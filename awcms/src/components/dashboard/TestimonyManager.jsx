@@ -1,8 +1,8 @@
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
-
-import { Star } from 'lucide-react';
+import { Star, MessageSquareQuote, ChevronRight, Home } from 'lucide-react';
 
 function TestimonyManager() {
     const columns = [
@@ -58,6 +58,31 @@ function TestimonyManager() {
         }
     ];
 
-    return <GenericContentManager tableName="testimonies" resourceName="Testimony" columns={columns} formFields={formFields} permissionPrefix="testimonies" />;
+    return (
+        <div className="space-y-6">
+            {/* Breadcrumb Navigation */}
+            <nav className="flex items-center text-sm text-slate-500">
+                <Link to="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+                    <Home className="w-4 h-4" />
+                    Dashboard
+                </Link>
+                <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+                <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <MessageSquareQuote className="w-4 h-4" />
+                    Testimonies
+                </span>
+            </nav>
+
+            <GenericContentManager
+                tableName="testimonies"
+                resourceName="Testimony"
+                columns={columns}
+                formFields={formFields}
+                permissionPrefix="testimonies"
+                showBreadcrumbs={false}
+            />
+        </div>
+    );
 }
+
 export default TestimonyManager;

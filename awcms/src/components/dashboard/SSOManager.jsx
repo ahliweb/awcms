@@ -92,6 +92,19 @@ function SSOManager() {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumb Navigation */}
+      <nav className="flex items-center text-sm text-slate-500">
+        <a href="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+          Dashboard
+        </a>
+        <svg className="w-4 h-4 mx-2 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+        <span className="flex items-center gap-1 text-slate-700 font-medium">
+          <Shield className="w-4 h-4" />
+          SSO & Security
+        </span>
+      </nav>
+
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-slate-800">{t('sso.title')}</h2>

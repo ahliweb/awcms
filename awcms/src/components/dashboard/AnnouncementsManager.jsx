@@ -1,6 +1,8 @@
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import { Megaphone, ChevronRight, Home } from 'lucide-react';
 
 function AnnouncementsManager() {
     const columns = [
@@ -60,6 +62,31 @@ function AnnouncementsManager() {
         { key: 'expires_at', label: 'Expires At', type: 'datetime' }
     ];
 
-    return <GenericContentManager tableName="announcements" resourceName="Announcement" columns={columns} formFields={formFields} permissionPrefix="announcements" />;
+    return (
+        <div className="space-y-6">
+            {/* Breadcrumb Navigation */}
+            <nav className="flex items-center text-sm text-slate-500">
+                <Link to="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+                    <Home className="w-4 h-4" />
+                    Dashboard
+                </Link>
+                <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+                <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <Megaphone className="w-4 h-4" />
+                    Announcements
+                </span>
+            </nav>
+
+            <GenericContentManager
+                tableName="announcements"
+                resourceName="Announcement"
+                columns={columns}
+                formFields={formFields}
+                permissionPrefix="announcements"
+                showBreadcrumbs={false}
+            />
+        </div>
+    );
 }
+
 export default AnnouncementsManager;

@@ -1,5 +1,7 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import { Settings, ChevronRight, Home } from 'lucide-react';
 
 function SettingsManager() {
     const columns = [
@@ -26,17 +28,31 @@ function SettingsManager() {
     ];
 
     return (
-        <GenericContentManager
-            tableName="settings"
-            resourceName="Setting"
-            columns={columns}
-            formFields={formFields}
-            permissionPrefix="setting"
-            viewPermission="tenant.setting.read"
-            createPermission="tenant.setting.create"
-        // Settings are critical, maybe restrict create/delete?
-        // For now, allow full CRUD as it's an admin tool.
-        />
+        <div className="space-y-6">
+            {/* Breadcrumb Navigation */}
+            <nav className="flex items-center text-sm text-slate-500">
+                <Link to="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+                    <Home className="w-4 h-4" />
+                    Dashboard
+                </Link>
+                <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+                <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <Settings className="w-4 h-4" />
+                    Settings
+                </span>
+            </nav>
+
+            <GenericContentManager
+                tableName="settings"
+                resourceName="Setting"
+                columns={columns}
+                formFields={formFields}
+                permissionPrefix="setting"
+                viewPermission="tenant.setting.read"
+                createPermission="tenant.setting.create"
+                showBreadcrumbs={false}
+            />
+        </div>
     );
 }
 

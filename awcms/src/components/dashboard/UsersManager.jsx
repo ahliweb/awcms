@@ -215,28 +215,44 @@ function UsersManager() {
         />
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <nav className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-1 text-sm">
-              <Link to="/cmspanel" className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 transition-all">
-                <Home className="w-4 h-4" />
-                <span className="font-medium">Dashboard</span>
-              </Link>
-              <ChevronRight className="w-4 h-4 text-slate-300" />
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold shadow-sm">
-                <User className="w-4 h-4" />
-                <span>Users</span>
-              </div>
-            </div>
-
-            <div>
-              <TabsList>
-                <TabsTrigger value="users">Active Users</TabsTrigger>
-                <TabsTrigger value="approvals">
-                  Registration Approvals
-                </TabsTrigger>
-              </TabsList>
-            </div>
+          {/* Breadcrumb Navigation */}
+          <nav className="flex items-center text-sm text-slate-500 mb-6">
+            <Link to="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+              <Home className="w-4 h-4" />
+              Dashboard
+            </Link>
+            <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+            <span className="flex items-center gap-1 text-slate-700 font-medium">
+              <User className="w-4 h-4" />
+              Users
+            </span>
+            {activeTab !== 'users' && (
+              <>
+                <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+                <span className="text-blue-600 font-medium">Registration Approvals</span>
+              </>
+            )}
           </nav>
+
+          {/* Enhanced Tabs */}
+          <div className="bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm mb-6 inline-flex">
+            <TabsList className="grid grid-cols-2 gap-1 bg-transparent p-0">
+              <TabsTrigger
+                value="users"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-blue-700 data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200 font-medium"
+              >
+                <User className="w-4 h-4" />
+                Active Users
+              </TabsTrigger>
+              <TabsTrigger
+                value="approvals"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200 font-medium"
+              >
+                <ShieldAlert className="w-4 h-4" />
+                Approvals
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="users" className="space-y-6 mt-0">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

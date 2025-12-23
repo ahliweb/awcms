@@ -1,6 +1,8 @@
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import { Image, ChevronRight, Home } from 'lucide-react';
 
 function PhotoGalleryManager() {
     const columns = [
@@ -29,7 +31,7 @@ function PhotoGalleryManager() {
         {
             key: 'published_at',
             label: 'Publish Date',
-            type: 'date', // ContentTable handles 'date' type for display
+            type: 'date',
             render: (value) => value ? new Date(value).toLocaleDateString() : '-'
         }
     ];
@@ -50,6 +52,31 @@ function PhotoGalleryManager() {
         }
     ];
 
-    return <GenericContentManager tableName="photo_gallery" resourceName="Photo Album" columns={columns} formFields={formFields} permissionPrefix="photo_gallery" />;
+    return (
+        <div className="space-y-6">
+            {/* Breadcrumb Navigation */}
+            <nav className="flex items-center text-sm text-slate-500">
+                <Link to="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+                    <Home className="w-4 h-4" />
+                    Dashboard
+                </Link>
+                <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+                <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <Image className="w-4 h-4" />
+                    Photo Gallery
+                </span>
+            </nav>
+
+            <GenericContentManager
+                tableName="photo_gallery"
+                resourceName="Photo Album"
+                columns={columns}
+                formFields={formFields}
+                permissionPrefix="photo_gallery"
+                showBreadcrumbs={false}
+            />
+        </div>
+    );
 }
+
 export default PhotoGalleryManager;

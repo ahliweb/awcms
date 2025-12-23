@@ -1,6 +1,8 @@
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import { Tag, ChevronRight, Home } from 'lucide-react';
 
 function PromotionsManager() {
     const columns = [
@@ -54,6 +56,31 @@ function PromotionsManager() {
         }
     ];
 
-    return <GenericContentManager tableName="promotions" resourceName="Promotion" columns={columns} formFields={formFields} permissionPrefix="promotions" />;
+    return (
+        <div className="space-y-6">
+            {/* Breadcrumb Navigation */}
+            <nav className="flex items-center text-sm text-slate-500">
+                <Link to="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+                    <Home className="w-4 h-4" />
+                    Dashboard
+                </Link>
+                <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+                <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <Tag className="w-4 h-4" />
+                    Promotions
+                </span>
+            </nav>
+
+            <GenericContentManager
+                tableName="promotions"
+                resourceName="Promotion"
+                columns={columns}
+                formFields={formFields}
+                permissionPrefix="promotions"
+                showBreadcrumbs={false}
+            />
+        </div>
+    );
 }
+
 export default PromotionsManager;

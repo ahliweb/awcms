@@ -1,7 +1,8 @@
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
-import { Package, Truck, CreditCard, User } from 'lucide-react';
+import { Package, Truck, CreditCard, User, ShoppingCart, ChevronRight, Home } from 'lucide-react';
 
 function OrdersManager() {
     const columns = [
@@ -103,10 +104,7 @@ function OrdersManager() {
     ];
 
     const formFields = [
-        // Customer Info (Read Only for orders)
         { key: 'user_id', label: 'Customer', type: 'relation', table: 'users', relationLabel: 'email', description: 'Customer who placed the order', readOnly: true },
-
-        // Order Status
         {
             key: 'status', label: 'Order Status', type: 'select', options: [
                 { value: 'pending', label: '⏳ Pending' },
@@ -127,30 +125,40 @@ function OrdersManager() {
             ]
         },
         { key: 'payment_method', label: 'Payment Method', description: 'Bank Transfer, Credit Card, etc.' },
-
-        // Amounts (Read Only)
         { key: 'subtotal', label: 'Subtotal', type: 'number', readOnly: true },
         { key: 'shipping_cost', label: 'Shipping Cost', type: 'number' },
         { key: 'total_amount', label: 'Total Amount', type: 'number', readOnly: true },
-
-        // Shipping
         { key: 'shipping_address', label: 'Shipping Address', type: 'textarea' },
         { key: 'tracking_number', label: 'Tracking Number', description: 'Courier tracking number' },
-
-        // Notes
         { key: 'notes', label: 'Order Notes', type: 'textarea', description: 'Internal notes about this order' }
     ];
 
     return (
-        <GenericContentManager
-            tableName="orders"
-            resourceName="Order"
-            columns={columns}
-            formFields={formFields}
-            permissionPrefix="orders"
-            canCreate={false}
-            customSelect="*, user:users(id, email, full_name)"
-        />
+        <div className="space-y-6">
+            {/* Breadcrumb Navigation */}
+            <nav className="flex items-center text-sm text-slate-500">
+                <Link to="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+                    <Home className="w-4 h-4" />
+                    Dashboard
+                </Link>
+                <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+                <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <ShoppingCart className="w-4 h-4" />
+                    Orders
+                </span>
+            </nav>
+
+            <GenericContentManager
+                tableName="orders"
+                resourceName="Order"
+                columns={columns}
+                formFields={formFields}
+                permissionPrefix="orders"
+                canCreate={false}
+                customSelect="*, user:users(id, email, full_name)"
+                showBreadcrumbs={false}
+            />
+        </div>
     );
 }
 

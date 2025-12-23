@@ -1,6 +1,8 @@
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import { Briefcase, ChevronRight, Home } from 'lucide-react';
 
 function PortfolioManager() {
     const columns = [
@@ -49,7 +51,31 @@ function PortfolioManager() {
         { key: 'images', label: 'Project Gallery', type: 'images', maxImages: 20, description: 'Add multiple project images' }
     ];
 
-    return <GenericContentManager tableName="portfolio" resourceName="Portfolio Project" columns={columns} formFields={formFields} permissionPrefix="portfolio" />;
-}
-export default PortfolioManager;
+    return (
+        <div className="space-y-6">
+            {/* Breadcrumb Navigation */}
+            <nav className="flex items-center text-sm text-slate-500">
+                <Link to="/cmspanel" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+                    <Home className="w-4 h-4" />
+                    Dashboard
+                </Link>
+                <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+                <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <Briefcase className="w-4 h-4" />
+                    Portfolio
+                </span>
+            </nav>
 
+            <GenericContentManager
+                tableName="portfolio"
+                resourceName="Portfolio Project"
+                columns={columns}
+                formFields={formFields}
+                permissionPrefix="portfolio"
+                showBreadcrumbs={false}
+            />
+        </div>
+    );
+}
+
+export default PortfolioManager;
