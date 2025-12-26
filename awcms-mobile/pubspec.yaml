@@ -1,0 +1,45 @@
+name: awcms_mobile
+description: "AWCMS Mobile - Flutter frontend for AWCMS Content Management System"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.8
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  
+  # Supabase
+  supabase_flutter: ^2.8.0
+  
+  # State Management
+  flutter_riverpod: ^2.6.1
+  
+  # Routing
+  go_router: ^14.6.2
+  
+  # Environment
+  flutter_dotenv: ^5.2.1
+  
+  # Storage
+  shared_preferences: ^2.3.3
+  
+  # Utils
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  # Uncomment after creating .env file:
+  # assets:
+  #   - .env

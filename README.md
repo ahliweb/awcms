@@ -11,6 +11,7 @@ Welcome to the AWCMS development monorepo. This repository contains the source c
 | :--- | :--- | :--- |
 | `awcms/` | Admin Panel & CMS | React 18, Vite, Supabase |
 | `awcms-public/` | Public Portal | Astro 5, React 19 |
+| `awcms-mobile/` | Mobile App | Flutter 3.x, Riverpod, Supabase |
 
 ## 🚀 Quick Start
 
