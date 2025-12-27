@@ -46,6 +46,9 @@ dependencies:
   detect_fake_location: ^2.3.0
   geocoding: ^3.0.0
   
+  # Notifications
+  flutter_local_notifications: ^18.0.1
+  
   # Utils
   intl: ^0.20.2
 

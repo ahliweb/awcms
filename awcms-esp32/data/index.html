@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWCMS IoT Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="dashboard">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <h1>🌐 AWCMS IoT</h1>
+        <div class="status-badge" id="connectionStatus">
+          <span class="status-dot"></span>
+          <span>Connecting...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Device Info Card -->
+      <section class="card device-card">
+        <h2>📱 Device Info</h2>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="label">Device ID</span>
+            <span class="value" id="deviceId">--</span>
+          </div>
+          <div class="info-item">
+            <span class="label">IP Address</span>
+            <span class="value" id="ipAddress">--</span>
+          </div>
+          <div class="info-item">
+            <span class="label">WiFi Signal</span>
+            <span class="value" id="wifiRssi">--</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Uptime</span>
+            <span class="value" id="uptime">--</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Free Memory</span>
+            <span class="value" id="heapFree">--</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sensor Data Card -->
+      <section class="card sensor-card">
+        <h2>🌡️ Sensor Data</h2>
+        <div class="sensor-grid">
+          <div class="sensor-item temperature">
+            <div class="sensor-icon">🌡️</div>
+            <div class="sensor-value" id="temperature">--</div>
+            <div class="sensor-label">Temperature</div>
+            <div class="sensor-unit">°C</div>
+          </div>
+          <div class="sensor-item humidity">
+            <div class="sensor-icon">💧</div>
+            <div class="sensor-value" id="humidity">--</div>
+            <div class="sensor-label">Humidity</div>
+            <div class="sensor-unit">%</div>
+          </div>
+        </div>
+        <div class="last-update">
+          Last update: <span id="lastUpdate">--</span>
+        </div>
+      </section>
+
+      <!-- Actions Card -->
+      <section class="card actions-card">
+        <h2>⚙️ Actions</h2>
+        <div class="actions-grid">
+          <button class="btn btn-primary" onclick="refreshData()">
+            🔄 Refresh
+          </button>
+          <button class="btn btn-danger" onclick="restartDevice()">
+            🔁 Restart
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>AWCMS IoT Dashboard • v1.0.0</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

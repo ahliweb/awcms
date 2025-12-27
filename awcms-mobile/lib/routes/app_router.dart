@@ -12,6 +12,7 @@ import '../features/home/screens/home_screen.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/articles/screens/articles_screen.dart';
 import '../features/articles/screens/article_detail_screen.dart';
+import '../features/notifications/screens/notifications_screen.dart';
 
 /// Route names
 class AppRoutes {
@@ -19,6 +20,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String articles = '/articles';
   static const String articleDetail = '/articles/:id';
+  static const String notifications = '/notifications';
 }
 
 /// Router provider
@@ -69,6 +71,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id']!;
           return ArticleDetailScreen(articleId: id);
         },
+      ),
+      GoRoute(
+        path: AppRoutes.notifications,
+        name: 'notifications',
+        builder: (context, state) => const NotificationsScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
