@@ -29,7 +29,7 @@ AWCMS is a **Multi-Tenant** Content Management System designed for SaaS scalabil
 ### Core Capabilities
 
 | Feature | Description |
-|---------|-------------|
+| ------- | ----------- |
 | **Authentication** | Integrated Supabase Auth with Email/Password, Magic Link, and OAuth providers |
 | **Authorization** | Granular ABAC system with customizable Policies and Roles |
 | **Data Integrity** | Implements "Soft Delete" across all major modules |
@@ -97,9 +97,9 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 ## 🛠️ Tech Stack
 
 | Category | Technology |
-|----------|------------|
+| -------- | ---------- |
 | Frontend (Admin) | React 18.3.1, Vite 7.2.7 |
-| Frontend (Public)| Astro 5.x, React 19.x, Cloudflare Pages |
+| Frontend (Public) | Astro 5.x, React 19.x, Cloudflare Pages |
 | Styling | TailwindCSS 4.0.0, Radix UI |
 | Backend | Supabase (PostgreSQL, Auth, Storage) |
 | Editor | TipTap 3.13.0, Puck (@measured/puck) |
@@ -233,16 +233,20 @@ awcms/
 ## 📚 Documentation
 
 | Document | Description |
-|----------|-------------|
+| -------- | ----------- |
 | [Installation](docs/INSTALLATION.md) | Setup guide |
 | [Configuration](docs/CONFIGURATION.md) | Settings & env vars |
 | [Architecture](docs/ARCHITECTURE.md) | System design |
 | [Database Schema](docs/DATABASE_SCHEMA.md) | Data model |
 | [API Documentation](docs/API_DOCUMENTATION.md) | Supabase API usage |
 | [ABAC System](docs/ABAC_SYSTEM.md) | Permissions & Policies |
+| [Multi-Tenancy](docs/MULTI_TENANCY.md) | SaaS tenant isolation |
+| [Extensions](docs/EXTENSIONS.md) | Plugin & Extension system |
 | [Component Guide](docs/COMPONENT_GUIDE.md) | UI components |
+| [Folder Structure](docs/FOLDER_STRUCTURE.md) | Project organization |
 | [Security](docs/SECURITY.md) | Security measures |
 | [Deployment](docs/DEPLOYMENT.md) | Deploy to production |
+| [AI Agents](docs/AGENTS.md) | Agent development guide |
 | [Contributing](docs/CONTRIBUTING.md) | How to contribute |
 
 ---

@@ -39,11 +39,11 @@ USING (tenant_id = (select auth.uid() ->> 'tenant_id')::uuid);
 ## 3. Shared vs Isolated Resources
 
 | Resource | Scope | Description |
-|----------|-------|-------------|
+| -------- | ----- | ----------- |
 | **Users** | Isolated | Users belong to ONE tenant (except Super Admin). |
 | **Media** | Isolated | Storage buckets structured as `/{tenant_id}/{file.ext}`. |
 | **Settings** | Hybrid | `system_settings` (Global) vs `tenant_configs` (Tenant). |
-| **Extensions**| Shared | Installed globally, enabled per-tenant. |
+| **Extensions** | Shared | Installed globally, enabled per-tenant. |
 
 ## 4. Onboarding Flow
 
