@@ -84,6 +84,11 @@ const TenantSettings = lazy(() => import('@/components/dashboard/TenantSettings'
 const DevicesManager = lazy(() => import('@/pages/cmspanel/DevicesManager'));
 const DeviceDetail = lazy(() => import('@/pages/cmspanel/DeviceDetail'));
 
+// Mobile Admin (Lazy Loaded)
+const MobileUsersManager = lazy(() => import('@/pages/cmspanel/MobileUsersManager'));
+const PushNotificationsManager = lazy(() => import('@/pages/cmspanel/PushNotificationsManager'));
+const MobileAppConfig = lazy(() => import('@/pages/cmspanel/MobileAppConfig'));
+
 // Extensions (Lazy Loaded)
 const BackupSettings = lazy(() => import('@/extensions/backup/BackupSettings'));
 
@@ -270,6 +275,11 @@ const MainRouter = () => {
           {/* ESP32 IoT Devices */}
           <Route path="devices" element={<DevicesManager />} />
           <Route path="devices/:id" element={<DeviceDetail />} />
+
+          {/* Mobile Admin */}
+          <Route path="mobile/users" element={<MobileUsersManager />} />
+          <Route path="mobile/push" element={<PushNotificationsManager />} />
+          <Route path="mobile/config" element={<MobileAppConfig />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
