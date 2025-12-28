@@ -47,6 +47,14 @@ const DEFAULT_MENU_CONFIG = [
   { id: 'settings_branding', key: 'branding', label: 'Branding', path: 'settings/branding', icon: 'Palette', permission: 'tenant.setting.update', group_label: 'CONFIGURATION', group_order: 70, order: 10, is_visible: true },
   { id: 'sso', key: 'sso', label: 'SSO & Security', path: 'sso', icon: 'Lock', permission: 'platform.setting.read', group_label: 'CONFIGURATION', group_order: 70, order: 20, is_visible: true },
 
+  // IoT Group
+  { id: 'iot_devices', key: 'iot_devices', label: 'IoT Devices', path: 'devices', icon: 'Cpu', permission: 'tenant.setting.read', group_label: 'IoT', group_order: 80, order: 10, is_visible: true },
+
+  // MOBILE Group
+  { id: 'mobile_users', key: 'mobile_users', label: 'Mobile Users', path: 'mobile/users', icon: 'Smartphone', permission: 'tenant.setting.read', group_label: 'MOBILE', group_order: 85, order: 10, is_visible: true },
+  { id: 'push_notifications', key: 'push_notifications', label: 'Push Notifications', path: 'mobile/push', icon: 'Bell', permission: 'tenant.setting.update', group_label: 'MOBILE', group_order: 85, order: 20, is_visible: true },
+  { id: 'mobile_config', key: 'mobile_config', label: 'App Config', path: 'mobile/config', icon: 'Settings', permission: 'tenant.setting.update', group_label: 'MOBILE', group_order: 85, order: 30, is_visible: true },
+
   // PLATFORM Group
   { id: 'tenants', key: 'tenants', label: 'Tenant Management', path: 'tenants', icon: 'Building', permission: 'platform.tenant.read', group_label: 'PLATFORM', group_order: 100, order: 10, is_visible: true },
 ];
