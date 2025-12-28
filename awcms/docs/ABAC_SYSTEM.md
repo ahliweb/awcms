@@ -223,6 +223,7 @@ CREATE TABLE role_permissions (
 | Notifications | `tenant.notification.*` | read |
 | Contacts | `tenant.contacts.*` | read, create, update, delete, restore, permanent_delete |
 | Contact Messages | `tenant.contact_messages.*` | read, create, update, delete, restore, permanent_delete |
+| Regions | `tenant.region.*` | read, create, update, delete |
 
 ### C. Public / Consumption
 
@@ -399,7 +400,7 @@ Policies are defined as JSON objects linked to Roles via the `role_policies` tab
 ### Context Variables
 
 | Variable | Description | Source |
-|----------|-------------|--------|
+| ---------- | ------------- | -------- |
 | `channel` | Interface used (`web`, `mobile`, `api`) | `useContext` or API Header |
 | `ip_address` | Client IP | Edge Function |
 | `time` | Server time | Edge Function |
@@ -413,7 +414,7 @@ Compliance-grade logging is enforced for all critical write operations.
 ### Schema (`audit_logs`)
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `action` | TEXT | format: `resource.verb` (e.g. `user.create`) |
 | `old_value` | JSONB | Snapshot before change |
 | `new_value` | JSONB | Snapshot after change |
@@ -444,7 +445,7 @@ Compliance-grade logging is enforced for all critical write operations.
 Ensures that critical processes involve multiple roles to prevent fraud or error.
 
 | Activity | Authorized Role |
-|----------|-----------------|
+| ---------- | ----------------- |
 | **Create** | Author |
 | **Review** | Editor |
 | **Approve / Publish** | Admin |
@@ -465,7 +466,7 @@ graph LR
 ```
 
 | State | Who can set? |
-|-------|--------------|
+| ------- | -------------- |
 | `draft` | Author, Editor |
 | `reviewed` | Editor |
 | `approved` | Editor, Admin |

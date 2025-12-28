@@ -451,6 +451,45 @@ CREATE TABLE extension_menu_items (
 );
 ```
 
+### regions (New)
+
+Hierarchical administrative areas (Negara -> ... -> RT/RW).
+
+```sql
+CREATE TABLE regions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id),
+  level_id UUID REFERENCES region_levels(id),
+  parent_id UUID REFERENCES regions(id),
+  code TEXT, -- e.g., '33', '3322'
+  name TEXT NOT NULL,
+  full_path TEXT, -- Cached: 'Indonesia > Jawa Tengah > Semarang'
+  metadata JSONB DEFAULT '{}',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_regions_tenant ON regions(tenant_id);
+CREATE INDEX idx_regions_parent ON regions(parent_id);
+CREATE INDEX idx_regions_level ON regions(level_id);
+```
+
+### region_levels (New)
+
+Master levels configuration.
+
+```sql
+CREATE TABLE region_levels (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key TEXT UNIQUE NOT NULL, -- 'negara', 'prop', 'kota_kab', etc.
+  name TEXT NOT NULL,
+  level_order INT NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE
+);
+```
+
 ---
 
 ## Indexes
