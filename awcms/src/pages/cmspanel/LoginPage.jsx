@@ -361,7 +361,7 @@ const LoginPage = () => {
                   siteKey={
                     // FORCE production key if on primary.ahliweb.com to avoid env var issues
                     window.location.hostname === 'primary.ahliweb.com'
-                      ? '0x4AAAAAACGtMCPHiTd5Q8W3'
+                      ? '0x4AAAAAACJqShhDPcxMiNkx'
                       : import.meta.env.VITE_TURNSTILE_SITE_KEY
                   }
                   onVerify={(token) => {

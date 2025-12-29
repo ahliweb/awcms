@@ -131,7 +131,7 @@ const ForgotPasswordPage = () => {
                   <Turnstile
                     siteKey={
                       window.location.hostname === 'primary.ahliweb.com'
-                        ? '0x4AAAAAACGtMCPHiTd5Q8W3'
+                        ? '0x4AAAAAACJqShhDPcxMiNkx'
                         : import.meta.env.VITE_TURNSTILE_SITE_KEY
                     }
                     onVerify={(token) => {
