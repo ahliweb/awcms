@@ -24,11 +24,12 @@ export default defineConfig(({ mode }) => {
 				// CSP: Allow Supabase and self
 				'Content-Security-Policy': [
 					"default-src 'self'",
-					"script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Required for React dev
-					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-					"font-src 'self' https://fonts.gstatic.com",
+					"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com", // Required for React dev + Turnstile
+					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://rsms.me",
+					"font-src 'self' https://fonts.gstatic.com https://rsms.me",
 					"img-src 'self' data: blob: https://*.supabase.co",
-					"connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+					"connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+					"frame-src https://challenges.cloudflare.com",
 					"frame-ancestors 'self'",
 				].join('; '),
 			},

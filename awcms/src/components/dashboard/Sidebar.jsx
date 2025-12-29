@@ -20,6 +20,7 @@ function Sidebar({ isOpen, setIsOpen }) {
   const { hasPermission, userRole } = usePermissions();
   const { currentTenant } = useTenant();
   const { signOut } = useAuth();
+  const { applyFilters } = usePlugins(); // Moved to top level
   const navigate = useNavigate();
   const location = useLocation();
   const { menuItems, loading } = useAdminMenu();
@@ -96,8 +97,7 @@ function Sidebar({ isOpen, setIsOpen }) {
       return true;
     });
 
-    // HOOK: Allow plugins to modify the menu items dynamically
-    const { applyFilters } = usePlugins();
+    // HOOK: Allow plugins to modify the menu items dynamically (applyFilters from top-level hook)
     const filteredByPlugins = applyFilters('admin_sidebar_menu', authorizedItems, { userRole, hasPermission });
 
     const filteredItems = searchQuery
@@ -116,7 +116,7 @@ function Sidebar({ isOpen, setIsOpen }) {
     });
     Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a.order - b.order));
     return groups;
-  }, [menuItems, loading, userRole, hasPermission, searchQuery, t]);
+  }, [menuItems, loading, userRole, hasPermission, searchQuery, t, applyFilters, currentTenant?.subscription_tier]);
 
   const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
     groupedMenus[a].order - groupedMenus[b].order

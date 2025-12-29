@@ -21,14 +21,29 @@ import {
 
 import { useTenant } from '@/contexts/TenantContext';
 
-// ...
-
 function RolesManager() {
   const { toast } = useToast();
   const { hasPermission, isPlatformAdmin } = usePermissions();
-  const { currentTenant } = useTenant(); // Get Current Tenant
+  const { currentTenant } = useTenant();
 
-  // ...
+  // State declarations
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [showEditor, setShowEditor] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState(null);
+
+  // Permission checks
+  const canView = hasPermission('tenant.role.read');
+  const canCreate = hasPermission('tenant.role.create');
+  const canEdit = hasPermission('tenant.role.update');
+  const canDelete = hasPermission('tenant.role.delete');
+
+  useEffect(() => {
+    fetchRoles();
+  }, []);
 
   const fetchRoles = async () => {
     setLoading(true);
@@ -45,8 +60,6 @@ function RolesManager() {
       }
 
       const { data, error } = await dbQuery;
-
-      // ...
 
       if (error) throw error;
       setRoles(data || []);

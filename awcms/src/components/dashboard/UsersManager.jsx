@@ -21,15 +21,29 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useTenant } from '@/contexts/TenantContext';
-
-// ...
+import UserApprovalManager from '@/components/dashboard/UserApprovalManager';
 
 function UsersManager() {
   const { toast } = useToast();
   const { hasPermission, isPlatformAdmin } = usePermissions();
-  const { currentTenant } = useTenant(); // Get Current Tenant
+  const { currentTenant } = useTenant();
 
-  // ...
+  // State declarations
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [showEditor, setShowEditor] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [activeTab, setActiveTab] = useState('users');
+
+  // Permission checks
+  const canView = hasPermission('tenant.user.read');
+  const canCreate = hasPermission('tenant.user.create');
 
   const fetchUsers = async () => {
     if (!canView) return;
