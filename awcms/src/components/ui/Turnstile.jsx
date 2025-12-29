@@ -30,61 +30,52 @@ const Turnstile = ({
     // Load Turnstile script
     useEffect(() => {
         const scriptId = 'turnstile-script';
+        let loadInterval = null;
 
-        // Check if turnstile is already available
+        // Function to handle script ready
+        const onScriptReady = () => {
+            if (window.turnstile) {
+                console.log('[Turnstile] Script ready');
+                setScriptLoaded(true);
+                setIsLoading(false);
+                if (loadInterval) clearInterval(loadInterval);
+            }
+        };
+
+        // 1. Check if already available
         if (window.turnstile) {
-            setScriptLoaded(true);
-            setIsLoading(false);
+            onScriptReady();
             return;
         }
 
-        // Check if script already exists but not yet loaded
-        const existingScript = document.getElementById(scriptId);
-        if (existingScript) {
-            // Wait for it to load
-            const checkTurnstile = setInterval(() => {
-                if (window.turnstile) {
-                    clearInterval(checkTurnstile);
-                    setScriptLoaded(true);
-                    setIsLoading(false);
-                }
-            }, 100);
+        // 2. Setup Polling (Robustness)
+        loadInterval = setInterval(onScriptReady, 100);
 
-            // Timeout after 10 seconds
-            setTimeout(() => {
-                clearInterval(checkTurnstile);
-                if (!window.turnstile) {
-                    console.error('Turnstile script timeout');
-                    setIsLoading(false);
-                    setHasError(true);
-                    onError?.();
-                }
-            }, 10000);
-            return;
+        // 3. Check/Create Script
+        let script = document.getElementById(scriptId);
+        if (!script) {
+            script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
         }
 
-        // Create and load new script
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileLoad';
-        script.async = true;
-
-        // Global callback for when Turnstile is ready
-        window.onTurnstileLoad = () => {
-            setScriptLoaded(true);
-            setIsLoading(false);
-        };
-
-        script.onerror = () => {
-            console.error('Failed to load Turnstile script');
-            setIsLoading(false);
-            setHasError(true);
-            onError?.();
-        };
-
-        document.head.appendChild(script);
+        // Timeout fallback
+        const timeout = setTimeout(() => {
+            if (!window.turnstile) {
+                console.error('[Turnstile] Script load timeout');
+                if (loadInterval) clearInterval(loadInterval);
+                setIsLoading(false);
+                setHasError(true);
+                onError?.();
+            }
+        }, 15000); // 15 seconds
 
         return () => {
+            if (loadInterval) clearInterval(loadInterval);
+            clearTimeout(timeout);
             // Cleanup widget on unmount
             if (widgetIdRef.current && window.turnstile) {
                 try {
@@ -103,15 +94,10 @@ const Turnstile = ({
             return;
         }
 
-        // Remove existing widget if any
-        if (widgetIdRef.current !== null) {
-            try {
-                window.turnstile.remove(widgetIdRef.current);
-                widgetIdRef.current = null;
-            } catch (e) {
-                console.warn('Turnstile remove error:', e);
-            }
-        }
+        // Ensure we don't double render
+        if (widgetIdRef.current) return;
+
+        console.log('[Turnstile] Rendering widget...');
 
         // Render new widget
         try {
@@ -119,41 +105,34 @@ const Turnstile = ({
                 sitekey: siteKey,
                 theme,
                 size,
-                appearance, // 'always', 'execute', or 'interaction-only' (for invisible mode)
-                'retry': 'auto', // Enable automatic retry on failure
-                'retry-interval': 2000, // Retry every 2 seconds
+                appearance,
+                'retry': 'auto',
+                'retry-interval': 2000,
                 callback: (token) => {
-                    console.log('[Turnstile] Verification successful');
+                    console.log('[Turnstile] Verification successful', token ? '(Token received)' : '(No token)');
                     onVerify?.(token);
                 },
                 'error-callback': (errorCode) => {
-                    console.warn('Turnstile error (may auto-retry):', errorCode);
-                    // Only set hasError for critical errors, not transient ones
-                    // Transient errors will auto-retry
-                    if (errorCode === 'invalid-input-response' || errorCode === 'bad-request') {
+                    console.warn('[Turnstile] Error callback:', errorCode);
+                    // 600010 is invalid site key
+                    if (errorCode === '600010') {
+                        console.error('[Turnstile] Critical: Invalid Site Key');
                         setHasError(true);
                         onError?.();
                     }
-                    // For other errors, let Turnstile handle retry automatically
                 },
                 'expired-callback': () => {
-                    console.log('[Turnstile] Token expired, resetting...');
+                    console.log('[Turnstile] Token expired');
                     onExpire?.();
-                    // Auto-reset on expiration
-                    if (widgetIdRef.current !== null && window.turnstile) {
-                        window.turnstile.reset(widgetIdRef.current);
-                    }
+                    if (widgetIdRef.current && window.turnstile) window.turnstile.reset(widgetIdRef.current);
                 },
                 'timeout-callback': () => {
-                    console.warn('[Turnstile] Verification timed out, retrying...');
-                    // Auto-reset on timeout
-                    if (widgetIdRef.current !== null && window.turnstile) {
-                        window.turnstile.reset(widgetIdRef.current);
-                    }
+                    console.warn('[Turnstile] Timeout');
+                    if (widgetIdRef.current && window.turnstile) window.turnstile.reset(widgetIdRef.current);
                 },
             });
         } catch (e) {
-            console.error('Turnstile render error:', e);
+            console.error('[Turnstile] Exception during render:', e);
             setHasError(true);
             onError?.();
         }
