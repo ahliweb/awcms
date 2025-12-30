@@ -14,7 +14,7 @@ Welcome to the AWCMS documentation. This index provides a roadmap to help you na
 - [Public Portal Architecture](PUBLIC_PORTAL_ARCHITECTURE.md): Architecture specific to the public frontend.
 - [Tech Stack](TECH_STACK.md): List of technologies and libraries used.
 - [Multi-Tenancy](MULTI_TENANCY.md): How the multi-tenant SaaS architecture works.
-- [ABAC System](ABAC_SYSTEM.md): Attribute-Based Access Control and Permissions.
+- [Offline Architecture](OFFLINE_ARCHITECTURE.md): Offline-first design with UDM and SQLite.
 
 ## 📦 Modules & Features
 
@@ -29,6 +29,14 @@ Welcome to the AWCMS documentation. This index provides a roadmap to help you na
 - [Template System](TEMPLATE_SYSTEM.md): Template architecture and APIs.
 - [Template Migration](TEMPLATE_MIGRATION.md): Migration guide for templates.
 
+## 🔐 Security & Access Control
+
+- [ABAC System](ABAC_SYSTEM.md): Attribute-Based Access Control and Permissions.
+- [Role Hierarchy](ROLE_HIERARCHY.md): Role levels and permission matrix.
+- [RLS Policies](RLS_POLICIES.md): Row Level Security implementation per table.
+- [Audit Trail](AUDIT_TRAIL.md): System action logging and compliance.
+- [Security](SECURITY.md): Security best practices and implementations.
+
 ## 💻 Development & API
 
 - [API Documentation](API_DOCUMENTATION.md): Supabase API usage and patterns.
@@ -42,10 +50,9 @@ Welcome to the AWCMS documentation. This index provides a roadmap to help you na
 
 - [Deployment Guide](DEPLOYMENT.md): General deployment instructions.
 - [Cloudflare Deployment](CLOUDFLARE_DEPLOYMENT.md): Specific guide for Cloudflare Pages.
-- [Security](SECURITY.md): Security best practices and implementations.
 - [Scalability Guide](SCALABILITY_GUIDE.md): Preparing the system for high traffic.
-- [Monitoring](MONITORING.md): System monitoring and observability.
-- [Performance](PERFORMANCE.md): Performance optimization tips.
+- [Monitoring](MONITORING.md): System monitoring, logging, and observability.
+- [Performance](PERFORMANCE.md): Performance optimization strategies.
 - [Troubleshooting](TROUBLESHOOTING.md): Common issues and solutions.
 
 ## 🤝 Project Info
