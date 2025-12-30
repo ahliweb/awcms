@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/lib/customSupabaseClient';
+import { udm } from '@/lib/data/UnifiedDataManager'; // CHANGED: Replaced supabase with udm
 import { Loader2, Check, X, RefreshCw } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -12,6 +12,7 @@ const SlugGenerator = ({
     titleValue = '',
     tableName = 'pages',
     recordId = null,
+    tenantId = null,
     onSlugChange
 }) => {
     const { toast } = useToast();
@@ -80,21 +81,28 @@ const SlugGenerator = ({
         }
     };
 
-    // Check Availability against Database
+    // Check Availability against Database (Offline-Ready)
     const checkAvailability = async () => {
         if (!slug) return;
         setIsChecking(true);
         try {
-            let query = supabase
+            // CHANGED: Use UnifiedDataManager
+            // Note: udm query builder syntax: .select(...).eq(...)
+            let query = udm
                 .from(tableName)
                 .select('id')
                 .eq('slug', slug);
+
+            // Scope by Tenant ID if provided (Critical for Multi-Tenancy)
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
 
             if (recordId) {
                 query = query.neq('id', recordId);
             }
 
-            const { data, error } = await query;
+            const { data, error } = await query; // Executes remote or local automatically
 
             if (error) throw error;
 
@@ -153,7 +161,7 @@ const SlugGenerator = ({
                             if (format !== 'custom') setFormat('custom');
                         }}
                         className={`pr-10 ${isAvailable === true ? 'border-green-500 focus-visible:ring-green-500' :
-                                isAvailable === false ? 'border-red-500 focus-visible:ring-red-500' : ''
+                            isAvailable === false ? 'border-red-500 focus-visible:ring-red-500' : ''
                             }`}
                         placeholder="my-page-slug"
                     />

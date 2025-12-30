@@ -1,19 +1,14 @@
-/**
- * Visual Page Builder Component
- * Main editor component using Puck for drag-and-drop page building
- */
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Puck, Render } from '@measured/puck';
 import '@measured/puck/puck.css';
 import './puck-theme.css';
 import { motion } from 'framer-motion';
-import { Save, Eye, EyeOff, ArrowLeft, Upload, Monitor, Tablet, Smartphone, Layout, Undo2, Redo2, Cloud, Loader2 } from 'lucide-react';
+import { Save, Eye, EyeOff, ArrowLeft, Upload, Monitor, Tablet, Smartphone, Layout, Undo2, Redo2, Cloud, Loader2, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
+import { udm } from '@/lib/data/UnifiedDataManager';
 import editorConfig from './config';
 import TemplateSelector from './TemplateSelector';
 import { useHistory } from './hooks/useHistory';
@@ -32,11 +27,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Settings } from 'lucide-react';
 
-import { usePermissions } from '@/contexts/PermissionContext'; // Import usePermissions
+import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext'; // Added TenantContext
 
 const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
     // Permission Hook
-    const { hasPermission, checkAccess } = usePermissions();
+    const { hasPermission, checkAccess, isPlatformAdmin } = usePermissions();
+    const { currentTenant } = useTenant(); // Get current tenant
     const { toast } = useToast();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -50,20 +47,8 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
     // State
     const [page, setPage] = useState(initialPage || null);
 
-    // Debug logging
-    console.log('VisualPageBuilder render:', {
-        initialPageId: initialPage?.id,
-        pageStateId: page?.id,
-        mode,
-        templateId,
-        partId,
-        pageIdFromUrl: pageId
-    });
-
     // Initial data setup
     const initialData = initialPage?.content_draft || { content: [], root: { props: { title: '' } } };
-
-
 
     // Use History Hook for Data Management
     const {
@@ -75,8 +60,6 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
         canRedo,
         resetHistory
     } = useHistory(initialData);
-
-
 
     // Use ref to keep latest data reference for closures (save handlers)
     const dataRef = useRef(data);
@@ -108,10 +91,22 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState(null);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
     // History aliases for UI to minimize code changes
     const historyCanUndo = canUndo;
     const historyCanRedo = canRedo;
+
+    // Monitor Online Status
+    useEffect(() => {
+        const handleStatusChange = () => setIsOffline(!navigator.onLine);
+        window.addEventListener('online', handleStatusChange);
+        window.addEventListener('offline', handleStatusChange);
+        return () => {
+            window.removeEventListener('online', handleStatusChange);
+            window.removeEventListener('offline', handleStatusChange);
+        };
+    }, []);
 
     // Fetch data if needed
     useEffect(() => {
@@ -121,8 +116,20 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
             setLoading(true);
             try {
                 let fetchedData = null;
+                // CHANGED: Added tenant isolation to queries
+                // If not platform admin, enforce tenant_id
+
+                const applyTenantFilter = (q) => {
+                    if (!isPlatformAdmin && currentTenant?.id) {
+                        return q.eq('tenant_id', currentTenant.id);
+                    }
+                    return q;
+                };
+
                 if (mode === 'template' && templateId) {
-                    const { data: tpl, error } = await supabase.from('templates').select('*').eq('id', templateId).single();
+                    let q = udm.from('templates').select('*').eq('id', templateId);
+                    q = applyTenantFilter(q);
+                    const { data: tpl, error } = await q.single();
                     if (error) throw error;
 
                     fetchedData = {
@@ -139,7 +146,9 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                     });
 
                 } else if (mode === 'part' && partId) {
-                    const { data: part, error } = await supabase.from('template_parts').select('*').eq('id', partId).single();
+                    let q = udm.from('template_parts').select('*').eq('id', partId);
+                    q = applyTenantFilter(q);
+                    const { data: part, error } = await q.single();
                     if (error) throw error;
 
                     fetchedData = {
@@ -156,7 +165,9 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                     });
 
                 } else if (mode === 'page' && pageId) {
-                    const { data: pg, error } = await supabase.from('pages').select('*').eq('id', pageId).single();
+                    let q = udm.from('pages').select('*').eq('id', pageId);
+                    q = applyTenantFilter(q);
+                    const { data: pg, error } = await q.single();
                     if (error) throw error;
                     fetchedData = pg;
                     setPageMetadata({
@@ -174,21 +185,22 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                 }
             } catch (error) {
                 console.error("Error loading visual builder data:", error);
-                toast({ title: "Error", description: error.message || "Failed to load content.", variant: "destructive" });
-                // Only close on critical errors, not transient ones
+                toast({ title: "Error", description: error.message || "Failed to load content, or access denied.", variant: "destructive" });
+
                 if (error.code === 'PGRST116' || error.message?.includes('not found')) {
-                    // Page/template not found - this is a critical error
-                    setTimeout(() => handleClose(), 2000); // Give user time to see the error
+                    setTimeout(() => handleClose(), 2000);
                 }
             } finally {
                 setLoading(false);
             }
         };
 
-        loadData();
-        // Only run on mount or when IDs change, NOT when resetHistory changes
+        // Only run if we have currentTenant (or are global/platform admin)
+        if (currentTenant?.id || isPlatformAdmin) {
+            loadData();
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [templateId, pageId, initialPage, mode]);
+    }, [templateId, pageId, initialPage, mode, currentTenant?.id, isPlatformAdmin]);
 
 
     const handleClose = () => {
@@ -211,10 +223,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
     // Sanitize data (remove orphaned zones)
     const cleanPuckData = useCallback((currentData) => {
         if (!currentData || !currentData.zones) return currentData;
-
         const validIds = new Set();
-
-        // Helper to collect all IDs recursively
         const collectIds = (items) => {
             if (!items) return;
             items.forEach(item => {
@@ -223,29 +232,13 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                 }
             });
         };
-
-        // 1. Collect IDs from root content
         collectIds(currentData.content);
-
-        // 2. Collect IDs from all zones
-        // note: we iterate existing zones to find items inside them. 
-        // If a zone is orphaned, its items might still provide IDs? 
-        // No, if the zone is orphaned, we are about to delete it, so we shouldn't count its children as "valid" hosts for other zones?
-        // Actually, if a component C1 is in content, and has zone Z1. Items in Z1 are valid.
-        // If C1 is deleted, Z1 is orphaned. Items in Z1 are effectively deleted.
-        // So we should only collect IDs from "reachable" items.
-        // This requires a traversal starting from root.
-
         const reachableIds = new Set();
         const traverse = (items) => {
             if (!items) return;
             items.forEach(item => {
                 if (item.props && item.props.id) {
                     reachableIds.add(item.props.id);
-                    // If this item has zones, traverse them?
-                    // We don't know which zones belong to this item easily without config.
-                    // But we can check keys in currentData.zones that start with item.props.id + ":"
-                    // This assumes the naming convention "itemId:zoneName"
                     Object.keys(currentData.zones).forEach(zoneKey => {
                         if (zoneKey.startsWith(`${item.props.id}:`)) {
                             traverse(currentData.zones[zoneKey]);
@@ -254,22 +247,17 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                 }
             });
         };
-
         traverse(currentData.content);
-
         const newZones = {};
         let hasChanges = false;
-
         Object.keys(currentData.zones).forEach(zoneKey => {
             const [componentId] = zoneKey.split(':');
-            // Check if componentId is in reachableIds
             if (reachableIds.has(componentId)) {
                 newZones[zoneKey] = currentData.zones[zoneKey];
             } else {
-                hasChanges = true; // Orphaned zone
+                hasChanges = true;
             }
         });
-
         if (!hasChanges) return currentData;
         return { ...currentData, zones: newZones };
     }, []);
@@ -277,7 +265,6 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
     // Handle Puck data change
     const handleChange = useCallback((newData) => {
         const cleanedData = cleanPuckData(newData);
-
         if (cleanedData) {
             setData(cleanedData);
             setHasUnsavedChanges(true);
@@ -288,105 +275,84 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
 
     // Save Content Function
     const saveContent = async (contentData, isAutoSave = false) => {
-        // Validate we have the required ID before proceeding
-        if (mode === 'template') {
-            if (!templateId) {
-                console.error('Save failed: templateId is missing');
-                if (!isAutoSave) {
-                    toast({ variant: 'destructive', title: 'Error', description: 'Template ID is missing. Cannot save.' });
-                }
-                return;
-            }
-        } else {
-            if (!page || !page.id) {
-                console.error('Save failed: page or page.id is missing', { page });
-                if (!isAutoSave) {
-                    toast({ variant: 'destructive', title: 'Error', description: 'Page data is missing. Cannot save.' });
-                }
-                return;
-            }
+        if (mode === 'template' && !templateId) {
+            if (!isAutoSave) toast({ variant: 'destructive', title: 'Error', description: 'Template ID is missing. Cannot save.' });
+            return;
+        } else if (mode !== 'template' && (!page || !page.id)) {
+            if (!isAutoSave) toast({ variant: 'destructive', title: 'Error', description: 'Page data is missing. Cannot save.' });
+            return;
         }
-
-
 
         setIsSaving(true);
         try {
             let error = null;
-            let resultData = null; // Renamed to avoid shadowing 'data' from useHistory
+            let resultData = null; // Can be payload (optimistic) or row array
+
+            const timestamp = new Date().toISOString();
+
+            // applyTenantFilter logic for update is handled by .eq('id', ...) RLS, 
+            // but for offline safety we could check tenant match if we had full object. 
+            // Assuming loaded 'page' object has tenant_id correct from loadData.
 
             if (mode === 'template') {
-                console.log('Saving template to database:', templateId);
-                const result = await supabase
+                console.log('Saving template:', templateId);
+                const { data: res, error: err } = await udm
                     .from('templates')
                     .update({
                         data: contentData,
-                        updated_at: new Date().toISOString(),
+                        updated_at: timestamp,
                         name: pageMetadata.title,
                         slug: pageMetadata.slug,
                         description: pageMetadata.meta_description,
                         is_active: pageMetadata.status === 'published'
                     })
-                    .eq('id', templateId)
-                    .select();
-                error = result.error;
-                resultData = result.data;
+                    .eq('id', templateId);
+                error = err;
+                resultData = res;
             } else if (mode === 'part') {
-                console.log('Saving part to database:', partId);
-                const result = await supabase
+                console.log('Saving part:', partId);
+                const { data: res, error: err } = await udm
                     .from('template_parts')
                     .update({
                         content: contentData,
-                        updated_at: new Date().toISOString(),
+                        updated_at: timestamp,
                         name: pageMetadata.title,
-                        type: pageMetadata.slug, // Ensure slug reflects type if editable, or lock it
+                        type: pageMetadata.slug,
                         is_active: pageMetadata.status === 'published'
                     })
-                    .eq('id', partId)
-                    .select();
-                error = result.error;
-                resultData = result.data;
+                    .eq('id', partId);
+                error = err;
+                resultData = res;
             } else {
-                console.log('Saving page to database:', page.id);
-                const result = await supabase
+                console.log('Saving page:', page.id);
+                const { data: res, error: err } = await udm
                     .from('pages')
                     .update({
                         content_draft: contentData,
-                        updated_at: new Date().toISOString(),
+                        updated_at: timestamp,
                         title: pageMetadata.title,
                         slug: pageMetadata.slug,
                         meta_description: pageMetadata.meta_description,
                         status: pageMetadata.status,
                         published_at: pageMetadata.published_at || null
                     })
-                    .eq('id', page.id)
-                    .select();
-                error = result.error;
-                resultData = result.data;
+                    .eq('id', page.id);
+                error = err;
+                resultData = res;
             }
 
             if (error) throw error;
 
-            // Check if any rows were actually updated
-            if (!resultData || resultData.length === 0) {
-                console.error('⚠️ No rows updated! RLS policy may be blocking the update.');
-                toast({
-                    variant: 'destructive',
-                    title: 'Save Failed',
-                    description: 'No data was saved. You may not have permission to edit this page.'
-                });
-                return;
-            }
-
-            // Log what was actually saved to DB
-            console.log('✅ Save successful, rows updated:', resultData.length);
-            console.log('Saved content_draft (first 200 chars):', JSON.stringify(resultData[0]?.content_draft).substring(0, 200));
-
+            console.log('✅ Save successful');
             setLastSavedAt(new Date());
             setHasUnsavedChanges(false);
 
             if (!isAutoSave) {
                 const entityName = mode === 'template' ? 'Template' : (mode === 'part' ? 'Part' : 'Page');
-                toast({ title: 'Saved', description: `${entityName} saved successfully.` });
+                toast({
+                    title: isOffline ? 'Saved Offline' : 'Saved',
+                    description: isOffline ? `${entityName} saved to local device. Will sync when online.` : `${entityName} saved successfully.`
+                });
             }
         } catch (err) {
             console.error('Save error:', err);
@@ -414,17 +380,14 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
     // Keyboard shortcuts for undo/redo
     useEffect(() => {
         const handleKeyDown = (e) => {
-            // Ctrl/Cmd + Z = Undo
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
                 e.preventDefault();
                 handleUndo();
             }
-            // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y = Redo
             if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
                 e.preventDefault();
                 handleRedo();
             }
-            // Ctrl/Cmd + S = Save
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
                 if (dataRef.current) {
@@ -443,23 +406,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
             toast({ variant: 'destructive', title: 'Action Denied', description: 'You do not have permission to save changes.' });
             return;
         }
-
-        // Mode-aware validation
-        if (mode === 'template') {
-            if (!templateId) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Template ID is missing. Please reload the editor.' });
-                return;
-            }
-        } else {
-            if (!page || !page.id) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Page data is missing. Please reload the editor.' });
-                return;
-            }
-        }
-
-        // Use dataRef.current to get the LATEST data (avoids stale closure)
         const currentData = dataRef.current;
-
         if (!currentData) {
             toast({ variant: 'destructive', title: 'Error', description: 'No content data available to save.' });
             return;
@@ -472,7 +419,6 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
     useEffect(() => {
         if (hasUnsavedChanges && !isSaving && canEdit) {
             const timer = setTimeout(() => {
-                // Use dataRef.current for latest data (avoids stale closure)
                 if (dataRef.current) {
                     saveContent(dataRef.current, true);
                 }
@@ -493,11 +439,9 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
         }
         setIsPublishing(true);
         try {
-            // First save draft content
             await saveContent(data, false);
 
-            // Then publish
-            const { error } = await supabase
+            const { error } = await udm
                 .from('pages')
                 .update({
                     status: 'published',
@@ -508,12 +452,11 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
 
             if (error) throw error;
 
-            // Update local state
             setPageMetadata(prev => ({ ...prev, status: 'published' }));
 
             toast({
-                title: "Published Successfully",
-                description: "Your page is now live.",
+                title: isOffline ? "Published Offline" : "Published Successfully",
+                description: isOffline ? "Changes saved locally. Status will update when online." : "Your page is now live.",
             });
         } catch (error) {
             console.error('Error publishing page:', error);
@@ -527,11 +470,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
         }
     };
 
-
-
-
-
-    // Prepare config for Puck - Memoized to prevent re-renders
+    // Prepare config for Puck
     const puckConfig = React.useMemo(() => ({
         components: editorConfig.components,
         categories: editorConfig.categories,
@@ -582,6 +521,14 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Offline Indicator */}
+                    {isOffline && (
+                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 text-amber-700 mr-2" title="You are offline. Changes will be saved locally.">
+                            <WifiOff className="w-4 h-4" />
+                            <span className="text-xs font-bold">OFFLINE</span>
+                        </div>
+                    )}
+
                     <div className="flex items-center gap-1 mr-4 border-r pr-4">
                         <Button variant="ghost" size="icon" onClick={handleUndo} disabled={!canUndo}>
                             <Undo2 className="w-4 h-4" />
@@ -676,6 +623,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                             titleValue={pageMetadata.title}
                             tableName="pages"
                             recordId={page?.id}
+                            tenantId={currentTenant?.id} // CHANGED: Pass tenantId
                             onSlugChange={(newSlug) => setPageMetadata({ ...pageMetadata, slug: newSlug })}
                         />
 

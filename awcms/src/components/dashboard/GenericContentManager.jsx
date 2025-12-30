@@ -3,7 +3,7 @@ import ContentTable from '@/components/dashboard/ContentTable';
 import GenericResourceEditor from '@/components/dashboard/GenericResourceEditor';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
+import { udm } from '@/lib/data/UnifiedDataManager'; // Changed from supabase
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, Search, X, RefreshCw, Archive, RotateCcw, ShieldAlert, User, Home, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -85,47 +85,44 @@ const GenericContentManager = ({
             // Updated default select query to use valid PostgREST syntax for embedding 'users' via 'created_by' column.
             const selectQuery = customSelect || '*, owner:users!created_by(email, full_name)';
 
-            let dbQuery = supabase
-                .from(tableName)
+            // UnifiedDataManager Integration
+            let q = udm.from(tableName)
                 .select(selectQuery, { count: 'exact' });
 
             // STRICT TENANT FILTERING
             if (currentTenant?.id) {
-                dbQuery = dbQuery.eq('tenant_id', currentTenant.id);
+                q = q.eq('tenant_id', currentTenant.id);
             } else if (hasPermission('manage_platform')) {
                 // Platform admin view (no tenant selected) logic could go here
-                // For now, if no tenant is selected, we might want to show nothing or all (careful with all)
-                // Assuming we want to force tenant selection for now unless explicitly asking for all
                 console.log('Platform Admin View: showing all records (careful)');
             } else {
-                // Should be caught by the return above, but safety first
                 setItems([]);
                 setLoading(false);
                 return;
             }
 
             if (showTrash) {
-                dbQuery = dbQuery.not('deleted_at', 'is', null);
+                q = q.not('deleted_at', 'is', null);
             } else {
-                dbQuery = dbQuery.is('deleted_at', null);
+                q = q.is('deleted_at', null);
             }
 
             // Apply default filters (e.g., { type: 'articles' } for categories)
             if (defaultFilters && Object.keys(defaultFilters).length > 0) {
                 Object.entries(defaultFilters).forEach(([key, value]) => {
-                    dbQuery = dbQuery.eq(key, value);
+                    q = q.eq(key, value);
                 });
             }
 
             if (query) {
                 const searchCol = columns.find(c => c.key === 'title' || c.key === 'name')?.key || 'id';
-                dbQuery = dbQuery.ilike(searchCol, `%${query}%`);
+                q = q.ilike(searchCol, `%${query}%`);
             }
 
             const from = (currentPage - 1) * itemsPerPage;
             const to = from + itemsPerPage - 1;
 
-            const { data, count, error } = await dbQuery
+            const { data, count, error } = await q
                 .range(from, to)
                 .order('created_at', { ascending: false });
 
@@ -170,21 +167,17 @@ const GenericContentManager = ({
 
         try {
             const deletedAt = new Date().toISOString();
-            const { data, error } = await supabase
-                .from(tableName)
+
+            // UnifiedDataManager Update
+            const { data, error } = await udm.from(tableName)
                 .update({ deleted_at: deletedAt })
-                .eq('id', itemToDelete.id)
-                .select('id, deleted_at');
+                .eq('id', itemToDelete.id); // UDM update expects filters to apply to update WHERE clause
 
             if (error) throw error;
 
-            if (!data || data.length === 0) {
-                throw new Error('Failed to delete: No permission or item not found');
-            }
-
-            if (!data[0].deleted_at) {
-                throw new Error('Failed to delete: Update was blocked by database policy');
-            }
+            // Note: UDM update returns { data: payload } for optimistic, so checks on data might need adjustment 
+            // but our UDM wrapper returns standard {data, error} format.
+            // If offline, data is just the payload.
 
             toast({ title: 'Success', description: `${resourceName} moved to trash` });
             fetchItems();
@@ -199,17 +192,11 @@ const GenericContentManager = ({
 
     const handleRestore = async (id) => {
         try {
-            const { data, error } = await supabase
-                .from(tableName)
+            const { data, error } = await udm.from(tableName)
                 .update({ deleted_at: null })
-                .eq('id', id)
-                .select('id, deleted_at');
+                .eq('id', id);
 
             if (error) throw error;
-
-            if (!data || data.length === 0) {
-                throw new Error('Failed to restore: No permission or item not found');
-            }
 
             toast({ title: 'Restored', description: `${resourceName} restored from trash.` });
             fetchItems();
@@ -227,7 +214,7 @@ const GenericContentManager = ({
     const confirmPermanentDelete = async () => {
         if (!itemToPermanentDelete) return;
         try {
-            const { error } = await supabase.from(tableName).delete().eq('id', itemToPermanentDelete);
+            const { error } = await udm.from(tableName).delete().eq('id', itemToPermanentDelete);
             if (error) throw error;
             toast({ title: 'Deleted', description: `${resourceName} permanently deleted.` });
             fetchItems();

@@ -42,6 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_templates_slug ON public.templates(slug);
 CREATE INDEX IF NOT EXISTS idx_templates_category ON public.templates(category);
 
 -- Tigger for updated_at
+DROP TRIGGER IF EXISTS update_templates_updated_at ON public.templates;
 CREATE TRIGGER update_templates_updated_at
 BEFORE UPDATE ON public.templates
 FOR EACH ROW

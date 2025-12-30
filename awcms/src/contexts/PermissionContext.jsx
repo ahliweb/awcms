@@ -1,7 +1,7 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { supabase } from '@/lib/customSupabaseClient';
+import { udm } from '@/lib/data/UnifiedDataManager';
+import { supabase } from '@/lib/customSupabaseClient'; // Keep for edge cases/initial load if needed, but aim for UDM
 
 const PermissionContext = createContext(undefined);
 
@@ -18,32 +18,76 @@ export const PermissionProvider = ({ children }) => {
       setPermissions([]);
       setUserRole(null);
       setTenantId(null);
+      setAbacPolicies([]);
       setLoading(false);
       return;
     }
 
     try {
-      // 1. Fetch User Role & Permissions from Database
-      // FIX: Explicitly specify the foreign key relationship 'users_role_id_fkey'
-      const { data: userData, error: userError } = await supabase
-        .from('users')
+      // 1. Fetch User Data
+      // Attempt to load with deep joins (Online optimal)
+      // UDM will strip these joins if Offline/Local, returning just the user row.
+      const { data: userDataRaw, error: userError } = await udm.from('users')
         .select(`
-          tenant_id,
-          role_id,
+          *,
           roles!users_role_id_fkey (
             name,
             role_permissions (
               permissions (
                 name
               )
+            ),
+            role_policies (
+              policies (
+                definition
+              )
             )
           )
         `)
         .eq('id', user.id)
-        .maybeSingle();
+        .single(); // Use single()
 
       if (userError) {
         console.error('Error fetching user permissions:', userError);
+      }
+
+      let userData = userDataRaw;
+
+      // 2. Offline Fallback: Reconstruct Data Waterfall if needed
+      // If we got user data but missing nested 'roles', and we have a role_id
+      if (userData && !userData.roles && userData.role_id) {
+        // Fetch Role
+        const { data: roleData } = await udm.from('roles').select('*').eq('id', userData.role_id).single();
+
+        if (roleData) {
+          userData.roles = roleData;
+
+          // Fetch Role Permissions
+          // 1. Get role_permissions map (join table)
+          const { data: rpMap } = await udm.from('role_permissions').select('*').eq('role_id', roleData.id);
+
+          if (rpMap && rpMap.length > 0) {
+            const permIds = rpMap.map(rp => rp.permission_id);
+            // 2. Get actual permissions
+            const { data: perms } = await udm.from('permissions').select('name').in('id', permIds);
+            if (perms) {
+              userData.roles.role_permissions = perms.map(p => ({ permissions: p }));
+            }
+          }
+
+          // Fetch Role Policies
+          // 1. Get role_policies map
+          const { data: rPolMap } = await udm.from('role_policies').select('*').eq('role_id', roleData.id);
+
+          if (rPolMap && rPolMap.length > 0) {
+            const policyIds = rPolMap.map(rp => rp.policy_id);
+            // 2. Get actual policies
+            const { data: pols } = await udm.from('policies').select('definition').in('id', policyIds);
+            if (pols) {
+              userData.roles.role_policies = pols.map(p => ({ policies: p }));
+            }
+          }
+        }
       }
 
       let dbRole = null;
@@ -54,55 +98,56 @@ export const PermissionProvider = ({ children }) => {
         dbTenantId = userData.tenant_id;
         if (userData.roles) {
           dbRole = userData.roles.name;
-          // Load permissions based on role
+
           if (dbRole === 'super_admin' || dbRole === 'owner') {
-            // Will fetch all perms later if this role is active
+            // Will fetch all perms later
           } else {
             dbPermissions = userData.roles.role_permissions
               ?.map(rp => rp.permissions?.name)
               .filter(Boolean) || [];
 
-            // Load ABAC Policies (DISABLED: Table role_policies does not exist yet)
-            // const policies = userData.roles.role_policies
-            //   ?.map(rp => rp.policies?.definition)
-            //   .filter(Boolean) || [];
-            // setAbacPolicies(policies);
+            const policies = userData.roles.role_policies
+              ?.map(rp => rp.policies?.definition)
+              .filter(Boolean) || [];
+            setAbacPolicies(policies);
           }
         }
       }
 
       setTenantId(dbTenantId);
 
-      // 2. Determine Final Role (DB vs Env Var Safety Net)
+      // 3. Determine Final Role
       const superAdminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
       let finalRole = dbRole || 'guest';
       let finalPermissions = dbPermissions;
 
-      // Safety Net: If user matches env var AND has no higher role from DB, grant super_admin
-      // If DB says 'owner', we KEEP that (it's higher).
-      // If DB says 'guest' but env match, we UPGRADE to 'super_admin'.
       if (superAdminEmail && user.email === superAdminEmail) {
-        if (finalRole !== 'owner') { // Only 'owner' is higher than 'super_admin' now
+        if (finalRole !== 'owner') {
           finalRole = 'super_admin';
-          // If we upgraded via safety net, we might need to rely on env-var based bypass, 
-          // but we'll fetch all permissions below anyway.
         }
       }
 
       setUserRole(finalRole);
 
-      // 3. Load Permissions for Admin Roles
+      // 4. Load Permissions for Admin Roles
       if (finalRole === 'super_admin' || finalRole === 'owner') {
-        const { data: allPerms } = await supabase.from('permissions').select('name');
+        // Attempt to fetch all permissions from UDM
+        const { data: allPerms } = await udm.from('permissions').select('name');
         if (allPerms) {
           finalPermissions = allPerms.map(p => p.name);
+        } else {
+          // Fallback if UDM fails or is empty, maybe implied * access
+          // but normally table should exist locally or remotely
+          finalPermissions = ['*']; // Or handle as "All Access" logic in checks
         }
       }
 
-      setPermissions(finalPermissions);
+      setPermissions(finalPermissions || []);
 
     } catch (error) {
       console.error('Unexpected error fetching permissions:', error);
+      // Fallback to empty context to prevent crash loops
+      setPermissions([]);
     } finally {
       setLoading(false);
     }
@@ -114,11 +159,9 @@ export const PermissionProvider = ({ children }) => {
 
   const hasPermission = useCallback((permission) => {
     if (!permission) return true;
-    // --- SUPER ADMIN / OWNER BYPASS ---
-    // If user is super_admin or owner, they have ALL permissions
-    if (['super_admin', 'owner'].includes(userRole)) {
-      return true;
-    }
+    if (['super_admin', 'owner'].includes(userRole)) return true;
+
+    // Safety Net
     const superAdminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
     if (superAdminEmail && user?.email === superAdminEmail) return true;
 
@@ -126,38 +169,22 @@ export const PermissionProvider = ({ children }) => {
   }, [permissions, userRole, user]);
 
   const hasAnyPermission = useCallback((permissionList) => {
-    // --- SUPER ADMIN / OWNER BYPASS ---
-    // If user is super_admin or owner, they have ALL permissions
-    if (['super_admin', 'owner'].includes(userRole)) {
-      return true;
-    }
+    if (['super_admin', 'owner'].includes(userRole)) return true;
     const superAdminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
     if (superAdminEmail && user?.email === superAdminEmail) return true;
-    if (!permissionList || permissionList.length === 0) return true;
 
+    if (!permissionList || permissionList.length === 0) return true;
     return permissionList.some(p => permissions.includes(p));
   }, [permissions, userRole, user]);
 
-  // Enhanced Ownership Check Helper (ERP Aligned)
   const checkAccess = useCallback((action, resource, record = null) => {
-    // --- SUPER ADMIN / OWNER BYPASS ---
-    // If user is super_admin or owner, they have ALL permissions
-    if (['super_admin', 'owner'].includes(userRole)) {
-      return true;
-    }
+    if (['super_admin', 'owner'].includes(userRole)) return true;
 
-    // Construct Permission Key (Standard: tenant.resource.action)
-    // If resource already has a dot (e.g. 'platform.user'), use it as is.
     const hasScope = resource.includes('.');
     const permissionKey = hasScope ? `${resource}.${action}` : `tenant.${resource}.${action}`;
 
-    // 1. Check Explicit Permission (Admin level access)
-    // Also check legacy format for backward compatibility if needed, but we are migrating.
     if (permissions.includes(permissionKey)) return true;
 
-    // 2. Check Ownership (Author level access)
-    // ERP: Authors have U-own (Update Own) permission implicit if they don't have explicit Update permission
-    // but usually they rely on this check.
     if (record && record.created_by && user) {
       if (record.created_by === user.id) return true;
     }
@@ -165,50 +192,25 @@ export const PermissionProvider = ({ children }) => {
     return false;
   }, [permissions, userRole, user]);
 
-  /**
-   * ABAC Policy Check (ERP Standard)
-   * Evaluates JSON-based policies against the current action/context.
-   * @param {string} action - e.g. 'delete', 'publish'
-   * @param {string} resource - e.g. 'users', 'posts'
-   * @param {object} context - { channel: 'web'|'mobile', ip: '...', time: '...' }
-   */
   const checkPolicy = useCallback((action, resource, context = {}) => {
-    // 1. Super Admins bypass everything
-    // --- SUPER ADMIN / OWNER BYPASS ---
-    // If user is super_admin or owner, they have ALL permissions
-    if (['super_admin', 'owner'].includes(userRole)) {
-      return true;
-    }
+    if (['super_admin', 'owner'].includes(userRole)) return true;
 
-    // 2. Default Context
-    const finalContext = {
-      channel: 'web', // Default channel
-      ...context
-    };
+    const finalContext = { channel: 'web', ...context };
 
-    // 3. Evaluate Policies
-    // Default effect is DENY if no policy matches explicitly (or ALLOW if we rely on RBAC as base)
-    // Strategy: RBAC is base ALLOW. Policies are RESTRICTIVE overwrites (Deny overrides Allow).
-
-    // Check deny policies first
+    // Check deny policies
     const denyMatch = abacPolicies.some(policy => {
       if (policy.effect !== 'deny') return false;
       if (!policy.actions.includes('*') && !policy.actions.includes(action)) return false;
-
-      // Check conditions
       if (policy.conditions) {
         if (policy.conditions.channel && policy.conditions.channel !== finalContext.channel) return false;
-        // Add more condition checks here (time, ip, etc.)
       }
-      return true; // Policy matches and denies
+      return true;
     });
 
     if (denyMatch) return false;
-
-    return true; // No deny policy found (Permissive on top of RBAC)
+    return true;
   }, [abacPolicies, userRole]);
 
-  // Platform Admin: Owner or Super Admin
   const isPlatformAdmin = useMemo(() => {
     return ['owner', 'super_admin'].includes(userRole);
   }, [userRole]);

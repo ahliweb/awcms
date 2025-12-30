@@ -49,6 +49,7 @@ const UserProfile = lazy(() => import('@/components/dashboard/UserProfile'));
 const RolesManager = lazy(() => import('@/components/dashboard/RolesManager'));
 const RoleEditor = lazy(() => import('@/components/dashboard/RoleEditor'));
 const PermissionsManager = lazy(() => import('@/components/dashboard/PermissionsManager'));
+const PolicyManager = lazy(() => import('@/components/dashboard/PolicyManager'));
 const MenusManager = lazy(() => import('@/components/dashboard/MenusManager'));
 const ProductsManager = lazy(() => import('@/components/dashboard/ProductsManager'));
 const OrdersManager = lazy(() => import('@/components/dashboard/OrdersManager'));
@@ -222,7 +223,9 @@ const MainRouter = () => {
           <Route path="roles" element={<RolesManager />} />
           <Route path="roles/new" element={<RoleEditor />} />
           <Route path="roles/edit/:id" element={<RoleEditor />} />
+          <Route path="roles/edit/:id" element={<RoleEditor />} />
           <Route path="permissions" element={<PermissionsManager />} />
+          <Route path="policies" element={<PolicyManager />} />
 
           <Route path="menus" element={<MenusManager />} />
           <Route path="products" element={<ProductsManager />} />

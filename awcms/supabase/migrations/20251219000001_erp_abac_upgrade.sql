@@ -3,7 +3,7 @@
 
 -- 1. ERP Audit Logs
 CREATE TABLE IF NOT EXISTS public.audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     tenant_id UUID REFERENCES public.tenants(id),
     user_id UUID REFERENCES public.users(id),
@@ -44,7 +44,7 @@ WITH CHECK (
 
 -- 2. ABAC Policies System
 CREATE TABLE IF NOT EXISTS public.policies (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     description TEXT,
     definition JSONB NOT NULL, -- { "effect": "allow", "actions": ["delete"], "conditions": { ... } }
@@ -69,22 +69,25 @@ CREATE TABLE IF NOT EXISTS public.role_policies (
 );
 
 -- 3. Workflow State Columns
--- Posts
-ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS workflow_state TEXT DEFAULT 'draft'; -- draft, reviewed, approved, published
-ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS current_assignee_id UUID REFERENCES public.users(id);
+-- Articles (was posts)
+ALTER TABLE public.articles ADD COLUMN IF NOT EXISTS workflow_state TEXT DEFAULT 'draft'; -- draft, reviewed, approved, published
+ALTER TABLE public.articles ADD COLUMN IF NOT EXISTS current_assignee_id UUID REFERENCES public.users(id);
 
 -- Pages
 ALTER TABLE public.pages ADD COLUMN IF NOT EXISTS workflow_state TEXT DEFAULT 'draft';
 ALTER TABLE public.pages ADD COLUMN IF NOT EXISTS current_assignee_id UUID REFERENCES public.users(id);
 
 -- 4. Initial Seed for Workflow States (Optional but good for consistency)
-UPDATE public.posts SET workflow_state = 'published' WHERE status = 'published' AND workflow_state = 'draft';
+UPDATE public.articles SET workflow_state = 'published' WHERE status = 'published' AND workflow_state = 'draft';
 UPDATE public.pages SET workflow_state = 'published' WHERE status = 'published' AND workflow_state = 'draft';
 
 -- 5. Insert new Permissions
-INSERT INTO public.permissions (name, description, module, action) VALUES
-('view_system_audit_logs', 'View system audit trails', 'system', 'view')
-ON CONFLICT (name) DO NOTHING;
+INSERT INTO public.permissions (name, description, module, resource, action) VALUES
+('view_system_audit_logs', 'View system audit trails', 'system', 'system', 'view')
+ON CONFLICT (name) DO UPDATE SET
+    module = EXCLUDED.module,
+    resource = EXCLUDED.resource,
+    action = EXCLUDED.action;
 
 -- 6. Grant to Admins
 DO $$

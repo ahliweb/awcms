@@ -35,7 +35,8 @@ const DEFAULT_MENU_CONFIG = [
 
   // USERS Group
   { id: 'users', key: 'users', label: 'Users', path: 'users', icon: 'Users', permission: 'tenant.user.read', group_label: 'USERS', group_order: 50, order: 10, is_visible: true },
-  { id: 'roles', key: 'roles', label: 'Roles & Permissions', path: 'roles', icon: 'Shield', permission: 'tenant.user.read', group_label: 'USERS', group_order: 50, order: 20, is_visible: true },
+  { id: 'roles', key: 'roles', label: 'Roles & Permissions', path: 'roles', icon: 'Shield', permission: 'tenant.role.read', group_label: 'USERS', group_order: 50, order: 20, is_visible: true },
+  { id: 'policies', key: 'policies', label: 'Policies', path: 'policies', icon: 'ShieldCheck', permission: 'tenant.policy.read', group_label: 'USERS', group_order: 50, order: 30, is_visible: true },
 
   // SYSTEM Group
   { id: 'seo_manager', key: 'seo_manager', label: 'SEO Manager', path: 'seo', icon: 'Search', permission: 'tenant.setting.read', group_label: 'SYSTEM', group_order: 60, order: 10, is_visible: true },

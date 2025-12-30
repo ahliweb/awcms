@@ -18,7 +18,11 @@ const ThemeWrapper = ({ children }) => {
   return children;
 };
 
+import { useOfflineSync } from '@/hooks/useOfflineSync';
+
 function App() {
+  const { isSyncing } = useOfflineSync(); // Initialize Sync Engine
+
   return (
     <TenantProvider>
       <AuthProvider>

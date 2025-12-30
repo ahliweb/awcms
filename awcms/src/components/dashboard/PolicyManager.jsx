@@ -9,10 +9,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 export default function PolicyManager() {
-    const { tenantId, userRole } = usePermissions();
+    const { tenantId, userRole, hasPermission, isPlatformAdmin } = usePermissions();
     const { toast } = useToast();
     const [policies, setPolicies] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    const canManage = isPlatformAdmin || hasPermission('tenant.policy.create'); // Simplified for now, usually create/update/delete separate
+    const canView = isPlatformAdmin || hasPermission('tenant.policy.read');
+
+    if (!canView) return <div className="p-8 text-center text-red-500">Access Denied</div>;
 
     // Editor State
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -140,9 +145,11 @@ export default function PolicyManager() {
                     <h2 className="text-2xl font-bold tracking-tight">Policy Manager</h2>
                     <p className="text-slate-500 text-sm">Define ABAC rules for fine-grained access control.</p>
                 </div>
-                <Button onClick={() => handleOpenDialog()}>
-                    <Plus className="w-4 h-4 mr-2" /> New Policy
-                </Button>
+                {canManage && (
+                    <Button onClick={() => handleOpenDialog()}>
+                        <Plus className="w-4 h-4 mr-2" /> New Policy
+                    </Button>
+                )}
             </div>
 
             <div className="bg-white rounded-md border shadow-sm">
@@ -171,8 +178,8 @@ export default function PolicyManager() {
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${policy.definition?.effect === 'deny'
-                                                    ? 'bg-red-100 text-red-700'
-                                                    : 'bg-green-100 text-green-700'
+                                                ? 'bg-red-100 text-red-700'
+                                                : 'bg-green-100 text-green-700'
                                                 }`}>
                                                 {policy.definition?.effect}
                                             </span>
@@ -184,12 +191,16 @@ export default function PolicyManager() {
                                             {JSON.stringify(policy.definition?.conditions)}
                                         </td>
                                         <td className="px-4 py-3 text-right space-x-2">
-                                            <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(policy)}>
-                                                <Edit2 className="w-4 h-4 text-slate-500" />
-                                            </Button>
-                                            <Button variant="ghost" size="sm" onClick={() => handleDelete(policy.id)}>
-                                                <Trash2 className="w-4 h-4 text-red-500" />
-                                            </Button>
+                                            {canManage && (
+                                                <>
+                                                    <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(policy)}>
+                                                        <Edit2 className="w-4 h-4 text-slate-500" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="sm" onClick={() => handleDelete(policy.id)}>
+                                                        <Trash2 className="w-4 h-4 text-red-500" />
+                                                    </Button>
+                                                </>
+                                            )}
                                         </td>
                                     </tr>
                                 ))

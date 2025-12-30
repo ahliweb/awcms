@@ -35,11 +35,21 @@ DECLARE
   ];
 BEGIN
   FOREACH perm IN ARRAY perms LOOP
-    INSERT INTO public.permissions (key, description, module)
-    VALUES (perm, 'ERP Standard Permission', split_part(perm, '.', 1))
-    ON CONFLICT (key) DO NOTHING;
+    INSERT INTO public.permissions (name, description, module, resource, action)
+    VALUES (
+      perm, 
+      'ERP Standard Permission', 
+      split_part(perm, '.', 1), 
+      split_part(perm, '.', 1), 
+      split_part(perm, '.', array_length(string_to_array(perm, '.'), 1))
+    )
+    ON CONFLICT (name) DO UPDATE SET
+        module = EXCLUDED.module,
+        resource = EXCLUDED.resource,
+        action = EXCLUDED.action;
   END LOOP;
-END $$;
+END;
+$$;
 
 -- 3. Map Roles to Permissions
 CREATE OR REPLACE FUNCTION grant_perm(role_name text, perm_keys text[]) RETURNS void AS $$
@@ -51,7 +61,7 @@ BEGIN
   SELECT id INTO r_id FROM roles WHERE name = role_name;
   IF r_id IS NOT NULL THEN
     FOREACH p_key IN ARRAY perm_keys LOOP
-        SELECT id INTO p_id FROM permissions WHERE key = p_key;
+        SELECT id INTO p_id FROM permissions WHERE name = p_key; -- Changed from key to name to match schema
         IF p_id IS NOT NULL THEN
             INSERT INTO role_permissions (role_id, permission_id) VALUES (r_id, p_id) ON CONFLICT DO NOTHING;
         END IF;
@@ -126,11 +136,12 @@ BEGIN
         'content.read'
     ]);
 
-    -- PUBLIC (Roles typically not assigned, but handled via 'public' role if system supports it)
+    -- PUBLIC
     PERFORM grant_perm('public', ARRAY[
         'content.read'
     ]);
-END $$;
+END;
+$$;
 
 DROP FUNCTION grant_perm;
 
@@ -144,10 +155,3 @@ UPDATE public.admin_menus SET permission = 'tenant.theme.manage' WHERE permissio
 UPDATE public.admin_menus SET permission = 'platform.tenant.read' WHERE permission = 'manage_tenants';
 -- Visual Builder mapping
 UPDATE public.admin_menus SET permission = 'tenant.page.read' WHERE permission = 'view_visual_builder';
-
--- New Menu Insertions (if needed) for Policy Manager is already done in previous mig w/ 'manage_abac_policies'
--- We should map 'manage_abac_policies' to 'platform.module.update' or keep as is?
--- Keeping 'manage_abac_policies' as a specific permission is fine, or standardizing it.
--- Let's standardize it: 'platform.security.manage_policies' or just 'platform.setting.update'?
--- For now, le's keep 'manage_abac_policies' as it was just added, or add it to the permission list above.
--- I'll leave 'manage_abac_policies' alone for now as it's not strictly in the ERP matrix provided but is essential.

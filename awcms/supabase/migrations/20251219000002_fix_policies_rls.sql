@@ -2,9 +2,12 @@
 -- Date: 2025-12-19
 
 -- 1. Create permission for managing policies
-INSERT INTO public.permissions (name, description, module, action) VALUES
-('manage_abac_policies', 'Manage ABAC JSON Policies', 'system', 'edit')
-ON CONFLICT (name) DO NOTHING;
+INSERT INTO public.permissions (name, description, module, resource, action) VALUES
+('manage_abac_policies', 'Manage ABAC JSON Policies', 'system', 'system', 'edit')
+ON CONFLICT (name) DO UPDATE SET
+    module = EXCLUDED.module,
+    resource = EXCLUDED.resource,
+    action = EXCLUDED.action;
 
 -- 2. Grant to Admins
 DO $$

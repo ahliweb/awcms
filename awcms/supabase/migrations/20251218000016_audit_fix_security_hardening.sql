@@ -68,6 +68,8 @@ DROP POLICY IF EXISTS "sso_providers_update" ON public.sso_providers;
 DROP POLICY IF EXISTS "sso_providers_delete" ON public.sso_providers;
 
 -- Strict Policies
+-- Strict Policies
+DROP POLICY IF EXISTS "sso_providers_isolation_policy" ON public.sso_providers;
 CREATE POLICY "sso_providers_isolation_policy" ON public.sso_providers
 FOR ALL
 USING (
@@ -80,6 +82,7 @@ USING (
 -- but ideally mappings should also have RLS. Let's add RLS to mappings too just in case.
 
 ALTER TABLE public.sso_role_mappings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sso_mappings_isolation_policy" ON public.sso_role_mappings;
 CREATE POLICY "sso_mappings_isolation_policy" ON public.sso_role_mappings
 FOR ALL
 USING (

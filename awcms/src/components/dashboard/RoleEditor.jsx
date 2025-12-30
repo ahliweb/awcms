@@ -13,9 +13,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { usePermissions } from '@/contexts/PermissionContext';
 
 const PREDEFINED_TEMPLATES = {
-  'Viewer': ['view_articles', 'view_pages', 'view_products', 'view_portfolio', 'view_announcements', 'view_photo_gallery'],
-  'Editor': ['view_articles', 'create_articles', 'edit_articles', 'view_pages', 'create_pages', 'edit_pages', 'view_products', 'create_products', 'edit_products', 'view_media'],
-  'Manager': ['view_users', 'view_roles', 'view_settings', 'view_logs', 'view_extensions', 'manage_extensions']
+  'Viewer': ['tenant.article.read', 'tenant.page.read', 'tenant.product.read', 'tenant.portfolio.read', 'tenant.announcement.read', 'tenant.photo_gallery.read'],
+  'Editor': ['tenant.article.read', 'tenant.article.create', 'tenant.article.update', 'tenant.article.publish', 'tenant.page.read', 'tenant.page.create', 'tenant.page.update', 'tenant.product.read', 'tenant.product.create', 'tenant.product.update', 'tenant.media.read'],
+  'Manager': ['tenant.user.read', 'tenant.role.read', 'tenant.setting.read', 'tenant.audit.read', 'tenant.extensions.read', 'tenant.extensions.manage']
 };
 
 const RoleEditor = ({ role, onClose, onSave }) => {
@@ -23,7 +23,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
   const { hasPermission, isSuperAdmin } = usePermissions();
 
   // Permission check - only super admin or role.update can edit roles
-  const canEditRoles = isSuperAdmin || hasPermission('tenant.user.update') || hasPermission('platform.user.update');
+  const canEditRoles = isSuperAdmin || hasPermission('tenant.role.update') || hasPermission('platform.role.update');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -111,10 +111,17 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     // Filter permissions based on the template
     const targetIds = permissions
       .filter(p => {
-        // Very simple template logic for demo - can be much more sophisticated
-        if (templateName === 'Viewer') return p.action === 'view';
-        if (templateName === 'Editor') return ['view', 'create', 'edit', 'publish'].includes(p.action) && !['users', 'roles', 'settings', 'extensions', 'permissions'].includes(p.resource);
-        if (templateName === 'Manager') return !['permissions'].includes(p.resource);
+        // Standardized Template Logic (ABAC Pattern)
+        if (templateName === 'Viewer') {
+          return p.action === 'read' && !['users', 'roles', 'settings', 'permissions'].includes(p.module);
+        }
+        if (templateName === 'Editor') {
+          const contentModules = ['articles', 'pages', 'products', 'media', 'portfolio', 'announcements'];
+          return ['read', 'create', 'update', 'publish'].includes(p.action) && contentModules.includes(p.module);
+        }
+        if (templateName === 'Manager') {
+          return ['users', 'roles', 'settings', 'audit', 'extensions'].includes(p.module);
+        }
         return false;
       })
       .map(p => p.id);

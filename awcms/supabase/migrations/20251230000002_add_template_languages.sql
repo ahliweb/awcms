@@ -59,9 +59,10 @@ CREATE POLICY "Admins can insert" ON public.template_strings
     FOR INSERT WITH CHECK (
         auth.role() = 'authenticated' AND 
         (EXISTS (
-            SELECT 1 FROM public.users 
-            WHERE users.id = auth.uid() 
-            AND (users.role IN ('owner', 'admin', 'super_admin'))
+            SELECT 1 FROM public.users u
+            JOIN public.roles r ON u.role_id = r.id
+            WHERE u.id = auth.uid() 
+            AND (r.name IN ('owner', 'admin', 'super_admin'))
         ))
     );
 
@@ -69,9 +70,10 @@ CREATE POLICY "Admins can update" ON public.template_strings
     FOR UPDATE USING (
         auth.role() = 'authenticated' AND 
         (EXISTS (
-            SELECT 1 FROM public.users 
-            WHERE users.id = auth.uid() 
-            AND (users.role IN ('owner', 'admin', 'super_admin'))
+            SELECT 1 FROM public.users u
+            JOIN public.roles r ON u.role_id = r.id
+            WHERE u.id = auth.uid() 
+            AND (r.name IN ('owner', 'admin', 'super_admin'))
         ))
     );
 
@@ -79,9 +81,10 @@ CREATE POLICY "Admins can delete" ON public.template_strings
     FOR DELETE USING (
         auth.role() = 'authenticated' AND 
         (EXISTS (
-            SELECT 1 FROM public.users 
-            WHERE users.id = auth.uid() 
-            AND (users.role IN ('owner', 'admin', 'super_admin'))
+            SELECT 1 FROM public.users u
+            JOIN public.roles r ON u.role_id = r.id
+            WHERE u.id = auth.uid() 
+            AND (r.name IN ('owner', 'admin', 'super_admin'))
         ))
     );
 

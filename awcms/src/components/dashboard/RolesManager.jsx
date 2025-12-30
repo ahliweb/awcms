@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import ContentTable from '@/components/dashboard/ContentTable';
 import RoleEditor from '@/components/dashboard/RoleEditor';
 import { usePermissions } from '@/contexts/PermissionContext';
+// Standard Permissions: tenant.role.read, tenant.role.create, tenant.role.update, tenant.role.delete
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
