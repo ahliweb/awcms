@@ -39,7 +39,15 @@ dependencies:
   
   # Security (Anti-RE) (Updated)
   flutter_secure_storage: ^10.0.0
-  flutter_jailbreak_detection: ^1.10.0
+
+  # Jailbreak Detection
+  # Used to be
+  # flutter_jailbreak_detection: ^1.10.0
+  # Now using
+  flutter_jailbreak_detection:
+    git:
+      url: https://github.com/pdurasie-ecovery/flutter_jailbreak_detection.git
+      ref: add-namespace
   
   # Location & GPS (Updated)
   geolocator: ^14.0.2
@@ -61,6 +69,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # Uncomment after creating .env file:
-  # assets:
-  #   - .env
+  assets:
+    - .env
