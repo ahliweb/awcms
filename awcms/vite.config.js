@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
 				'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 				// Offline-First: OPFS requirements for wa-sqlite (SharedArrayBuffer)
 				'Cross-Origin-Opener-Policy': 'same-origin',
-				'Cross-Origin-Embedder-Policy': 'require-corp',
+				'Cross-Origin-Embedder-Policy': 'credentialless',
 				// CSP: Allow Supabase and self
 				'Content-Security-Policy': [
 					"default-src 'self'",
