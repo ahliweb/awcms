@@ -23,6 +23,9 @@ cd awcms
 npm install
 cp .env.example .env.local
 npm run dev
+
+# Optional: Configure CORS in .env.local
+# VITE_CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
 ```
 
 → `http://localhost:3000`

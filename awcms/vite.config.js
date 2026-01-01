@@ -6,6 +6,11 @@ export default defineConfig(({ mode }) => {
 	// Load env file based on `mode` in the current directory
 	const env = loadEnv(mode, process.cwd(), '');
 
+	// Parse CORS allowed origins
+	const corsAllowedOrigins = env.VITE_CORS_ALLOWED_ORIGINS
+		? env.VITE_CORS_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
+		: true; // Default to true (allow all) if not set
+
 	return {
 		plugins: [react()],
 
@@ -13,7 +18,7 @@ export default defineConfig(({ mode }) => {
 		server: {
 			host: '::',
 			port: 3000,
-			cors: true,
+			cors: typeof corsAllowedOrigins === 'boolean' ? corsAllowedOrigins : { origin: corsAllowedOrigins },
 			// Security headers (OWASP aligned)
 			headers: {
 				'X-Content-Type-Options': 'nosniff',
@@ -42,6 +47,7 @@ export default defineConfig(({ mode }) => {
 		preview: {
 			host: '::',
 			port: 3000,
+			cors: typeof corsAllowedOrigins === 'boolean' ? corsAllowedOrigins : { origin: corsAllowedOrigins },
 		},
 
 		// Path resolution
@@ -113,6 +119,7 @@ export default defineConfig(({ mode }) => {
 				'react-router-dom',
 				'@supabase/supabase-js',
 			],
+			exclude: ['wa-sqlite'],
 		},
 
 		// Define global constants

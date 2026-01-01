@@ -1,8 +1,15 @@
+<!-- markdownlint-disable MD024 -->
 # Changelog
 
 All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
+
+### Added
+
+- **Dynamic CORS**: `vite.config.js` now reads `VITE_CORS_ALLOWED_ORIGINS` from `.env`.
+- **System Audit**: Verified system health across 12 checking points.
+- **Documentation**: Updated README.md and SECURITY.md with CORS best practices.
 
 ## [2.1.0] - 2026-01-01
 

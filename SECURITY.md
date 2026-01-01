@@ -30,6 +30,7 @@ When deploying AWCMS:
 
 - Always use HTTPS in production
 - Keep all dependencies up to date
+- Restrict CORS origins via VITE_CORS_ALLOWED_ORIGINS
 - Use strong, unique passwords
 - Enable Two-Factor Authentication (2FA) for admin accounts
 - Regularly review Supabase RLS policies
