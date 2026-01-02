@@ -11,6 +11,23 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **System Audit**: Verified system health across 12 checking points.
 - **Documentation**: Updated README.md and SECURITY.md with CORS best practices.
 
+## [2.2.0] - 2026-01-03
+
+### Changed
+
+- **Core Architecture**:
+  - Migrated to **Tailwind CSS v4** with native `@theme` configuration.
+  - Optimized **Vite 7** build with `server.warmup` and `baseline-widely-available` target.
+  - Implemented strict **Tenant Isolation** via comprehensive RLS policies and Database Indices.
+- **Module Standardization**:
+  - Refactored **P0 Modules** (Content, Pages, Categories) to use standard UI/UX tokens.
+  - Refactored **P1 Modules** (Users, Roles, Permissions) for enhanced ABAC security.
+  - Refactored **P2 Modules** (Tenants, Settings, Themes) with modernized layouts.
+  - Refactored **P3 Modules** (Commerce, Galleries) to align with design system.
+- **Security & Reliability**:
+  - Added `ExtensionErrorBoundary` to prevent widget crashes affecting the core UI.
+  - Enhanced `SSOManager` and `PolicyManager` with strict validation.
+
 ## [2.1.0] - 2026-01-01
 
 ### Added
