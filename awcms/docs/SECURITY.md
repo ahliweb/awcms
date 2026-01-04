@@ -118,7 +118,7 @@ AWCMS supports OpenID Connect (OIDC) through Supabase Auth (Google, GitHub, Azur
 
 ---
 
-## Authorization (RBAC)
+## Authorization (ABAC)
 
 ### Permission Checks
 

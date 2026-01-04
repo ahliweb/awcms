@@ -5,6 +5,16 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.6.3] - 2026-01-04
+
+### Fixed
+
+- **Turnstile Login**: Resolved "Security check failed" (Error 600010) by correcting environment variable configuration and removing hardcoded keys in `LoginPage.jsx`.
+
+### Documentation
+
+- **Comprehensive Update**: Updated `CONFIGURATION.md`, `TROUBLESHOOTING.md`, `DEPLOYMENT.md`, and `SECURITY.md` to reflect recent system changes and fixes.
+
 ## [2.6.2] - 2026-01-04
 
 ### Fixed
