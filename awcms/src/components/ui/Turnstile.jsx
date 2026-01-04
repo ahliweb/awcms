@@ -101,13 +101,8 @@ const Turnstile = ({
 
         // Render new widget
         try {
-            widgetIdRef.current = window.turnstile.render(containerRef.current, {
+            const renderOptions = {
                 sitekey: siteKey,
-                theme,
-                ...(size && { size }),
-                appearance,
-                'retry': 'auto',
-                'retry-interval': 2000,
                 callback: (token) => {
                     console.log('[Turnstile] Verification successful', token ? '(Token received)' : '(No token)');
                     onVerify?.(token);
@@ -130,7 +125,22 @@ const Turnstile = ({
                     console.warn('[Turnstile] Timeout');
                     if (widgetIdRef.current && window.turnstile) window.turnstile.reset(widgetIdRef.current);
                 },
-            });
+                'retry': 'auto',
+                'retry-interval': 2000,
+            };
+
+            // STRICT validation for Invisible widgets (Error 400020 prevention)
+            if (appearance === 'interaction-only') {
+                renderOptions.appearance = 'interaction-only';
+                // DO NOT include 'size' or 'theme' for invisible widgets
+            } else {
+                renderOptions.appearance = appearance;
+                renderOptions.theme = theme;
+                if (size) renderOptions.size = size;
+            }
+
+            console.log('[Turnstile] Render options:', { ...renderOptions, sitekey: '***' });
+            widgetIdRef.current = window.turnstile.render(containerRef.current, renderOptions);
         } catch (e) {
             console.error('[Turnstile] Exception during render:', e);
             setHasError(true);

@@ -128,12 +128,8 @@ const PublicRegisterPage = () => {
 
                             <div className="pt-2">
                                 <Turnstile
-                                    siteKey={
-                                        window.location.hostname === 'primary.ahliweb.com'
-                                            ? '0x4AAAAAACJqShhDPcxMiNkx'
-                                            : import.meta.env.VITE_TURNSTILE_SITE_KEY
-                                    }
-                                    onVerify={setTurnstileToken}
+                                    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                                    appearance="interaction-only"
                                 />
                             </div>
                         </div>

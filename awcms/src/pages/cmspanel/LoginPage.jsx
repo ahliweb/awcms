@@ -355,7 +355,6 @@ const LoginPage = () => {
                     setTurnstileToken('');
                     setTurnstileReady(false);
                   }}
-                  theme="light"
                   appearance="interaction-only"
                 />
                 {!turnstileReady && !turnstileError && (
