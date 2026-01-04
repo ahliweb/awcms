@@ -106,7 +106,7 @@ src/
 │   ├── hooks.js                 # WordPress-style hooks system
 │   ├── pluginRegistry.js        # Core plugin registry
 │   ├── externalExtensionLoader.js # External extension loader
-│   ├── extensionRegistry.js     # Legacy (deprecated)
+│   ├── extensionRegistry.js     # Extension component registry
 │   ├── templateExtensions.js    # Template/Widget/PageType APIs
 │   ├── widgetRegistry.js        # Widget type definitions
 │   ├── i18n.js                  # i18n configuration
@@ -149,7 +149,7 @@ docs/
 ├── ARCHITECTURE.md       # System architecture
 ├── DATABASE_SCHEMA.md    # Database tables
 ├── API_DOCUMENTATION.md  # API usage
-├── RBAC_SYSTEM.md        # Permissions system
+├── ABAC_SYSTEM.md        # Permissions system
 ├── COMPONENT_GUIDE.md    # UI components
 ├── SECURITY.md           # Security measures
 ├── DEPLOYMENT_GUIDE.md   # Deployment options

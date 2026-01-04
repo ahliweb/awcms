@@ -5,11 +5,32 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.4.0] "Blaze" - 2026-01-04
+
 ### Added
 
+- **CORE_STANDARDS Compliance**: Full audit verification of all 55 requirements across 5 pillars.
+- **Privileged Supabase Client**: `src/lib/supabaseAdmin.js` for server-side operations that bypass RLS.
+- **Cloudflare Configuration**: `wrangler.toml` for Cloudflare Pages/Workers deployment.
+- **Code Formatting**: `.prettierrc` configuration for consistent code style.
+- **CI/CD Pipeline**: `.github/workflows/ci.yml` GitHub Actions workflow for automated testing and deployment.
+- **Documentation**:
+  - `docs/ARCHITECTURAL_RECOMMENDATIONS.md`: Architecture best practices.
+  - `docs/CI_CD.md`: CI/CD pipeline documentation.
+
+### Changed
+
 - **Dynamic CORS**: `vite.config.js` now reads `VITE_CORS_ALLOWED_ORIGINS` from `.env`.
-- **System Audit**: Verified system health across 12 checking points.
-- **Documentation**: Updated README.md and SECURITY.md with CORS best practices.
+- **Documentation Updates**:
+  - Fixed broken links in `INDEX.md` (CHANGELOG path).
+  - Fixed broken links in `VERSIONING.md` (CHANGELOG references).
+  - Fixed `FOLDER_STRUCTURE.md` (RBAC→ABAC, removed deprecated notice).
+  - Added Vitest/Prettier/Wrangler to `TECH_STACK.md`.
+  - Updated `TESTING.md` with Vitest implementation details.
+
+### Security
+
+- **RLS Bypass Client**: Proper implementation of service role client with security warnings.
 
 ## [2.3.1] - 2026-01-04
 

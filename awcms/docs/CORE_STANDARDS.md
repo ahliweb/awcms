@@ -6,7 +6,7 @@ This document establishes the definitive architecture and standardization pillar
 
 **Standard**: Zero Trust, Attribute-Based Access Control (ABAC), and complete Tenant Isolation.
 
-### Sub-Components & Architecture
+### 1.1 Security Architecture
 
 * **ABAC System**:
   * **Context**: `src/contexts/PermissionContext.jsx` (Global permission state)
@@ -27,7 +27,7 @@ This document establishes the definitive architecture and standardization pillar
   * **Logging**: `useAuditLog()` (System), `useExtensionAudit()` (Plugins)
   * **User**: Soft Delete protocol (No permanent deletion without archival).
 
-### Key Documentation
+### 1.2 Security Documentation
 
 * [ABAC System Guide](ABAC_SYSTEM.md)
 * [Multi-Tenancy Guide](MULTI_TENANCY.md)
@@ -41,7 +41,7 @@ This document establishes the definitive architecture and standardization pillar
 
 **Standard**: Responsive, Accessible, Theme-able, and Consistent Shadcn/Tailwind implementation.
 
-### Sub-Components & Architecture
+### 2.1 UI/UX Architecture
 
 * **Template System**:
   * **Layouts**: `MainLayout` (Admin), `AuthLayout` (Login), `DashboardLayout`
@@ -61,7 +61,7 @@ This document establishes the definitive architecture and standardization pillar
   * **Config**: `i18next` initialization
   * **Assets**: Backend-driven translation files (`template_strings`).
 
-### Key Documentation
+### 2.2 UI/UX Documentation
 
 * [Template System](TEMPLATE_SYSTEM.md)
 
@@ -76,7 +76,7 @@ This document establishes the definitive architecture and standardization pillar
 
 **Standard**: Modular, Sandboxed, and Event-Driven architecture for scalability.
 
-### Sub-Components & Architecture
+### 3.1 Extension Architecture
 
 * **Architecture**:
   * **Registry**: `src/lib/extensionRegistry.js` (Component mapping)
@@ -91,7 +91,7 @@ This document establishes the definitive architecture and standardization pillar
   * **Commerce**: `CartContext` (Optional Commerce Module)
   * **Slots**: Defined UI slots for standardized injection points.
 
-### Key Documentation
+### 3.2 Extension Documentation
 
 * [Extension Guide](EXTENSIONS.md)
 
@@ -103,7 +103,7 @@ This document establishes the definitive architecture and standardization pillar
 
 **Standard**: Single Source of Truth, AI-Native, and Comprehensive.
 
-### Sub-Components & Architecture
+### 4.1 Documentation Architecture
 
 * **AI Guidelines**:
   * **Primary**: [AGENTS.md](AGENTS.md) (Rules for AI Assist)
@@ -114,7 +114,7 @@ This document establishes the definitive architecture and standardization pillar
   * **Data**: [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) (SQL Structure)
   * **Map**: [INDEX.md](INDEX.md) (Documentation Map)
 
-### Key Documentation
+### 4.2 Documentation Reference
 
 * [AI Agents Guide](AGENTS.md)
 
@@ -126,7 +126,7 @@ This document establishes the definitive architecture and standardization pillar
 
 **Standard**: Modern Mobile/IoT Integration, DevOps Excellence, and High Code Quality.
 
-### Sub-Components & Architecture
+### 5.1 Additional Standards Architecture
 
 * **Mobile & IoT Ecosystem**:
   * **App**: Flutter Integration (`awcms-mobile`)
@@ -142,7 +142,7 @@ This document establishes the definitive architecture and standardization pillar
   * **Tests**: `vitest` (Unit/Integration)
   * **Standards**: ESLint, Prettier, [Code of Conduct](CODE_OF_CONDUCT.md)
 
-### Key Documentation
+### 5.2 Additional Standards Documentation
 
 * [Mobile Development](MOBILE_DEVELOPMENT.md)
 * [Offline Architecture](OFFLINE_ARCHITECTURE.md)

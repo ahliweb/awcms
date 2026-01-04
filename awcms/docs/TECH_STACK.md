@@ -11,7 +11,7 @@ AWCMS employs a "Headless" architecture with two distinct frontends sharing a co
 *The internal dashboard for content and tenant management.*
 
 | Category | Technology | Version | Purpose |
-|----------|------------|---------|---------|
+| ---------- | ------------ | --------- | --------- |
 | **Framework** | [React](https://react.dev/) | **18.3.1** | UI Framework (Strict locked for Puck) |
 | **Build Tool** | [Vite](https://vitejs.dev/) | 7.2.7 | SPA Bundler |
 | **Language** | JavaScript | ES2022+ | Functional Components |
@@ -28,7 +28,7 @@ AWCMS employs a "Headless" architecture with two distinct frontends sharing a co
 *The multi-tenant, high-performance public website.*
 
 | Category | Technology | Version | Purpose |
-|----------|------------|---------|---------|
+| ---------- | ------------ | --------- | --------- |
 | **Meta-Framework** | [Astro](https://astro.build/) | **5.x** | Islands Architecture, SSG/SSR |
 | **UI Library** | [React](https://react.dev/) | **19.x** | Component Rendering (Islands) |
 | **Deployment** | [Cloudflare Pages](https://pages.cloudflare.com/) | - | Edge Hosting |
@@ -42,7 +42,7 @@ AWCMS employs a "Headless" architecture with two distinct frontends sharing a co
 ## 3. Backend & Data (Shared)
 
 | Technology | Version | Purpose |
-|------------|---------|---------|
+| ------------ | --------- | --------- |
 | [Supabase](https://supabase.com/) | 2.87.1 | Backend-as-a-Service |
 | **PostgreSQL** | 15+ | Primary Database |
 | **Auth** | GoTrue | Authentication (JWT) |
@@ -54,7 +54,7 @@ AWCMS employs a "Headless" architecture with two distinct frontends sharing a co
 ## 4. Key Libraries
 
 | Category | Library | Version | Usage |
-|----------|---------|---------|-------|
+| -------- | ------- | ------- | ----- |
 | **UI Primitives** | [Radix UI](https://radix-ui.com/) | Latest | Admin Panel UI |
 | **Icons** | [Lucide React](https://lucide.dev/) | 0.56x | System Icons |
 | **Animations** | [Framer Motion](https://www.framer.com/motion/) | 12.x | UI Transitions |
@@ -67,10 +67,13 @@ AWCMS employs a "Headless" architecture with two distinct frontends sharing a co
 ## 5. Development Tools
 
 | Tool | Purpose |
-|------|---------|
+| ------ | --------- |
 | **Node.js** | Runtime (v20+ required) |
 | **npm** | Package Manager |
 | **ESLint** | Code Linting |
+| **Prettier** | Code Formatting |
+| **Vitest** | Unit/Integration Testing |
+| **Wrangler** | Cloudflare Workers CLI |
 | **PostCSS** | CSS Processing |
 
 ## 6. Security Status

@@ -4,20 +4,20 @@
 export const VERSION = {
     // Semantic Version (Major.Minor.Patch)
     major: 2,
-    minor: 3,
+    minor: 4,
     patch: 0,
 
     // Pre-release identifier (alpha, beta, rc.1, etc.) - empty for stable
     prerelease: '',
 
     // Build metadata
-    build: 14,
+    build: 15,
 
     // Release date
     date: '2026-01-04',
 
     // Codename (optional)
-    codename: 'Aurora',
+    codename: 'Blaze',
 };
 
 // Computed version strings

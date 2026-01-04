@@ -19,6 +19,7 @@ Welcome to the AWCMS documentation. This index provides a roadmap to help you na
 * [Tech Stack](TECH_STACK.md): List of technologies and libraries used.
 * [Multi-Tenancy](MULTI_TENANCY.md): How the multi-tenant SaaS architecture works.
 * [Offline Architecture](OFFLINE_ARCHITECTURE.md): Offline-first design with UDM and SQLite.
+* [Architectural Recommendations](ARCHITECTURAL_RECOMMENDATIONS.md): Best practices and guidelines.
 
 ## 📦 Modules & Features
 
@@ -59,11 +60,12 @@ Welcome to the AWCMS documentation. This index provides a roadmap to help you na
 * [Monitoring](MONITORING.md): System monitoring, logging, and observability.
 * [Performance](PERFORMANCE.md): Performance optimization strategies.
 * [Troubleshooting](TROUBLESHOOTING.md): Common issues and solutions.
+* [CI/CD Pipeline](CI_CD.md): GitHub Actions workflow documentation.
 
 ## 🤝 Project Info
 
 * [Contributing](CONTRIBUTING.md): Guidelines for contributing to the project.
 * [Code of Conduct](CODE_OF_CONDUCT.md): Community standards.
 * [Versioning](VERSIONING.md): Semantic versioning and release process.
-* [Changelog](CHANGELOG.md): History of changes and updates.
+* [Changelog](../CHANGELOG.md): History of changes and updates.
 * [License](LICENSE.md): Project license information.

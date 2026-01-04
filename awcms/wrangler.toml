@@ -1,0 +1,68 @@
+# Cloudflare Workers Configuration
+# AWCMS Public Portal Deployment
+# See: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "awcms-public"
+main = "dist/_worker.js"
+compatibility_date = "2024-01-01"
+
+# Account and Zone (set via environment or CLI)
+# account_id = ""
+# zone_id = ""
+
+# Build configuration
+[build]
+command = "npm run build"
+cwd = "."
+watch_dir = "src"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+
+# Production environment
+[env.production]
+name = "awcms-public-production"
+route = { pattern = "*", zone_name = "your-domain.com" }
+
+[env.production.vars]
+ENVIRONMENT = "production"
+
+# Staging environment
+[env.staging]
+name = "awcms-public-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+# Development environment
+[env.development]
+name = "awcms-public-dev"
+
+[env.development.vars]
+ENVIRONMENT = "development"
+
+# Site configuration for static assets
+[site]
+bucket = "./dist"
+
+# Secrets (set via wrangler secret put)
+# - SUPABASE_URL
+# - SUPABASE_ANON_KEY
+# - SUPABASE_SERVICE_ROLE_KEY
+
+# D1 Database bindings (if using Cloudflare D1)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "awcms-db"
+# database_id = ""
+
+# KV Namespace bindings (for caching)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = ""
+
+# R2 Storage bindings (for media storage)
+# [[r2_buckets]]
+# binding = "MEDIA"
+# bucket_name = "awcms-media"

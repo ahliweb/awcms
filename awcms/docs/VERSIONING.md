@@ -34,7 +34,7 @@ Examples:
 | `src/lib/version.js` | Single source of truth for app version |
 | `package.json` | npm version (should match) |
 | `.version` | Build number (auto-incremented by CI) |
-| `docs/CHANGELOG.md` | Release history |
+| `../CHANGELOG.md` | Release history |
 
 ---
 
@@ -106,7 +106,7 @@ Update `package.json` version:
 
 ### 3. Update Changelog
 
-Add new section to `docs/CHANGELOG.md`:
+Add new section to `../CHANGELOG.md`:
 
 ```markdown
 ## [2.1.0] "Blaze" - 2025-01-15
@@ -154,6 +154,6 @@ prerelease: ''         // → 2.1.0
 
 ## Related Documentation
 
-- [Changelog](CHANGELOG.md)
+- [Changelog](../CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Deployment](DEPLOYMENT.md)

@@ -93,7 +93,7 @@ found 0 vulnerabilities ✓
 Test on the following browsers:
 
 | Browser | Version | Status |
-|---------|---------|--------|
+| ------- | ------- | ------ |
 | Chrome | Latest | ✓ Required |
 | Firefox | Latest | ✓ Required |
 | Safari | Latest | ✓ Required |
@@ -110,7 +110,7 @@ Test on the following browsers:
 Run Lighthouse in Chrome DevTools:
 
 | Metric | Target |
-|--------|--------|
+| ------ | ------ |
 | Performance | > 80 |
 | Accessibility | > 90 |
 | Best Practices | > 90 |
@@ -132,22 +132,61 @@ Current bundle sizes:
 
 ---
 
+## Unit Testing (Vitest)
+
+AWCMS uses **Vitest** for unit and integration testing.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm run test
+
+# Run tests in watch mode
+npm run test -- --watch
+
+# Run tests with coverage
+npm run test -- --coverage
+```
+
+### Test Configuration
+
+Configuration is in `vitest.config.js`:
+
+- **Environment**: `jsdom` (simulates browser)
+- **Setup**: `src/setupTests.js` (Testing Library matchers)
+- **Path Alias**: `@` → `src/`
+
+### Current Test Coverage
+
+| Module | File | Tests |
+| :--- | :--- | :--- |
+| Data Layer | `UnifiedDataManager.test.js` | Online/Offline mode |
+| Security | `PermissionContext.test.jsx` | ABAC policy evaluation |
+
+### Writing New Tests
+
+```javascript
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+
+describe('MyComponent', () => {
+  it('renders correctly', () => {
+    render(<MyComponent />);
+    expect(screen.getByText('Hello')).toBeInTheDocument();
+  });
+});
+```
+
+---
+
 ## Future Testing Plans
 
 ### Planned Additions
 
-1. **Unit Tests** (Jest + Testing Library)
-   - Component tests
-   - Hook tests
-   - Utility function tests
-
-2. **Integration Tests** (Playwright)
+1. **E2E Tests** (Playwright)
    - Auth flow
    - CRUD operations
-   - Permission checks
-
-3. **E2E Tests** (Cypress)
-   - Full user journeys
    - Cross-browser testing
 
 ---
