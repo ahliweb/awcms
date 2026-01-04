@@ -5,6 +5,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-01-04
+
+### Fixed
+
+- **Public Portal**: Added missing `@/lib/utils.ts` with `cn` function for class name merging.
+- **Public Portal**: Installed `@measured/puck` dependency required by Card component.
+- **Card Component**: Added required `render` property to `CardConfig` for Puck ComponentConfig compliance.
+
 ## [2.6.0] "Clarity" - 2026-01-04
 
 ### Added

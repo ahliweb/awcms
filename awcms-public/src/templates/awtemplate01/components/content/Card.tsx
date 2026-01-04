@@ -91,5 +91,6 @@ export const CardConfig: ComponentConfig<CardProps> = {
         description: "This is a brief description of the card content.",
         linkText: "Learn More",
         variant: "default"
-    }
+    },
+    render: (props) => <Card {...props} />
 };
