@@ -10,7 +10,7 @@ The Visual Page Builder allows users to create complex, responsive layouts using
 
 The dashboard interface for listing and managing visual pages. It allows creating, editing, and deleting pages that are marked with `editor_type = 'visual'`.
 
-### 2. `VisualBuilder.jsx`
+### 2. `VisualPageBuilder.jsx`
 
 The editor component that wraps the Puck editor. It handles saving data to Supabase and loading existing content.
 
@@ -25,7 +25,7 @@ This is the core configuration file where all blocks are registered. It defines:
 ## Available Blocks
 
 | Block Name | Description | Key Props |
-|------------|-------------|-----------|
+| :--- | :--- | :--- |
 | **Hero** | Large intro section with image/text | `title`, `subtitle`, `backgroundImage`, `overlay` |
 | **Grid** | Layout container with nested zones | `columns` (2-4), `gap` |
 | **Text** | Rich text content | `content` (HTML) |

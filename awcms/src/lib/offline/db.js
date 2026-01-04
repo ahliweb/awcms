@@ -1,6 +1,7 @@
 import * as SQLite from 'wa-sqlite';
 import SQLiteAsyncESMFactory from 'wa-sqlite/dist/wa-sqlite-async.mjs';
 import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js';
+import { applySchema } from './schema';
 
 let sqlite3;
 let db;
@@ -27,6 +28,15 @@ export async function initDB() {
 
         console.log('[Offline] Local Database Initialized');
 
+        // Apply Schema
+        // We pass a bound runQuery function or just the raw helpers if we export them carefully.
+        // But runQuery depends on db/sqlite3 vars which are module level here.
+        // So we can wrap runQuery to pass to applySchema.
+        await applySchema(async (sql, params) => {
+            return runQuery(sql, params);
+        });
+
+
         // Enable WAL mode for better concurrency if supported, or other PRAGMAs
         // await runQuery('PRAGMA journal_mode=WAL;'); // WAL not always supported in VFS
 
@@ -44,7 +54,18 @@ export async function initDB() {
  * @returns {Promise<Array>} - Result rows
  */
 export async function runQuery(sql, params = []) {
-    if (!db) await initDB();
+    if (!db) {
+        // Avoid infinite recursion if initDB calls runQuery -> applySchema -> runQuery -> initDB
+        // However, initDB sets 'db' variable *before* calling applySchema? No, it sets it after open_v2.
+        // 'db' is set at line 23. applySchema is called at line 34 (in replacement).
+        // So 'db' is available.
+        // But if runQuery checks !db -> initDB, and if initDB hasn't finished...
+        // Ideally applySchema is called only once.
+        // If runQuery is called explicitly from outside, it calls initDB.
+        // If initDB calls applySchema -> runQuery, 'db' is set, so it skips initDB recursion.
+        // Checks out.
+        await initDB();
+    }
 
     const str = sqlite3.str_new(db, sql);
     const prepared = await sqlite3.prepare_v2(db, sqlite3.str_value(str));
