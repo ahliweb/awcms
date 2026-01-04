@@ -5,6 +5,12 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.4.3] - 2026-01-04
+
+### Fixed
+
+- **Flutter Mobile**: Downgraded `flutter_lints` from `^6.0.0` to `^5.0.0` for Dart 3.6.0 compatibility.
+
 ## [2.4.2] - 2026-01-04
 
 ### Fixed
