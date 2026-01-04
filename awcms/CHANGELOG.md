@@ -5,6 +5,17 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.6.2] - 2026-01-04
+
+### Fixed
+
+- **Public Portal**: Resolved 500 error on non-home pages (e.g., `/about`) caused by incorrect Supabase client initialization in Cloudflare runtime.
+- **Database Synchronization**: Repaired migration history and synchronized local schema with remote database.
+
+### Security
+
+- **Supabase Advisor**: Resolved "Function Search Path Mutable" warning for `public.get_tenant_by_domain` by setting explicit `search_path`.
+
 ## [2.6.1] - 2026-01-04
 
 ### Fixed
