@@ -17,7 +17,7 @@ const Turnstile = ({
     onError,
     onExpire,
     theme = 'auto',
-    size = 'normal',
+    size,
     appearance = 'always',
     className = '',
 }) => {
@@ -104,7 +104,7 @@ const Turnstile = ({
             widgetIdRef.current = window.turnstile.render(containerRef.current, {
                 sitekey: siteKey,
                 theme,
-                size,
+                ...(size && { size }),
                 appearance,
                 'retry': 'auto',
                 'retry-interval': 2000,

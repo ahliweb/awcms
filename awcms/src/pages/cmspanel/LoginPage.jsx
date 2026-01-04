@@ -356,7 +356,7 @@ const LoginPage = () => {
                     setTurnstileReady(false);
                   }}
                   theme="light"
-                  appearance="always"
+                  appearance="interaction-only"
                 />
                 {!turnstileReady && !turnstileError && (
                   <p className="text-xs text-slate-400 text-center mt-1">Verifying security...</p>
