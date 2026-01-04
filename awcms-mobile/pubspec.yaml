@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.6.0
+  sdk: ^3.10.0
 
 dependencies:
   flutter:
@@ -19,42 +19,39 @@ dependencies:
   supabase_flutter: ^2.8.0
   
   # State Management
-  flutter_riverpod: ^2.6.1
+  flutter_riverpod: ^3.1.0
   
   # Routing
-  go_router: ^14.6.2
+  go_router: ^17.0.1
   
-  # Environment (Updated)
+  # Environment
   flutter_dotenv: ^6.0.0
   
   # Storage
   shared_preferences: ^2.3.3
   
   # Local Database (Offline-First)
-  drift: ^2.22.0
-  drift_flutter: ^0.2.4
+  drift: ^2.30.0
+  drift_flutter: ^0.2.8
   
-  # Connectivity (Updated)
+  # Connectivity
   connectivity_plus: ^7.0.0
   
-  # Security (Anti-RE) (Updated)
+  # Security (Anti-RE)
   flutter_secure_storage: ^10.0.0
 
   # Jailbreak Detection
-  # Used to be
-  # flutter_jailbreak_detection: ^1.10.0
-  # Now using
   flutter_jailbreak_detection:
     git:
       url: https://github.com/pdurasie-ecovery/flutter_jailbreak_detection.git
       ref: add-namespace
   
-  # Location & GPS (Updated)
+  # Location & GPS
   geolocator: ^14.0.2
   detect_fake_location: ^2.3.0
   geocoding: ^4.0.0
   
-  # Notifications (Updated)
+  # Notifications
   flutter_local_notifications: ^19.5.0
   
   # Utils
@@ -63,8 +60,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
-  drift_dev: ^2.22.0
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.30.0
   build_runner: ^2.4.15
 
 flutter:
