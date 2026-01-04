@@ -1,8 +1,14 @@
 ---
-import { supabase } from '../lib/supabase';
+import { createScopedClient } from '../lib/supabase';
 import { Menu, X, ChevronDown } from 'lucide-react';
 
-const { tenant_id } = Astro.locals;
+const { tenant_id, runtime } = Astro.locals;
+const env = runtime?.env || {};
+
+// Initialize Scoped Client
+const supabase = createScopedClient({
+    'x-tenant-id': tenant_id
+}, env);
 
 // Fetch Menu Items for 'main' menu of this tenant
 // Schema: menus -> menu_items
@@ -15,7 +21,7 @@ const { tenant_id } = Astro.locals;
 let menuItems = [];
 let brandName = "AWCMS"; // Default
 
-if (tenant_id) {
+if (tenant_id && supabase) {
     // 1. Get Tenant Name (Simple cacheable lookup)
     const { data: tenantData } = await supabase
         .from('tenants')
