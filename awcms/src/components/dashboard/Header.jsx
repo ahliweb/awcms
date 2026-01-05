@@ -44,8 +44,7 @@ function Header({ toggleSidebar, onNavigate }) {
             <Menu className="w-6 h-6" />
           </Button>
           <div className="hidden md:block">
-            <h1 className="text-xl font-bold text-slate-800">AWCMS Dashboard</h1>
-            <p className="text-sm text-slate-500">{t('common.dashboard_subtitle')}</p>
+            {/* Title removed: Handled by individual pages via PageHeader */}
           </div>
           {/* Tenant Context Badge for Platform Admins */}
           {isPlatformAdmin && (

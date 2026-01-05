@@ -15,6 +15,7 @@ import { PluginAction } from '@/contexts/PluginContext';
 import { PlatformOverview } from './widgets/PlatformOverview';
 import { MyApprovals } from './widgets/MyApprovals';
 import { UsageWidget } from './widgets/UsageWidget';
+import { AdminPageLayout, PageHeader } from '@/templates/awadmintemplate01';
 
 function AdminDashboard() {
     console.log('AdminDashboard rendering...');
@@ -29,47 +30,39 @@ function AdminDashboard() {
         return 'Good Evening';
     };
 
+    const formattedDate = format(new Date(), 'EEEE, MMMM do, yyyy');
+
+    const headerActions = [
+        {
+            label: 'Refresh',
+            icon: RefreshCw,
+            onClick: refresh,
+            variant: 'outline',
+            className: loading ? 'opacity-70' : ''
+        }
+    ];
+
     if (error) {
         return (
-            <div className="p-8 text-center bg-red-50 text-red-600 rounded-xl border border-red-100">
-                <p>{error}</p>
-                <Button onClick={refresh} variant="outline" className="mt-4 border-red-200 hover:bg-red-100">
-                    Try Again
-                </Button>
-            </div>
+            <AdminPageLayout>
+                <div className="p-8 text-center bg-red-50 text-red-600 rounded-xl border border-red-100">
+                    <p>{error}</p>
+                    <Button onClick={refresh} variant="outline" className="mt-4 border-red-200 hover:bg-red-100">
+                        Try Again
+                    </Button>
+                </div>
+            </AdminPageLayout>
         );
     }
 
     return (
-        <div className="space-y-8 pb-10">
-            {/* Header Section */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                        {getGreeting()}, {userRole?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} 👋
-                    </h1>
-                    <div className="flex items-center gap-2 mt-2 text-slate-500 text-sm">
-                        <Calendar className="w-4 h-4" />
-                        <span>{format(new Date(), 'EEEE, MMMM do, yyyy')}</span>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3 bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm">
-                    <span className="text-xs text-slate-400 px-2 hidden sm:inline-block">
-                        Updated: {lastUpdated.toLocaleTimeString()}
-                    </span>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => refresh()}
-                        disabled={loading}
-                        className="h-8 w-8 p-0 rounded-md hover:bg-slate-100"
-                        title="Refresh Data"
-                    >
-                        <RefreshCw className={`w-4 h-4 text-slate-600 ${loading ? 'animate-spin' : ''}`} />
-                    </Button>
-                </div>
-            </div>
+        <AdminPageLayout>
+            <PageHeader
+                title={`${getGreeting()}, ${userRole?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'User'} 👋`}
+                description={`Here's what's happening today. Updated: ${lastUpdated.toLocaleTimeString()}`}
+                actions={headerActions}
+                breadcrumbs={[{ label: 'Dashboard', href: '/cmspanel' }]} // Self-link or just text
+            />
 
             {/* Platform Overview for Global Roles (Owner & Super Admin) */}
             {(userRole === 'owner' || userRole === 'super_admin') && (
@@ -85,10 +78,10 @@ function AdminDashboard() {
             </div>
 
             {/* Content & Activity Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column (2/3 width) */}
                 <div className="lg:col-span-2 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[400px]">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <ContentDistribution data={data.overview} />
                         <SystemHealth health={data.systemHealth} />
                     </div>
@@ -133,13 +126,13 @@ function AdminDashboard() {
                 </div>
 
                 {/* Right Column (1/3 width) - Activity Feed */}
-                <div className="h-full space-y-6">
+                <div className="space-y-6">
                     <UsageWidget />
                     <MyApprovals />
                     <ActivityFeed activities={data.activity} />
                 </div>
             </div>
-        </div>
+        </AdminPageLayout>
     );
 }
 

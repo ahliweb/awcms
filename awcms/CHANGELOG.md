@@ -34,6 +34,11 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Template ABAC**: Only `owner` and `super_admin` roles can manage admin templates
 - **Route Guards**: All refactored managers use `AdminPageLayout` permission checks
 
+### Fixed
+
+- **Turnstile**: Fully resolved CORS (`x-tenant-id` support) and 500 errors by correcting Edge Function headers and secrets.
+- **AdminDashboard**: Refactored to use `AdminPageLayout`, eliminated layout shifts, and fixed grid responsiveness.
+
 ### Database Migrations
 
 - `20260105000001_add_template_permissions.sql` - Template permission seeding
