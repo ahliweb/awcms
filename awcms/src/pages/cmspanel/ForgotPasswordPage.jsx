@@ -129,7 +129,7 @@ const ForgotPasswordPage = () => {
                 {/* Turnstile CAPTCHA - Invisible Mode (configured in Cloudflare) */}
                 <div>
                   <Turnstile
-                    siteKey="0x4AAAAAACKcJKttH3wXulvJ"
+                    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
                     onVerify={(token) => {
                       setTurnstileToken(token);
                       setTurnstileError(false);

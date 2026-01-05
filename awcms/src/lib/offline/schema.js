@@ -5,20 +5,20 @@
  */
 
 export const CORE_SCHEMA = [
-    // Tenants (Global Context)
-    `CREATE TABLE IF NOT EXISTS tenants (
+  // Tenants (Global Context)
+  `CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     domain TEXT,
     logo_url TEXT,
     subscription_tier TEXT DEFAULT 'free',
-    config JSON,
+    config TEXT,
     created_at TEXT,
     updated_at TEXT
   );`,
 
-    // Users (Auth Context)
-    `CREATE TABLE IF NOT EXISTS users (
+  // Users (Auth Context)
+  `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     full_name TEXT,
@@ -29,8 +29,8 @@ export const CORE_SCHEMA = [
     updated_at TEXT
   );`,
 
-    // Articles (Content)
-    `CREATE TABLE IF NOT EXISTS articles (
+  // Articles (Content)
+  `CREATE TABLE IF NOT EXISTS articles (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
     title TEXT,
@@ -41,21 +41,19 @@ export const CORE_SCHEMA = [
     status TEXT DEFAULT 'draft',
     author_id TEXT,
     category_id TEXT,
-    tags TEXT, -- JSON array or comma separated
-    is_active INTEGER DEFAULT 1, -- Boolean as Integer
+    tags TEXT,
+    is_active INTEGER DEFAULT 1,
     is_public INTEGER DEFAULT 1,
     published_at TEXT,
     created_at TEXT,
     updated_at TEXT,
     deleted_at TEXT,
-    
-    -- Offline Sync Metadata
-    _sync_status TEXT DEFAULT 'synced', -- 'synced', 'pending_insert', 'pending_update', 'pending_delete'
+    _sync_status TEXT DEFAULT 'synced',
     _last_synced_at TEXT
   );`,
 
-    // Pages (Content)
-    `CREATE TABLE IF NOT EXISTS pages (
+  // Pages (Content)
+  `CREATE TABLE IF NOT EXISTS pages (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
     title TEXT,
@@ -67,15 +65,13 @@ export const CORE_SCHEMA = [
     updated_at TEXT,
     deleted_at TEXT,
     editor_type TEXT DEFAULT 'richtext',
-    puck_layout_jsonb TEXT, -- JSON string
-    
-    -- Offline Sync Metadata
+    puck_layout_jsonb TEXT,
     _sync_status TEXT DEFAULT 'synced',
     _last_synced_at TEXT
   );`,
 
-    // Files (Media)
-    `CREATE TABLE IF NOT EXISTS files (
+  // Files (Media)
+  `CREATE TABLE IF NOT EXISTS files (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
     name TEXT,
@@ -85,8 +81,6 @@ export const CORE_SCHEMA = [
     is_public INTEGER DEFAULT 1,
     created_at TEXT,
     updated_at TEXT,
-    
-    -- Offline Sync Metadata
     _sync_status TEXT DEFAULT 'synced',
     _last_synced_at TEXT
   );`
@@ -98,22 +92,22 @@ export const CORE_SCHEMA = [
  * @param {function} runQuery - Helper to run queries
  */
 export async function applySchema(runQuery) {
-    console.log('[Offline] Applying Local Schema...');
+  console.log('[Offline] Applying Local Schema...');
 
-    for (const query of CORE_SCHEMA) {
-        try {
-            await runQuery(query);
-        } catch (err) {
-            console.error('[Offline] Schema Error:', err, query);
-            // Don't throw, try to continue or handle gracefully
-        }
-    }
-
-    // Verify
+  for (const query of CORE_SCHEMA) {
     try {
-        const tables = await runQuery("SELECT name FROM sqlite_master WHERE type='table'");
-        console.log('[Offline] Tables created:', tables.map(t => t.name));
-    } catch (e) {
-        console.error('[Offline] Verification failed', e);
+      await runQuery(query);
+    } catch (err) {
+      console.error('[Offline] Schema Error:', err, query);
+      // Don't throw, try to continue or handle gracefully
     }
+  }
+
+  // Verify
+  try {
+    const tables = await runQuery("SELECT name FROM sqlite_master WHERE type='table'");
+    console.log('[Offline] Tables created:', tables.map(t => t.name));
+  } catch (e) {
+    console.error('[Offline] Verification failed', e);
+  }
 }

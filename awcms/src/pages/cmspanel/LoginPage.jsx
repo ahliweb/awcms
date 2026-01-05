@@ -338,7 +338,7 @@ const LoginPage = () => {
               {/* Turnstile CAPTCHA - Invisible Mode (configured in Cloudflare) */}
               <div className="min-h-[20px]">
                 <Turnstile
-                  siteKey="0x4AAAAAACKcJKttH3wXulvJ"
+                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
                   onVerify={(token) => {
                     console.log('[Login] Turnstile token received');
                     setTurnstileToken(token);
@@ -358,7 +358,7 @@ const LoginPage = () => {
                   theme="light"
                 />
                 {!turnstileReady && !turnstileError && (
-                  <p className="text-xs text-slate-400 text-center mt-1">Verifying security (v2.3 Final)...</p>
+                  <p className="text-xs text-slate-400 text-center mt-1">Verifying security...</p>
                 )}
               </div>
             </div>
