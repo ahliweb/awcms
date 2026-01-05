@@ -355,10 +355,10 @@ const LoginPage = () => {
                     setTurnstileToken('');
                     setTurnstileReady(false);
                   }}
-                  appearance="interaction-only"
+                  theme="light"
                 />
                 {!turnstileReady && !turnstileError && (
-                  <p className="text-xs text-slate-400 text-center mt-1">Verifying security (v2.0)...</p>
+                  <p className="text-xs text-slate-400 text-center mt-1">Verifying security (v2.1)...</p>
                 )}
               </div>
             </div>

@@ -128,7 +128,7 @@ const Turnstile = ({
                 'retry': 'never', // Stop looping on error
             };
 
-            console.log('%c [Turnstile] v2 loaded: Checking parameters...', 'background: #222; color: #bada55');
+            console.log('%c [Turnstile] v2.1 loaded: Standard Managed Mode', 'background: #222; color: #00ff00');
 
             // STRICT validation for Invisible widgets (Error 400020 prevention)
             if (appearance === 'interaction-only') {
@@ -140,7 +140,7 @@ const Turnstile = ({
                 if (size) renderOptions.size = size;
             }
 
-            console.log('[Turnstile] Render options:', { ...renderOptions, sitekey: '***' });
+            console.log('[Turnstile] Render options:', { ...renderOptions });
             widgetIdRef.current = window.turnstile.render(containerRef.current, renderOptions);
         } catch (e) {
             console.error('[Turnstile] Exception during render:', e);
