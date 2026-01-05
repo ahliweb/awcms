@@ -111,23 +111,7 @@ const LoginPage = () => {
         throw new Error('Please complete the security check (CAPTCHA).');
       }
 
-      // 1.5 Verify Turnstile token via Edge Function (server-side verification)
-      if (turnstileToken) {
-        const verifyResponse = await supabase.functions.invoke('verify-turnstile', {
-          body: { token: turnstileToken },
-        });
-
-        if (verifyResponse.error || !verifyResponse.data?.success) {
-          // Reset Turnstile on verification failure
-          setTurnstileToken('');
-          if (window.turnstileReset) {
-            window.turnstileReset();
-          }
-          throw new Error('Security verification failed. Please try again.');
-        }
-      }
-
-      // 2. Authenticate with Supabase Auth
+      // 1. Authenticate with Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
