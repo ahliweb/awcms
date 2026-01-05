@@ -19,6 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import LanguageSelector from '@/components/ui/LanguageSelector';
 import { NotificationDropdown } from '@/components/dashboard/notifications/NotificationDropdown';
 import { TenantBadge } from '@/templates/awadmintemplate01';
+import { DarkModeToggle } from '@/components/ui/DarkModeToggle';
 
 function Header({ toggleSidebar, onNavigate }) {
   const { user, signOut } = useAuth();
@@ -31,7 +32,7 @@ function Header({ toggleSidebar, onNavigate }) {
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 shadow-sm z-30">
+    <header className="bg-background border-b border-border shadow-sm z-30">
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-4">
           <Button
@@ -54,10 +55,13 @@ function Header({ toggleSidebar, onNavigate }) {
           )}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
+          {/* Dark Mode Toggle */}
+          <DarkModeToggle />
+
           <LanguageSelector />
 
-          {/* New Notification Dropdown Component */}
+          {/* Notification Dropdown */}
           <NotificationDropdown />
 
           <div className="h-8 w-px bg-slate-200 mx-1 hidden md:block"></div>

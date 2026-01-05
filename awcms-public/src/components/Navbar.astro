@@ -1,6 +1,7 @@
 ---
 import { createScopedClient } from '../lib/supabase';
 import { Menu, X, ChevronDown } from 'lucide-react';
+import DarkModeToggle from './DarkModeToggle';
 
 const { tenant_id, runtime } = Astro.locals;
 const env = runtime?.env || {};
@@ -85,7 +86,10 @@ if (menuItems.length === 0) {
         </div>
 
         <div class="flex items-center gap-4">
-             {/* Mobile Menu Trigger could go here */}
+             {/* Dark Mode Toggle */}
+             <DarkModeToggle client:load />
+             
+             {/* Mobile Menu Trigger */}
              <button class="md:hidden p-2 text-foreground/60">
                  <Menu className="w-6 h-6" />
              </button>
