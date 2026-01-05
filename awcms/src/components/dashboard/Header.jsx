@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Menu, LogOut, User } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -16,10 +18,13 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import LanguageSelector from '@/components/ui/LanguageSelector';
 import { NotificationDropdown } from '@/components/dashboard/notifications/NotificationDropdown';
+import { TenantBadge } from '@/templates/awadmintemplate01';
 
 function Header({ toggleSidebar, onNavigate }) {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
+  const { isPlatformAdmin, userRole } = usePermissions();
+  const { currentTenant } = useTenant();
 
   const getInitials = (email) => {
     return email ? email.substring(0, 2).toUpperCase() : 'U';
@@ -41,6 +46,12 @@ function Header({ toggleSidebar, onNavigate }) {
             <h1 className="text-xl font-bold text-slate-800">AWCMS Dashboard</h1>
             <p className="text-sm text-slate-500">{t('common.dashboard_subtitle')}</p>
           </div>
+          {/* Tenant Context Badge for Platform Admins */}
+          {isPlatformAdmin && (
+            <div className="hidden lg:block ml-4">
+              <TenantBadge tenant={currentTenant} />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-4">

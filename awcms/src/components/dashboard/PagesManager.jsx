@@ -1,21 +1,30 @@
 
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, FolderOpen, ChevronRight, Home, Layers, Paintbrush, Edit } from 'lucide-react';
+import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/awadmintemplate01';
+import { FileText, FolderOpen, Layers, Paintbrush } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+/**
+ * PagesManager - Manages pages with Visual Builder support.
+ * Refactored to use awadmintemplate01 components for consistent UI.
+ */
 function PagesManager({ onlyVisual = false }) {
   const [activeTab, setActiveTab] = useState('pages');
   const [visualBuilderPage, setVisualBuilderPage] = useState(null);
 
-  // Tab labels for breadcrumb
-  const tabLabels = {
-    pages: onlyVisual ? 'Visual Pages' : 'Pages',
-    categories: 'Categories'
-  };
+  // Tab definitions
+  const tabs = onlyVisual ? [] : [
+    { value: 'pages', label: 'Pages', icon: FileText, color: 'blue' },
+    { value: 'categories', label: 'Categories', icon: FolderOpen, color: 'purple' },
+  ];
+
+  // Dynamic breadcrumb based on active tab
+  const breadcrumbs = [
+    { label: onlyVisual ? 'Visual Pages' : 'Pages', href: activeTab !== 'pages' ? '/cmspanel/pages' : undefined, icon: Layers },
+    ...(activeTab !== 'pages' && !onlyVisual ? [{ label: 'Categories' }] : []),
+  ];
 
   // Page columns with editor type indicator
   const pageColumns = [
@@ -100,8 +109,6 @@ function PagesManager({ onlyVisual = false }) {
       ],
       defaultValue: onlyVisual ? 'visual' : 'richtext',
       description: 'Choose the editor type for this page',
-      // If ONLY visual, maybe hide this or disable it? 
-      // User might still want to switch, but default is visual.
     },
     { key: 'category_id', label: 'Category', type: 'resource_select', resourceTable: 'categories' },
     {
@@ -172,76 +179,60 @@ function PagesManager({ onlyVisual = false }) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Breadcrumb Navigation */}
-      <nav className="flex items-center text-sm text-muted-foreground">
-        <Link to="/cmspanel" className="hover:text-foreground transition-colors flex items-center gap-1">
-          <Home className="w-4 h-4" />
-          Dashboard
-        </Link>
-        <ChevronRight className="w-4 h-4 mx-2 text-muted" />
-        <span className="flex items-center gap-1 text-foreground font-medium">
-          <Layers className="w-4 h-4" />
-          Pages
-        </span>
-        {activeTab !== 'pages' && (
-          <>
-            <ChevronRight className="w-4 h-4 mx-2 text-muted" />
-            <span className="text-primary font-medium capitalize">{tabLabels[activeTab]}</span>
-          </>
-        )}
-      </nav>
+    <AdminPageLayout requiredPermission={onlyVisual ? "tenant.visual_pages.read" : "tenant.pages.read"}>
+      {/* Page Header with Breadcrumbs */}
+      <PageHeader
+        title={onlyVisual ? "Visual Pages" : "Pages"}
+        description={onlyVisual ? "Build pages with drag-and-drop" : "Manage website pages and sections"}
+        icon={Layers}
+        breadcrumbs={breadcrumbs}
+      />
 
-      {/* Enhanced Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        {!onlyVisual && (
-          <div className="bg-muted p-1 rounded-xl mb-6 inline-flex">
-            <TabsList className="grid grid-cols-2 gap-1 bg-transparent p-0">
-              <TabsTrigger
-                value="pages"
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all duration-200 font-medium text-muted-foreground"
-              >
-                <FileText className="w-4 h-4" />
-                Pages
-              </TabsTrigger>
-              <TabsTrigger
-                value="categories"
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all duration-200 font-medium text-muted-foreground"
-              >
-                <FolderOpen className="w-4 h-4" />
-                Categories
-              </TabsTrigger>
-            </TabsList>
-          </div>
-        )}
+      {/* Tabs Navigation (hidden for onlyVisual mode) */}
+      {onlyVisual ? (
+        <GenericContentManager
+          tableName="pages"
+          resourceName="Visual Page"
+          columns={pageColumns}
+          formFields={pageFormFields}
+          permissionPrefix="visual_pages"
+          customRowActions={customRowActions}
+          defaultFilters={{ editor_type: 'visual' }}
+          showBreadcrumbs={false}
+        />
+      ) : (
+        <PageTabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          tabs={tabs}
+        >
+          <TabsContent value="pages" className="mt-0">
+            <GenericContentManager
+              tableName="pages"
+              resourceName="Page"
+              columns={pageColumns}
+              formFields={pageFormFields}
+              permissionPrefix="pages"
+              customRowActions={customRowActions}
+              showBreadcrumbs={false}
+            />
+          </TabsContent>
 
-        <TabsContent value="pages" className="mt-0">
-          <GenericContentManager
-            tableName="pages"
-            resourceName={onlyVisual ? "Visual Page" : "Page"}
-            columns={pageColumns}
-            formFields={pageFormFields}
-            permissionPrefix={onlyVisual ? "visual_pages" : "pages"}
-            customRowActions={customRowActions}
-            defaultFilters={onlyVisual ? { editor_type: 'visual' } : {}}
-            showBreadcrumbs={false}
-          />
-        </TabsContent>
-
-        <TabsContent value="categories" className="mt-0">
-          <GenericContentManager
-            tableName="categories"
-            resourceName="Category"
-            columns={categoryColumns}
-            formFields={categoryFormFields}
-            permissionPrefix="categories"
-            customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-            defaultFilters={{ type: 'page' }}
-            showBreadcrumbs={false}
-          />
-        </TabsContent>
-      </Tabs>
-    </div>
+          <TabsContent value="categories" className="mt-0">
+            <GenericContentManager
+              tableName="categories"
+              resourceName="Category"
+              columns={categoryColumns}
+              formFields={categoryFormFields}
+              permissionPrefix="categories"
+              customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
+              defaultFilters={{ type: 'page' }}
+              showBreadcrumbs={false}
+            />
+          </TabsContent>
+        </PageTabs>
+      )}
+    </AdminPageLayout>
   );
 }
 

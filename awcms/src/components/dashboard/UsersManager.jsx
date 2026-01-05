@@ -1,16 +1,17 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import ContentTable from '@/components/dashboard/ContentTable';
 import UserEditor from '@/components/dashboard/UserEditor';
+import UserApprovalManager from '@/components/dashboard/UserApprovalManager';
+import { AdminPageLayout, PageHeader, PageTabs, TabsContent, NotAuthorized } from '@/templates/awadmintemplate01';
 import { usePermissions } from '@/contexts/PermissionContext';
-// Standard Permissions: tenant.user.read, tenant.user.create, tenant.user.update, tenant.user.delete
 import { useToast } from '@/components/ui/use-toast';
-import { udm } from '@/lib/data/UnifiedDataManager'; // CHANGED: from supabase
-import { supabase } from '@/lib/customSupabaseClient'; // Keep for Edge Functions if needed
+import { udm } from '@/lib/data/UnifiedDataManager';
+import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
-import { Plus, Search, RefreshCw, Home, ChevronRight, ShieldAlert, User, Trash2, Crown } from 'lucide-react';
+import { Plus, Search, RefreshCw, User, ShieldAlert, Trash2, Crown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Link } from 'react-router-dom';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,9 +22,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useTenant } from '@/contexts/TenantContext';
-import UserApprovalManager from '@/components/dashboard/UserApprovalManager';
 
+/**
+ * UsersManager - Manages users and registration approvals.
+ * Refactored to use awadmintemplate01 components for consistent UI.
+ */
 function UsersManager() {
   const { toast } = useToast();
   const { hasPermission, isPlatformAdmin } = usePermissions();
@@ -48,30 +51,42 @@ function UsersManager() {
   const canEdit = hasPermission('tenant.user.update');
   const canDelete = hasPermission('tenant.user.delete');
 
+  // Tab definitions
+  const tabs = [
+    { value: 'users', label: 'Active Users', icon: User, color: 'blue' },
+    { value: 'approvals', label: 'Approvals', icon: ShieldAlert, color: 'amber' },
+  ];
+
+  // Breadcrumbs
+  const breadcrumbs = [
+    { label: 'Users', href: activeTab !== 'users' ? '/cmspanel/users' : undefined, icon: User },
+    ...(activeTab === 'approvals' ? [{ label: 'Registration Approvals' }] : []),
+  ];
+
+  // Actions for header
+  const headerActions = canCreate ? [
+    {
+      label: 'New User',
+      icon: Plus,
+      onClick: () => { setSelectedUser(null); setShowEditor(true); },
+      permission: 'tenant.user.create',
+    },
+  ] : [];
+
   const fetchUsers = useCallback(async () => {
     if (!canView) return;
     setLoading(true);
     try {
-      // CHANGED: Use UnifiedDataManager
       let q = udm.from('users')
         .select('*, roles!users_role_id_fkey(name), tenant:tenants(name)', { count: 'exact' })
         .is('deleted_at', null);
 
-      // Strict Multi-Tenancy: Filter by tenant_id if not Platform Admin
+      // Strict Multi-Tenancy
       if (!isPlatformAdmin && currentTenant?.id) {
         q = q.eq('tenant_id', currentTenant.id);
       }
 
       if (query) {
-        // UDM doesn't support .or() yet for remote passthrough efficiently in standard way without raw filter string support
-        // For P1 offline, we used .ilike. 
-        // Supabase .or is specific. 
-        // Workaround: Search by email OR name is standard pattern.
-        // We will default to email for now to simplify, or if we need OR support we should add to UDM.
-        // Let's assume we search email for now to keep it safe, or try the raw filter if UDM supports it? 
-        // UDM currently assumes array of filters ANDed.
-
-        // Let's implement partial search on email
         q = q.ilike('email', `%${query}%`);
       }
 
@@ -104,24 +119,17 @@ function UsersManager() {
     setShowEditor(true);
   };
 
-  const handleCreate = () => {
-    setSelectedUser(null);
-    setShowEditor(true);
-  };
-
   const handleSave = () => {
     setShowEditor(false);
     setSelectedUser(null);
     fetchUsers();
   };
 
-  // Open delete confirmation dialog
   const openDeleteDialog = (user) => {
     setUserToDelete(user);
     setDeleteDialogOpen(true);
   };
 
-  // Execute the actual delete
   const handleConfirmDelete = async () => {
     if (!userToDelete) return;
 
@@ -129,13 +137,6 @@ function UsersManager() {
     setDeleteDialogOpen(false);
 
     try {
-      // NOTE: Edge Function 'manage-users' handles Auth + DB deletion (soft or hard).
-      // For Offline Architecture, we can't call Edge Function offline.
-      // Ideally, we move this logic to 'delete user' in DB (soft delete) which syncs, 
-      // and a background trigger handles Auth deletion.
-      // BUT for P1, we keep the Edge Function for "Hard Delete" or "Auth Management" if online.
-
-      // If Online: Use Edge Function (keeps current behavior)
       if (navigator.onLine) {
         const { data, error } = await supabase.functions.invoke('manage-users', {
           body: { action: 'delete', user_id: userToDelete.id }
@@ -144,7 +145,6 @@ function UsersManager() {
         if (error) throw error;
         if (data && data.error) throw new Error(data.error);
       } else {
-        // If Offline: Soft Delete Locally
         await udm.from('users').update({ deleted_at: new Date().toISOString() }).eq('id', userToDelete.id);
         toast({ title: 'Offline', description: 'User marked for deletion. Will sync when online.' });
       }
@@ -200,16 +200,18 @@ function UsersManager() {
     { key: 'created_at', label: 'Joined', type: 'date' }
   ];
 
-  if (!canView) return (
-    <div className="flex flex-col items-center justify-center min-h-[400px] bg-card rounded-xl border border-border p-12 text-center">
-      <ShieldAlert className="w-12 h-12 text-destructive mb-4" />
-      <h3 className="text-xl font-bold text-foreground">Access Denied</h3>
-      <p className="text-muted-foreground">You do not have permission to view users.</p>
-    </div>
-  );
+  if (showEditor) {
+    return (
+      <UserEditor
+        user={selectedUser}
+        onClose={() => { setShowEditor(false); setSelectedUser(null); }}
+        onSave={handleSave}
+      />
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <AdminPageLayout requiredPermission="tenant.user.read">
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
@@ -225,126 +227,76 @@ function UsersManager() {
                 </p>
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-sm">
                   <p className="font-medium mb-1">⚠️ Before deleting:</p>
-                  <p>Please ensure the user's role has been changed to <strong>"No Access"</strong> or a role without permissions. Users with active permissions cannot be deleted.</p>
+                  <p>Please ensure the user's role has been changed to <strong>"No Access"</strong> or a role without permissions.</p>
                 </div>
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
                   <p className="font-medium">🚫 Warning:</p>
-                  <p>This action is <strong>permanent</strong> and cannot be undone. All user data will be permanently removed from the system.</p>
+                  <p>This action is <strong>permanent</strong> and cannot be undone.</p>
                 </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-600 hover:bg-red-700">
               Delete Permanently
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {showEditor ? (
-        <UserEditor
-          user={selectedUser}
-          onClose={() => { setShowEditor(false); setSelectedUser(null); }}
-          onSave={handleSave}
-        />
-      ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {/* Breadcrumb Navigation */}
-          <nav className="flex items-center text-sm text-muted-foreground mb-6">
-            <Link to="/cmspanel" className="hover:text-foreground transition-colors flex items-center gap-1">
-              <Home className="w-4 h-4" />
-              Dashboard
-            </Link>
-            <ChevronRight className="w-4 h-4 mx-2 text-muted" />
-            <span className="flex items-center gap-1 text-foreground font-medium">
-              <User className="w-4 h-4" />
-              Users
-            </span>
-            {activeTab !== 'users' && (
-              <>
-                <ChevronRight className="w-4 h-4 mx-2 text-muted" />
-                <span className="text-primary font-medium">Registration Approvals</span>
-              </>
-            )}
-          </nav>
+      {/* Page Header */}
+      <PageHeader
+        title="Users"
+        description="Manage user accounts, roles, and registration approvals"
+        icon={User}
+        breadcrumbs={breadcrumbs}
+        actions={activeTab === 'users' ? headerActions : []}
+      />
 
-          {/* Enhanced Tabs */}
-          <div className="bg-muted p-1 rounded-xl mb-6 inline-flex">
-            <TabsList className="grid grid-cols-2 gap-1 bg-transparent p-0">
-              <TabsTrigger
-                value="users"
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all duration-200 font-medium text-muted-foreground"
-              >
-                <User className="w-4 h-4" />
-                Active Users
-              </TabsTrigger>
-              <TabsTrigger
-                value="approvals"
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all duration-200 font-medium text-muted-foreground"
-              >
-                <ShieldAlert className="w-4 h-4" />
-                Approvals
-              </TabsTrigger>
-            </TabsList>
+      {/* Tabs Navigation */}
+      <PageTabs value={activeTab} onValueChange={setActiveTab} tabs={tabs}>
+        <TabsContent value="users" className="space-y-6 mt-0">
+          {/* Search Bar */}
+          <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center gap-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search users..."
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                className="pl-9 bg-background"
+              />
+            </div>
+            <div className="flex-1"></div>
+            <Button variant="ghost" size="icon" onClick={fetchUsers} title="Refresh" className="text-muted-foreground hover:text-foreground">
+              <RefreshCw className="w-4 h-4" />
+            </Button>
           </div>
 
-          <TabsContent value="users" className="space-y-6 mt-0">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h2 className="text-3xl font-bold text-foreground">Users</h2>
-                <p className="text-muted-foreground">Manage user accounts and roles.</p>
-              </div>
-              {canCreate && (
-                <Button onClick={handleCreate} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                  <Plus className="w-4 h-4 mr-2" /> New User
-                </Button>
-              )}
-            </div>
+          {/* Users Table */}
+          <ContentTable
+            data={users}
+            columns={columns}
+            loading={loading}
+            onEdit={canEdit ? handleEdit : null}
+            onDelete={canDelete ? openDeleteDialog : null}
+            pagination={{
+              currentPage,
+              totalPages: Math.ceil(totalItems / itemsPerPage),
+              totalItems,
+              itemsPerPage,
+              onPageChange: setCurrentPage,
+              onLimitChange: setItemsPerPage
+            }}
+          />
+        </TabsContent>
 
-            <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center gap-2">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search users..."
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  className="pl-9 bg-background"
-                />
-              </div>
-              <div className="flex-1"></div>
-              <Button variant="ghost" size="icon" onClick={fetchUsers} title="Refresh" className="text-muted-foreground hover:text-foreground">
-                <RefreshCw className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <ContentTable
-              data={users}
-              columns={columns}
-              loading={loading}
-              onEdit={canEdit ? handleEdit : null}
-              onDelete={canDelete ? openDeleteDialog : null}
-              pagination={{
-                currentPage,
-                totalPages: Math.ceil(totalItems / itemsPerPage),
-                totalItems,
-                itemsPerPage,
-                onPageChange: setCurrentPage,
-                onLimitChange: setItemsPerPage
-              }}
-            />
-          </TabsContent>
-
-          <TabsContent value="approvals" className="mt-0">
-            <UserApprovalManager />
-          </TabsContent>
-        </Tabs>
-      )}
-    </div>
+        <TabsContent value="approvals" className="mt-0">
+          <UserApprovalManager />
+        </TabsContent>
+      </PageTabs>
+    </AdminPageLayout>
   );
 }
 

@@ -1,48 +1,64 @@
-import React from 'react';
-import { useTranslation } from 'react-i18next';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import React, { useState } from 'react';
+import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/awadmintemplate01';
 import TemplatesList from './templates/TemplatesList';
 import TemplatePartsList from './templates/TemplatePartsList';
 import TemplateAssignments from './templates/TemplateAssignments';
 import TemplateLanguageManager from './templates/TemplateLanguageManager';
-import { usePermissions } from '@/contexts/PermissionContext';
+import { Layout, Puzzle, Link2, Languages } from 'lucide-react';
 
+/**
+ * TemplatesManager - Manages admin templates and configurations.
+ * RESTRICTED: Only accessible to users with 'owner' or 'super_admin' roles.
+ * Refactored to use awadmintemplate01 with ABAC enforcement.
+ */
 const TemplatesManager = () => {
+    const [activeTab, setActiveTab] = useState('pages');
+
+    // Tab definitions
+    const tabs = [
+        { value: 'pages', label: 'Page Templates', icon: Layout, color: 'blue' },
+        { value: 'parts', label: 'Template Parts', icon: Puzzle, color: 'purple' },
+        { value: 'assignments', label: 'Assignments', icon: Link2, color: 'emerald' },
+        { value: 'languages', label: 'Languages', icon: Languages, color: 'amber' },
+    ];
+
+    // Breadcrumb
+    const breadcrumbs = [
+        { label: 'Templates', icon: Layout },
+    ];
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Templates</h1>
-                    <p className="text-slate-500 mt-1">Manage page templates, parts, and assignments.</p>
-                </div>
-            </div>
+        <AdminPageLayout
+            requiredPermission="platform.template.manage"
+            showTenantBadge={false}
+        >
+            {/* Page Header */}
+            <PageHeader
+                title="Templates"
+                description="Manage page templates, parts, and language assignments"
+                icon={Layout}
+                breadcrumbs={breadcrumbs}
+            />
 
-            <Tabs defaultValue="pages" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
-                    <TabsTrigger value="pages">Page Templates</TabsTrigger>
-                    <TabsTrigger value="parts">Template Parts</TabsTrigger>
-                    <TabsTrigger value="assignments">Assignments</TabsTrigger>
-                    <TabsTrigger value="languages">Languages</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="pages" className="mt-6">
+            {/* Tabs Navigation */}
+            <PageTabs value={activeTab} onValueChange={setActiveTab} tabs={tabs}>
+                <TabsContent value="pages" className="mt-0">
                     <TemplatesList />
                 </TabsContent>
 
-                <TabsContent value="parts" className="mt-6">
+                <TabsContent value="parts" className="mt-0">
                     <TemplatePartsList />
                 </TabsContent>
 
-                <TabsContent value="assignments" className="mt-6">
+                <TabsContent value="assignments" className="mt-0">
                     <TemplateAssignments />
                 </TabsContent>
 
-                <TabsContent value="languages" className="mt-6">
+                <TabsContent value="languages" className="mt-0">
                     <TemplateLanguageManager />
                 </TabsContent>
-            </Tabs>
-        </div>
+            </PageTabs>
+        </AdminPageLayout>
     );
 };
 

@@ -1,20 +1,28 @@
 
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { FileText, FolderOpen, Tag, ChevronRight, Home, Layers } from 'lucide-react';
+import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/awadmintemplate01';
+import { FileText, FolderOpen, Tag } from 'lucide-react';
 
+/**
+ * ArticlesManager - Manages articles, categories, and tags.
+ * Refactored to use awadmintemplate01 components for consistent UI.
+ */
 function ArticlesManager() {
   const [activeTab, setActiveTab] = useState('articles');
+
+  // Tab definitions
+  const tabs = [
+    { value: 'articles', label: 'Articles', icon: FileText, color: 'blue' },
+    { value: 'categories', label: 'Categories', icon: FolderOpen, color: 'purple' },
+    { value: 'tags', label: 'Tags', icon: Tag, color: 'emerald' },
+  ];
+
+  // Dynamic breadcrumb based on active tab
+  const breadcrumbs = [
+    { label: 'Articles', href: activeTab !== 'articles' ? '/cmspanel/articles' : undefined, icon: FileText },
+    ...(activeTab !== 'articles' ? [{ label: activeTab.charAt(0).toUpperCase() + activeTab.slice(1) }] : []),
+  ];
 
   // Article columns and fields
   const articleColumns = [
@@ -93,97 +101,58 @@ function ArticlesManager() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Standard Breadcrumb */}
-      <Breadcrumb className="mb-6">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link to="/cmspanel">Dashboard</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Articles</BreadcrumbPage>
-          </BreadcrumbItem>
-          {activeTab !== 'articles' && (
-            <>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage className="capitalize text-blue-600">{activeTab}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </>
-          )}
-        </BreadcrumbList>
-      </Breadcrumb>
+    <AdminPageLayout requiredPermission="tenant.articles.read">
+      {/* Page Header with Breadcrumbs */}
+      <PageHeader
+        title="Articles"
+        description="Manage your content, categories, and tags"
+        icon={FileText}
+        breadcrumbs={breadcrumbs}
+      />
 
-      {/* Enhanced Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="bg-muted p-1 rounded-xl mb-6 inline-flex">
-          <TabsList className="grid grid-cols-3 gap-1 bg-transparent p-0">
-            <TabsTrigger
-              value="articles"
-              className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all duration-200 font-medium text-muted-foreground"
-            >
-              <FileText className="w-4 h-4" />
-              Articles
-            </TabsTrigger>
-            <TabsTrigger
-              value="categories"
-              className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all duration-200 font-medium text-muted-foreground"
-            >
-              <FolderOpen className="w-4 h-4" />
-              Categories
-            </TabsTrigger>
-            <TabsTrigger
-              value="tags"
-              className="flex items-center gap-2 px-6 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all duration-200 font-medium text-muted-foreground"
-            >
-              <Tag className="w-4 h-4" />
-              Tags
-            </TabsTrigger>
-          </TabsList>
-        </div>
-      </Tabs>
+      {/* Tabs Navigation */}
+      <PageTabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        tabs={tabs}
+      >
+        <TabsContent value="articles" className="mt-0">
+          <GenericContentManager
+            tableName="articles"
+            resourceName="Article"
+            columns={articleColumns}
+            formFields={articleFormFields}
+            permissionPrefix="articles"
+            showBreadcrumbs={false}
+          />
+        </TabsContent>
 
-      {/* Tab Content - Pure conditional rendering */}
-      {activeTab === 'articles' && (
-        <GenericContentManager
-          tableName="articles"
-          resourceName="Article"
-          columns={articleColumns}
-          formFields={articleFormFields}
-          permissionPrefix="articles"
-          showBreadcrumbs={false}
-        />
-      )}
+        <TabsContent value="categories" className="mt-0">
+          <GenericContentManager
+            tableName="categories"
+            resourceName="Category"
+            columns={categoryColumns}
+            formFields={categoryFormFields}
+            permissionPrefix="categories"
+            showBreadcrumbs={false}
+            customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
+            defaultFilters={{ type: 'article' }}
+          />
+        </TabsContent>
 
-      {activeTab === 'categories' && (
-        <GenericContentManager
-          tableName="categories"
-          resourceName="Category"
-          columns={categoryColumns}
-          formFields={categoryFormFields}
-          permissionPrefix="categories"
-          showBreadcrumbs={false}
-          customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-          defaultFilters={{ type: 'article' }}
-        />
-      )}
-
-      {activeTab === 'tags' && (
-        <GenericContentManager
-          tableName="tags"
-          resourceName="Tag"
-          columns={tagColumns}
-          formFields={tagFormFields}
-          permissionPrefix="tags"
-          showBreadcrumbs={false}
-        />
-      )}
-    </div>
+        <TabsContent value="tags" className="mt-0">
+          <GenericContentManager
+            tableName="tags"
+            resourceName="Tag"
+            columns={tagColumns}
+            formFields={tagFormFields}
+            permissionPrefix="tags"
+            showBreadcrumbs={false}
+          />
+        </TabsContent>
+      </PageTabs>
+    </AdminPageLayout>
   );
 }
 
 export default ArticlesManager;
-

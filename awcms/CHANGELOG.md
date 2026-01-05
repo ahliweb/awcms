@@ -5,6 +5,39 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.7.0] "Unified Admin Template" - 2026-01-05
+
+### Added
+
+- **awadmintemplate01**: New unified admin UI template with 11 core components:
+  - `AdminPageLayout`: Main wrapper with permission guard and tenant context
+  - `PageHeader`: Standardized breadcrumbs and ABAC-filtered action buttons
+  - `PageTabs`: Gradient-styled tabs with accessibility features
+  - `DataTable`: Auto-injection of "Nama Tenant" column for platform admins
+  - `FormWrapper`: Sticky submit bar with unsaved changes warning
+  - `EmptyState`, `LoadingSkeleton`, `NotAuthorized`: Consistent state components
+  - `TenantBadge`: Displays current tenant context in header
+- **Template Permissions**: `platform.template.read/update/manage` for owner/super_admin only
+- **Documentation**: New `docs/ADMIN_UI_ARCHITECTURE.md` with component reference
+
+### Changed
+
+- **Header.jsx**: Now displays `TenantBadge` for platform admins
+- **AdminLayout.jsx**: Added footer with template version info
+- **ArticlesManager.jsx**: Refactored to use awadmintemplate01 components
+- **PagesManager.jsx**: Refactored to use awadmintemplate01 components
+- **UsersManager.jsx**: Refactored to use awadmintemplate01 components
+- **TemplatesManager.jsx**: Now requires `platform.template.manage` permission
+
+### Security
+
+- **Template ABAC**: Only `owner` and `super_admin` roles can manage admin templates
+- **Route Guards**: All refactored managers use `AdminPageLayout` permission checks
+
+### Database Migrations
+
+- `20260105000001_add_template_permissions.sql` - Template permission seeding
+
 ## [2.6.4] - 2026-01-05
 
 ### Fixed
