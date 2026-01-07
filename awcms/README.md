@@ -240,26 +240,26 @@ awcms/
 
 | Document | Description |
 | -------- | ----------- |
-| [Installation](docs/INSTALLATION.md) | Setup guide |
-| [Configuration](docs/CONFIGURATION.md) | Settings & env vars |
-| [Architecture](docs/ARCHITECTURE.md) | System design |
-| [Database Schema](docs/DATABASE_SCHEMA.md) | Data model |
-| [API Documentation](docs/API_DOCUMENTATION.md) | Supabase API usage |
-| [ABAC System](docs/ABAC_SYSTEM.md) | Permissions & Policies |
-| [Multi-Tenancy](docs/MULTI_TENANCY.md) | SaaS tenant isolation |
-| [Extensions](docs/EXTENSIONS.md) | Plugin & Extension system |
-| [Component Guide](docs/COMPONENT_GUIDE.md) | UI components |
-| [Folder Structure](docs/FOLDER_STRUCTURE.md) | Project organization |
-| [Security](docs/SECURITY.md) | Security measures |
-| [Deployment](docs/DEPLOYMENT.md) | Deploy to production |
-| [AI Agents](docs/AGENTS.md) | Agent development guide |
-| [Contributing](docs/CONTRIBUTING.md) | How to contribute |
+| [Installation](docs/01-guides/INSTALLATION.md) | Setup guide |
+| [Configuration](docs/01-guides/CONFIGURATION.md) | Settings & env vars |
+| [Architecture](docs/00-core/ARCHITECTURE.md) | System design |
+| [Database Schema](docs/02-reference/DATABASE_SCHEMA.md) | Data model |
+| [API Documentation](docs/02-reference/API_DOCUMENTATION.md) | Supabase API usage |
+| [ABAC System](docs/03-features/ABAC_SYSTEM.md) | Permissions & Policies |
+| [Multi-Tenancy](docs/00-core/MULTI_TENANCY.md) | SaaS tenant isolation |
+| [Extensions](docs/03-features/EXTENSIONS.md) | Plugin & Extension system |
+| [Component Guide](docs/03-features/COMPONENT_GUIDE.md) | UI components |
+| [Folder Structure](docs/02-reference/FOLDER_STRUCTURE.md) | Project organization |
+| [Security](docs/00-core/SECURITY.md) | Security measures |
+| [Deployment](docs/01-guides/DEPLOYMENT.md) | Deploy to production |
+| [AI Agents](docs/02-reference/AGENTS.md) | Agent development guide |
+| [Contributing](docs/01-guides/CONTRIBUTING.md) | How to contribute |
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
+Contributions are welcome! See [CONTRIBUTING.md](docs/01-guides/CONTRIBUTING.md) for guidelines.
 
 ---
 

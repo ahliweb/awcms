@@ -13,7 +13,7 @@
     "deploy:manage-users": "npx supabase functions deploy manage-users",
     "deploy:functions": "npx supabase functions deploy",
     "test": "vitest",
-    "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md docs/INDEX.md"
+    "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md README.md docs/INDEX.md"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "^1.4.0",
