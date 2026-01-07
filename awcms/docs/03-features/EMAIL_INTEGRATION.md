@@ -128,5 +128,5 @@ The webhook handler logs these events to `email_logs` table:
 ## Related Documentation
 
 - [Mailketing API Docs](https://mailketing.co.id/docs-kategori/api/)
-- [Configuration](CONFIGURATION.md)
-- [Cloudflare Deployment](CLOUDFLARE_DEPLOYMENT.md)
+- [Configuration](../01-guides/CONFIGURATION.md)
+- [Cloudflare Deployment](../01-guides/CLOUDFLARE_DEPLOYMENT.md)

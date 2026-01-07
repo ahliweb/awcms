@@ -154,6 +154,6 @@ prerelease: ''         // → 2.1.0
 
 ## Related Documentation
 
-- [Changelog](../CHANGELOG.md)
-- [Contributing](CONTRIBUTING.md)
-- [Deployment](DEPLOYMENT.md)
+- [Changelog](../../CHANGELOG.md)
+- [Contributing](../01-guides/CONTRIBUTING.md)
+- [Deployment](../01-guides/DEPLOYMENT.md)

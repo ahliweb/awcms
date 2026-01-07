@@ -85,3 +85,38 @@ To allow tenants to use subdomains (e.g., `tenant1.yoursite.com`) or custom doma
 ### For Admin Panel
 
 Typically lives on a secure subdomain like `admin.yoursite.com` or `app.yoursite.com`.
+
+---
+
+## 5. Mobile Application (`awcms-mobile`)
+
+The mobile app is a Flutter project located in `/awcms-mobile`.
+
+**Prerequisites**:
+
+* Flutter SDK 3.x+
+* Android Studio / Xcode
+
+### Build & Deploy
+
+1. **Configuration**:
+   * Ensure `lib/core/constants/app_constants.dart` points to your Supabase URL.
+   * Update `android/app/build.gradle` and `ios/Runner.xcodeproj` with your App ID.
+
+2. **Build for Stores**:
+
+   ```bash
+   cd awcms-mobile
+   
+   # Android App Bundle (Play Store)
+   flutter build appbundle --release
+   
+   # iOS Archive (App Store)
+   flutter build ipa --release
+   ```
+
+3. **CI/CD**:
+   * Automated builds are configured in [ci.yml](../../../.github/workflows/ci.yml).
+   * Artifacts are uploaded to GitHub Actions releases.
+
+For more details, see [Mobile Development](../01-guides/MOBILE_DEVELOPMENT.md).

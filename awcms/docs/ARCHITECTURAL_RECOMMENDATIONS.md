@@ -175,7 +175,7 @@ describe('ComponentName', () => {
 
 All new features MUST include:
 
-1. Update to relevant `docs/*.md` file
+1. Update to relevant `docs/` subdirectory file
 2. Entry in `CHANGELOG.md`
 3. Update to `docs/INDEX.md` if new doc created
 
@@ -183,7 +183,7 @@ All new features MUST include:
 
 ## Related Documents
 
-- [CORE_STANDARDS.md](CORE_STANDARDS.md) - Definitive standards
-- [AGENTS.md](AGENTS.md) - AI development guidelines
-- [PERFORMANCE.md](PERFORMANCE.md) - Performance optimization
-- [SECURITY.md](SECURITY.md) - Security implementation
+- [CORE_STANDARDS.md](00-core/CORE_STANDARDS.md) - Definitive standards
+- [AGENTS.md](02-reference/AGENTS.md) - AI development guidelines
+- [PERFORMANCE.md](03-features/PERFORMANCE.md) - Performance optimization
+- [SECURITY.md](00-core/SECURITY.md) - Security implementation

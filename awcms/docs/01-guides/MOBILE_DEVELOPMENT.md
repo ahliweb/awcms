@@ -222,4 +222,15 @@ Lihat implementasi referensi di folder `awcms-mobile/`:
 * `lib/core/database/` - Drift local database
 * `lib/core/services/sync_service.dart` - Sync logic
 * `lib/shared/widgets/offline_indicator.dart` - Status indicators
+* `lib/shared/widgets/offline_indicator.dart` - Status indicators
 * `lib/shared/widgets/offline_asset_warning.dart` - Asset warnings
+
+## 9. CI/CD Pipeline
+
+AWCMS includes a GitHub Actions workflow for building the mobile app automatically.
+
+* **Workflow File**: [ci.yml](../../../.github/workflows/ci.yml)
+* **Triggers**: Pushes to `main` branch.
+* **Artifacts**: Generates APK (Android) and IPA (iOS - No Code Signing in Free Tier) binaries attached to the workflow run.
+
+See [Deployment Guide](../01-guides/DEPLOYMENT.md#5-mobile-application-awcms-mobile) for store release instructions.

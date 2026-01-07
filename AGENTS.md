@@ -220,7 +220,7 @@ To prevent API hallucinations and ensure adherence to the latest library standar
 
 ### Available Tools
 
-- `resolve-library-id`: Search for a library's Context7 ID.
+* `resolve-library-id`: Search for a library's Context7 ID.
 * `query-docs`: Query specific documentation using a Library ID.
 
 ### Core Library IDs

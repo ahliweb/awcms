@@ -195,5 +195,5 @@ export function useNetworkStatus() {
 ## Related Documentation
 
 - [Performance Optimization](PERFORMANCE.md)
-- [Database Schema](DATABASE_SCHEMA.md)
-- [Multi-Tenancy](MULTI_TENANCY.md)
+- [Database Schema](../02-reference/DATABASE_SCHEMA.md)
+- [Multi-Tenancy](../00-core/MULTI_TENANCY.md)

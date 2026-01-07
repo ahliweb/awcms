@@ -87,7 +87,7 @@ Untuk sistem ABAC yang kompleks:
 
 ## 5. Integrasi AI Agents di Skala Besar
 
-Merujuk pada [AGENTS.md](AGENTS.md), AWCMS didesain untuk kolaborasi dengan AI Agents. Agent seringkali melakukan operasi "burst" (banyak request dalam waktu singkat).
+Merujuk pada [AGENTS.md](../02-reference/AGENTS.md), AWCMS didesain untuk kolaborasi dengan AI Agents. Agent seringkali melakukan operasi "burst" (banyak request dalam waktu singkat).
 
 ### A. Dedicated Queue untuk Agent
 

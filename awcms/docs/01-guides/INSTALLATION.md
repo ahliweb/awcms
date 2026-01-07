@@ -82,7 +82,7 @@ The application will be available at: **<http://localhost:3000>**
 Run the SQL migrations in your Supabase SQL Editor:
 
 ```sql
--- See docs/DATABASE_SCHEMA.md for full schema
+-- See docs/02-reference/DATABASE_SCHEMA.md for full schema
 ```
 
 Or use the Supabase CLI:
@@ -155,5 +155,5 @@ npm install
 ## Next Steps
 
 - [Configuration Guide](CONFIGURATION.md) - Customize your AWCMS instance
-- [Database Schema](DATABASE_SCHEMA.md) - Understand the data model
-- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Deploy to production
+- [Database Schema](../02-reference/DATABASE_SCHEMA.md) - Understand the data model
+- [Deployment Guide](DEPLOYMENT.md) - Deploy to production
