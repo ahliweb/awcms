@@ -11,7 +11,7 @@ This document establishes the definitive architecture and standardization pillar
 * **ABAC System**:
   * **Context**: `src/contexts/PermissionContext.jsx` (Global permission state)
   * **Hook**: `usePermission()` (Role & Permission checks)
-  * **Definition**: [Role Hierarchy & Matrix](ROLE_HIERARCHY.md)
+  * **Definition**: [Role Hierarchy & Matrix](../03-features/ROLE_HIERARCHY.md)
 * **Multi-Tenancy**:
   * **Context**: `src/contexts/TenantContext.jsx` (Tenant isolation)
   * **Hooks**: `usePublicTenant()` (Public resolving), `useTenantTheme()` (Theming)
@@ -22,18 +22,18 @@ This document establishes the definitive architecture and standardization pillar
 * **Database Security**:
   * **Safe Client**: `customSupabaseClient.js` (Respects RLS)
   * **Privileged**: `supabaseAdmin.js` (Bypasses RLS - Server/Admin only)
-  * **Rules**: [RLS Policies](RLS_POLICIES.md)
+  * **Rules**: [RLS Policies](../02-reference/RLS_POLICIES.md)
 * **Audit & Lifecycle**:
   * **Logging**: `useAuditLog()` (System), `useExtensionAudit()` (Plugins)
   * **User**: Soft Delete protocol (No permanent deletion without archival).
 
 ### 1.2 Security Documentation
 
-* [ABAC System Guide](ABAC_SYSTEM.md)
+* [ABAC System Guide](../03-features/ABAC_SYSTEM.md)
 * [Multi-Tenancy Guide](MULTI_TENANCY.md)
 * [Security Model](SECURITY.md)
-* [User Management](USER_MANAGEMENT.md)
-* [System Performance](PERFORMANCE.md)
+* [User Management](../03-features/USER_MANAGEMENT.md)
+* [System Performance](../03-features/PERFORMANCE.md)
 
 ---
 
@@ -63,12 +63,11 @@ This document establishes the definitive architecture and standardization pillar
 
 ### 2.2 UI/UX Documentation
 
-* [Template System](TEMPLATE_SYSTEM.md)
-
-* [Theming Guide](THEMING.md)
-* [Visual Builder](VISUAL_BUILDER.md)
-* [Menu System](MENU_SYSTEM.md)
-* [Internationalization](INTERNATIONALIZATION.md)
+* [Template System](../03-features/TEMPLATE_SYSTEM.md)
+* [Theming Guide](../03-features/THEMING.md)
+* [Visual Builder](../03-features/VISUAL_BUILDER.md)
+* [Menu System](../03-features/MENU_SYSTEM.md)
+* [Internationalization](../03-features/INTERNATIONALIZATION.md)
 
 ---
 
@@ -93,9 +92,8 @@ This document establishes the definitive architecture and standardization pillar
 
 ### 3.2 Extension Documentation
 
-* [Extension Guide](EXTENSIONS.md)
-
-* [Module Development](MODULES_GUIDE.md)
+* [Extension Guide](../03-features/EXTENSIONS.md)
+* [Module Development](../03-features/MODULES_GUIDE.md)
 
 ---
 
@@ -106,19 +104,18 @@ This document establishes the definitive architecture and standardization pillar
 ### 4.1 Documentation Architecture
 
 * **AI Guidelines**:
-  * **Primary**: [AGENTS.md](AGENTS.md) (Rules for AI Assist)
+  * **Primary**: [AGENTS.md](../02-reference/AGENTS.md) (Rules for AI Assist)
   * **Context**: **Context7 MCP** integration for library docs.
 * **Project Overview**:
-  * **Root**: [README.md](../README.md) (Installation & Start)
+  * **Root**: [README.md](../../README.md) (Installation & Start)
 * **Technical Reference**:
-  * **Data**: [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) (SQL Structure)
-  * **Map**: [INDEX.md](INDEX.md) (Documentation Map)
+  * **Data**: [DATABASE_SCHEMA.md](../02-reference/DATABASE_SCHEMA.md) (SQL Structure)
+  * **Map**: [INDEX.md](../INDEX.md) (Documentation Map)
 
 ### 4.2 Documentation Reference
 
-* [AI Agents Guide](AGENTS.md)
-
-* [Database Schema](DATABASE_SCHEMA.md)
+* [AI Agents Guide](../02-reference/AGENTS.md)
+* [Database Schema](../02-reference/DATABASE_SCHEMA.md)
 
 ---
 
@@ -134,19 +131,19 @@ This document establishes the definitive architecture and standardization pillar
   * **Engagement**: `useMobileUsers()`, `usePushNotifications()`
 * **Offline Capability**:
   * **Sync**: `useOfflineSync()` (Queue-based synchronization)
-  * **Architecture**: [Offline Guide](OFFLINE_ARCHITECTURE.md)
+  * **Architecture**: [Offline Guide](../03-features/OFFLINE_ARCHITECTURE.md)
 * **DevOps & Deployment**:
   * **Cloudflare**: `wrangler.toml` (Pages Config), Edge Functions
   * **CI/CD**: GitHub Actions workflows
 * **Quality Assurance**:
   * **Tests**: `vitest` (Unit/Integration)
-  * **Standards**: ESLint, Prettier, [Code of Conduct](CODE_OF_CONDUCT.md)
+  * **Standards**: ESLint, Prettier, [Code of Conduct](../CODE_OF_CONDUCT.md)
 
 ### 5.2 Additional Standards Documentation
 
-* [Mobile Development](MOBILE_DEVELOPMENT.md)
-* [Offline Architecture](OFFLINE_ARCHITECTURE.md)
-* [Cloudflare Deployment](CLOUDFLARE_DEPLOYMENT.md)
-* [Testing Guide](TESTING.md)
-* [Contributing](CONTRIBUTING.md)
-* [Architectural Recommendations](ARCHITECTURAL_RECOMMENDATIONS.md)
+* [Mobile Development](../01-guides/MOBILE_DEVELOPMENT.md)
+* [Offline Architecture](../03-features/OFFLINE_ARCHITECTURE.md)
+* [Cloudflare Deployment](../01-guides/CLOUDFLARE_DEPLOYMENT.md)
+* [Testing Guide](../01-guides/TESTING.md)
+* [Contributing](../01-guides/CONTRIBUTING.md)
+* [Architectural Recommendations](../ARCHITECTURAL_RECOMMENDATIONS.md)

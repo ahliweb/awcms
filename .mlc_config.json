@@ -1,0 +1,23 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^https?://",
+      "comment": "Skip external HTTP/HTTPS links"
+    },
+    {
+      "pattern": "^mailto:",
+      "comment": "Skip mailto links"
+    },
+    {
+      "pattern": "^#",
+      "comment": "Skip anchor-only links (checked separately)"
+    }
+  ],
+  "replacementPatterns": [],
+  "httpHeaders": {},
+  "timeout": "5s",
+  "retryOn429": true,
+  "retryCount": 2,
+  "fallbackRetryDelay": "30s",
+  "aliveStatusCodes": [200, 206]
+}

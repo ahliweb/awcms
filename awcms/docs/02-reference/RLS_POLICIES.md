@@ -222,7 +222,7 @@ RESET request.jwt.claims;
 
 ## Related Documentation
 
-- [Security](SECURITY.md)
-- [ABAC System](ABAC_SYSTEM.md)
+- [Security](../00-core/SECURITY.md)
+- [ABAC System](../03-features/ABAC_SYSTEM.md)
 - [Database Schema](DATABASE_SCHEMA.md)
-- [Multi-Tenancy](MULTI_TENANCY.md)
+- [Multi-Tenancy](../00-core/MULTI_TENANCY.md)

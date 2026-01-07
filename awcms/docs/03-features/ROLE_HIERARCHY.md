@@ -23,7 +23,7 @@ graph TD
 ## Role Definitions
 
 | Role | Scope | Description | Access Level |
-|------|-------|-------------|--------------|
+| ---- | ----- | ----------- | ------------ |
 | **Owner** | Global | Supreme authority. Full system access across all tenants. | 100% |
 | **Super Admin** | Global | Platform management. Can manage tenants and global settings. | 95% |
 | **Admin** | Tenant | Tenant administrator. Full access within their tenant. | 85% |
@@ -41,7 +41,7 @@ graph TD
 ### Content Operations
 
 | Role | Create | Read | Update | Publish | Soft Delete | Restore | Hard Delete |
-|------|:------:|:----:|:------:|:-------:|:-----------:|:-------:|:-----------:|
+| ---- | :----: | :--: | :----: | :-----: | :---------: | :-----: | :---------: |
 | Owner | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Super Admin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Admin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
@@ -57,7 +57,7 @@ graph TD
 ### System Operations
 
 | Role | User Management | Role Management | Tenant Management | Extension Management |
-|------|:---------------:|:---------------:|:-----------------:|:--------------------:|
+| ---- | :-------------: | :-------------: | :---------------: | :------------------: |
 | Owner | ✅ | ✅ | ✅ | ✅ |
 | Super Admin | ✅ | ✅ | ✅ | ✅ |
 | Admin | ✅ | ⚠️* | ❌ | ⚠️* |
@@ -95,7 +95,7 @@ CREATE TABLE roles (
 ### Global vs Tenant Roles
 
 | Role | tenant_id | Scope |
-|------|-----------|-------|
+| ---- | --------- | ----- |
 | owner | NULL | Global |
 | super_admin | NULL | Global |
 | admin | {tenant-uuid} | Tenant |
@@ -166,5 +166,5 @@ function MyComponent() {
 ## Related Documentation
 
 - [ABAC System](ABAC_SYSTEM.md)
-- [Security](SECURITY.md)
+- [Security](../00-core/SECURITY.md)
 - [User Management](USER_MANAGEMENT.md)

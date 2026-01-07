@@ -21,7 +21,7 @@ The audit trail captures all significant system actions, providing:
 ### audit_logs Table
 
 | Column | Type | Description |
-|--------|------|-------------|
+| ------ | ---- | ----------- |
 | `id` | UUID | Primary key |
 | `tenant_id` | UUID | Tenant isolation |
 | `user_id` | UUID | User who performed action |
@@ -40,7 +40,7 @@ The audit trail captures all significant system actions, providing:
 ## Action Types
 
 | Action | Description | Captures |
-|--------|-------------|----------|
+| ------ | ----------- | -------- |
 | `create` | New record created | new_value |
 | `update` | Record modified | old_value, new_value |
 | `delete` | Record soft-deleted | old_value |
@@ -183,6 +183,6 @@ WHERE created_at < NOW() - INTERVAL '365 days';
 
 ## Related Documentation
 
-- [Security](SECURITY.md)
+- [Security](../00-core/SECURITY.md)
 - [ABAC System](ABAC_SYSTEM.md)
 - [Monitoring](MONITORING.md)

@@ -80,6 +80,7 @@ source .env && pio run -t upload
 | Doc | Path |
 | :-- | :--- |
 | Admin Docs | `awcms/docs/` |
+| **AI Agents Guide** | [AGENTS.md](AGENTS.md) |
 | ESP32 Docs | `awcms-esp32/README.md` |
 | Mobile Docs | `awcms-mobile/README.md` |
 

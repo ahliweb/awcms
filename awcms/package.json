@@ -12,7 +12,8 @@
     "lint:fix": "eslint src --ext js,jsx --fix",
     "deploy:manage-users": "npx supabase functions deploy manage-users",
     "deploy:functions": "npx supabase functions deploy",
-    "test": "vitest"
+    "test": "vitest",
+    "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md docs/INDEX.md"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "^1.4.0",

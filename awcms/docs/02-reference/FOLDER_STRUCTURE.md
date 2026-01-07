@@ -135,7 +135,7 @@ src/
 └── 📄 index.css          # Global styles (TailwindCSS 4)
 ```
 
-> **External Extensions** are located at project root in `awcms-ext-{vendor}-{slug}/` folders. See [EXTENSIONS.md](./EXTENSIONS.md) for details.
+> **External Extensions** are located at project root in `awcms-ext-{vendor}-{slug}/` folders. See [EXTENSIONS.md](../03-features/EXTENSIONS.md) for details.
 
 ---
 
