@@ -6,7 +6,7 @@ External extensions for AWCMS.
 
 | Extension | Path | Description |
 | :--- | :--- | :--- |
-| primary-analitics | [primary-analitics/](./primary-analitics/) | Analytics extension for primary tenant |
+| primary-analytics | [primary-analytics/](./primary-analytics/) | Analytics extension for primary tenant |
 
 ## Structure
 
