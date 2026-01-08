@@ -49,6 +49,19 @@ awcms-esp32/
 └── data/             # Web UI
 ```
 
+## Tenant Folders
+
+Tenant-specific configuration lives under `/{tenant_code}/`:
+
+```text
+awcms-esp32/
+  primary/              # Default tenant
+    README.md           # Tenant config docs
+  src/                  # Shared firmware code
+```
+
+See [primary/README.md](./primary/README.md) for tenant-specific setup.
+
 ## API Endpoints
 
 | Endpoint | Auth | Description |
