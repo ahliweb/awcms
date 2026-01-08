@@ -23,6 +23,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - **Data Cleanup Migration**: Removes rows with NULL or invalid `tenant_id` (orphaned data)
 - **RLS Enforcement**: All navigation tables now have proper tenant-scoped RLS policies
+- **Media Library Audit**: Verified `files` table compliance (RLS, NOT NULL, ABAC) - no changes needed
 
 ### Changed
 
