@@ -102,7 +102,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
                 return next();
             }
 
-            return new Response(`Tenant Not Found: "${tenantSlugFromPath || 'unknown'}"`, { status: 404 });
+            // Fallback to 'primary' for known channel domains
+            let host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
+            if (host.includes(":")) host = host.split(":")[0];
+
+            if (host.includes('ahliweb.com') || host.includes('localhost')) {
+                console.log('[Middleware] Fallback to primary tenant for host:', host);
+                return Response.redirect(new URL('/primary/', url.origin), 302);
+            }
+
+            return new Response('Tenant Not Found', { status: 404 });
         }
 
         // 7. Set context for downstream components
