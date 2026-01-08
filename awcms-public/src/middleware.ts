@@ -71,7 +71,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
             if (hostTenantId) {
                 tenantId = hostTenantId as string;
 
-                // Get tenant slug for redirect
+                // Get tenant slug
                 const { data: tenantData } = await SafeSupabase
                     .from('tenants')
                     .select('slug')
@@ -80,13 +80,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
                 if (tenantData) {
                     tenantSlug = tenantData.slug;
-
-                    // If tenant resolved from host but NOT in path, redirect to canonical path
-                    if (!tenantSlugFromPath && !pathname.startsWith('/_') && pathname !== '/favicon.ico') {
-                        const targetPath = `/${tenantSlug}${pathname === '/' ? '/' : pathname}`;
-                        console.log('[Middleware] Redirecting to canonical path:', targetPath);
-                        return Response.redirect(new URL(targetPath, url.origin), 301);
-                    }
+                    // Serve content directly from host without path prefix redirect
+                    console.log('[Middleware] Tenant resolved from host:', tenantSlug, tenantId);
                 }
             } else if (hostError) {
                 console.warn('[Middleware] Host lookup error:', hostError.message);
@@ -108,15 +103,26 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
             if (host.includes('ahliweb.com') || host.includes('localhost')) {
                 console.log('[Middleware] Fallback to primary tenant for host:', host);
-                return Response.redirect(new URL('/primary/', url.origin), 302);
+                // Set primary tenant context directly (no redirect)
+                tenantSlug = 'primary';
+                const { data: primaryTenant } = await SafeSupabase
+                    .from('tenants')
+                    .select('id')
+                    .eq('slug', 'primary')
+                    .single();
+                if (primaryTenant) {
+                    tenantId = primaryTenant.id;
+                } else {
+                    return new Response('Primary tenant not configured', { status: 500 });
+                }
+            } else {
+                return new Response('Tenant Not Found', { status: 404 });
             }
-
-            return new Response('Tenant Not Found', { status: 404 });
         }
 
         // 7. Set context for downstream components
-        locals.tenant_id = tenantId;
-        locals.tenant_slug = tenantSlug;
+        locals.tenant_id = tenantId!;
+        locals.tenant_slug = tenantSlug!;
         locals.host = request.headers.get("host") || "";
 
         return next();
