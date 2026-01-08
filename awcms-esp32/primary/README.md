@@ -1,39 +1,83 @@
-# Primary Tenant Configuration
+# AWCMS ESP32 IoT Firmware
 
-This folder contains tenant-specific configuration for the **primary** tenant.
+ESP32-based IoT firmware with **secure credential storage**.
 
-## Environment
+## Security Features
 
-Create `config.h` with tenant-specific settings:
+| Feature | Implementation |
+| :------ | :------------- |
+| Build-time secrets | `.env` + PlatformIO flags |
+| String obfuscation | XOR in `security.h` |
+| Authentication | Basic Auth + API key |
+| Multi-tenant | Tenant ID isolation |
 
-```cpp
-#define TENANT_CODE "primary"
-#define TENANT_DOMAIN "primaryesp32.ahliweb.com"
-#define API_BASE_URL "https://imveukxxtdwjgwsafwfl.supabase.co"
+## Quick Start
+
+1. **Copy environment file:**
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Edit `.env` with your credentials:**
+
+   ```ini
+   WIFI_SSID=YourWiFi
+   WIFI_PASSWORD=YourPassword
+   SUPABASE_URL=https://xxx.supabase.co
+   SUPABASE_ANON_KEY=eyJxxx...
+   AUTH_PASSWORD=your-secure-password
+   ```
+
+3. **Build and upload:**
+
+   ```bash
+   source .env && pio run -t uploadfs && pio run -t upload
+   ```
+
+## Project Structure
+
+```text
+awcms-esp32/
+├── .env              # Secrets (NOT in git)
+├── .env.example      # Template
+├── include/
+│   ├── config.h      # Uses build flags
+│   ├── security.h    # Obfuscation
+│   ├── auth.h        # Authentication
+│   └── ...
+└── data/             # Web UI
 ```
 
-## Build
+## Tenant Folders
 
-```bash
-# Using PlatformIO
-pio run -e primary
+Tenant-specific configuration lives under `/{tenant_code}/`:
 
-# Upload to device
-pio run -e primary -t upload
+```text
+awcms-esp32/
+  primary/              # Default tenant
+    README.md           # Tenant config docs
+  src/                  # Shared firmware code
 ```
 
-## API Configuration
+See [primary/README.md](./primary/README.md) for tenant-specific setup.
 
-The ESP32 device uses the `tenant_channels` table for domain resolution:
+## API Endpoints
 
-- Channel: `esp32`
-- Domain: `primaryesp32.ahliweb.com`
-- Base Path: `/awcms-esp32/primary/`
+| Endpoint | Auth | Description |
+| :------- | :--- | :---------- |
+| `/` | No | Dashboard |
+| `/api/gas` | Yes | Gas sensor |
+| `/capture` | Yes | Camera |
+| `/api/restart` | Yes | Reboot |
 
-## Device Registration
+## Anti-Reverse Engineering
 
-Each ESP32 device must be registered with:
+- Credentials injected at compile time
+- Not hardcoded in source code
+- String obfuscation available
+- For production: Enable ESP32 Flash Encryption
 
-1. Device UUID
-2. Tenant ID (`primary`)
-3. API credentials
+## License
+
+MIT
