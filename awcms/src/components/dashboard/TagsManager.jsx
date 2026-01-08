@@ -358,10 +358,10 @@ function TagsManager() {
                 if (error) throw error;
                 toast({ title: "Success", description: "Tag updated successfully" });
             } else {
-                // Add tenant_id for new tags (platform admins can create global tags)
+                // Always use current tenant context for new tags
                 const insertPayload = {
                     ...payload,
-                    tenant_id: isPlatformAdmin ? null : currentTenant?.id
+                    tenant_id: currentTenant?.id
                 };
                 const { error } = await supabase
                     .from('tags')

@@ -5,6 +5,30 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.9.0] "Navigator" - 2026-01-08
+
+### Added
+
+- **RLS Policies for Menus**: Added unified tenant-scoped RLS policies (select/insert/update/delete)
+- **Database Indexes**: Added performance indexes for `tenant_id` on navigation tables
+- **Seed Data**: Idempotent seed script for primary tenant (3 menus, 3 categories, 3 tags)
+
+### Fixed
+
+- **Tenant Isolation Bug (TagsManager)**: Platform admins now create tags within active tenant context
+- **Tenant Isolation Bug (MenusManager)**: Menu inserts now include `tenant_id` from TenantContext
+- **NOT NULL Constraints**: Enforced `tenant_id NOT NULL` on categories, tags, menus, menu_permissions
+
+### Security
+
+- **Data Cleanup Migration**: Removes rows with NULL or invalid `tenant_id` (orphaned data)
+- **RLS Enforcement**: All navigation tables now have proper tenant-scoped RLS policies
+
+### Changed
+
+- **MenusManager**: Added TenantContext integration for proper tenant isolation
+- **TagsManager**: Removed conditional null tenant_id for platform admins
+
 ## [2.8.0] "Pathfinder" - 2026-01-08
 
 ### Added

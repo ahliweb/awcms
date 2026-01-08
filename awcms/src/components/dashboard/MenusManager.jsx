@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import {
 function MenusManager() {
   const { toast } = useToast();
   const { hasPermission, userRole } = usePermissions();
+  const { currentTenant } = useTenant();
   const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
 
   // Data State
@@ -196,6 +198,7 @@ function MenusManager() {
       } else {
         // Get max order for new item
         payload.order = 99; // Default to end, user can reorder
+        payload.tenant_id = currentTenant?.id; // Set tenant context
         const { error: insertError } = await supabase
           .from('menus')
           .insert(payload);
