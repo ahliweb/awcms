@@ -5,11 +5,16 @@ import { Save, X, Globe, Calendar, Lock, Layout, Image as ImageIcon, Share2, Fol
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
-// ... other imports
+import { usePermissions } from '@/contexts/PermissionContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ImageUpload } from '@/components/ui/ImageUpload';
+import RichTextEditor from '@/components/ui/RichTextEditor';
+import TagInput from '@/components/ui/TagInput';
 
 function ArticleEditor({ article, onClose, onSuccess }) {
     const { toast } = useToast();
@@ -287,7 +292,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                         </Button>
                     )}
 
-                    <Button type="button" onClick={handleSubmit} disabled={loading} className="bg-slate-900 hover:bg-slate-800 text-white">
+                    <Button type="button" onClick={() => saveArticle()} disabled={loading} className="bg-slate-900 hover:bg-slate-800 text-white">
                         <Save className="w-4 h-4 mr-2" />
                         {loading ? 'Saving...' : 'Save Draft'}
                     </Button>
@@ -297,7 +302,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
+            <form onSubmit={(e) => { e.preventDefault(); saveArticle(); }} className="flex-1 overflow-hidden flex flex-col">
                 <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30">
                     <Tabs defaultValue="content" className="w-full h-full flex flex-col">
                         <TabsList className="grid w-full grid-cols-4 mb-6 bg-slate-100 p-1 rounded-lg">

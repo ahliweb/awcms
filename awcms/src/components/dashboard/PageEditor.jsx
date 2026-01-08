@@ -5,11 +5,16 @@ import { Save, X, Globe, Calendar, Lock, Layout, Image as ImageIcon, Share2, Fol
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
-// ... other imports
+import { usePermissions } from '@/contexts/PermissionContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ImageUpload } from '@/components/ui/ImageUpload';
+import RichTextEditor from '@/components/ui/RichTextEditor';
+import TagInput from '@/components/ui/TagInput';
 
 function PageEditor({ page, onClose, onSuccess }) {
     const { toast } = useToast();
