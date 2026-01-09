@@ -13,6 +13,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **DEPLOYMENT.md**: Fixed `awcms-public` and `awcms-mobile` root directory paths to reference `primary` subfolder.
 - **Docs Coverage Map**: Verified alignment for multi-tenancy, ABAC, RLS, workflow engine, audit trail, and compliance.
 - **Standards Verification**: Confirmed CORE_STANDARDS.md, ABAC_SYSTEM.md, AUDIT_TRAIL.md, RLS_POLICIES.md, and COMPLIANCE_MAP.md accurately reflect implementation.
+- **AGENTS.md**: Enforced React 18.3.1 across all projects (removed React 19 references).
+- **README Updates**: Updated all project READMEs with correct `primary` subfolder paths and React 18.3.1.
+- **CORE_STANDARDS.md**: Added version metadata (2.9.2, React 18.3.1, last updated date).
+- **Link Fixes**: Corrected broken relative links in `awcms-mobile`, `awcms-public`, and `awcms-esp32` READMEs.
 
 ### Fixed
 
