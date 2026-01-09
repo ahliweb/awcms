@@ -114,6 +114,7 @@ function TenantsManager() {
             notes: '',
             contact_email: ''
         });
+        setChannelDomains({ web_public: '', mobile: '', esp32: '' });
         setShowEditor(true);
     };
 
@@ -188,6 +189,7 @@ function TenantsManager() {
             };
 
             let error;
+            let newTenantId = null;
             if (editingTenant) {
                 const { error: updateError } = await supabase
                     .from('tenants')
@@ -195,28 +197,33 @@ function TenantsManager() {
                     .eq('id', editingTenant.id);
                 error = updateError;
             } else {
-                const { error: insertError } = await supabase
+                const { data: insertedTenant, error: insertError } = await supabase
                     .from('tenants')
-                    .insert(payload);
+                    .insert(payload)
+                    .select('id, slug')
+                    .single();
                 error = insertError;
+                if (insertedTenant) newTenantId = insertedTenant.id;
             }
 
             if (error) throw error;
 
-            // Save channel domains for existing tenant
-            if (editingTenant) {
+            // Save channel domains for tenant (both new and existing)
+            const tenantId = editingTenant?.id || newTenantId;
+            const tenantSlug = editingTenant?.slug || formData.slug;
+            if (tenantId) {
                 for (const channel of ['web_public', 'mobile', 'esp32']) {
                     if (channelDomains[channel]) {
                         // Upsert channel domain
                         const { error: channelError } = await supabase
                             .from('tenant_channels')
                             .upsert({
-                                tenant_id: editingTenant.id,
+                                tenant_id: tenantId,
                                 channel,
                                 domain: channelDomains[channel].toLowerCase().trim(),
-                                base_path: channel === 'web_public' ? `/awcms-public/${editingTenant.slug}/` :
-                                    channel === 'mobile' ? `/awcms-mobile/${editingTenant.slug}/` :
-                                        `/awcms-esp32/${editingTenant.slug}/`,
+                                base_path: channel === 'web_public' ? `/awcms-public/${tenantSlug}/` :
+                                    channel === 'mobile' ? `/awcms-mobile/${tenantSlug}/` :
+                                        `/awcms-esp32/${tenantSlug}/`,
                                 is_primary: true,
                                 is_active: true
                             }, { onConflict: 'tenant_id,channel,is_primary' });
@@ -467,157 +474,157 @@ function TenantsManager() {
 
             {/* Editor Dialog */}
             <Dialog open={showEditor} onOpenChange={setShowEditor}>
-                <DialogContent>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader>
                         <DialogTitle>{editingTenant ? 'Edit Tenant' : 'New Tenant'}</DialogTitle>
                         <DialogDescription>Configure tenant details and subscription.</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="grid gap-2">
-                            <Label>Name</Label>
-                            <Input
-                                value={formData.name}
-                                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                placeholder="Acme Corp"
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>Slug (Unique ID)</Label>
-                            <Input
-                                value={formData.slug}
-                                onChange={e => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
-                                placeholder="acme-corp"
-                                disabled={!!editingTenant}
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>Custom Domain (Optional)</Label>
-                            <Input
-                                value={formData.domain}
-                                onChange={e => setFormData({ ...formData, domain: e.target.value })}
-                                placeholder="app.acme.com"
-                            />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
+                    <div className="flex-1 overflow-y-auto pr-2">
+                        <div className="space-y-4 py-4">
                             <div className="grid gap-2">
-                                <Label>Status</Label>
-                                <Select value={formData.status} onValueChange={v => setFormData({ ...formData, status: v })}>
-                                    <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="active">Active</SelectItem>
-                                        <SelectItem value="suspended">Suspended</SelectItem>
-                                        <SelectItem value="archived">Archived</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <Label>Name</Label>
+                                <Input
+                                    value={formData.name}
+                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                    placeholder="Acme Corp"
+                                />
                             </div>
                             <div className="grid gap-2">
-                                <Label>Subscription</Label>
-                                <Select value={formData.subscription_tier} onValueChange={v => setFormData({ ...formData, subscription_tier: v })}>
-                                    <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="free">Free</SelectItem>
-                                        <SelectItem value="pro">Pro</SelectItem>
-                                        <SelectItem value="enterprise">Enterprise</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <Label>Slug (Unique ID)</Label>
+                                <Input
+                                    value={formData.slug}
+                                    onChange={e => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                                    placeholder="acme-corp"
+                                    disabled={!!editingTenant}
+                                />
                             </div>
-                        </div>
-
-                        {/* Billing Section */}
-                        <div className="pt-4 border-t border-border">
-                            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                                <DollarSign className="w-4 h-4 text-muted-foreground" /> Billing Information
-                            </h4>
-                            <div className="grid grid-cols-4 gap-4">
+                            <div className="grid gap-2">
+                                <Label>Custom Domain (Optional)</Label>
+                                <Input
+                                    value={formData.domain}
+                                    onChange={e => setFormData({ ...formData, domain: e.target.value })}
+                                    placeholder="app.acme.com"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
                                 <div className="grid gap-2">
-                                    <Label>Expiry Date</Label>
-                                    <Input
-                                        type="date"
-                                        value={formData.subscription_expires_at}
-                                        onChange={e => setFormData({ ...formData, subscription_expires_at: e.target.value })}
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Amount</Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.billing_amount}
-                                        onChange={e => setFormData({ ...formData, billing_amount: e.target.value })}
-                                        placeholder="99.00"
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Currency</Label>
-                                    <Select value={formData.currency} onValueChange={v => setFormData({ ...formData, currency: v })}>
+                                    <Label>Status</Label>
+                                    <Select value={formData.status} onValueChange={v => setFormData({ ...formData, status: v })}>
                                         <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="IDR">IDR (Rupiah)</SelectItem>
-                                            <SelectItem value="USD">USD (Dollar)</SelectItem>
-                                            <SelectItem value="EUR">EUR (Euro)</SelectItem>
-                                            <SelectItem value="SGD">SGD (Singapore)</SelectItem>
-                                            <SelectItem value="MYR">MYR (Ringgit)</SelectItem>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="suspended">Suspended</SelectItem>
+                                            <SelectItem value="archived">Archived</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
                                 <div className="grid gap-2">
-                                    <Label>Cycle</Label>
-                                    <Select value={formData.billing_cycle} onValueChange={v => setFormData({ ...formData, billing_cycle: v })}>
+                                    <Label>Subscription</Label>
+                                    <Select value={formData.subscription_tier} onValueChange={v => setFormData({ ...formData, subscription_tier: v })}>
                                         <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="monthly">Monthly</SelectItem>
-                                            <SelectItem value="yearly">Yearly</SelectItem>
-                                            <SelectItem value="custom">Custom</SelectItem>
+                                            <SelectItem value="free">Free</SelectItem>
+                                            <SelectItem value="pro">Pro</SelectItem>
+                                            <SelectItem value="enterprise">Enterprise</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
                             </div>
 
-                            {/* Locale / Language */}
-                            <div className="grid gap-2 mt-4">
-                                <Label className="flex items-center gap-1"><Globe className="w-3 h-3 text-muted-foreground" /> Default Language</Label>
-                                <Select value={formData.locale} onValueChange={v => setFormData({ ...formData, locale: v })}>
-                                    <SelectTrigger className="max-w-[200px] bg-background border-input"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="id">🇮🇩 Bahasa Indonesia</SelectItem>
-                                        <SelectItem value="en">🇺🇸 English</SelectItem>
-                                        <SelectItem value="zh">🇨🇳 中文 (Chinese)</SelectItem>
-                                        <SelectItem value="ja">🇯🇵 日本語 (Japanese)</SelectItem>
-                                        <SelectItem value="ko">🇰🇷 한국어 (Korean)</SelectItem>
-                                        <SelectItem value="ar">🇸🇦 العربية (Arabic)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-
-                        {/* Contact & Notes */}
-                        <div className="pt-4 border-t border-border">
-                            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-muted-foreground" /> Administrative Notes
-                            </h4>
-                            <div className="grid gap-4">
-                                <div className="grid gap-2">
-                                    <Label className="flex items-center gap-1"><Mail className="w-3 h-3 text-muted-foreground" /> Contact Email</Label>
-                                    <Input
-                                        type="email"
-                                        value={formData.contact_email}
-                                        onChange={e => setFormData({ ...formData, contact_email: e.target.value })}
-                                        placeholder="admin@tenant.com"
-                                    />
+                            {/* Billing Section */}
+                            <div className="pt-4 border-t border-border">
+                                <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                                    <DollarSign className="w-4 h-4 text-muted-foreground" /> Billing Information
+                                </h4>
+                                <div className="grid grid-cols-4 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Expiry Date</Label>
+                                        <Input
+                                            type="date"
+                                            value={formData.subscription_expires_at}
+                                            onChange={e => setFormData({ ...formData, subscription_expires_at: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Amount</Label>
+                                        <Input
+                                            type="number"
+                                            value={formData.billing_amount}
+                                            onChange={e => setFormData({ ...formData, billing_amount: e.target.value })}
+                                            placeholder="99.00"
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Currency</Label>
+                                        <Select value={formData.currency} onValueChange={v => setFormData({ ...formData, currency: v })}>
+                                            <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="IDR">IDR (Rupiah)</SelectItem>
+                                                <SelectItem value="USD">USD (Dollar)</SelectItem>
+                                                <SelectItem value="EUR">EUR (Euro)</SelectItem>
+                                                <SelectItem value="SGD">SGD (Singapore)</SelectItem>
+                                                <SelectItem value="MYR">MYR (Ringgit)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Cycle</Label>
+                                        <Select value={formData.billing_cycle} onValueChange={v => setFormData({ ...formData, billing_cycle: v })}>
+                                            <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="monthly">Monthly</SelectItem>
+                                                <SelectItem value="yearly">Yearly</SelectItem>
+                                                <SelectItem value="custom">Custom</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
-                                <div className="grid gap-2">
-                                    <Label>Notes</Label>
-                                    <textarea
-                                        value={formData.notes}
-                                        onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                        placeholder="Internal notes about this tenant..."
-                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                                    />
+
+                                {/* Locale / Language */}
+                                <div className="grid gap-2 mt-4">
+                                    <Label className="flex items-center gap-1"><Globe className="w-3 h-3 text-muted-foreground" /> Default Language</Label>
+                                    <Select value={formData.locale} onValueChange={v => setFormData({ ...formData, locale: v })}>
+                                        <SelectTrigger className="max-w-[200px] bg-background border-input"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="id">🇮🇩 Bahasa Indonesia</SelectItem>
+                                            <SelectItem value="en">🇺🇸 English</SelectItem>
+                                            <SelectItem value="zh">🇨🇳 中文 (Chinese)</SelectItem>
+                                            <SelectItem value="ja">🇯🇵 日本語 (Japanese)</SelectItem>
+                                            <SelectItem value="ko">🇰🇷 한국어 (Korean)</SelectItem>
+                                            <SelectItem value="ar">🇸🇦 العربية (Arabic)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Channel Domains Section */}
-                        {editingTenant && (
+                            {/* Contact & Notes */}
+                            <div className="pt-4 border-t border-border">
+                                <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-muted-foreground" /> Administrative Notes
+                                </h4>
+                                <div className="grid gap-4">
+                                    <div className="grid gap-2">
+                                        <Label className="flex items-center gap-1"><Mail className="w-3 h-3 text-muted-foreground" /> Contact Email</Label>
+                                        <Input
+                                            type="email"
+                                            value={formData.contact_email}
+                                            onChange={e => setFormData({ ...formData, contact_email: e.target.value })}
+                                            placeholder="admin@tenant.com"
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Notes</Label>
+                                        <textarea
+                                            value={formData.notes}
+                                            onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                                            placeholder="Internal notes about this tenant..."
+                                            className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Channel Domains Section */}
                             <div className="pt-4 border-t border-border">
                                 <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                                     <Radio className="w-4 h-4 text-muted-foreground" /> Channel Domains
@@ -653,9 +660,9 @@ function TenantsManager() {
                                     </div>
                                 </div>
                             </div>
-                        )}
+                        </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="pt-4 border-t">
                         <Button variant="outline" onClick={() => setShowEditor(false)}>Cancel</Button>
                         <Button onClick={handleSave} disabled={loading}>Save Changes</Button>
                     </DialogFooter>

@@ -3,6 +3,16 @@
 
 All notable changes to the **AWCMS** project will be documented in this file.
 
+## [2.9.3] - 2026-01-09
+
+### Fixed
+
+- **Visual Page Builder Error**: Resolved `no such table: _sync_queue` error by ensuring `SyncEngine` tables are auto-initialized before any mutations are queued.
+- **UserProfile**: Improved error handling to catch and display user-friendly messages for `504 Gateway Timeout` and network failures during password updates.
+- **TenantsManager**:
+  - Fixed form overflow issues on smaller screens by making the modal content scrollable.
+  - Added "Channel Domains" configuration inputs to the *Create Tenant* form (previously only available in Edit).
+
 ## [Unreleased]
 
 ## [2.9.2] "Clarity" - 2026-01-09

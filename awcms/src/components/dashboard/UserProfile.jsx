@@ -165,8 +165,15 @@ function UserProfile() {
 
       let errorMessage = error.message || "Failed to change password.";
 
+      // Handle specific error cases
       if (errorMessage.includes("New password should be different") || error.code === "same_password") {
         errorMessage = "Your new password cannot be the same as your old password.";
+      } else if (errorMessage.includes("Gateway Timeout") || error.status === 504) {
+        errorMessage = "Server is busy. Please wait a moment and try again.";
+      } else if (errorMessage.includes("fetch") || errorMessage.includes("network") || error.name === "TypeError") {
+        errorMessage = "Network error. Please check your connection and try again.";
+      } else if (error.status === 429) {
+        errorMessage = "Too many requests. Please wait a few minutes before trying again.";
       }
 
       toast({

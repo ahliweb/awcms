@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.9.3] - 2026-01-09
+
+### Fixed
+
+- **Visual Page Builder**: Fixed `no such table: _sync_queue` error.
+- **UserProfile**: Improved error handling for network timeouts.
+- **TenantsManager**: Form scrollability and Channel Domains fields.
+
 ## [2.9.2] - 2026-01-09
 
 ### Documentation

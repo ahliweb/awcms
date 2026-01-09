@@ -201,6 +201,9 @@ class SyncEngine {
      * Queues a local mutation to be synced.
      */
     async queueMutation(table, action, payload) {
+        // Ensure tables are initialized before queuing
+        await this.init();
+
         // 1. Write to Queue
         await runQuery(`
       INSERT INTO _sync_queue (table_name, action, payload, status)
