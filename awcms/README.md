@@ -24,7 +24,7 @@ AWCMS is a **Multi-Tenant** Content Management System designed for SaaS scalabil
 ### Key Interfaces
 
 1. **Admin Panel (`/cmspanel`)**: React 18 SPA. Feature-rich dashboard for content management, system configuration, and analytics.
-2. **Public Portal (`/`)**: Astro 5 + React 19. High-performance, multi-tenant frontend on Cloudflare Pages.
+2. **Public Portal (`/`)**: Astro 5 + React 18.3.1. High-performance, multi-tenant frontend on Cloudflare Pages.
 
 ### Core Capabilities
 

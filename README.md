@@ -9,10 +9,11 @@ Welcome to the AWCMS development monorepo. A complete content management and IoT
 
 | Directory | Description | Tech Stack |
 | :--- | :--- | :--- |
-| `awcms/` | Admin Panel & CMS | React 18, Vite, Supabase |
-| `awcms-public/` | Public Portal | Astro 5, React 19 |
+| `awcms/` | Admin Panel & CMS | React 18.3.1, Vite 7, Supabase |
+| `awcms-public/` | Public Portal | Astro 5, React 18.3.1 |
 | `awcms-mobile/` | Mobile App | Flutter 3.x, Riverpod |
 | `awcms-esp32/` | IoT Firmware | ESP32, PlatformIO |
+| `awcms-ext/` | External Extensions | JavaScript modules |
 
 ## 🚀 Quick Start
 
@@ -33,7 +34,7 @@ npm run dev
 ### 2. Public Portal (`awcms-public`)
 
 ```bash
-cd awcms-public
+cd awcms-public/primary
 npm install
 npm run dev
 ```
@@ -43,7 +44,7 @@ npm run dev
 ### 3. Mobile App (`awcms-mobile`)
 
 ```bash
-cd awcms-mobile
+cd awcms-mobile/primary
 flutter pub get
 flutter run
 ```
@@ -51,7 +52,7 @@ flutter run
 ### 4. ESP32 IoT (`awcms-esp32`)
 
 ```bash
-cd awcms-esp32
+cd awcms-esp32/primary
 cp .env.example .env
 # Edit .env with credentials
 source .env && pio run -t upload

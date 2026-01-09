@@ -12,7 +12,7 @@ External extensions for AWCMS.
 
 Each extension follows the AWCMS extension manifest format.
 
-```
+```text
 awcms-ext/
   {extension-name}/
     manifest.json     # Extension metadata
