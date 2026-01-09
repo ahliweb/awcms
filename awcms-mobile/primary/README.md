@@ -124,9 +124,9 @@ Menggunakan **backend yang sama** dengan web admin:
 
 | Document | Description |
 | -------- | ----------- |
-| [Mobile Development](../awcms/docs/01-guides/MOBILE_DEVELOPMENT.md) | Strategi pengembangan mobile |
-| [API Documentation](../awcms/docs/02-reference/API_DOCUMENTATION.md) | Supabase API usage |
-| [ABAC System](../awcms/docs/03-features/ABAC_SYSTEM.md) | Permissions & Policies |
+| [Mobile Development](../../awcms/docs/01-guides/MOBILE_DEVELOPMENT.md) | Strategi pengembangan mobile |
+| [API Documentation](../../awcms/docs/02-reference/API_DOCUMENTATION.md) | Supabase API usage |
+| [ABAC System](../../awcms/docs/03-features/ABAC_SYSTEM.md) | Permissions & Policies |
 
 ---
 
