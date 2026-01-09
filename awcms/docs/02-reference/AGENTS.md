@@ -31,12 +31,13 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 * **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 * **Capabilities**:
-  * Working with **Astro 5** and **React 19** (Islands Architecture).
+  * Working with **Astro 5** and **React 18.3.1** (Islands Architecture).
   * Implementing **Zod** schemas for component prop validation.
   * Optimizing for Cloudflare Pages (Edge Cache, Headers).
 * **Constraints**:
   * **NO** direct database access (must use Supabase JS Client or Functions).
   * **NO** `@measured/puck` dependency (use `PuckRenderer` only).
+  * **React 18.3.1 ONLY** - Do not upgrade to React 19 (Puck compatibility).
 
 ---
 
@@ -61,7 +62,7 @@ Agents must be aware of the exact versions in use:
 | Leaflet          | 1.9.4    | Maps                                    |
 
 > [!IMPORTANT]
-> **React Version Split**: The Admin Panel uses React 18.3.1 (required for Puck visual editor compatibility). The Public Portal uses React 19.2.3 (Astro Islands architecture). Do not mix these versions across projects.
+> **React 18.3.1 ONLY**: Both the Admin Panel (`awcms`) and Public Portal (`awcms-public`) use React 18.3.1. This is a strict constraint for Puck visual editor compatibility. **Do NOT upgrade to React 19.**
 
 ---
 
@@ -95,7 +96,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | ---------------- | ------------------------------------------ |
 | Language         | JavaScript ES2022+ (NO TypeScript)         |
 | **Admin Panel**  | React 18.3.1 (Strict), Vite 7              |
-| **Public Portal**| Astro 5, React 19, Cloudflare Pages        |
+| **Public Portal**| Astro 5, React 18.3.1, Cloudflare Pages    |
 | Styling          | TailwindCSS 4 utilities (NO external CSS)  |
 | Backend          | Supabase only (NO Node.js servers)         |
 
