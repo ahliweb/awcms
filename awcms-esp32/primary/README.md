@@ -60,7 +60,7 @@ awcms-esp32/
   src/                  # Shared firmware code
 ```
 
-See [primary/README.md](./primary/README.md) for tenant-specific setup.
+See the [parent README](../README.md) for multi-tenant folder structure.
 
 ## API Endpoints
 
