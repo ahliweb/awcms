@@ -63,9 +63,7 @@ awcms-mobile/
   lib/                   # Shared Flutter code
 ```
 
-See [primary/README.md](./primary/README.md) for tenant-specific setup.
-
-```
+See the [parent README](../README.md) for multi-tenant folder structure.
 
 ---
 
@@ -149,7 +147,7 @@ flutter build ios --release
 
 ## 📄 License
 
-MIT License - see [LICENSE](../LICENSE)
+MIT License - see [LICENSE](../../LICENSE)
 
 ---
 
