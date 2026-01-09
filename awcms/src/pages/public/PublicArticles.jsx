@@ -10,6 +10,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useSearch } from '@/hooks/useSearch';
+import { stripHtml } from '@/utils/textUtils';
 
 function PublicArticles() {
     const [articles, setArticles] = useState([]);
@@ -185,7 +186,7 @@ function PublicArticles() {
                                                 <Link to={`/articles/${item.slug}`}>{item.title}</Link>
                                             </h3>
                                             <p className="text-slate-600 text-sm line-clamp-3 mb-6 flex-1 leading-relaxed">
-                                                {item.excerpt || item.content?.replace(/<[^>]*>/g, '').substring(0, 150) + '...'}
+                                                {item.excerpt || stripHtml(item.content).substring(0, 150) + '...'}
                                             </p>
                                             <div className="pt-4 border-t border-slate-100 flex justify-between items-center mt-auto">
                                                 <Link to={`/articles/${item.slug}`} className="inline-flex items-center text-sm font-semibold text-blue-600 hover:text-blue-700">

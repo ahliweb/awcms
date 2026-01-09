@@ -8,6 +8,7 @@ import SeoHelmet from '@/components/public/SeoHelmet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { sanitizeHTML } from '@/utils/sanitize';
+import { stripHtml } from '@/utils/textUtils';
 
 function PublicArticleDetail() {
     const { slug } = useParams();
@@ -108,7 +109,7 @@ function PublicArticleDetail() {
                 type="article_detail"
                 id={article.id}
                 defaultTitle={`${article.title} | Blog`}
-                defaultDescription={article.excerpt || article.content?.replace(/<[^>]*>/g, '').substring(0, 150)}
+                defaultDescription={article.excerpt || stripHtml(article.content).substring(0, 150)}
                 defaultImage={article.featured_image}
             />
 

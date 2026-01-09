@@ -101,7 +101,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
             let host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
             if (host.includes(":")) host = host.split(":")[0];
 
-            if (host.includes('ahliweb.com') || host.includes('localhost')) {
+            if (host === 'ahliweb.com' || host.endsWith('.ahliweb.com') || host === 'localhost' || host.includes('localhost:')) {
                 console.log('[Middleware] Fallback to primary tenant for host:', host);
                 // Set primary tenant context directly (no redirect)
                 tenantSlug = 'primary';
