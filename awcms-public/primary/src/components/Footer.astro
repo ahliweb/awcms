@@ -6,15 +6,21 @@ interface Props {
 }
 
 const { tenantSlug: propTenantSlug } = Astro.props;
-const { tenant_id, tenant_slug: localTenantSlug } = Astro.locals;
+const { tenant_id, tenant_slug: localTenantSlug, tenant_source } = Astro.locals;
 
 // Use prop or fallback to locals
 const tenantSlug = propTenantSlug || localTenantSlug || 'primary';
 
 const year = new Date().getFullYear();
 
-// Build tenant-aware URLs
-const buildUrl = (path: string) => tenantUrl(tenantSlug, path);
+// Build URLs - use clean paths (no tenant prefix) for host-based resolution
+const buildUrl = (path: string) => {
+    // If prop explicitly sets tenantSlug to empty, or tenant resolved from host, use clean URLs
+    if (propTenantSlug === '' || tenant_source === 'host') {
+        return path; // Clean URL like /articles
+    }
+    return tenantUrl(tenantSlug, path); // Prefixed URL like /primary/articles
+};
 ---
 
 <footer class="border-t bg-slate-50 mt-auto">

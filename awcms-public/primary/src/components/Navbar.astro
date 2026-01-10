@@ -9,7 +9,7 @@ interface Props {
 }
 
 const { tenantSlug: propTenantSlug } = Astro.props;
-const { tenant_id, tenant_slug: localTenantSlug, runtime } = Astro.locals;
+const { tenant_id, tenant_slug: localTenantSlug, tenant_source, runtime } = Astro.locals;
 const env = runtime?.env || {};
 
 // Use prop or fallback to locals
@@ -67,8 +67,14 @@ if (menuItems.length === 0) {
     ];
 }
 
-// Build tenant-aware URLs
-const buildUrl = (path: string) => tenantUrl(tenantSlug, path);
+// Build URLs - use clean paths (no tenant prefix) for host-based resolution
+const buildUrl = (path: string) => {
+    // If prop explicitly sets tenantSlug to empty, or tenant resolved from host, use clean URLs
+    if (propTenantSlug === '' || tenant_source === 'host') {
+        return path; // Clean URL like /articles
+    }
+    return tenantUrl(tenantSlug, path); // Prefixed URL like /primary/articles
+};
 ---
 
 <header class="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
