@@ -97,10 +97,17 @@ function TagsManager() {
             let data = [];
 
             if (showTrash) {
-                const { data: trashData, error } = await supabase
+                let trashQuery = supabase
                     .from('tags')
                     .select('*, tenant:tenants(name)')
                     .not('deleted_at', 'is', null);
+
+                // Apply tenant filter for non-platform admins
+                if (currentTenant?.id && !isPlatformAdmin) {
+                    trashQuery = trashQuery.eq('tenant_id', currentTenant.id);
+                }
+
+                const { data: trashData, error } = await trashQuery;
 
                 if (error) throw error;
 
@@ -122,10 +129,17 @@ function TagsManager() {
 
             } else {
                 // Regular View
-                const { data: allTags, error: tagsError } = await supabase
+                let tagsQuery = supabase
                     .from('tags')
                     .select('*, tenant:tenants(name)')
                     .is('deleted_at', null);
+
+                // Apply tenant filter for non-platform admins
+                if (currentTenant?.id && !isPlatformAdmin) {
+                    tagsQuery = tagsQuery.eq('tenant_id', currentTenant.id);
+                }
+
+                const { data: allTags, error: tagsError } = await tagsQuery;
 
                 if (tagsError) throw tagsError;
 
@@ -184,7 +198,7 @@ function TagsManager() {
         } finally {
             setLoading(false);
         }
-    }, [showTrash, toast]);
+    }, [showTrash, toast, currentTenant?.id, isPlatformAdmin]);
 
     useEffect(() => {
         fetchTags();

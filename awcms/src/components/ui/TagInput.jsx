@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/customSupabaseClient';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 
 const TagInput = ({
   value = [],
@@ -14,6 +15,7 @@ const TagInput = ({
   disabled = false
 }) => {
   const { toast } = useToast();
+  const { currentTenant } = useTenant();
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -32,13 +34,19 @@ const TagInput = ({
 
       setLoading(true);
       try {
-        const { data } = await supabase
+        let query = supabase
           .from('tags')
           .select('id, name, color')
           .ilike('name', `%${inputValue}%`)
           .is('deleted_at', null)
-          .eq('is_active', true)
-          .limit(5);
+          .eq('is_active', true);
+
+        // Apply tenant filter if available
+        if (currentTenant?.id) {
+          query = query.eq('tenant_id', currentTenant.id);
+        }
+
+        const { data } = await query.limit(5);
 
         if (data) {
           const filtered = data.filter(t => !safeValue.includes(t.name));

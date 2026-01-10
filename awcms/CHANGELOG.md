@@ -13,6 +13,15 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - Fixed form overflow issues on smaller screens by making the modal content scrollable.
   - Added "Channel Domains" configuration inputs to the *Create Tenant* form (previously only available in Edit).
 
+## [2.9.4] - 2026-01-10
+
+### Fixed
+
+- **Article Module Alignment**: Resolved inconsistencies between Article module and Category/Tag/Media modules.
+  - **TagsManager**: Added `tenant_id` filtering to ensure tags are scoped to current tenant (non-platform admins).
+  - **TagInput**: Added tenant context filtering to tag autocomplete suggestions.
+  - **ArticlesManager**: Aligned category `type` filter from `'article'` to `'articles'` for consistency with `ArticleEditor`.
+
 ## [Unreleased]
 
 ## [2.9.2] "Clarity" - 2026-01-09

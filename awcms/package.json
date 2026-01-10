@@ -2,7 +2,7 @@
   "name": "awcms",
   "description": "AWCMS - Ahliweb Content Management System",
   "type": "module",
-  "version": "2.9.3",
+  "version": "2.9.4",
   "private": true,
   "scripts": {
     "dev": "vite",

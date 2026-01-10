@@ -81,10 +81,10 @@ function ArticlesManager() {
     { key: 'description', label: 'Description', type: 'textarea' },
     {
       key: 'type', label: 'Type', type: 'select', options: [
-        { value: 'article', label: 'Articles' },
+        { value: 'articles', label: 'Articles' },
         { value: 'product', label: 'Products' },
         { value: 'portfolio', label: 'Portfolio' }
-      ], defaultValue: 'article'
+      ], defaultValue: 'articles'
     }
   ];
 
@@ -136,7 +136,7 @@ function ArticlesManager() {
             permissionPrefix="categories"
             showBreadcrumbs={false}
             customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-            defaultFilters={{ type: 'article' }}
+            defaultFilters={{ type: 'articles' }}
           />
         </TabsContent>
 

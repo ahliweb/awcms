@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { FileText, Layers, ShoppingBag, Users, HardDrive } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function StatCards({ data, loading }) {
@@ -10,57 +10,57 @@ export function StatCards({ data, loading }) {
       title: "Total Articles",
       value: data?.articles,
       icon: FileText,
-      color: "text-blue-600",
-      bg: "bg-blue-100"
+      gradient: "from-blue-500 to-blue-600",
+      shadow: "shadow-blue-500/20",
     },
     {
       title: "Total Pages",
       value: data?.pages,
       icon: Layers,
-      color: "text-purple-600",
-      bg: "bg-purple-100"
+      gradient: "from-purple-500 to-purple-600",
+      shadow: "shadow-purple-500/20",
     },
     {
       title: "Total Products",
       value: data?.products,
       icon: ShoppingBag,
-      color: "text-orange-600",
-      bg: "bg-orange-100"
+      gradient: "from-orange-500 to-orange-600",
+      shadow: "shadow-orange-500/20",
     },
     {
       title: "Active Users",
       value: data?.users,
       icon: Users,
-      color: "text-green-600",
-      bg: "bg-green-100"
+      gradient: "from-emerald-500 to-emerald-600",
+      shadow: "shadow-emerald-500/20",
     },
     {
       title: "Total Orders",
       value: data?.orders,
       icon: ShoppingBag,
-      color: "text-emerald-600",
-      bg: "bg-emerald-100"
+      gradient: "from-teal-500 to-teal-600",
+      shadow: "shadow-teal-500/20",
     },
     {
       title: "Storage Used",
       value: data?.storage,
       icon: HardDrive,
-      color: "text-slate-600",
-      bg: "bg-slate-100"
+      gradient: "from-slate-600 to-slate-700",
+      shadow: "shadow-slate-500/20",
     }
   ];
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         {[1, 2, 3, 4, 5, 6].map((i) => (
-          <Card key={i}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-4 rounded-full" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-12" />
+          <Card key={i} className="bg-white/60 backdrop-blur-xl border-white/20 shadow-sm overflow-hidden h-32">
+            <CardContent className="p-6 flex flex-col justify-between h-full">
+              <Skeleton className="h-4 w-24 bg-slate-200/50" />
+              <div className="flex justify-between items-end">
+                <Skeleton className="h-8 w-16 bg-slate-200/50" />
+                <Skeleton className="h-10 w-10 rounded-xl bg-slate-200/50" />
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -69,21 +69,31 @@ export function StatCards({ data, loading }) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (
-          <Card key={index} className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">
+          <Card
+            key={index}
+            className="group relative overflow-hidden bg-white/70 backdrop-blur-xl border-white/40 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+          >
+            {/* Subtle Gradient Glow Background */}
+            <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br ${stat.gradient} opacity-10 blur-2xl group-hover:opacity-20 transition-opacity`}></div>
+
+            <CardContent className="p-5 flex flex-col justify-between h-full relative z-10">
+              <span className="text-sm font-medium text-slate-500 group-hover:text-slate-700 transition-colors">
                 {stat.title}
-              </CardTitle>
-              <div className={`p-2 rounded-full ${stat.bg}`}>
-                <Icon className={`h-4 w-4 ${stat.color}`} />
+              </span>
+
+              <div className="flex items-end justify-between mt-4">
+                <div className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                  {stat.value}
+                </div>
+
+                <div className={`p-2.5 rounded-xl bg-gradient-to-br ${stat.gradient} text-white shadow-lg ${stat.shadow} transform group-hover:scale-110 transition-transform duration-300`}>
+                  <Icon className="h-5 w-5" />
+                </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">{stat.value}</div>
             </CardContent>
           </Card>
         );
