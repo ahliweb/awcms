@@ -59,7 +59,7 @@ This document maps AWCMS security and privacy features to relevant international
 
 | Requirement | AWCMS Feature | Implementation |
 | ----------- | ------------- | -------------- |
-| System Reliability | Offline architecture (UDM) | [OFFLINE_ARCHITECTURE.md](../03-features/OFFLINE_ARCHITECTURE.md) |
+| System Reliability | High Performance (UDM) | Online-First with Local Storage Caching |
 | Data Center Location | Configurable Supabase region | Project settings |
 | Audit Trail | Immutable logging | Trigger-based inserts, no UPDATE/DELETE |
 | Incident Response | Error tracking integration | Sentry (optional) |
