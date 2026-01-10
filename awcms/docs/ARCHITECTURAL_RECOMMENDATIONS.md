@@ -15,25 +15,25 @@ Every feature MUST be designed with multi-tenancy in mind:
 - **Queries**: Application code MUST filter by `tenant_id`
 - **Storage**: Media assets MUST be organized by tenant
 
-### 1.2 Offline-First Architecture
+### 1.2 Performance & Caching Architecture
 
-The Unified Data Manager (UDM) pattern ensures seamless offline/online operation:
+The Unified Data Manager (UDM) implements a 'Stale-While-Revalidate' inspired caching strategy using Local Storage:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    UnifiedDataManager                       │
 ├─────────────────────────────────────────────────────────────┤
-│  isOnline() ──► Yes ──► SupabaseClient ──► Remote DB       │
-│       │                                                     │
-│       └──► No ──► LocalDB (SQLite) ──► Sync Queue          │
+│  Request ──► Check Cache (LocalStorage) ──► Hit (< 60s)     │
+│       │                                     │               │
+│       └──► Miss/Expired ──► Supabase ──► Update Cache       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Key Files:**
+**Key Principles:**
 
-- `src/lib/data/UnifiedDataManager.js` - Data abstraction layer
-- `src/lib/offline/db.js` - Local SQLite management
-- `src/lib/offline/schema.js` - Local table definitions
+1. **Read-Heavy Optimization**: Reads are cached for 60 seconds by default.
+2. **Write-Through Invalidation**: ALL writes (insert/update/delete) immediately invalidate the table's cache to ensure consistency.
+3. **Stable Keys**: Cache keys are generated based on query params (filters, sorts, columns).
 
 ### 1.3 Security by Default
 

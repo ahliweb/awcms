@@ -13,7 +13,7 @@ import { TenantProvider } from '@/contexts/TenantContext';
 
 import { useTenantTheme } from '@/hooks/useTenantTheme';
 
-import { useOfflineSync } from '@/hooks/useOfflineSync';
+
 
 // Wrapper to apply tenant theme
 const ThemeWrapper = ({ children }) => {
@@ -22,7 +22,7 @@ const ThemeWrapper = ({ children }) => {
 };
 
 function App() {
-  useOfflineSync(); // Initialize Sync Engine
+
 
   return (
     <DarkModeProvider>

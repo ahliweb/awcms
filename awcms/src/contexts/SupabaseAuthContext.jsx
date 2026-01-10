@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }) => {
   // Helper to clear local storage aggressively
   const clearLocalAuth = useCallback(() => {
     try {
-      console.log("[Auth] Clearing local session data...");
+      // console.log("[Auth] Clearing local session data...");
       const keyPattern = /^sb-.*-auth-token$/;
 
       // 1. Clear Supabase Tokens

@@ -1,135 +1,116 @@
-/* Professional Webflow-like Dark Theme for Puck */
+/* Neo-Glass Theme for Puck Editor */
 
+/* Root Variables */
 :root {
-    --puck-color-black: #1a1a1a;
-    --puck-color-grey-1: #262626;
-    /* Darker panel bg */
-    --puck-color-grey-2: #333333;
-    /* Input bg */
-    --puck-color-grey-3: #404040;
-    /* Border */
-    --puck-color-grey-4: #737373;
-    /* Label text */
-    --puck-color-white: #ffffff;
-    --puck-color-azur: #3b82f6;
-    /* Blue accent like generic editor */
-    --puck-color-azur-dark: #2563eb;
-    --puck-font-family: 'Inter', sans-serif;
+  --puck-color-grey-1: #f8fafc;
+  --puck-color-grey-2: #e2e8f0;
+  --puck-color-grey-3: #cbd5e1;
+  --puck-color-grey-4: #94a3b8;
+  --puck-color-grey-5: #64748b;
+  --puck-color-grey-6: #475569;
+  --puck-color-grey-7: #334155;
+  --puck-color-grey-8: #1e293b;
+  --puck-color-grey-9: #0f172a;
+  
+  --puck-color-azure-4: #6366f1; /* Indigo-500 */
+  --puck-color-azure-5: #4f46e5; /* Indigo-600 */
+  --puck-color-azure-6: #4338ca; /* Indigo-700 */
+  --puck-color-red-5: #ef4444;
 
-    /* Interface Colors */
-    --puck-interface-background: #f3f4f6;
-    /* Canvas bg */
-    --puck-sidebar-background: #171717;
-    /* Very dark sidebar */
-    --puck-sidebar-text: #e5e5e5;
-    --puck-sidebar-border: #262626;
+  --puck-font-family: 'Inter', sans-serif;
 }
 
-/* Sidebar Overrides */
-.Puck-LeftColumn,
-.Puck-RightColumn {
-    background-color: var(--puck-sidebar-background) !important;
-    border-color: var(--puck-sidebar-border) !important;
-    color: var(--puck-sidebar-text) !important;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+/* Sidebar Styling */
+.Puck-Left, .Puck-Right {
+  border-left: 1px solid rgba(226, 232, 240, 0.8);
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(12px) !important;
 }
 
-/* Categories & Headers */
-.Puck-SidebarSectionTitle {
-    color: #a3a3a3 !important;
-    font-size: 11px !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-    font-weight: 600 !important;
-    margin-bottom: 12px !important;
-    margin-top: 16px !important;
+/* Fields Styling */
+.Puck-Field {
+  margin-bottom: 1.5rem;
 }
 
-/* Draggable Items */
-.Puck-Drawer-Item {
-    background-color: var(--puck-color-grey-1) !important;
-    color: var(--puck-sidebar-text) !important;
-    border: 1px solid var(--puck-color-grey-2) !important;
-    border-radius: 4px !important;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    padding: 10px 12px !important;
+.Puck-Field .Puck-Label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.5rem;
 }
 
-.Puck-Drawer-Item:hover {
-    background-color: var(--puck-color-grey-2) !important;
-    border-color: var(--puck-color-grey-3) !important;
-    transform: translateY(-1px);
+/* Inputs */
+.Puck-Input, 
+.Puck-Select, 
+.Puck-TextArea {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  background: rgba(255, 255, 255, 0.6);
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-.Puck-Drawer-ItemLabel {
-    color: var(--puck-sidebar-text) !important;
-    font-weight: 500 !important;
-    font-size: 13px !important;
+.Puck-Input:focus, 
+.Puck-Select:focus, 
+.Puck-TextArea:focus {
+  border-color: #6366f1;
+  background: #ffffff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05); /* Ring effect */
 }
 
-/* Fields & Inputs */
-.Puck-Field-Label {
-    color: #a3a3a3 !important;
-    font-size: 11px !important;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600 !important;
-    margin-bottom: 6px !important;
+/* Buttons inside Sidebar (e.g. Add Item) */
+.Puck-Button {
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: all 0.2s;
 }
 
-.Puck-Input,
-.Puck-Select {
-    background-color: var(--puck-color-grey-1) !important;
-    border: 1px solid var(--puck-color-grey-3) !important;
-    color: white !important;
-    border-radius: 4px !important;
-    padding: 8px !important;
-    font-size: 13px !important;
-    transition: border-color 0.2s;
+.Puck-Button--primary {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: none;
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2), 0 2px 4px -1px rgba(79, 70, 229, 0.1);
 }
 
-.Puck-Input:focus,
-.Puck-Select:focus {
-    border-color: var(--puck-color-azur) !important;
-    outline: none !important;
-    box-shadow: 0 0 0 1px var(--puck-color-azur) !important;
+.Puck-Button--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(79, 70, 229, 0.3), 0 2px 4px -1px rgba(79, 70, 229, 0.15);
 }
 
-/* Canvas Area */
-.Puck-Frame {
-    background-color: var(--puck-interface-background) !important;
+/* Components List Items */
+.Puck-Component {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: white;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* DropZones */
+.Puck-Component:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* Zone Drop Area */
 .Puck-DropZone {
-    outline: 2px dashed #d1d5db !important;
-    background-color: transparent !important;
-    /* Changed from rgba(243, 244, 246, 0.8) to prevent hiding content */
-    border-radius: 4px;
-    transition: background-color 0.2s;
-    min-height: 50px;
-    /* Ensure it has height */
+  border: 2px dashed #cbd5e1;
+  background: rgba(248, 250, 252, 0.5);
+  border-radius: 0.75rem;
+  transition: all 0.2s;
 }
 
-.Puck-DropZone:hover,
-.Puck-DropZone--isActive {
-    background-color: #eff6ff !important;
-    outline-color: var(--puck-color-azur) !important;
+.Puck-DropZone--isHovering {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.05);
 }
 
-/* Selected Component Overlay */
-.Puck-Component-isActive {
-    outline: 2px solid var(--puck-color-azur) !important;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15) !important;
-}
-
-/* Custom Scrollbars for Sidebar */
-.Puck-LeftColumn::-webkit-scrollbar {
-    width: 6px;
-    background: transparent;
-}
-
-.Puck-LeftColumn::-webkit-scrollbar-thumb {
-    background: var(--puck-color-grey-2);
-    border-radius: 3px;
+/* Layout overrides to match the new header */
+/* Ensure Puck doesn't fight with our fixed header layout */
+.Puck-Root {
+  height: 100%;
 }

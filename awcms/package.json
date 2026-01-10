@@ -2,7 +2,7 @@
   "name": "awcms",
   "description": "AWCMS - Ahliweb Content Management System",
   "type": "module",
-  "version": "2.9.4",
+  "version": "2.9.5",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -67,8 +67,7 @@
     "react-router-dom": "^7.10.1",
     "recharts": "^3.5.1",
     "tailwind-merge": "^3.4.0",
-    "tailwindcss-animate": "^1.0.7",
-    "wa-sqlite": "^1.0.0"
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

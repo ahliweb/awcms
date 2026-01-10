@@ -45,27 +45,14 @@ vi.mock('@/lib/customSupabaseClient', () => {
     };
 });
 
-vi.mock('../offline/db', () => ({
-    runQuery: vi.fn(),
-}));
-
-vi.mock('../offline/SyncEngine', () => ({
-    syncEngine: {
-        queueMutation: vi.fn(),
-    },
-}));
-
 describe('UnifiedDataManager', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        Object.defineProperty(navigator, 'onLine', {
-            writable: true,
-            value: true,
-        });
+        localStorage.clear();
     });
 
-    describe('Online Mode', () => {
-        it('fetches data from Supabase when online', async () => {
+    describe('Online Mode / Caching', () => {
+        it('fetches data from Supabase', async () => {
             // Setup specific return
             mocks.mockSelectBuilder.then.mockImplementation((resolve) => resolve({
                 data: [{ id: 1, title: 'Test' }],
@@ -76,23 +63,6 @@ describe('UnifiedDataManager', () => {
 
             expect(mocks.mockFrom).toHaveBeenCalledWith('articles');
             expect(result.data).toEqual([{ id: 1, title: 'Test' }]);
-        });
-    });
-
-    describe('Offline Mode', () => {
-        it('does not call Supabase when offline', async () => {
-            Object.defineProperty(navigator, 'onLine', {
-                writable: true,
-                value: false,
-            });
-
-            try {
-                await udm.from('articles').select('*');
-            } catch (e) {
-                // consume
-            }
-
-            expect(mocks.mockFrom).not.toHaveBeenCalled();
         });
     });
 });

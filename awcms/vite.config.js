@@ -36,9 +36,6 @@ export default defineConfig(({ mode }) => {
 				'X-XSS-Protection': '1; mode=block',
 				'Referrer-Policy': 'strict-origin-when-cross-origin',
 				'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-				// Offline-First: OPFS requirements for wa-sqlite (SharedArrayBuffer)
-				'Cross-Origin-Opener-Policy': 'same-origin',
-				'Cross-Origin-Embedder-Policy': 'credentialless',
 				// CSP: Allow Supabase and self
 				'Content-Security-Policy': [
 					"default-src 'self'",
@@ -130,7 +127,7 @@ export default defineConfig(({ mode }) => {
 				'react-router-dom',
 				'@supabase/supabase-js',
 			],
-			exclude: ['wa-sqlite'],
+			exclude: [],
 		},
 
 		// Define global constants

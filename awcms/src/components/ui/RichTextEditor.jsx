@@ -13,6 +13,7 @@ import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
+import { Button } from '@/components/ui/button';
 import {
   Bold,
   Italic,
@@ -28,24 +29,27 @@ import {
   Heading3,
   Undo,
   Redo,
-  RemoveFormatting
+  RemoveFormatting,
+  Code,
+  FileCode
 } from 'lucide-react';
 
 // Toolbar Button Component
 const ToolbarButton = ({ onClick, isActive, children, title }) => (
-  <button
+  <Button
     type="button"
+    variant={isActive ? "secondary" : "ghost"}
+    size="sm"
     onClick={onClick}
-    className={`p-1.5 rounded hover:bg-slate-100 transition-colors ${isActive ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-      }`}
+    className={`h-8 w-8 p-0 ${isActive ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:text-slate-900'}`}
     title={title}
   >
     {children}
-  </button>
+  </Button>
 );
 
 // Toolbar Divider
-const Divider = () => <div className="w-px h-6 bg-slate-200 mx-1" />;
+const Divider = () => <div className="w-px h-4 bg-slate-200 mx-1 self-center" />;
 
 const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd }) => {
   const editor = useEditor({
@@ -54,17 +58,18 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
         heading: {
           levels: [1, 2, 3],
         },
+        codeBlock: true,
       }),
       Underline,
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
-          class: 'text-blue-600 underline hover:text-blue-800',
+          class: 'text-blue-600 underline hover:text-blue-800 cursor-pointer',
         },
       }),
       Image.configure({
         HTMLAttributes: {
-          class: 'max-w-full h-auto rounded-lg',
+          class: 'max-w-full h-auto rounded-lg shadow-sm border border-slate-100 my-4',
         },
       }),
       Placeholder.configure({
@@ -80,7 +85,7 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-4',
+        class: 'prose prose-slate prose-lg max-w-none focus:outline-none min-h-[300px] p-6 lg:p-8',
       },
     },
   });
@@ -115,88 +120,108 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
   };
 
   return (
-    <div className={`border border-slate-200 rounded-lg overflow-hidden bg-white ${className || ''}`}>
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-0.5 p-2 border-b border-slate-200 bg-slate-50">
+    <div className={`group relative border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm transition-all focus-within:ring-2 focus-within:ring-indigo-100 focus-within:border-indigo-300 ${className || ''}`}>
+      {/* Sticky Toolbar */}
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1 p-2 border-b border-slate-100 bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60">
         {/* Headings */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          isActive={editor.isActive('heading', { level: 1 })}
-          title="Heading 1"
-        >
-          <Heading1 className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          isActive={editor.isActive('heading', { level: 2 })}
-          title="Heading 2"
-        >
-          <Heading2 className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          isActive={editor.isActive('heading', { level: 3 })}
-          title="Heading 3"
-        >
-          <Heading3 className="w-4 h-4" />
-        </ToolbarButton>
+        <div className="flex bg-slate-100/50 rounded-lg p-0.5">
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            isActive={editor.isActive('heading', { level: 1 })}
+            title="Heading 1"
+          >
+            <Heading1 className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            isActive={editor.isActive('heading', { level: 2 })}
+            title="Heading 2"
+          >
+            <Heading2 className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            isActive={editor.isActive('heading', { level: 3 })}
+            title="Heading 3"
+          >
+            <Heading3 className="w-4 h-4" />
+          </ToolbarButton>
+        </div>
 
         <Divider />
 
         {/* Text Formatting */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          isActive={editor.isActive('bold')}
-          title="Bold"
-        >
-          <Bold className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          isActive={editor.isActive('italic')}
-          title="Italic"
-        >
-          <Italic className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-          isActive={editor.isActive('underline')}
-          title="Underline"
-        >
-          <UnderlineIcon className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-          isActive={editor.isActive('strike')}
-          title="Strikethrough"
-        >
-          <Strikethrough className="w-4 h-4" />
-        </ToolbarButton>
+        <div className="flex bg-slate-100/50 rounded-lg p-0.5">
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            isActive={editor.isActive('bold')}
+            title="Bold"
+          >
+            <Bold className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            isActive={editor.isActive('italic')}
+            title="Italic"
+          >
+            <Italic className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            isActive={editor.isActive('underline')}
+            title="Underline"
+          >
+            <UnderlineIcon className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            isActive={editor.isActive('strike')}
+            title="Strikethrough"
+          >
+            <Strikethrough className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleCode().run()}
+            isActive={editor.isActive('code')}
+            title="Inline Code"
+          >
+            <Code className="w-4 h-4" />
+          </ToolbarButton>
+        </div>
 
         <Divider />
 
-        {/* Lists */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          isActive={editor.isActive('bulletList')}
-          title="Bullet List"
-        >
-          <List className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          isActive={editor.isActive('orderedList')}
-          title="Ordered List"
-        >
-          <ListOrdered className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          isActive={editor.isActive('blockquote')}
-          title="Blockquote"
-        >
-          <Quote className="w-4 h-4" />
-        </ToolbarButton>
+        {/* Lists & Blocks */}
+        <div className="flex bg-slate-100/50 rounded-lg p-0.5">
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            isActive={editor.isActive('bulletList')}
+            title="Bullet List"
+          >
+            <List className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            isActive={editor.isActive('orderedList')}
+            title="Ordered List"
+          >
+            <ListOrdered className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            isActive={editor.isActive('blockquote')}
+            title="Blockquote"
+          >
+            <Quote className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            isActive={editor.isActive('codeBlock')}
+            title="Code Block"
+          >
+            <FileCode className="w-4 h-4" />
+          </ToolbarButton>
+        </div>
 
         <Divider />
 
@@ -216,30 +241,32 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
           <ImageIcon className="w-4 h-4" />
         </ToolbarButton>
 
-        <Divider />
+        <div className="flex-1" /> {/* Spacer */}
 
-        {/* Undo/Redo */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().undo().run()}
-          isActive={false}
-          title="Undo"
-        >
-          <Undo className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().redo().run()}
-          isActive={false}
-          title="Redo"
-        >
-          <Redo className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
-          isActive={false}
-          title="Clear Formatting"
-        >
-          <RemoveFormatting className="w-4 h-4" />
-        </ToolbarButton>
+        {/* History & Clear */}
+        <div className="flex bg-slate-100/50 rounded-lg p-0.5 ml-auto">
+          <ToolbarButton
+            onClick={() => editor.chain().focus().undo().run()}
+            isActive={false}
+            title="Undo"
+          >
+            <Undo className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().redo().run()}
+            isActive={false}
+            title="Redo"
+          >
+            <Redo className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+            isActive={false}
+            title="Clear Formatting"
+          >
+            <RemoveFormatting className="w-4 h-4" />
+          </ToolbarButton>
+        </div>
       </div>
 
       {/* Editor Content */}
@@ -248,7 +275,7 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
       {/* Styles for placeholder and prose */}
       <style>{`
         .ProseMirror p.is-editor-empty:first-child::before {
-          color: #9ca3af;
+          color: #94a3b8;
           content: attr(data-placeholder);
           float: left;
           height: 0;
@@ -257,18 +284,43 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
         .ProseMirror:focus {
           outline: none;
         }
-        .ProseMirror h1 { font-size: 1.875rem; font-weight: 700; margin: 1rem 0; }
-        .ProseMirror h2 { font-size: 1.5rem; font-weight: 600; margin: 0.75rem 0; }
-        .ProseMirror h3 { font-size: 1.25rem; font-weight: 600; margin: 0.5rem 0; }
-        .ProseMirror p { margin: 0.5rem 0; }
-        .ProseMirror ul, .ProseMirror ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+        /* Custom Typography Tweaks for 'Prose' */
+        .ProseMirror h1 { letter-spacing: -0.025em; color: #1e293b; }
+        .ProseMirror h2 { letter-spacing: -0.025em; color: #334155; }
         .ProseMirror blockquote { 
-          border-left: 3px solid #e2e8f0; 
-          padding-left: 1rem; 
-          margin: 0.5rem 0;
-          color: #64748b;
+          font-style: italic;
+          border-left-width: 4px;
+          border-left-color: #e2e8f0; 
+          background: #f8fafc;
+          padding: 1rem;
+          border-radius: 0.25rem;
         }
-        .ProseMirror img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+        .ProseMirror pre {
+          background: #0f172a;
+          color: #f8fafc;
+          padding: 1rem;
+          border-radius: 0.5rem;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .ProseMirror code {
+            color: #d946ef;
+            background: #fae8ff;
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-size: 0.875em;
+        }
+        .ProseMirror pre code {
+            color: inherit;
+            background: transparent;
+            padding: 0;
+        }
+        .ProseMirror img { 
+            transition: all 0.2s; 
+        }
+        .ProseMirror img.ProseMirror-selectednode {
+            outline: 2px solid #6366f1;
+            outline-offset: 2px;
+        }
       `}</style>
     </div>
   );

@@ -321,11 +321,11 @@ const LoginPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200"
+        className="bg-white/80 backdrop-blur-xl w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-white/20"
       >
         <div className="p-8 md:p-10 space-y-8">
           <div className="space-y-2 text-center">
@@ -336,12 +336,28 @@ const LoginPage = () => {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" placeholder="admin@example.com" className="h-11" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@example.com"
+                  className="h-11 bg-white/50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
-                  <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="••••••••" className="h-11 pr-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    className="h-11 pr-10 bg-white/50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -375,7 +391,7 @@ const LoginPage = () => {
                 )}
               </div>
             </div>
-            <Button type="submit" className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading || (!turnstileReady && !turnstileError)}>
+            <Button type="submit" className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all" disabled={isLoading || (!turnstileReady && !turnstileError)}>
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (!turnstileReady && !turnstileError) ? 'Waiting for security check...' : 'Sign In'}
             </Button>
             <div className="text-center mt-4 space-y-2">

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import ArticleEditor from '@/components/dashboard/ArticleEditor';
 import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/awadmintemplate01';
-import { FileText, FolderOpen, Tag } from 'lucide-react';
+import { FileText, FolderOpen, Tag, Layout, Monitor, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 /**
  * ArticlesManager - Manages articles, categories, and tags.
@@ -46,8 +47,43 @@ function ArticlesManager() {
     },
     { key: 'status', label: 'Visibility', className: 'capitalize' },
     { key: 'published_at', label: 'Published', type: 'date' },
-    { key: 'views', label: 'Views', type: 'number' }
+    { key: 'views', label: 'Views', type: 'number' },
+    {
+      key: 'editor_type',
+      label: 'Type',
+      render: (value) => (
+        value === 'visual' ?
+          <span title="Visual Builder" className="inline-flex items-center justify-center w-6 h-6 rounded bg-indigo-50 text-indigo-600"><Layout className="w-3.5 h-3.5" /></span> :
+          <span title="Standard Editor" className="inline-flex items-center justify-center w-6 h-6 rounded bg-slate-50 text-slate-500"><FileText className="w-3.5 h-3.5" /></span>
+      )
+    }
   ];
+
+  // Custom Actions
+  const customRowActions = (item, { openEditor }) => (
+    <Button
+      size="icon"
+      variant="ghost"
+      className="text-indigo-600 hover:bg-indigo-50 h-8 w-8"
+      title="Edit in Visual Builder"
+      onClick={(e) => {
+        e.stopPropagation();
+        openEditor({ ...item, editor_type: 'visual' });
+      }}
+    >
+      <Layout className="w-4 h-4" />
+    </Button>
+  );
+
+  const customToolbarActions = ({ openEditor }) => (
+    <Button
+      onClick={() => openEditor({ editor_type: 'visual', title: '', status: 'draft' })}
+      className="bg-indigo-600 hover:bg-indigo-700 text-white"
+    >
+      <Sparkles className="w-4 h-4 mr-2" />
+      Create Visual
+    </Button>
+  );
 
   const articleFormFields = [
     { key: 'title', label: 'Title', required: true },
@@ -125,6 +161,8 @@ function ArticlesManager() {
             permissionPrefix="articles"
             showBreadcrumbs={false}
             EditorComponent={ArticleEditor}
+            customRowActions={customRowActions}
+            customToolbarActions={customToolbarActions}
           />
         </TabsContent>
 

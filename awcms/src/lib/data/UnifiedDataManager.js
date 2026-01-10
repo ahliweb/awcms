@@ -1,11 +1,12 @@
 import { supabase } from '@/lib/customSupabaseClient';
-import { runQuery } from '@/lib/offline/db';
-import { syncEngine } from '@/lib/offline/SyncEngine';
+
+const CACHE_PREFIX = 'udm_cache_';
+const CACHE_TTL = 60 * 1000; // 60 Seconds default TTL
 
 /**
  * UnifiedDataManager
- * Abstracts data access to support Offline-First architecture.
- * Mimics Supabase SDK chaining syntax for easy migration.
+ * Abstracts data access and provides Local Storage Caching for performance.
+ * Replaces the previous Offline-First (SQLite) architecture with a Cache-First approach.
  */
 class UnifiedDataManager {
     constructor(table) {
@@ -69,19 +70,14 @@ class UnifiedDataManager {
     }
 
     is(column, value) {
-        // value is typically null
         this.query.filters.push({ column, operator: 'IS', value });
         return this;
     }
 
     not(column, operator, value) {
-        // Mapping 'is' to 'IS NOT' if operator is 'is'
         if (operator === 'is') {
             this.query.filters.push({ column, operator: 'IS NOT', value });
         } else {
-            // generic not? Supabase 'not' is tricky. 
-            // For simple 'not eq' we have neq. 
-            // For now supporting the specific use case: .not('deleted_at', 'is', null)
             this.query.filters.push({ column, operator: 'NOT ' + operator, value });
         }
         return this;
@@ -116,49 +112,144 @@ class UnifiedDataManager {
 
     /**
      * Executes the query.
-     * Checks connection status and routes to Remote or Local.
+     * Uses Local Storage Caching for optimization.
      */
     async then(resolve, reject) {
-        const isOnline = navigator.onLine;
-
         try {
             // READ Operation
             if (this.query.type === 'select') {
-                let result;
-                if (isOnline) {
-                    result = await this._executeRemote();
-                } else {
-                    result = await this._executeLocal();
+                // 1. Check Cache
+                const cachedData = this._getCache();
+                if (cachedData) {
+                    // console.log(`[UDM] Cache Hit: ${this.table}`);
+                    resolve(cachedData);
+                    // Optional: Re-validate in background (Stale-While-Revalidate) could be added here
+                    return;
                 }
+
+                // 2. Remote Fetch
+                const result = await this._executeRemote();
+
+                // 3. Set Cache (if success)
+                if (!result.error && result.data) {
+                    this._setCache(result);
+                }
+
                 resolve(result);
                 return;
             }
 
             // WRITE Operation (Insert/Update/Delete)
-            if (isOnline) {
-                // When online, use Supabase directly for reliable writes
-                const result = await this._executeRemoteWrite();
-                resolve(result);
-            } else {
-                // When offline, queue for sync and update local
-                await syncEngine.queueMutation(
-                    this.table,
-                    this.query.type.toUpperCase(),
-                    this.query.payload || { id: this._extractIdFromFilters() }
-                );
-                const localResult = await this._executeLocalWrite();
-                resolve(localResult);
+            // 1. Remote Write
+            const result = await this._executeRemoteWrite();
+
+            // 2. Invalidate Cache for this table (simple invalidation)
+            if (!result.error) {
+                this._invalidateCache();
             }
 
+            resolve(result);
+
         } catch (error) {
+            console.error('[UDM] Execution Error:', error);
             reject(error);
         }
     }
 
-    _extractIdFromFilters() {
-        const idFilter = this.query.filters.find(f => f.column === 'id');
-        return idFilter ? idFilter.value : null;
+    // --- CACHE INTERNALS ---
+
+    _generateCacheKey() {
+        // Create a unique key based on table and all query parameters
+        // Sort filters and orders to ensure consistent keys
+        const q = this.query;
+        const keyObj = {
+            table: this.table,
+            type: q.type,
+            cols: q.columns,
+            opts: q.options,
+            // Sort filters by column to ensure order doesn't matter
+            filters: [...q.filters].sort((a, b) => a.column.localeCompare(b.column)),
+            orders: q.orders,
+            range: q.range,
+            limit: q.limit,
+            single: q.single
+        };
+        return CACHE_PREFIX + JSON.stringify(keyObj);
     }
+
+    _getCache() {
+        try {
+            const key = this._generateCacheKey();
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+
+            const entry = JSON.parse(raw);
+            const now = Date.now();
+
+            if (now - entry.timestamp > CACHE_TTL) {
+                // Expired
+                localStorage.removeItem(key);
+                return null;
+            }
+
+            return entry.data; // { data, error, count }
+        } catch (e) {
+            console.warn('[UDM] Cache Read Failed:', e);
+            return null;
+        }
+    }
+
+    _setCache(resultData) {
+        try {
+            const key = this._generateCacheKey();
+            const entry = {
+                timestamp: Date.now(),
+                data: resultData
+            };
+            localStorage.setItem(key, JSON.stringify(entry));
+        } catch (e) {
+            if (e.name === 'QuotaExceededError') {
+                console.warn('[UDM] LocalStorage Full. Clearing old cache...');
+                this._clearOldCache();
+            } else {
+                console.warn('[UDM] Cache Write Failed:', e);
+            }
+        }
+    }
+
+    _invalidateCache() {
+        try {
+            // Simple Strategy: Remove ALL cache entries for this TABLE
+            // Since strict keys include filters, determining exact keys to invalidate is hard.
+            // Clearing all 'udm_cache_{ "table": "X" ... }' is safer.
+
+            // Helper to match prefix
+            const targetPrefix = `${CACHE_PREFIX}{"table":"${this.table}"`;
+
+            // Iterate and remove
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(CACHE_PREFIX) && key.includes(`"table":"${this.table}"`)) {
+                    keysToRemove.push(key);
+                }
+            }
+
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            console.log(`[UDM] Invalidated ${keysToRemove.length} cache entries for table: ${this.table}`);
+        } catch (e) {
+            console.warn('[UDM] Cache Invalidation Failed:', e);
+        }
+    }
+
+    _clearOldCache() {
+        // Fallback: Clear all UDM cache if quota exceeded
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith(CACHE_PREFIX)) localStorage.removeItem(key);
+        });
+    }
+
+    // --- REMOTE EXECUTION ---
 
     async _executeRemote() {
         let builder = supabase.from(this.table);
@@ -226,146 +317,6 @@ class UnifiedDataManager {
             builder.order(o.column, { ascending: o.ascending });
         });
         if (this.query.limit) builder.limit(this.query.limit);
-    }
-
-    async _executeLocal() {
-        // READ Logic
-        // Sanitize columns for Local SQLite (strip PostgREST joins like '*, owner:...')
-        let localColumns = this.query.columns;
-        if (localColumns !== '*' && (localColumns.includes('(') || localColumns.includes('!') || localColumns.includes(':'))) {
-            // console.warn('[UDM] Complex select detected, falling back to * for Local SQLite:', localColumns);
-            localColumns = '*';
-        }
-
-        let sql = `SELECT ${localColumns}`;
-
-        // Count Handling
-        let count = null;
-        if (this.query.options?.count) {
-            // We need a separate count query
-            const { sql: whereSql, params } = this._buildWhereClause();
-            const countSql = `SELECT COUNT(*) as total FROM "${this.table}" ${whereSql}`;
-            const countRes = await runQuery(countSql, params);
-            count = countRes[0]?.total || 0;
-        }
-
-        sql += ` FROM "${this.table}"`;
-        const { sql: whereSql, params } = this._buildWhereClause();
-
-        sql += whereSql;
-
-        if (this.query.orders.length > 0) {
-            const orders = this.query.orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`);
-            sql += ' ORDER BY ' + orders.join(', ');
-        }
-
-        if (this.query.range) {
-            const limit = this.query.range.to - this.query.range.from + 1;
-            const offset = this.query.range.from;
-            sql += ` LIMIT ${limit} OFFSET ${offset}`;
-        } else if (this.query.limit) {
-            sql += ` LIMIT ${this.query.limit}`;
-        }
-
-        console.log(`[UDM] Local Read: ${sql}`, params);
-
-        try {
-            const rows = await runQuery(sql, params);
-            let data = rows;
-            if (this.query.single) {
-                data = rows.length > 0 ? rows[0] : null;
-            }
-            return { data, error: null, count };
-        } catch (err) {
-            console.error('[UDM] Local Read Error:', err);
-            return { data: null, error: err };
-        }
-    }
-
-    _buildWhereClause() {
-        const params = [];
-        const whereClauses = [];
-
-        this.query.filters.forEach(f => {
-            if (f.operator === 'IN') {
-                const placeholders = f.value.map(() => '?').join(',');
-                whereClauses.push(`"${f.column}" IN (${placeholders})`);
-                params.push(...f.value);
-            } else if (f.operator === 'IS') {
-                if (f.value === null) whereClauses.push(`"${f.column}" IS NULL`);
-                else { whereClauses.push(`"${f.column}" = ?`); params.push(f.value); }
-            } else if (f.operator === 'IS NOT') {
-                if (f.value === null) whereClauses.push(`"${f.column}" IS NOT NULL`);
-                else { whereClauses.push(`"${f.column}" != ?`); params.push(f.value); }
-            } else if (f.operator === 'ILIKE') {
-                whereClauses.push(`"${f.column}" LIKE ?`); // SQLite defaults to case-insensitive LIKE for ASCII
-                params.push(f.value);
-            } else {
-                whereClauses.push(`"${f.column}" ${f.operator} ?`);
-                params.push(f.value);
-            }
-        });
-
-        return {
-            sql: whereClauses.length > 0 ? ' WHERE ' + whereClauses.join(' AND ') : '',
-            params
-        };
-    }
-
-    async _executeLocalWrite() {
-        // Optimistic Write to Local SQLite
-        // 1. INSERT
-        if (this.query.type === 'insert') {
-            const payload = this.query.payload;
-            const columns = Object.keys(payload);
-            const placeholders = columns.map(() => '?').join(',');
-            const sql = `INSERT INTO "${this.table}" (${columns.map(c => `"${c}"`).join(',')}) VALUES (${placeholders})`;
-            const params = Object.values(payload);
-
-            try {
-                await runQuery(sql, params);
-                return { data: payload, error: null };
-            } catch (err) {
-                return { data: null, error: err };
-            }
-        }
-
-        // 2. UPDATE
-        if (this.query.type === 'update') {
-            const payload = this.query.payload;
-            const columns = Object.keys(payload);
-            const sets = columns.map(c => `"${c}" = ?`).join(',');
-            let sql = `UPDATE "${this.table}" SET ${sets}`;
-            const params = Object.values(payload);
-
-            // Add Where
-            // For update, typically we filter by ID
-            const { sql: whereSql, params: whereParams } = this._buildWhereClause();
-
-            sql += whereSql;
-            params.push(...whereParams);
-
-            try {
-                await runQuery(sql, params);
-                return { data: payload, error: null };
-            } catch (err) {
-                return { data: null, error: err };
-            }
-        }
-
-        // 3. DELETE
-        if (this.query.type === 'delete') {
-            let sql = `DELETE FROM "${this.table}"`;
-            const { sql: whereSql, params } = this._buildWhereClause();
-            sql += whereSql;
-
-            try {
-                await runQuery(sql, params);
-                return { data: null, error: null };
-            } catch (err) {
-                return { data: null, error: err };
-            }
-        }
     }
 }
 

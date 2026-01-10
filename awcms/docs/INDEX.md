@@ -83,7 +83,6 @@ Welcome to the AWCMS documentation. This index provides a roadmap to navigate al
 * [Performance](03-features/PERFORMANCE.md) - Optimization strategies
 * [Scalability Guide](03-features/SCALABILITY_GUIDE.md) - High traffic preparation
 * [Monitoring](03-features/MONITORING.md) - Logging and observability
-* [Offline Architecture](03-features/OFFLINE_ARCHITECTURE.md) - Offline-first design
 * [Versioning](03-features/VERSIONING.md) - Semantic versioning
 
 ---

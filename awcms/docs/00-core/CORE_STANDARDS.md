@@ -130,10 +130,10 @@ This document establishes the definitive architecture and standardization pillar
 * **Mobile & IoT Ecosystem**:
   * **App**: Flutter Integration (`awcms-mobile`)
   * **IoT Hooks**: `useSensorData()` (Real-time), `useDevices()` (Management)
-  * **Engagement**: `useMobileUsers()`, `usePushNotifications()`
-* **Offline Capability**:
-  * **Sync**: `useOfflineSync()` (Queue-based synchronization)
-  * **Architecture**: [Offline Guide](../03-features/OFFLINE_ARCHITECTURE.md)
+  * **Engangement**: `useMobileUsers()`, `usePushNotifications()`
+* **Performance Strategy**:
+  * **Caching**: `UnifiedDataManager` (Local Storage Caching, 60s TTL)
+  * **Architecture**: Online-First with SWR-like caching behavior.
 * **DevOps & Deployment**:
   * **Cloudflare**: `wrangler.toml` (Pages Config), Edge Functions
   * **CI/CD**: GitHub Actions workflows
@@ -144,7 +144,6 @@ This document establishes the definitive architecture and standardization pillar
 ### 5.2 Additional Standards Documentation
 
 * [Mobile Development](../01-guides/MOBILE_DEVELOPMENT.md)
-* [Offline Architecture](../03-features/OFFLINE_ARCHITECTURE.md)
 * [Cloudflare Deployment](../01-guides/CLOUDFLARE_DEPLOYMENT.md)
 * [Testing Guide](../01-guides/TESTING.md)
 * [Contributing](../01-guides/CONTRIBUTING.md)

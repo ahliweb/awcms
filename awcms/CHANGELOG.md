@@ -22,6 +22,21 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - **TagInput**: Added tenant context filtering to tag autocomplete suggestions.
   - **ArticlesManager**: Aligned category `type` filter from `'article'` to `'articles'` for consistency with `ArticleEditor`.
 
+## [2.9.5] "Velocity" - 2026-01-10
+
+### Changed
+
+- **Performance Architecture**: Replaced unstable Offline Sync engine with **Local Storage Caching** layer in `UnifiedDataManager`.
+  - **Caching**: Implemented 60-second TTL cache for all read operations (`select`).
+  - **Invalidation**: Smart invalidation clears table-specific cache on every write (`insert`, `update`, `delete`).
+  - **Speed**: Instant navigation between recently visited modules.
+- **Removed**: Completely purged `wa-sqlite` dependency and `src/lib/offline` directory to resolve persistent `SQLiteError: not an error` crashes.
+- **Cleanup**: Removed `useOfflineSync` hook and related dead code.
+
+### Fixed
+
+- **Stability**: Resolved all application crashes related to `IDBBatchAtomicVFS` and `SQLITE_MISUSE`.
+
 ## [Unreleased]
 
 ## [2.9.2] "Clarity" - 2026-01-09

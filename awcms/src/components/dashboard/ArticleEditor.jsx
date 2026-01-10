@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Save, X, Globe, Calendar, Lock, Layout, Share2, FolderOpen,
@@ -16,6 +17,7 @@ import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import RichTextEditor from '@/components/ui/RichTextEditor';
+import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
 import TagInput from '@/components/ui/TagInput';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -27,6 +29,9 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from "@/components/ui/select";
 
 function ArticleEditor({ article, onClose, onSuccess }) {
     const { toast } = useToast();
@@ -37,8 +42,18 @@ function ArticleEditor({ article, onClose, onSuccess }) {
     const [categories, setCategories] = useState([]);
     const [currentState, setCurrentState] = useState(article?.workflow_state || 'draft');
 
+    // Detect Visual Builder Mode
+    // Check strict editor_type first, then fallback to content shape inspection
+    const isVisualContent = article?.editor_type === 'visual' ||
+        (article?.content && typeof article.content === 'object' && !Array.isArray(article.content) && article.content.root);
+
+    const [useVisualBuilder, setUseVisualBuilder] = useState(isVisualContent);
+
     // UI State
     const [activeSection, setActiveSection] = useState('main'); // For mobile tabs if needed
+
+    // Mobile Settings Toggle
+    const [showMobileSettings, setShowMobileSettings] = useState(false);
 
     // Initial Form Data State
     const [formData, setFormData] = useState({
@@ -51,6 +66,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
         workflow_state: article?.workflow_state || 'draft',
         is_active: article?.is_active ?? true,
         is_public: article?.is_public ?? false,
+        editor_type: article?.editor_type || (isVisualContent ? 'visual' : 'richtext'),
         category_id: article?.category_id || '',
         tags: article?.tags || [],
 
@@ -255,13 +271,29 @@ function ArticleEditor({ article, onClose, onSuccess }) {
         }
     };
 
-    return (
+    if (useVisualBuilder) {
+        return createPortal(
+            <VisualPageBuilder
+                page={article}
+                onClose={onClose}
+                onSuccess={onSuccess}
+                mode="article" // Custom prop we added support for
+                pageId={article?.id} // Helper for mode='article' logic
+            />,
+            document.body
+        );
+    }
+
+    // ... (rest of component logic)
+
+    // Helper to render in portal
+    const renderEditor = () => (
         <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex flex-col bg-slate-50/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex flex-col bg-slate-50/50 backdrop-blur-sm"
         >
             {/* 1. Blur Overlay Background - Optional visual depth */}
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white/50 to-blue-50/50 -z-10" />
@@ -269,8 +301,9 @@ function ArticleEditor({ article, onClose, onSuccess }) {
             {/* 2. Top Navigation / Header */}
             <div className="h-16 px-6 border-b border-white/60 bg-white/80 backdrop-blur-xl flex items-center justify-between shadow-sm z-50">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={onClose} className="hover:bg-slate-100/50 rounded-full">
-                        <ArrowLeft className="w-5 h-5 text-slate-600" />
+                    <Button variant="ghost" onClick={onClose} className="hover:bg-slate-100/50 gap-2 pr-4 text-slate-600 rounded-full">
+                        <ChevronLeft className="w-5 h-5" />
+                        <span className="font-medium hidden sm:inline-block">Back</span>
                     </Button>
                     <Separator orientation="vertical" className="h-6" />
                     <div>
@@ -304,7 +337,37 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                         </Tooltip>
                     </TooltipProvider>
 
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        if (confirm('Switching to Visual Builder might affect existing content formatting. Continue?')) {
+                                            setUseVisualBuilder(true);
+                                        }
+                                    }}
+                                    className="text-slate-500 hover:text-indigo-600 hidden sm:flex gap-2"
+                                >
+                                    <Layout className="w-4 h-4" />
+                                    <span className="hidden lg:inline">Visual Builder</span>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Switch to Visual Editor</TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+
                     <Separator orientation="vertical" className="h-6" />
+
+                    <Button variant="ghost" onClick={onClose} className="hidden sm:flex text-slate-500 hover:text-slate-700 hover:bg-slate-100 ring-0 focus:ring-0">
+                        Cancel
+                    </Button>
+
+                    {/* Mobile Settings Toggle */}
+                    <Button variant="ghost" size="icon" className="lg:hidden text-slate-500" onClick={() => setShowMobileSettings(true)}>
+                        <MoreVertical className="w-5 h-5" />
+                    </Button>
 
                     {/* Workflow Actions */}
                     {currentState === WORKFLOW_STATES.DRAFT && (
@@ -383,8 +446,19 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                     </ScrollArea>
 
                     {/* Right: Sidebar (Settings) - Glassy */}
-                    <div className="w-full lg:w-[380px] border-l border-white/60 bg-white/60 backdrop-blur-md h-full overflow-y-auto hidden lg:block">
+                    <div className={`w-full lg:w-[380px] border-l border-white/60 bg-white/60 backdrop-blur-md h-full overflow-y-auto ${showMobileSettings ? 'fixed inset-0 z-[110] bg-white' : 'hidden lg:block'}`}>
+                        {/* Mobile Sidebar Header */}
+                        {showMobileSettings && (
+                            <div className="flex items-center justify-between p-4 border-b lg:hidden">
+                                <span className="font-semibold">Article Settings</span>
+                                <Button variant="ghost" size="icon" onClick={() => setShowMobileSettings(false)}>
+                                    <X className="w-5 h-5" />
+                                </Button>
+                            </div>
+                        )}
                         <div className="p-6 space-y-8">
+
+
 
                             {/* Organization */}
                             <div className="space-y-4">
@@ -393,18 +467,21 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                                 </h4>
                                 <div className="space-y-4 bg-white/50 p-4 rounded-xl border border-white/60 shadow-sm">
                                     <div className="space-y-2">
-                                        <Label className="text-xs text-slate-500">Category</Label>
-                                        <select
+                                        <Label className="text-slate-500 uppercase tracking-widest text-[11px] font-semibold pl-1">Category</Label>
+                                        <Select
                                             value={formData.category_id}
-                                            onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                                            className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                                            onValueChange={(val) => setFormData({ ...formData, category_id: val })}
                                         >
-                                            <option value="">Select Category...</option>
-                                            {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                                        </select>
+                                            <SelectTrigger className="w-full bg-white/80 border-slate-200">
+                                                <SelectValue placeholder="Select Category..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-xs text-slate-500">Tags</Label>
+                                        <Label className="text-slate-500 uppercase tracking-widest text-[11px] font-semibold pl-1">Tags</Label>
                                         <TagInput
                                             value={formData.tags}
                                             onChange={(tags) => setFormData(p => ({ ...p, tags: tags }))}
@@ -496,6 +573,8 @@ function ArticleEditor({ article, onClose, onSuccess }) {
             </div>
         </motion.div>
     );
+
+    return createPortal(renderEditor(), document.body);
 }
 
 export default ArticleEditor;

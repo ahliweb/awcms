@@ -26,19 +26,31 @@ export const LatestArticlesBlock = ({
             try {
                 let query = supabase
                     .from('articles')
-                    .select('*, main_category:categories!main_category_id(title, slug)')
+                    // Foreign key is category_id. We fetch the related category data.
+                    // We remove the explicit alias 'main_category' to avoid 'categories_1' auto-alias errors,
+                    // or we check if 'main_category' is needed by the UI. 
+                    // Looking at the block UI code (not shown but inferred), it likely needs 'main_category' or checks specific props.
+                    // Let's try the standard relationship syntax without custom alias first to be safe, 
+                    // OR adhere to exact Supabase syntax: select('*, categories!category_id(title, slug)')
+                    .select('*, categories!category_id(title, slug)')
                     .eq('status', 'published')
                     .order('published_at', { ascending: false })
                     .limit(count);
 
                 if (categoryFilter) {
-                    query = query.eq('main_category_id', categoryFilter);
+                    query = query.eq('category_id', categoryFilter);
                 }
 
                 const { data, error } = await query;
 
+                // Map data if necessary to match expected props (if UI expects main_category)
+                const mappedData = data ? data.map(article => ({
+                    ...article,
+                    main_category: article.categories // Map default 'categories' response to 'main_category'
+                })) : [];
+
                 if (error) throw error;
-                setArticles(data || []);
+                setArticles(mappedData || []);
             } catch (err) {
                 console.error('Error fetching articles:', err);
                 setError(err.message);

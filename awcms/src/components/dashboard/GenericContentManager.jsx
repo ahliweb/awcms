@@ -37,7 +37,8 @@ const GenericContentManager = ({
     showBreadcrumbs = true,
     enableSoftDelete = true,
     defaultSortColumn = 'created_at',
-    EditorComponent // Optional custom editor component
+    EditorComponent, // Optional custom editor component
+    customToolbarActions // ({ openEditor }) => ReactNode
 }) => {
     const { toast } = useToast();
     const { user } = useAuth();
@@ -356,6 +357,12 @@ const GenericContentManager = ({
                                     {showTrash ? "Back to Active" : "Trash"}
                                 </Button>
                             )}
+
+                            {/* Custom Toolbar Actions */}
+                            {customToolbarActions && customToolbarActions({
+                                openEditor: (data = null) => { setSelectedItem(data); setShowEditor(true); }
+                            })}
+
                             {canCreate && !showTrash && (
                                 <Button onClick={() => { setSelectedItem(null); setShowEditor(true); }} className="bg-primary text-primary-foreground hover:bg-primary/90">
                                     <Plus className="w-4 h-4 mr-2" /> New {resourceName}
@@ -393,8 +400,10 @@ const GenericContentManager = ({
                         onDelete={!showTrash ? (item) => handleDelete(item.id, item) : null}
 
                         extraActions={(item) => (
-                            <div className="flex gap-1">
-                                {customRowActions && customRowActions(item)}
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                                {customRowActions && customRowActions(item, {
+                                    openEditor: (data) => { setSelectedItem(data || item); setShowEditor(true); }
+                                })}
                                 {showTrash && (
                                     <>
                                         {canRestore && (

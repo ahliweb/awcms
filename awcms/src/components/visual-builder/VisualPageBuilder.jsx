@@ -110,7 +110,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
         const loadData = async () => {
             if (initialPage) return; // Already have data from props
 
-            if (initialPage) return; // Already have data from props
+            if (initialPage && (initialPage.id || initialPage.editor_type === 'visual')) return; // Already have data from props, possibly new Visual Article
             try {
                 let fetchedData = null;
                 // CHANGED: Added tenant isolation to queries
@@ -161,6 +161,24 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         published_at: ''
                     });
 
+                } else if (mode === 'article' && pageId) {
+                    let q = udm.from('articles').select('*').eq('id', pageId);
+                    q = applyTenantFilter(q);
+                    const { data: art, error } = await q.single();
+                    if (error) throw error;
+                    fetchedData = {
+                        id: art.id,
+                        ...art,
+                        content_draft: typeof art.content === 'object' ? art.content : { content: [], root: { props: { title: art.title } } }
+                    };
+                    setPageMetadata({
+                        title: art.title,
+                        slug: art.slug,
+                        meta_description: art.meta_description,
+                        status: art.status,
+                        published_at: art.published_at ? new Date(art.published_at).toISOString().slice(0, 16) : ''
+                    });
+
                 } else if (mode === 'page' && pageId) {
                     let q = udm.from('pages').select('*').eq('id', pageId);
                     q = applyTenantFilter(q);
@@ -178,7 +196,13 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
 
                 if (fetchedData) {
                     setPage(fetchedData);
-                    resetHistory(fetchedData.content_draft || fetchedData.data || { content: [], root: { props: { title: fetchedData.title || fetchedData.name } } });
+                    // For articles, we might need to be careful if content is HTML string (legacy) vs JSON (visual)
+                    const initialContent = fetchedData.content_draft ||
+                        (typeof fetchedData.content === 'object' ? fetchedData.content : null) ||
+                        fetchedData.data ||
+                        { content: [], root: { props: { title: fetchedData.title || fetchedData.name } } };
+
+                    resetHistory(initialContent);
                 }
             } catch (error) {
                 console.error("Error loading visual builder data:", error);
@@ -317,6 +341,49 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                     })
                     .eq('id', partId);
                 error = err;
+            } else if (mode === 'article') {
+                console.log('Saving article:', page?.id ? page.id : 'NEW');
+
+                const payload = {
+                    content: contentData,
+                    updated_at: timestamp,
+                    title: pageMetadata.title,
+                    slug: pageMetadata.slug,
+                    meta_description: pageMetadata.meta_description,
+                    status: pageMetadata.status,
+                    published_at: pageMetadata.published_at || null,
+                    editor_type: 'visual',
+                    tenant_id: currentTenant?.id
+                };
+
+                if (page?.id) {
+                    const { error: err } = await udm
+                        .from('articles')
+                        .update(payload)
+                        .eq('id', page.id);
+                    error = err;
+                } else {
+                    // Create new article
+                    // If offline or just standard practice, we might want to generate ID, 
+                    // but for now let's rely on UDM/Supabase to return the created record.
+                    const { data: newArticle, error: err } = await udm
+                        .from('articles')
+                        .insert([payload])
+                        .select()
+                        .single();
+
+                    error = err;
+
+                    if (newArticle) {
+                        setPage(newArticle);
+                        // Update the URL without reloading? 
+                        // Or just inform the user. Better to update state so subsequent saves are updates.
+                        // We also need to update the history object if necessary, but 'page' state is key.
+
+                        // NOTE: Changing URL search params in place is tricky without rerender, 
+                        // but we can just update the internal 'page' state which the save logic uses.
+                    }
+                }
             } else {
                 console.log('Saving page:', page.id);
                 const { error: err } = await udm
@@ -492,78 +559,133 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
 
     // --- RENDER ---
     return (
-        <div className="fixed inset-0 z-50 flex flex-col bg-background">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-background">
             {/* Header / Toolbar */}
-            <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 h-16 flex items-center justify-between px-4 shrink-0 gap-4">
+            {/* Header / Toolbar */}
+            <header className="border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 h-16 flex items-center justify-between px-6 shrink-0 gap-6 z-50 shadow-sm transition-all duration-300">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => {
-                        if (hasUnsavedChanges) {
-                            if (window.confirm('You have unsaved changes. Are you sure you want to leave?')) {
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                            if (hasUnsavedChanges) {
+                                if (window.confirm('You have unsaved changes. Are you sure you want to leave?')) {
+                                    handleClose();
+                                }
+                            } else {
                                 handleClose();
                             }
-                        } else {
-                            handleClose();
-                        }
-                    }}>
-                        <ArrowLeft className="w-5 h-5" />
+                        }}
+                        className="rounded-full hover:bg-slate-100/50"
+                    >
+                        <ArrowLeft className="w-5 h-5 text-slate-700" />
                     </Button>
                     <div className="flex flex-col">
-                        <h1 className="text-lg font-semibold leading-none">{pageMetadata.title || 'Untitled Page'}</h1>
-                        <span className="text-sm text-muted-foreground font-mono">/{pageMetadata.slug}</span>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-lg font-bold text-slate-800 tracking-tight leading-none bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
+                                {pageMetadata.title || 'Untitled Page'}
+                            </h1>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${pageMetadata.status === 'published'
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                : 'bg-amber-50 text-amber-600 border-amber-100'
+                                }`}>
+                                {pageMetadata.status}
+                            </span>
+                        </div>
+                        <span className="text-xs text-slate-400 font-medium tracking-wide font-mono">/{pageMetadata.slug}</span>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     {/* Offline Indicator */}
                     {isOffline && (
-                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 text-amber-700 mr-2" title="You are offline. Changes will be saved locally.">
-                            <WifiOff className="w-4 h-4" />
-                            <span className="text-xs font-bold">OFFLINE</span>
+                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 text-rose-600 border border-rose-100 mr-2 shadow-sm animate-pulse" title="You are offline. Changes will be saved locally.">
+                            <WifiOff className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">OFFLINE</span>
                         </div>
                     )}
 
-                    <div className="flex items-center gap-1 mr-4 border-r pr-4">
-                        <Button variant="ghost" size="icon" onClick={handleUndo} disabled={!canUndo}>
-                            <Undo2 className="w-4 h-4" />
+                    <div className="flex items-center gap-1 mr-2 p-1 bg-slate-100/50 rounded-lg border border-slate-200/60">
+                        <Button variant="ghost" size="icon" onClick={handleUndo} disabled={!canUndo} className="h-7 w-7 rounded-md hover:bg-white hover:shadow-sm transition-all">
+                            <Undo2 className="w-3.5 h-3.5 text-slate-600" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={handleRedo} disabled={!canRedo}>
-                            <Redo2 className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" onClick={handleRedo} disabled={!canRedo} className="h-7 w-7 rounded-md hover:bg-white hover:shadow-sm transition-all">
+                            <Redo2 className="w-3.5 h-3.5 text-slate-600" />
                         </Button>
                     </div>
 
+                    <div className="h-6 w-px bg-slate-200 mx-1" />
+
                     <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground mr-2 flex items-center gap-1">
+                        <span className="text-xs text-slate-400 mr-2 flex items-center gap-1.5 font-medium">
                             {isSaving ? (
                                 <>
-                                    <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+                                    <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
+                                    <span className="text-indigo-600">Saving...</span>
                                 </>
                             ) : hasUnsavedChanges ? (
-                                'Unsaved changes'
+                                <span className="text-amber-500 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 block"></span>
+                                    Unsaved
+                                </span>
                             ) : lastSavedAt ? (
-                                <>
+                                <span className="text-slate-400 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 block"></span>
                                     Saved {formatTime(lastSavedAt)}
-                                </>
+                                </span>
                             ) : 'Saved'}
                         </span>
 
-                        <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
-                            <Settings className="w-4 h-4 mr-2" />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSettingsOpen(true)}
+                            className="h-9 px-4 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+                        >
+                            <Settings className="w-3.5 h-3.5 mr-2" />
                             Settings
                         </Button>
 
-                        <Button variant="outline" size="sm" onClick={() => setPreviewMode(!previewMode)}>
-                            {previewMode ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
-                            {previewMode ? 'Exit Preview' : 'Preview'}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPreviewMode(!previewMode)}
+                            className={`h-9 px-4 border-slate-200 transition-all shadow-sm ${previewMode ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}
+                        >
+                            {previewMode ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
+                            {previewMode ? 'Exit' : 'Preview'}
                         </Button>
 
-                        <Button variant="secondary" size="sm" onClick={handleManualSave} disabled={isSaving || !canEdit}>
-                            <Save className="w-4 h-4 mr-2" />
-                            Save
-                        </Button>
-                        <Button size="sm" onClick={handlePublish} disabled={isPublishing || !canPublish}>
-                            <Upload className="w-4 h-4 mr-2" />
-                            {isPublishing ? 'Publishing...' : 'Publish'}
-                        </Button>
+                        <div className="flex items-center gap-1 ml-1">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleManualSave}
+                                disabled={isSaving || !canEdit}
+                                className="h-9 px-4 text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
+                            >
+                                <Save className="w-4 h-4 mr-2" />
+                                Save
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handlePublish}
+                                disabled={isPublishing || !canPublish}
+                                className="h-9 px-6 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 text-white shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+                            >
+                                {isPublishing ? (
+                                    <>
+                                        <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                                        Publishing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload className="w-3.5 h-3.5 mr-2" />
+                                        Publish
+                                    </>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -583,7 +705,9 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         data={data || { content: [], root: { props: { title: page?.title || '' } } }}
                         onChange={handleChange}
                         headerPath={page?.slug || '/'}
-                        renderHeader={() => null} // Hide default header to avoid duplication
+                        overrides={{
+                            header: () => null, // Hide default header to avoid duplication
+                        }}
                         viewports={[
                             { width: 1280, height: 'auto', label: 'Desktop', icon: <Monitor />, id: 'desktop' },
                             { width: 768, height: 'auto', label: 'Tablet', icon: <Tablet />, id: 'tablet' },
@@ -594,78 +718,108 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
             </div>
 
             <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-                <DialogContent className="sm:max-w-[500px]">
-                    <DialogHeader>
-                        <DialogTitle>Page Settings</DialogTitle>
-                        <DialogDescription>
-                            Configure page URL, SEO details, and publishing status.
+                <DialogContent className="sm:max-w-[500px] bg-white/95 backdrop-blur-xl border-slate-200 shadow-2xl">
+                    <DialogHeader className="pb-4 border-b border-slate-100">
+                        <DialogTitle className="text-xl font-bold text-slate-900 tracking-tight">Page Settings</DialogTitle>
+                        <DialogDescription className="text-slate-500">
+                            Configure page properties, SEO metadata, and publication status.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="title">Page Title</Label>
-                            <Input
-                                id="title"
-                                value={pageMetadata.title}
-                                onChange={(e) => setPageMetadata({ ...pageMetadata, title: e.target.value })}
-                            />
-                        </div>
-
-                        <SlugGenerator
-                            initialSlug={pageMetadata.slug}
-                            titleValue={pageMetadata.title}
-                            tableName="pages"
-                            recordId={page?.id}
-                            tenantId={currentTenant?.id} // CHANGED: Pass tenantId
-                            onSlugChange={(newSlug) => setPageMetadata({ ...pageMetadata, slug: newSlug })}
-                        />
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="meta_description">SEO Description</Label>
-                            <Textarea
-                                id="meta_description"
-                                value={pageMetadata.meta_description}
-                                onChange={(e) => setPageMetadata({ ...pageMetadata, meta_description: e.target.value })}
-                                placeholder="Brief description for search engines..."
-                            />
-                        </div>
-
-                        <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-                            <div className="space-y-0.5">
-                                <Label>Publish Status</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    {pageMetadata.status === 'published' ? 'Page is live and visible.' : 'Page is hidden (Draft).'}
-                                </p>
+                    <div className="grid gap-6 py-6">
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-1 h-4 bg-indigo-500 rounded-full"></span>
+                                General Information
+                            </h3>
+                            <div className="grid gap-3">
+                                <Label htmlFor="title" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Page Title</Label>
+                                <Input
+                                    id="title"
+                                    value={pageMetadata.title}
+                                    onChange={(e) => setPageMetadata({ ...pageMetadata, title: e.target.value })}
+                                    className="bg-slate-50 border-slate-200 focus:border-indigo-500 transition-colors"
+                                    placeholder="e.g. Landing Page"
+                                />
                             </div>
-                            <div className="flex items-center gap-2">
-                                <span className={`text-xs font-medium ${pageMetadata.status === 'published' ? 'text-green-600' : 'text-amber-600'}`}>
-                                    {pageMetadata.status === 'published' ? 'Published' : 'Draft'}
-                                </span>
-                                <Switch
-                                    checked={pageMetadata.status === 'published'}
-                                    onCheckedChange={(checked) => setPageMetadata({ ...pageMetadata, status: checked ? 'published' : 'draft' })}
+
+                            <div className="grid gap-3">
+                                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">URL Slug</Label>
+                                <SlugGenerator
+                                    initialSlug={pageMetadata.slug}
+                                    titleValue={pageMetadata.title}
+                                    tableName="pages"
+                                    recordId={page?.id}
+                                    tenantId={currentTenant?.id}
+                                    onSlugChange={(newSlug) => setPageMetadata({ ...pageMetadata, slug: newSlug })}
                                 />
                             </div>
                         </div>
 
-                        <div className="grid gap-2">
-                            <Label htmlFor="published_at">Publish Date</Label>
-                            <Input
-                                type="datetime-local"
-                                id="published_at"
-                                value={pageMetadata.published_at}
-                                onChange={(e) => setPageMetadata({ ...pageMetadata, published_at: e.target.value })}
-                            />
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-1 h-4 bg-purple-500 rounded-full"></span>
+                                SEO & Metadata
+                            </h3>
+                            <div className="grid gap-3">
+                                <Label htmlFor="meta_description" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</Label>
+                                <Textarea
+                                    id="meta_description"
+                                    value={pageMetadata.meta_description}
+                                    onChange={(e) => setPageMetadata({ ...pageMetadata, meta_description: e.target.value })}
+                                    placeholder="Brief description for search engines and social media..."
+                                    className="bg-slate-50 border-slate-200 focus:border-purple-500 transition-colors resize-none min-h-[80px]"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-1 h-4 bg-emerald-500 rounded-full"></span>
+                                Publication
+                            </h3>
+                            <div className="flex items-center justify-between rounded-xl border border-slate-200 p-4 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                                <div className="space-y-1">
+                                    <Label className="text-base font-semibold text-slate-800">Publish Status</Label>
+                                    <p className="text-xs text-slate-500 font-medium">
+                                        {pageMetadata.status === 'published'
+                                            ? 'Page is live and visible to visitors.'
+                                            : 'Page is hidden and only visible to editors.'}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${pageMetadata.status === 'published'
+                                        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                        : 'bg-amber-100 text-amber-700 border-amber-200'
+                                        }`}>
+                                        {pageMetadata.status === 'published' ? 'Live' : 'Draft'}
+                                    </span>
+                                    <Switch
+                                        checked={pageMetadata.status === 'published'}
+                                        onCheckedChange={(checked) => setPageMetadata({ ...pageMetadata, status: checked ? 'published' : 'draft' })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid gap-3">
+                                <Label htmlFor="published_at" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Publish Date</Label>
+                                <Input
+                                    type="datetime-local"
+                                    id="published_at"
+                                    value={pageMetadata.published_at || ''}
+                                    onChange={(e) => setPageMetadata({ ...pageMetadata, published_at: e.target.value })}
+                                    className="bg-slate-50 border-slate-200 focus:border-emerald-500 transition-colors"
+                                />
+                            </div>
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+                    <DialogFooter className="border-t border-slate-100 pt-4">
+                        <Button variant="ghost" onClick={() => setSettingsOpen(false)} className="hover:bg-slate-100 text-slate-600">Cancel</Button>
                         <Button onClick={() => {
                             setHasUnsavedChanges(true);
                             setSettingsOpen(false);
-                            toast({ title: "Settings Updated", description: "Don't forget to save your changes." });
-                        }}>
-                            Update Settings
+                            toast({ title: "Settings Updated", description: "Don't forget to save your changes to apply them." });
+                        }} className="bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200">
+                            Apply Changes
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -40,6 +40,7 @@ AWCMS is a **Multi-Tenant** Content Management System designed for SaaS scalabil
 | **Subscription** | Tier-based feature access (Free, Pro, Enterprise) via `tierFeatures.js` logic |
 | **Theming** | Dynamic white-labeling (Colors, Fonts, Logo) per tenant via `tenants.config` |
 | **Security** | TipTap editor (XSS-safe), Supabase RLS, and zero npm vulnerabilities |
+| **Performance** | Local Storage Caching (60s TTL), Vite 7, and React 18 |
 
 ### Quick Start
 

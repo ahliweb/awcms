@@ -16,34 +16,36 @@ export function ContentDistribution({ data }) {
       <CardHeader>
         <CardTitle>Content Overview</CardTitle>
       </CardHeader>
-      <CardContent className="h-[300px]">
+      <CardContent className="h-[300px] min-h-[300px] p-6">
         {chartData.length > 0 ? (
+          <div className="w-full h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
+              <PieChart>
                 <Pie
-                data={chartData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
                 >
-                {chartData.map((entry, index) => (
+                  {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
+                  ))}
                 </Pie>
-                <Tooltip 
-                    contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    itemStyle={{ color: '#1e293b' }}
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ color: '#1e293b' }}
                 />
-                <Legend verticalAlign="bottom" height={36}/>
-            </PieChart>
+                <Legend verticalAlign="bottom" height={36} />
+              </PieChart>
             </ResponsiveContainer>
+          </div>
         ) : (
-            <div className="flex items-center justify-center h-full text-slate-400">
-                No data available
-            </div>
+          <div className="flex items-center justify-center h-full text-slate-400">
+            No data available
+          </div>
         )}
       </CardContent>
     </Card>
