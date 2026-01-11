@@ -3,26 +3,29 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { useTwoFactor } from '../useTwoFactor';
 
 // Mock dependencies
-vi.mock('@/lib/customSupabaseClient', () => ({
-    supabase: {
-        from: vi.fn(() => ({
-            select: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                    maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
-                    single: vi.fn(() => Promise.resolve({ data: null, error: null })),
+vi.mock('@/lib/customSupabaseClient', () => {
+    const selectChain = {};
+    selectChain.eq = vi.fn(() => selectChain);
+    selectChain.is = vi.fn(() => selectChain);
+    selectChain.maybeSingle = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    selectChain.single = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+    return {
+        supabase: {
+            from: vi.fn(() => ({
+                select: vi.fn(() => selectChain),
+                upsert: vi.fn(() => Promise.resolve({ error: null })),
+                insert: vi.fn(() => Promise.resolve({ error: null })),
+                delete: vi.fn(() => ({
+                    eq: vi.fn(() => Promise.resolve({ error: null })),
+                })),
+                update: vi.fn(() => ({
+                    eq: vi.fn(() => Promise.resolve({ error: null })),
                 })),
             })),
-            upsert: vi.fn(() => Promise.resolve({ error: null })),
-            insert: vi.fn(() => Promise.resolve({ error: null })),
-            delete: vi.fn(() => ({
-                eq: vi.fn(() => Promise.resolve({ error: null })),
-            })),
-            update: vi.fn(() => ({
-                eq: vi.fn(() => Promise.resolve({ error: null })),
-            })),
-        })),
-    },
-}));
+        },
+    };
+});
 
 vi.mock('@/contexts/SupabaseAuthContext', () => ({
     useAuth: vi.fn(() => ({

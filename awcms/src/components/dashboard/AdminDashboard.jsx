@@ -21,6 +21,8 @@ function AdminDashboard() {
     const perms = usePermissions() || {};
     const { userRole } = perms;
     const { data, loading, error, lastUpdated, refresh } = useDashboardData();
+    const isTenantAdmin = userRole === 'admin';
+    const spacingClass = isTenantAdmin ? 'space-y-10' : 'space-y-8';
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -55,7 +57,7 @@ function AdminDashboard() {
     }
 
     return (
-        <AdminPageLayout>
+        <AdminPageLayout className={spacingClass}>
             <PageHeader
                 title={`${getGreeting()}, ${userRole?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'User'}`}
                 description={`Here's your performance overview for ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}.`}
@@ -78,7 +80,11 @@ function AdminDashboard() {
 
             {/* Main Stats Grid */}
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-                <StatCards data={data.overview} loading={loading} />
+                <StatCards
+                    data={data.overview}
+                    loading={loading}
+                    className={isTenantAdmin ? 'gap-8 xl:gap-10' : ''}
+                />
             </div>
 
             {/* Plugin Hook: Dashboard Top */}
@@ -87,10 +93,10 @@ function AdminDashboard() {
             </div>
 
             {/* Content & Activity Grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+            <div className={`grid grid-cols-1 xl:grid-cols-3 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 ${isTenantAdmin ? 'gap-10' : 'gap-8'}`}>
                 {/* Left Column (2/3 width on XL) */}
-                <div className="xl:col-span-2 space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className={`xl:col-span-2 ${isTenantAdmin ? 'space-y-10' : 'space-y-8'}`}>
+                    <div className={`grid grid-cols-1 md:grid-cols-2 ${isTenantAdmin ? 'gap-10' : 'gap-8'}`}>
                         <ContentDistribution data={data.overview} />
                         <SystemHealth health={data.systemHealth} />
                     </div>
@@ -146,7 +152,7 @@ function AdminDashboard() {
                 </div>
 
                 {/* Right Column (1/3 width on XL) - Activity Feed */}
-                <div className="space-y-8">
+                <div className={isTenantAdmin ? 'space-y-10' : 'space-y-8'}>
                     <UsageWidget />
                     <MyApprovals />
                     <ActivityFeed activities={data.activity} />

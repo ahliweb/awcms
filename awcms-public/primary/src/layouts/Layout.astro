@@ -13,13 +13,20 @@ interface Props {
 
 const { title, description, tenantSlug } = Astro.props;
 
-// Get tenant_slug from props or locals
-const resolvedTenantSlug = tenantSlug || Astro.locals.tenant_slug || 'primary';
+// Resolve tenant slug for URL building (empty string = host-based URLs)
+const resolvedTenantSlug = tenantSlug !== undefined
+  ? tenantSlug
+  : (Astro.locals.tenant_source === 'path' ? Astro.locals.tenant_slug : '');
+const actualTenantSlug = Astro.locals.tenant_slug || 'primary';
+const isHostBased = resolvedTenantSlug === '';
 const { tenant_id, runtime } = Astro.locals;
 const env = runtime?.env || {};
 
 // Build canonical URL
-const canonicalPath = tenantUrl(resolvedTenantSlug, Astro.url.pathname.replace(`/${resolvedTenantSlug}`, '') || '/');
+const pathWithoutTenant = resolvedTenantSlug
+  ? Astro.url.pathname.replace(`/${resolvedTenantSlug}`, '') || '/'
+  : Astro.url.pathname || '/';
+const canonicalPath = tenantUrl(resolvedTenantSlug, pathWithoutTenant);
 const canonicalUrl = new URL(canonicalPath, Astro.url.origin).href;
 
 // Initialize Scoped Client
@@ -60,7 +67,26 @@ if (tenant_id && supabase) {
             .order('order');
         
         if (items) {
-            menuItems = items;
+            const normalizeMenuUrl = (url = '') => {
+                const trimmed = url.trim();
+                if (!trimmed) return '/';
+                if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('mailto:') || trimmed.startsWith('tel:') || trimmed.startsWith('#')) {
+                    return trimmed;
+                }
+                const normalized = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+                if (!isHostBased) return normalized;
+                const prefix = `/${actualTenantSlug}`;
+                if (normalized === prefix) return '/';
+                if (normalized.startsWith(`${prefix}/`)) {
+                    return normalized.slice(prefix.length);
+                }
+                return normalized;
+            };
+
+            menuItems = items.map((item) => ({
+                ...item,
+                url: normalizeMenuUrl(item.url)
+            }));
         }
     }
 }

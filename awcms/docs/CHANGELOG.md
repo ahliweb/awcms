@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.9.9] - 2026-01-11
+
+### Changed
+
+- Admin Dashboard: Added more spacing for admin role cards and widget sections.
+- Public Portal: Removed tenant slug prefixes for host-based URLs and normalized menu links.
+
+### Fixed
+
+- RBAC Soft Delete: Added `deleted_at` support and RLS alignment for `role_permissions`, `role_policies`, and `policies`.
+
 ## [2.9.8] - 2026-01-11
 
 ### Changed

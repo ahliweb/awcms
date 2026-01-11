@@ -8,13 +8,18 @@
 /**
  * Build a tenant-scoped URL path.
  * 
- * @param tenantSlug - The tenant's slug (e.g., "primary", "tenant-a")
+ * @param tenantSlug - The tenant's slug (e.g., "primary", "tenant-a"). Empty string = host-based URL.
  * @param path - The page path (e.g., "/", "/articles", "/pages/about")
  * @returns Full path with tenant prefix (e.g., "/primary/articles")
  */
 export function tenantUrl(tenantSlug: string, path: string = '/'): string {
     // Normalize path
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+    // Host-based URLs should not include a tenant prefix
+    if (!tenantSlug || tenantSlug.trim() === '') {
+        return normalizedPath;
+    }
 
     // Handle root path
     if (normalizedPath === '/') {
@@ -49,6 +54,9 @@ export function absoluteTenantUrl(baseUrl: string, tenantSlug: string, path: str
  * @returns True if path already starts with /{tenantSlug}/
  */
 export function hasValidTenantPrefix(pathname: string, tenantSlug: string): boolean {
+    if (!tenantSlug || tenantSlug.trim() === '') {
+        return false;
+    }
     const pattern = new RegExp(`^/${tenantSlug}(/|$)`);
     return pattern.test(pathname);
 }

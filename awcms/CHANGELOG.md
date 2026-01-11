@@ -5,6 +5,17 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.9.9] - 2026-01-11
+
+### Changed
+
+- **Admin Dashboard**: Increased spacing between stat cards and widget sections for the admin role to improve readability.
+- **Public Portal**: Removed tenant slug prefixes for host-based URLs and normalized menu links to avoid `/primary` in public navigation.
+
+### Fixed
+
+- **ABAC Soft Delete**: Added `deleted_at` support and aligned RLS policies for `role_permissions`, `role_policies`, and `policies` to prevent permission matrix load errors.
+
 ## [2.9.8] - 2026-01-11
 
 ### Changed

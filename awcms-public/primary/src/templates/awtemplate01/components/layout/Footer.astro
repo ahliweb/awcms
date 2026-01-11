@@ -11,7 +11,7 @@ export interface Props {
     tenantSlug?: string;
 }
 
-const { siteName = 'AWCMS', year = new Date().getFullYear(), tenantSlug = 'primary' } = Astro.props;
+const { siteName = 'AWCMS', year = new Date().getFullYear(), tenantSlug = '' } = Astro.props;
 
 // Helper
 const getUrl = (path: string) => tenantUrl(tenantSlug, path);

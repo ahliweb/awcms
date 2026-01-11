@@ -4,7 +4,7 @@ import { FileText, Layers, ShoppingBag, Users, HardDrive } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
-export function StatCards({ data, loading }) {
+export function StatCards({ data, loading, className = '' }) {
   const stats = [
     {
       title: "Total Articles",
@@ -52,7 +52,7 @@ export function StatCards({ data, loading }) {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 ${className}`}>
         {[1, 2, 3, 4, 5, 6].map((i) => (
           <Card key={i} className="bg-white/60 backdrop-blur-xl border-white/20 shadow-sm overflow-hidden h-32">
             <CardContent className="p-6 flex flex-col justify-between h-full">
@@ -69,7 +69,7 @@ export function StatCards({ data, loading }) {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+    <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 ${className}`}>
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (

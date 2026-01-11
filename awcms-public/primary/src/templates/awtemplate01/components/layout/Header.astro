@@ -14,7 +14,7 @@ export interface Props {
     tenantSlug?: string;
 }
 
-const { siteName = 'AWCMS', logoUrl, menuItems = [], tenantSlug = 'primary' } = Astro.props;
+const { siteName = 'AWCMS', logoUrl, menuItems = [], tenantSlug = '' } = Astro.props;
 
 // Helper to build URL
 const getUrl = (path: string) => tenantUrl(tenantSlug, path);
