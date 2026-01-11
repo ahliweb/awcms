@@ -46,7 +46,9 @@ const ResourceSelect = ({
                 // Default limit to prevent massive loads in dropdowns
                 query = query.limit(100);
 
+                console.log(`[ResourceSelect] Fetching ${table} with filter:`, filter);
                 const { data, error } = await query;
+                console.log(`[ResourceSelect] Fetched ${data?.length} items for ${table}`, data);
 
                 if (error) throw error;
                 setItems(data || []);
@@ -67,26 +69,34 @@ const ResourceSelect = ({
     }, [table, labelKey, valueKey, filterString, toast]);
 
     return (
-        <Select
-            value={value ? String(value) : undefined}
-            onValueChange={onChange}
-            disabled={loading}
-        >
-            <SelectTrigger className="w-full">
-                <SelectValue placeholder={loading ? "Loading..." : placeholder} />
-            </SelectTrigger>
-            <SelectContent>
-                {items.length === 0 && !loading ? (
-                    <div className="p-2 text-sm text-slate-500 text-center">No items found</div>
-                ) : (
-                    items.map(item => (
-                        <SelectItem key={item[valueKey]} value={String(item[valueKey])}>
-                            {item[labelKey] || `Item ${item[valueKey]}`}
-                        </SelectItem>
-                    ))
-                )}
-            </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-1">
+            {loading ? (
+                <div className="h-10 w-full border border-input bg-muted/50 rounded-md px-3 py-2 text-sm text-muted-foreground flex items-center">
+                    Loading options...
+                </div>
+            ) : (
+                <Select
+                    value={value ? String(value) : ''}
+                    onValueChange={onChange}
+                    disabled={false}
+                >
+                    <SelectTrigger className="w-full">
+                        <SelectValue placeholder={placeholder} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {items.length === 0 ? (
+                            <div className="p-2 text-sm text-center text-muted-foreground">No items found</div>
+                        ) : (
+                            items.map(item => (
+                                <SelectItem key={item[valueKey]} value={String(item[valueKey])}>
+                                    {item[labelKey] || `Item ${item[valueKey]}`}
+                                </SelectItem>
+                            ))
+                        )}
+                    </SelectContent>
+                </Select>
+            )}
+        </div>
     );
 };
 

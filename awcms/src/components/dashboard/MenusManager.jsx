@@ -48,13 +48,28 @@ function MenusManager() {
   const canEdit = hasPermission('tenant.menu.update');
   const canDelete = hasPermission('tenant.menu.delete');
 
+  const [pages, setPages] = useState([]);
+
   useEffect(() => {
     if (canView) {
       fetchMenus();
       fetchRoles();
+      fetchPages();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView]);
+
+  const fetchPages = async () => {
+    try {
+      let q = supabase.from('pages').select('id, title, slug, status').neq('status', 'archived');
+      if (currentTenant?.id) q = q.eq('tenant_id', currentTenant.id);
+
+      const { data, error } = await q;
+      if (!error) setPages(data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const fetchMenus = async () => {
     setLoading(true);
@@ -162,7 +177,8 @@ function MenusManager() {
       setMenuFormData({
         ...menu,
         is_active: menu.is_active === true,
-        is_public: menu.is_public === true
+        is_public: menu.is_public === true,
+        page_id: menu.page_id || '' // Handle page_id
       });
     } else {
       // Default values for new menu
@@ -172,10 +188,27 @@ function MenusManager() {
         name: '',
         is_public: true,
         is_active: true,
-        parent_id: null
+        parent_id: null,
+        page_id: ''
       });
     }
     setIsEditing(true);
+  };
+
+  // Handle Page Selection
+  const handlePageSelect = (pageId) => {
+    const page = pages.find(p => p.id === pageId);
+    if (page) {
+      setMenuFormData(prev => ({
+        ...prev,
+        page_id: pageId,
+        url: page.slug.startsWith('/') ? page.slug : `/${page.slug}`, // Auto-set URL
+        label: prev.label || page.title // Auto-set label if empty
+      }));
+    } else {
+      // Clear page association
+      setMenuFormData(prev => ({ ...prev, page_id: null }));
+    }
   };
 
   const handleSaveMenu = async (e) => {
@@ -186,6 +219,7 @@ function MenusManager() {
       name: menuFormData.name || menuFormData.label.toLowerCase().replace(/[^a-z0-9_]+/g, '_'),
       url: menuFormData.url,
       parent_id: menuFormData.parent_id || null,
+      page_id: menuFormData.page_id || null,
       is_public: menuFormData.is_public,
       is_active: menuFormData.is_active,
       updated_at: new Date().toISOString()
@@ -416,6 +450,20 @@ function MenusManager() {
                 </select>
               </div>
             )}
+
+            <div className="space-y-2">
+              <Label>Link to Page (Optional)</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                value={menuFormData.page_id || ''}
+                onChange={e => handlePageSelect(e.target.value)}
+              >
+                <option value="">-- No Page Linked --</option>
+                {pages.map(p => (
+                  <option key={p.id} value={p.id}>{p.title} ({p.slug})</option>
+                ))}
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Label</Label>
@@ -522,6 +570,8 @@ function MenusManager() {
   );
 }
 
+
+
 const MenuReorderItem = ({ menu, canEdit, canDelete, onEdit, onDelete, onPerms, onChildReorder, isPlatformAdmin }) => {
   const hasChildren = menu.children && menu.children.length > 0;
   const [isOpen, setIsOpen] = useState(true);
@@ -541,7 +591,10 @@ const MenuReorderItem = ({ menu, canEdit, canDelete, onEdit, onDelete, onPerms, 
             {menu.label}
             {!menu.is_active && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200">Inactive</span>}
           </div>
-          <span className="text-xs font-mono text-slate-400 truncate">{menu.url}</span>
+          <div className="flex items-center gap-2">
+            {menu.page_id && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100">Page Linked</span>}
+            <span className="text-xs font-mono text-slate-400 truncate">{menu.url}</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-1">
@@ -576,7 +629,10 @@ const MenuReorderItem = ({ menu, canEdit, canDelete, onEdit, onDelete, onPerms, 
                   <GripVertical className="w-4 h-4 text-slate-300 cursor-grab" />
                   <div className="flex flex-col">
                     <span className="text-sm font-medium text-slate-700">{child.label}</span>
-                    <span className="text-xs text-slate-400">{child.url}</span>
+                    <div className="flex items-center gap-2">
+                      {child.page_id && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100">Page</span>}
+                      <span className="text-xs text-slate-400">{child.url}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-1">

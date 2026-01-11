@@ -61,7 +61,7 @@ function PageEditor({ page, onClose, onSuccess }) {
     useEffect(() => {
         const fetchCategories = async () => {
             try {
-                let q = supabase.from('categories').select('id, name').eq('type', 'pages');
+                let q = supabase.from('categories').select('id, name').eq('type', 'page');
                 if (currentTenant?.id) q = q.eq('tenant_id', currentTenant.id);
                 const { data, error } = await q;
                 if (!error) setCategories(data || []);

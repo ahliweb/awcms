@@ -14,6 +14,7 @@ import { Render } from '@measured/puck';
 import puckConfig from '@/components/visual-builder/config';
 import '@measured/puck/puck.css';
 import '@/components/visual-builder/puck-theme.css';
+import { WidgetAreaRenderer } from '@/components/public/WidgetAreaRenderer';
 import { sanitizeHTML } from '@/utils/sanitize';
 
 function PublicPageDetail() {
@@ -263,9 +264,13 @@ function PublicPageDetail() {
 
                     {/* Sidebar */}
                     <div className="lg:col-span-4 space-y-8 print:hidden">
+
                         {/* Table of Contents */}
                         <div className="sticky top-24 space-y-8">
                             <TableOfContents content={page.content} />
+
+                            {/* Widget Area: Default Sidebar */}
+                            <WidgetAreaRenderer slug="default-sidebar" />
 
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                                 <h4 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">

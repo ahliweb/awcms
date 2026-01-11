@@ -58,7 +58,8 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
         heading: {
           levels: [1, 2, 3],
         },
-        codeBlock: true,
+        codeBlock: false, // Disable default CodeBlock to avoid conflict if I add it manually, or rely on this one.
+        // History is included in StarterKit
       }),
       Underline,
       Link.configure({

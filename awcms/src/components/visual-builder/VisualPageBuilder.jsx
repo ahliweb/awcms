@@ -11,6 +11,7 @@ import editorConfig from './config';
 import TemplateSelector from './TemplateSelector';
 import { useHistory } from './hooks/useHistory';
 import SlugGenerator from '@/components/dashboard/slug/SlugGenerator';
+import ResourceSelect from '@/components/dashboard/ResourceSelect';
 import {
     Dialog,
     DialogContent,
@@ -71,9 +72,11 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
         title: initialPage?.title || '',
         slug: initialPage?.slug || '',
         meta_description: initialPage?.meta_description || '',
+        category_id: initialPage?.category_id || null, // Added category_id
         status: initialPage?.status || 'draft',
         published_at: initialPage?.published_at ? new Date(initialPage.published_at).toISOString().slice(0, 16) : ''
     });
+
 
     const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('edit', 'pages', page);
     const canEdit = isEditorEnabled; // Alias for readability
@@ -138,6 +141,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         title: tpl.name,
                         slug: tpl.slug,
                         meta_description: tpl.description,
+                        category_id: tpl.category_id || null,
                         status: tpl.is_active ? 'published' : 'draft',
                         published_at: ''
                     });
@@ -157,6 +161,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         title: part.name,
                         slug: part.type,
                         meta_description: part.type,
+                        category_id: part.category_id || null,
                         status: part.is_active ? 'published' : 'draft',
                         published_at: ''
                     });
@@ -175,9 +180,11 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         title: art.title,
                         slug: art.slug,
                         meta_description: art.meta_description,
+                        category_id: art.category_id || null,
                         status: art.status,
                         published_at: art.published_at ? new Date(art.published_at).toISOString().slice(0, 16) : ''
                     });
+
 
                 } else if (mode === 'page' && pageId) {
                     let q = udm.from('pages').select('*').eq('id', pageId);
@@ -190,7 +197,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         slug: pg.slug,
                         meta_description: pg.meta_description,
                         status: pg.status,
-                        published_at: pg.published_at ? new Date(pg.published_at).toISOString().slice(0, 16) : ''
+
                     });
                 }
 
@@ -324,6 +331,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         name: pageMetadata.title,
                         slug: pageMetadata.slug,
                         description: pageMetadata.meta_description,
+                        category_id: pageMetadata.category_id,
                         is_active: pageMetadata.status === 'published'
                     })
                     .eq('id', templateId);
@@ -337,6 +345,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         updated_at: timestamp,
                         name: pageMetadata.title,
                         type: pageMetadata.slug,
+                        category_id: pageMetadata.category_id,
                         is_active: pageMetadata.status === 'published'
                     })
                     .eq('id', partId);
@@ -350,6 +359,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                     title: pageMetadata.title,
                     slug: pageMetadata.slug,
                     meta_description: pageMetadata.meta_description,
+                    category_id: pageMetadata.category_id,
                     status: pageMetadata.status,
                     published_at: pageMetadata.published_at || null,
                     editor_type: 'visual',
@@ -394,6 +404,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         title: pageMetadata.title,
                         slug: pageMetadata.slug,
                         meta_description: pageMetadata.meta_description,
+                        category_id: pageMetadata.category_id,
                         status: pageMetadata.status,
                         published_at: pageMetadata.published_at || null
                     })
@@ -751,6 +762,19 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                                     recordId={page?.id}
                                     tenantId={currentTenant?.id}
                                     onSlugChange={(newSlug) => setPageMetadata({ ...pageMetadata, slug: newSlug })}
+                                />
+                            </div>
+
+                            <div className="grid gap-3">
+                                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</Label>
+                                <ResourceSelect
+                                    table="categories"
+                                    value={pageMetadata.category_id}
+                                    onChange={(val) => setPageMetadata({ ...pageMetadata, category_id: val })}
+                                    labelKey="name"
+                                    valueKey="id"
+                                    filter={{ type: mode === 'article' ? 'article' : 'page' }}
+                                    placeholder="No Category"
                                 />
                             </div>
                         </div>

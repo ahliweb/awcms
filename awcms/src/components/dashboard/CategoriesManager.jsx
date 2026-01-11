@@ -36,7 +36,7 @@ function CategoriesManager() {
       columns={columns}
       formFields={formFields}
       permissionPrefix="categories"
-      customSelect="*"
+
     />
   );
 }

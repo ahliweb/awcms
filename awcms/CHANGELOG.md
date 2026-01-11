@@ -5,6 +5,40 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.12.0] "Mailbox" - 2026-01-12
+
+### Added
+
+- **Email Logs Enhancements**:
+  - Added **Tenant Name** column to Email Logs table.
+  - Added **User** column showing who sent the email.
+  - Added **Role** column with nested role data join.
+  - Added **IP Address** column with client IP tracking.
+  - Updated date format to include seconds (HH:mm:ss).
+- **IP Address Tracking**: Mailketing Edge Function now captures client IP from request headers (`cf-connecting-ip`, `x-real-ip`, `x-forwarded-for`).
+- **Widget Area System**: Default Sidebar widget area with WidgetAreaRenderer component.
+
+### Fixed
+
+- **Email Settings Redirect**: Fixed broken navigation by activating Mailketing plugin and removing hardcoded menu entries.
+- **Email Logs Select Error**: Fixed Radix UI Select crash by replacing empty string value with 'all'.
+- **Test Email Sender**: Fixed "Unknown Sender" error by fetching tenant config for verified `from_email` in `sendTestEmail`.
+- **Audit Logs Schema**: Added `deleted_at` column for soft-delete support.
+- **Email Logs Schema**: Added `deleted_at`, `user_id`, and `ip_address` columns.
+
+### Security
+
+- **RLS Performance**: Fixed Auth RLS Initialization Plan warning by wrapping `current_tenant_id()` and `auth.uid()` in `(select ...)`.
+- **Policy Consolidation**: Removed duplicate INSERT policies on `audit_logs` table.
+
+### Database Migrations
+
+- `add_deleted_at_to_email_logs` - Soft delete support for email_logs
+- `add_user_to_email_logs` - Track which user sent emails
+- `add_ip_address_to_email_logs` - IP address tracking
+- `fix_email_logs_user_fk` - Foreign key to public.users table
+- `fix_audit_logs_rls_performance` - Optimized RLS policies
+
 ## [2.11.0] "Connect" - 2026-01-11
 
 ### Added

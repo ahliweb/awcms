@@ -20,10 +20,10 @@ export async function getTenantMenus(tenantSlug: string, env: any = {}): Promise
 
     if (!tenant) return [];
 
-    // 2. Fetch active, public menus
+    // 2. Fetch active, public menus with page relation
     const { data: menus, error } = await supabase
         .from('menus')
-        .select('id, label, url, parent_id, order')
+        .select('id, label, url, parent_id, order, page:pages(slug)')
         .eq('tenant_id', tenant.id)
         .eq('is_active', true)
         .eq('is_public', true)
@@ -42,7 +42,19 @@ export async function getTenantMenus(tenantSlug: string, env: any = {}): Promise
 
     // Initialize map
     menus.forEach(item => {
-        menuMap[item.id] = { ...item, children: [] };
+        // Dynamic URL Resolution: If page is linked, use its slug.
+        // Ensure consistent formatting (e.g. leading slash)
+        let finalUrl = item.url;
+        if (item.page && (item.page as any).slug) {
+            const splitSlug = (item.page as any).slug.split('/');
+            // If slug is 'home', mapping to '/' might be desired, but let's stick to standard behavior
+            // Usually 'home' -> '/' handles in routing.
+            // If the slug doesn't start with '/', add it.
+            const rawSlug = (item.page as any).slug;
+            finalUrl = rawSlug.startsWith('/') ? rawSlug : `/${rawSlug}`;
+        }
+
+        menuMap[item.id] = { ...item, url: finalUrl, children: [] };
     });
 
     // Build hierarchy

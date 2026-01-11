@@ -167,16 +167,16 @@ function EmailLogs() {
                             </div>
                         </div>
                         <Select
-                            value={filters.eventType}
+                            value={filters.eventType || 'all'}
                             onValueChange={(value) =>
-                                setFilters((prev) => ({ ...prev, eventType: value }))
+                                setFilters((prev) => ({ ...prev, eventType: value === 'all' ? '' : value }))
                             }
                         >
                             <SelectTrigger className="w-40">
                                 <SelectValue placeholder="All Events" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Events</SelectItem>
+                                <SelectItem value="all">All Events</SelectItem>
                                 <SelectItem value="sent">Sent</SelectItem>
                                 <SelectItem value="opened">Opened</SelectItem>
                                 <SelectItem value="clicked">Clicked</SelectItem>
@@ -195,6 +195,10 @@ function EmailLogs() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Date</TableHead>
+                                <TableHead>Tenant</TableHead>
+                                <TableHead>User</TableHead>
+                                <TableHead>Role</TableHead>
+                                <TableHead>IP Address</TableHead>
                                 <TableHead>Event</TableHead>
                                 <TableHead>Recipient</TableHead>
                                 <TableHead>Subject</TableHead>
@@ -203,13 +207,13 @@ function EmailLogs() {
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="text-center py-8">
+                                    <TableCell colSpan={8} className="text-center py-8">
                                         <RefreshCw className="w-6 h-6 animate-spin mx-auto text-slate-400" />
                                     </TableCell>
                                 </TableRow>
                             ) : logs.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="text-center py-8 text-slate-500">
+                                    <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                                         No email logs found
                                     </TableCell>
                                 </TableRow>
@@ -220,7 +224,19 @@ function EmailLogs() {
                                     return (
                                         <TableRow key={log.id}>
                                             <TableCell className="text-sm text-slate-500">
-                                                {format(new Date(log.created_at), 'MMM d, yyyy HH:mm')}
+                                                {format(new Date(log.created_at), 'MMM d, yyyy HH:mm:ss')}
+                                            </TableCell>
+                                            <TableCell className="text-sm">
+                                                {log.tenant?.name || '-'}
+                                            </TableCell>
+                                            <TableCell className="text-sm">
+                                                {log.user?.full_name || log.user?.email || '-'}
+                                            </TableCell>
+                                            <TableCell className="text-sm">
+                                                {log.user?.role?.name || '-'}
+                                            </TableCell>
+                                            <TableCell className="text-xs font-mono text-slate-500">
+                                                {log.ip_address || '-'}
                                             </TableCell>
                                             <TableCell>
                                                 <Badge

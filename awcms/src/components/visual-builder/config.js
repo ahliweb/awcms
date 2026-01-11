@@ -25,12 +25,14 @@ import { AccordionBlock, AccordionBlockFields } from './blocks/AccordionBlock';
 import { LatestArticlesBlock, LatestArticlesBlockFields } from './blocks/LatestArticlesBlock';
 import { ImageField, MultiImageField } from './fields/ImageField';
 
+import { WidgetAreaBlock, WidgetAreaBlockFields } from './blocks/WidgetAreaBlock';
+
 // Puck configuration object
 export const puckConfig = {
     categories: {
         layout: {
             title: 'Layout & Structure',
-            components: ['Section', 'Grid', 'Divider', 'Spacer']
+            components: ['Section', 'Grid', 'Divider', 'Spacer', 'WidgetArea']
         },
         content: {
             title: 'Basic Content',
@@ -85,6 +87,15 @@ export const puckConfig = {
                 height: 40
             },
             render: SpacerBlock
+        },
+        WidgetArea: {
+            label: 'Widget Area',
+            fields: WidgetAreaBlockFields,
+            defaultProps: {
+                areaSlug: 'default-sidebar',
+                title: 'Sidebar'
+            },
+            render: WidgetAreaBlock
         },
 
         // --- Basic Content ---

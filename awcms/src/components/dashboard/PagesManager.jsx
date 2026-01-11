@@ -60,6 +60,15 @@ function PagesManager({ onlyVisual = false }) {
       }
     },
     {
+      key: 'category',
+      label: 'Category',
+      render: (value, row) => (
+        <span className="text-sm text-muted-foreground">
+          {row.category?.name || '-'}
+        </span>
+      )
+    },
+    {
       key: 'editor_type',
       label: 'Editor',
       render: (value) => (
@@ -83,14 +92,7 @@ function PagesManager({ onlyVisual = false }) {
       label: 'Page Type',
       type: 'select',
       options: [
-        { value: 'regular', label: 'Regular Page' },
-        { value: 'homepage', label: 'Homepage' },
-        { value: 'header', label: 'Global Header' },
-        { value: 'footer', label: 'Global Footer' },
-        { value: 'single_page', label: 'Single Page Template' },
-        { value: 'single_post', label: 'Single Post Template' },
-        { value: '404', label: '404 Error Page' },
-        { value: 'archive', label: 'Archive Template' }
+        { value: 'regular', label: 'Regular Page' }
       ],
       defaultValue: 'regular',
       description: 'System page type (Homepage, Header, etc.)'
@@ -110,7 +112,7 @@ function PagesManager({ onlyVisual = false }) {
       defaultValue: onlyVisual ? 'visual' : 'richtext',
       description: 'Choose the editor type for this page',
     },
-    { key: 'category_id', label: 'Category', type: 'resource_select', resourceTable: 'categories' },
+    { key: 'category_id', label: 'Category', type: 'resource_select', resourceTable: 'categories', filter: { type: 'page' } },
     {
       key: 'content',
       label: 'Content',
@@ -213,6 +215,8 @@ function PagesManager({ onlyVisual = false }) {
               columns={pageColumns}
               formFields={pageFormFields}
               permissionPrefix="pages"
+              defaultFilters={{ page_type: 'regular' }}
+              customSelect="*, category:categories!pages_category_id_fkey(id, name), owner:users!created_by(email, full_name), tenant:tenants(name)"
               customRowActions={customRowActions}
               showBreadcrumbs={false}
             />

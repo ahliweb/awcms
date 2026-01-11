@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
+import { udm } from '@/lib/data/UnifiedDataManager';
+import { supabase } from '@/lib/customSupabaseClient'; // Keep for slug check if needed, or use udm
 import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 import { useTenant } from '@/contexts/TenantContext';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -45,6 +46,8 @@ const GenericResourceEditor = ({
     // Initialize form data
     useEffect(() => {
         if (initialData) {
+            console.log('[GenericResourceEditor] initialData KEYS:', Object.keys(initialData));
+            console.log('[GenericResourceEditor] initialData FULL:', initialData);
             setFormData(initialData);
         } else {
             // Reset for new entry
@@ -56,14 +59,14 @@ const GenericResourceEditor = ({
         }
     }, [initialData, fields]);
 
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         try {
-            const payload = { ...formData };
-            // Remove joined relationship objects that shouldn't be sent to the DB
-            delete payload.owner;
-            delete payload.tenant;
+            // Remove joined relationship objects that shouldn't be sent to the DB using destructuring
+            const { owner, tenant, category, ...cleanPayload } = formData;
+            const payload = { ...cleanPayload };
 
             // ... slug logic
 
@@ -136,15 +139,16 @@ const GenericResourceEditor = ({
                 }
             }
 
+
             let error;
             if (initialData) {
-                const { error: updateError } = await supabase
+                const { error: updateError } = await udm
                     .from(tableName)
                     .update(payload)
                     .eq('id', initialData.id);
                 error = updateError;
             } else {
-                const { error: insertError } = await supabase
+                const { error: insertError } = await udm
                     .from(tableName)
                     .insert([payload]);
                 error = insertError;

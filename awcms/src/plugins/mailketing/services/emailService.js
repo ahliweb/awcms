@@ -52,8 +52,8 @@ export const saveTenantEmailConfig = async (tenantId, config) => {
     await supabase.from('audit_logs').insert({
         tenant_id: tenantId,
         action: 'config_change',
-        table_name: 'settings',
-        metadata: { plugin: 'mailketing', changes: Object.keys(config) },
+        resource: 'settings',
+        details: { plugin: 'mailketing', changes: Object.keys(config) },
     });
 
     return { success: true };
@@ -100,9 +100,11 @@ export const sendEmail = async ({
 
     const result = await response.json();
 
-    // Log to email_logs
+    // Log to email_logs with IP address from Edge Function
     await supabase.from('email_logs').insert({
         tenant_id: tenantId,
+        user_id: session?.user?.id || null,
+        ip_address: result.client_ip || null,
         event_type: result.status === 'success' ? 'sent' : 'failed',
         recipient: to,
         subject,
@@ -187,7 +189,7 @@ export const getLists = async () => {
 export const getEmailLogs = async (tenantId, { limit = 50, offset = 0, eventType, recipient } = {}) => {
     let query = supabase
         .from('email_logs')
-        .select('*', { count: 'exact' })
+        .select('*, user:user_id(id, email, full_name, role_id, role:role_id(id, name)), tenant:tenant_id(id, name)', { count: 'exact' })
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -206,6 +208,9 @@ export const getEmailLogs = async (tenantId, { limit = 50, offset = 0, eventType
  * Send test email to verify configuration
  */
 export const sendTestEmail = async (tenantId, toEmail) => {
+    // Fetch tenant config to get the verified sender details
+    const config = await getTenantEmailConfig(tenantId);
+
     return sendEmail({
         to: toEmail,
         subject: 'AWCMS Email Test',
@@ -218,6 +223,8 @@ export const sendTestEmail = async (tenantId, toEmail) => {
                 <small>Sent at: ${new Date().toISOString()}</small>
             </div>
         `,
+        fromName: config.from_name || 'AWCMS',
+        fromEmail: config.from_email || 'noreply@awcms.com',
         tenantId,
     });
 };
