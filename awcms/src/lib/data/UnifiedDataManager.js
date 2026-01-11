@@ -223,9 +223,6 @@ class UnifiedDataManager {
             // Since strict keys include filters, determining exact keys to invalidate is hard.
             // Clearing all 'udm_cache_{ "table": "X" ... }' is safer.
 
-            // Helper to match prefix
-            const targetPrefix = `${CACHE_PREFIX}{"table":"${this.table}"`;
-
             // Iterate and remove
             const keysToRemove = [];
             for (let i = 0; i < localStorage.length; i++) {

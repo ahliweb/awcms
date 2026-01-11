@@ -61,7 +61,7 @@ const TagInput = ({
 
     const timeoutId = setTimeout(fetchTags, 300);
     return () => clearTimeout(timeoutId);
-  }, [inputValue, safeValue]);
+  }, [inputValue, safeValue, currentTenant?.id]);
 
   // Outside click handler
   useEffect(() => {

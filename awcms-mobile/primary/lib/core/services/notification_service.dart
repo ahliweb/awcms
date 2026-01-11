@@ -218,7 +218,7 @@ class NotificationService extends Notifier<NotificationState> {
           .from('notifications')
           .select()
           .or('user_id.eq.$userId,user_id.is.null')
-          .is('deleted_at', null)
+          .isFilter('deleted_at', null)
           .order('created_at', ascending: false)
           .limit(50);
 
@@ -290,9 +290,10 @@ class NotificationService extends Notifier<NotificationState> {
   /// Delete notification
   Future<void> deleteNotification(String notificationId) async {
     try {
-      await _supabase.from('notifications').update({
-        'deleted_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', notificationId);
+      await _supabase
+          .from('notifications')
+          .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', notificationId);
 
       final updated = state.notifications
           .where((n) => n.id != notificationId)

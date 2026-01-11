@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-    Save, X, Globe, Calendar, Lock, Layout, Share2, FolderOpen,
-    ChevronRight, ChevronLeft, Eye, Send, CheckCircle, AlertCircle,
-    FileText, Image as ImageIcon, MoreVertical, ArrowLeft
+    Save, X, Globe, Layout, Share2, FolderOpen,
+    ChevronLeft, Eye, Send, Image as ImageIcon, MoreVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +31,16 @@ import {
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function ArticleEditor({ article, onClose, onSuccess }) {
     const { toast } = useToast();
@@ -49,11 +58,9 @@ function ArticleEditor({ article, onClose, onSuccess }) {
 
     const [useVisualBuilder, setUseVisualBuilder] = useState(isVisualContent);
 
-    // UI State
-    const [activeSection, setActiveSection] = useState('main'); // For mobile tabs if needed
-
     // Mobile Settings Toggle
     const [showMobileSettings, setShowMobileSettings] = useState(false);
+    const [visualSwitchOpen, setVisualSwitchOpen] = useState(false);
 
     // Initial Form Data State
     const [formData, setFormData] = useState({
@@ -122,11 +129,6 @@ function ArticleEditor({ article, onClose, onSuccess }) {
         } catch (error) {
             console.error('Error fetching categories:', error);
         }
-    };
-
-    const canTransition = (targetState) => {
-        if (!isEditMode) return true; // Allow state changes for new articles too (if logic permits)
-        return true;
     };
 
     const handleWorkflowAction = async (newState) => {
@@ -343,11 +345,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => {
-                                        if (confirm('Switching to Visual Builder might affect existing content formatting. Continue?')) {
-                                            setUseVisualBuilder(true);
-                                        }
-                                    }}
+                                    onClick={() => setVisualSwitchOpen(true)}
                                     className="text-slate-500 hover:text-indigo-600 hidden sm:flex gap-2"
                                 >
                                     <Layout className="w-4 h-4" />
@@ -571,6 +569,29 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                     </div>
                 </div>
             </div>
+
+            <AlertDialog open={visualSwitchOpen} onOpenChange={setVisualSwitchOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Switch to Visual Builder?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Switching to the Visual Builder might affect existing content formatting.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setUseVisualBuilder(true);
+                                setVisualSwitchOpen(false);
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700"
+                        >
+                            Switch
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </motion.div>
     );
 

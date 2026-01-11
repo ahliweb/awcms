@@ -420,7 +420,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
         } finally {
             setIsSaving(false);
         }
-    }, [mode, templateId, partId, page, toast, pageMetadata, isOffline]);
+    }, [mode, templateId, partId, page, toast, pageMetadata, isOffline, currentTenant?.id]);
 
     // undo/redo wrappers
     const handleUndo = useCallback(() => {
