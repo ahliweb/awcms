@@ -15,6 +15,7 @@ export const getTenantEmailConfig = async (tenantId) => {
         .from('settings')
         .select('key, value')
         .eq('tenant_id', tenantId)
+        .is('deleted_at', null)
         .like('key', 'email.%');
 
     const config = {};
@@ -38,6 +39,7 @@ export const saveTenantEmailConfig = async (tenantId, config) => {
         tenant_id: tenantId,
         key: `email.${key}`,
         value: JSON.stringify(value),
+        deleted_at: null,
     }));
 
     for (const update of updates) {

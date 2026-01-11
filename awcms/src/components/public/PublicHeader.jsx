@@ -73,11 +73,11 @@ const PublicHeader = ({ tenant }) => {
       if (user) {
         const { data: userData } = await supabase
           .from('users')
-          .select('role_id, roles(name)')
+          .select('role_id, roles(name, deleted_at)')
           .eq('id', user.id)
           .maybeSingle();
 
-        if (userData && userData.roles) {
+        if (userData && userData.roles && !userData.roles.deleted_at) {
           roleName = userData.roles.name;
           roleId = userData.role_id;
         }
@@ -88,6 +88,7 @@ const PublicHeader = ({ tenant }) => {
           .from('roles')
           .select('id')
           .eq('name', 'public')
+          .is('deleted_at', null)
           .maybeSingle();
         if (publicRole) roleId = publicRole.id;
       }

@@ -22,6 +22,7 @@ export const ThemeProvider = ({ children }) => {
         .from('themes')
         .select('*')
         .eq('is_active', true)
+        .is('deleted_at', null)
         .maybeSingle();
 
       if (data && data.config) {
@@ -46,7 +47,7 @@ export const ThemeProvider = ({ children }) => {
       .channel('public:themes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'themes' }, (payload) => {
         // If the active theme changed or the currently active theme was updated
-        if (payload.new && payload.new.is_active) {
+        if (payload.new && payload.new.is_active && !payload.new.deleted_at) {
           setCurrentTheme(payload.new);
           applyTheme(payload.new.config);
         }

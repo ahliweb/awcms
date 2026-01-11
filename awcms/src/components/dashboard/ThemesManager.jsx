@@ -80,6 +80,7 @@ const ThemesManager = () => {
         const { data, error } = await supabase
             .from('themes')
             .select('*, tenant:tenants(name)')
+            .is('deleted_at', null)
             .order('is_active', { ascending: false })
             .order('created_at', { ascending: false });
 
@@ -119,11 +120,11 @@ const ThemesManager = () => {
         try {
             const { error } = await supabase
                 .from('themes')
-                .delete()
+                .update({ deleted_at: new Date().toISOString() })
                 .eq('id', themeToDelete);
 
             if (error) throw error;
-            toast({ title: "Deleted", description: "Theme removed successfully." });
+            toast({ title: "Deleted", description: "Theme moved to trash." });
             setThemeToDelete(null);
             fetchThemes();
         } catch (error) {
@@ -377,12 +378,12 @@ const ThemesManager = () => {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete the theme and remove its data from our servers.
+                            This will move the theme to trash. You can restore it later if needed.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">Delete Theme</AlertDialogAction>
+                        <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">Move to Trash</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

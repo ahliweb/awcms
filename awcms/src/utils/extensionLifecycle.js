@@ -13,7 +13,12 @@ export const syncExtensionToRegistry = async (extensionId, config) => {
 
     // 1. Sync Routes
     if (config.routes && Array.isArray(config.routes)) {
-      await supabase.from('extension_routes_registry').delete().eq('extension_id', extensionId);
+      const deletedAt = new Date().toISOString();
+      await supabase
+        .from('extension_routes_registry')
+        .update({ deleted_at: deletedAt, is_active: false, updated_at: deletedAt })
+        .eq('extension_id', extensionId)
+        .is('deleted_at', null);
       
       const routesToInsert = config.routes.map(route => ({
         extension_id: extensionId,
@@ -23,7 +28,8 @@ export const syncExtensionToRegistry = async (extensionId, config) => {
         icon: route.icon,
         requires_auth: route.requires_auth !== false, // Default true
         required_permissions: route.permissions || [],
-        is_active: true
+        is_active: true,
+        deleted_at: null
       }));
 
       if (routesToInsert.length > 0) {
@@ -34,7 +40,12 @@ export const syncExtensionToRegistry = async (extensionId, config) => {
 
     // 2. Sync Menus
     if (config.menus && Array.isArray(config.menus)) {
-      await supabase.from('extension_menu_items').delete().eq('extension_id', extensionId);
+      const deletedAt = new Date().toISOString();
+      await supabase
+        .from('extension_menu_items')
+        .update({ deleted_at: deletedAt, is_active: false, updated_at: deletedAt })
+        .eq('extension_id', extensionId)
+        .is('deleted_at', null);
 
       const menusToInsert = config.menus.map((menu, index) => ({
         extension_id: extensionId,
@@ -42,7 +53,8 @@ export const syncExtensionToRegistry = async (extensionId, config) => {
         path: menu.path,
         icon: menu.icon,
         order: menu.order || 99 + index,
-        is_active: true
+        is_active: true,
+        deleted_at: null
       }));
 
       if (menusToInsert.length > 0) {
@@ -74,7 +86,8 @@ export const syncExtensionToRegistry = async (extensionId, config) => {
                      name: permName, 
                      resource: 'extension', 
                      action: 'dynamic', 
-                     description: `Registered by extension ${extensionId}` 
+                     description: `Registered by extension ${extensionId}`,
+                     deleted_at: null
                  },
                  { onConflict: 'name' }
              );
@@ -95,14 +108,30 @@ export const syncExtensionToRegistry = async (extensionId, config) => {
  * Deactivates extension components in registry without deleting them.
  */
 export const deactivateExtensionRegistry = async (extensionId) => {
-    await supabase.from('extension_routes_registry').update({ is_active: false }).eq('extension_id', extensionId);
-    await supabase.from('extension_menu_items').update({ is_active: false }).eq('extension_id', extensionId);
+    await supabase
+      .from('extension_routes_registry')
+      .update({ is_active: false })
+      .eq('extension_id', extensionId)
+      .is('deleted_at', null);
+    await supabase
+      .from('extension_menu_items')
+      .update({ is_active: false })
+      .eq('extension_id', extensionId)
+      .is('deleted_at', null);
 };
 
 /**
  * Reactivates extension components.
  */
 export const activateExtensionRegistry = async (extensionId) => {
-    await supabase.from('extension_routes_registry').update({ is_active: true }).eq('extension_id', extensionId);
-    await supabase.from('extension_menu_items').update({ is_active: true }).eq('extension_id', extensionId);
+    await supabase
+      .from('extension_routes_registry')
+      .update({ is_active: true })
+      .eq('extension_id', extensionId)
+      .is('deleted_at', null);
+    await supabase
+      .from('extension_menu_items')
+      .update({ is_active: true })
+      .eq('extension_id', extensionId)
+      .is('deleted_at', null);
 };

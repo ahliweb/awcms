@@ -19,7 +19,10 @@ function ExtensionRBACIntegration({ extensionId }) {
       setLoading(true);
       try {
          // 1. Fetch System Roles
-         const { data: rolesData } = await supabase.from('roles').select('id, name').is('deleted_at', null);
+         const { data: rolesData } = await supabase
+            .from('roles')
+            .select('id, name')
+            .is('deleted_at', null);
          setRoles(rolesData || []);
 
          // 2. Fetch Extension Config to get defined Permissions
@@ -31,7 +34,11 @@ function ExtensionRBACIntegration({ extensionId }) {
          // 3. Fetch current mappings from REAL permissions table interactions
          if (definedPermNames.length > 0 && rolesData?.length > 0) {
             // Get permission IDs from core table
-            const { data: corePerms } = await supabase.from('permissions').select('id, name').in('name', definedPermNames);
+            const { data: corePerms } = await supabase
+               .from('permissions')
+               .select('id, name')
+               .in('name', definedPermNames)
+               .is('deleted_at', null);
 
             if (corePerms) {
                const permIdMap = {};
@@ -40,7 +47,8 @@ function ExtensionRBACIntegration({ extensionId }) {
                const { data: rolePerms } = await supabase
                   .from('role_permissions')
                   .select('role_id, permission_id')
-                  .in('permission_id', corePerms.map(p => p.id));
+                  .in('permission_id', corePerms.map(p => p.id))
+                  .is('deleted_at', null);
 
                const matrix = {};
                if (rolePerms) {
@@ -81,7 +89,11 @@ function ExtensionRBACIntegration({ extensionId }) {
       try {
          setLoading(true);
          // 1. Get Core Permission IDs again to be safe
-         const { data: corePerms } = await supabase.from('permissions').select('id, name').in('name', extensionPermissions);
+         const { data: corePerms } = await supabase
+            .from('permissions')
+            .select('id, name')
+            .in('name', extensionPermissions)
+            .is('deleted_at', null);
 
          if (!corePerms || corePerms.length === 0) {
             toast({ title: "No permissions to map", variant: "warning" });
@@ -95,7 +107,11 @@ function ExtensionRBACIntegration({ extensionId }) {
 
          // 2. Clear existing mappings for these specific permissions across ALL roles (or just the ones we edited? safer to clear all involved)
          // We delete from role_permissions where permission_id is in our target list
-         await supabase.from('role_permissions').delete().in('permission_id', targetPermIds);
+         await supabase
+            .from('role_permissions')
+            .update({ deleted_at: new Date().toISOString() })
+            .in('permission_id', targetPermIds)
+            .is('deleted_at', null);
 
          // 3. Insert new mappings
          const inserts = [];
@@ -111,7 +127,10 @@ function ExtensionRBACIntegration({ extensionId }) {
          });
 
          if (inserts.length > 0) {
-            const { error } = await supabase.from('role_permissions').insert(inserts);
+            const payload = inserts.map(item => ({ ...item, deleted_at: null }));
+            const { error } = await supabase
+               .from('role_permissions')
+               .upsert(payload, { onConflict: 'role_id, permission_id' });
             if (error) throw error;
          }
 

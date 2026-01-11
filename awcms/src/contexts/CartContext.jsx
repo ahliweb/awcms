@@ -45,6 +45,7 @@ export function CartProvider({ children }) {
           )
         `)
                 .eq('tenant_id', currentTenant.id)
+                .is('cart_items.deleted_at', null)
                 .eq('status', 'active')
                 .order('created_at', { ascending: false })
                 .limit(1);
@@ -102,15 +103,41 @@ export function CartProvider({ children }) {
                 currentCart = await createCart();
             }
 
-            // Check if item already exists
-            const existingItem = items.find(item => item.product_id === product.id);
+            const { data: existingRow, error: existingError } = await supabase
+                .from('cart_items')
+                .select('id, quantity, deleted_at')
+                .eq('cart_id', currentCart.id)
+                .eq('product_id', product.id)
+                .maybeSingle();
 
-            if (existingItem) {
-                // Update quantity
-                const newQuantity = existingItem.quantity + quantity;
-                await updateItemQuantity(existingItem.id, newQuantity);
+            if (existingError) throw existingError;
+
+            if (existingRow) {
+                const baseQuantity = existingRow.deleted_at ? 0 : existingRow.quantity;
+                const newQuantity = baseQuantity + quantity;
+                const { data, error } = await supabase
+                    .from('cart_items')
+                    .update({
+                        quantity: newQuantity,
+                        updated_at: new Date().toISOString(),
+                        deleted_at: null
+                    })
+                    .eq('id', existingRow.id)
+                    .select(`
+            *,
+            product:products (id, name, slug, price, discount_price, featured_image, stock, is_available)
+          `)
+                    .single();
+
+                if (error) throw error;
+                setItems(prev => {
+                    const exists = prev.find(item => item.id === data.id);
+                    if (exists) {
+                        return prev.map(item => item.id === data.id ? data : item);
+                    }
+                    return [...prev, data];
+                });
             } else {
-                // Add new item
                 const { data, error } = await supabase
                     .from('cart_items')
                     .insert({
@@ -144,7 +171,7 @@ export function CartProvider({ children }) {
 
             const { data, error } = await supabase
                 .from('cart_items')
-                .update({ quantity, updated_at: new Date().toISOString() })
+                .update({ quantity, updated_at: new Date().toISOString(), deleted_at: null })
                 .eq('id', itemId)
                 .select(`
           *,
@@ -166,7 +193,7 @@ export function CartProvider({ children }) {
         try {
             const { error } = await supabase
                 .from('cart_items')
-                .delete()
+                .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
                 .eq('id', itemId);
 
             if (error) throw error;
@@ -183,7 +210,11 @@ export function CartProvider({ children }) {
         if (!cart) return;
 
         try {
-            await supabase.from('cart_items').delete().eq('cart_id', cart.id);
+            await supabase
+                .from('cart_items')
+                .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+                .eq('cart_id', cart.id)
+                .is('deleted_at', null);
             setItems([]);
             return true;
         } catch (error) {

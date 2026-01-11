@@ -47,6 +47,7 @@ function PermissionsManager() {
       const { data, error } = await supabase
         .from('permissions')
         .select('*')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -94,6 +95,7 @@ function PermissionsManager() {
         description: formData.description,
         resource: formData.resource,
         action: formData.action,
+        deleted_at: null,
         updated_at: new Date().toISOString()
       };
 
@@ -122,9 +124,12 @@ function PermissionsManager() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure? This might break role access.")) return;
     try {
-      const { error } = await supabase.from('permissions').delete().eq('id', id);
+      const { error } = await supabase
+        .from('permissions')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
       if (error) throw error;
-      toast({ title: "Success", description: "Permission deleted" });
+      toast({ title: "Success", description: "Permission moved to trash" });
       fetchPermissions();
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: error.message });

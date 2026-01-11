@@ -5,7 +5,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { udm } from '@/lib/data/UnifiedDataManager'; // Changed from supabase
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Search, X, RefreshCw, RotateCcw, ShieldAlert, User, Home, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Search, RefreshCw, RotateCcw, ShieldAlert, User, Home, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Link } from 'react-router-dom';
@@ -33,9 +33,7 @@ const GenericContentManager = ({
     viewPermission,
     createPermission,
     restorePermission,
-    permanentDeletePermission,
     showBreadcrumbs = true,
-    enableSoftDelete = true,
     defaultSortColumn = 'created_at',
     EditorComponent, // Optional custom editor component
     customToolbarActions // ({ openEditor }) => ReactNode
@@ -60,10 +58,6 @@ const GenericContentManager = ({
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState(null);
 
-    // Permanent delete confirmation state
-    const [permanentDeleteDialogOpen, setPermanentDeleteDialogOpen] = useState(false);
-    const [itemToPermanentDelete, setItemToPermanentDelete] = useState(null);
-
     // Computed Permissions - Using frontend pattern (tenant.module.*)
     const canView = viewPermission
         ? hasPermission(viewPermission)
@@ -74,9 +68,7 @@ const GenericContentManager = ({
     const canRestore = restorePermission
         ? hasPermission(restorePermission)
         : hasPermission(`tenant.${permissionPrefix}.restore`);
-    const canPermanentDelete = permanentDeletePermission
-        ? hasPermission(permanentDeletePermission)
-        : hasPermission(`tenant.${permissionPrefix}.permanent_delete`);
+    const softDeleteEnabled = true;
 
     const fetchItems = async () => {
         if (!canView) return;
@@ -105,7 +97,7 @@ const GenericContentManager = ({
                 return;
             }
 
-            if (enableSoftDelete) {
+            if (softDeleteEnabled) {
                 if (showTrash) {
                     q = q.not('deleted_at', 'is', null);
                 } else {
@@ -175,20 +167,12 @@ const GenericContentManager = ({
         try {
             const deletedAt = new Date().toISOString();
 
-            // UnifiedDataManager Update
-            if (enableSoftDelete) {
-                const { error } = await udm.from(tableName)
-                    .update({ deleted_at: deletedAt })
-                    .eq('id', itemToDelete.id);
+            const { error } = await udm.from(tableName)
+                .update({ deleted_at: deletedAt })
+                .eq('id', itemToDelete.id);
 
-                if (error) throw error;
-                toast({ title: 'Success', description: `${resourceName} moved to trash` });
-            } else {
-                const { error } = await udm.from(tableName).delete().eq('id', itemToDelete.id);
-
-                if (error) throw error;
-                toast({ title: 'Success', description: `${resourceName} deleted permanently` });
-            }
+            if (error) throw error;
+            toast({ title: 'Success', description: `${resourceName} moved to trash` });
 
             fetchItems();
         } catch (err) {
@@ -216,25 +200,6 @@ const GenericContentManager = ({
         }
     };
 
-    const openPermanentDeleteDialog = (id) => {
-        setItemToPermanentDelete(id);
-        setPermanentDeleteDialogOpen(true);
-    };
-
-    const confirmPermanentDelete = async () => {
-        if (!itemToPermanentDelete) return;
-        try {
-            const { error } = await udm.from(tableName).delete().eq('id', itemToPermanentDelete);
-            if (error) throw error;
-            toast({ title: 'Deleted', description: `${resourceName} permanently deleted.` });
-            fetchItems();
-        } catch (err) {
-            toast({ variant: 'destructive', title: 'Error', description: err.message });
-        } finally {
-            setPermanentDeleteDialogOpen(false);
-            setItemToPermanentDelete(null);
-        }
-    };
 
     if (!canView) return (
         <div className="flex flex-col items-center justify-center min-h-[400px] bg-card rounded-xl border border-border p-12 text-center">
@@ -347,7 +312,7 @@ const GenericContentManager = ({
                             <p className="text-muted-foreground">Manage {resourceName.toLowerCase()} entries.</p>
                         </div>
                         <div className="flex gap-2">
-                            {enableSoftDelete && (
+                            {softDeleteEnabled && (
                                 <Button
                                     variant={showTrash ? "destructive" : "outline"}
                                     onClick={() => { setShowTrash(!showTrash); setCurrentPage(1); }}
@@ -411,11 +376,6 @@ const GenericContentManager = ({
                                                 <RotateCcw className="w-4 h-4" />
                                             </Button>
                                         )}
-                                        {canPermanentDelete && (
-                                            <Button size="icon" variant="ghost" onClick={() => openPermanentDeleteDialog(item.id)} className="text-red-600 hover:bg-red-50" title="Delete Forever">
-                                                <X className="w-4 h-4" />
-                                            </Button>
-                                        )}
                                     </>
                                 )}
                             </div>
@@ -451,32 +411,6 @@ const GenericContentManager = ({
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Permanent Delete Confirmation Dialog */}
-            <AlertDialog open={permanentDeleteDialogOpen} onOpenChange={setPermanentDeleteDialogOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-red-600">
-                            <Trash2 className="w-5 h-5" />
-                            Permanent Delete
-                        </AlertDialogTitle>
-                        <AlertDialogDescription asChild>
-                            <div className="space-y-3">
-                                <p>Are you sure you want to <strong>permanently delete</strong> this {resourceName.toLowerCase()}?</p>
-                                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
-                                    <p className="font-medium">🚫 Warning:</p>
-                                    <p>This action is <strong>irreversible</strong>. The data will be permanently removed and cannot be recovered.</p>
-                                </div>
-                            </div>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setItemToPermanentDelete(null)}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmPermanentDelete} className="bg-red-600 hover:bg-red-700">
-                            Delete Forever
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 };

@@ -15,7 +15,7 @@
     "success": "Berhasil",
     "error": "Error",
     "confirm_delete": "Apakah Anda yakin ingin menghapus item ini?",
-    "confirm_permanent_delete": "Ini akan menghapus item secara permanen. Tindakan ini tidak dapat dibatalkan.",
+  "confirm_permanent_delete": "Hapus permanen dinonaktifkan. Gunakan tempat sampah dan pemulihan.",
     "status": "Status",
     "created_at": "Dibuat Pada",
     "updated_at": "Terakhir Diperbarui",
@@ -45,7 +45,7 @@
     "reset": "Atur Ulang",
     "trash": "Sampah",
     "restore": "Pulihkan",
-    "permanent_delete": "Hapus Permanen",
+  "permanent_delete": "Hapus Permanen (Dinonaktifkan)",
     "access_denied": "Akses Ditolak",
     "access_restricted": "Akses Terbatas",
     "permission_required": "Anda tidak memiliki izin untuk melihat bagian ini."

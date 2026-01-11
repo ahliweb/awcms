@@ -194,7 +194,7 @@ function RolesManager() {
                 </div>
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
                   <p className="font-medium">🚫 Warning:</p>
-                  <p>This action is <strong>permanent</strong> and cannot be undone.</p>
+                  <p>This will move the role to trash. You can restore it if needed.</p>
                 </div>
               </div>
             </AlertDialogDescription>
@@ -205,7 +205,7 @@ function RolesManager() {
               onClick={handleConfirmDelete}
               className="bg-red-600 hover:bg-red-700"
             >
-              Delete Permanently
+              Move to Trash
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

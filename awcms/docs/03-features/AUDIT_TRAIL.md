@@ -45,7 +45,7 @@ The audit trail captures all significant system actions, providing:
 | `update` | Record modified | old_value, new_value |
 | `delete` | Record soft-deleted | old_value |
 | `restore` | Record restored | old_value, new_value |
-| `hard_delete` | Record permanently deleted | old_value |
+| `hard_delete` | Reserved (permanent delete disabled) | old_value |
 | `login` | User authentication | user details |
 | `logout` | User session ended | - |
 | `permission_change` | Role/permission modified | old_value, new_value |

@@ -41,7 +41,8 @@ export function usePlatformStats() {
             // 3. Fetch Total File Storage
             const { data: files, error: fileError } = await supabase
                 .from('files')
-                .select('file_size');
+                .select('file_size')
+                .is('deleted_at', null);
 
             if (fileError) throw fileError;
 

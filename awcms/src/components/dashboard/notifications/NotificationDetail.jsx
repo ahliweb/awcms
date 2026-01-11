@@ -44,6 +44,7 @@ function NotificationDetail({ id: propId }) {
                     .from('notifications')
                     .select('*, sender:created_by(full_name, email)')
                     .eq('id', id)
+                    .is('deleted_at', null)
                     .maybeSingle();
 
                 if (error) throw error;

@@ -38,7 +38,7 @@ const ACTIONS = [
     { key: 'delete', label: 'Delete (All)', icon: Trash2, color: 'text-red-500', bg: 'bg-red-50', desc: 'Can delete ANY item (Admin level)' },
     { key: 'publish', label: 'Publish', icon: Check, color: 'text-indigo-500', bg: 'bg-indigo-50', desc: 'Can publish content live' },
     { key: 'restore', label: 'Restore', icon: RotateCcw, color: 'text-cyan-500', bg: 'bg-cyan-50', desc: 'Can restore from trash' },
-    { key: 'permanent_delete', label: 'Perm Delete', icon: X, color: 'text-rose-600', bg: 'bg-rose-50', desc: 'Can delete forever' }
+    { key: 'permanent_delete', label: 'Perm Delete (Disabled)', icon: X, color: 'text-rose-600', bg: 'bg-rose-50', desc: 'Reserved. Permanent delete is disabled.' }
 ];
 
 // Map UI keys to potential DB action names

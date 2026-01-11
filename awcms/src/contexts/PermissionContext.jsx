@@ -32,13 +32,17 @@ export const PermissionProvider = ({ children }) => {
           roles!users_role_id_fkey (
             name,
             role_permissions (
+              deleted_at,
               permissions (
-                name
+                name,
+                deleted_at
               )
             ),
             role_policies (
+              deleted_at,
               policies (
-                definition
+                definition,
+                deleted_at
               )
             )
           )
@@ -56,19 +60,32 @@ export const PermissionProvider = ({ children }) => {
       // If we got user data but missing nested 'roles', and we have a role_id
       if (userData && !userData.roles && userData.role_id) {
         // Fetch Role
-        const { data: roleData } = await udm.from('roles').select('*').eq('id', userData.role_id).single();
+        const { data: roleData } = await udm
+          .from('roles')
+          .select('*')
+          .eq('id', userData.role_id)
+          .is('deleted_at', null)
+          .single();
 
         if (roleData) {
           userData.roles = roleData;
 
           // Fetch Role Permissions
           // 1. Get role_permissions map (join table)
-          const { data: rpMap } = await udm.from('role_permissions').select('*').eq('role_id', roleData.id);
+          const { data: rpMap } = await udm
+            .from('role_permissions')
+            .select('*')
+            .eq('role_id', roleData.id)
+            .is('deleted_at', null);
 
           if (rpMap && rpMap.length > 0) {
             const permIds = rpMap.map(rp => rp.permission_id);
             // 2. Get actual permissions
-            const { data: perms } = await udm.from('permissions').select('name').in('id', permIds);
+            const { data: perms } = await udm
+              .from('permissions')
+              .select('name')
+              .in('id', permIds)
+              .is('deleted_at', null);
             if (perms) {
               userData.roles.role_permissions = perms.map(p => ({ permissions: p }));
             }
@@ -76,12 +93,20 @@ export const PermissionProvider = ({ children }) => {
 
           // Fetch Role Policies
           // 1. Get role_policies map
-          const { data: rPolMap } = await udm.from('role_policies').select('*').eq('role_id', roleData.id);
+          const { data: rPolMap } = await udm
+            .from('role_policies')
+            .select('*')
+            .eq('role_id', roleData.id)
+            .is('deleted_at', null);
 
           if (rPolMap && rPolMap.length > 0) {
             const policyIds = rPolMap.map(rp => rp.policy_id);
             // 2. Get actual policies
-            const { data: pols } = await udm.from('policies').select('definition').in('id', policyIds);
+            const { data: pols } = await udm
+              .from('policies')
+              .select('definition')
+              .in('id', policyIds)
+              .is('deleted_at', null);
             if (pols) {
               userData.roles.role_policies = pols.map(p => ({ policies: p }));
             }
@@ -102,11 +127,13 @@ export const PermissionProvider = ({ children }) => {
             // Will fetch all perms later
           } else {
             dbPermissions = userData.roles.role_permissions
-              ?.map(rp => rp.permissions?.name)
+              ?.filter(rp => !rp.deleted_at && rp.permissions && !rp.permissions.deleted_at)
+              .map(rp => rp.permissions?.name)
               .filter(Boolean) || [];
 
             const policies = userData.roles.role_policies
-              ?.map(rp => rp.policies?.definition)
+              ?.filter(rp => !rp.deleted_at && rp.policies && !rp.policies.deleted_at)
+              .map(rp => rp.policies?.definition)
               .filter(Boolean) || [];
             setAbacPolicies(policies);
           }
@@ -131,7 +158,7 @@ export const PermissionProvider = ({ children }) => {
       // 4. Load Permissions for Admin Roles
       if (finalRole === 'super_admin' || finalRole === 'owner') {
         // Attempt to fetch all permissions from UDM
-        const { data: allPerms } = await udm.from('permissions').select('name');
+        const { data: allPerms } = await udm.from('permissions').select('name').is('deleted_at', null);
         if (allPerms) {
           finalPermissions = allPerms.map(p => p.name);
         } else {

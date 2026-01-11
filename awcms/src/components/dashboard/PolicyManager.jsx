@@ -34,6 +34,7 @@ export default function PolicyManager() {
             const { data, error } = await supabase
                 .from('policies')
                 .select('*')
+                .is('deleted_at', null)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -98,7 +99,8 @@ export default function PolicyManager() {
                 name: formData.name,
                 description: formData.description,
                 definition,
-                tenant_id: tenantId // Context ensures correct tenant
+                tenant_id: tenantId, // Context ensures correct tenant
+                deleted_at: null
             };
 
             let error;
@@ -131,9 +133,12 @@ export default function PolicyManager() {
         if (!window.confirm('Are you sure you want to delete this policy?')) return;
 
         try {
-            const { error } = await supabase.from('policies').delete().eq('id', id);
+            const { error } = await supabase
+                .from('policies')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', id);
             if (error) throw error;
-            toast({ title: "Deleted", description: "Policy removed." });
+            toast({ title: "Deleted", description: "Policy moved to trash." });
             fetchPolicies();
         } catch (err) {
             toast({ variant: "destructive", title: "Delete Failed", description: err.message });

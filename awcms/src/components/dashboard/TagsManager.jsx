@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Tag, Trash2, Search, Filter, RefreshCw, Edit, Plus, RotateCcw, Ban, CheckCircle, AlertCircle, SortAsc, SortDesc, X, Loader2 } from 'lucide-react';
+import { Tag, Trash2, Search, Filter, RefreshCw, Edit, Plus, RotateCcw, CheckCircle, AlertCircle, SortAsc, SortDesc, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
@@ -89,7 +89,6 @@ function TagsManager() {
     const canEdit = hasPermission('tenant.tag.update');
     const canSoftDelete = hasPermission('tenant.tag.delete');
     const canRestore = hasPermission('tenant.tag.restore') || hasPermission('tenant.tag.delete');
-    const canPermanentDelete = hasPermission('tenant.tag.permanent_delete');
 
     const fetchTags = useCallback(async () => {
         setLoading(true);
@@ -258,35 +257,24 @@ function TagsManager() {
         }));
     };
 
-    const handleDelete = async (id, permanent = false) => {
-        if (permanent && !canPermanentDelete) {
-            toast({ variant: "destructive", title: "Action Denied", description: "You do not have permission to permanently delete tags." });
-            return;
-        }
-        if (!permanent && !canSoftDelete) {
+    const handleDelete = async (id) => {
+        if (!canSoftDelete) {
             toast({ variant: "destructive", title: "Action Denied", description: "You do not have permission to delete tags." });
             return;
         }
 
-        const message = permanent
-            ? 'Are you sure? This will PERMANENTLY delete the tag and remove it from all content!'
-            : 'Are you sure? This tag will be moved to trash.';
+        const message = 'Are you sure? This tag will be moved to trash.';
 
         if (!window.confirm(message)) return;
 
         try {
-            if (permanent) {
-                const { error } = await supabase.from('tags').delete().eq('id', id);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase
-                    .from('tags')
-                    .update({ deleted_at: new Date().toISOString() })
-                    .eq('id', id);
-                if (error) throw error;
-            }
+            const { error } = await supabase
+                .from('tags')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) throw error;
 
-            toast({ title: "Success", description: permanent ? "Tag permanently deleted." : "Tag moved to trash." });
+            toast({ title: "Success", description: "Tag moved to trash." });
             fetchTags();
         } catch (error) {
             toast({ variant: "destructive", title: "Error deleting tag", description: error.message });
@@ -606,11 +594,6 @@ function TagsManager() {
                                                                 <RotateCcw className="w-4 h-4" />
                                                             </Button>
                                                         )}
-                                                        {canPermanentDelete && (
-                                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(tag.tag_id, true)} className="text-destructive hover:bg-destructive/10" title="Permanent Delete">
-                                                                <Ban className="w-4 h-4" />
-                                                            </Button>
-                                                        )}
                                                     </>
                                                 ) : (
                                                     <>
@@ -620,7 +603,7 @@ function TagsManager() {
                                                             </Button>
                                                         )}
                                                         {canSoftDelete && (
-                                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(tag.tag_id, false)} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(tag.tag_id)} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10">
                                                                 <Trash2 className="w-4 h-4" />
                                                             </Button>
                                                         )}

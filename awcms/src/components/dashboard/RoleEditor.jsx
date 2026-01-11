@@ -42,6 +42,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         const { data: allPerms, error: permError } = await supabase
           .from('permissions')
           .select('*')
+          .is('deleted_at', null)
           .order('resource', { ascending: true });
 
         if (permError) throw permError;
@@ -52,7 +53,8 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           const { data: rolePerms, error: rpError } = await supabase
             .from('role_permissions')
             .select('permission_id')
-            .eq('role_id', role.id);
+            .eq('role_id', role.id)
+            .is('deleted_at', null);
 
           if (rpError) throw rpError;
 
@@ -160,18 +162,23 @@ const RoleEditor = ({ role, onClose, onSave }) => {
       // Note: Supabase doesn't have true transactions in client lib without RPC, 
       // but this sequential operation is standard practice.
 
-      await supabase.from('role_permissions').delete().eq('role_id', roleId);
+      await supabase
+        .from('role_permissions')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('role_id', roleId)
+        .is('deleted_at', null);
 
       const newPerms = Array.from(selectedPermissions).map(permId => ({
         role_id: roleId,
-        permission_id: permId
+        permission_id: permId,
+        deleted_at: null
       }));
 
       if (newPerms.length > 0) {
         // Chunk inserts if too many to avoid payload limits (unlikely here but good practice)
         const { error: permInsertError } = await supabase
           .from('role_permissions')
-          .insert(newPerms);
+          .upsert(newPerms, { onConflict: 'role_id, permission_id' });
 
         if (permInsertError) throw permInsertError;
       }

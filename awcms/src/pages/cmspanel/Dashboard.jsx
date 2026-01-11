@@ -66,7 +66,8 @@ function Dashboard() {
         const { data } = await supabase
           .from('extension_routes_registry')
           .select('path, component_key')
-          .eq('is_active', true);
+          .eq('is_active', true)
+          .is('deleted_at', null);
 
         if (data) {
           const routes = {};

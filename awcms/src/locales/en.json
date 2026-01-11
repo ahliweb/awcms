@@ -15,7 +15,7 @@
     "success": "Success",
     "error": "Error",
     "confirm_delete": "Are you sure you want to delete this item?",
-    "confirm_permanent_delete": "This will permanently delete the item. This action cannot be undone.",
+  "confirm_permanent_delete": "Permanent delete is disabled. Use trash and restore instead.",
     "status": "Status",
     "created_at": "Created At",
     "updated_at": "Last Updated",
@@ -45,7 +45,7 @@
     "reset": "Reset",
     "trash": "Trash",
     "restore": "Restore",
-    "permanent_delete": "Permanent Delete",
+  "permanent_delete": "Permanent Delete (Disabled)",
     "access_denied": "Access Denied",
     "access_restricted": "Access Restricted",
     "permission_required": "You do not have permission to view this section."

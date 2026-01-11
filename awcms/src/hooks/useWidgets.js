@@ -15,6 +15,7 @@ export const useWidgets = (areaId) => {
                 .from('widgets')
                 .select('*, tenant:tenants(name)')
                 .eq('area_id', areaId)
+                .is('deleted_at', null)
                 .order('order', { ascending: true }); // Make sure 'order' column exists and is used
 
             if (error) throw error;
@@ -83,7 +84,7 @@ export const useWidgets = (areaId) => {
         try {
             const { error } = await supabase
                 .from('widgets')
-                .delete()
+                .update({ deleted_at: new Date().toISOString() })
                 .eq('id', id);
 
             if (error) throw error;

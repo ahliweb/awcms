@@ -89,7 +89,8 @@ export function useAdminMenu() {
       // We join with extensions to get the group label (extension name)
       const { data: extMenus, error: extError } = await supabase
         .from('extension_menu_items')
-        .select('*, extension:extensions(name, is_active)');
+        .select('*, extension:extensions(name, is_active, deleted_at)')
+        .is('deleted_at', null);
 
       if (extError) {
         console.warn('Error fetching extension menus:', extError);
@@ -98,7 +99,7 @@ export function useAdminMenu() {
 
       // 3. Merge and Normalize
       const normalizedExtMenus = (extMenus || [])
-        .filter(item => item.extension?.is_active) // Double check extension is active
+        .filter(item => item.extension?.is_active && !item.extension?.deleted_at) // Double check extension is active
         .map(item => ({
           id: `ext-${item.id}`, // specific ID format
           original_id: item.id,

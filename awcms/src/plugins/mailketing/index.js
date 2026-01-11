@@ -84,13 +84,14 @@ export const activate = async (supabase, tenantId) => {
         .select('key')
         .eq('tenant_id', tenantId)
         .eq('key', 'email.provider')
+        .is('deleted_at', null)
         .single();
 
     if (!existingSettings) {
-        await supabase.from('settings').insert([
-            { tenant_id: tenantId, key: 'email.provider', value: '"mailketing"' },
-            { tenant_id: tenantId, key: 'email.enabled', value: 'true' },
-        ]);
+        await supabase.from('settings').upsert([
+            { tenant_id: tenantId, key: 'email.provider', value: '"mailketing"', deleted_at: null },
+            { tenant_id: tenantId, key: 'email.enabled', value: 'true', deleted_at: null },
+        ], { onConflict: 'tenant_id,key' });
     }
 
     return { success: true };
@@ -123,7 +124,7 @@ export const uninstall = async (supabase, tenantId) => {
     // Remove plugin settings
     await supabase
         .from('settings')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('tenant_id', tenantId)
         .like('key', 'email.%');
 

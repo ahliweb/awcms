@@ -44,6 +44,7 @@ export const useTemplates = () => {
             const { data: stringsData, error: stringsError } = await supabase
                 .from('template_strings')
                 .select('*')
+                .is('deleted_at', null)
                 .order('key', { ascending: true });
 
             if (stringsError && stringsError.code !== '42P01') {
@@ -219,14 +220,33 @@ export const useTemplates = () => {
         try {
             // If ID is 'new', it's an insert
             if (stringId === 'new') {
-                const { error } = await supabase
+                const context = updates.context || 'default';
+                const { data: existingRow, error: existingError } = await supabase
                     .from('template_strings')
-                    .insert([updates]);
-                if (error) throw error;
+                    .select('id')
+                    .eq('key', updates.key)
+                    .eq('locale', updates.locale)
+                    .eq('context', context)
+                    .maybeSingle();
+
+                if (existingError) throw existingError;
+
+                if (existingRow) {
+                    const { error } = await supabase
+                        .from('template_strings')
+                        .update({ ...updates, context, deleted_at: null })
+                        .eq('id', existingRow.id);
+                    if (error) throw error;
+                } else {
+                    const { error } = await supabase
+                        .from('template_strings')
+                        .insert([{ ...updates, context, deleted_at: null }]);
+                    if (error) throw error;
+                }
             } else {
                 const { error } = await supabase
                     .from('template_strings')
-                    .update(updates)
+                    .update({ ...updates, deleted_at: null })
                     .eq('id', stringId);
                 if (error) throw error;
             }
@@ -243,7 +263,7 @@ export const useTemplates = () => {
         try {
             const { error } = await supabase
                 .from('template_strings')
-                .delete()
+                .update({ deleted_at: new Date().toISOString() })
                 .eq('id', id);
 
             if (error) throw error;

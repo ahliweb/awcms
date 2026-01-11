@@ -198,7 +198,9 @@ class SyncService extends Notifier<SyncState> {
             .eq('id', item.recordId);
         break;
       case 'delete':
-        await _supabase.from(item.targetTable).delete().eq('id', item.recordId);
+        await _supabase.from(item.targetTable).update({
+          'deleted_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', item.recordId);
         break;
     }
   }

@@ -72,7 +72,7 @@ export const activate = async (supabase, tenantId) => {
 
     // Upsert permissions (soft create if not exists)
     for (const perm of permissions) {
-        await supabase.from('permissions').upsert(perm, { onConflict: 'permission_name' });
+        await supabase.from('permissions').upsert({ ...perm, deleted_at: null }, { onConflict: 'permission_name' });
     }
 
     console.log(`[Plugin] ${manifest.name} activated`);

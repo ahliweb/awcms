@@ -39,6 +39,7 @@ function SeoManager() {
                 .select('value')
                 .eq('key', 'seo_global')
                 .eq('tenant_id', tenantId)
+                .is('deleted_at', null)
                 .maybeSingle();
 
             if (error) throw error;
@@ -81,6 +82,7 @@ function SeoManager() {
                 type: 'json',
                 description: 'Global SEO Configuration',
                 is_public: true,
+                deleted_at: null,
                 tenant_id: tenantId
             };
 
@@ -244,4 +246,3 @@ function SeoManager() {
 }
 
 export default SeoManager;
-

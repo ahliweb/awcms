@@ -21,6 +21,7 @@ export function useTwoFactor() {
         .from('two_factor_auth')
         .select('enabled, created_at')
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .maybeSingle();
 
       if (error) throw error;
@@ -110,6 +111,7 @@ export function useTwoFactor() {
           secret: setupData.secret,
           backup_codes: setupData.backupCodes,
           enabled: true,
+          deleted_at: null,
           updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
 
@@ -137,7 +139,7 @@ export function useTwoFactor() {
     try {
       const { error } = await supabase
         .from('two_factor_auth')
-        .delete()
+        .update({ enabled: false, deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
 
       if (error) throw error;
@@ -167,6 +169,7 @@ export function useTwoFactor() {
         .from('two_factor_auth')
         .select('secret, backup_codes')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .single();
 
       if (error || !data) throw new Error('2FA not set up for this user');

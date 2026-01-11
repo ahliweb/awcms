@@ -50,20 +50,23 @@ async function runCleanup() {
     // Check constraints via delete
     const { error: deleteError } = await supabase
         .from('roles')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', oldRole.id);
 
     if (deleteError) {
         console.error('Error deleting role:', deleteError);
         console.log('Try deleting permissions first explicitly if needed...');
-        await supabase.from('role_permissions').delete().eq('role_id', oldRole.id);
-        await supabase.from('role_policies').delete().eq('role_id', oldRole.id);
-        // Retry delete
-        const { error: deleteError2 } = await supabase.from('roles').delete().eq('id', oldRole.id);
+        await supabase.from('role_permissions').update({ deleted_at: new Date().toISOString() }).eq('role_id', oldRole.id);
+        await supabase.from('role_policies').update({ deleted_at: new Date().toISOString() }).eq('role_id', oldRole.id);
+        // Retry soft delete
+        const { error: deleteError2 } = await supabase
+            .from('roles')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', oldRole.id);
         if (deleteError2) console.error('Still failed:', deleteError2);
-        else console.log('Role deleted.');
+        else console.log('Role soft deleted.');
     } else {
-        console.log('Role super_super_admin deleted successfully.');
+        console.log('Role super_super_admin soft deleted successfully.');
     }
 
     console.log('Cleanup Complete.');

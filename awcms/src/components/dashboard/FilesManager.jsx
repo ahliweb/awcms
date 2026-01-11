@@ -80,7 +80,7 @@ function FilesManager() {
           </h1>
           <p className="text-muted-foreground">
             {showTrash
-              ? 'Manage deleted files. You can restore them or delete them permanently.'
+              ? 'Manage deleted files. You can restore them when needed.'
               : 'Manage and organize all your digital assets, images, and documents.'}
           </p>
         </div>

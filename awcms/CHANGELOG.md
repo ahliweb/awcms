@@ -5,9 +5,12 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.9.8] - 2026-01-11
+
 ### Changed
 
 - **Public Portal**: Upgraded TailwindCSS to v4 with `@tailwindcss/vite` and removed `@astrojs/tailwind`.
+- **Soft Delete**: Enforced `deleted_at` across admin/mobile flows, added missing columns, and aligned RLS policies and permission helpers to ignore soft-deleted rows.
 
 ## [2.9.7] - 2026-01-11
 

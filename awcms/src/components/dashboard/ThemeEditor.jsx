@@ -56,6 +56,7 @@ const ThemeEditor = () => {
             .from('themes')
             .select('*')
             .eq('id', id)
+            .is('deleted_at', null)
             .single();
 
         if (error) {

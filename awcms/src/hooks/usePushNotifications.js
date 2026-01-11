@@ -29,6 +29,7 @@ export function usePushNotifications() {
           created_by_user:users!push_notifications_created_by_fkey(full_name)
         `)
                 .eq('tenant_id', tenantId)
+                .is('deleted_at', null)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -57,6 +58,7 @@ export function usePushNotifications() {
                     ...data,
                     tenant_id: tenantId,
                     created_by: user?.id,
+                    deleted_at: null,
                 })
                 .select()
                 .single();
@@ -111,13 +113,13 @@ export function usePushNotifications() {
         try {
             const { error } = await supabase
                 .from('push_notifications')
-                .delete()
+                .update({ deleted_at: new Date().toISOString() })
                 .eq('id', id);
 
             if (error) throw error;
 
             setNotifications((prev) => prev.filter((n) => n.id !== id));
-            toast({ title: 'Notification Deleted' });
+            toast({ title: 'Notification Moved to Trash' });
         } catch (err) {
             toast({
                 variant: 'destructive',

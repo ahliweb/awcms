@@ -293,7 +293,7 @@ class UnifiedDataManager {
 
         // DELETE
         if (this.query.type === 'delete') {
-            builder = builder.delete();
+            builder = builder.update({ deleted_at: new Date().toISOString() });
             this.query.filters.forEach(f => {
                 if (f.operator === '=') builder = builder.eq(f.column, f.value);
                 if (f.operator === '!=') builder = builder.neq(f.column, f.value);

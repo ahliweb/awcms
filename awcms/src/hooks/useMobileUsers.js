@@ -28,6 +28,7 @@ export function useMobileUsers() {
           user:users(id, full_name, email, avatar_url)
         `)
                 .eq('tenant_id', tenantId)
+                .is('deleted_at', null)
                 .order('last_active', { ascending: false });
 
             if (error) throw error;
@@ -63,7 +64,7 @@ export function useMobileUsers() {
         try {
             const { error } = await supabase
                 .from('mobile_users')
-                .delete()
+                .update({ deleted_at: new Date().toISOString() })
                 .eq('id', id);
 
             if (error) throw error;
