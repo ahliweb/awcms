@@ -5,6 +5,11 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **SSO Login Activity**: Log OAuth-based sign-ins to `audit_logs` so SSO login history is populated consistently.
+- **Extensions Registry**: Added soft delete support for `extension_menu_items` and `extension_routes_registry` to prevent missing `deleted_at` errors during menu/route fetches.
+
 ## [2.10.0] "Sentinel" - 2026-01-11
 
 ### Added
