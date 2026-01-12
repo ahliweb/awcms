@@ -10,33 +10,33 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 ### 1. The Coding Agent (Architect/Builder)
 
-* **Focus**: Implementation, Refactoring, Bug Fixing.
-* **Capabilities**:
-  * Full context awareness of React 18/Vite 7/Supabase constraints.
-  * Ability to generate complex UI components using `shadcn/ui` patterns.
-  * Writing SQL migrations for Supabase.
-  * Updating system hooks (e.g., `useSearch`, `useAdminMenu`, `useMedia`, `useTwoFactor`).
-* **Responsibility**: Ensuring code quality, functional patterns, and adhering to the "Single Source of Truth" principle.
+- **Focus**: Implementation, Refactoring, Bug Fixing.
+- **Capabilities**:
+  - Full context awareness of React 18/Vite 7/Supabase constraints.
+  - Ability to generate complex UI components using `shadcn/ui` patterns.
+  - Writing SQL migrations for Supabase.
+  - Updating system hooks (e.g., `useSearch`, `useAdminMenu`, `useMedia`, `useTwoFactor`).
+- **Responsibility**: Ensuring code quality, functional patterns, and adhering to the "Single Source of Truth" principle.
 
 ### 2. The Communication Agent (Documenter/Explainer)
 
-* **Focus**: Documentation, Changelogs, PR Descriptions.
-* **Capabilities**:
-  * Summarizing technical changes for non-technical stakeholders.
-  * Updating Markdown files in `docs/` folder.
-  * Generating "How-to" guides based on code analysis.
-* **Responsibility**: Maintaining the accuracy of documentation relative to the codebase state.
+- **Focus**: Documentation, Changelogs, PR Descriptions.
+- **Capabilities**:
+  - Summarizing technical changes for non-technical stakeholders.
+  - Updating Markdown files in `docs/` folder.
+  - Generating "How-to" guides based on code analysis.
+- **Responsibility**: Maintaining the accuracy of documentation relative to the codebase state.
 
 ### 3. The Public Experience Agent (Frontend Specialist)
 
-* **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
-* **Capabilities**:
-  * Working with **Astro 5** and **React 18.3.1** (Islands Architecture).
-  * Implementing **Zod** schemas for component prop validation.
-  * Optimizing for Cloudflare Pages (Edge Cache, Headers).
-* **Constraints**:
-  * **NO** direct database access (must use Supabase JS Client or Functions).
-  * **NO** Puck editor runtime in the public portal (use `PuckRenderer` only; `@measured/puck` is types-only).
+- **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
+- **Capabilities**:
+  - Working with **Astro 5** and **React 18.3.1** (Islands Architecture).
+  - Implementing **Zod** schemas for component prop validation.
+  - Optimizing for Cloudflare Pages (Edge Cache, Headers).
+- **Constraints**:
+  - **NO** direct database access (must use Supabase JS Client or Functions).
+  - **NO** Puck editor runtime in the public portal (use `PuckRenderer` only; `@measured/puck` is types-only).
 
 ---
 
@@ -44,22 +44,22 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 Agents must be aware of the exact versions in use:
 
-| Technology       | Version   | Notes                                   |
-| ---------------- | --------- | --------------------------------------- |
-| React            | 18.3.1    | Functional components only              |
-| Vite             | 7.2.7     | Build tool & dev server                 |
-| TailwindCSS      | 4.1.18    | Admin uses CSS-based config             |
-| Supabase JS      | 2.87.1    | Admin client (respects RLS)             |
-| React Router DOM | 7.10.1    | Client-side routing                     |
-| Puck             | 0.20.2    | Visual Editor (@measured/puck)          |
-| TipTap           | 3.13.0    | Rich text editor (XSS-safe)             |
-| Framer Motion    | 12.23.26  | Animations                              |
-| Radix UI         | Latest    | Accessible UI primitives                |
-| Lucide React     | 0.561.0   | Icon library                            |
-| i18next          | 25.7.2    | Internationalization                    |
-| Recharts         | 3.5.1     | Charts & Data Visualization             |
-| Leaflet          | 1.9.4     | Maps                                    |
-| Vitest           | 4.0.16    | Unit/Integration testing                |
+| Technology       | Version  | Notes                          |
+| ---------------- | -------- | ------------------------------ |
+| React            | 18.3.1   | Functional components only     |
+| Vite             | 7.2.7    | Build tool & dev server        |
+| TailwindCSS      | 4.1.18   | Admin uses CSS-based config    |
+| Supabase JS      | 2.87.1   | Admin client (respects RLS)    |
+| React Router DOM | 7.10.1   | Client-side routing            |
+| Puck             | 0.20.2   | Visual Editor (@measured/puck) |
+| TipTap           | 3.13.0   | Rich text editor (XSS-safe)    |
+| Framer Motion    | 12.23.26 | Animations                     |
+| Radix UI         | Latest   | Accessible UI primitives       |
+| Lucide React     | 0.561.0  | Icon library                   |
+| i18next          | 25.7.2   | Internationalization           |
+| Recharts         | 3.5.1    | Charts & Data Visualization    |
+| Leaflet          | 1.9.4    | Maps                           |
+| Vitest           | 4.0.16   | Unit/Integration testing       |
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 18.3.1. Do not upgrade to React 19 until Puck compatibility and public portal validation are complete.
@@ -75,38 +75,38 @@ To ensure successful code generation and integration, Agents must adhere to the 
 1. **Context First**: Before generating code, read `README.md` and related component files to understand the existing patterns.
 
 2. **Multi-Tenancy Awareness**:
-   * **RLS is Sacred**: Never bypass RLS unless explicitly creating a Platform Admin feature.
-   * **Tenant Context**: Always use `useTenant()` or `usePermissions()` to get `tenantId`.
-   * **Isolation**: Ensure all new tables have `tenant_id` and RLS policies.
-   * **Permission Keys**: Use the strict format `scope.resource.action` (e.g., `tenant.post.publish`).
-   * **Channel Restrictions**:
-     * Governance/Publishing = `web` only.
-     * Content Creation = `mobile` or `web`.
-     * API = Read-heavy.
+   - **RLS is Sacred**: Never bypass RLS unless explicitly creating a Platform Admin feature.
+   - **Tenant Context**: Always use `useTenant()` or `usePermissions()` to get `tenantId`.
+   - **Isolation**: Ensure all new tables have `tenant_id` and RLS policies.
+   - **Permission Keys**: Use the strict format `scope.resource.action` (e.g., `tenant.post.publish`).
+   - **Channel Restrictions**:
+     - Governance/Publishing = `web` only.
+     - Content Creation = `mobile` or `web`.
+     - API = Read-heavy.
 
 3. **Atomic Changes**: Do not attempt to rewrite the entire application in one pass. Break tasks into:
-   * Database Schema Updates (SQL migrations)
-   * Utility/Hook Creation
-   * Component Implementation
-   * Documentation Updates
+   - Database Schema Updates (SQL migrations)
+   - Utility/Hook Creation
+   - Component Implementation
+   - Documentation Updates
 
 4. **Strict Technology Constraints**:
 
-| Rule             | Requirement                                |
-| ---------------- | ------------------------------------------ |
-| Language         | Admin Panel uses JavaScript ES2022+; Public Portal uses TypeScript/TSX |
-| **Admin Panel**  | React 18.3.1 (Strict), Vite 7              |
-| **Public Portal**| Astro 5, React 18.3.1, Cloudflare Pages    |
-| Styling          | TailwindCSS 4 utilities in Admin/Public (Public uses Vite plugin + `tailwind.config.mjs`) |
-| Backend          | Supabase only (NO Node.js servers)         |
+| Rule              | Requirement                                                               |
+| ----------------- | ------------------------------------------------------------------------- |
+| Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
+| **Admin Panel**   | React 18.3.1 (Strict), Vite 7                                             |
+| **Public Portal** | Astro 5, React 18.3.1, Cloudflare Pages                                   |
+| Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
+| Backend           | Supabase only (NO Node.js servers)                                        |
 
 ### Code Patterns
 
 ```javascript
 // ✅ CORRECT: ES2022+ with hooks
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/use-toast';
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 
 function MyComponent({ data }) {
   const [state, setState] = useState(null);
@@ -121,13 +121,15 @@ function MyComponent({ data }) {
       await doSomething();
       toast({ title: "Success", description: "Action completed" });
     } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
     }
   };
 
-  return (
-    <Button onClick={handleAction}>Action</Button>
-  );
+  return <Button onClick={handleAction}>Action</Button>;
 }
 
 export default MyComponent;
@@ -148,15 +150,15 @@ class MyComponent extends Component<Props> { } // NO class components!
 
 ### Contexts (Global State)
 
-| File                                   | Purpose                               |
-| -------------------------------------- | ------------------------------------- |
-| `src/contexts/SupabaseAuthContext.jsx` | Authentication state & methods        |
-| `src/contexts/PermissionContext.jsx`   | ABAC permissions & role checks        |
-| `src/contexts/PluginContext.jsx`       | Extension system & hook provider      |
-| `src/contexts/ThemeContext.jsx`        | Dark/Light theme management           |
-| `src/contexts/TenantContext.jsx`       | Multi-tenant context & resolution     |
-| `src/contexts/DarkModeContext.jsx`     | Dark mode toggle state                |
-| `src/contexts/CartContext.jsx`         | Optional commerce cart state          |
+| File                                   | Purpose                           |
+| -------------------------------------- | --------------------------------- |
+| `src/contexts/SupabaseAuthContext.jsx` | Authentication state & methods    |
+| `src/contexts/PermissionContext.jsx`   | ABAC permissions & role checks    |
+| `src/contexts/PluginContext.jsx`       | Extension system & hook provider  |
+| `src/contexts/ThemeContext.jsx`        | Dark/Light theme management       |
+| `src/contexts/TenantContext.jsx`       | Multi-tenant context & resolution |
+| `src/contexts/DarkModeContext.jsx`     | Dark mode toggle state            |
+| `src/contexts/CartContext.jsx`         | Optional commerce cart state      |
 
 ### Core Libraries
 
@@ -165,47 +167,47 @@ class MyComponent extends Component<Props> { } // NO class components!
 | `src/lib/hooks.js`                | WordPress-style Action/Filter system  |
 | `src/lib/customSupabaseClient.js` | Public Supabase client (respects RLS) |
 
-| Hook                 | File                                 | Purpose                         |
-| -------------------- | ------------------------------------ | ------------------------------- |
-| `useAdminMenu`       | `src/hooks/useAdminMenu.js`          | Sidebar menu loading & state    |
-| `useAuditLog`        | `src/hooks/useAuditLog.js`           | ERP Audit Logging & Compliance  |
-| `useDashboardData`   | `src/hooks/useDashboardData.js`      | Dashboard statistics            |
-| `useDevices`         | `src/hooks/useDevices.js`            | IoT device management           |
-| `useExtensionAudit`  | `src/hooks/useExtensionAudit.js`     | Extension audit logging         |
-| `useMedia`           | `src/hooks/useMedia.js`              | Media library operations        |
-| `useMobileUsers`     | `src/hooks/useMobileUsers.js`        | Mobile app user management      |
-| `useNotifications`   | `src/hooks/useNotifications.js`      | Notification system             |
-| `usePlatformStats`   | `src/hooks/usePlatformStats.js`      | Platform-wide statistics        |
-| `usePublicTenant`    | `src/hooks/usePublicTenant.js`       | Public portal tenant resolving  |
-| `usePushNotifications`| `src/hooks/usePushNotifications.js` | Mobile push notifications       |
-| `useRegions`         | `src/hooks/useRegions.js`            | 10-level region hierarchy       |
-| `useSearch`          | `src/hooks/useSearch.js`             | Debounced search logic          |
-| `useSensorData`      | `src/hooks/useSensorData.js`         | IoT sensor real-time data       |
-| `useTemplates`       | `src/hooks/useTemplates.js`          | Template management             |
-| `useTemplateStrings` | `src/hooks/useTemplateStrings.js`    | i18n template strings           |
-| `useTenantTheme`     | `src/hooks/useTenantTheme.js`        | Per-tenant theming              |
-| `useTwoFactor`       | `src/hooks/useTwoFactor.js`          | 2FA setup & verification        |
-| `useWidgets`         | `src/hooks/useWidgets.js`            | Widget system management        |
-| `useWorkflow`        | `src/hooks/useWorkflow.js`           | Content workflow engine         |
+| Hook                   | File                                | Purpose                        |
+| ---------------------- | ----------------------------------- | ------------------------------ |
+| `useAdminMenu`         | `src/hooks/useAdminMenu.js`         | Sidebar menu loading & state   |
+| `useAuditLog`          | `src/hooks/useAuditLog.js`          | ERP Audit Logging & Compliance |
+| `useDashboardData`     | `src/hooks/useDashboardData.js`     | Dashboard statistics           |
+| `useDevices`           | `src/hooks/useDevices.js`           | IoT device management          |
+| `useExtensionAudit`    | `src/hooks/useExtensionAudit.js`    | Extension audit logging        |
+| `useMedia`             | `src/hooks/useMedia.js`             | Media library operations       |
+| `useMobileUsers`       | `src/hooks/useMobileUsers.js`       | Mobile app user management     |
+| `useNotifications`     | `src/hooks/useNotifications.js`     | Notification system            |
+| `usePlatformStats`     | `src/hooks/usePlatformStats.js`     | Platform-wide statistics       |
+| `usePublicTenant`      | `src/hooks/usePublicTenant.js`      | Public portal tenant resolving |
+| `usePushNotifications` | `src/hooks/usePushNotifications.js` | Mobile push notifications      |
+| `useRegions`           | `src/hooks/useRegions.js`           | 10-level region hierarchy      |
+| `useSearch`            | `src/hooks/useSearch.js`            | Debounced search logic         |
+| `useSensorData`        | `src/hooks/useSensorData.js`        | IoT sensor real-time data      |
+| `useTemplates`         | `src/hooks/useTemplates.js`         | Template management            |
+| `useTemplateStrings`   | `src/hooks/useTemplateStrings.js`   | i18n template strings          |
+| `useTenantTheme`       | `src/hooks/useTenantTheme.js`       | Per-tenant theming             |
+| `useTwoFactor`         | `src/hooks/useTwoFactor.js`         | 2FA setup & verification       |
+| `useWidgets`           | `src/hooks/useWidgets.js`           | Widget system management       |
+| `useWorkflow`          | `src/hooks/useWorkflow.js`          | Content workflow engine        |
 
 ### Utility Libraries
 
-| File                                | Purpose                                   |
-| ----------------------------------- | ----------------------------------------- |
-| `src/lib/customSupabaseClient.js`   | Public Supabase client (respects RLS)     |
-| `src/lib/supabaseAdmin.js`          | Admin client (bypasses RLS)               |
-| `src/lib/utils.js`                  | Helper functions (`cn()`, etc.)           |
-| `src/lib/extensionRegistry.js`      | Extension component mapping               |
-| `src/lib/templateExtensions.js`     | Template/Widget/PageType extension APIs   |
-| `src/lib/widgetRegistry.js`         | Widget type definitions                   |
-| `src/lib/themeUtils.js`             | Theme utilities                           |
-| `src/lib/i18n.js`                   | i18next configuration                     |
-| `src/lib/hooks.js`                  | WordPress-style Action/Filter system      |
-| `src/lib/pluginRegistry.js`         | Core plugin registration                  |
-| `src/lib/publicModuleRegistry.js`   | Public portal module registry             |
-| `src/lib/tierFeatures.js`           | Subscription tier feature gating          |
-| `src/lib/regionUtils.js`            | Region hierarchy utilities                |
-| `src/lib/externalExtensionLoader.js`| External extension dynamic loading        |
+| File                                 | Purpose                                 |
+| ------------------------------------ | --------------------------------------- |
+| `src/lib/customSupabaseClient.js`    | Public Supabase client (respects RLS)   |
+| `src/lib/supabaseAdmin.js`           | Admin client (bypasses RLS)             |
+| `src/lib/utils.js`                   | Helper functions (`cn()`, etc.)         |
+| `src/lib/extensionRegistry.js`       | Extension component mapping             |
+| `src/lib/templateExtensions.js`      | Template/Widget/PageType extension APIs |
+| `src/lib/widgetRegistry.js`          | Widget type definitions                 |
+| `src/lib/themeUtils.js`              | Theme utilities                         |
+| `src/lib/i18n.js`                    | i18next configuration                   |
+| `src/lib/hooks.js`                   | WordPress-style Action/Filter system    |
+| `src/lib/pluginRegistry.js`          | Core plugin registration                |
+| `src/lib/publicModuleRegistry.js`    | Public portal module registry           |
+| `src/lib/tierFeatures.js`            | Subscription tier feature gating        |
+| `src/lib/regionUtils.js`             | Region hierarchy utilities              |
+| `src/lib/externalExtensionLoader.js` | External extension dynamic loading      |
 
 ---
 
@@ -213,11 +215,11 @@ class MyComponent extends Component<Props> { } // NO class components!
 
 ### 1. Feature Request Phase
 
-* **User**: "Add a notification badge to the header."
-* **Agent**: Analyzes:
-  * `src/components/dashboard/Header.jsx`
-  * `src/hooks/useNotifications.js`
-  * Database table `notifications`
+- **User**: "Add a notification badge to the header."
+- **Agent**: Analyzes:
+  - `src/components/dashboard/Header.jsx`
+  - `src/hooks/useNotifications.js`
+  - Database table `notifications`
 
 ### 2. Implementation Phase
 
@@ -231,8 +233,8 @@ Agent Action 5: Update documentation if needed
 
 ### 3. Verification Phase
 
-* Test the feature manually or describe how to test
-* Ensure no breaking changes to existing functionality
+- Test the feature manually or describe how to test
+- Ensure no breaking changes to existing functionality
 
 ---
 
@@ -242,20 +244,20 @@ To prevent API hallucinations and ensure adherence to the latest library standar
 
 ### Available Tools
 
-* `resolve-library-id`: Search for a library's Context7 ID.
-* `query-docs`: Query specific documentation using a Library ID.
+- `resolve-library-id`: Search for a library's Context7 ID.
+- `query-docs`: Query specific documentation using a Library ID.
 
 ### Core Library IDs
 
 Use these pre-resolved IDs for frequent queries:
 
-| Library | Context7 Library ID | Purpose |
-| :--- | :--- | :--- |
-| **Vite 7** | `/vitejs/vite` | Build tool & Dev server |
-| **TailwindCSS 4** | `/websites/tailwindcss` | Styling & Utility classes |
-| **Supabase JS** | `/supabase/supabase-js` | Auth, DB & Storage Client |
-| **Lucide React** | `/websites/lucide_dev_guide_packages` | Icon documentation |
-| **React 18** | `/websites/react_dev` | Core Library documentation |
+| Library           | Context7 Library ID                   | Purpose                    |
+| :---------------- | :------------------------------------ | :------------------------- |
+| **Vite 7**        | `/vitejs/vite`                        | Build tool & Dev server    |
+| **TailwindCSS 4** | `/websites/tailwindcss`               | Styling & Utility classes  |
+| **Supabase JS**   | `/supabase/supabase-js`               | Auth, DB & Storage Client  |
+| **Lucide React**  | `/websites/lucide_dev_guide_packages` | Icon documentation         |
+| **React 18**      | `/websites/react_dev`                 | Core Library documentation |
 
 ### Usage Pattern
 
@@ -271,16 +273,27 @@ Use these pre-resolved IDs for frequent queries:
 
 ```javascript
 // Import from @/components/ui/
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 ```
 
 ### Toast Notifications (Required)
 
 ```javascript
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from "@/components/ui/use-toast";
 
 const { toast } = useToast();
 
@@ -353,19 +366,21 @@ While powerful, Agents operating in this environment have specific boundaries:
 ### Data Fetching
 
 ```javascript
-import { supabase } from '@/lib/customSupabaseClient';
+import { supabase } from "@/lib/customSupabaseClient";
 
 // Select with relations
 const { data, error } = await supabase
-  .from('articles')
-  .select(`
+  .from("articles")
+  .select(
+    `
     *,
     author:users(id, full_name, avatar_url),
     category:categories(id, name)
-  `)
-  .eq('status', 'published')
-  .is('deleted_at', null)
-  .order('created_at', { ascending: false });
+  `,
+  )
+  .eq("status", "published")
+  .is("deleted_at", null)
+  .order("created_at", { ascending: false });
 ```
 
 ### Soft Delete Pattern
@@ -373,19 +388,19 @@ const { data, error } = await supabase
 ```javascript
 // AWCMS uses soft delete - never use .delete()
 const { error } = await supabase
-  .from('articles')
+  .from("articles")
   .update({ deleted_at: new Date().toISOString() })
-  .eq('id', articleId);
+  .eq("id", articleId);
 ```
 
 ### File Upload
 
 ```javascript
 const { data, error } = await supabase.storage
-  .from('articles')
+  .from("articles")
   .upload(`images/${fileName}`, file, {
-    cacheControl: '3600',
-    upsert: false
+    cacheControl: "3600",
+    upsert: false,
   });
 ```
 
@@ -430,59 +445,59 @@ case 'delete': {
 
 ### Key Format Compliance
 
-Agents must usage the standardized permission keys: `scope.resource.action`.
+Agents must use the standardized permission keys: `scope.resource.action`.
 
-* **Scopes**: `platform`, `tenant`, `content`
-* **Actions**: `create` (C), `read` (R), `update` (U), `publish` (P), `delete` (SD), `delete_permanent` (DP).
-* **Special Flags**: `U-own` (Update Own Only) - requires checking `user_id` against resource owner.
+- **Scopes**: `platform`, `tenant`, `content`
+- **Actions**: `create` (C), `read` (R), `update` (U), `publish` (P), `delete` (SD), `delete_permanent` (DP).
+- **Special Flags**: `U-own` (Update Own Only) - requires checking `user_id` against resource owner.
 
 ### Standard Permission Matrix
 
 Agents must strictly adhere to this matrix when implementing access controls:
 
-📌 *Semua permission hanya berlaku dalam tenant masing-masing*
+📌 _Semua permission hanya berlaku dalam tenant masing-masing_
 
-| Role | C | R | U | P | SD | RS | DP | Description |
-| :--- | :--: | :--: | :--: | :--: | :--: | :--: | :--: | :--- |
-| **Owner (Global)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Supreme authority (Global) |
-| **Super Admin (Global)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Platform management (Global) |
-| **Admin (Tenant)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | Tenant management (Tenant) |
-| **Editor (Tenant)** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | Content review & approval |
-| **Author (Tenant)** | ✅ | ✅ | ✅* | ❌ | ❌ | ❌ | ❌ | Content creation & update own |
-| **Member** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | Commenting & Profile management |
-| **Subscriber** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | Premium content access |
-| **Public** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | Read-only access |
-| **No Access** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Banned/Disabled |
+| Role                     |  C  |  R  |  U   |  P  | SD  | RS  | DP  | Description                     |
+| :----------------------- | :-: | :-: | :--: | :-: | :-: | :-: | :-: | :------------------------------ |
+| **Owner (Global)**       | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Supreme authority (Global)      |
+| **Super Admin (Global)** | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Platform management (Global)    |
+| **Admin (Tenant)**       | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ❌  | Tenant management (Tenant)      |
+| **Editor (Tenant)**      | ✅  | ✅  |  ✅  | ✅  | ✅  | ❌  | ❌  | Content review & approval       |
+| **Author (Tenant)**      | ✅  | ✅  | ✅\* | ❌  | ❌  | ❌  | ❌  | Content creation & update own   |
+| **Member**               | ❌  | ✅  |  ❌  | ❌  | ❌  | ❌  | ❌  | Commenting & Profile management |
+| **Subscriber**           | ❌  | ✅  |  ❌  | ❌  | ❌  | ❌  | ❌  | Premium content access          |
+| **Public**               | ❌  | ✅  |  ❌  | ❌  | ❌  | ❌  | ❌  | Read-only access                |
+| **No Access**            | ❌  | ❌  |  ❌  | ❌  | ❌  | ❌  | ❌  | Banned/Disabled                 |
 
-*\* Author → hanya konten milik sendiri (tenant_id + owner_id)*
+_\* Author → hanya konten milik sendiri (tenant_id + owner_id)_
 
 **Legend:**
 
-* **C**: Create
-* **R**: Read
-* **U**: Update
-* **P**: Publish
-* **SD**: Soft Delete
-* **RS**: Restore
-* **DP**: Delete Permanent
+- **C**: Create
+- **R**: Read
+- **U**: Update
+- **P**: Publish
+- **SD**: Soft Delete
+- **RS**: Restore
+- **DP**: Delete Permanent
 
-Example: `tenant.user.manage`, `content.post.publish`.
+Example: `tenant.user.create`, `tenant.article.publish`.
 
 ### Implementation Pattern
 
 ```javascript
-import { usePermission } from '@/contexts/PermissionContext';
+import { usePermissions } from "@/contexts/PermissionContext";
 
 function MyComponent() {
-  const { hasPermission, role } = usePermission();
+  const { hasPermission, userRole } = usePermissions();
 
   // Super admin bypasses all checks
-  if (role === 'super_admin') {
+  if (userRole === "super_admin") {
     // Full access
   }
 
   // Permission-based rendering
-  if (hasPermission('content.article.edit')) {
+  if (hasPermission("tenant.article.update")) {
     return <EditButton />;
   }
 

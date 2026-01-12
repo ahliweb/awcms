@@ -1,11 +1,20 @@
 # AWCMS Extension System
 
-## Overview
+## Purpose
+Describe the plugin and extension architecture for AWCMS.
+## Audience
+- Admin panel developers
+- Extension authors
 
-AWCMS uses a **dual extension system** combining WordPress-style hooks with modern ES module architecture.
+## Prerequisites
+- `awcms/docs/00-core/CORE_STANDARDS.md`
+
+AWCMS uses a dual extension system combining WordPress-style hooks with modern ES module architecture.
 
 > [!IMPORTANT]
 > **Terminology**: "Plugin" = Core bundled modules. "Extension" = External dynamic modules.
+
+## Core Concepts
 
 | Type | Location | Loading | Use Case |
 | ---- | -------- | ------- | -------- |
@@ -13,6 +22,8 @@ AWCMS uses a **dual extension system** combining WordPress-style hooks with mode
 | **External Extension** | `awcms-ext-{vendor}-{slug}/` | Dynamic at runtime | Third-party modules |
 
 ---
+
+## How It Works
 
 ## Hook System
 
@@ -273,3 +284,20 @@ registerPageType({
 ```
 
 These APIs use the WordPress-style hooks system internally. Registered blocks will be available in both the Admin Panel's Visual Builder and the Public Portal's component registry.
+
+---
+
+## Permissions and Access
+
+- Extensions must use `usePermissions()` for access checks.
+- Tenant context is required for any data operations.
+
+## Security and Compliance Notes
+
+- External extensions are sandboxed and loaded per tenant.
+- Public portal does not support runtime extension loading.
+
+## References
+
+- `../03-features/PUBLIC_PORTAL_ARCHITECTURE.md`
+- `../00-core/CORE_STANDARDS.md`

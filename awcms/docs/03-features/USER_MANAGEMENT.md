@@ -1,6 +1,17 @@
 
 # User Management Documentation
 
+## Purpose
+Describe user identity, profile sync, and role assignment patterns.
+
+## Audience
+- Admin panel developers
+- Operators managing user provisioning
+
+## Prerequisites
+- `awcms/docs/03-features/ABAC_SYSTEM.md`
+- `awcms/docs/00-core/SECURITY.md`
+
 ## Authentication
 
 AWCMS relies on **Supabase Auth** (GoTrue) for identity management.
@@ -97,3 +108,19 @@ The login process (`/login`) includes:
 3. Receives email with reset link.
 4. Clicks link → redirected to `/cmspanel/update-password`.
 5. Sets new password and logs in.
+
+---
+
+## Permissions and Access
+
+- User management requires `tenant.user.*` permissions.
+
+## Security and Compliance Notes
+
+- Soft delete applies to users.
+- Service role access is restricted to edge functions.
+
+## References
+
+- `../03-features/ROLE_HIERARCHY.md`
+- `../00-core/SECURITY.md`

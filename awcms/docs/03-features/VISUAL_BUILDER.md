@@ -1,102 +1,70 @@
-# Visual Page Builder Documentation
+# Visual Builder
 
-## Overview
+## Purpose
+Explain the Visual Page Builder architecture and integration with public rendering.
 
-The Visual Page Builder allows users to create complex, responsive layouts using a drag-and-drop interface. It is built on top of [Puck](https://github.com/measuredco/puck) and integrated deeply with AWCMS's media library and ABAC system.
+## Audience
+- Admin panel developers
+- Public portal developers
 
-## Key Components
+## Prerequisites
+- `awcms/docs/03-features/TEMPLATE_SYSTEM.md`
+- `awcms/docs/03-features/ABAC_SYSTEM.md`
 
-### 1. `VisualPagesManager.jsx`
+## Core Concepts
 
-The dashboard interface for listing and managing visual pages. It allows creating, editing, and deleting pages that are marked with `editor_type = 'visual'`.
+- Admin uses `@measured/puck` editor to build layouts.
+- Output is stored in `puck_layout_jsonb`.
+- Public portal renders JSON via `PuckRenderer` with an allow-list registry.
 
-### 2. `VisualPageBuilder.jsx`
+## How It Works
 
-The editor component that wraps the Puck editor. It handles saving data to Supabase and loading existing content.
+### Admin Components
 
-### 3. `config.js` (`src/components/visual-builder/config.js`)
+- `awcms/src/components/dashboard/VisualPagesManager.jsx`
+- `awcms/src/components/visual-builder/VisualPageBuilder.jsx`
+- `awcms/src/components/visual-builder/config.js`
 
-This is the core configuration file where all blocks are registered. It defines:
+### Public Rendering
 
-- **Components**: The React components to render (e.g., Hero, Grid, Text).
-- **Fields**: The properties each component accepts (e.g., title, image URL, alignment).
-- **Root Fields**: Page-level settings like background color.
+- `awcms-public/primary/src/components/PuckRenderer.tsx`
+- `awcms-public/primary/src/components/registry.tsx`
 
-## Available Blocks
+## Implementation Patterns
 
-| Block Name | Description | Key Props |
-| :--- | :--- | :--- |
-| **Hero** | Large intro section with image/text | `title`, `subtitle`, `backgroundImage`, `overlay` |
-| **Grid** | Layout container with nested zones | `columns` (2-4), `gap` |
-| **Text** | Rich text content | `content` (HTML) |
-| **Image** | Single image with caption | `src`, `alt`, `borderRadius`, `width` |
-| **Card** | Content cards | `title`, `description`, `image`, `link` |
-| **Testimonial** | Customer reviews | `quote`, `name`, `avatar`, `rating` |
-| **Promotion** | Integration with Promotions module | `promotionId`, `variant` (Banner/Card/Popup) |
-| **ContactForm** | Native contact form | `recipientEmail`, `successMessage` |
-
-## Creating a New Block
-
-To add a new block (e.g., "Video Block"):
-
-1. **Create Component**: Create `src/components/visual-builder/blocks/VideoBlock.jsx`.
-2. **Define Fields**: Export a fields object for Puck config.
-3. **Register**: Import in `config.js` and add to `puckConfig.components`.
-
-**Example:**
-
-```javascript
-// VideoBlock.jsx
-export const VideoBlock = ({ videoUrl }) => (
-  <div className="video-wrapper">
-    <iframe src={videoUrl} />
-  </div>
-);
-
-// config.js
-Video: {
-  fields: {
-    videoUrl: { type: 'text', label: 'YouTube URL' }
-  },
-  render: VideoBlock
-}
-```
-
-## Permissions
-
-The Visual Builder is protected by the following permissions:
-
-- `edit_visual_pages`: Required to access the builder.
-- `publish_visual_pages`: Required to access the builder.
-
-## Public Portal Integration
-
-The Visual Builder outputs a **JSON Payload** stored in `puck_layout_jsonb`. The Public Portal (`awcms-public`) renders this using a headless strategy.
-
-### Rendering Engine (`awcms-public`)
-
-- **Registry**: `awcms-public/primary/src/components/registry.tsx` (Zod-validated whitelist).
-- **Renderer**: `awcms-public/primary/src/components/PuckRenderer.tsx` (Maps JSON -> Astro/React Components).
-
-> **Security Note**: The Public Portal ignores any blocks NOT in the registry, preventing unauthorized component injection.
-
-## Template Parts
-
-The Visual Builder can also edit **Template Parts** (Headers, Footers, Sidebars). Access the Template Parts editor via `/cmspanel/visual-editor?partId=<uuid>`.
-
-## Extension Integration
-
-Extensions can register new blocks at runtime using the `registerTemplateBlock()` API:
+### Registering Blocks
 
 ```javascript
 import { registerTemplateBlock } from '@/lib/templateExtensions';
 
 registerTemplateBlock({
-    type: 'my_plugin/chart',
-    label: 'Interactive Chart',
-    render: ChartComponent,
-    fields: { data: { type: 'object' } }
+  type: 'my_plugin/chart',
+  label: 'Interactive Chart',
+  render: ChartComponent,
+  fields: { data: { type: 'object' } }
 });
 ```
 
-Registered blocks will appear in both the Admin Panel's Visual Builder and the Public Portal's component registry (after being whitelisted).
+## Permissions and Access
+
+Current UI checks include:
+
+- Menu access: `tenant.page.read`
+- Visual list: `tenant.visual_pages.read`
+- Edit/publish: `checkAccess('edit', 'pages', page)` and `checkAccess('publish', 'pages', page)`
+
+Refer to `ABAC_SYSTEM.md` for key conventions.
+
+## Security and Compliance Notes
+
+- Public portal must never load the Puck editor runtime.
+- Unknown blocks are ignored by the registry allow-list.
+
+## Operational Concerns
+
+- Ensure templates and parts are assigned for the `web` channel.
+
+## References
+
+- `../03-features/TEMPLATE_SYSTEM.md`
+- `../03-features/PUBLIC_PORTAL_ARCHITECTURE.md`

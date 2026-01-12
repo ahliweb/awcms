@@ -1,122 +1,82 @@
 # Deployment Guide
 
-AWCMS is a **Monorepo** containing two distinct applications. You will deploy them separately to different hosting providers (or the same one as separate projects), connecting to the **same GitHub Repository**.
+## Purpose
+Describe deployment steps for each AWCMS package in the monorepo.
 
----
+## Audience
+- Operators deploying admin, public, mobile, or IoT packages
+- Engineers validating build output
 
-## 1. Public Portal (`awcms-public`)
+## Prerequisites
+- `awcms/docs/01-guides/CONFIGURATION.md`
+- Cloudflare Pages account (admin/public)
 
-**Recommended Host**: Cloudflare Pages
-**Why**: Native support for Astro Edge SSR and high performance.
+## Steps
 
-### Public Portal Setup
+### 1. Public Portal (Cloudflare Pages)
 
-1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com) > **Workers & Pages**.
-2. Click **Create Application** > **Connect to Git**.
-3. Select your GitHub Repository (`ahliweb/awcms`).
-4. **Configure Build Settings** (Crucial!):
-    * **Project Name**: `your-brand-portal`
-    * **Production Branch**: `main`
-    * **Framework Preset**: Select `Astro`
-    * **Root Directory**: `/awcms-public/primary` (⚠️ Required: The actual Astro project is in the `primary` subfolder)
-    * **Build Command**: `npm run build`
-    * **Output Directory**: `dist`
-5. **Environment Variables**:
-    * `VITE_SUPABASE_URL`: Your Supabase Project URL.
-    * `VITE_SUPABASE_ANON_KEY`: Your Supabase Anon Key.
-6. Click **Save and Deploy**.
+- Root directory: `awcms-public/primary`
+- Framework preset: Astro
+- Build command: `npm run build`
+- Output directory: `dist`
+- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
----
+### 2. Admin Panel (Cloudflare Pages)
 
-## 2. Admin Panel (`awcms`)
+- Root directory: `awcms`
+- Framework preset: None or Vite
+- Build command: `npm run build`
+- Output directory: `dist`
+- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_TURNSTILE_SITE_KEY`
+- Set `NODE_VERSION=20`
 
-**Recommended Host**: Cloudflare Pages
-**Why**: Keeps deployment in a single platform and works well for React SPAs.
+### 3. Supabase
 
-### Admin Panel Setup
+- Apply migrations from repo root:
 
-1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com) > **Workers & Pages**.
-2. Click **Create Application** > **Connect to Git**.
-3. Select your GitHub Repository (`ahliweb/awcms`).
-4. **Configure Build Settings**:
-    * **Project Name**: `your-brand-admin`
-    * **Production Branch**: `main`
-    * **Framework Preset**: Select `None` (or `Vite` if available)
-    * **Root Directory**: `/awcms` (⚠️ Important: Do not leave empty)
-    * **Build Command**: `npm run build`
-    * **Output Directory**: `dist`
-    * **Node Version**: `20` (Set via Environment Variable `NODE_VERSION`)
-5. **Environment Variables**:
-    * `VITE_SUPABASE_URL`: Your Supabase Project URL.
-    * `VITE_SUPABASE_ANON_KEY`: Your Supabase Anon Key.
-    * `VITE_TURNSTILE_SITE_KEY`: Your **Production** Cloudflare Turnstile Site Key (Do not use the Test Key).
-    * `NODE_VERSION`: `20` (Required for Vite v5+)
-6. Click **Save and Deploy**.
+```bash
+supabase db push
+```
 
----
+- Deploy edge functions as needed:
 
-## 3. Connect the Dots (Supabase)
+```bash
+supabase functions deploy
+```
 
-Once both sites are live, you need to update Supabase Authentication settings.
+### 3.1 Supabase Auth URLs
 
-1. Go to Supabase Dashboard > **Authentication** > **URL Configuration**.
-2. **Site URL**: Set to your **Admin Panel** URL (e.g., `https://admin.your-project.pages.dev`).
-    * This is where "Magic Links" and Password Resets will redirect by default.
-3. **Redirect URLs**: Add your Public Portal and Admin URLs.
-    * `https://your-brand-portal.pages.dev/*`
-    * `https://your-brand-admin.pages.dev/*`
-    * `https://*.your-brand-portal.pages.dev/*` (If using wildcards for tenants)
+- Set Site URL to your admin panel domain.
+- Add redirect URLs for admin and public domains (including wildcards if needed).
 
----
+### 4. Mobile App (Flutter)
 
-## 4. DNS & Custom Domains (Multi-Tenancy)
+```bash
+cd awcms-mobile/primary
+flutter build appbundle --release
+flutter build ipa --release
+```
 
-### For Public Portal (Tenants)
+### 5. ESP32 Firmware
 
-To allow tenants to use subdomains (e.g., `tenant1.yoursite.com`) or custom domains (`tenant.com`):
+```bash
+cd awcms-esp32/primary
+source .env && pio run -t uploadfs && pio run -t upload
+```
 
-1. In Cloudflare Pages > **Custom Domains**, add your main domain (`yoursite.com`).
-2. For subdomains: Add a CNAME record `*` pointing to `your-brand-portal.pages.dev` in your DNS provider.
-3. **AWCMS Configuration**:
-    * Go to Admin Panel > **Tenants**.
-    * Edit a Tenant -> Update **Subdomain** or **Custom Domain** field.
-    * The Public Portal Middleware (`awcms-public/primary/src/middleware.ts`) will automatically resolve the host.
+## Verification
 
-### For Admin Panel
+- Admin panel loads and resolves tenant by domain.
+- Public portal resolves tenant via middleware and renders pages.
+- Mobile app authenticates via Supabase.
+- ESP32 reports telemetry to Supabase.
 
-Typically lives on a secure subdomain like `admin.yoursite.com` or `app.yoursite.com`.
+## Troubleshooting
 
----
+- Cloudflare build failures: verify root directory and Node version.
+- Supabase auth redirects: set Site URL and redirect URLs in Supabase.
 
-## 5. Mobile Application (`awcms-mobile`)
+## References
 
-The mobile app is a Flutter project located in `/awcms-mobile/primary`.
-
-**Prerequisites**:
-
-* Flutter SDK 3.x+
-* Android Studio / Xcode
-
-### Build & Deploy
-
-1. **Configuration**:
-   * Ensure `lib/core/constants/app_constants.dart` points to your Supabase URL.
-   * Update `android/app/build.gradle` and `ios/Runner.xcodeproj` with your App ID.
-
-2. **Build for Stores**:
-
-   ```bash
-   cd awcms-mobile/primary
-   
-   # Android App Bundle (Play Store)
-   flutter build appbundle --release
-   
-   # iOS Archive (App Store)
-   flutter build ipa --release
-   ```
-
-3. **CI/CD**:
-   * Automated builds are configured in [ci.yml](../../../.github/workflows/ci.yml).
-   * Artifacts are uploaded to GitHub Actions releases.
-
-For more details, see [Mobile Development](../01-guides/MOBILE_DEVELOPMENT.md).
+- `../01-guides/CLOUDFLARE_DEPLOYMENT.md`
+- `../00-core/SUPABASE_INTEGRATION.md`

@@ -1,88 +1,34 @@
-# AWCMS ESP32 IoT Firmware
+# AWCMS ESP32 Firmware
 
-ESP32-based IoT firmware with **secure credential storage**.
+## Purpose
+Firmware for ESP32 devices sending telemetry to Supabase.
 
-## Security Features
-
-| Feature | Implementation |
-| :------ | :------------- |
-| Build-time secrets | `.env` + PlatformIO flags |
-| String obfuscation | XOR in `security.h` |
-| Authentication | Basic Auth + API key |
-| Multi-tenant | Tenant ID isolation |
+## Prerequisites
+- PlatformIO
 
 ## Quick Start
 
-Run all commands from `awcms-esp32/primary`.
-
-1. **Copy environment file:**
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Edit `.env` with your credentials:**
-
-   ```ini
-   WIFI_SSID=YourWiFi
-   WIFI_PASSWORD=YourPassword
-   SUPABASE_URL=https://xxx.supabase.co
-   SUPABASE_ANON_KEY=eyJxxx...
-   AUTH_PASSWORD=your-secure-password
-   ```
-
-3. **Build and upload:**
-
-   ```bash
-   # Run from awcms-esp32/primary
-   source .env && pio run -t uploadfs && pio run -t upload
-   ```
-
-## Project Structure
-
-```text
-awcms-esp32/primary/
-├── .env              # Secrets (NOT in git)
-├── .env.example      # Template
-├── include/
-│   ├── config.h      # Uses build flags
-│   ├── security.h    # Obfuscation
-│   ├── auth.h        # Authentication
-│   └── ...
-└── data/             # Web UI
+```bash
+cd awcms-esp32/primary
+cp .env.example .env
+source .env && pio run -t uploadfs && pio run -t upload
 ```
 
-## Tenant Folders
+## Environment Variables
 
-Tenant-specific configuration lives under `/{tenant_code}/`:
-
-```text
-awcms-esp32/
-  primary/              # Default tenant
-    README.md           # Tenant config docs
-    src/                # Firmware code
-    include/            # Headers and config
-    data/               # Web UI assets
+```ini
+WIFI_SSID=...
+WIFI_PASSWORD=...
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
+AUTH_PASSWORD=...
 ```
 
-See the [parent README](../README.md) for multi-tenant folder structure.
+## Security Notes
 
-## API Endpoints
+- Never hardcode credentials in source.
+- Use build-time secrets from `.env`.
 
-| Endpoint | Auth | Description |
-| :------- | :--- | :---------- |
-| `/` | No | Dashboard |
-| `/api/gas` | Yes | Gas sensor |
-| `/capture` | Yes | Camera |
-| `/api/restart` | Yes | Reboot |
+## References
 
-## Anti-Reverse Engineering
-
-- Credentials injected at compile time
-- Not hardcoded in source code
-- String obfuscation available
-- For production: Enable ESP32 Flash Encryption
-
-## License
-
-MIT
+- `../../DOCS_INDEX.md`

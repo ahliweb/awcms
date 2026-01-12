@@ -1,7 +1,18 @@
 
 # Database Schema
 
-## Overview
+## Purpose
+Describe the tenant-scoped PostgreSQL schema used by AWCMS.
+
+## Audience
+- Developers working with data models and migrations
+- Operators reviewing RLS and data isolation
+
+## Prerequisites
+- `awcms/docs/00-core/MULTI_TENANCY.md`
+- `awcms/docs/00-core/SOFT_DELETE.md`
+
+## Reference
 
 AWCMS uses PostgreSQL via Supabase. This document describes the core database schema.
 
@@ -614,3 +625,16 @@ CREATE INDEX idx_articles_published
 ON articles(status, published_at DESC) 
 WHERE deleted_at IS NULL;
 ```
+
+---
+
+## Security and Compliance Notes
+
+- All tenant-scoped tables must include `tenant_id` and `deleted_at`.
+- RLS policies and helper functions are defined in `supabase/migrations`.
+
+## References
+
+- `../02-reference/RLS_POLICIES.md`
+- `../00-core/SOFT_DELETE.md`
+- `../../../schema_dump.sql`

@@ -1,57 +1,88 @@
 # Multi-Tenancy Architecture
 
-## Overview
+## Purpose
+Define how tenant isolation is resolved and enforced across AWCMS.
 
-AWCMS uses a **Logical Isolation** model on a **Shared Database**. This allows for high scalability while maintaining strict data separation.
+## Audience
+- Developers implementing tenant-aware features
+- Operators configuring tenant domains
 
-## 1. Tenant Resolution
+## Prerequisites
+- `awcms/docs/00-core/CORE_STANDARDS.md`
+- `awcms/docs/02-reference/RLS_POLICIES.md`
 
-### Admin Panel
+## Core Concepts
 
-* **Context**: Users log in to a unified dashboard (`/cmspanel`).
-* **Resolution**: `tenant_id` is derived from the User's Profile (`users.tenant_id`) upon login.
-* **Switching**: Platform Admins can "Assume Identity" of a tenant using the Tenant Switcher.
+- AWCMS uses logical isolation on a shared database.
+- Tenant context is mandatory for all reads and writes.
+- RLS enforces isolation at the database layer.
 
-### Public Portal
+## How It Works
 
-* **Context**: Visitors access `example.com/{tenant}/` or legacy `tenant.awcms.com`.
-* **Resolution** (Priority Order):
-    1. **Path Parameter** (Primary): Extract tenant slug from first URL segment (`/{tenant}/...`).
-    2. **Host Header** (Fallback): Queries `get_tenant_id_by_host(host)` RPC function.
-* **Middleware**: `src/middleware.ts` intercepts the Request.
-* **Context**: Sets `Astro.locals.tenant_id` and `Astro.locals.tenant_slug`.
-* **Redirects**: Host-resolved tenants are redirected to canonical path-based URLs.
+### Admin Panel (React)
 
-> See [Migration Guide](../01-guides/MIGRATION.md) for URL structure details.
+- Tenant context is resolved by domain in `awcms/src/contexts/TenantContext.jsx`.
+- Resolution calls RPC `get_tenant_by_domain` and sets `setGlobalTenantId()`.
+- Local development uses `VITE_DEV_TENANT_SLUG` to force a tenant.
+- `usePermissions()` exposes `tenantId` for permission-scoped operations.
 
-## 2. Row Level Security (RLS)
+### Public Portal (Astro)
 
-Every query to the database is filtered by RLS policies.
+- Middleware resolves tenant in `awcms-public/primary/src/middleware.ts`.
+- Priority order:
+  1. Path slug (`/{tenant}/...`) via `get_tenant_by_slug`.
+  2. Host header fallback via `get_tenant_id_by_host`.
+- Host-resolved tenants are served at root paths without redirects.
 
-### The Golden Rule
->
-> **"Every table must have a `tenant_id` column and RLS enabled."**
+### Data Layer (Supabase)
 
-### Policy Logic
+- `x-tenant-id` is injected into requests by the admin client and public middleware.
+- SQL functions read `app.current_tenant_id` via `current_tenant_id()`.
 
-```sql
--- Standard Policy
-CREATE POLICY "Tenant Isolation" ON table_name
-USING (tenant_id = (select auth.uid() ->> 'tenant_id')::uuid);
+## Implementation Patterns
+
+### Admin Tenant Context
+
+```javascript
+import { useTenant } from '@/contexts/TenantContext';
+
+const { currentTenant } = useTenant();
 ```
 
-## 3. Shared vs Isolated Resources
+### Public Tenant Context
 
-| Resource | Scope | Description |
-| -------- | ----- | ----------- |
-| **Users** | Isolated | Users belong to ONE tenant (except Super Admin). |
-| **Media** | Isolated | Storage buckets structured as `/{tenant_id}/{file.ext}`. |
-| **Settings** | Hybrid | `system_settings` (Global) vs `tenant_configs` (Tenant). |
-| **Extensions** | Shared | Installed globally, enabled per-tenant. |
+```ts
+const supabase = createScopedClient({ 'x-tenant-id': tenantId }, runtimeEnv);
+```
 
-## 4. Onboarding Flow
+### Tenant-Scoped Queries
 
-1. **Registration**: New Tenant creation triggers `create_tenant` RPC.
-2. **Seeding**: `create_tenant_with_defaults` seeds initial Roles, Pages, and Menus.
-3. **DNS**: Tenant configures CNAME to Cloudflare.
-4. **Verification**: Admin updates `tenants.host` column.
+```javascript
+const { data } = await supabase
+  .from('pages')
+  .select('*')
+  .eq('tenant_id', tenantId)
+  .is('deleted_at', null);
+```
+
+## Security and Compliance Notes
+
+- Every tenant-scoped table must include `tenant_id` and `deleted_at`.
+- All queries must include tenant filters even when RLS is enabled.
+- Platform admin features are the only exception to cross-tenant access.
+
+## Operational Concerns
+
+- Tenant domains are configured in the `tenants` table (host/subdomain fields).
+- New tenant creation must seed default roles, templates, and menus via SQL or RPC.
+
+## Troubleshooting
+
+- 404 on public portal: confirm middleware tenant resolution and host config.
+- Missing data in admin: verify `setGlobalTenantId()` and Supabase headers.
+
+## References
+
+- `../00-core/SUPABASE_INTEGRATION.md`
+- `../02-reference/RLS_POLICIES.md`
+- `../03-features/ABAC_SYSTEM.md`

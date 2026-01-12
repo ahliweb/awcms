@@ -1,83 +1,70 @@
-# Tech Stack & Dependencies
+# Tech Stack and Dependencies
 
-## Overview
+## Purpose
+Provide authoritative versions and technology choices for all AWCMS packages.
 
-AWCMS employs a "Headless" architecture with two distinct frontends sharing a common Supabase backend.
+## Audience
+- Developers validating compatibility
+- Operators planning deployments
 
----
+## Prerequisites
+- `awcms/docs/00-core/CORE_STANDARDS.md`
 
-## 1. Admin Panel (Core)
+## Reference
 
-*The internal dashboard for content and tenant management.*
-
-| Category | Technology | Version | Purpose |
-| ---------- | ------------ | --------- | --------- |
-| **Framework** | [React](https://react.dev/) | **18.3.1** | UI Framework (Strict locked for Puck) |
-| **Build Tool** | [Vite](https://vitejs.dev/) | 7.2.7 | SPA Bundler |
-| **Language** | JavaScript | ES2022+ | Functional Components |
-| **Visual Editor** | [@measured/puck](https://puckeditor.com/) | 0.20.2 | Drag-and-drop Page Builder |
-| **Rich Text** | [TipTap](https://tiptap.dev/) | 3.13.0 | Headless WYSIWYG |
-
-> [!IMPORTANT]
-> **Do NOT upgrade React in the Admin Panel**. The Puck editor requires React 18.
-
----
-
-## 2. Public Portal (Headless Frontend)
-
-*The multi-tenant, high-performance public website.*
+### Admin Panel (awcms)
 
 | Category | Technology | Version | Purpose |
-| ---------- | ------------ | --------- | --------- |
-| **Meta-Framework** | [Astro](https://astro.build/) | **5.x** | Islands Architecture, SSG/SSR |
-| **UI Library** | [React](https://react.dev/) | **18.3.1** | Component Rendering (Islands) |
-| **Language** | TypeScript | 5.x | Typed components and utilities |
-| **Deployment** | [Cloudflare Pages](https://pages.cloudflare.com/) | - | Edge Hosting |
-| **Validation** | [Zod](https://zod.dev/) | 4.2.1 | Runtime Prop Validation |
-| **Styling** | TailwindCSS | 4.1.18 | Utility CSS |
+| --- | --- | --- | --- |
+| Framework | React | 18.3.1 | UI framework (locked for Puck) |
+| Build tool | Vite | 7.2.7 | SPA build and dev server |
+| Language | JavaScript | ES2022+ | Functional components |
+| Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
+| Visual editor | @measured/puck | 0.20.2 | Visual builder |
+| Rich text | TipTap | 3.13.0 | WYSIWYG editor |
+| Animations | Framer Motion | 12.23.26 | UI motion |
+| Routing | React Router DOM | 7.10.1 | Client routing |
+| Supabase JS | @supabase/supabase-js | 2.87.1 | API client |
 
-> **Note**: The Public Portal uses a custom `PuckRenderer` and `@measured/puck` types only (no editor runtime).
+Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
----
+### Public Portal (awcms-public/primary)
 
-## 3. Backend & Data (Shared)
+| Category | Technology | Version | Purpose |
+| --- | --- | --- | --- |
+| Meta-framework | Astro | 5.16.6 | SSR/Islands |
+| UI library | React | 18.3.1 | Island rendering |
+| Language | TypeScript | 5.x | Typed components |
+| Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
+| Supabase JS | @supabase/supabase-js | 2.89.0 | Public API client |
+| Validation | Zod | 4.2.1 | Runtime prop validation |
+| Icons | Lucide React | 0.562.0 | Icon set |
 
-| Technology | Version | Purpose |
-| ------------ | --------- | --------- |
-| [Supabase](https://supabase.com/) | 2.87.1 / 2.89.0 | Admin / Public clients |
-| **PostgreSQL** | 15+ | Primary Database |
-| **Auth** | GoTrue | Authentication (JWT) |
-| **Storage** | S3-compatible | Media Assets |
-| **Edge Functions** | Deno | Server-side Logic (User Mgmt) |
+Public styling uses TailwindCSS 4 via the Vite plugin and `tailwind.config.mjs`.
 
----
+### Mobile (awcms-mobile/primary)
 
-## 4. Key Libraries
+| Category | Technology | Version | Purpose |
+| --- | --- | --- |
+| Framework | Flutter | 3.10+ | Mobile app |
+| State | Riverpod | 3.1.0 | State management |
+| Supabase | supabase_flutter | 2.8.0 | Auth and data |
+| Local DB | Drift | 2.30.0 | Offline cache |
+| Routing | GoRouter | 17.0.1 | Navigation |
 
-| Category | Library | Version | Usage |
-| -------- | ------- | ------- | ----- |
-| **UI Primitives** | [Radix UI](https://radix-ui.com/) | Latest | Admin Panel UI |
-| **Icons** | [Lucide React](https://lucide.dev/) | 0.561.0 / 0.562.0 | Admin / Public icons |
-| **Animations** | [Framer Motion](https://www.framer.com/motion/) | 12.x | UI Transitions |
-| **Maps** | Leaflet / React-Leaflet | 1.9.4 | Map Widgets |
-| **Charts** | Recharts | 3.5.1 | Analytics Dashboards |
-| **i18n** | i18next | 25.x | Internationalization |
+### IoT (awcms-esp32/primary)
 
----
+| Category | Technology | Version | Purpose |
+| --- | --- | --- |
+| Firmware | ESP32 | - | IoT device |
+| Build | PlatformIO | - | Build and upload |
 
-## 5. Development Tools
+## Security and Compliance Notes
 
-| Tool | Purpose |
-| ------ | --------- |
-| **Node.js** | Runtime (v20+ required) |
-| **npm** | Package Manager |
-| **ESLint** | Code Linting |
-| **Prettier** | Code Formatting |
-| **Vitest** | Unit/Integration Testing |
-| **Wrangler** | Cloudflare Workers CLI |
-| **PostCSS** | CSS Processing |
+- React 18 is required for Puck compatibility.
+- Public portal uses PuckRenderer only; no editor runtime.
 
-## 6. Security Status
+## References
 
-- **Vulnerabilities**: 0 (Regularly audited via `npm audit`)
-- **Compliance**: Dependencies selected for ISO 27001 readiness.
+- `../00-core/CORE_STANDARDS.md`
+- `../03-features/VERSIONING.md`

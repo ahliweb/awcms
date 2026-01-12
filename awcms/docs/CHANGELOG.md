@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.12.1] - 2026-01-12
+
+### Documentation
+
+- Added monorepo docs index and documentation structure standard.
+- Added canonical Supabase integration and soft delete docs.
+- Refreshed core, guide, reference, and feature docs to align with code and AGENTS.md.
+- Updated package READMEs and removed duplicate doc content.
+
 ## [2.9.9] - 2026-01-11
 
 ### Changed

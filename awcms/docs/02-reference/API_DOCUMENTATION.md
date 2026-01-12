@@ -1,38 +1,33 @@
-
 # API Documentation
 
-## Overview
+## Purpose
+Document how AWCMS uses the Supabase client APIs for data, auth, storage, and edge functions.
 
-AWCMS uses Supabase as its backend, which automatically generates RESTful APIs from the PostgreSQL database schema using PostgREST.
+## Audience
+- Admin and public portal developers
+- Integrators building extensions
 
----
+## Prerequisites
+- `awcms/docs/00-core/SUPABASE_INTEGRATION.md`
+- `awcms/docs/00-core/SOFT_DELETE.md`
 
-## Base Configuration
+## Reference
 
-```javascript
-// Client initialization
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-```
-
----
-
-## Authentication API
-
-### Sign Up
+### Client Initialization (Admin)
 
 ```javascript
-const { data, error } = await supabase.auth.signUp({
-  email: 'user@example.com',
-  password: 'securepassword'
-});
+import { supabase } from '@/lib/customSupabaseClient';
 ```
 
-### Sign In
+### Client Initialization (Public)
+
+```ts
+import { createScopedClient } from '../lib/supabase';
+
+const supabase = createScopedClient({ 'x-tenant-id': tenantId }, runtimeEnv);
+```
+
+### Authentication
 
 ```javascript
 const { data, error } = await supabase.auth.signInWithPassword({
@@ -41,232 +36,51 @@ const { data, error } = await supabase.auth.signInWithPassword({
 });
 ```
 
-### Sign Out
+### Data Access
 
 ```javascript
-const { error } = await supabase.auth.signOut();
-```
-
-### Get Current User
-
-```javascript
-const { data: { user } } = await supabase.auth.getUser();
-```
-
-### Password Reset
-
-```javascript
-const { error } = await supabase.auth.resetPasswordForEmail(email, {
-  redirectTo: 'https://yourapp.com/reset-password'
-});
-```
-
----
-
-## Data API
-
-### Select (Read)
-
-```javascript
-// Get all articles
 const { data, error } = await supabase
   .from('articles')
-  .select('*');
-
-// Get with relations
-const { data, error } = await supabase
-  .from('articles')
-  .select(`
-    *,
-    author:users(id, full_name, avatar_url),
-    category:categories(id, name)
-  `);
-
-// Filter
-const { data, error } = await supabase
-  .from('articles')
-  .select('*')
+  .select('*, author:users(id, full_name)')
   .eq('status', 'published')
   .is('deleted_at', null)
-  .order('created_at', { ascending: false })
-  .limit(10);
+  .order('created_at', { ascending: false });
 ```
 
-### Insert (Create)
+### Soft Delete
 
 ```javascript
-const { data, error } = await supabase
-  .from('articles')
-  .insert({
-    title: 'New Article',
-    content: '<p>Article content...</p>',
-    author_id: userId,
-    status: 'draft'
-  })
-  .select();
-```
-
-### Update
-
-```javascript
-const { data, error } = await supabase
-  .from('articles')
-  .update({
-    title: 'Updated Title',
-    updated_at: new Date().toISOString()
-  })
-  .eq('id', articleId)
-  .select();
-```
-
-### Delete (Soft Delete)
-
-```javascript
-// AWCMS uses soft delete pattern
-const { data, error } = await supabase
+const { error } = await supabase
   .from('articles')
   .update({ deleted_at: new Date().toISOString() })
   .eq('id', articleId);
 ```
 
----
-
-## Storage API
-
-### Upload File
+### Storage Upload
 
 ```javascript
 const { data, error } = await supabase.storage
   .from('articles')
-  .upload(`images/${fileName}`, file, {
-    cacheControl: '3600',
-    upsert: false
-  });
+  .upload(`images/${fileName}`, file, { cacheControl: '3600', upsert: false });
 ```
 
-### Get Public URL
+### Edge Functions
 
 ```javascript
-const { data } = supabase.storage
-  .from('articles')
-  .getPublicUrl('images/example.jpg');
-// data.publicUrl
+const { data, error } = await supabase.functions.invoke('manage-users', {
+  body: { action: 'delete', user_id: targetId }
+});
 ```
 
-### Delete File
+## Security and Compliance Notes
 
-```javascript
-const { error } = await supabase.storage
-  .from('articles')
-  .remove(['images/example.jpg']);
-```
+- Always filter `deleted_at IS NULL` for reads.
+- Tenant-scoped tables must be filtered by tenant and RLS enforced.
+- Service role keys may be used only in Edge Functions and migrations.
+- Admin client injects `x-tenant-id` automatically via `customSupabaseClient`.
 
----
+## References
 
-## Realtime API
-
-### Subscribe to Changes
-
-```javascript
-const subscription = supabase
-  .channel('articles-changes')
-  .on(
-    'postgres_changes',
-    { event: '*', schema: 'public', table: 'articles' },
-    (payload) => {
-      console.log('Change received!', payload);
-    }
-  )
-  .subscribe();
-
-// Cleanup
-subscription.unsubscribe();
-```
-
----
-
-## Custom Hooks
-
-AWCMS provides custom hooks for common operations:
-
-### useSupabaseQuery
-
-```javascript
-import { useSupabaseQuery } from '@/hooks/useSupabase';
-
-function ArticlesList() {
-  const { data, loading, error, refetch } = useSupabaseQuery(
-    'articles',
-    {
-      select: '*, author:users(full_name)',
-      filter: { status: 'published' },
-      order: { column: 'created_at', ascending: false }
-    }
-  );
-
-  if (loading) return <Spinner />;
-  if (error) return <Error message={error.message} />;
-  
-  return <ArticleList articles={data} />;
-}
-```
-
-### useSupabaseMutation
-
-```javascript
-import { useSupabaseMutation } from '@/hooks/useSupabase';
-
-function CreateArticle() {
-  const { mutate, loading } = useSupabaseMutation('articles', 'insert');
-
-  const handleSubmit = async (formData) => {
-    const result = await mutate(formData);
-    if (result.success) {
-      toast.success('Article created!');
-    }
-  };
-
-  return <ArticleForm onSubmit={handleSubmit} loading={loading} />;
-}
-```
-
----
-
-## Error Handling
-
-```javascript
-try {
-  const { data, error } = await supabase.from('articles').select('*');
-  
-  if (error) {
-    throw error;
-  }
-  
-  return data;
-} catch (error) {
-  console.error('Database error:', error.message);
-  toast.error('Failed to fetch articles');
-}
-```
-
-### Common Error Codes
-
-| Code | Meaning |
-|------|---------|
-| `PGRST116` | No rows returned |
-| `23505` | Unique constraint violation |
-| `42501` | RLS policy violation |
-| `42883` | Function not found |
-
----
-
-## Rate Limiting
-
-Supabase applies rate limits:
-
-| Plan | Requests/second |
-|------|-----------------|
-| Free | 500 |
-| Pro | 1,000 |
-
-For high-traffic applications, implement caching and debouncing.
+- `../00-core/SUPABASE_INTEGRATION.md`
+- `../02-reference/RLS_POLICIES.md`
+- `../00-core/SOFT_DELETE.md`

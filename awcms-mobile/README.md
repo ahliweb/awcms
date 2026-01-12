@@ -1,23 +1,21 @@
 # AWCMS Mobile
 
-Multi-tenant Flutter mobile application for AWCMS.
+## Purpose
+Multi-tenant Flutter app for AWCMS.
 
-## Tenant Folders
-
-Each tenant has its own folder with complete Flutter project:
-
-| Tenant | Path | Description |
-| :--- | :--- | :--- |
-| primary | [primary/](./primary/) | Default tenant |
+## Prerequisites
+- Flutter 3.10+
 
 ## Quick Start
 
 ```bash
 cd awcms-mobile/primary
 flutter pub get
+cp .env.example .env
 flutter run
 ```
 
-## Documentation
+## References
 
-See [primary/README.md](./primary/README.md) for full documentation.
+- `primary/README.md`
+- `../DOCS_INDEX.md`

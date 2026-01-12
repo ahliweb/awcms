@@ -1,98 +1,64 @@
 # AWCMS Monorepo
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
+Welcome to the AWCMS monorepo. AWCMS is a multi-tenant CMS platform with admin, public, mobile, and IoT clients backed by Supabase.
 
-Welcome to the AWCMS development monorepo. A complete content management and IoT platform.
-
-## 📂 Project Structure
+## Project Structure
 
 | Directory | Description | Tech Stack |
-| :--- | :--- | :--- |
-| `awcms/` | Admin Panel & CMS | React 18.3.1, Vite 7, Supabase |
-| `awcms-public/` | Public Portal | Astro 5, React 18.3.1 |
-| `awcms-mobile/` | Mobile App | Flutter 3.x, Riverpod |
-| `awcms-esp32/` | IoT Firmware | ESP32, PlatformIO |
+| --- | --- | --- |
+| `awcms/` | Admin Panel | React 18.3.1, Vite 7, Supabase |
+| `awcms-public/primary/` | Public Portal | Astro 5, React 18.3.1 |
+| `awcms-mobile/primary/` | Mobile App | Flutter |
+| `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
 | `awcms-ext/` | External Extensions | JavaScript modules |
+| `supabase/` | Migrations and Edge Functions | Supabase CLI |
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Admin Panel (`awcms`)
+### Admin Panel
 
 ```bash
 cd awcms
 npm install
 cp .env.example .env.local
 npm run dev
-
-# Optional: Configure CORS in .env.local
-# VITE_CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
 ```
 
-→ `http://localhost:3000`
-
-### 2. Public Portal (`awcms-public`)
+### Public Portal
 
 ```bash
 cd awcms-public/primary
 npm install
+# Create .env with Supabase variables
 npm run dev
 ```
 
-→ `http://localhost:4321`
-
-### 3. Mobile App (`awcms-mobile`)
+### Mobile App
 
 ```bash
 cd awcms-mobile/primary
 flutter pub get
+cp .env.example .env
 flutter run
 ```
 
-### 4. ESP32 IoT (`awcms-esp32`)
+### ESP32 Firmware
 
 ```bash
 cd awcms-esp32/primary
 cp .env.example .env
-# Edit .env with credentials
-source .env && pio run -t upload
+source .env && pio run -t uploadfs && pio run -t upload
 ```
 
-## 🌟 Features
+## Documentation
 
-### Admin Panel
+- `DOCS_INDEX.md` (monorepo index)
+- `AGENTS.md` (AI agent rules)
 
-- 📝 Content management (articles, pages)
-- 👥 Multi-tenant architecture
-- 🔐 ABAC + RLS security
-- 🎨 Visual page builder
-- 📊 Analytics dashboard
+## Contributing
 
-### IoT (ESP32)
+See `CONTRIBUTING.md`.
 
-- 💨 Gas sensor monitoring (MQ series)
-- 📷 Camera streaming (ESP32-CAM)
-- 📡 Realtime data sync to Supabase
-- 🌐 Web dashboard on device
-- 🔐 Secure credentials (.env)
+## License
 
-## 📚 Documentation
-
-| Doc | Path |
-| :-- | :--- |
-| Admin Docs | `awcms/docs/` |
-| **AI Agents Guide** | [AGENTS.md](AGENTS.md) |
-| ESP32 Docs | `awcms-esp32/README.md` |
-| Mobile Docs | `awcms-mobile/README.md` |
-
-## 🤝 Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## 📜 License
-
-MIT - see [LICENSE](LICENSE)
-
-## 🔒 Security
-
-See [SECURITY.md](SECURITY.md)
+See `LICENSE`.

@@ -1,5 +1,15 @@
 # Architectural Recommendations
 
+## Purpose
+Provide architectural guidance for AWCMS development derived from audits and best practices.
+
+## Audience
+- Engineers implementing new modules
+- Reviewers assessing architectural changes
+
+## Prerequisites
+- `awcms/docs/00-core/CORE_STANDARDS.md`
+
 This document provides architectural guidance for AWCMS development, derived from system audits and best practices.
 
 ---
@@ -187,3 +197,10 @@ All new features MUST include:
 - [AGENTS.md](../../AGENTS.md) - AI development guidelines
 - [PERFORMANCE.md](03-features/PERFORMANCE.md) - Performance optimization
 - [SECURITY.md](00-core/SECURITY.md) - Security implementation
+
+---
+
+## References
+
+- `../00-core/CORE_STANDARDS.md`
+- `../03-features/PERFORMANCE.md`

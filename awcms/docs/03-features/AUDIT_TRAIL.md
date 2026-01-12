@@ -1,5 +1,15 @@
 # Audit Trail System
 
+## Purpose
+Document audit logging behavior and schema usage.
+
+## Audience
+- Admin panel developers
+- Compliance and security reviewers
+
+## Prerequisites
+- `awcms/docs/00-core/SECURITY.md`
+
 AWCMS implements comprehensive audit logging for compliance and security monitoring.
 
 ---
@@ -186,3 +196,15 @@ WHERE created_at < NOW() - INTERVAL '365 days';
 - [Security](../00-core/SECURITY.md)
 - [ABAC System](ABAC_SYSTEM.md)
 - [Monitoring](MONITORING.md)
+
+---
+
+## Security and Compliance Notes
+
+- Audit logs are tenant-scoped and use RLS.
+- Soft delete applies where applicable.
+
+## References
+
+- `../02-reference/DATABASE_SCHEMA.md`
+- `../00-core/SECURITY.md`

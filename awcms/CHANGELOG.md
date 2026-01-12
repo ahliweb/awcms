@@ -5,6 +5,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.12.1] "Mailbox" - 2026-01-12
+
+### Documentation
+
+- Consolidated documentation structure, added monorepo docs index, and refreshed core standards and guides.
+- Added Supabase integration and soft delete canonical docs.
+- Updated package READMEs and removed duplicated doc content via canonical links.
+
 ## [2.12.0] "Mailbox" - 2026-01-12
 
 ### Added

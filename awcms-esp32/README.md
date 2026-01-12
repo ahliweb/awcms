@@ -1,22 +1,20 @@
-# AWCMS ESP32 IoT
+# AWCMS ESP32
 
-Multi-tenant ESP32 firmware for AWCMS.
+## Purpose
+ESP32 firmware for IoT telemetry in AWCMS.
 
-## Tenant Folders
-
-Each tenant has its own folder with complete PlatformIO project:
-
-| Tenant | Path | Description |
-| :--- | :--- | :--- |
-| primary | [primary/](./primary/) | Default tenant |
+## Prerequisites
+- PlatformIO
 
 ## Quick Start
 
 ```bash
 cd awcms-esp32/primary
-pio run -t upload
+cp .env.example .env
+source .env && pio run -t uploadfs && pio run -t upload
 ```
 
-## Documentation
+## References
 
-See [primary/README.md](./primary/README.md) for full documentation.
+- `primary/README.md`
+- `../DOCS_INDEX.md`

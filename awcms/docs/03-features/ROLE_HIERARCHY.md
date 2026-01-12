@@ -1,5 +1,15 @@
 # Role Hierarchy
 
+## Purpose
+Define the role hierarchy and access levels used by AWCMS.
+
+## Audience
+- Admin panel developers
+- Policy designers
+
+## Prerequisites
+- `awcms/docs/03-features/ABAC_SYSTEM.md`
+
 AWCMS implements a hierarchical role-based access control system within the ABAC framework.
 
 ---
@@ -168,3 +178,18 @@ function MyComponent() {
 - [ABAC System](ABAC_SYSTEM.md)
 - [Security](../00-core/SECURITY.md)
 - [User Management](USER_MANAGEMENT.md)
+
+---
+
+## Permissions and Access
+
+- Roles map to permission keys as defined in `ABAC_SYSTEM.md`.
+
+## Security and Compliance Notes
+
+- Tenant scope applies to all roles except platform admins.
+
+## References
+
+- `../03-features/ABAC_SYSTEM.md`
+- `../00-core/SECURITY.md`

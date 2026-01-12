@@ -1,9 +1,19 @@
-
 # ABAC System (Attribute-Based Access Control)
 
-## Overview
+## Purpose
+Define the permission model and enforcement patterns for AWCMS.
 
-AWCMS implements a comprehensive ABAC (Attribute-Based Access Control) system that manages user permissions across all modules, combining traditional roles with granular policy enforcement.
+## Audience
+- Admin panel developers
+- Edge function authors
+
+## Prerequisites
+- `awcms/docs/00-core/SECURITY.md`
+- `awcms/docs/00-core/MULTI_TENANCY.md`
+
+## Core Concepts
+
+AWCMS implements a comprehensive ABAC system that combines roles with policy enforcement.
 
 ---
 
@@ -94,21 +104,21 @@ CREATE TABLE role_permissions (
 
 ### 1. Global Scope
 
-* **Owner**: The supreme authority. Has access to everything.
-* **Super Admin**: Platform administrator. Manages tenants and global settings.
+- **Owner**: The supreme authority. Has access to everything.
+- **Super Admin**: Platform administrator. Manages tenants and global settings.
 
 ### 2. Tenant Scope
 
-* **Admin**: Tenant administrator. Full access within their own tenant.
-* **Editor**: Content manager. Can review and approve content.
-* **Author**: Content creator. Can create drafts but needs approval to publish.
-* **Member**: Registered regular user.
-* **Subscriber**: Read-only access to premium content.
+- **Admin**: Tenant administrator. Full access within their own tenant.
+- **Editor**: Content manager. Can review and approve content.
+- **Author**: Content creator. Can create drafts but needs approval to publish.
+- **Member**: Registered regular user.
+- **Subscriber**: Read-only access to premium content.
 
 ### 3. System Roles
 
-* **Public**: Anonymous visitors.
-* **No Access**: Banned or disabled users.
+- **Public**: Anonymous visitors.
+- **No Access**: Banned or disabled users.
 
 ---
 
@@ -116,33 +126,33 @@ CREATE TABLE role_permissions (
 
 ### Matriks Hak Akses - Tenant Content
 
-📌 *Semua permission hanya berlaku dalam tenant masing-masing*
+📌 _Semua permission hanya berlaku dalam tenant masing-masing_
 
 #### A. Post / Page / Content
 
-| Role | C | R | U | P | SD | RS | DP | Description |
-| :--- | :--: | :--: | :--: | :--: | :--: | :--: | :--: | :--- |
-| **Owner (Global)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Supreme authority (Global) |
-| **Super Admin (Global)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Platform management (Global) |
-| **Admin (Tenant)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | Tenant management (Tenant) |
-| **Editor (Tenant)** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | Content review & approval |
-| **Author (Tenant)** | ✅ | ✅ | ✅* | ❌ | ❌ | ❌ | ❌ | Content creation & update own |
-| **Member** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | Commenting & Profile management |
-| **Subscriber** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | Premium content access |
-| **Public** | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | Read-only access |
-| **No Access** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Banned/Disabled |
+| Role                     |  C  |  R  |  U   |  P  | SD  | RS  | DP  | Description                     |
+| :----------------------- | :-: | :-: | :--: | :-: | :-: | :-: | :-: | :------------------------------ |
+| **Owner (Global)**       | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Supreme authority (Global)      |
+| **Super Admin (Global)** | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Platform management (Global)    |
+| **Admin (Tenant)**       | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ❌  | Tenant management (Tenant)      |
+| **Editor (Tenant)**      | ✅  | ✅  |  ✅  | ✅  | ✅  | ❌  | ❌  | Content review & approval       |
+| **Author (Tenant)**      | ✅  | ✅  | ✅\* | ❌  | ❌  | ❌  | ❌  | Content creation & update own   |
+| **Member**               | ❌  | ✅  |  ❌  | ❌  | ❌  | ❌  | ❌  | Commenting & Profile management |
+| **Subscriber**           | ❌  | ✅  |  ❌  | ❌  | ❌  | ❌  | ❌  | Premium content access          |
+| **Public**               | ❌  | ✅  |  ❌  | ❌  | ❌  | ❌  | ❌  | Read-only access                |
+| **No Access**            | ❌  | ❌  |  ❌  | ❌  | ❌  | ❌  | ❌  | Banned/Disabled                 |
 
-*\* Author → hanya konten milik sendiri (tenant_id + owner_id)*
+_\* Author → hanya konten milik sendiri (tenant_id + owner_id)_
 
 **Legend:**
 
-* **C**: Create
-* **R**: Read
-* **U**: Update
-* **P**: Publish
-* **SD**: Soft Delete
-* **RS**: Restore
-* **DP**: Delete Permanent
+- **C**: Create
+- **R**: Read
+- **U**: Update
+- **P**: Publish
+- **SD**: Soft Delete
+- **RS**: Restore
+- **DP**: Delete Permanent
 
 ---
 
@@ -150,13 +160,13 @@ CREATE TABLE role_permissions (
 
 ### A. Platform (Global Scope)
 
-| Permission Key | C | R | U | SD | RS | DP | Channel |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| `platform.tenant` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | web |
-| `platform.setting` | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | web |
-| `platform.module` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | web |
-| `platform.billing` | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | web |
-| `platform.user` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | web |
+| Permission Key     |  C  |  R  |  U  | SD  | RS  | DP  | Channel |
+| :----------------- | :-: | :-: | :-: | :-: | :-: | :-: | :------ |
+| `platform.tenant`  | ✅  | ✅  | ✅  | ✅  | ✅  | ✅  | web     |
+| `platform.setting` | ❌  | ✅  | ✅  | ❌  | ❌  | ❌  | web     |
+| `platform.module`  | ✅  | ✅  | ✅  | ❌  | ❌  | ❌  | web     |
+| `platform.billing` | ❌  | ✅  | ✅  | ❌  | ❌  | ❌  | web     |
+| `platform.user`    | ✅  | ✅  | ✅  | ✅  | ✅  | ✅  | web     |
 
 ### B. Tenant (Tenant Scope) - Standardized Pattern
 
@@ -164,84 +174,86 @@ CREATE TABLE role_permissions (
 
 **Actions Available**:
 
-* `read` - View/list items
-* `create` - Create new items
-* `update` - Edit existing items
-* `delete` - Soft delete items
-* `restore` - Restore from trash
-* `permanent_delete` - Permanently delete items
-* `publish` - Publish content (content modules only)
+- `read` - View/list items
+- `create` - Create new items
+- `update` - Edit existing items
+- `delete` - Soft delete items
+- `restore` - Restore from trash
+- `permanent_delete` - Permanently delete items
+- `publish` - Publish content (content modules only)
+
+> Note: The current codebase uses `permanent_delete` as the action key. The canonical action name in `AGENTS.md` is `delete_permanent`. Treat `permanent_delete` as a legacy alias until keys are normalized.
 
 #### Content Modules
 
-| Module | Permission Prefix | Actions |
-| :--- | :--- | :--- |
-| Articles | `tenant.article.*` | read, create, update, delete, restore, permanent_delete, publish |
-| Pages | `tenant.page.*` | read, create, update, delete, restore, permanent_delete, publish |
-| Portfolio | `tenant.portfolio.*` | read, create, update, delete, restore, permanent_delete |
-| Testimonies | `tenant.testimonies.*` | read, create, update, delete, restore, permanent_delete |
-| Announcements | `tenant.announcements.*` | read, create, update, delete, restore, permanent_delete |
-| Promotions | `tenant.promotions.*` | read, create, update, delete, restore, permanent_delete |
+| Module        | Permission Prefix        | Actions                                                          |
+| :------------ | :----------------------- | :--------------------------------------------------------------- |
+| Articles      | `tenant.article.*`       | read, create, update, delete, restore, permanent_delete, publish |
+| Pages         | `tenant.page.*`          | read, create, update, delete, restore, permanent_delete, publish |
+| Portfolio     | `tenant.portfolio.*`     | read, create, update, delete, restore, permanent_delete          |
+| Testimonies   | `tenant.testimonies.*`   | read, create, update, delete, restore, permanent_delete          |
+| Announcements | `tenant.announcements.*` | read, create, update, delete, restore, permanent_delete          |
+| Promotions    | `tenant.promotions.*`    | read, create, update, delete, restore, permanent_delete          |
 
 #### Media Modules
 
-| Module | Permission Prefix | Actions |
-| :--- | :--- | :--- |
-| Media | `tenant.media.*` | read, create, update, delete, manage |
+| Module        | Permission Prefix        | Actions                                                 |
+| :------------ | :----------------------- | :------------------------------------------------------ |
+| Media         | `tenant.media.*`         | read, create, update, delete, manage                    |
 | Photo Gallery | `tenant.photo_gallery.*` | read, create, update, delete, restore, permanent_delete |
 | Video Gallery | `tenant.video_gallery.*` | read, create, update, delete, restore, permanent_delete |
 
 #### Commerce Modules
 
-| Module | Permission Prefix | Actions |
-| :--- | :--- | :--- |
-| Products | `tenant.products.*` | read, create, update, delete, restore, permanent_delete |
+| Module        | Permission Prefix        | Actions                                                 |
+| :------------ | :----------------------- | :------------------------------------------------------ |
+| Products      | `tenant.products.*`      | read, create, update, delete, restore, permanent_delete |
 | Product Types | `tenant.product_types.*` | read, create, update, delete, restore, permanent_delete |
-| Orders | `tenant.orders.*` | read, create, update, delete, restore, permanent_delete |
+| Orders        | `tenant.orders.*`        | read, create, update, delete, restore, permanent_delete |
 
 #### Navigation & Taxonomy
 
-| Module | Permission Prefix | Actions |
-| :--- | :--- | :--- |
-| Menus | `tenant.menu.*` | read, create, update, delete |
+| Module     | Permission Prefix     | Actions                                                 |
+| :--------- | :-------------------- | :------------------------------------------------------ |
+| Menus      | `tenant.menu.*`       | read, create, update, delete                            |
 | Categories | `tenant.categories.*` | read, create, update, delete, restore, permanent_delete |
-| Tags | `tenant.tag.*` | read, create, update, delete, restore, permanent_delete |
+| Tags       | `tenant.tag.*`        | read, create, update, delete, restore, permanent_delete |
 
 #### User Management
 
-| Module | Permission Prefix | Actions |
-| :--- | :--- | :--- |
-| Users | `tenant.user.*` | read, create, update, delete |
+| Module | Permission Prefix | Actions                      |
+| :----- | :---------------- | :--------------------------- |
+| Users  | `tenant.user.*`   | read, create, update, delete |
 
 #### System
 
-| Module | Permission Prefix | Actions |
-| :--- | :--- | :--- |
-| Settings | `tenant.setting.*` | read, update |
-| Themes | `tenant.theme.*` | read, create, update, delete |
-| Audit Logs | `tenant.audit.*` | read |
-| Notifications | `tenant.notification.*` | read |
-| Contacts | `tenant.contacts.*` | read, create, update, delete, restore, permanent_delete |
+| Module           | Permission Prefix           | Actions                                                 |
+| :--------------- | :-------------------------- | :------------------------------------------------------ |
+| Settings         | `tenant.setting.*`          | read, update                                            |
+| Themes           | `tenant.theme.*`            | read, create, update, delete                            |
+| Audit Logs       | `tenant.audit.*`            | read                                                    |
+| Notifications    | `tenant.notification.*`     | read                                                    |
+| Contacts         | `tenant.contacts.*`         | read, create, update, delete, restore, permanent_delete |
 | Contact Messages | `tenant.contact_messages.*` | read, create, update, delete, restore, permanent_delete |
-| Regions | `tenant.region.*` | read, create, update, delete |
-| Visual Pages | `tenant.page.*` | read, create, update, delete, restore |
+| Regions          | `tenant.region.*`           | read, create, update, delete                            |
+| Visual Pages     | `tenant.page.*`             | read, create, update, delete, restore                   |
 
 #### Mobile & IoT
 
-| Module | Permission Prefix | Actions |
-| :--- | :--- | :--- |
-| Mobile Users | `tenant.mobile_users.*` | read, create, update, delete |
-| Push Notif | `tenant.push_notifications.*` | read, create, delete |
-| Mobile Config | `tenant.mobile_config.*` | read, update |
-| IoT Devices | `tenant.iot_devices.*` | read, create, update, delete |
+| Module        | Permission Prefix             | Actions                      |
+| :------------ | :---------------------------- | :--------------------------- |
+| Mobile Users  | `tenant.mobile_users.*`       | read, create, update, delete |
+| Push Notif    | `tenant.push_notifications.*` | read, create, delete         |
+| Mobile Config | `tenant.mobile_config.*`      | read, update                 |
+| IoT Devices   | `tenant.iot_devices.*`        | read, create, update, delete |
 
 ### C. Public / Consumption
 
-| Permission Key | R | Channel |
-| :--- | :---: | :--- |
-| `content.read` | ✅ | all |
-| `content.comment` | ✅ | web, mobile |
-| `content.like` | ✅ | web, mobile |
+| Permission Key    |  R  | Channel     |
+| :---------------- | :-: | :---------- |
+| `content.read`    | ✅  | all         |
+| `content.comment` | ✅  | web, mobile |
+| `content.like`    | ✅  | web, mobile |
 
 ---
 
@@ -271,65 +283,79 @@ export function PermissionProvider({ children }) {
     // Falls back to waterfall queries if offline
   }, [user]);
 
-  const hasPermission = useCallback((permission) => {
-    if (!permission) return true;
-    if (['super_admin', 'owner'].includes(userRole)) return true;
-    return permissions.includes(permission);
-  }, [permissions, userRole]);
+  const hasPermission = useCallback(
+    permission => {
+      if (!permission) return true;
+      if (['super_admin', 'owner'].includes(userRole)) return true;
+      return permissions.includes(permission);
+    },
+    [permissions, userRole]
+  );
 
-  const hasAnyPermission = useCallback((permissionList) => {
-    if (['super_admin', 'owner'].includes(userRole)) return true;
-    if (!permissionList || permissionList.length === 0) return true;
-    return permissionList.some(p => permissions.includes(p));
-  }, [permissions, userRole]);
+  const hasAnyPermission = useCallback(
+    permissionList => {
+      if (['super_admin', 'owner'].includes(userRole)) return true;
+      if (!permissionList || permissionList.length === 0) return true;
+      return permissionList.some(p => permissions.includes(p));
+    },
+    [permissions, userRole]
+  );
 
   // Check access with ownership awareness
-  const checkAccess = useCallback((action, resource, record = null) => {
-    if (['super_admin', 'owner'].includes(userRole)) return true;
-    const permissionKey = `tenant.${resource}.${action}`;
-    if (permissions.includes(permissionKey)) return true;
-    // Ownership check
-    if (record?.created_by === user?.id) return true;
-    return false;
-  }, [permissions, userRole, user]);
+  const checkAccess = useCallback(
+    (action, resource, record = null) => {
+      if (['super_admin', 'owner'].includes(userRole)) return true;
+      const permissionKey = `tenant.${resource}.${action}`;
+      if (permissions.includes(permissionKey)) return true;
+      // Ownership check
+      if (record?.created_by === user?.id) return true;
+      return false;
+    },
+    [permissions, userRole, user]
+  );
 
   // ABAC Policy evaluation
-  const checkPolicy = useCallback((action, resource, context = {}) => {
-    if (['super_admin', 'owner'].includes(userRole)) return true;
-    const finalContext = { channel: 'web', ...context };
-    // Check deny policies
-    const denyMatch = abacPolicies.some(policy => {
-      if (policy.effect !== 'deny') return false;
-      if (!policy.actions.includes('*') && !policy.actions.includes(action)) return false;
-      if (policy.conditions?.channel && policy.conditions.channel !== finalContext.channel) return false;
-      return true;
-    });
-    return !denyMatch;
-  }, [abacPolicies, userRole]);
+  const checkPolicy = useCallback(
+    (action, resource, context = {}) => {
+      if (['super_admin', 'owner'].includes(userRole)) return true;
+      const finalContext = { channel: 'web', ...context };
+      // Check deny policies
+      const denyMatch = abacPolicies.some(policy => {
+        if (policy.effect !== 'deny') return false;
+        if (!policy.actions.includes('*') && !policy.actions.includes(action)) return false;
+        if (policy.conditions?.channel && policy.conditions.channel !== finalContext.channel)
+          return false;
+        return true;
+      });
+      return !denyMatch;
+    },
+    [abacPolicies, userRole]
+  );
 
   // Computed property for platform admin check
   const isPlatformAdmin = useMemo(() => {
     return ['owner', 'super_admin'].includes(userRole);
   }, [userRole]);
 
-  const value = useMemo(() => ({
-    permissions,
-    userRole,
-    tenantId,
-    isPlatformAdmin,
-    loading,
-    hasPermission,
-    hasAnyPermission,
-    checkAccess,
-    checkPolicy,
-    refreshPermissions: fetchUserPermissions
-  }), [/* deps */]);
-
-  return (
-    <PermissionContext.Provider value={value}>
-      {children}
-    </PermissionContext.Provider>
+  const value = useMemo(
+    () => ({
+      permissions,
+      userRole,
+      tenantId,
+      isPlatformAdmin,
+      loading,
+      hasPermission,
+      hasAnyPermission,
+      checkAccess,
+      checkPolicy,
+      refreshPermissions: fetchUserPermissions,
+    }),
+    [
+      /* deps */
+    ]
   );
+
+  return <PermissionContext.Provider value={value}>{children}</PermissionContext.Provider>;
 }
 
 // Note: Hook is named usePermissions (plural)
@@ -344,18 +370,18 @@ export const usePermissions = () => {
 
 ### Context API
 
-| Property/Method | Type | Description |
-| --------------- | ---- | ----------- |
-| `permissions` | `string[]` | Array of permission keys user has |
-| `userRole` | `string` | Current user's role name |
-| `tenantId` | `string` | Current tenant UUID |
-| `isPlatformAdmin` | `boolean` | True if owner or super_admin |
-| `loading` | `boolean` | True while loading permissions |
-| `hasPermission(key)` | `function` | Check single permission |
-| `hasAnyPermission(keys[])` | `function` | Check if user has any of listed permissions |
-| `checkAccess(action, resource, record?)` | `function` | Check access with ownership awareness |
-| `checkPolicy(action, resource, context?)` | `function` | Evaluate ABAC policies |
-| `refreshPermissions()` | `function` | Force reload permissions |
+| Property/Method                           | Type       | Description                                 |
+| ----------------------------------------- | ---------- | ------------------------------------------- |
+| `permissions`                             | `string[]` | Array of permission keys user has           |
+| `userRole`                                | `string`   | Current user's role name                    |
+| `tenantId`                                | `string`   | Current tenant UUID                         |
+| `isPlatformAdmin`                         | `boolean`  | True if owner or super_admin                |
+| `loading`                                 | `boolean`  | True while loading permissions              |
+| `hasPermission(key)`                      | `function` | Check single permission                     |
+| `hasAnyPermission(keys[])`                | `function` | Check if user has any of listed permissions |
+| `checkAccess(action, resource, record?)`  | `function` | Check access with ownership awareness       |
+| `checkPolicy(action, resource, context?)` | `function` | Evaluate ABAC policies                      |
+| `refreshPermissions()`                    | `function` | Force reload permissions                    |
 
 ### Protected Component
 
@@ -371,18 +397,16 @@ function ArticleActions({ article }) {
       {hasPermission('tenant.article.update') && (
         <Button onClick={() => editArticle(article.id)}>Edit</Button>
       )}
-      
+
       {/* Access check with ownership */}
       {checkAccess('delete', 'article', article) && (
         <Button variant="destructive" onClick={() => deleteArticle(article.id)}>
           Delete
         </Button>
       )}
-      
+
       {/* Platform admin check */}
-      {isPlatformAdmin && (
-        <Badge>Viewing as Admin</Badge>
-      )}
+      {isPlatformAdmin && <Badge>Viewing as Admin</Badge>}
     </div>
   );
 }
@@ -398,7 +422,7 @@ function ProtectedRoute({ children, permission }) {
   const { hasPermission, loading } = usePermissions();
 
   if (loading) return <LoadingSpinner />;
-  
+
   if (!hasPermission(permission)) {
     return <Navigate to="/403" />;
   }
@@ -407,14 +431,14 @@ function ProtectedRoute({ children, permission }) {
 }
 
 // Usage
-<Route 
-  path="/cmspanel/users" 
+<Route
+  path="/cmspanel/users"
   element={
     <ProtectedRoute permission="tenant.user.read">
       <UsersPage />
     </ProtectedRoute>
-  } 
-/>
+  }
+/>;
 ```
 
 ---
@@ -438,7 +462,7 @@ CREATE TABLE menu_permissions (
 const visibleMenus = allMenus.filter(menu => {
   // Super admin sees everything
   if (role === 'super_admin') return true;
-  
+
   // Check menu permission for user's role
   return menuPermissions.some(
     mp => mp.menu_id === menu.id && mp.role_id === userRoleId && mp.can_view
@@ -480,7 +504,7 @@ Policies are defined as JSON objects linked to Roles via the `role_policies` tab
 ```json
 {
   "name": "Restrict Mobile Deletion",
-  "effect": "deny", 
+  "effect": "deny",
   "actions": ["delete"],
   "conditions": {
     "channel": "mobile",
@@ -496,17 +520,17 @@ Policies are defined as JSON objects linked to Roles via the `role_policies` tab
 2. **Global Policies**: Checked first.
 3. **Role Policies**: Checked next.
 4. **Logic**:
-   * Default is **ALLOW** (ABAC foundation).
-   * Policies act as **DENY** overrides (Restrictive model).
-   * If *any* policy matches the action/resource AND conditions evaluate to true, access is **DENIED**.
+   - Default is **ALLOW** (ABAC foundation).
+   - Policies act as **DENY** overrides (Restrictive model).
+   - If _any_ policy matches the action/resource AND conditions evaluate to true, access is **DENIED**.
 
 ### Context Variables
 
-| Variable | Description | Source |
-| ---------- | ------------- | -------- |
-| `channel` | Interface used (`web`, `mobile`, `api`) | `useContext` or API Header |
-| `ip_address` | Client IP | Edge Function |
-| `time` | Server time | Edge Function |
+| Variable     | Description                             | Source                     |
+| ------------ | --------------------------------------- | -------------------------- |
+| `channel`    | Interface used (`web`, `mobile`, `api`) | `useContext` or API Header |
+| `ip_address` | Client IP                               | Edge Function              |
+| `time`       | Server time                             | Edge Function              |
 
 ---
 
@@ -516,13 +540,13 @@ Compliance-grade logging is enforced for all critical write operations.
 
 ### Schema (`audit_logs`)
 
-| Field | Type | Description |
-| ------- | ------ | ------------- |
-| `action` | TEXT | format: `resource.verb` (e.g. `user.create`) |
-| `old_value` | JSONB | Snapshot before change |
-| `new_value` | JSONB | Snapshot after change |
-| `channel` | TEXT | Source (`web`, `mobile`, `api`) |
-| `tenant_id` | UUID | Tenant isolation |
+| Field       | Type  | Description                                  |
+| ----------- | ----- | -------------------------------------------- |
+| `action`    | TEXT  | format: `resource.verb` (e.g. `user.create`) |
+| `old_value` | JSONB | Snapshot before change                       |
+| `new_value` | JSONB | Snapshot after change                        |
+| `channel`   | TEXT  | Source (`web`, `mobile`, `api`)              |
+| `tenant_id` | UUID  | Tenant isolation                             |
 
 ---
 
@@ -530,10 +554,10 @@ Compliance-grade logging is enforced for all critical write operations.
 
 ### Channel Enum
 
-* `web`: Main Dashboard & Portal
-* `mobile`: IOS / Android Apps
-* `api`: 3rd Party Integrations
-* `all`: Universal access
+- `web`: Main Dashboard & Portal
+- `mobile`: IOS / Android Apps
+- `api`: 3rd Party Integrations
+- `all`: Universal access
 
 ### Security Principles
 
@@ -547,12 +571,12 @@ Compliance-grade logging is enforced for all critical write operations.
 
 Ensures that critical processes involve multiple roles to prevent fraud or error.
 
-| Activity | Authorized Role |
-| ---------- | ----------------- |
-| **Create** | Author |
-| **Review** | Editor |
-| **Approve / Publish** | Admin |
-| **Governance** | Owner |
+| Activity              | Authorized Role |
+| --------------------- | --------------- |
+| **Create**            | Author          |
+| **Review**            | Editor          |
+| **Approve / Publish** | Admin           |
+| **Governance**        | Owner           |
 
 ---
 
@@ -568,11 +592,11 @@ graph LR
     Published --> Archived
 ```
 
-| State | Who can set? |
-| ------- | -------------- |
-| `draft` | Author, Editor |
-| `reviewed` | Editor |
-| `approved` | Editor, Admin |
+| State       | Who can set?     |
+| ----------- | ---------------- |
+| `draft`     | Author, Editor   |
+| `reviewed`  | Editor           |
+| `approved`  | Editor, Admin    |
 | `published` | Admin, Publisher |
 
 ---
@@ -592,37 +616,101 @@ To ensure strict multi-tenancy (SaaS), the following rules are enforced at the d
 
 All tables (except global system tables like `tenants`) MUST have a `tenant_id` column.
 
-* **Type**: `UUID`
-* **Reference**: `public.tenants(id)`
-* **Constraint**: `NOT NULL` (enforced via migration)
+- **Type**: `UUID`
+- **Reference**: `public.tenants(id)`
+- **Constraint**: `NOT NULL` (enforced via migration)
 
 ### 2. RLS Enforcement (Strict)
 
 Row Level Security (RLS) is enabled on **ALL tables** and has been audited for "Permissive" leaks.
 
-* **Default**: Deny All.
-* **Policy**: Must use `current_tenant_id()` helper.
-* **Public Data**: Only specific global settings (`is_public=true`) or public content are exempted from strict tenant checks.
+- **Default**: Deny All.
+- **Policy**: Must use `current_tenant_id()` helper.
+- **Public Data**: Only specific global settings (`is_public=true`) or public content are exempted from strict tenant checks.
 
 ```sql
 -- Standard Policy Pattern
 CREATE POLICY "Tenant Isolation Select" ON table_name
 FOR SELECT TO authenticated
 USING (
-  (tenant_id = public.current_tenant_id()) 
-  OR 
+  (tenant_id = public.current_tenant_id())
+  OR
   (is_platform_admin()) -- Super Admins can see all
 );
 ```
 
 ### 3. Performance & Indexing
 
-* **Index required**: `CREATE INDEX ON table_name(tenant_id)`
-* **Composite Indexes**: When frequently filtering by other columns, put `tenant_id` first (e.g., `(tenant_id, created_at)`).
+- **Index required**: `CREATE INDEX ON table_name(tenant_id)`
+- **Composite Indexes**: When frequently filtering by other columns, put `tenant_id` first (e.g., `(tenant_id, created_at)`).
 
 ### 4. Tier-Based Access
 
 Feature access is dynamically filtered based on `tenants.subscription_tier` ('free', 'pro', 'enterprise').
 
-* **UI**: Sidebar hides menu items (`checkTierAccess`).
-* **API**: Extensions and advanced modules check tier capability before execution.
+- **UI**: Sidebar hides menu items (`checkTierAccess`).
+- **API**: Extensions and advanced modules check tier capability before execution.
+
+---
+
+## 🔒 Extension Security Model
+
+Extensions must strictly adhere to the AWCMS ABAC and Isolation standards.
+
+### 1. Permission Registration
+
+Extensions must use the standardized permission key format: `tenant.{extension_slug}.{action}`.
+
+| Extension Type   | Format Example           | Scope  | Used By                  |
+| ---------------- | ------------------------ | ------ | ------------------------ |
+| **Core Plugin**  | `tenant.mailketing.send` | Tenant | `src/plugins/mailketing` |
+| **External Ext** | `tenant.analytics.view`  | Tenant | `awcms-ext-analytics`    |
+
+### 2. Implementation Pattern
+
+Extensions should not invent their own security logic. Use the core `usePermissions` hook:
+
+```javascript
+import { usePermissions } from '@/contexts/PermissionContext';
+
+const MyExtensionWidget = () => {
+  const { hasPermission } = usePermissions();
+
+  // Check custom extension permission
+  if (!hasPermission('tenant.my_ext.view')) {
+    return null; // Or <AccessDenied />
+  }
+
+  return <div>Extension Content</div>;
+};
+```
+
+### 3. Database Isolation Compliance
+
+Any tables created by extensions must:
+
+1. Include `tenant_id` (UUID) foreign key.
+2. Enable RLS (Row Level Security).
+3. Implement standard "Tenant Isolation" policies.
+
+---
+
+## Permissions and Access
+
+- Permission keys must follow `scope.resource.action`.
+- Enforce checks at UI entry points, data operations, and edge functions.
+
+## Security and Compliance Notes
+
+- Tenant scope is mandatory for all permission checks.
+- Soft delete applies to permission tables (filter `deleted_at`).
+
+## Operational Concerns
+
+- Permission seeding lives in scripts and migrations.
+- Keep menu configuration aligned with permission keys.
+
+## References
+
+- `../03-features/ROLE_HIERARCHY.md`
+- `../00-core/SECURITY.md`

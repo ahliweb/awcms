@@ -1,212 +1,94 @@
-
 # Folder Structure
 
-## Overview
+## Purpose
+Describe the monorepo layout and the key directories for each package.
 
-AWCMS follows a standard React application structure optimized for scalability and maintainability.
+## Audience
+- Contributors navigating the codebase
+- Operators locating deployment artifacts
 
----
+## Prerequisites
+- `awcms/docs/00-core/CORE_STANDARDS.md`
 
-## Root Directory (Monorepo)
+## Reference
 
-```text
-awcms-dev/              # Monorepo Root
-├── awcms/              # Admin Panel (React 18 + Vite)
-│   ├── docs/
-│   ├── src/
-│   └── package.json
-├── awcms-public/       # Public Portal
-│   ├── primary/        # Astro App (v5 + React 18.3.1, TypeScript)
-│   └── package.json    # Cloudflare Proxy
-├── awcms-mobile/       # Mobile App
-│   └── primary/        # Flutter Source
-├── awcms-esp32/        # IoT Firmware
-│   └── primary/        # ESP32 PlatformIO project
-└── awcms-ext/          # External Extensions
-    └── primary-analytics/ # Example external extension
-```
-
-> **Note:** Admin uses TailwindCSS 4.x with CSS-based config; Public Portal uses TailwindCSS 4.x via Vite plugin with `tailwind.config.mjs`.
-
----
-
-## Source Directory (`src/`)
+### Monorepo Root
 
 ```text
-src/
-├── 📁 components/
-│   ├── 📁 dashboard/     # Admin panel components (49 files)
-│   │   ├── AdminDashboard.jsx
-│   │   ├── AdminLayout.jsx
-│   │   ├── ArticleEditor.jsx
-│   │   ├── ArticlesManager.jsx
-│   │   ├── ExtensionsManager.jsx
-│   │   ├── Header.jsx
-│   │   ├── MenusManager.jsx
-│   │   ├── PageEditor.jsx
-│   │   ├── PagesManager.jsx
-│   │   ├── PermissionMatrix.jsx
-│   │   ├── RoleEditor.jsx
-│   │   ├── RolesManager.jsx
-│   │   ├── Sidebar.jsx
-│   │   ├── SidebarMenuManager.jsx
-│   │   ├── SSOManager.jsx
-│   │   ├── TagsManager.jsx
-│   │   ├── ThemeEditor.jsx
-│   │   ├── ThemesManager.jsx
-│   │   ├── TwoFactorSettings.jsx
-│   │   ├── UserEditor.jsx
-│   │   ├── UserProfile.jsx
-│   │   ├── 📁 media/         # Media management
-│   │   ├── 📁 notifications/ # Notification components
-│   │   ├── 📁 widgets/       # Dashboard widgets
-│   │   └── ...
-│   ├── 📁 public/        # Public-facing components (9 files)
-│   │   ├── PublicHeader.jsx
-│   │   ├── PublicFooter.jsx
-│   │   └── ...
-│   └── 📁 ui/            # Reusable UI components (30 files)
-│       ├── button.jsx
-│       ├── input.jsx
-│       ├── dialog.jsx
-│       ├── select.jsx
-│       ├── tabs.jsx
-│       ├── toast.jsx
-│       ├── RichTextEditor.jsx
-│       ├── ImageUpload.jsx
-│       ├── LocationPicker.jsx
-│       ├── TagInput.jsx
-│       └── ...
-│
-├── 📁 contexts/          # React Context providers
-│   ├── SupabaseAuthContext.jsx
-│   ├── PermissionContext.jsx
-│   ├── PluginContext.jsx        # Plugin/Extension system
-│   └── ThemeContext.jsx
-│
-├── 📁 hooks/             # Custom React hooks
-│   ├── useAdminMenu.js
-│   ├── useDashboardData.js
-│   ├── useExtensionAudit.js     # Extension audit logging
-│   ├── useMedia.js
-│   ├── useNotifications.js
-│   ├── useSearch.js
-│   ├── useTemplates.js          # Template CRUD operations
-│   ├── useTemplateStrings.js    # Localized strings with fallback
-│   ├── useTwoFactor.js
-│   └── useWidgets.js            # Widget CRUD operations
-│
-├── 📁 lib/               # Utilities and configs
-│   ├── customSupabaseClient.js  # Public Supabase client
-│   ├── supabaseAdmin.js         # Admin client (service role)
-│   ├── utils.js                 # Helper functions (cn, etc.)
-│   ├── hooks.js                 # WordPress-style hooks system
-│   ├── pluginRegistry.js        # Core plugin registry
-│   ├── externalExtensionLoader.js # External extension loader
-│   ├── extensionRegistry.js     # Extension component registry
-│   ├── templateExtensions.js    # Template/Widget/PageType APIs
-│   ├── widgetRegistry.js        # Widget type definitions
-│   ├── i18n.js                  # i18n configuration
-│   └── themeUtils.js            # Theme utilities
-│
-├── 📁 locales/           # i18n translations
-│   ├── en.json           # English
-│   └── id.json           # Indonesian
-│
-├── 📁 pages/             # Page components
-│   ├── Dashboard.jsx     # Main dashboard page
-│   ├── LoginPage.jsx     # Authentication page
-│   ├── 📁 cmspanel/      # Admin panel pages
-│   └── 📁 public/        # Public site pages (19 files)
-│
-├── 📁 plugins/           # Core plugins (bundled)
-│   ├── 📁 backup/        # Backup plugin
-│   │   ├── plugin.json   # Plugin manifest
-│   │   └── index.js      # Entry point
-│   └── 📁 helloworld/    # Example plugin
-│
-├── 📁 utils/             # Additional utilities
-│
-├── 📄 App.jsx            # Root component
-├── 📄 main.jsx           # Entry point
-└── 📄 index.css          # Global styles (TailwindCSS 4)
+awcms-dev/
+├── awcms/                      # Admin panel (React + Vite)
+├── awcms-public/               # Public portal (Astro)
+│   └── primary/                # Astro project
+├── awcms-mobile/               # Flutter app
+│   └── primary/
+├── awcms-esp32/                # ESP32 firmware
+│   └── primary/
+├── awcms-ext/                  # External extensions
+├── supabase/                   # Migrations and edge functions
+├── DOCS_INDEX.md               # Monorepo docs index
+├── AGENTS.md                   # AI agent rules (SSOT)
+└── schema_dump.sql             # Database reference snapshot
 ```
 
-> **External Extensions** live in `awcms-ext/` and internal extensions live in `awcms/src/extensions/`. See [EXTENSIONS.md](../03-features/EXTENSIONS.md) for details.
-
----
-
-## Documentation Directory (`docs/`)
+### Admin Panel (`awcms/`)
 
 ```text
-docs/
-├── 00-core/              # Core standards and architecture
-├── 01-guides/            # Installation, configuration, deployment
-├── 02-reference/         # API, schema, tech stack, folder structure
-├── 03-features/          # Feature deep dives
-├── 04-compliance/        # Compliance mapping
-├── schemas/              # JSON schemas
-├── INDEX.md              # Documentation index
-├── CHANGELOG.md          # Docs changelog
-├── LICENSE.md            # MIT License
-├── CODE_OF_CONDUCT.md    # Community standards
-└── ARCHITECTURAL_RECOMMENDATIONS.md # Best practices
+awcms/
+├── src/
+│   ├── components/             # UI and module components
+│   ├── contexts/               # Auth, permissions, tenant, theme
+│   ├── hooks/                  # Data and feature hooks
+│   ├── lib/                    # Supabase clients and utilities
+│   ├── pages/                  # Route components
+│   ├── plugins/                # Core plugins
+│   └── templates/              # Admin templates
+├── docs/                       # Admin documentation tree
+├── supabase/                   # Legacy supabase artifacts (see SUPABASE_INTEGRATION)
+├── package.json
+└── vite.config.js
 ```
 
----
+### Public Portal (`awcms-public/primary`)
 
-## Key Files Explained
-
-| File | Purpose |
-| ---- | ------- |
-| `main.jsx` | Application entry point, renders root component |
-| `App.jsx` | Root component with providers and router |
-| `index.css` | Global CSS with TailwindCSS 4 directives (Admin Panel) |
-| `vite.config.js` | Build tool configuration with aliases |
-| `postcss.config.js` | PostCSS with TailwindCSS plugin |
-
----
-
-## Import Aliases
-
-```javascript
-// @ maps to /src directory
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { supabase } from '@/lib/customSupabaseClient';
+```text
+awcms-public/primary/
+├── src/
+│   ├── components/             # React components
+│   ├── layouts/                # Astro layouts
+│   ├── lib/                    # Supabase and URL helpers
+│   ├── middleware.ts           # Tenant resolution
+│   ├── pages/                  # Astro routes
+│   └── templates/              # Theme templates
+├── astro.config.mjs
+└── tailwind.config.mjs
 ```
 
-Configured in `vite.config.js`:
+### Mobile (`awcms-mobile/primary`)
 
-```javascript
-resolve: {
-  alias: {
-    '@': path.resolve(__dirname, './src')
-  }
-}
+```text
+awcms-mobile/primary/
+├── lib/                        # Flutter source
+├── android/                    # Android project
+├── ios/                        # iOS project
+└── pubspec.yaml
 ```
 
----
+### ESP32 (`awcms-esp32/primary`)
 
-## Component Categories
+```text
+awcms-esp32/primary/
+├── src/                        # Firmware
+├── include/                    # Headers
+├── data/                       # Web UI assets
+└── platformio.ini
+```
 
-### Dashboard Components (49 files)
+## Security and Compliance Notes
 
-| Category | Examples |
-| -------- | -------- |
-| **Content Managers** | ArticlesManager, PagesManager, ProductsManager |
-| **Editors** | ArticleEditor, PageEditor, ThemeEditor, RoleEditor |
-| **System** | UsersManager, RolesManager, PermissionMatrix |
-| **Navigation** | Sidebar, SidebarMenuManager, MenusManager |
-| **Settings** | SSOManager, TwoFactorSettings, LanguageSettings |
-| **Layout** | AdminLayout, AdminDashboard, Header |
+- Tenant isolation applies across all packages.
+- Supabase is the only backend; no custom servers.
 
-### UI Components (30 files)
+## References
 
-| Category | Components |
-| -------- | ---------- |
-| **Forms** | button, input, textarea, select, checkbox, switch |
-| **Feedback** | toast, alert, dialog, alert-dialog |
-| **Layout** | card, tabs, scroll-area |
-| **Data Display** | table, badge, avatar, skeleton, progress |
-| **Custom** | RichTextEditor, ImageUpload, LocationPicker, TagInput |
+- `../../../DOCS_INDEX.md`
+- `../00-core/ARCHITECTURE.md`

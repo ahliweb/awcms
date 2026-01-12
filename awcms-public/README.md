@@ -1,27 +1,24 @@
-# AWCMS Public
+# AWCMS Public Portal
 
-Multi-tenant public portal for AWCMS.
+## Purpose
+Multi-tenant public portal implemented in Astro.
 
-## Tenant Folders
+## Audience
+- Public portal developers
 
-Each tenant has its own folder with complete Astro project:
-
-| Tenant | Path | Description |
-| :--- | :--- | :--- |
-| primary | [primary/](./primary/) | Default tenant |
+## Prerequisites
+- Node.js 20+
 
 ## Quick Start
 
 ```bash
 cd awcms-public/primary
 npm install
+# Create .env with Supabase variables
 npm run dev
 ```
 
-## Styling
+## References
 
-The public portal uses Tailwind CSS v4 via the Vite plugin in `awcms-public/primary/astro.config.mjs`.
-
-## Documentation
-
-See [primary/README.md](./primary/README.md) for full documentation.
+- `primary/README.md`
+- `../DOCS_INDEX.md`

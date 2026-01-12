@@ -1,58 +1,37 @@
 # Contributing to AWCMS
 
-Thank you for your interest in contributing to AWCMS! We welcome contributions from the community.
+## Purpose
+Provide contribution guidelines aligned to AWCMS core standards.
 
-## How to Contribute
-
-### Reporting Bugs
-
-1. Check if the bug has already been reported in [Issues](https://github.com/ahliweb/awcms/issues).
-2. If not, create a new issue with a clear title and description.
-3. Include steps to reproduce, expected behavior, and actual behavior.
-4. Add screenshots if applicable.
-
-### Suggesting Features
-
-1. Open a new issue with the `[Feature Request]` prefix.
-2. Describe the feature and its use case.
-3. Explain why this feature would be valuable.
-
-### Pull Requests
-
-1. Fork the repository.
-2. Create a new branch from `main`:
-
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-3. Make your changes and commit them with clear messages.
-4. Push to your fork and submit a Pull Request.
-5. Ensure your PR description clearly describes the problem and solution.
+## Prerequisites
+- Read `AGENTS.md`
+- Read `awcms/docs/00-core/CORE_STANDARDS.md`
 
 ## Development Setup
 
-See the [README.md](README.md) for quick start instructions.
+See `README.md` and `DOCS_INDEX.md` for package-specific setup instructions.
 
-## Code Style
+## Core Rules
 
-- Use ESLint and Prettier configurations provided in the project.
-- Write clear, self-documenting code.
-- Add comments for complex logic.
-- Follow existing patterns in the codebase.
+- Multi-tenancy is mandatory: always scope by `tenant_id` and respect RLS.
+- Permission keys must follow `scope.resource.action` and be enforced at UI and data layers.
+- Soft delete only: update `deleted_at`, never hard delete tenant data.
+- Supabase is the only backend (no custom servers).
+- Admin panel uses JavaScript (ES2022+); public portal uses TypeScript.
+- Use shadcn/ui components and `useToast` for UI feedback.
 
-## Commit Messages
+## Pull Request Checklist
 
-Use clear and meaningful commit messages:
+- Update documentation when behavior changes.
+- Add or update tests where appropriate.
+- Ensure linting and tests pass locally.
+- Reference relevant issues and describe scope clearly.
 
-- `feat:` for new features
-- `fix:` for bug fixes
-- `docs:` for documentation changes
-- `style:` for formatting changes
-- `refactor:` for code refactoring
-- `test:` for adding tests
-- `chore:` for maintenance tasks
+## Issue Reporting
 
-## Questions?
+- Use GitHub Issues for bugs and feature requests.
+- Include reproduction steps and environment details.
 
-Feel free to open an issue or reach out to the maintainers.
+## Code of Conduct
+
+See `CODE_OF_CONDUCT.md`.

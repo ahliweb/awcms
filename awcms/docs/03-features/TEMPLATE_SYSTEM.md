@@ -1,97 +1,75 @@
 # Template System
 
-AWCMS uses a comprehensive, WordPress-inspired template system that supports multi-tenant, multi-channel, and multi-language content rendering.
+## Purpose
+Explain how templates, parts, widgets, and assignments drive multi-channel rendering.
 
-## Architecture
+## Audience
+- Admin panel developers
+- Public portal developers
 
-```mermaid
-graph LR
-    A[Admin Panel] --> B(Templates DB)
-    A --> C(Template Parts DB)
-    A --> D(Widgets DB)
-    B --> E{Public Portal}
-    C --> E
-    D --> E
-    E --> F[Web Channel]
-    E --> G[Mobile Channel]
-    E --> H[ESP32 Channel]
-```
+## Prerequisites
+- `awcms/docs/03-features/VISUAL_BUILDER.md`
+- `awcms/docs/00-core/MULTI_TENANCY.md`
 
-## Database Tables
+## Core Concepts
+
+- Templates and parts are stored as Puck JSON.
+- Template assignments map route types to templates per channel.
+- Widgets fill predefined widget areas.
+
+## How It Works
+
+### Database Tables
 
 | Table | Description |
-|-------|-------------|
+| --- | --- |
 | `templates` | Full page layouts (Puck JSON) |
-| `template_parts` | Reusable parts (Header, Footer, Widget Areas) |
+| `template_parts` | Reusable parts (header, footer, widget areas) |
 | `template_assignments` | Route-to-template mappings per channel |
-| `widgets` | Widget instances for Widget Areas |
-| `template_strings` | Localized strings for templates |
+| `widgets` | Widget instances |
+| `template_strings` | Localized strings |
 
-## Admin UI
+### Admin UI
 
-### Templates Manager (`/cmspanel/templates`)
+- `/cmspanel/templates` manages templates and parts.
+- `/cmspanel/templates/assignments` manages route assignments by channel.
+- `/cmspanel/widgets` manages widget instances.
 
-Provides a tabbed interface:
+### Public Portal Rendering
 
-- **Page Templates**: Manage full page layouts using Visual Builder.
-- **Template Parts**: Manage reusable components (Header, Footer, Sidebars).
-- **Assignments**: Map system routes (Home, 404, Search) to specific templates per Channel.
-- **Languages**: Manage translation strings for template content.
+1. Fetch page data and `template_assignments` for `web` channel.
+2. Merge header part, page content, and footer part.
+3. Render with `PuckRenderer` and allow-list registry.
 
-### Widgets Manager (`/cmspanel/widgets`)
-
-Manage widgets within defined Widget Areas. Supports drag-and-drop ordering and configuration.
-
-## Extension API
-
-Extensions can register custom components:
+## Implementation Patterns
 
 ```javascript
 import { registerTemplateBlock, registerWidgetArea, registerPageType } from '@/lib/templateExtensions';
 
-// Register a new Puck block
 registerTemplateBlock({
-    type: 'my_plugin/slider',
-    label: 'Image Slider',
-    render: MySliderComponent,
-    fields: { images: { type: 'array' } }
-});
-
-// Register a new widget type
-registerWidgetArea({
-    type: 'my_plugin/social',
-    name: 'Social Links',
-    icon: ShareIcon,
-    defaultConfig: { networks: [] }
-});
-
-// Register a new page type for assignments
-registerPageType({
-    type: 'product_single',
-    label: 'Single Product'
+  type: 'my_plugin/slider',
+  label: 'Image Slider',
+  render: MySliderComponent,
+  fields: { images: { type: 'array' } }
 });
 ```
 
-## Public Portal Rendering
+## Permissions and Access
 
-The Astro-based public portal (`awcms-public`) uses a dynamic routing system:
+- Template management is gated by tenant permissions and ABAC checks.
+- Assignments are tenant-scoped and filtered via RLS.
 
-1. Fetch the requested page from `pages` table.
-2. Fetch the `template_assignments` for the current channel (`web`).
-3. Determine the template to use (page override or assignment default).
-4. Merge **Header Part** + **Page Content** + **Footer Part**.
-5. Render using `PuckRenderer` and the component registry.
+## Security and Compliance Notes
 
-## Multi-Channel Support
+- Templates are tenant-scoped and must include `tenant_id`.
+- Public rendering uses allow-listed components only.
 
-| Channel | Description |
-|---------|-------------|
-| `web` | Standard web pages (SSR/SSG via Astro) |
-| `mobile` | Flutter app (JSON API consumption) |
-| `esp32` | IoT devices (simplified HTML/text) |
+## Operational Concerns
 
-Assignments can be configured per channel, allowing different templates for different platforms.
+- Channels supported in the UI: `web`, `mobile`, `esp32`.
+- Only the `web` channel is rendered by the Astro public portal.
 
-## Security
+## References
 
-All template-related tables enforce multi-tenancy via Row Level Security (RLS). RLS policies ensure data isolation between tenants.
+- `../03-features/VISUAL_BUILDER.md`
+- `../03-features/PUBLIC_PORTAL_ARCHITECTURE.md`

@@ -1,99 +1,63 @@
-# AWCMS - Cloudflare Pages Deployment Guide
+# Cloudflare Pages Deployment
 
-This repository is set up as a **Monorepo**. For deployment on Cloudflare Pages, you will need to create **two separate projects**: one for the Admin Panel (`awcms`) and one for the Public Portal (`awcms-public`).
+## Purpose
+Provide Cloudflare Pages settings for the Admin Panel and Public Portal.
+
+## Audience
+- Operators deploying AWCMS to Cloudflare
 
 ## Prerequisites
+- Cloudflare account
+- Supabase project configured
 
-- GitHub/GitLab repository with AWCMS code
-- Cloudflare account (free tier is sufficient)
-- Supabase project (already configured)
+## Steps
 
----
-
-## Part 1: Deploying the Admin Panel (`awcms`)
-
-This is the React-based CMS dashboard for tenant administration.
-
-### 1. Create Admin Project
-
-1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com)
-2. Navigate to **Pages** → **Create a project** → **Connect to Git**
-3. Select your repository
-
-### 2. Configure Admin Build
+### Admin Panel (awcms)
 
 | Setting | Value |
-| :--- | :--- |
-| **Project Name** | e.g., `awcms-admin` |
-| **Framework preset** | Vite |
-| **Build command** | `npm run build` |
-| **Build output directory** | `dist` |
-| **Root directory** | `awcms` |
-| **Node.js version** | 20.x |
+| --- | --- |
+| Project name | `awcms-admin` (example) |
+| Framework preset | Vite or None |
+| Root directory | `awcms` |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Node version | `20` |
 
-### 3. Admin Environment Variables
+Environment variables:
 
-Add these in **Settings** → **Environment Variables**:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_TURNSTILE_SITE_KEY`
+- `NODE_VERSION=20`
 
-| Variable | Value |
-| :--- | :--- |
-| `VITE_SUPABASE_URL` | `https://your-project.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | `your-anon-key` |
-| `NODE_VERSION` | `20` |
-
-### 4. Deploy Admin
-
-Click **Save and Deploy**. This will deploy the Admin Panel.
-
----
-
-## Part 2: Deploying the Public Portal (`awcms-public`)
-
-This is the Astro-based public frontend for your tenants.
-
-### 1. Create Public Project
-
-1. Go to **Pages** → **Create a project** → **Connect to Git**
-2. Select **the same repository** again
-
-### 2. Configure Public Build
+### Public Portal (awcms-public/primary)
 
 | Setting | Value |
-| :--- | :--- |
-| **Project Name** | e.g., `awcms-public` |
-| **Framework preset** | Astro |
-| **Build command** | `npm run build` (Proxies to `primary` folder) |
-| **Build output directory** | `dist` |
-| **Root directory** | `awcms-public` (proxy build runs in `primary/`) |
-| **Node.js version** | 20.x |
+| --- | --- |
+| Project name | `awcms-public` (example) |
+| Framework preset | Astro |
+| Root directory | `awcms-public/primary` |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Node version | `20` |
 
-### 3. Public Environment Variables
+Environment variables:
 
-Add these in **Settings** → **Environment Variables**:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `NODE_VERSION=20`
 
-| Variable | Value |
-| :--- | :--- |
-| `VITE_SUPABASE_URL` | `https://your-project.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | `your-anon-key` |
-| `NODE_VERSION` | `20` |
+## Verification
 
-### 4. Deploy Public
+- Public portal returns tenant-resolved pages.
+- Admin panel loads and authenticates.
 
-Click **Save and Deploy**. This will deploy the Public Portal.
+## Troubleshooting
 
----
+- Build failures: verify root directory and Node version.
+- Tenant resolution issues: confirm middleware and tenant domains.
 
-## Post-Deployment Configuration
+## References
 
-### Custom Domains
-
-1. Go to your **Public Portal** project in Cloudflare.
-2. Add your custom domain (e.g., `yourdomain.com`).
-3. (Optional) Go to your **Admin Panel** project and add a subdomain (e.g., `admin.yourdomain.com`).
-
-### Supabase Auth Settings
-
-Ensure you update your Supabase Auth Redirect URLs to include both of your new Cloudflare Pages URLs:
-
-- `https://awcms-admin.pages.dev`
-- `https://awcms-public.pages.dev`
+- `../01-guides/DEPLOYMENT.md`
+- `../00-core/MULTI_TENANCY.md`

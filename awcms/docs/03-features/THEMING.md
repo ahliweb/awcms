@@ -1,73 +1,59 @@
-# Multi-Tenant Theming Guide
+# Multi-Tenant Theming
 
-## Overview
+## Purpose
+Describe how tenant branding is stored and applied across the admin UI.
 
-AWCMS supports dynamic white-labeling, allowing each tenant to have their own brand identity (colors, fonts, logo) without code changes.
+## Audience
+- Admin panel developers
+- Designers defining tenant branding
 
-## Architecture
+## Prerequisites
+- `awcms/docs/00-core/MULTI_TENANCY.md`
 
-1. **Storage**: Theme preferences are stored in the `tenants.config` JSONB column.
-2. **Injection**: `useTenantTheme` hook injects CSS variables into the `:root` (or `#root`) element at runtime.
-3. **Usage**: Tailwind utilities use these CSS variables, ensuring components update automatically.
+## Core Concepts
 
-## Tenant Config Structure
+- Branding lives in `tenants.config` (JSONB).
+- `useTenantTheme()` applies CSS variables at runtime.
+- Components use Tailwind tokens that map to CSS variables.
+
+## How It Works
+
+- Hook: `awcms/src/hooks/useTenantTheme.js`.
+- Variables set on `document.documentElement`:
+  - `--primary`
+  - `--font-sans`
+
+## Implementation Patterns
+
+### Tenant Config Example
 
 ```json
 {
   "theme": {
-    "colors": {
-      "brand": "#3b82f6"
-    },
-    "fonts": {
-      "sans": "Inter"
-    },
-    "logo": "https://tenant-bucket/logo.png"
+    "brandColor": "#3b82f6",
+    "fontFamily": "Inter"
   }
 }
 ```
 
-## CSS Variables
-
-The system automatically generating the following variables based on the tenant's brand color:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `--primary` | Main brand color (HSL) | `222.2 47.4% 11.2%` |
-| `--font-sans` | Primary font family | `"Inter", sans-serif` |
-
-## Usage in Components
-
-### 1. Using Tailwind Classes (Recommended)
-
-Always use the semantic utility classes, never hardcode colors.
+### Usage in Components
 
 ```jsx
-// ✅ Correct
 <Button className="bg-primary text-primary-foreground">
   Action
 </Button>
-
-// ❌ Incorrect
-<Button className="bg-blue-600 text-white">
-  Action
-</Button>
 ```
 
-### 2. Using CSS Variables Directly
+## Permissions and Access
 
-```css
-.custom-card {
-  background-color: hsl(var(--primary));
-  font-family: var(--font-sans);
-}
-```
+- Theme editing is guarded by tenant settings permissions.
 
-## Configuring a New Tenant
+## Security and Compliance Notes
 
-1. Go to **Settings > Branding**.
-2. Upload a Logo.
-3. Select a Brand Color.
-4. Choose a Font Family.
-5. Click **Save Changes**.
+- No hardcoded colors in components; use tokens or CSS variables.
+- Validate font and color input before applying.
 
-The theme will update instantly across the user's session.
+## References
+
+- `../03-features/COMPONENT_GUIDE.md`
+- `../../src/hooks/useTenantTheme.js`

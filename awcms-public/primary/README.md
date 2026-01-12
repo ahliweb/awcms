@@ -1,104 +1,39 @@
 # AWCMS Public Portal
 
-The public-facing frontend for AWCMS multi-tenant content management system, built with Astro.
+## Purpose
+Public-facing frontend for AWCMS tenants, built with Astro SSR and React islands.
 
-## 🏗️ Architecture
+## Prerequisites
+- Node.js 20+
 
-This is a **Server-Side Rendered (SSR)** Astro application deployed to Cloudflare Pages. It serves public content for multiple tenants using path-based routing.
-
-### URL Structure
-
-```txt
-/{tenant}/{page-slug}
-```
-
-**Examples:**
-
-```txt
-/primary/              → Primary tenant homepage
-/primary/articles/     → Articles listing
-/primary/pages/about/  → About page
-/tenant-b/             → Another tenant's homepage
-```
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-* Node.js 20+
-* npm or pnpm
-
-### Installation
+## Quick Start
 
 ```bash
 cd awcms-public/primary
 npm install
-```
-
-### Development
-
-```bash
+# Create .env with Supabase variables
 npm run dev
 ```
 
-The dev server runs at `http://localhost:4321`. By default, it uses the `VITE_DEV_TENANT_HOST` environment variable for tenant resolution.
-
-### Environment Variables
-
-Create `.env` based on `.env.example`:
+## Environment Variables
 
 ```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_DEV_TENANT_HOST=localhost  # For local development
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+VITE_DEV_TENANT_HOST=localhost
 ```
 
-## 📁 Project Structure
+## Routing
 
-```txt
-/
-├── public/             # Static assets
-├── src/
-│   ├── components/     # Astro/React components
-│   ├── layouts/        # Page layouts
-│   ├── lib/            # Utilities (supabase, url builder)
-│   ├── pages/
-│   │   ├── index.astro           # Host-based root page
-│   │   └── [tenant]/
-│   │       └── [...slug].astro   # Tenant-scoped pages
-│   ├── styles/         # Global CSS
-│   └── templates/      # Template themes
-├── astro.config.mjs    # Astro configuration
-└── package.json
-```
+- Path-based tenants: `/{tenant}/...`
+- Host-based tenants: `/<slug>` routes served at root
 
-## 🎨 Styling (Tailwind CSS v4)
+## Rendering
 
-Tailwind is wired via the Vite plugin in `astro.config.mjs`.
+- Puck JSON is rendered via `PuckRenderer` and a registry allow-list.
+- The Puck editor runtime is not used in the public portal.
 
-- **Vite plugin**: `@tailwindcss/vite`
-- **Entry CSS**: `src/styles/global.css` uses `@config "../../tailwind.config.mjs";` + `@import "tailwindcss";`
-- **Config**: `tailwind.config.mjs` for content globs and theme extensions
+## References
 
-## 🔗 Tenant Resolution
-
-The middleware resolves tenants in this order:
-
-1. **Path Parameter** (Primary): Extracts tenant slug from URL path (`/{tenant}/...`)
-2. **Host Header** (Fallback): Looks up tenant by domain/subdomain
-
-If resolved from host, content is served directly without a tenant path prefix (legacy domains remain supported).
-
-## 🛠️ Commands
-
-| Command | Action |
-| :--- | :--- |
-| `npm run dev` | Start dev server at `localhost:4321` |
-| `npm run build` | Build for production |
-| `npm run preview` | Preview production build locally |
-
-## 📚 Documentation
-
-* [Migration Guide](../../awcms/docs/01-guides/MIGRATION.md) - URL structure changes
-* [Deployment Guide](../../awcms/docs/01-guides/DEPLOYMENT.md) - Cloudflare Pages setup
-* [Main Documentation](../../awcms/docs/INDEX.md) - Full documentation index
+- `../../DOCS_INDEX.md`
+- `../../awcms/docs/03-features/PUBLIC_PORTAL_ARCHITECTURE.md`

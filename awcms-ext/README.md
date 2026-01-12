@@ -1,25 +1,19 @@
 # AWCMS Extensions
 
-External extensions for AWCMS.
-
-## Extensions
-
-| Extension | Path | Description |
-| :--- | :--- | :--- |
-| primary-analytics | [primary-analytics/](./primary-analytics/) | Analytics extension for primary tenant |
+## Purpose
+External extension packages for AWCMS.
 
 ## Structure
-
-Each extension follows the AWCMS extension manifest format.
 
 ```text
 awcms-ext/
   {extension-name}/
-    manifest.json     # Extension metadata
-    package.json      # Dependencies
-    src/              # Source code
+    manifest.json
+    package.json
+    src/
 ```
 
-## Documentation
+## References
 
-See each extension's folder for specific documentation.
+- `../awcms/docs/03-features/EXTENSIONS.md`
+- `../DOCS_INDEX.md`
