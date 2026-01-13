@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ComponentConfig } from "@measured/puck";
-import { z } from "astro/zod";
+
 import { cn } from "@/lib/utils";
 
 export interface CardProps {

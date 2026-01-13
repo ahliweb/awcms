@@ -5,6 +5,7 @@ declare namespace App {
     interface Locals {
         tenant_id: string;
         tenant_slug: string;
+        tenant_source: 'host' | 'path';
         host: string;
         runtime?: {
             env: {

@@ -14,7 +14,7 @@ import { RichTextBlock } from './components/content/RichTextBlock';
 import { HeroBlock } from './components/content/HeroBlock';
 import { MediaBlock } from './components/content/MediaBlock';
 import { CTABlock } from './components/content/CTABlock';
-import { Card, CardConfig } from './components/content/Card';
+import { Card } from './components/content/Card';
 import { Menu } from './components/navigation/Menu';
 import { Breadcrumbs } from './components/navigation/Breadcrumbs';
 

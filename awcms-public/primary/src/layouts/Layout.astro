@@ -4,6 +4,7 @@ import Header from '../templates/awtemplate01/components/layout/Header.astro';
 import Footer from '../templates/awtemplate01/components/layout/Footer.astro';
 import { tenantUrl } from '../lib/url';
 import { createScopedClient } from '../lib/supabase';
+import type { MenuItemDTO } from '../types/MenuDTO';
 
 interface Props {
   title: string;
@@ -35,7 +36,7 @@ const supabase = createScopedClient({
 }, env);
 
 // Fetch Data (Tenant Name & Menu)
-let menuItems = [];
+let menuItems: MenuItemDTO[] = [];
 let brandName = "AWCMS";
 
 if (tenant_id && supabase) {
@@ -83,7 +84,7 @@ if (tenant_id && supabase) {
                 return normalized;
             };
 
-            menuItems = items.map((item) => ({
+            menuItems = items.map((item: any) => ({
                 ...item,
                 url: normalizeMenuUrl(item.url)
             }));

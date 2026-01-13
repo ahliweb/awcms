@@ -129,7 +129,7 @@ const PublicRegisterPage = () => {
 
                             <div className="pt-2">
                                 <Turnstile
-                                    siteKey="0x4AAAAAACKcJKttH3wXulvJ"
+                                    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || "0x4AAAAAACKcJKttH3wXulvJ"}
                                 />
                             </div>
                         </div>

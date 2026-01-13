@@ -3,7 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import AWT01Layout from '../../templates/awtemplate01/Layout.astro';
 import { createScopedClient } from '../../lib/supabase';
 import { PuckRenderer } from '../../components/PuckRenderer';
-import { TipTapRenderer } from '../../components/TipTapRenderer';
+
 
 // SSR Mode
 export const prerender = false;
@@ -22,13 +22,12 @@ if (tenant_source === 'host' && tenant !== tenant_slug) {
     // Host-based resolution: the "tenant" URL param is actually part of the slug
     // Example: /services matched as [tenant=services]/[slug=''] 
     // We treat 'services' as the page slug, not as a tenant prefix
-    rawSlug = slug ? `${tenant}/${slug}` : tenant;
+    rawSlug = slug ? `${tenant}/${slug}` : tenant || '';
     useTenantPrefix = false; // Don't use tenant prefix in URLs
 } else if (tenant !== tenant_slug) {
     // Path-based resolution but tenant mismatch - redirect to correct tenant
     console.warn(`[Page] Tenant mismatch: URL param "${tenant}" vs resolved "${tenant_slug}"`);
-    const fallbackSlug = slug || '';
-    return Astro.redirect(`/${tenant_slug}/${fallbackSlug}`, 301);
+    return Astro.redirect(`/${tenant_slug}/${slug || ''}`, 301);
 } else {
     // Correct path-based resolution
     rawSlug = slug || '';
@@ -77,7 +76,7 @@ if (!supabase) {
             
         if (assignmentError) console.warn('[Page] Template Assignment Fetch Warning:', assignmentError);
 
-        const assignmentMap = {};
+        const assignmentMap: Record<string, string> = {};
         (assignments || []).forEach(a => assignmentMap[a.route_type] = a.template_id);
 
 
@@ -126,7 +125,7 @@ if (!supabase) {
                 const parts = template.parts || {};
                 const partIds = Object.values(parts).filter(Boolean);
                 
-                let partDataMap = {};
+                const partDataMap: Record<string, any> = {};
                 if (partIds.length > 0) {
                     const { data: partsData } = await supabase
                         .from('template_parts')
@@ -171,7 +170,7 @@ if (!supabase) {
 
 const finalPuckData = {
     content: mergedContent,
-    root: { title: meta.title }
+    root: { title: meta.title, props: {} }
 };
 
 const LayoutComponent = (currentTemplateSlug === 'awtemplate01') ? AWT01Layout : Layout;
@@ -189,7 +188,7 @@ const layoutProps = {
     {errorState ? (
         <div class="container mx-auto py-20 text-center text-red-600">
             <h1 class="text-4xl font-bold mb-4">500 - Server Error</h1>
-            <p className="font-mono bg-gray-100 p-4 rounded inline-block text-left text-sm text-gray-800">
+            <p class="font-mono bg-gray-100 p-4 rounded inline-block text-left text-sm text-gray-800">
                 {errorState}
             </p>
         </div>

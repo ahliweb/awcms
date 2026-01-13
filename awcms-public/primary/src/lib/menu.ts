@@ -46,7 +46,7 @@ export async function getTenantMenus(tenantSlug: string, env: any = {}): Promise
         // Ensure consistent formatting (e.g. leading slash)
         let finalUrl = item.url;
         if (item.page && (item.page as any).slug) {
-            const splitSlug = (item.page as any).slug.split('/');
+
             // If slug is 'home', mapping to '/' might be desired, but let's stick to standard behavior
             // Usually 'home' -> '/' handles in routing.
             // If the slug doesn't start with '/', add it.

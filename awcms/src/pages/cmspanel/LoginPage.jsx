@@ -471,7 +471,7 @@ const LoginPage = () => {
               {/* Turnstile CAPTCHA - Invisible Mode (configured in Cloudflare) */}
               <div className="min-h-[20px]">
                 <Turnstile
-                  siteKey="0x4AAAAAACKcJKttH3wXulvJ"
+                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || "0x4AAAAAACKcJKttH3wXulvJ"}
                   onVerify={(token) => {
                     console.log('[Login] Turnstile token received');
                     setTurnstileToken(token);

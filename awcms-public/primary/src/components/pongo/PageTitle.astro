@@ -1,0 +1,25 @@
+---
+interface Props {
+  title: string;
+  breadcrumbs?: { label: string; url?: string }[];
+}
+
+const { title, breadcrumbs = [] } = Astro.props;
+---
+<!-- start page-title -->
+<section class="page-title">
+    <div class="container">
+        <div class="row">
+            <div class="col col-xs-12">
+                <h2>{title}</h2>
+                <ol class="breadcrumb">
+                    <li><a href="/">Home</a></li>
+                    {breadcrumbs.map((crumb) => (
+                         <li>{crumb.label}</li>
+                    ))}
+                </ol>
+            </div>
+        </div> <!-- end row -->
+    </div> <!-- end container -->
+</section>        
+<!-- end page-title -->

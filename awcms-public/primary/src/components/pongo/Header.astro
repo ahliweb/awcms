@@ -1,0 +1,83 @@
+---
+import { getMenu } from '../../utils/menuFetcher';
+import type { MenuItemDTO } from '../../types/MenuDTO';
+
+const tenantId = 'primary'; // Hardcoded for now
+const menuItems = await getMenu(tenantId, 'header', Astro.locals?.runtime?.env);
+---
+<!-- Start header -->
+<header id="header" class="site-header header-style-2">
+    <div class="topbar">
+        <div class="container">
+            <div class="row">
+                <div class="col col-md-9">
+                    <div class="contact-info">
+                        <ul>
+                            <li><i class="ti-mobile"></i> +884574156414</li>
+                            <li><i class="ti-email"></i> <a href="mailto:info@example.com">info@example.com</a></li>
+                            <li><i class="ti-time"></i> Sun - Fri 10AM - PM</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col col-md-3">
+                    <div class="social">
+                        <ul>
+                            <li><a href="#"><i class="ti-facebook"></i></a></li>
+                            <li><a href="#"><i class="ti-twitter-alt"></i></a></li>
+                            <li><a href="#"><i class="ti-linkedin"></i></a></li>
+                            <li><a href="#"><i class="ti-pinterest"></i></a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div> <!-- end topbar -->
+    <nav class="navigation navbar navbar-default">
+        <div class="container">
+            <div class="navbar-header">
+                <button type="button" class="open-btn">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="/"><img src="/pongo/assets/images/logo-2.png" alt=""></a>
+            </div>
+            <div id="navbar" class="navbar-collapse collapse navbar-right navigation-holder">
+                <button class="close-navbar"><i class="ti-close"></i></button>
+                <ul class="nav navbar-nav">
+                    {menuItems.map((item) => (
+                        <li class={item.children ? "menu-item-has-children" : ""}>
+                            <a href={item.url}>{item.label}</a>
+                            {item.children && (
+                                <ul class="sub-menu">
+                                    {item.children.map((subItem) => (
+                                        <li><a href={subItem.url}>{subItem.label}</a></li>
+                                    ))}
+                                </ul>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            </div><!-- end of nav-collapse -->
+
+            <div class="search-contact">
+                <div class="header-search-form-wrapper">
+                    <button class="search-toggle-btn"><i class="ti-search"></i></button>
+                    <div class="header-search-form">
+                        <form>
+                            <div>
+                                <input type="text" class="form-control" placeholder="Search here...">
+                                <button type="submit"><i class="ti-search"></i></button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="contact-btn">
+                    <a href="#" class="theme-btn">Get a quote</a>
+                </div>
+            </div>
+        </div><!-- end of container -->
+    </nav>
+</header>
+<!-- end of header -->

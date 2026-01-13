@@ -1,0 +1,18 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import PageTitle from '../components/pongo/PageTitle.astro';
+
+interface Props {
+  layout_key: string;
+  title: string;
+  seo?: any;
+}
+
+const { layout_key, title, seo } = Astro.props;
+---
+
+<BaseLayout title={seo?.meta_title || title} description={seo?.meta_description}>
+  {(layout_key === 'awtemplate01.standard' || layout_key === 'pongo.standard') && <PageTitle title={title} breadcrumbs={[{label: title}]} />}
+  
+  <slot />
+</BaseLayout>

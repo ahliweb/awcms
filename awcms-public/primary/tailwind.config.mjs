@@ -2,6 +2,9 @@
 import defaultTheme from 'tailwindcss/defaultTheme';
 
 export default {
+    corePlugins: {
+        preflight: false,
+    },
     darkMode: 'class',
     content: ['./src/**/*.{astro,html,js,jsx,md,mdx,svelte,ts,tsx,vue}'],
     theme: {

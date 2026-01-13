@@ -1,0 +1,28 @@
+---
+import { sanitizeHtml } from '../utils/sanitizer';
+
+interface Props {
+  contentType: 'visual_builder' | 'richtext' | 'markdown';
+  content: any;
+}
+
+const { contentType, content } = Astro.props;
+
+// Ensure content is a string for sanitization if it's not visual builder data
+const rawContent = (typeof content === 'string') ? content : '';
+const safeContent = sanitizeHtml(rawContent);
+---
+
+<div class="page-content">
+  {contentType === 'markdown' || contentType === 'richtext' ? (
+     <div class="prose max-w-none" set:html={safeContent} />
+  ) : contentType === 'visual_builder' ? (
+     <div class="visual-builder-content">
+        {/* Placeholder for visual builder renderer */}
+        <!-- Visual Builder Content -->
+        <pre>{JSON.stringify(content, null, 2)}</pre>
+     </div>
+  ) : (
+     <div>Unknown content type</div>
+  )}
+</div>

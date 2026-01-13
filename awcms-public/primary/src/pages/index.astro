@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import AWT01Layout from '../templates/awtemplate01/Layout.astro';
 import { createScopedClient } from '../lib/supabase';
 import { PuckRenderer } from '../components/PuckRenderer';
-import { TipTapRenderer } from '../components/TipTapRenderer';
+
 
 /**
  * Root Index Page
@@ -63,7 +63,7 @@ if (!supabase) {
             
         if (assignmentError) console.warn('[Index] Template Assignment Fetch Warning:', assignmentError);
 
-        const assignmentMap = {};
+        const assignmentMap: Record<string, string> = {};
         (assignments || []).forEach(a => assignmentMap[a.route_type] = a.template_id);
 
         if (pageData) {
@@ -96,7 +96,7 @@ if (!supabase) {
                 const parts = template.parts || {};
                 const partIds = Object.values(parts).filter(Boolean);
                 
-                let partDataMap = {};
+                const partDataMap: Record<string, any> = {};
                 if (partIds.length > 0) {
                     const { data: partsData } = await supabase
                         .from('template_parts')
@@ -140,7 +140,7 @@ if (!supabase) {
 
 const finalPuckData = {
     content: mergedContent,
-    root: { title: meta.title }
+    root: { title: meta.title, props: {} }
 };
 
 const LayoutComponent = (currentTemplateSlug === 'awtemplate01') ? AWT01Layout : Layout;

@@ -5,6 +5,27 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.14.0] "Horizon" - 2026-01-14
+
+### Added
+
+- **Hierarchical Information Architecture**:
+  - **Database Schema**: Added `parent_id`, `template_key`, `sort_order`, and `nav_visibility` to `pages` table.
+  - **Admin Page Editor**: Added Parent Page selector, Navigation Visibility toggle, and Sort Order controls.
+  - **Public Portal Routing**: Implemented nested slug resolution (e.g., `/profile/team`) in `[...slug].astro`.
+- **Template System**:
+  - Migrated Pongo template to `awtemplate01` structure.
+  - Updated `PageLayout` to support `awtemplate01.standard` and `awtemplate01.landing` keys.
+- **Seeding**:
+  - Added seeding migration for hierarchical pages (Home, Profile, Services, Projects, News, Contact).
+
+### Fixed
+
+- **Public Portal Code Quality**:
+  - **Linting**: Resolved 29+ `astro check` errors, fixing implicit `any` types and unused variables.
+  - **Type Safety**: Enhanced TypeScript interfaces for `PagePublicDTO`, `MenuDTO`, and component props.
+  - **Components**: Fixed `PageTitle`, `Header`, and `Layout` components to strictly adhere to Astro/React best practices.
+
 ## [2.13.0] "Atlas" - 2026-01-13
 
 ### Added
