@@ -42,6 +42,7 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
             group: 'CONFIGURATION',
             order: 75,
             permission: 'tenant.email.configure',
+            plugin_type: manifest.type,
         },
     ]);
 

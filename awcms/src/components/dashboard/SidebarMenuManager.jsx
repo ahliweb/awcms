@@ -81,6 +81,8 @@ function SidebarMenuManager() {
         menuItems.forEach(item => {
             if (item.source === 'extension') {
                 groupSources.set(item.group_label, 'extension');
+            } else if (item.source === 'plugin') {
+                groupSources.set(item.group_label, 'plugin');
             }
         });
 
@@ -91,7 +93,8 @@ function SidebarMenuManager() {
                     id: item.group_label, // Use label as ID for reorder
                     label: item.group_label,
                     order: item.group_order || 999,
-                    isExtension: groupSources.get(item.group_label) === 'extension'
+                    isExtension: groupSources.get(item.group_label) === 'extension',
+                    isPlugin: groupSources.get(item.group_label) === 'plugin'
                 });
             }
         });
@@ -422,6 +425,12 @@ bg - card shadow - sm transition - all
                                                                     Ext
                                                                 </span>
                                                             )}
+                                                            {(item.plugin_type === 'core' || item.is_core) && (
+                                                                <span className="flex items-center text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 dark:bg-emerald-900/10 dark:text-emerald-400 dark:border-emerald-900/20">
+                                                                    <Puzzle className="w-3 h-3 mr-1" />
+                                                                    Core
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -521,6 +530,7 @@ bg - card shadow - sm transition - all
                                                 <div className="flex items-center gap-2">
                                                     <h4 className={`font-medium ${group.isExtension ? 'text-indigo-700 dark:text-indigo-300' : 'text-foreground'}`}>{group.label}</h4>
                                                     {group.isExtension && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 rounded-full border border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-800">Module</span>}
+                                                    {group.isPlugin && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 rounded-full border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800">Core</span>}
                                                 </div>
                                                 <p className="text-xs text-muted-foreground">Order: {group.order}</p>
                                             </div>

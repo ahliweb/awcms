@@ -13,7 +13,11 @@ export function useRegions() {
     /**
      * Get regions by level (optionally filtered by parent)
      */
-    const getRegions = useCallback(async ({ levelId, parentId = null }) => {
+    /**
+     * Get regions by level (optionally filtered by parent)
+     * Supports pagination and search
+     */
+    const getRegions = useCallback(async ({ levelId, parentId = null, page = 1, pageSize = 20, searchQuery = '' }) => {
         try {
             setLoading(true);
 
@@ -22,31 +26,41 @@ export function useRegions() {
                 .select(`
           *,
           level:region_levels(key, name, level_order)
-        `)
-                .order('name');
+        `, { count: 'exact' });
+
+            if (searchQuery && searchQuery.trim().length > 0) {
+                query = query.ilike('name', `%${searchQuery}%`);
+            } else {
+                query = query.order('name');
+            }
 
             if (levelId) {
                 query = query.eq('level_id', levelId);
             }
 
-            // If parentId is explicitly null, filter for root regions (no parent) usually
-            // But query logic depends on use case. 
-            // If parentId is provided, filter by it.
-            if (parentId) {
-                query = query.eq('parent_id', parentId);
-            } else if (levelId && !parentId) {
-                // If getting specific level but no parent, return all in that level
-                // No extra filter needed
+            // Logic for parent/hierarchy navigation (only if not searching, usually)
+            // Or allow search within parent? Let's allow global search if query exists.
+            if (!searchQuery) {
+                if (parentId) {
+                    query = query.eq('parent_id', parentId);
+                } else if (parentId === null) {
+                    query = query.is('parent_id', null);
+                }
             }
 
-            const { data, error } = await query;
+            // Pagination
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+            query = query.range(from, to);
+
+            const { data, error, count } = await query;
 
             if (error) throw error;
-            return data;
+            return { data, count };
         } catch (error) {
             console.error('Error fetching regions:', error);
             toast.error('Failed to fetch regions');
-            return [];
+            return { data: [], count: 0 };
         } finally {
             setLoading(false);
         }

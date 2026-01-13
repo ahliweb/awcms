@@ -35,7 +35,8 @@ export const register = ({ addAction, addFilter, supabase }) => {
                 path: manifest.menu.path,
                 parent: manifest.menu.parent,
                 order: 100,
-                permission: 'plugin.backup.view'
+                permission: 'plugin.backup.view',
+                plugin_type: manifest.type
             }
         ];
     });

@@ -142,7 +142,8 @@ export function useAdminMenu() {
             order: item.order || 10,
             is_visible: true,
             permission: item.permission || null,
-            source: 'plugin'
+            source: 'plugin',
+            plugin_type: item.plugin_type || 'extension' // Default to extension if not specified
           }));
         combined = [...combined, ...normalizedPluginMenus];
       } catch (pluginErr) {

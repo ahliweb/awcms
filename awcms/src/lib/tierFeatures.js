@@ -15,7 +15,7 @@ export const TIER_FEATURES = {
         // Includes all Free features
         'ALL_FREE',
         'themes', 'widgets', 'roles', 'permissions', 'policies', 'seo_manager', 'languages',
-        'notifications', 'audit_logs', 'settings_branding', 'backup',
+        'notifications', 'audit_logs', 'settings_branding', 'backup', 'regions',
         'photo_gallery', 'video_gallery'
     ],
     enterprise: [

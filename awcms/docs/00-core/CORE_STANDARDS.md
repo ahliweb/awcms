@@ -3,13 +3,16 @@
 > Version: 2.12.1 | Last Updated: 2026-01-12 | React: 18.3.1
 
 ## Purpose
+
 Define the non-negotiable architecture and implementation standards for AWCMS across all packages.
 
 ## Audience
+
 - Engineers and maintainers working on any AWCMS package
 - AI coding agents collaborating on the codebase
 
 ## Prerequisites
+
 - `../../../AGENTS.md` must be followed over all other instructions
 - `../00-core/DOCS_STRUCTURE.md` for documentation structure
 
@@ -25,7 +28,8 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
   - Context: `awcms/src/contexts/PermissionContext.jsx`
   - Hook: `usePermissions()` (role and permission checks)
   - Definition: `../03-features/ROLE_HIERARCHY.md`
-- **Multi-Tenancy**:
+- **Administrative Regions**: Indonesian administrative regions (Propinsi to Desa/Kelurahan) sourced from [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah/blob/master/db/wilayah.sql) (Last Updated: 2026-01-13). Managed via `regions` table with standard hierarchy.
+- **Tenants**: Multi-tenancy support with `tenants` table and RLS policies.
   - Context: `awcms/src/contexts/TenantContext.jsx`
   - Hooks: `useTenant()`, `usePublicTenant()`, `useTenantTheme()`
   - Policy: All database queries must be scoped by `tenant_id`
@@ -86,7 +90,7 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 
 #### 3.1 Extension Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         AWCMS CORE                                   │
 │  ┌───────────────────────────────────────────────────────────────┐  │
@@ -119,6 +123,8 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 | Core Plugins | `awcms/src/plugins/` | Static import | Platform-wide | Essential functionality |
 | External Extensions | `awcms-ext-*` folders | Dynamic import | Per-tenant | Third-party modules |
 | UI Slots | `<PluginSlot>` components | Runtime injection | Any | Widgets, menus, form fields |
+
+> **Requirement**: Core Plugins must specify `"type": "core"` in their `plugin.json` manifest and pass `plugin_type` during menu registration to be labeled as "Core" in the UI. Extensions must not use this type.
 
 #### 3.3 Core Files
 
