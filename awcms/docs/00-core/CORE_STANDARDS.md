@@ -121,7 +121,7 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 | Layer | Location | Loading | Scope | Use Case |
 | --- | --- | --- | --- | --- |
 | Core Plugins | `awcms/src/plugins/` | Static import | Platform-wide | Essential functionality |
-| External Extensions | `awcms-ext-*` folders | Dynamic import | Per-tenant | Third-party modules |
+| External Extensions | `awcms-ext/*` folders | Dynamic import | Per-tenant | Third-party modules |
 | UI Slots | `<PluginSlot>` components | Runtime injection | Any | Widgets, menus, form fields |
 
 > **Requirement**: Core Plugins must specify `"type": "core"` in their `plugin.json` manifest and pass `plugin_type` during menu registration to be labeled as "Core" in the UI. Extensions must not use this type.
