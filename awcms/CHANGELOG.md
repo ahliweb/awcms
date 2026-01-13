@@ -5,6 +5,28 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.13.0] "Atlas" - 2026-01-13
+
+### Added
+
+- **Region Module Upgrades**:
+  - Implemented server-side pagination, debounced search, and sorting for Administrative Regions.
+  - Refactored `RegionsManager` to use standard Admin Table component consistent with other modules.
+  - Added `Administrative` group label to Sidebar for Region module visibility.
+
+### Fixed
+
+- **Sidebar Manager**: Fixed "Core" label logic to only appear for plugins explicitly marked as `type: "core"` (e.g., Mailketing, Backup).
+- **Database Synchronization**: Resolved `npx supabase db pull` failure by fixing a missing policy (`audit_logs_insert_unified`) in the migration history.
+- **Documentation Link Check**: resolved linting errors in `AGENTS.md` and `CORE_STANDARDS.md`.
+
+### Changed
+
+- **Documentation**:
+  - Consolidated architecture docs (Menu System, ABAC, Core Standards).
+  - Updated "Current Tech Stack" references to React 18.3.1 and Tailwind 4.
+- **Admin Menu System**: Updated `useAdminMenu` hook to propagate `plugin_type` from manifest to UI components.
+
 ## [2.12.1] "Mailbox" - 2026-01-12
 
 ### Documentation
