@@ -6,8 +6,8 @@ Welcome to the AWCMS monorepo. AWCMS is a multi-tenant CMS platform with admin, 
 
 | Directory | Description | Tech Stack |
 | --- | --- | --- |
-| `awcms/` | Admin Panel | React 18.3.1, Vite 7, Supabase |
-| `awcms-public/primary/` | Public Portal | Astro 5, React 18.3.1 |
+| `awcms/` | Admin Panel | React 19.2.3, Vite 7, Supabase |
+| `awcms-public/primary/` | Public Portal | Astro 5, React 19.2.3 |
 | `awcms-mobile/primary/` | Mobile App | Flutter |
 | `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
 | `awcms-ext/` | External Extensions | JavaScript modules |

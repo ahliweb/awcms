@@ -1,13 +1,16 @@
 # Tech Stack and Dependencies
 
 ## Purpose
+
 Provide authoritative versions and technology choices for all AWCMS packages.
 
 ## Audience
+
 - Developers validating compatibility
 - Operators planning deployments
 
 ## Prerequisites
+
 - `docs/architecture/standards.md`
 
 ## Reference
@@ -16,7 +19,7 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
-| Framework | React | 18.3.1 | UI framework (locked for Puck) |
+| Framework | React | 19.2.3 | UI framework |
 | Build tool | Vite | 7.2.7 | SPA build and dev server |
 | Language | JavaScript | ES2022+ | Functional components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
@@ -33,7 +36,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | Meta-framework | Astro | 5.16.6 | SSR/Islands |
-| UI library | React | 18.3.1 | Island rendering |
+| UI library | React | 19.2.3 | Island rendering |
 | Language | TypeScript | 5.x | Typed components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
 | Supabase JS | @supabase/supabase-js | 2.89.0 | Public API client |
@@ -61,7 +64,7 @@ Public styling uses TailwindCSS 4 via the Vite plugin and `tailwind.config.mjs`.
 
 ## Security and Compliance Notes
 
-- React 18 is required for Puck compatibility.
+- React 19.2.3 is required for consistent behavior.
 - Public portal uses PuckRenderer only; no editor runtime.
 
 ## References

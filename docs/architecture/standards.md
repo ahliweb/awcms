@@ -1,6 +1,6 @@
 # AWCMS Core Standards
 
-> Version: 2.12.1 | Last Updated: 2026-01-12 | React: 18.3.1
+> Version: 2.12.1 | Last Updated: 2026-01-16 | React: 19.2.3
 
 ## Purpose
 

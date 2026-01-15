@@ -1,11 +1,13 @@
 # AWCMS Admin Panel
 
-The admin panel for AWCMS, built with React 18.3.1 and Vite 7.
+The admin panel for AWCMS, built with React 19.2.3 and Vite 7.
 
 ## Purpose
+
 Manage tenant content, users, templates, and configuration.
 
 ## Prerequisites
+
 - Node.js 20+
 - npm 10+
 

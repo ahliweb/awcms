@@ -1,13 +1,16 @@
 # System Architecture
 
 ## Purpose
+
 Describe the runtime architecture and data flow across the AWCMS monorepo.
 
 ## Audience
+
 - Developers working across admin/public/mobile/IoT
 - Operators configuring deployments
 
 ## Prerequisites
+
 - `docs/architecture/standards.md`
 - `docs/tenancy/overview.md`
 
@@ -15,7 +18,7 @@ Describe the runtime architecture and data flow across the AWCMS monorepo.
 
 AWCMS is a headless system with multiple clients sharing a Supabase backend:
 
-- Admin Panel: React 18 SPA (Vite)
+- Admin Panel: React 19 SPA (Vite)
 - Public Portal: Astro SSR/Islands (Cloudflare Pages)
 - Mobile: Flutter app
 - IoT: ESP32 firmware
@@ -40,7 +43,7 @@ graph TD
     end
 
     subgraph "Admin Panel (Vite SPA)"
-        AdminPanel[React 18 App]
+        AdminPanel[React 19 App]
         AdminContext[Tenant Context]
         Puck[Puck Visual Editor]
         AdminPanel --> AdminContext

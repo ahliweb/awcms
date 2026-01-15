@@ -12,7 +12,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Implementation, Refactoring, Bug Fixing.
 - **Capabilities**:
-  - Full context awareness of React 18/Vite 7/Supabase constraints.
+  - Full context awareness of React 19/Vite 7/Supabase constraints.
   - Ability to generate complex UI components using `shadcn/ui` patterns.
   - Writing SQL migrations for Supabase.
   - Updating system hooks (e.g., `useSearch`, `useAdminMenu`, `useMedia`, `useTwoFactor`).
@@ -31,7 +31,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 - **Capabilities**:
-  - Working with **Astro 5** and **React 18.3.1** (Islands Architecture).
+  - Working with **Astro 5** and **React 19.2.3** (Islands Architecture).
   - Implementing **Zod** schemas for component prop validation.
   - Optimizing for Cloudflare Pages (Edge Cache, Headers).
 - **Constraints**:
@@ -44,25 +44,25 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 Agents must be aware of the exact versions in use:
 
-| Technology       | Version  | Notes                          |
-| ---------------- | -------- | ------------------------------ |
-| React            | 18.3.1   | Functional components only     |
-| Vite             | 7.2.7    | Build tool & dev server        |
-| TailwindCSS      | 4.1.18   | Admin uses CSS-based config    |
-| Supabase JS      | 2.87.1   | Admin client (respects RLS)    |
-| React Router DOM | 7.10.1   | Client-side routing            |
+| Technology       | Version  | Notes                            |
+| ---------------- | -------- | -------------------------------- |
+| React            | 19.2.3   | Functional components only       |
+| Vite             | 7.2.7    | Build tool & dev server          |
+| TailwindCSS      | 4.1.18   | Admin uses CSS-based config      |
+| Supabase JS      | 2.87.1   | Admin client (respects RLS)      |
+| React Router DOM | 7.10.1   | Client-side routing              |
 | Puck             | 0.21.0   | Visual Editor (@puckeditor/puck) |
-| TipTap           | 3.13.0   | Rich text editor (XSS-safe)    |
-| Framer Motion    | 12.23.26 | Animations                     |
-| Radix UI         | Latest   | Accessible UI primitives       |
-| Lucide React     | 0.561.0  | Icon library                   |
-| i18next          | 25.7.2   | Internationalization           |
-| Recharts         | 3.5.1    | Charts & Data Visualization    |
-| Leaflet          | 1.9.4    | Maps                           |
-| Vitest           | 4.0.16   | Unit/Integration testing       |
+| TipTap           | 3.13.0   | Rich text editor (XSS-safe)      |
+| Framer Motion    | 12.23.26 | Animations                       |
+| Radix UI         | Latest   | Accessible UI primitives         |
+| Lucide React     | 0.561.0  | Icon library                     |
+| i18next          | 25.7.2   | Internationalization             |
+| Recharts         | 3.5.1    | Charts & Data Visualization      |
+| Leaflet          | 1.9.4    | Maps                             |
+| Vitest           | 4.0.16   | Unit/Integration testing         |
 
 > [!IMPORTANT]
-> **React Version Alignment**: The Admin Panel and Public Portal both use React 18.3.1. Do not upgrade to React 19 until Puck compatibility and public portal validation are complete.
+> **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.3. Ensure full compatibility with all dependencies.
 
 ---
 
@@ -95,8 +95,8 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | Rule              | Requirement                                                               |
 | ----------------- | ------------------------------------------------------------------------- |
 | Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
-| **Admin Panel**   | React 18.3.1 (Strict), Vite 7                                             |
-| **Public Portal** | Astro 5, React 18.3.1, Cloudflare Pages                                   |
+| **Admin Panel**   | React 19.2.3, Vite 7                                                      |
+| **Public Portal** | Astro 5, React 19.2.3, Cloudflare Pages                                   |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase only (NO Node.js servers)                                        |
 
@@ -257,7 +257,7 @@ Use these pre-resolved IDs for frequent queries:
 | **TailwindCSS 4** | `/websites/tailwindcss`               | Styling & Utility classes  |
 | **Supabase JS**   | `/supabase/supabase-js`               | Auth, DB & Storage Client  |
 | **Lucide React**  | `/websites/lucide_dev_guide_packages` | Icon documentation         |
-| **React 18**      | `/websites/react_dev`                 | Core Library documentation |
+| **React 19**      | `/websites/react_dev`                 | Core Library documentation |
 
 ### Usage Pattern
 
