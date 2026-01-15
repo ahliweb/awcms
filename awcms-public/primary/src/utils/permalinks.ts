@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import slugify from 'limax';
 
 import { SITE, APP_BLOG } from 'astrowind:config';
@@ -42,17 +43,19 @@ export const getCanonical = (path = ''): string | URL => {
 export const getPermalink = (slug = '', type = 'page'): string => {
   let permalink: string;
 
-  if (slug.startsWith('javascript:')) {
+  const lowerSlug = slug.toLowerCase().trim();
+
+  if (lowerSlug.startsWith('javascript:') || lowerSlug.startsWith('vbscript:') || lowerSlug.startsWith('data:')) {
     return '#';
   }
 
   if (
-    slug.startsWith('https://') ||
-    slug.startsWith('http://') ||
-    slug.startsWith('://') ||
-    slug.startsWith('#') ||
-    slug.startsWith('mailto:') ||
-    slug.startsWith('tel:')
+    lowerSlug.startsWith('https://') ||
+    lowerSlug.startsWith('http://') ||
+    lowerSlug.startsWith('://') ||
+    lowerSlug.startsWith('#') ||
+    lowerSlug.startsWith('mailto:') ||
+    lowerSlug.startsWith('tel:')
   ) {
     return slug;
   }

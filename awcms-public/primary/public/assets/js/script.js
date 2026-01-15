@@ -506,7 +506,7 @@
         $(document.body).on('appear', '.odometer', function (e) {
             var odo = $(".odometer");
             odo.each(function () {
-                var countNumber = $(this).attr("data-count");
+                var countNumber = Number($(this).attr("data-count"));
                 $(this).text(countNumber);
             });
         });
