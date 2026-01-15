@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Puck, Render } from '@measured/puck';
-import '@measured/puck/puck.css';
+import { Puck, Render } from '@puckeditor/core';
+import '@puckeditor/core/puck.css';
 import './puck-theme.css';
 import { Save, Eye, EyeOff, ArrowLeft, Upload, Monitor, Tablet, Smartphone, Undo2, Redo2, Loader2, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';

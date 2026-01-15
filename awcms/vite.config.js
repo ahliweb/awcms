@@ -106,7 +106,7 @@ export default defineConfig(({ mode }) => {
 							'@tiptap/extension-underline',
 							'@tiptap/react',
 							'@tiptap/starter-kit',
-							'@measured/puck',
+							'@puckeditor/core',
 						],
 						'vendor-charts': ['recharts'],
 						'vendor-maps': ['leaflet', 'react-leaflet'],

@@ -51,7 +51,7 @@ Describe how the public portal renders tenant content and enforces security cons
 ## Permissions and Access
 
 - Public portal only renders published content.
-- No runtime use of `@measured/puck` editor; only `PuckRenderer` is allowed.
+- No runtime use of `@puckeditor/puck` editor; only `PuckRenderer` is allowed.
 
 ## Security and Compliance Notes
 

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { DropZone } from '@measured/puck';
+import { DropZone } from '@puckeditor/core';
 
 export const GridBlockFields = {
     columns: {

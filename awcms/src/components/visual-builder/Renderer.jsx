@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Render } from '@measured/puck';
+import { Render } from '@puckeditor/core';
 import puckConfig from './config';
 
 const VisualPageRenderer = ({ content }) => {

@@ -20,7 +20,7 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 | Build tool | Vite | 7.2.7 | SPA build and dev server |
 | Language | JavaScript | ES2022+ | Functional components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
-| Visual editor | @measured/puck | 0.20.2 | Visual builder |
+| Visual editor | @puckeditor/puck | 0.20.2 | Visual builder |
 | Rich text | TipTap | 3.13.0 | WYSIWYG editor |
 | Animations | Framer Motion | 12.23.26 | UI motion |
 | Routing | React Router DOM | 7.10.1 | Client routing |

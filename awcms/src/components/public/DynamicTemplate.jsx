@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Render } from '@measured/puck';
+import { Render } from '@puckeditor/core';
 import { supabase } from '@/lib/customSupabaseClient';
 import { puckConfig } from '@/components/visual-builder/config';
 import { usePermissions } from '@/contexts/PermissionContext';

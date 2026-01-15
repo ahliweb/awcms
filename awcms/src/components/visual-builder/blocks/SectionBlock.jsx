@@ -1,5 +1,5 @@
 import React from 'react';
-import { DropZone } from '@measured/puck';
+import { DropZone } from '@puckeditor/core';
 import { ImageField } from '../fields/ImageField';
 import { ColorPickerField } from '../fields/ColorPickerField';
 

@@ -13,7 +13,7 @@ Explain the Visual Page Builder architecture and integration with public renderi
 
 ## Core Concepts
 
-- Admin uses `@measured/puck` editor to build layouts.
+- Admin uses `@puckeditor/puck` editor to build layouts.
 - Output is stored in `puck_layout_jsonb`.
 - Public portal renders JSON via `PuckRenderer` with an allow-list registry.
 
