@@ -37,21 +37,22 @@
 	},
 	"dependencies": {
 		"@astrojs/sitemap": "^1.1.0",
-		"@astrojs/tailwind": "^3.0.1",
+		"@astrojs/tailwind": "^6.0.2",
 		"@faker-js/faker": "^7.6.0",
 		"apexcharts": "^3.37.2",
-		"astro": "^2.0.4",
+		"astro": "^5.16.9",
 		"flowbite": "^2.1.1",
 		"flowbite-typography": "^1.0.3",
 		"shiki": "^0.14.1",
 		"tailwind-scrollbar": "^3.0.0",
-		"tailwindcss": "^3.0.24"
+		"tailwindcss": "^3.4.19"
 	},
 	"devDependencies": {
 		"@types/eslint": "^8.21.1",
 		"@typescript-eslint/eslint-plugin": "^5.54.1",
 		"@typescript-eslint/parser": "^5.54.1",
 		"astro-eslint-parser": "^0.11.0",
+		"autoprefixer": "^10.4.23",
 		"eslint": "^8.35.0",
 		"eslint-config-airbnb-base": "^15.0.0",
 		"eslint-config-airbnb-typescript": "^17.0.0",
@@ -60,6 +61,7 @@
 		"eslint-plugin-astro": "^0.23.0",
 		"eslint-plugin-import": "^2.27.5",
 		"eslint-plugin-prettier": "^4.2.1",
-		"eslint-plugin-tsdoc": "^0.2.17"
+		"eslint-plugin-tsdoc": "^0.2.17",
+		"postcss": "^8.5.6"
 	}
 }
