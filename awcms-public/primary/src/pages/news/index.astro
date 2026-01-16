@@ -1,0 +1,192 @@
+---
+/**
+ * News/Articles Listing Page
+ * Path: /news
+ * Lists all published articles from Supabase with pagination
+ */
+import Layout from '~/layouts/PageLayout.astro';
+import { createClientFromEnv } from '~/lib/supabase';
+import { getArticles } from '~/lib/content';
+import { Icon } from 'astro-icon/components';
+
+// SSR mode for dynamic content
+export const prerender = false;
+
+// Get query params
+const url = new URL(Astro.request.url);
+const currentPage = parseInt(url.searchParams.get('page') || '1');
+const categorySlug = url.searchParams.get('category') || undefined;
+const tagSlug = url.searchParams.get('tag') || undefined;
+const perPage = 12;
+
+// Get tenant from locals
+const tenant_id = Astro.locals.tenant_id || null;
+
+// Create Supabase client
+const supabase = createClientFromEnv(Astro.locals.runtime?.env || import.meta.env);
+
+let articles: any[] = [];
+let total = 0;
+
+if (supabase) {
+  const result = await getArticles(supabase, tenant_id, {
+    limit: perPage,
+    offset: (currentPage - 1) * perPage,
+    categorySlug
+  });
+  articles = result.articles;
+  total = result.total;
+}
+
+// Pagination
+const totalPages = Math.ceil(total / perPage);
+const hasNextPage = currentPage < totalPages;
+const hasPrevPage = currentPage > 1;
+
+// Metadata
+const metadata = {
+  title: 'News & Articles',
+  description: 'Latest news, updates, and articles',
+};
+---
+
+<Layout metadata={metadata}>
+  <section class="py-12 sm:py-16 lg:py-20">
+    <div class="mx-auto max-w-7xl px-6 sm:px-8">
+      <!-- Page Header -->
+      <header class="mb-12 text-center">
+        <h1 class="text-4xl md:text-5xl font-bold tracking-tight dark:text-slate-200">
+          News & Articles
+        </h1>
+        <p class="mt-4 text-xl text-muted-foreground max-w-2xl mx-auto">
+          Stay updated with our latest news, announcements, and insights.
+        </p>
+        
+        <!-- Filter Info -->
+        {categorySlug && (
+          <div class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
+            <span>Category: {categorySlug}</span>
+            <a href="/news" class="hover:bg-primary/20 rounded-full p-1">
+              <Icon name="tabler:x" class="w-4 h-4" />
+            </a>
+          </div>
+        )}
+        {tagSlug && (
+          <div class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary text-secondary-foreground">
+            <span>Tag: #{tagSlug}</span>
+            <a href="/news" class="hover:bg-secondary/80 rounded-full p-1">
+              <Icon name="tabler:x" class="w-4 h-4" />
+            </a>
+          </div>
+        )}
+      </header>
+
+      <!-- Articles Grid -->
+      {articles.length > 0 ? (
+        <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+          {articles.map((article) => (
+            <article class="group flex flex-col bg-card rounded-xl border border-border overflow-hidden hover:shadow-lg transition-shadow">
+              <!-- Featured Image -->
+              {article.featured_image ? (
+                <a href={`/news/${article.slug}`} class="block aspect-video overflow-hidden">
+                  <img
+                    src={article.featured_image}
+                    alt={article.title}
+                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                  />
+                </a>
+              ) : (
+                <a href={`/news/${article.slug}`} class="block aspect-video bg-muted flex items-center justify-center">
+                  <Icon name="tabler:photo" class="w-12 h-12 text-muted-foreground" />
+                </a>
+              )}
+              
+              <!-- Content -->
+              <div class="flex flex-col flex-1 p-6">
+                <!-- Category -->
+                {article.category && (
+                  <a 
+                    href={`/news?category=${article.category.slug}`}
+                    class="self-start mb-2 text-xs font-medium text-primary hover:underline"
+                  >
+                    {article.category.name}
+                  </a>
+                )}
+                
+                <!-- Title -->
+                <h2 class="text-xl font-semibold leading-snug mb-2">
+                  <a 
+                    href={`/news/${article.slug}`}
+                    class="hover:text-primary transition-colors"
+                  >
+                    {article.title}
+                  </a>
+                </h2>
+                
+                <!-- Excerpt -->
+                {article.excerpt && (
+                  <p class="text-muted-foreground text-sm line-clamp-2 flex-1">
+                    {article.excerpt}
+                  </p>
+                )}
+                
+                <!-- Meta -->
+                <div class="mt-4 pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+                  <time datetime={article.published_at || article.created_at}>
+                    {new Date(article.published_at || article.created_at).toLocaleDateString('id-ID', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </time>
+                  {article.views > 0 && (
+                    <span class="flex items-center gap-1">
+                      <Icon name="tabler:eye" class="w-3.5 h-3.5" />
+                      {article.views}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div class="text-center py-16">
+          <Icon name="tabler:news-off" class="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+          <h2 class="text-xl font-semibold mb-2">No articles found</h2>
+          <p class="text-muted-foreground">Check back later for new content.</p>
+        </div>
+      )}
+
+      <!-- Pagination -->
+      {totalPages > 1 && (
+        <nav class="mt-12 flex items-center justify-center gap-2">
+          {hasPrevPage && (
+            <a 
+              href={`/news?page=${currentPage - 1}${categorySlug ? `&category=${categorySlug}` : ''}`}
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors"
+            >
+              <Icon name="tabler:chevron-left" class="w-4 h-4" />
+              Previous
+            </a>
+          )}
+          
+          <span class="px-4 py-2 text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          
+          {hasNextPage && (
+            <a 
+              href={`/news?page=${currentPage + 1}${categorySlug ? `&category=${categorySlug}` : ''}`}
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors"
+            >
+              Next
+              <Icon name="tabler:chevron-right" class="w-4 h-4" />
+            </a>
+          )}
+        </nav>
+      )}
+    </div>
+  </section>
+</Layout>

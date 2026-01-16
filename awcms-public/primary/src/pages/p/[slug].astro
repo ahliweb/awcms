@@ -1,0 +1,113 @@
+---
+/**
+ * Dynamic Page Route - Renders pages from Supabase 'pages' table
+ * Path: /p/{slug}
+ */
+import Layout from '~/layouts/PageLayout.astro';
+import { createClientFromEnv } from '~/lib/supabase';
+import { getPageBySlug } from '~/lib/content';
+
+// SSR mode for dynamic content
+export const prerender = false;
+
+// Get slug from URL
+const { slug } = Astro.params;
+
+if (!slug) {
+  return Astro.redirect('/404');
+}
+
+// Get tenant from locals (set by middleware)
+const tenant_id = Astro.locals.tenant_id || null;
+
+// Create Supabase client
+const supabase = createClientFromEnv(Astro.locals.runtime?.env || import.meta.env);
+
+if (!supabase) {
+  console.error('[Page] Supabase client not available');
+  return Astro.redirect('/404');
+}
+
+// Fetch page data
+const page = await getPageBySlug(supabase, slug, tenant_id);
+
+if (!page) {
+  console.log(`[Page] Page not found: ${slug}`);
+  return Astro.redirect('/404');
+}
+
+// Metadata for SEO
+const metadata = {
+  title: page.title,
+  description: page.meta_description || page.excerpt || '',
+  openGraph: {
+    type: 'website',
+    images: page.featured_image ? [{ url: page.featured_image }] : undefined,
+  },
+};
+
+// Determine content to render
+const isVisual = page.editor_type === 'visual';
+const htmlContent = page.content || '';
+---
+
+<Layout metadata={metadata}>
+  <section class="py-12 sm:py-16 lg:py-20">
+    <div class="mx-auto max-w-4xl px-6 sm:px-8">
+      <!-- Page Header -->
+      <header class="mb-8">
+        <h1 class="text-4xl md:text-5xl font-bold leading-tight tracking-tight dark:text-slate-200">
+          {page.title}
+        </h1>
+        {page.excerpt && (
+          <p class="mt-4 text-xl text-muted-foreground dark:text-slate-400">
+            {page.excerpt}
+          </p>
+        )}
+      </header>
+
+      <!-- Featured Image -->
+      {page.featured_image && (
+        <figure class="mb-8">
+          <img
+            src={page.featured_image}
+            alt={page.title}
+            class="w-full rounded-xl shadow-lg"
+            loading="lazy"
+          />
+        </figure>
+      )}
+
+      <!-- Page Content -->
+      {isVisual ? (
+        <!-- Visual Builder Content (JSON blocks) -->
+        <div class="visual-content prose prose-lg dark:prose-invert max-w-none">
+          <!-- TODO: Implement visual block renderer -->
+          <p class="text-muted-foreground">Visual content rendering coming soon...</p>
+        </div>
+      ) : (
+        <!-- Rich Text Content (HTML) -->
+        <article 
+          class="prose prose-lg dark:prose-invert max-w-none
+                 prose-headings:font-bold prose-headings:tracking-tight
+                 prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                 prose-img:rounded-xl prose-img:shadow-lg"
+          set:html={htmlContent}
+        />
+      )}
+
+      <!-- Page Footer -->
+      {page.updated_at && (
+        <footer class="mt-12 pt-8 border-t border-border">
+          <p class="text-sm text-muted-foreground">
+            Last updated: {new Date(page.updated_at).toLocaleDateString('id-ID', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            })}
+          </p>
+        </footer>
+      )}
+    </div>
+  </section>
+</Layout>

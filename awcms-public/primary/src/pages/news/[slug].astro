@@ -1,0 +1,195 @@
+---
+/**
+ * Dynamic Article/News Route - Renders articles from Supabase 'articles' table
+ * Path: /news/{slug}
+ */
+import Layout from "~/layouts/PageLayout.astro";
+import { createClientFromEnv } from "~/lib/supabase";
+import { getArticleBySlug } from "~/lib/content";
+import { Icon } from "astro-icon/components";
+
+// SSR mode for dynamic content
+export const prerender = false;
+
+// Get slug from URL
+const { slug } = Astro.params;
+
+if (!slug) {
+    return Astro.redirect("/404");
+}
+
+// Get tenant from locals
+const tenant_id = Astro.locals.tenant_id || null;
+
+// Create Supabase client
+const supabase = createClientFromEnv(
+    Astro.locals.runtime?.env || import.meta.env,
+);
+
+if (!supabase) {
+    console.error("[Article] Supabase client not available");
+    return Astro.redirect("/404");
+}
+
+// Fetch article data
+const article = await getArticleBySlug(supabase, slug, tenant_id);
+
+if (!article) {
+    console.log(`[Article] Article not found: ${slug}`);
+    return Astro.redirect("/404");
+}
+
+// Format dates
+const publishedDate = article.published_at
+    ? new Date(article.published_at)
+    : new Date(article.created_at);
+
+const formattedDate = publishedDate.toLocaleDateString("id-ID", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+});
+
+// Metadata for SEO
+const metadata = {
+    title: article.title,
+    description: article.excerpt || "",
+    openGraph: {
+        type: "article",
+        article: {
+            publishedTime: article.published_at,
+            modifiedTime: article.updated_at,
+        },
+        images: article.featured_image
+            ? [{ url: article.featured_image }]
+            : undefined,
+    },
+};
+
+// Content
+const isVisual = article.editor_type === "visual";
+const htmlContent = article.content || "";
+---
+
+<Layout metadata={metadata}>
+    <article class="py-12 sm:py-16 lg:py-20">
+        <div class="mx-auto max-w-4xl px-6 sm:px-8">
+            <!-- Article Header -->
+            <header class="mb-8">
+                <!-- Category Badge -->
+                {
+                    article.category && (
+                        <a
+                            href={`/news?category=${article.category.slug}`}
+                            class="inline-block mb-4 px-3 py-1 text-sm font-medium rounded-full
+                   bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                        >
+                            {article.category.name}
+                        </a>
+                    )
+                }
+
+                <!-- Title -->
+                <h1
+                    class="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-tight dark:text-slate-200"
+                >
+                    {article.title}
+                </h1>
+
+                <!-- Meta Info -->
+                <div
+                    class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground"
+                >
+                    <time
+                        datetime={article.published_at || article.created_at}
+                        class="flex items-center gap-1"
+                    >
+                        <Icon name="tabler:calendar" class="w-4 h-4" />
+                        {formattedDate}
+                    </time>
+
+                    {
+                        article.views > 0 && (
+                            <span class="flex items-center gap-1">
+                                <Icon name="tabler:eye" class="w-4 h-4" />
+                                {article.views.toLocaleString()} views
+                            </span>
+                        )
+                    }
+                </div>
+
+                <!-- Excerpt -->
+                {
+                    article.excerpt && (
+                        <p class="mt-6 text-xl text-muted-foreground dark:text-slate-400 leading-relaxed">
+                            {article.excerpt}
+                        </p>
+                    )
+                }
+            </header>
+
+            <!-- Featured Image -->
+            {
+                article.featured_image && (
+                    <figure class="mb-10 -mx-6 sm:-mx-8 lg:-mx-16">
+                        <img
+                            src={article.featured_image}
+                            alt={article.title}
+                            class="w-full aspect-video object-cover rounded-none sm:rounded-xl shadow-lg"
+                            loading="eager"
+                        />
+                    </figure>
+                )
+            }
+
+            <!-- Article Content -->
+            {
+                isVisual ? (
+                    <div class="visual-content prose prose-lg dark:prose-invert max-w-none">
+                        <p class="text-muted-foreground">
+                            Visual content rendering coming soon...
+                        </p>
+                    </div>
+                ) : (
+                    <div
+                        class="prose prose-lg dark:prose-invert max-w-none
+                 prose-headings:font-bold prose-headings:tracking-tight
+                 prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                 prose-img:rounded-xl prose-img:shadow-lg
+                 prose-blockquote:border-l-primary prose-blockquote:bg-muted/50 prose-blockquote:py-1 prose-blockquote:px-4"
+                        set:html={htmlContent}
+                    />
+                )
+            }
+
+            <!-- Article Footer -->
+            <footer class="mt-12 pt-8 border-t border-border">
+                <!-- Tags -->
+                {
+                    article.tags && article.tags.length > 0 && (
+                        <div class="flex flex-wrap gap-2 mb-6">
+                            {article.tags.map((tag) => (
+                                <a
+                                    href={`/news?tag=${tag.slug}`}
+                                    class="px-3 py-1 text-sm rounded-full border border-border 
+                       hover:bg-muted transition-colors"
+                                >
+                                    #{tag.name}
+                                </a>
+                            ))}
+                        </div>
+                    )
+                }
+
+                <!-- Back Link -->
+                <a
+                    href="/news"
+                    class="inline-flex items-center gap-2 text-primary hover:underline"
+                >
+                    <Icon name="tabler:arrow-left" class="w-4 h-4" />
+                    Back to News
+                </a>
+            </footer>
+        </div>
+    </article>
+</Layout>
