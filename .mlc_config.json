@@ -59,6 +59,18 @@
     },
     {
       "pattern": "^https?://tailnext\\.vercel\\.app"
+    },
+    {
+      "pattern": "^https?://.*\\.vercel\\.app"
+    },
+    {
+      "pattern": "^https?://images\\.unsplash\\.com"
+    },
+    {
+      "pattern": "^landing/"
+    },
+    {
+      "pattern": "^https?://example\\.com"
     }
   ],
   "replacementPatterns": [],
