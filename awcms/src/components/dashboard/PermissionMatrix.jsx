@@ -10,26 +10,39 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 // Defined Resource Categories for better organization
 const RESOURCE_CATEGORIES = {
     'Content': [
-        'articles', 'pages', 'portfolio', 'testimonies',
+        'articles', 'pages', 'visual_pages', 'portfolio', 'testimonies',
         'announcements', 'promotions', 'products', 'product_types',
-        'themes', 'inbox', 'contact_messages'
+        'themes', 'widgets', 'templates', 'contact_messages'
     ],
     'Media': [
         'photo_gallery', 'photo_galleries', 'video_gallery', 'video_galleries',
-        'files', 'media', 'gallery'
+        'files', 'media', 'galleries'
+    ],
+    'Commerce': [
+        'orders', 'products', 'product_types'
     ],
     'System': [
-        'users', 'roles', 'permissions', 'settings', 'logs', 'backup',
+        'users', 'roles', 'permissions', 'policies', 'settings', 'audit', 'backups',
         'extensions', 'languages', 'seo', 'sso', 'admin_menu',
         'sidebar_manager', 'system'
     ],
     'Navigation': [
         'menus', 'categories', 'tags', 'navigation', 'admin_navigation'
     ],
-    'Interaction': [
-        'contacts', 'contact_messages', 'notifications', 'messages'
+    'Communication': [
+        'contacts', 'contact_messages', 'notifications', 'messages', 'email'
+    ],
+    'Platform': [
+        'tenant', 'tenants', 'platform', 'dashboard', '2fa', 'content', 'tenant.region'
+    ],
+    'Plugins': [
+        'regions', 'mailketing', 'analytics'
+    ],
+    'Mobile & IoT': [
+        'mobile', 'iot'
     ]
 };
+
 
 const ACTIONS = [
     { key: 'view', label: 'View', icon: Eye, color: 'text-blue-500', bg: 'bg-blue-50', desc: 'Can view list and details' },
@@ -44,8 +57,12 @@ const ACTIONS = [
 // Map UI keys to potential DB action names
 const ACTION_ALIASES = {
     'view': ['view', 'read'],
+    'create': ['create'],
     'edit': ['edit', 'update'],
-    'delete': ['delete', 'remove']
+    'delete': ['delete', 'remove', 'soft_delete'],
+    'publish': ['publish'],
+    'restore': ['restore'],
+    'permanent_delete': ['permanent_delete', 'delete_permanent']
 };
 
 const getPermissionId = (map, resource, actionKey) => {

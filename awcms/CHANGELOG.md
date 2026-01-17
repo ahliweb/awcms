@@ -5,6 +5,29 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.16.0] "Bastion" - 2026-01-17
+
+### Changed
+
+- **ABAC Refactor**:
+  - Replaced all legacy Role-Based Access Control (RBAC) references with Attribute-Based Access Control (ABAC).
+  - Renamed `ExtensionRBACIntegration` to `ExtensionABACIntegration` in codebase and UI.
+  - Standardized terminology across the entire repository (docs, components, guides).
+- **Security & RLS**:
+  - Deprecated `is_admin_or_above()` in favor of granular `public.has_permission()` RLS checks.
+  - Hardened RLS policies for `public.sso_providers` and `public.roles`.
+- **Documentation**:
+  - Extensive audit and cleanup: Removed duplicate `permissions.md` and outdated docs.
+  - Updated `DOCS_INDEX.md`, `MODULES_GUIDE.md`, and `ROLE_HIERARCHY.md` to reflect current ABAC implementation.
+
+### Fixed
+
+- **Code Quality**:
+  - Resolved ESLint errors in `LanguageSettings.jsx`, `WidgetsManager.jsx`, and `Sidebar.jsx` (conditional hooks, unused vars).
+  - Cleaned up unused variables in `RichTextEditor.jsx`.
+- **Database**:
+  - Repaired migration history and successfully synchronized schema via `supabase db push`.
+
 ## [2.15.3] - 2026-01-16
 
 ### Remediation & Enhancements

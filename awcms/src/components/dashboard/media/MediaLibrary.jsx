@@ -41,8 +41,8 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
     const tenantId = currentTenant?.id;
     const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
 
-    const canUpload = checkAccess('create', 'media');
-    const canDelete = checkAccess('delete', 'media');
+    const canUpload = checkAccess('create', 'files');
+    const canDelete = checkAccess('delete', 'files');
 
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -710,7 +710,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                         <select
                             value={itemsPerPage}
                             onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                            className="h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                         >
                             <option value={12}>12 / page</option>
                             <option value={24}>24 / page</option>

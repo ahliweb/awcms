@@ -288,7 +288,7 @@ function PageEditor({ page, onClose, onSuccess }) {
                                                 id="layout_key"
                                                 value={formData.layout_key}
                                                 onChange={(e) => setFormData({ ...formData, layout_key: e.target.value })}
-                                                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                                             >
                                                 <option value="awtemplate01.standard">Standard Layout (with Title)</option>
                                                 <option value="awtemplate01.landing">Landing Page (Full Width)</option>
@@ -382,7 +382,7 @@ function PageEditor({ page, onClose, onSuccess }) {
                                             id="robots"
                                             value={formData.robots}
                                             onChange={(e) => setFormData({ ...formData, robots: e.target.value })}
-                                            className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                                         >
                                             <option value="index, follow">Index, Follow (Default)</option>
                                             <option value="noindex, follow">NoIndex, Follow</option>
@@ -409,7 +409,7 @@ function PageEditor({ page, onClose, onSuccess }) {
                                                 id="status"
                                                 value={formData.status}
                                                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                                                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                                             >
                                                 <option value="draft">Draft</option>
                                                 <option value="published" disabled={!canPublish}>Published {(!canPublish) && '(Locked)'}</option>
@@ -467,7 +467,7 @@ function PageEditor({ page, onClose, onSuccess }) {
                                                 id="parent_id"
                                                 value={formData.parent_id}
                                                 onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
-                                                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                                             >
                                                 <option value="">No Parent (Top Level)</option>
                                                 {parentPages.map(p => (
@@ -504,7 +504,7 @@ function PageEditor({ page, onClose, onSuccess }) {
                                                 id="category"
                                                 value={formData.category_id}
                                                 onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                                                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                                                 required
                                             >
                                                 <option value="">Select Category</option>
@@ -574,7 +574,7 @@ function PageEditor({ page, onClose, onSuccess }) {
                                                 <select
                                                     value={formData.twitter_card_type}
                                                     onChange={(e) => setFormData({ ...formData, twitter_card_type: e.target.value })}
-                                                    className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                                    className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                                                 >
                                                     <option value="summary">Summary</option>
                                                     <option value="summary_large_image">Summary Large Image</option>

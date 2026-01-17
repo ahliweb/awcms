@@ -13,7 +13,7 @@ import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 const VisualPagesManager = () => {
     const { hasPermission } = usePermissions();
 
-    if (!hasPermission('tenant.page.read')) {
+    if (!hasPermission('tenant.visual_pages.read')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-xl border border-slate-200 p-12 text-center">
                 <div className="p-4 bg-red-50 rounded-full mb-4">
@@ -26,7 +26,7 @@ const VisualPagesManager = () => {
     }
 
     return (
-        <AdminPageLayout requiredPermission="tenant.page.read">
+        <AdminPageLayout requiredPermission="tenant.visual_pages.read">
             <PageHeader
                 title="Visual Builder"
                 description="Manage your visual pages and system theme templates."

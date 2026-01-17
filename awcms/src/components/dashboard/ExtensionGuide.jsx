@@ -32,7 +32,7 @@ function ExtensionGuide({ onBack }) {
                   </p>
                   <ul className="list-disc pl-5 space-y-2">
                      <li>Add custom pages to the dashboard sidebar</li>
-                     <li>Register new permissions for RBAC</li>
+                     <li>Register new permissions for ABAC</li>
                      <li>Store custom configuration via JSON</li>
                      <li>Hook into system events (lifecycle hooks)</li>
                   </ul>
@@ -73,12 +73,12 @@ function ExtensionGuide({ onBack }) {
                <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                      <Shield className="w-5 h-5 text-purple-600" />
-                     RBAC Integration
+                     ABAC Integration
                   </CardTitle>
                </CardHeader>
                <CardContent className="text-slate-600 text-sm">
                   <p className="mb-3">
-                     Extensions fully integrate with the Role-Based Access Control system.
+                     Extensions fully integrate with the Attribute-Based Access Control system.
                   </p>
                   <div className="space-y-2">
                      <div className="p-3 bg-slate-50 rounded border border-slate-100">

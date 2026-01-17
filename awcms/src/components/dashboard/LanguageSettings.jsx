@@ -2,7 +2,8 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { Globe, Check } from 'lucide-react';
+import { Globe, Check, ShieldAlert } from 'lucide-react';
+import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -11,6 +12,7 @@ function LanguageSettings() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
 
   const currentLang = i18n.language;
 
@@ -30,6 +32,18 @@ function LanguageSettings() {
       };
     }
   }, []);
+
+  if (!hasPermission('tenant.languages.read')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-xl border border-slate-200 p-12 text-center">
+        <div className="p-4 bg-red-50 rounded-full mb-4">
+          <ShieldAlert className="w-12 h-12 text-red-500" />
+        </div>
+        <h3 className="text-xl font-bold text-slate-800">Access Denied</h3>
+        <p className="text-slate-500 mt-2">You do not have permission to view language settings.</p>
+      </div>
+    );
+  }
 
   const handleLanguageChange = async (lang) => {
     i18n.changeLanguage(lang);
@@ -78,8 +92,8 @@ function LanguageSettings() {
             <button
               onClick={() => handleLanguageChange('id')}
               className={`flex items-center justify-between p-4 rounded-lg border transition-all ${currentLang === 'id'
-                  ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
-                  : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
+                : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
                 }`}
             >
               <div className="flex items-center gap-3">
@@ -95,8 +109,8 @@ function LanguageSettings() {
             <button
               onClick={() => handleLanguageChange('en')}
               className={`flex items-center justify-between p-4 rounded-lg border transition-all ${currentLang === 'en'
-                  ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
-                  : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
+                : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
                 }`}
             >
               <div className="flex items-center gap-3">

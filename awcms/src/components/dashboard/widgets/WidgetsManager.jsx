@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Settings, Trash2, GripVertical } from 'lucide-react';
+import { Layers, Plus, Settings, Trash2, GripVertical, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -14,7 +14,7 @@ import WidgetEditor from './WidgetEditor';
 
 const WidgetsManager = () => {
     const { templateParts } = useTemplates();
-    const { userRole } = usePermissions();
+    const { userRole, hasPermission } = usePermissions();
     const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
 
     // Filter only widget areas
@@ -28,6 +28,18 @@ const WidgetsManager = () => {
             setSelectedAreaId(widgetAreas[0].id);
         }
     }, [widgetAreas, selectedAreaId]);
+
+    if (!hasPermission('tenant.widgets.read')) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-xl border border-slate-200 p-12 text-center">
+                <div className="p-4 bg-red-50 rounded-full mb-4">
+                    <ShieldAlert className="w-12 h-12 text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">Access Denied</h3>
+                <p className="text-slate-500 mt-2">You do not have permission to view widgets.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-8">

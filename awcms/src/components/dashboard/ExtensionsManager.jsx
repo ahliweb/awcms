@@ -29,7 +29,7 @@ import ExtensionGuide from './ExtensionGuide';
 import ExtensionSettings from './ExtensionSettings';
 import ExtensionLogs from './ExtensionLogs';
 import ExtensionHealthCheck from './ExtensionHealthCheck';
-import ExtensionRBACIntegration from './ExtensionRBACIntegration';
+import ExtensionABACIntegration from './ExtensionABACIntegration';
 import ExtensionInstaller from './ExtensionInstaller';
 
 function ExtensionsManager() {
@@ -48,9 +48,9 @@ function ExtensionsManager() {
 
   // RBAC & Permissions Logic
   const isSuperAdmin = ['super_admin', 'owner'].includes(userRole);
-  const canCreate = isSuperAdmin || hasPermission('platform.module.create');
-  const canManageGlobal = isSuperAdmin || hasPermission('platform.module.update');
-  const canView = isSuperAdmin || hasAnyPermission(['platform.module.read', 'platform.module.update', 'platform.module.create']);
+  const canCreate = isSuperAdmin || hasPermission('platform.extensions.create');
+  const canManageGlobal = isSuperAdmin || hasPermission('platform.extensions.update');
+  const canView = isSuperAdmin || hasAnyPermission(['platform.extensions.read', 'platform.extensions.update', 'platform.extensions.create']);
 
   useEffect(() => {
     if (canView) {
@@ -185,7 +185,7 @@ function ExtensionsManager() {
           {canManageGlobal && <TabsTrigger value="settings">{t('extensions.settings')}</TabsTrigger>}
           {canManageGlobal && <TabsTrigger value="health">{t('extensions.health')}</TabsTrigger>}
           {canManageGlobal && <TabsTrigger value="logs">{t('extensions.logs')}</TabsTrigger>}
-          {canManageGlobal && <TabsTrigger value="rbac" className="flex gap-2"><Shield className="w-4 h-4" /> {t('extensions.rbac')}</TabsTrigger>}
+          {canManageGlobal && <TabsTrigger value="rbac" className="flex gap-2"><Shield className="w-4 h-4" /> {t('extensions.abac')}</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="installed" className="space-y-4 mt-4">
@@ -266,7 +266,7 @@ function ExtensionsManager() {
                 <div className="space-y-4">
                   <Button variant="outline" onClick={() => setSelectedForRBAC(null)} className="mb-4">{t('common.back')}</Button>
                   <h3 className="text-xl font-bold">Managing RBAC for {selectedForRBAC.name}</h3>
-                  <ExtensionRBACIntegration extensionId={selectedForRBAC.id} />
+                  <ExtensionABACIntegration extensionId={selectedForRBAC.id} />
                 </div>
               ) : (
                 <div className="text-center py-12 border border-dashed border-border rounded-xl">

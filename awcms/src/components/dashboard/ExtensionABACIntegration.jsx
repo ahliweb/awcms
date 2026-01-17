@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useTranslation } from 'react-i18next';
 
-function ExtensionRBACIntegration({ extensionId }) {
+function ExtensionABACIntegration({ extensionId }) {
    const { toast } = useToast();
    const { t } = useTranslation();
    const [roles, setRoles] = useState([]);
@@ -151,7 +151,7 @@ function ExtensionRBACIntegration({ extensionId }) {
          <CardHeader>
             <CardTitle className="flex items-center gap-2">
                <Shield className="w-5 h-5 text-purple-600" />
-               {t('extensions.rbac')}
+               {t('extensions.abac')}
             </CardTitle>
             <CardDescription>Map extension permissions to system roles.</CardDescription>
          </CardHeader>
@@ -210,4 +210,4 @@ function ExtensionRBACIntegration({ extensionId }) {
    );
 }
 
-export default ExtensionRBACIntegration;
+export default ExtensionABACIntegration;

@@ -41,14 +41,14 @@ function LanguageSelector({ variant = "ghost" }) {
           <span className="sr-only">Switch Language</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem 
+      <DropdownMenuContent align="end" className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 z-[100]">
+        <DropdownMenuItem
           onClick={() => changeLanguage('id')}
           className={i18n.language === 'id' ? 'bg-slate-100 font-bold' : ''}
         >
           🇮🇩 Indonesia
         </DropdownMenuItem>
-        <DropdownMenuItem 
+        <DropdownMenuItem
           onClick={() => changeLanguage('en')}
           className={i18n.language === 'en' ? 'bg-slate-100 font-bold' : ''}
         >

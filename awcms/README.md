@@ -4,12 +4,19 @@ The admin panel for AWCMS, built with React 19.2.3 and Vite 7.
 
 ## Purpose
 
-Manage tenant content, users, templates, and configuration.
+Manage tenant content, users, templates, configuration, and IoT/Mobile devices.
+
+## Key Features
+
+* **Multi-Tenancy**: Domain-driven tenant resolution.
+* **Security (ABAC)**: Granular permission system with Row Level Security.
+* **Visual Building**: Integrated WYSIWYG editor for pages.
+* **Extended Modules**: IoT, Mobile, Commerce, and Regions support.
 
 ## Prerequisites
 
-- Node.js 20+
-- npm 10+
+* Node.js 20+
+* npm 10+
 
 ## Quick Start
 
@@ -37,13 +44,14 @@ VITE_SUPER_ADMIN_EMAIL=...
 VITE_DEV_TENANT_SLUG=primary
 ```
 
-## Key Concepts
+## Architecture
 
-- Tenant context is resolved by domain in `TenantContext`.
-- ABAC enforcement uses `usePermissions()`.
-- All deletes are soft deletes (`deleted_at`).
+* **Context**: `TenantContext` resolves tenant by domain.
+* **Security**: `usePermissions()` hook enforces ABAC policies.
+* **Data**: All deletes are soft deletes (`deleted_at`).
 
 ## References
 
-- `../DOCS_INDEX.md`
-- `../awcms/docs/INDEX.md`
+* `../DOCS_INDEX.md`
+* `../docs/security/abac.md`
+* `../docs/modules/MODULES_GUIDE.md`

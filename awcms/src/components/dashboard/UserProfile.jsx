@@ -189,8 +189,8 @@ function UserProfile() {
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
       <div className="flex flex-col gap-1">
-        <h2 className="text-3xl font-bold text-slate-800 tracking-tight">My Profile</h2>
-        <p className="text-slate-500">Manage your account settings and security preferences</p>
+        <h2 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">My Profile</h2>
+        <p className="text-slate-500 dark:text-slate-400">Manage your account settings and security preferences</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -201,15 +201,15 @@ function UserProfile() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"
           >
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
-              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
                 <User className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-800">Personal Information</h3>
-                <p className="text-xs text-slate-500">Update your personal details</p>
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Personal Information</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Update your personal details</p>
               </div>
             </div>
 
@@ -248,11 +248,11 @@ function UserProfile() {
                       compact={true}
                     />
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">Click camera icon or use Media Library</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Click camera icon or use Media Library</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="full_name" className="text-slate-700">Full Name</Label>
+                  <Label htmlFor="full_name" className="text-slate-700 dark:text-slate-300">Full Name</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                     <Input
@@ -266,7 +266,7 @@ function UserProfile() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-700">Email Address</Label>
+                  <Label htmlFor="email" className="text-slate-700 dark:text-slate-300">Email Address</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                     <Input
@@ -278,7 +278,7 @@ function UserProfile() {
                       placeholder="your.email@example.com"
                     />
                   </div>
-                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
                     Changing email will require re-verification.
                   </p>
@@ -311,15 +311,15 @@ function UserProfile() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"
           >
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
-              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 flex items-center gap-3">
+              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-lg">
                 <Lock className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-800">Password</h3>
-                <p className="text-xs text-slate-500">Manage your password</p>
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Password</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Manage your password</p>
               </div>
             </div>
 
@@ -327,7 +327,7 @@ function UserProfile() {
               <form onSubmit={handlePasswordChange} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-slate-700">New Password</Label>
+                    <Label htmlFor="password" className="text-slate-700 dark:text-slate-300">New Password</Label>
                     <div className="relative">
                       <Key className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                       <Input
@@ -341,7 +341,7 @@ function UserProfile() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-slate-700">Confirm Password</Label>
+                    <Label htmlFor="confirmPassword" className="text-slate-700 dark:text-slate-300">Confirm Password</Label>
                     <div className="relative">
                       <Key className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                       <Input
@@ -357,7 +357,7 @@ function UserProfile() {
                 </div>
 
                 <div className="pt-2 flex justify-end">
-                  <Button type="submit" variant="outline" disabled={passLoading || !passwordData.password} className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800">
+                  <Button type="submit" variant="outline" disabled={passLoading || !passwordData.password} className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-900/20">
                     {passLoading ? 'Updating...' : 'Update Password'}
                   </Button>
                 </div>
@@ -372,39 +372,39 @@ function UserProfile() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col"
+            className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden h-full flex flex-col"
           >
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
-              <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 flex items-center gap-3">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
                 <Shield className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-800">Access Control</h3>
-                <p className="text-xs text-slate-500">Your assigned role and permissions</p>
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Access Control</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Your assigned role and permissions</p>
               </div>
             </div>
 
             <div className="p-6 space-y-6 flex-1 flex flex-col">
               <div>
-                <h4 className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Current Role</h4>
+                <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-wider">Current Role</h4>
                 <div className={`inline-flex items-center px-3 py-1.5 rounded-full font-semibold text-sm border ${(profileData.role_name || userRole) === 'super_admin' || (profileData.role_name || userRole) === 'owner'
-                  ? 'bg-purple-100 text-purple-800 border-purple-200'
-                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                   }`}>
-                  {(profileData.role_name || userRole) === 'super_admin' || (profileData.role_name || userRole) === 'owner' ? <Crown className="w-3.5 h-3.5 mr-2 text-purple-600" /> : <Shield className="w-3.5 h-3.5 mr-2" />}
+                  {(profileData.role_name || userRole) === 'super_admin' || (profileData.role_name || userRole) === 'owner' ? <Crown className="w-3.5 h-3.5 mr-2 text-purple-600 dark:text-purple-400" /> : <Shield className="w-3.5 h-3.5 mr-2" />}
                   {(profileData.role_name || userRole) ? (profileData.role_name || userRole).replace(/_/g, ' ') : 'Guest'}
                 </div>
                 {profileData.role_description && (
-                  <p className="text-sm text-slate-500 mt-2 italic">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 italic">
                     "{profileData.role_description}"
                   </p>
                 )}
               </div>
 
               <div className="flex-1 flex flex-col min-h-0">
-                <h4 className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-wider flex items-center justify-between">
                   Active Permissions
-                  <span className="text-xs normal-case bg-slate-100 px-2 py-0.5 rounded-full text-slate-600 border border-slate-200">
+                  <span className="text-xs normal-case bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                     {permissions?.length || 0}
                   </span>
                 </h4>
@@ -412,15 +412,15 @@ function UserProfile() {
                 {permissions && permissions.length > 0 ? (
                   <div className="overflow-y-auto pr-2 custom-scrollbar space-y-1 flex-1 max-h-[400px]">
                     {permissions.map((perm, index) => (
-                      <div key={index} className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-50 text-sm text-slate-600 transition-colors group border border-transparent hover:border-slate-100">
-                        <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                        <span className="group-hover:text-slate-900">{perm.replace(/_/g, ' ')}</span>
+                      <div key={index} className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50 text-sm text-slate-600 dark:text-slate-400 transition-colors group border border-transparent hover:border-slate-100 dark:hover:border-slate-700">
+                        <CheckCircle2 className="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" />
+                        <span className="group-hover:text-slate-900 dark:group-hover:text-slate-200">{perm.replace(/_/g, ' ')}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-400 italic p-6 bg-slate-50 rounded-lg text-center border border-slate-100 flex flex-col items-center gap-2">
-                    <Shield className="w-8 h-8 text-slate-200" />
+                  <div className="text-sm text-slate-400 italic p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-center border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-2">
+                    <Shield className="w-8 h-8 text-slate-200 dark:text-slate-700" />
                     No specific permissions assigned.
                   </div>
                 )}

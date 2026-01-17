@@ -440,7 +440,7 @@ function MenusManager() {
                 <div className="space-y-2">
                   <Label>Quick Select (Optional)</Label>
                   <select
-                    className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                     value={selectedModule}
                     onChange={e => handleModuleSelect(e.target.value)}
                   >
@@ -459,7 +459,7 @@ function MenusManager() {
               <div className="space-y-2">
                 <Label>Link to Page (Optional)</Label>
                 <select
-                  className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                   value={menuFormData.page_id || ''}
                   onChange={e => handlePageSelect(e.target.value)}
                 >
@@ -500,7 +500,7 @@ function MenusManager() {
               <div className="space-y-2">
                 <Label>Parent Menu</Label>
                 <select
-                  className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                   value={menuFormData.parent_id || ''}
                   onChange={e => setMenuFormData({ ...menuFormData, parent_id: e.target.value || null })}
                 >

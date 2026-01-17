@@ -126,7 +126,7 @@ function SSOManager() {
   );
 
   return (
-    <AdminPageLayout requiredPermission="platform.sso.read">
+    <AdminPageLayout requiredPermission="tenant.sso.read">
       <PageHeader
         title={t('sso.title')}
         description={t('sso.subtitle')}

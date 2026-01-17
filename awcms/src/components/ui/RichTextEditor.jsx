@@ -83,8 +83,6 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
       const html = editor.getHTML();
       // Only fire onChange if content actually changed (avoid loops)
       // Tiptap returns '<p></p>' for empty content, so we normalize value to compare
-      const normalizedValue = value || '<p></p>';
-      const normalizedHtml = html === '<p></p>' ? '' : html;
 
       // If the incoming value is empty/null and editor is empty '<p></p>', do nothing
       if (!value && html === '<p></p>') return;

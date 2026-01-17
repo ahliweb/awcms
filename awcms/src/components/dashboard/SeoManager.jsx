@@ -118,7 +118,7 @@ function SeoManager() {
         );
     }
 
-    if (!hasPermission('tenant.setting.read')) {
+    if (!hasPermission('tenant.seo.read')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] bg-card rounded-xl border border-border p-12 text-center">
                 <div className="p-4 bg-destructive/10 rounded-full mb-4">
@@ -131,7 +131,7 @@ function SeoManager() {
     }
 
     return (
-        <AdminPageLayout requiredPermission="tenant.setting.read">
+        <AdminPageLayout requiredPermission="tenant.seo.read">
             <PageHeader
                 title="SEO Management"
                 description="Configure global metadata and search engine settings."

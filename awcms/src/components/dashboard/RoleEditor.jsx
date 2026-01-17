@@ -101,16 +101,26 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     // Filter permissions based on the template
     const targetIds = permissions
       .filter(p => {
-        // Standardized Template Logic (ABAC Pattern)
+        // Standardized Template Logic (ABAC Pattern) - using resource column
         if (templateName === 'Viewer') {
-          return p.action === 'read' && !['users', 'roles', 'settings', 'permissions'].includes(p.module);
+          // Viewer: Read-only access to content, exclude admin resources
+          const excludedResources = ['users', 'roles', 'settings', 'permissions', 'policies', 'platform', 'tenants', 'system'];
+          return (p.action === 'read' || p.action === 'view') && !excludedResources.includes(p.resource);
         }
         if (templateName === 'Editor') {
-          const contentModules = ['articles', 'pages', 'products', 'media', 'portfolio', 'announcements'];
-          return ['read', 'create', 'update', 'publish'].includes(p.action) && contentModules.includes(p.module);
+          // Editor: Full content management (CRUD + publish) for content modules
+          const contentResources = ['articles', 'pages', 'products', 'files', 'photo_gallery', 'video_gallery',
+            'portfolio', 'announcements', 'testimonies', 'promotions', 'galleries',
+            'menus', 'categories', 'tags', 'visual_pages'];
+          return ['read', 'view', 'create', 'update', 'edit', 'publish', 'delete', 'restore'].includes(p.action)
+            && contentResources.includes(p.resource);
         }
         if (templateName === 'Manager') {
-          return ['users', 'roles', 'settings', 'audit', 'extensions'].includes(p.module);
+          // Manager: Full admin access (197 permissions)
+          // Excludes: system/platform resources and specialized actions
+          const excludedActions = ['permanent_delete', 'delete_permanent', 'view_public', 'soft_delete', 'manage', 'configure', 'comment', 'send', 'like', 'view_logs', 'view_readers'];
+          const excludedResources = ['platform', 'tenant', 'tenants', 'system', '2fa', 'dashboard', 'content', 'tenant.region', 'orders'];
+          return !excludedActions.includes(p.action) && !excludedResources.includes(p.resource);
         }
         return false;
       })
@@ -120,6 +130,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     setActiveTemplate(templateName);
     toast({ title: "Template Applied", description: `Applied permissions for ${templateName}` });
   };
+
 
   const handleSave = async (e) => {
     e.preventDefault();

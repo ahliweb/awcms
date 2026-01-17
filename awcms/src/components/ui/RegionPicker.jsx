@@ -100,7 +100,7 @@ const RegionPicker = ({
                             <span className="label-text">{level.name}</span>
                         </label>
                         <select
-                            className="select select-bordered w-full"
+                            className="select select-bordered w-full dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                             value={selections[level.key]?.id || ''}
                             onChange={(e) => handleSelection(level.key, e.target.value)}
                         >

@@ -1,94 +1,71 @@
-# Role Hierarchy
+# Role Hierarchy (ABAC Framework)
 
 ## Purpose
-Define the role hierarchy and access levels used by AWCMS.
+
+Define the *default* role definitions and hierarchy used by AWCMS.
+> **Note:** With the ABAC system, "Hierarchy" is conceptual. In practice, roles are mutable collections of permissions. An "Editor" could theoretically have more permissions than an "Admin" if customized.
 
 ## Audience
-- Admin panel developers
+
 - Policy designers
+- Admin panel developers
 
 ## Prerequisites
+
 - `docs/security/abac.md`
 
-AWCMS implements a hierarchical role-based access control system within the ABAC framework.
+## Default Role Definitions (Baselines)
+
+These are the standard templates provided in the "Roles" manager.
+
+| Role | Scope | Description |
+| ---- | ----- | ----------- |
+| **Owner** | Global | **Supreme Authority**. Full system access across all tenants. Cannot be restricted. |
+| **Super Admin** | Global | **Platform Manager**. Manages tenants, billing, and global settings. |
+| **Admin** | Tenant | **Tenant Manager**. Full access *within* their tenant. Can manage tenant users and roles. |
+| **Editor** | Tenant | **Content Manager**. Can review, approve, and publish content. Cannot manage users/settings. |
+| **Author** | Tenant | **Creator**. Can create and edit *own* content. Needs approval to publish. |
+| **Member** | Tenant | **User**. Registered end-user with basic profile access. |
+| **Subscriber** | Tenant | **Customer**. Read-only access to premium/gated content. |
+| **Public** | - | **Visitor**. Anonymous read-only access to public content. |
 
 ---
 
-## Role Levels
+## Conceptual Hierarchy
 
 ```mermaid
 graph TD
     A[Owner] --> B[Super Admin]
-    B --> C[Admin]
+    B --> C[Admin (Tenant)]
     C --> D[Editor]
     D --> E[Author]
     E --> F[Member]
-    F --> G[Subscriber]
-    G --> H[Public]
-    I[No Access] -.->|Blocked| H
 ```
 
----
+## Permission Matrix (Default Templates)
 
-## Role Definitions
-
-| Role | Scope | Description | Access Level |
-| ---- | ----- | ----------- | ------------ |
-| **Owner** | Global | Supreme authority. Full system access across all tenants. | 100% |
-| **Super Admin** | Global | Platform management. Can manage tenants and global settings. | 95% |
-| **Admin** | Tenant | Tenant administrator. Full access within their tenant. | 85% |
-| **Editor** | Tenant | Content review and approval. Can publish content. | 70% |
-| **Author** | Tenant | Content creation. Can create/edit own content only. | 50% |
-| **Member** | Tenant | Basic access. Commenting and profile management. | 25% |
-| **Subscriber** | Tenant | Premium content access. Read-only plus subscribed content. | 20% |
-| **Public** | - | Anonymous access. Read-only public content. | 10% |
-| **No Access** | - | Banned/disabled users. No system access. | 0% |
-
----
-
-## Permission Matrix
+The following matrix represents the *default* configuration for new tenants.
 
 ### Content Operations
 
-| Role | Create | Read | Update | Publish | Soft Delete | Restore | Hard Delete |
-| ---- | :----: | :--: | :----: | :-----: | :---------: | :-----: | :---------: |
-| Owner | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Super Admin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Admin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Editor | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Author | ✅ | ✅ | ⚠️* | ❌ | ❌ | ❌ | ❌ |
-| Member | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Subscriber | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Public | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| No Access | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-
-*\* Author can only update their own content*
+| Role | Create | Read | Update | Publish | Delete |
+| ---- | :----: | :--: | :----: | :-----: | :----: |
+| Owner | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Admin | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Editor | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Author | ✅ | ✅ | Own Only* | ❌ | ❌ |
 
 ### System Operations
 
-| Role | User Management | Role Management | Tenant Management | Extension Management |
-| ---- | :-------------: | :-------------: | :---------------: | :------------------: |
+| Role | User Mgmt | Role Mgmt | Settings | Audit Logs |
+| ---- | :-------: | :-------: | :------: | :--------: |
 | Owner | ✅ | ✅ | ✅ | ✅ |
-| Super Admin | ✅ | ✅ | ✅ | ✅ |
-| Admin | ✅ | ⚠️* | ❌ | ⚠️* |
+| Admin | ✅ | ✅ | ✅ | ✅ |
 | Editor | ❌ | ❌ | ❌ | ❌ |
-| Author | ❌ | ❌ | ❌ | ❌ |
-
-*\* Admin can manage within tenant, but cannot modify global roles or core extensions*
 
 ---
 
 ## Database Implementation
-
-### Users Table
-
-```sql
--- users.role_id references roles.id
-SELECT u.email, r.name as role_name
-FROM users u
-JOIN roles r ON u.role_id = r.id
-WHERE u.id = auth.uid();
-```
 
 ### Roles Table
 
@@ -96,100 +73,24 @@ WHERE u.id = auth.uid();
 CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  description TEXT,
   tenant_id UUID REFERENCES tenants(id),  -- NULL for global roles
-  created_at TIMESTAMPTZ DEFAULT now()
+  is_system BOOLEAN DEFAULT FALSE -- Protected roles
 );
 ```
 
 ### Global vs Tenant Roles
 
-| Role | tenant_id | Scope |
-| ---- | --------- | ----- |
-| owner | NULL | Global |
-| super_admin | NULL | Global |
-| admin | {tenant-uuid} | Tenant |
-| editor | {tenant-uuid} | Tenant |
+- **Global Roles** (`tenant_id` is NULL): Visible to all, managed by Platform Admins.
+- **Tenant Roles** (`tenant_id` is set): Visible only to that tenant.
 
----
+## DB Helper Functions
 
-## Helper Functions
+> **Warning:** These functions are strictly for **Platform Administration** logic. Do not use them for feature access (use `has_permission` instead).
 
-### is_super_admin()
-
-Returns `true` for Owner and Super Admin roles:
-
-```sql
-CREATE FUNCTION is_super_admin() RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM users u
-    JOIN roles r ON u.role_id = r.id
-    WHERE u.id = auth.uid()
-    AND r.name IN ('owner', 'super_admin')
-  )
-$$ LANGUAGE sql SECURITY DEFINER;
-```
-
-### is_admin_or_above()
-
-Returns `true` for Admin, Super Admin, and Owner:
-
-```sql
-CREATE FUNCTION is_admin_or_above() RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM users u
-    JOIN roles r ON u.role_id = r.id
-    WHERE u.id = auth.uid()
-    AND r.name IN ('admin', 'super_admin', 'owner')
-  )
-$$ LANGUAGE sql SECURITY DEFINER;
-```
-
----
-
-## Frontend Usage
-
-### Permission Check
-
-```javascript
-import { usePermissions } from '@/contexts/PermissionContext';
-
-function MyComponent() {
-  const { hasPermission, isPlatformAdmin, userRole } = usePermissions();
-  
-  // Check specific permission
-  if (!hasPermission('tenant.article.publish')) {
-    return <AccessDenied />;
-  }
-  
-  // Check platform admin status
-  if (isPlatformAdmin) {
-    // Show admin-only features
-  }
-  
-  return <Content />;
-}
-```
-
----
-
-## Related Documentation
-
-- [ABAC System](ABAC_SYSTEM.md)
-- [Security](docs/security/overview.md)
-- [User Management](USER_MANAGEMENT.md)
-
----
-
-## Permissions and Access
-
-- Roles map to permission keys as defined in `ABAC_SYSTEM.md`.
-
-## Security and Compliance Notes
-
-- Tenant scope applies to all roles except platform admins.
+- `is_super_admin()`: Returns true for Owner/Super Admin.
+- `is_admin_or_above()`: **Deprecated** for feature checks.
 
 ## References
 
 - `docs/security/abac.md`
-- `docs/security/overview.md`
+- `docs/security/rls.md`

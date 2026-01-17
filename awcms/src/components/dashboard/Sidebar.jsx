@@ -10,7 +10,6 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useAdminMenu } from '@/hooks/useAdminMenu';
 import { getIconComponent } from '@/lib/adminIcons';
 import { usePlugins } from '@/contexts/PluginContext';
-import { Input } from '@/components/ui/input';
 import { TenantUsage } from './TenantUsage';
 import { useTenant } from '@/contexts/TenantContext';
 import { checkTierAccess } from '@/lib/tierFeatures';

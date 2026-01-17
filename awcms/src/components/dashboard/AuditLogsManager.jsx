@@ -24,7 +24,7 @@ function AuditLogsManager() {
     const [limit, setLimit] = useState(50);
     const [totalCount, setTotalCount] = useState(0);
 
-    const canView = hasPermission('tenant.audit.read') || ['super_admin', 'owner'].includes(userRole);
+    const canView = hasPermission('tenant.audit.view') || ['super_admin', 'owner'].includes(userRole);
 
     const fetchLogs = async () => {
         if (!canView) return;
@@ -229,7 +229,7 @@ function AuditLogsManager() {
                                         setLimit(Number(e.target.value));
                                         setPage(1);
                                     }}
-                                    className="border border-input rounded px-3 py-1.5 text-sm bg-background text-foreground"
+                                    className="border border-input rounded px-3 py-1.5 text-sm bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
                                 >
                                     <option value={25}>25 per page</option>
                                     <option value={50}>50 per page</option>

@@ -18,7 +18,7 @@ export function ContentDistribution({ data }) {
       </CardHeader>
       <CardContent className="p-6">
         {chartData.length > 0 ? (
-          <div className="w-full h-[300px] relative">
+          <div className="w-full h-[300px] relative" style={{ minHeight: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

@@ -179,6 +179,26 @@
   h6 {
     font-family: var(--font-heading);
   }
+
+  /* Native select and option elements - dark mode support */
+  select {
+    color-scheme: light;
+  }
+
+  .dark select {
+    color-scheme: dark;
+  }
+
+  /* Explicitly style select options for browsers that support it */
+  select option {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  .dark select option {
+    background-color: #1e293b;
+    color: #f1f5f9;
+  }
 }
 
 /* Scrollbar Styles */
