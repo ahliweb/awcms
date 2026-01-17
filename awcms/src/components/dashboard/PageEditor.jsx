@@ -50,11 +50,11 @@ function PageEditor({ page, onClose, onSuccess }) {
         twitter_image: page?.twitter_image || '',
 
         published_at: page?.published_at ? new Date(page.published_at).toISOString().slice(0, 16) : '',
-        layout_key: page?.layout_key || 'awtemplate01.standard',
+        layout_key: page?.layout_key || 'astrowind.standard',
         content_type: page?.content_type || 'richtext',
         // Hierarchy & Nav
         parent_id: page?.parent_id || '',
-        template_key: page?.template_key || 'awtemplate01',
+        template_key: page?.template_key || 'astrowind',
         sort_order: page?.sort_order || 0,
         nav_visibility: page?.nav_visibility ?? true
     });
@@ -290,8 +290,8 @@ function PageEditor({ page, onClose, onSuccess }) {
                                                 onChange={(e) => setFormData({ ...formData, layout_key: e.target.value })}
                                                 className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
                                             >
-                                                <option value="awtemplate01.standard">Standard Layout (with Title)</option>
-                                                <option value="awtemplate01.landing">Landing Page (Full Width)</option>
+                                                <option value="astrowind.standard">Standard Layout (with Title)</option>
+                                                <option value="astrowind.landing">Landing Page (Full Width)</option>
                                             </select>
                                         </div>
                                     </div>

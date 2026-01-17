@@ -11,11 +11,11 @@ Describe how admin modules are organized, where to find them, and how they map t
 
 ## Module Structure
 
-| Component Type | Location | Naming |
-|----------------|----------|--------|
-| Manager Components | `awcms/src/components/dashboard/` | `*Manager.jsx` |
-| Route Pages | `awcms/src/pages/cmspanel/` | Module-specific |
-| Sidebar Config | `awcms/src/templates/flowbite-admin/components/Sidebar.jsx` | `MENU_ITEMS` |
+| Component Type     | Location                                                    | Naming           |
+| :----------------- | :---------------------------------------------------------- | :--------------- |
+| Manager Components | `awcms/src/components/dashboard/`                           | `*Manager.jsx`   |
+| Route Pages        | `awcms/src/pages/cmspanel/`                                 | Module-specific  |
+| Sidebar Config     | `awcms/src/templates/flowbite-admin/components/Sidebar.jsx` | `MENU_ITEMS`     |
 
 ## Available Modules (Comprehensive List)
 
@@ -23,7 +23,7 @@ Modules are categorized to match the **Permission Matrix**.
 
 ### 1. Content
 
-* **Articles** (`ArticlesManager.jsx`)
+- **Articles** (`ArticlesManager.jsx`)
 - **Pages** (`PagesManager.jsx`)
 - **Visual Pages** (`VisualPagesManager.jsx`) - *New*
 - **Widgets** (`WidgetsManager.jsx`) - *New*
@@ -34,26 +34,26 @@ Modules are categorized to match the **Permission Matrix**.
 
 ### 2. Media
 
-* **Media Library** (`MediaLibrary.jsx`)
+- **Media Library** (`MediaLibrary.jsx`)
 - **Photo Gallery** (`PhotoGalleryManager.jsx`)
 - **Video Gallery** (`VideoGalleryManager.jsx`)
 
 ### 3. Commerce
 
-* **Products** (`ProductManager.jsx`)
+- **Products** (`ProductManager.jsx`)
 - **Product Types** (`ProductTypeManager.jsx`)
 - **Orders** (`OrderManager.jsx`)
 - **Promotions** (`PromotionManager.jsx`)
 
 ### 4. Navigation
 
-* **Menus** (`MenusManager.jsx`)
+- **Menus** (`MenusManager.jsx`)
 - **Categories** (`CategoriesManager.jsx`)
 - **Tags** (`TagsManager.jsx`)
 
 ### 5. System & Access
 
-* **Users** (`UsersManager.jsx`)
+- **Users** (`UsersManager.jsx`)
 - **Roles** (`RolesManager.jsx`)
 - **Permissions** (`PermissionsManager.jsx`)
 - **Settings** (`SettingsManager.jsx`)
@@ -65,14 +65,14 @@ Modules are categorized to match the **Permission Matrix**.
 
 ### 6. Platform & Plugins
 
-* **Tenants** (`TenantsManager.jsx`)
+- **Tenants** (`TenantsManager.jsx`)
 - **Regions** (`RegionManager.jsx`) - *New*
 - **Mailketing** (`MailketingManager.jsx`) - *New*
 - **Analytics** (`AnalyticsManager.jsx`)
 
 ### 7. Mobile & IoT
 
-* **Mobile Users** (`MobileUsersManager.jsx`)
+- **Mobile Users** (`MobileUsersManager.jsx`)
 - **IoT Devices** (`IoTManager.jsx`)
 
 ## Implementation Pattern

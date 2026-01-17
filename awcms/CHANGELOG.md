@@ -19,6 +19,8 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Documentation**:
   - Extensive audit and cleanup: Removed duplicate `permissions.md` and outdated docs.
   - Updated `DOCS_INDEX.md`, `MODULES_GUIDE.md`, and `ROLE_HIERARCHY.md` to reflect current ABAC implementation.
+- **Templates**:
+  - Replaced legacy `awtemplate01` references with `astrowind` as the active public template.
 
 ### Fixed
 

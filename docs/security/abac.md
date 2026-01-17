@@ -26,13 +26,13 @@ These lists correspond directly to the database `permissions` table and `Permiss
 
 ### A. Platform (Global Scope)
 
-| Permission Key     | Actions | Channel |
-| :----------------- | :------ | :------ |
-| `platform.tenant`  | read, create, update, delete | web |
-| `platform.setting` | read, update | web |
-| `platform.module`  | read, create, update | web |
-| `platform.billing` | read, update | web |
-| `platform.user`    | read, create, update, delete | web |
+| Permission Key     | Actions                      | Channel |
+| :----------------- | :--------------------------- | :------ |
+| `platform.tenant`  | read, create, update, delete | web     |
+| `platform.setting` | read, update                 | web     |
+| `platform.module`  | read, create, update         | web     |
+| `platform.billing` | read, update                 | web     |
+| `platform.user`    | read, create, update, delete | web     |
 
 ### B. Tenant (Tenant Scope) - Standardized Pattern
 
