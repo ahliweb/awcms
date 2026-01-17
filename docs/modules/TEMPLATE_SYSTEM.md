@@ -1,13 +1,16 @@
 # Template System
 
 ## Purpose
+
 Explain how templates, parts, widgets, and assignments drive multi-channel rendering.
 
 ## Audience
+
 - Admin panel developers
 - Public portal developers
 
 ## Prerequisites
+
 - `awcms/docs/03-features/VISUAL_BUILDER.md`
 - `docs/tenancy/overview.md`
 

@@ -1,12 +1,16 @@
 # AWCMS Extension System
 
 ## Purpose
+
 Describe the plugin and extension architecture for AWCMS.
+
 ## Audience
+
 - Admin panel developers
 - Extension authors
 
 ## Prerequisites
+
 - `docs/architecture/standards.md`
 
 AWCMS uses a dual extension system combining WordPress-style hooks with modern ES module architecture.

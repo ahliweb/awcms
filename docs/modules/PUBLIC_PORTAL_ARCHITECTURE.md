@@ -1,13 +1,16 @@
 # Public Portal Architecture
 
 ## Purpose
+
 Describe how the public portal renders tenant content and enforces security constraints.
 
 ## Audience
+
 - Public portal developers
 - Operators deploying Astro to Cloudflare Pages
 
 ## Prerequisites
+
 - `docs/tenancy/overview.md`
 - `docs/tenancy/supabase.md`
 

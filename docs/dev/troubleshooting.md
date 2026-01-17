@@ -1,13 +1,16 @@
 # Troubleshooting Guide
 
 ## Purpose
+
 Provide common fixes for local development and deployment issues.
 
 ## Audience
+
 - Developers running the apps locally
 - Operators diagnosing production failures
 
 ## Prerequisites
+
 - `awcms/docs/01-guides/CONFIGURATION.md`
 
 ## Steps

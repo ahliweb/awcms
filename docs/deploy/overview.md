@@ -1,13 +1,16 @@
 # Deployment Guide
 
 ## Purpose
+
 Describe deployment steps for each AWCMS package in the monorepo.
 
 ## Audience
+
 - Operators deploying admin, public, mobile, or IoT packages
 - Engineers validating build output
 
 ## Prerequisites
+
 - `awcms/docs/01-guides/CONFIGURATION.md`
 - Cloudflare Pages account (admin/public)
 

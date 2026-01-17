@@ -1,13 +1,16 @@
 # CI/CD Pipeline
 
 ## Purpose
+
 Describe the GitHub Actions workflows used for AWCMS.
 
 ## Audience
+
 - Maintainers and release engineers
 - Contributors validating CI expectations
 
 ## Prerequisites
+
 - GitHub Actions enabled
 - Secrets configured (Supabase and Cloudflare)
 

@@ -1,13 +1,16 @@
 # Multi-Tenant Theming
 
 ## Purpose
+
 Describe how tenant branding is stored and applied across the admin UI.
 
 ## Audience
+
 - Admin panel developers
 - Designers defining tenant branding
 
 ## Prerequisites
+
 - `docs/tenancy/overview.md`
 
 ## Core Concepts

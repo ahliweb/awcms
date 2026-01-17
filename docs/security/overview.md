@@ -1,13 +1,16 @@
 # Security Guide
 
 ## Purpose
+
 Describe AWCMS security posture, enforcement points, and operational expectations.
 
 ## Audience
+
 - Developers implementing security-sensitive features
 - Operators configuring deployments
 
 ## Prerequisites
+
 - `docs/architecture/standards.md`
 - `docs/tenancy/overview.md`
 

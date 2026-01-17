@@ -1,13 +1,16 @@
 # Performance Guide
 
 ## Purpose
+
 Summarize performance strategies implemented in AWCMS.
 
 ## Audience
+
 - Admin panel developers
 - Operators tuning performance
 
 ## Prerequisites
+
 - `docs/architecture/overview.md`
 
 ## Core Concepts

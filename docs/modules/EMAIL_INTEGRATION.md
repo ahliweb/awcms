@@ -1,13 +1,16 @@
 # Email Integration (Mailketing)
 
 ## Purpose
+
 Document the Mailketing integration used for transactional email.
 
 ## Audience
+
 - Admin panel developers
 - Operators configuring Edge Functions
 
 ## Prerequisites
+
 - Supabase Edge Functions enabled
 - `docs/tenancy/supabase.md`
 
@@ -22,7 +25,7 @@ Document the Mailketing integration used for transactional email.
 
 Set secrets in Supabase (Edge Functions):
 
-```
+```shell
 MAILKETING_API_TOKEN=...
 MAILKETING_DEFAULT_LIST_ID=1
 ```

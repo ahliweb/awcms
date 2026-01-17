@@ -1,13 +1,16 @@
 # Supabase Integration
 
 ## Purpose
+
 Define how AWCMS integrates with Supabase for auth, data, storage, and edge functions.
 
 ## Audience
+
 - Admin and public portal developers
 - Platform operators configuring Supabase
 
 ## Prerequisites
+
 - Supabase project with RLS enabled
 - `supabase` CLI installed for migrations
 

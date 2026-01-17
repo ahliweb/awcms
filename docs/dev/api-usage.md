@@ -1,13 +1,16 @@
 # API Documentation
 
 ## Purpose
+
 Document how AWCMS uses the Supabase client APIs for data, auth, storage, and edge functions.
 
 ## Audience
+
 - Admin and public portal developers
 - Integrators building extensions
 
 ## Prerequisites
+
 - `docs/tenancy/supabase.md`
 - `docs/architecture/soft-delete.md`
 

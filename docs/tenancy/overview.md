@@ -1,13 +1,16 @@
 # Multi-Tenancy Architecture
 
 ## Purpose
+
 Define how tenant isolation is resolved and enforced across AWCMS.
 
 ## Audience
+
 - Developers implementing tenant-aware features
 - Operators configuring tenant domains
 
 ## Prerequisites
+
 - `docs/architecture/standards.md`
 - `docs/security/rls.md`
 

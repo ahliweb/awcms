@@ -1,13 +1,16 @@
 # Versioning System
 
 ## Purpose
+
 Define how AWCMS versions are managed across code and documentation.
 
 ## Audience
+
 - Release managers
 - Maintainers updating versions
 
 ## Prerequisites
+
 - `awcms/CHANGELOG.md`
 
 ## Core Concepts
@@ -21,7 +24,7 @@ Define how AWCMS versions are managed across code and documentation.
 
 ### Version Format
 
-```
+```text
 MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 ```
 

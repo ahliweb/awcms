@@ -1,13 +1,16 @@
 # Testing Guide
 
 ## Purpose
+
 Describe how to validate AWCMS packages locally and in CI.
 
 ## Audience
+
 - Contributors running tests before PRs
 - Maintainers verifying releases
 
 ## Prerequisites
+
 - Node.js 20+ (admin/public)
 - Flutter SDK (mobile)
 

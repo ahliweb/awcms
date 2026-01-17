@@ -1,12 +1,15 @@
 # Cloudflare Pages Deployment
 
 ## Purpose
+
 Provide Cloudflare Pages settings for the Admin Panel and Public Portal.
 
 ## Audience
+
 - Operators deploying AWCMS to Cloudflare
 
 ## Prerequisites
+
 - Cloudflare account
 - Supabase project configured
 

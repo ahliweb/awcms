@@ -2,13 +2,16 @@
 # Database Schema
 
 ## Purpose
+
 Describe the tenant-scoped PostgreSQL schema used by AWCMS.
 
 ## Audience
+
 - Developers working with data models and migrations
 - Operators reviewing RLS and data isolation
 
 ## Prerequisites
+
 - `docs/tenancy/overview.md`
 - `docs/architecture/soft-delete.md`
 

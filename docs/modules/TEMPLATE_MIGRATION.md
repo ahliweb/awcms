@@ -1,13 +1,16 @@
 # Template Migration Guide
 
 ## Purpose
+
 Provide guidance for migrating legacy templates to the current template system.
 
 ## Audience
+
 - Operators running migrations
 - Admin panel developers
 
 ## Prerequisites
+
 - `awcms/docs/03-features/TEMPLATE_SYSTEM.md`
 - Supabase CLI installed
 

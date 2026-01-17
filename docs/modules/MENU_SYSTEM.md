@@ -1,13 +1,16 @@
 # Admin Menu System
 
 ## Purpose
+
 Describe how admin menus are stored, loaded, and extended.
 
 ## Audience
+
 - Admin panel developers
 - Extension authors
 
 ## Prerequisites
+
 - `docs/security/abac.md`
 
 ## Core Concepts

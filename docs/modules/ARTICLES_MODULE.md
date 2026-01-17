@@ -1,13 +1,16 @@
 # Articles Module Documentation
 
 ## Purpose
+
 Describe the article workflows and data model used by the CMS.
 
 ## Audience
+
 - Admin panel developers
 - Content workflow maintainers
 
 ## Prerequisites
+
 - `docs/architecture/soft-delete.md`
 - `docs/security/abac.md`
 
@@ -24,10 +27,10 @@ The Articles module is a full-featured blogging and news management system desig
 
 Stored in `articles` table:
 
-* `slug`: Unique identifier for routing (e.g., `/blog/my-post`).
-* `tiptap_doc_jsonb`: The source of truth for content.
-* `content`: HTML fallback (optional/legacy).
-* `puck_layout_jsonb`: Optional Visual Builder layout for "Long-form" articles.
+- `slug`: Unique identifier for routing (e.g., `/blog/my-post`).
+- `tiptap_doc_jsonb`: The source of truth for content.
+- `content`: HTML fallback (optional/legacy).
+- `puck_layout_jsonb`: Optional Visual Builder layout for "Long-form" articles.
 
 ## Implementation Patterns
 

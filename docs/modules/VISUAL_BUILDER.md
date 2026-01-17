@@ -1,13 +1,16 @@
 # Visual Builder
 
 ## Purpose
+
 Explain the Visual Page Builder architecture and integration with public rendering.
 
 ## Audience
+
 - Admin panel developers
 - Public portal developers
 
 ## Prerequisites
+
 - `awcms/docs/03-features/TEMPLATE_SYSTEM.md`
 - `docs/security/abac.md`
 

@@ -1,13 +1,16 @@
 # Monitoring and Observability
 
 ## Purpose
+
 Describe the monitoring tools and logging practices for AWCMS.
 
 ## Audience
+
 - Operators and SREs
 - Developers adding telemetry
 
 ## Prerequisites
+
 - `awcms/docs/03-features/AUDIT_TRAIL.md`
 
 ## Core Concepts

@@ -1,13 +1,16 @@
 # Scalability Guide
 
 ## Purpose
+
 Outline scalability considerations for AWCMS deployments.
 
 ## Audience
+
 - Operators planning growth
 - Engineers optimizing performance
 
 ## Prerequisites
+
 - `awcms/docs/03-features/PERFORMANCE.md`
 
 ## Core Concepts

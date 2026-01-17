@@ -2,13 +2,16 @@
 # User Management Documentation
 
 ## Purpose
+
 Describe user identity, profile sync, and role assignment patterns.
 
 ## Audience
+
 - Admin panel developers
 - Operators managing user provisioning
 
 ## Prerequisites
+
 - `docs/security/abac.md`
 - `docs/security/overview.md`
 

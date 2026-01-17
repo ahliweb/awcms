@@ -1,13 +1,16 @@
 # Audit Trail System
 
 ## Purpose
+
 Document audit logging behavior and schema usage.
 
 ## Audience
+
 - Admin panel developers
 - Compliance and security reviewers
 
 ## Prerequisites
+
 - `docs/security/overview.md`
 
 AWCMS implements comprehensive audit logging for compliance and security monitoring.

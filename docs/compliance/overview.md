@@ -1,13 +1,16 @@
 # Compliance Mapping
 
 ## Purpose
+
 Map AWCMS security controls to common compliance frameworks.
 
 ## Audience
+
 - Compliance reviewers
 - Security and platform teams
 
 ## Prerequisites
+
 - `docs/security/overview.md`
 
 ## Core Concepts
