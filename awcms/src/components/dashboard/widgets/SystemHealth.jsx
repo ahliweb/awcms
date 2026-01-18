@@ -22,8 +22,8 @@ const StatusItem = ({ label, status }) => {
   }
 
   return (
-    <div className="flex items-center justify-between p-4 bg-white/50 rounded-xl border border-slate-100 hover:bg-white/80 transition-colors group">
-      <span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">{label}</span>
+    <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-slate-700/50 rounded-xl border border-slate-100 dark:border-slate-600 hover:bg-white/80 dark:hover:bg-slate-700/80 transition-colors group">
+      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{label}</span>
       <div className="flex items-center gap-3">
         <span className={`text-[10px] uppercase tracking-wider font-bold ${color} opacity-80`}>{status}</span>
         <div className={`p-1.5 rounded-full ${bg} relative`}>
@@ -37,9 +37,9 @@ const StatusItem = ({ label, status }) => {
 
 export function SystemHealth({ health }) {
   return (
-    <Card className="col-span-1 min-w-0 border-white/40 bg-white/60 backdrop-blur-xl shadow-sm hover:shadow-md transition-shadow">
+    <Card className="col-span-1 min-w-0 border-white/40 dark:border-slate-700/40 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl shadow-sm hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-slate-800">
+        <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
           <Activity className="w-5 h-5 text-indigo-500" />
           System Health
         </CardTitle>

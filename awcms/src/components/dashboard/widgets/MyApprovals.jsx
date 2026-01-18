@@ -42,17 +42,17 @@ export function MyApprovals() {
 
     if (!canApprove) return null;
 
-    if (loading) return <div className="h-[200px] bg-slate-100 animate-pulse rounded-xl" />;
+    if (loading) return <div className="h-[200px] bg-slate-100 dark:bg-slate-800 animate-pulse rounded-xl" />;
 
     return (
-        <Card className="bg-white/60 backdrop-blur-xl border-white/40 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+        <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-shadow flex flex-col">
             <CardContent className="p-6 flex-1 flex flex-col">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                         Pending Approvals
                         {approvals.length > 0 && (
-                            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                            <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs px-2 py-0.5 rounded-full">
                                 {approvals.length}
                             </span>
                         )}
@@ -62,19 +62,19 @@ export function MyApprovals() {
                 <div className="flex-1 overflow-y-auto space-y-3">
                     {approvals.length > 0 ? (
                         approvals.map(item => (
-                            <div key={item.id} className="p-3 bg-slate-50 border border-slate-100 rounded-lg group hover:border-blue-200 transition-colors">
+                            <div key={item.id} className="p-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600 rounded-lg group hover:border-blue-200 dark:hover:border-blue-800 transition-colors">
                                 <div className="flex justify-between items-start mb-1">
-                                    <h4 className="font-medium text-slate-900 line-clamp-1">{item.title}</h4>
+                                    <h4 className="font-medium text-slate-900 dark:text-white line-clamp-1">{item.title}</h4>
                                     <span className="text-xs text-slate-400 whitespace-nowrap">
                                         {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true })}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between mt-2">
-                                    <span className="text-xs text-slate-500 flex items-center gap-1">
+                                    <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                                         <FileText className="w-3 h-3" />
                                         by {item.author?.email || 'Unknown'}
                                     </span>
-                                    <Button asChild size="sm" variant="ghost" className="h-6 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                                    <Button asChild size="sm" variant="ghost" className="h-6 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30">
                                         <Link to={`/cmspanel/articles?edit=${item.id}`}>Review</Link>
                                     </Button>
                                 </div>
@@ -88,8 +88,8 @@ export function MyApprovals() {
                     )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100">
-                    <Link to="/cmspanel/articles?status=reviewed" className="text-sm text-slate-500 hover:text-blue-600 flex items-center justify-center w-full">
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                    <Link to="/cmspanel/articles?status=reviewed" className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center w-full">
                         View All Queue <ArrowRight className="w-4 h-4 ml-1" />
                     </Link>
                 </div>

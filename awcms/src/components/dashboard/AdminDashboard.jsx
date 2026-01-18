@@ -35,7 +35,7 @@ function AdminDashboard() {
         <Button
             onClick={refresh}
             variant="outline"
-            className={loading ? 'opacity-70' : 'bg-white/50 backdrop-blur-sm border-slate-200 hover:bg-white hover:border-indigo-300 transition-all'}
+            className={loading ? 'opacity-70' : 'bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500 transition-all'}
         >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh Data
@@ -64,7 +64,7 @@ function AdminDashboard() {
                 icon={LayoutGrid}
                 actions={headerActions}
                 children={
-                    <div className="flex items-center gap-2 text-sm text-slate-500 bg-white/40 px-3 py-1.5 rounded-full border border-white/40 w-fit backdrop-blur-sm">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 bg-white/40 dark:bg-slate-800/40 px-3 py-1.5 rounded-full border border-white/40 dark:border-slate-700/40 w-fit backdrop-blur-sm">
                         <Calendar className="w-3 h-3" />
                         <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
                     </div>

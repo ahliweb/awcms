@@ -12,7 +12,7 @@ export function ContentDistribution({ data }) {
   ].filter(item => item.value > 0);
 
   return (
-    <Card className="col-span-1 min-w-0 bg-white/60 backdrop-blur-xl border-white/40 shadow-sm hover:shadow-md transition-shadow">
+    <Card className="col-span-1 min-w-0 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-shadow">
       <CardHeader>
         <CardTitle>Content Overview</CardTitle>
       </CardHeader>
@@ -43,7 +43,7 @@ export function ContentDistribution({ data }) {
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-slate-400">
+          <div className="flex items-center justify-center h-full text-slate-400 dark:text-slate-500">
             No data available
           </div>
         )}

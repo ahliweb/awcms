@@ -54,12 +54,12 @@ export function StatCards({ data, loading, className = '' }) {
     return (
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 ${className}`}>
         {[1, 2, 3, 4, 5, 6].map((i) => (
-          <Card key={i} className="bg-white/60 backdrop-blur-xl border-white/20 shadow-sm overflow-hidden h-32">
+          <Card key={i} className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/20 dark:border-slate-700/20 shadow-sm overflow-hidden h-32">
             <CardContent className="p-6 flex flex-col justify-between h-full">
-              <Skeleton className="h-4 w-24 bg-slate-200/50" />
+              <Skeleton className="h-4 w-24 bg-slate-200/50 dark:bg-slate-700/50" />
               <div className="flex justify-between items-end">
-                <Skeleton className="h-8 w-16 bg-slate-200/50" />
-                <Skeleton className="h-10 w-10 rounded-xl bg-slate-200/50" />
+                <Skeleton className="h-8 w-16 bg-slate-200/50 dark:bg-slate-700/50" />
+                <Skeleton className="h-10 w-10 rounded-xl bg-slate-200/50 dark:bg-slate-700/50" />
               </div>
             </CardContent>
           </Card>
@@ -75,18 +75,18 @@ export function StatCards({ data, loading, className = '' }) {
         return (
           <Card
             key={index}
-            className="group relative overflow-hidden bg-white/70 backdrop-blur-xl border-white/40 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+            className="group relative overflow-hidden bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
           >
             {/* Subtle Gradient Glow Background */}
             <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br ${stat.gradient} opacity-10 blur-2xl group-hover:opacity-20 transition-opacity`}></div>
 
             <CardContent className="p-5 flex flex-col justify-between h-full relative z-10">
-              <span className="text-sm font-medium text-slate-500 group-hover:text-slate-700 transition-colors">
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
                 {stat.title}
               </span>
 
               <div className="flex items-end justify-between mt-4">
-                <div className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                <div className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {stat.value}
                 </div>
 

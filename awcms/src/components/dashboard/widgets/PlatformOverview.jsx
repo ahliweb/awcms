@@ -27,20 +27,20 @@ export function PlatformOverview() {
                 <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600">
                     <ShieldCheck className="w-6 h-6" />
                 </div>
-                <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">
+                <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300">
                     Platform Overview
                 </h2>
             </div>
 
             {/* Top Stats - Neo Glass */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-sm hover:shadow-lg transition-all duration-300">
+                <Card className="bg-white/40 dark:bg-slate-800/40 backdrop-blur-md border-white/20 dark:border-slate-700/30 shadow-sm hover:shadow-lg transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600">Total Tenants</CardTitle>
+                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Tenants</CardTitle>
                         <Building2 className="h-4 w-4 text-indigo-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-extrabold text-slate-900">{stats.totalTenants}</div>
+                        <div className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalTenants}</div>
                         <div className="mt-2 text-xs flex gap-2">
                             <Badge variant="outline" className="bg-blue-50/50 text-blue-700 border-blue-200">
                                 {stats.tenantsByTier.pro} Pro
@@ -52,26 +52,26 @@ export function PlatformOverview() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-sm hover:shadow-lg transition-all duration-300">
+                <Card className="bg-white/40 dark:bg-slate-800/40 backdrop-blur-md border-white/20 dark:border-slate-700/30 shadow-sm hover:shadow-lg transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600">System Users</CardTitle>
+                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">System Users</CardTitle>
                         <Users className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-extrabold text-slate-900">{stats.totalUsers}</div>
-                        <p className="text-xs text-slate-500 mt-1 font-medium">Active across all data</p>
+                        <div className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalUsers}</div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Active across all data</p>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-sm hover:shadow-lg transition-all duration-300">
+                <Card className="bg-white/40 dark:bg-slate-800/40 backdrop-blur-md border-white/20 dark:border-slate-700/30 shadow-sm hover:shadow-lg transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600">System Storage</CardTitle>
+                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">System Storage</CardTitle>
                         <Database className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-extrabold text-slate-900">{formatBytes(stats.totalStorage)}</div>
+                        <div className="text-3xl font-extrabold text-slate-900 dark:text-white">{formatBytes(stats.totalStorage)}</div>
                         {/* Visual Progress Bar */}
-                        <div className="w-full bg-slate-200/50 rounded-full h-1.5 mt-3 overflow-hidden">
+                        <div className="w-full bg-slate-200/50 dark:bg-slate-700/50 rounded-full h-1.5 mt-3 overflow-hidden">
                             <div className="bg-gradient-to-r from-orange-400 to-red-500 h-1.5 rounded-full" style={{ width: '45%' }}></div>
                         </div>
                     </CardContent>
@@ -92,9 +92,9 @@ export function PlatformOverview() {
             </div>
 
             {/* Recent Tenants Table - Glass Pane */}
-            <Card className="bg-white/60 backdrop-blur-xl border-white/40 shadow-sm">
+            <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm">
                 <CardHeader>
-                    <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <CardTitle className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-slate-400" />
                         Recent Registrations
                     </CardTitle>
@@ -102,21 +102,21 @@ export function PlatformOverview() {
                 <CardContent>
                     <div className="space-y-4">
                         {stats.recentTenants.map(tenant => (
-                            <div key={tenant.id} className="group flex items-center justify-between border-b border-slate-100/50 last:border-0 pb-4 last:pb-0 hover:bg-white/50 p-2 rounded-lg transition-colors">
+                            <div key={tenant.id} className="group flex items-center justify-between border-b border-slate-100/50 dark:border-slate-700/50 last:border-0 pb-4 last:pb-0 hover:bg-white/50 dark:hover:bg-slate-700/50 p-2 rounded-lg transition-colors">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 shadow-inner">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 shadow-inner">
                                         <Building2 className="w-5 h-5" />
                                     </div>
                                     <div>
-                                        <p className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition-colors">{tenant.name}</p>
-                                        <p className="text-xs text-slate-500 font-medium">Joined {format(new Date(tenant.created_at), 'MMM d, yyyy')}</p>
+                                        <p className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{tenant.name}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Joined {format(new Date(tenant.created_at), 'MMM d, yyyy')}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <Badge variant={tenant.subscription_tier === 'free' ? 'secondary' : 'default'}
                                         className={`uppercase text-[10px] tracking-wider font-bold ${tenant.subscription_tier === 'enterprise' ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' :
-                                                tenant.subscription_tier === 'pro' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
-                                                    'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                            tenant.subscription_tier === 'pro' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
+                                                'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                             }`}>
                                         {tenant.subscription_tier}
                                     </Badge>
