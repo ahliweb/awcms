@@ -3,19 +3,20 @@
  * LanguageSwitcher.astro
  * Language toggle component for public portal
  * Switches between English (en) and Indonesian (id)
+ * Uses URL path prefixes (/en/, /id/) for automatic language persistence via cookie
  */
-import { Icon } from 'astro-icon/components';
+import { Icon } from "astro-icon/components";
+import { getLocale } from "~/utils/i18n";
 
 interface Props {
   iconClass?: string;
 }
 
-const { iconClass = 'w-5 h-5' } = Astro.props;
+const { iconClass = "w-5 h-5" } = Astro.props;
 
-// Get current locale from URL or default to 'en'
-const url = new URL(Astro.request.url);
-const currentLang = url.searchParams.get('lang') || 'en';
-const isEnglish = currentLang === 'en';
+// Get current locale from i18n utility (checks URL path, then cookie)
+const currentLang = getLocale(Astro.request);
+const isEnglish = currentLang === "en";
 ---
 
 <div class="language-switcher relative">
@@ -24,21 +25,24 @@ const isEnglish = currentLang === 'en';
     id="language-toggle"
     class="text-muted dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 rounded-lg text-sm p-2.5 inline-flex items-center gap-1"
     aria-label="Switch Language"
-    title={isEnglish ? 'Switch to Indonesian' : 'Switch to English'}
+    title={isEnglish ? "Switch to Indonesian" : "Switch to English"}
   >
     <Icon name="tabler:language" class={iconClass} />
     <span class="text-xs font-medium uppercase">{currentLang}</span>
   </button>
-  
-  <div 
+
+  <div
     id="language-dropdown"
     class="hidden absolute right-0 top-full mt-2 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 min-w-[120px] z-50"
   >
     <a
-      href="?lang=en"
+      href="/en"
       class:list={[
-        'flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg',
-        { 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400': isEnglish }
+        "flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg",
+        {
+          "bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400":
+            isEnglish,
+        },
       ]}
     >
       <span class="text-lg">🇺🇸</span>
@@ -46,10 +50,13 @@ const isEnglish = currentLang === 'en';
       {isEnglish && <Icon name="tabler:check" class="w-4 h-4 ml-auto" />}
     </a>
     <a
-      href="?lang=id"
+      href="/id"
       class:list={[
-        'flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg',
-        { 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400': !isEnglish }
+        "flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg",
+        {
+          "bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400":
+            !isEnglish,
+        },
       ]}
     >
       <span class="text-lg">🇮🇩</span>
@@ -61,31 +68,31 @@ const isEnglish = currentLang === 'en';
 
 <script>
   function initLanguageSwitcher() {
-    const toggle = document.getElementById('language-toggle');
-    const dropdown = document.getElementById('language-dropdown');
-    
+    const toggle = document.getElementById("language-toggle");
+    const dropdown = document.getElementById("language-dropdown");
+
     if (!toggle || !dropdown) return;
-    
+
     // Toggle dropdown on click
-    toggle.addEventListener('click', (e) => {
+    toggle.addEventListener("click", (e) => {
       e.stopPropagation();
-      dropdown.classList.toggle('hidden');
+      dropdown.classList.toggle("hidden");
     });
-    
+
     // Close dropdown when clicking outside
-    document.addEventListener('click', () => {
-      dropdown.classList.add('hidden');
+    document.addEventListener("click", () => {
+      dropdown.classList.add("hidden");
     });
-    
+
     // Prevent dropdown from closing when clicking inside it
-    dropdown.addEventListener('click', (e) => {
+    dropdown.addEventListener("click", (e) => {
       e.stopPropagation();
     });
   }
-  
+
   // Initialize on page load
   initLanguageSwitcher();
-  
+
   // Re-initialize after Astro page transitions
-  document.addEventListener('astro:after-swap', initLanguageSwitcher);
+  document.addEventListener("astro:after-swap", initLanguageSwitcher);
 </script>

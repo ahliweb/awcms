@@ -74,7 +74,7 @@
         "shop": "Shop",
         "terms": "Terms",
         "privacy": "Privacy Policy",
-        "made_by": "Made by <a class=\"text-blue-600 underline dark:text-muted\" href=\"https://github.com/arthelokyo\"> Arthelokyo</a> · All rights reserved."
+        "made_by": "Made by <a class=\"text-blue-600 underline dark:text-muted\" href=\"https://ahliweb.co.id\"> AWCMS</a> · All rights reserved."
     },
     "hero": {
         "welcome": "Welcome",
@@ -136,43 +136,43 @@
     },
     "home": {
         "hero": {
-            "title_html": "Free template for <span class='hidden xl:inline'>creating websites with</span> <span class='text-accent dark:text-white'>Astro 5.0</span> + Tailwind CSS",
-            "subtitle": "AstroWind is a free, customizable and production-ready template for Astro 5.0 + Tailwind CSS.",
-            "subtitle_highlight": "AstroWind: Production-ready.",
+            "title_html": "Boost Your Sales and Business Identity <span class='hidden xl:inline'>with</span> <span class='text-accent dark:text-white'>Website & App Solutions</span> from AWCMS",
+            "subtitle": "AWCMS is a powerful content management system providing Website, Application, and ERP solutions to strengthen your business vision and mission.",
+            "subtitle_highlight": "AWCMS: Enterprise-ready.",
             "description": "Suitable for Startups, Small Business, SaaS websites, Professional Portfolios, Marketing websites, Landing Pages & Blogs."
         },
         "note": {
             "title": "Philosophy:",
-            "description": "Simplicity, Best Practices and High Performance"
+            "description": "Scalability, Latest Technology and Scrum Project Management"
         },
         "features": {
             "tagline": "Features",
-            "title": "What you get with AstroWind",
-            "subtitle": "One of the most professional and comprehensive templates currently on the market. Most starred & forked Astro theme in 2022, 2023 and 2024.",
+            "title": "What you get with AWCMS",
+            "subtitle": "A comprehensive CMS platform with automatic billing, real-time WhatsApp notifications, and modern scalable technology.",
             "items": {
                 "integration": {
-                    "title": "Astro + Tailwind CSS Integration",
-                    "desc": "A seamless integration between two great frameworks that offer high productivity, performance and versatility."
+                    "title": "Automatic Billing System",
+                    "desc": "The AWCMS automatic billing system ensures everything runs according to your needs without manual intervention."
                 },
                 "components": {
-                    "title": "Ready-to-use Components",
-                    "desc": "Widgets made with Tailwind CSS ready to be used in Marketing Websites, SaaS, Blogs, Personal Profiles, Small Business..."
+                    "title": "WhatsApp Notifications",
+                    "desc": "Billing notifications and support communication via WhatsApp ensures everything runs smoothly in real-time."
                 },
                 "best_practices": {
-                    "title": "Best Practices",
-                    "desc": "Creating secure, efficient, and user-friendly websites that deliver exceptional experiences and lasting value."
+                    "title": "Scalable & Modern Technology",
+                    "desc": "AWCMS always prioritizes security updates and the latest global technology features so services are always safe and reliable."
                 },
                 "speed": {
-                    "title": "Excellent Page Speed",
-                    "desc": "Having a good page speed impacts organic search ranking, improves user experience (UI/UX) and increase conversion rates."
+                    "title": "Scrum Project Management",
+                    "desc": "Scrum-based project management ensures better control and flexibility for your projects."
                 },
                 "seo": {
-                    "title": "Search Engine Optimization (SEO)",
-                    "desc": "SEO lies in its ability to enhance a website's visibility, driving organic traffic and enabling it to reach a wider audience."
+                    "title": "Domain Registration",
+                    "desc": "Secure your digital assets through unique Indonesian and International domain names with automatic registration."
                 },
                 "contribution": {
-                    "title": "Open to new ideas and contributions",
-                    "desc": "Embracing a culture that is open to new ideas and contributions is integral fostering innovation, collaboration, and a dynamic user experience."
+                    "title": "Reliable Hosting",
+                    "desc": "Secure your data and systems on our trusted server services with enterprise-grade infrastructure."
                 }
             }
         },
@@ -437,8 +437,8 @@
     },
     "announcement": {
         "badge": "NEW",
-        "content": "Astro v5.12 is now available! »",
-        "tooltip": "If you like AstroWind, give us a star."
+        "content": "AWCMS is now available on GitHub! »",
+        "tooltip": "Star us on GitHub to support AWCMS development."
     },
     "contact_page": {
         "hero": {

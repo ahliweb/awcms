@@ -48,7 +48,7 @@ export default function PolicyManager() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [toast, t]);
 
     useEffect(() => {
         if (canView) {

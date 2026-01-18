@@ -1,0 +1,380 @@
+---
+/**
+ * English Language Root Page
+ *
+ * Serves the homepage with English locale.
+ * Re-exports the main index page with locale context.
+ */
+export const prerender = false;
+
+import Layout from "~/layouts/PageLayout.astro";
+import Hero from "~/components/widgets/Hero.astro";
+import Note from "~/components/widgets/Note.astro";
+import Features from "~/components/widgets/Features.astro";
+import Features2 from "~/components/widgets/Features2.astro";
+import Steps from "~/components/widgets/Steps.astro";
+import Content from "~/components/widgets/Content.astro";
+import Stats from "~/components/widgets/Stats.astro";
+import CallToAction from "~/components/widgets/CallToAction.astro";
+import Testimonials from "~/components/widgets/Testimonials.astro";
+import Brands from "~/components/widgets/Brands.astro";
+import Grid from "~/components/blog/Grid.astro";
+import WidgetWrapper from "~/components/ui/WidgetWrapper.astro";
+import Headline from "~/components/ui/Headline.astro";
+import type { Item, Post, Testimonial, Stat, Image } from "~/types";
+
+import { createClientFromEnv } from "~/lib/supabase";
+import { t } from "~/utils/i18n";
+
+const locale = "en" as const;
+const { tenant_id } = Astro.locals;
+const supabase = createClientFromEnv(import.meta.env);
+
+let services: Item[] = [];
+let projects: Post[] = [];
+let team: Testimonial[] = [];
+let testimonials: Testimonial[] = [];
+let funfacts: Stat[] = [];
+let partners: Image[] = [];
+
+if (tenant_id && supabase) {
+    try {
+        const { data: servicesData } = await supabase
+            .from("services")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("status", "published")
+            .order("display_order", { ascending: true })
+            .limit(6);
+
+        if (servicesData) {
+            services = servicesData.map((s) => ({
+                title: s.title,
+                description: s.description,
+                icon: "tabler:check",
+            }));
+        }
+
+        const { data: projectsData } = await supabase
+            .from("projects")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("status", "published")
+            .limit(6);
+
+        if (projectsData) {
+            projects = projectsData.map((p) => ({
+                id: p.id,
+                slug: p.slug || "#",
+                permalink: "#",
+                publishDate: new Date(p.date || Date.now()),
+                title: p.title,
+                excerpt: p.description,
+                image: p.image,
+            }));
+        }
+
+        const { data: teamData } = await supabase
+            .from("teams")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("status", "published")
+            .order("display_order", { ascending: true });
+
+        if (teamData) {
+            team = teamData.map((t) => ({
+                name: t.name,
+                job: t.title,
+                testimonial: t.description || "Commitment to excellence.",
+                image: t.image,
+            }));
+        }
+
+        const { data: testData } = await supabase
+            .from("testimonials")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("status", "published")
+            .order("display_order", { ascending: true });
+
+        if (testData) {
+            testimonials = testData.map((t) => ({
+                name: t.name,
+                job: t.title,
+                testimonial: t.quote,
+                image: t.image,
+            }));
+        }
+
+        const { data: statsData } = await supabase
+            .from("funfacts")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("status", "published")
+            .order("display_order", { ascending: true });
+
+        if (statsData) {
+            funfacts = statsData.map((s) => ({
+                title: s.title,
+                amount: s.count,
+                icon: "tabler:info-circle",
+            }));
+        }
+
+        const { data: partnerData } = await supabase
+            .from("partners")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("status", "published")
+            .order("display_order", { ascending: true });
+
+        if (partnerData) {
+            partners = partnerData.map((p) => ({
+                src: p.image,
+                alt: p.name,
+            }));
+        }
+    } catch (e) {
+        console.error("Error fetching data:", e);
+    }
+}
+
+const metadata = {
+    title: "Primary Tenant - English",
+    ignoreTitleTemplate: true,
+};
+---
+
+<Layout metadata={metadata}>
+    <Hero
+        actions={[
+            {
+                variant: "primary",
+                text: t("home.hero.get_started", locale),
+                href: "https://ahliweb.co.id",
+                target: "_blank",
+                icon: "tabler:download",
+            },
+            { text: t("home.hero.learn_more", locale), href: "#features" },
+        ]}
+        image={{
+            src: "~/assets/images/hero-image.png",
+            alt: "AstroWind Hero Image",
+        }}
+    >
+        <Fragment slot="title">
+            <span set:html={t("home.hero.title_html", locale)} />
+        </Fragment>
+
+        <Fragment slot="subtitle">
+            <span class="hidden sm:inline">
+                <span class="font-semibold">AstroWind</span>
+                {t("home.hero.subtitle", locale)}
+            </span>
+            <span class="block mb-1 sm:hidden font-bold text-blue-600">
+                {t("home.hero.subtitle_highlight", locale)}
+            </span>
+            {t("home.hero.description", locale)}
+        </Fragment>
+    </Hero>
+
+    <Note
+        title={t("home.note.title", locale)}
+        description={t("home.note.description", locale)}
+    />
+
+    <Features
+        id="features"
+        tagline={t("home.features.tagline", locale)}
+        title={t("home.features.title", locale)}
+        subtitle={t("home.features.subtitle", locale)}
+        items={[
+            {
+                title: t("home.features.items.integration.title", locale),
+                description: t("home.features.items.integration.desc", locale),
+                icon: "tabler:brand-tailwind",
+            },
+            {
+                title: t("home.features.items.components.title", locale),
+                description: t("home.features.items.components.desc", locale),
+                icon: "tabler:components",
+            },
+            {
+                title: t("home.features.items.best_practices.title", locale),
+                description: t(
+                    "home.features.items.best_practices.desc",
+                    locale,
+                ),
+                icon: "tabler:list-check",
+            },
+            {
+                title: t("home.features.items.speed.title", locale),
+                description: t("home.features.items.speed.desc", locale),
+                icon: "tabler:rocket",
+            },
+            {
+                title: t("home.features.items.seo.title", locale),
+                description: t("home.features.items.seo.desc", locale),
+                icon: "tabler:arrows-right-left",
+            },
+            {
+                title: t("home.features.items.contribution.title", locale),
+                description: t("home.features.items.contribution.desc", locale),
+                icon: "tabler:bulb",
+            },
+        ]}
+    />
+
+    <Content
+        isReversed
+        tagline={t("home.content.tagline", locale)}
+        title={t("home.content.title", locale)}
+        items={[
+            {
+                title: t("home.content.items.astro.title", locale),
+                description: t("home.content.items.astro.desc", locale),
+            },
+            {
+                title: t("home.content.items.tailwind.title", locale),
+                description: t("home.content.items.tailwind.desc", locale),
+            },
+            {
+                title: t("home.content.items.cross_browser.title", locale),
+                description: t("home.content.items.cross_browser.desc", locale),
+            },
+        ]}
+        image={{
+            src: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80",
+            alt: "Colorful Image",
+        }}
+    >
+        <Fragment slot="content">
+            <h3
+                class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
+            >
+                {t("home.content.modern_foundations.title", locale)}
+            </h3>
+            {t("home.content.modern_foundations.desc", locale)}
+        </Fragment>
+
+        <Fragment slot="bg">
+            <div class="absolute inset-0 bg-blue-50 dark:bg-transparent"></div>
+        </Fragment>
+    </Content>
+
+    <Steps
+        title={t("home.steps.title", locale)}
+        items={[
+            {
+                title: t("home.steps.step1", locale),
+                description: t("home.steps.step1_desc", locale),
+                icon: "tabler:package",
+            },
+            {
+                title: t("home.steps.step2", locale),
+                description: t("home.steps.step2_desc", locale),
+                icon: "tabler:letter-case",
+            },
+            {
+                title: t("home.steps.step3", locale),
+                description: t("home.steps.step3_desc", locale),
+                icon: "tabler:paint",
+            },
+            {
+                title: t("home.steps.ready", locale),
+                icon: "tabler:check",
+            },
+        ]}
+        image={{
+            src: "https://images.unsplash.com/photo-1616198814651-e71f960c3180?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=987&q=80",
+            alt: "Steps image",
+        }}
+    />
+
+    {
+        services.length > 0 && (
+            <Features2
+                title={t("home.services.title", locale)}
+                subtitle={t("home.services.subtitle", locale)}
+                tagline={t("home.services.tagline", locale)}
+                items={services}
+            >
+                <Fragment slot="bg">
+                    <div class="absolute inset-0 bg-blue-50 dark:bg-transparent" />
+                </Fragment>
+            </Features2>
+        )
+    }
+
+    {
+        projects.length > 0 && (
+            <WidgetWrapper
+                id="projects"
+                isDark={false}
+                containerClass="max-w-7xl mx-auto"
+                bg={undefined}
+            >
+                <Headline
+                    title={t("home.projects.title", locale)}
+                    subtitle={t("home.projects.subtitle", locale)}
+                    tagline={t("home.projects.tagline", locale)}
+                />
+                <Grid posts={projects} />
+            </WidgetWrapper>
+        )
+    }
+
+    {
+        team.length > 0 && (
+            <Testimonials
+                title={t("home.team.title", locale)}
+                subtitle={t("home.team.subtitle", locale)}
+                tagline={t("home.team.tagline", locale)}
+                testimonials={team}
+            />
+        )
+    }
+
+    {
+        testimonials.length > 0 && (
+            <Testimonials
+                title={t("home.testimonials.title", locale)}
+                subtitle={t("home.testimonials.subtitle", locale)}
+                tagline={t("home.testimonials.tagline", locale)}
+                testimonials={testimonials}
+            />
+        )
+    }
+
+    {funfacts.length > 0 && <Stats stats={funfacts} />}
+
+    {
+        partners.length > 0 && (
+            <Brands
+                title={t("home.partners.title", locale)}
+                icons={[]}
+                images={partners}
+            />
+        )
+    }
+
+    <CallToAction
+        actions={[
+            {
+                variant: "primary",
+                text: t("home.cta.get_template", locale),
+                href: "https://ahliweb.co.id",
+                target: "_blank",
+                icon: "tabler:download",
+            },
+        ]}
+    >
+        <Fragment slot="title">
+            <span set:html={t("home.cta.title", locale)} />
+        </Fragment>
+
+        <Fragment slot="subtitle">
+            <span set:html={t("home.cta.subtitle", locale)} />
+        </Fragment>
+    </CallToAction>
+</Layout>

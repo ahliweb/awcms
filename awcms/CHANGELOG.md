@@ -5,6 +5,24 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.19.0] "Evolution" - 2026-01-18
+
+### Added
+
+- **Rebranding**:
+  - Renamed all public-facing branding from "Arthelokyo" to "AWCMS".
+  - Updated social media handles and footer configuration.
+- **Language Persistence**:
+  - Implemented `lang` cookie for persistent language selection across sessions.
+  - Updated Middleware to respect cookie preferences when URL prefix is missing.
+- **Public Portal**:
+  - Updated Language Switcher to use explicit `/en` and `/id` paths for better SEO and routing.
+
+### Fixed
+
+- **Code Quality**:
+  - Resolved `react-hooks/exhaustive-deps` warnings in `PolicyManager` and `ThemeEditor` by adding missing `t` dependency.
+
 ## [2.18.0] "Defiance" - 2026-01-18
 
 ### Added

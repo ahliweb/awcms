@@ -30,9 +30,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
         // e.g., /id/homes/startup -> /homes/startup
         const localeMatch = logicalPath.match(/^\/(id|en)(\/|$)/);
         let locale: string | null = null;
+        let localeFromUrl = false;
+
         if (localeMatch) {
             locale = localeMatch[1];
+            localeFromUrl = true;
             logicalPath = logicalPath.replace(/^\/(id|en)/, '') || '/';
+        } else {
+            // No locale in URL - check cookie for persisted preference
+            const cookies = request.headers.get('cookie') || '';
+            const cookieMatch = cookies.match(/lang=(en|id)/);
+            if (cookieMatch) {
+                locale = cookieMatch[1];
+            }
         }
 
         // 1. Extract tenant from path
@@ -156,13 +166,28 @@ export const onRequest = defineMiddleware(async (context, next) => {
         locals.ref_code = refCode;
         locals.locale = locale || 'en'; // Default to English
 
-        // Rewrite if path was modified (ref code or locale stripped)
-        if (refMatch || localeMatch) {
-            // console.log(`[Middleware] Rewriting path: ${pathname} -> ${logicalPath}`);
-            return next(logicalPath);
+        // Helper to add locale cookie to response
+        const addLocaleCookie = async (response: Response): Promise<Response> => {
+            if (localeFromUrl && locale) {
+                // Clone the response and add the Set-Cookie header
+                const newResponse = new Response(response.body, response);
+                // Cookie expires in 1 year
+                const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
+                newResponse.headers.append('Set-Cookie', `lang=${locale}; Path=/; Expires=${expires}; SameSite=Lax`);
+                return newResponse;
+            }
+            return response;
+        };
+
+        // Rewrite only if ref code was stripped (locale prefix is kept for page routing)
+        if (refMatch) {
+            // console.log(`[Middleware] Rewriting ref path: ${pathname} -> ${logicalPath}`);
+            const response = await next(logicalPath);
+            return addLocaleCookie(response);
         }
 
-        return next();
+        const response = await next();
+        return addLocaleCookie(response);
     } catch (e) {
         console.error('[Middleware] CRITICAL ERROR:', e);
         const errorMessage = e instanceof Error ? e.message : 'Unknown error';

@@ -75,7 +75,7 @@ const ThemeEditor = () => {
             });
         }
         setLoading(false);
-    }, [id, navigate, toast]);
+    }, [id, navigate, toast, t]);
 
     useEffect(() => {
         fetchTheme();

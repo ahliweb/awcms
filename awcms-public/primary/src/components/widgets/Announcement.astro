@@ -12,16 +12,17 @@ const locale = getLocale(Astro.request);
     >{t("announcement.badge", locale)}</span
   >
   <a
-    href="https://astro.build/blog/astro-5120/"
+    href="https://github.com/ahliweb/awcms"
     class="text-muted hover:underline dark:text-slate-400 font-medium"
     >{t("announcement.content", locale)}</a
   >
   <a
     target="_blank"
     rel="noopener"
-    class="ltr:ml-auto rtl:mr-auto w-[5.6rem] h-[1.25rem] ml-auto bg-contain inline-block bg-[url(https://img.shields.io/github/stars/arthelokyo/astrowind.svg?style=social&label=Stars&maxAge=86400)]"
+    class="ltr:ml-auto rtl:mr-auto font-medium text-accent hover:underline"
     title={t("announcement.tooltip", locale)}
-    href="https://github.com/arthelokyo/astrowind"
+    href="https://ahliweb.co.id"
   >
+    AWCMS
   </a>
 </div>

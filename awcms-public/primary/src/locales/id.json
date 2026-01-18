@@ -74,7 +74,7 @@
         "shop": "Toko",
         "terms": "Ketentuan",
         "privacy": "Kebijakan Privasi",
-        "made_by": "Dibuat oleh <a class=\"text-blue-600 underline dark:text-muted\" href=\"https://github.com/arthelokyo\"> Arthelokyo</a> · Hak cipta dilindungi undang-undang."
+        "made_by": "Dibuat oleh <a class=\"text-blue-600 underline dark:text-muted\" href=\"https://ahliweb.co.id\"> AWCMS</a> · Hak cipta dilindungi undang-undang."
     },
     "hero": {
         "welcome": "Selamat Datang",
@@ -136,43 +136,43 @@
     },
     "home": {
         "hero": {
-            "title_html": "Template gratis untuk <span class='hidden xl:inline'>membuat website dengan</span> <span class='text-accent dark:text-white'>Astro 5.0</span> + Tailwind CSS",
-            "subtitle": "AstroWind adalah template gratis, dapat disesuaikan, dan siap produksi untuk Astro 5.0 + Tailwind CSS.",
-            "subtitle_highlight": "AstroWind: Siap Produksi.",
+            "title_html": "Tingkatkan Penjualan dan Identitas Bisnis Anda <span class='hidden xl:inline'>dengan</span> <span class='text-accent dark:text-white'>Solusi Website & Aplikasi</span> dari AWCMS",
+            "subtitle": "AWCMS adalah sistem manajemen konten yang kuat menyediakan solusi Website, Aplikasi, dan ERP untuk memperkuat visi dan misi bisnis Anda.",
+            "subtitle_highlight": "AWCMS: Siap Enterprise.",
             "description": "Cocok untuk Startup, Bisnis Kecil, Website SaaS, Portofolio Profesional, Website Marketing & Blog."
         },
         "note": {
             "title": "Filosofi:",
-            "description": "Kesederhanaan, Praktik Terbaik, dan Kinerja Tinggi"
+            "description": "Skalabilitas, Teknologi Terbaru dan Manajemen Proyek Scrum"
         },
         "features": {
             "tagline": "Fitur",
-            "title": "Apa yang Anda dapatkan dengan AstroWind",
-            "subtitle": "Salah satu template paling profesional dan komprehensif yang ada di pasaran saat ini. Tema Astro yang paling banyak dibintangi & di-fork pada tahun 2022, 2023, dan 2024.",
+            "title": "Apa yang Anda dapatkan dengan AWCMS",
+            "subtitle": "Platform CMS komprehensif dengan billing otomatis, notifikasi WhatsApp real-time, dan teknologi skalabel modern.",
             "items": {
                 "integration": {
-                    "title": "Integrasi Astro + Tailwind CSS",
-                    "desc": "Integrasi mulus antara dua kerangka kerja hebat yang menawarkan produktivitas, kinerja, dan fleksibilitas tinggi."
+                    "title": "Sistem Billing Otomatis",
+                    "desc": "Sistem billing otomatis AWCMS memastikan segalanya berjalan sesuai kebutuhan Anda tanpa intervensi manual."
                 },
                 "components": {
-                    "title": "Komponen Siap Pakai",
-                    "desc": "Widget yang dibuat dengan Tailwind CSS siap digunakan di Website Marketing, SaaS, Blog, Profil Pribadi, Bisnis Kecil..."
+                    "title": "Notifikasi WhatsApp",
+                    "desc": "Notifikasi billing dan komunikasi dukungan melalui WhatsApp memastikan semuanya berjalan lancar secara real-time."
                 },
                 "best_practices": {
-                    "title": "Praktik Terbaik",
-                    "desc": "Membuat website yang aman, efisien, dan ramah pengguna yang memberikan pengalaman luar biasa dan nilai jangka panjang."
+                    "title": "Teknologi Skalabel & Modern",
+                    "desc": "AWCMS selalu mengutamakan update keamanan dan fitur teknologi global terbaru sehingga layanan selalu aman dan terpercaya."
                 },
                 "speed": {
-                    "title": "Kecepatan Halaman Luar Biasa",
-                    "desc": "Memiliki kecepatan halaman yang baik berdampak pada peringkat pencarian organik, meningkatkan pengalaman pengguna (UI/UX), dan meningkatkan tingkat konversi."
+                    "title": "Manajemen Proyek Scrum",
+                    "desc": "Manajemen proyek berbasis Scrum memastikan kontrol dan fleksibilitas yang lebih baik untuk proyek Anda."
                 },
                 "seo": {
-                    "title": "Optimasi Mesin Pencari (SEO)",
-                    "desc": "SEO terletak pada kemampuannya untuk meningkatkan visibilitas website, mendorong lalu lintas organik, dan memungkinkannya menjangkau audiens yang lebih luas."
+                    "title": "Pendaftaran Domain",
+                    "desc": "Amankan aset digital Anda melalui nama domain unik Indonesia maupun Internasional dengan pendaftaran otomatis."
                 },
                 "contribution": {
-                    "title": "Terbuka untuk ide dan kontribusi baru",
-                    "desc": "Merangkul budaya yang terbuka terhadap ide dan kontribusi baru adalah bagian integral dari mendorong inovasi, kolaborasi, dan pengalaman pengguna yang dinamis."
+                    "title": "Hosting Terpercaya",
+                    "desc": "Amankan data dan sistem Anda pada layanan server terpercaya kami dengan infrastruktur kelas enterprise."
                 }
             }
         },
@@ -437,8 +437,8 @@
     },
     "announcement": {
         "badge": "BARU",
-        "content": "Astro v5.12 kini tersedia! »",
-        "tooltip": "Jika Anda menyukai AstroWind, beri kami bintang."
+        "content": "AWCMS kini tersedia di GitHub! »",
+        "tooltip": "Beri kami bintang di GitHub untuk mendukung pengembangan AWCMS."
     },
     "contact_page": {
         "hero": {
