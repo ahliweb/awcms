@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { LogIn, UserPlus } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -10,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Helmet } from 'react-helmet-async';
 
 function LoginPage() {
+  const { t } = useTranslation();
   const { signIn, signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -35,8 +37,8 @@ function LoginPage() {
   return (
     <>
       <Helmet>
-        <title>Login - CMS Dashboard</title>
-        <meta name="description" content="Login to access the CMS dashboard" />
+        <title>{t('login_page.title')}</title>
+        <meta name="description" content={t('login_page.meta_description')} />
       </Helmet>
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4">
         <motion.div
@@ -47,24 +49,24 @@ function LoginPage() {
         >
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 p-8">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-white mb-2">CMS Dashboard</h1>
-              <p className="text-blue-200">Content Management System</p>
+              <h1 className="text-3xl font-bold text-white mb-2">{t('login_page.heading')}</h1>
+              <p className="text-blue-200">{t('login_page.subheading')}</p>
             </div>
 
             <Tabs defaultValue="login" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                <TabsTrigger value="login">{t('login_page.tab_login')}</TabsTrigger>
+                <TabsTrigger value="signup">{t('login_page.tab_signup')}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div>
-                    <Label htmlFor="login-email" className="text-white">Email</Label>
+                    <Label htmlFor="login-email" className="text-white">{t('login_page.email_label')}</Label>
                     <Input
                       id="login-email"
                       type="email"
-                      placeholder="your@email.com"
+                      placeholder={t('login_page.email_placeholder')}
                       value={loginData.email}
                       onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                       className="bg-white/20 border-white/30 text-white placeholder:text-white/50"
@@ -72,11 +74,11 @@ function LoginPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="login-password" className="text-white">Password</Label>
+                    <Label htmlFor="login-password" className="text-white">{t('login_page.password_label')}</Label>
                     <Input
                       id="login-password"
                       type="password"
-                      placeholder="••••••••"
+                      placeholder={t('login_page.password_placeholder')}
                       value={loginData.password}
                       onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                       className="bg-white/20 border-white/30 text-white placeholder:text-white/50"
@@ -89,7 +91,7 @@ function LoginPage() {
                     disabled={isLoading}
                   >
                     <LogIn className="w-4 h-4 mr-2" />
-                    {isLoading ? 'Logging in...' : 'Login'}
+                    {isLoading ? t('login_page.button_logging_in') : t('login_page.button_login')}
                   </Button>
                 </form>
               </TabsContent>
@@ -97,11 +99,11 @@ function LoginPage() {
               <TabsContent value="signup">
                 <form onSubmit={handleSignup} className="space-y-4">
                   <div>
-                    <Label htmlFor="signup-name" className="text-white">Full Name</Label>
+                    <Label htmlFor="signup-name" className="text-white">{t('login_page.fullname_label')}</Label>
                     <Input
                       id="signup-name"
                       type="text"
-                      placeholder="John Doe"
+                      placeholder={t('login_page.fullname_placeholder')}
                       value={signupData.fullName}
                       onChange={(e) => setSignupData({ ...signupData, fullName: e.target.value })}
                       className="bg-white/20 border-white/30 text-white placeholder:text-white/50"
@@ -109,11 +111,11 @@ function LoginPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="signup-email" className="text-white">Email</Label>
+                    <Label htmlFor="signup-email" className="text-white">{t('login_page.email_label')}</Label>
                     <Input
                       id="signup-email"
                       type="email"
-                      placeholder="your@email.com"
+                      placeholder={t('login_page.email_placeholder')}
                       value={signupData.email}
                       onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
                       className="bg-white/20 border-white/30 text-white placeholder:text-white/50"
@@ -121,11 +123,11 @@ function LoginPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="signup-password" className="text-white">Password</Label>
+                    <Label htmlFor="signup-password" className="text-white">{t('login_page.password_label')}</Label>
                     <Input
                       id="signup-password"
                       type="password"
-                      placeholder="••••••••"
+                      placeholder={t('login_page.password_placeholder')}
                       value={signupData.password}
                       onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
                       className="bg-white/20 border-white/30 text-white placeholder:text-white/50"
@@ -138,7 +140,7 @@ function LoginPage() {
                     disabled={isLoading}
                   >
                     <UserPlus className="w-4 h-4 mr-2" />
-                    {isLoading ? 'Creating account...' : 'Sign Up'}
+                    {isLoading ? t('login_page.button_creating_account') : t('login_page.button_signup')}
                   </Button>
                 </form>
               </TabsContent>

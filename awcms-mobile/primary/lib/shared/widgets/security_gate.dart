@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/extensions/context_extensions.dart';
 import '../../core/services/security_service.dart';
 
 /// Security gate - blocks app if device is compromised
@@ -36,14 +37,14 @@ class _LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Memeriksa keamanan perangkat...'),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(context.l10n.checkingDeviceSecurity),
           ],
         ),
       ),
@@ -70,16 +71,15 @@ class _BlockedScreen extends StatelessWidget {
               Icon(Icons.security, size: 80, color: colorScheme.error),
               const SizedBox(height: 24),
               Text(
-                'Perangkat Tidak Aman',
+                context.l10n.insecureDevice,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.error,
-                    ),
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.error,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
-                message ??
-                    'Aplikasi tidak dapat berjalan pada perangkat yang di-root atau jailbreak.',
+                message ?? context.l10n.deviceRootedMessage,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
@@ -99,7 +99,7 @@ class _BlockedScreen extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Untuk keamanan data Anda, aplikasi ini tidak mendukung perangkat yang telah dimodifikasi.',
+                        context.l10n.deviceModifiedMessage,
                         style: TextStyle(
                           color: colorScheme.onErrorContainer,
                           fontSize: 13,

@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/extensions/context_extensions.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/sync_service.dart';
 
@@ -35,7 +36,7 @@ class OfflineIndicator extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Mode Offline',
+                  context.l10n.offlineMode,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onErrorContainer,
                     fontSize: 12,
@@ -87,7 +88,7 @@ class OfflineIndicator extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Menyinkronkan...',
+                  context.l10n.syncing,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onPrimaryContainer,
                     fontSize: 12,
@@ -132,10 +133,10 @@ class SyncStatusChip extends ConsumerWidget {
               color: isOffline
                   ? colorScheme.errorContainer
                   : syncState.isSyncing
-                      ? colorScheme.primaryContainer
-                      : syncState.hasPending
-                          ? colorScheme.tertiaryContainer
-                          : colorScheme.surfaceContainerHighest,
+                  ? colorScheme.primaryContainer
+                  : syncState.hasPending
+                  ? colorScheme.tertiaryContainer
+                  : colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -155,8 +156,8 @@ class SyncStatusChip extends ConsumerWidget {
                     isOffline
                         ? Icons.cloud_off
                         : syncState.hasPending
-                            ? Icons.sync_problem
-                            : Icons.cloud_done,
+                        ? Icons.sync_problem
+                        : Icons.cloud_done,
                     size: 14,
                     color: isOffline
                         ? colorScheme.onErrorContainer

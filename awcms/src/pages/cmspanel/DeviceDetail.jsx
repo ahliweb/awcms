@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
 
 function DeviceDetail() {
+    const { t } = useTranslation();
     const { id } = useParams();
     const navigate = useNavigate();
     const { tenantId } = usePermissions();
@@ -106,7 +108,7 @@ function DeviceDetail() {
     const isOnline = device.is_online;
     const lastSeen = device.last_seen
         ? formatDistanceToNow(new Date(device.last_seen), { addSuffix: true })
-        : 'Never';
+        : t('devices.detail_page.never');
 
     return (
         <div className="space-y-6">
@@ -121,14 +123,14 @@ function DeviceDetail() {
                             {device.device_name || device.device_id}
                             <Badge variant={isOnline ? 'default' : 'secondary'}>
                                 {isOnline ? (
-                                    <><Wifi className="mr-1 h-3 w-3" /> Online</>
+                                    <><Wifi className="mr-1 h-3 w-3" /> {t('devices.online')}</>
                                 ) : (
-                                    <><WifiOff className="mr-1 h-3 w-3" /> Offline</>
+                                    <><WifiOff className="mr-1 h-3 w-3" /> {t('devices.offline')}</>
                                 )}
                             </Badge>
                         </h1>
                         <p className="text-muted-foreground">
-                            {device.device_id} • Last seen {lastSeen}
+                            {device.device_id} • {t('devices.detail_page.last_seen')} {lastSeen}
                         </p>
                     </div>
                 </div>
@@ -136,11 +138,11 @@ function DeviceDetail() {
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => { }}>
                         <RefreshCw className="mr-2 h-4 w-4" />
-                        Refresh
+                        {t('devices.detail_page.refresh')}
                     </Button>
                     <Button variant="outline" onClick={() => navigate(`/admin/devices/${id}/settings`)}>
                         <Settings className="mr-2 h-4 w-4" />
-                        Settings
+                        {t('devices.detail_page.settings')}
                     </Button>
                 </div>
             </div>
@@ -157,7 +159,7 @@ function DeviceDetail() {
                                 <p className="text-2xl font-bold">
                                     {latestReading?.gas_ppm?.toFixed(1) || '--'}
                                 </p>
-                                <p className="text-sm text-muted-foreground">Gas PPM</p>
+                                <p className="text-sm text-muted-foreground">{t('devices.detail_page.gas_ppm')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -173,7 +175,7 @@ function DeviceDetail() {
                                 <p className="text-2xl font-bold">
                                     {latestReading?.temperature?.toFixed(1) || '--'}°C
                                 </p>
-                                <p className="text-sm text-muted-foreground">Temperature</p>
+                                <p className="text-sm text-muted-foreground">{t('devices.detail_page.temperature')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -189,7 +191,7 @@ function DeviceDetail() {
                                 <p className="text-2xl font-bold">
                                     {latestReading?.humidity?.toFixed(1) || '--'}%
                                 </p>
-                                <p className="text-sm text-muted-foreground">Humidity</p>
+                                <p className="text-sm text-muted-foreground">{t('devices.detail_page.humidity')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -203,9 +205,9 @@ function DeviceDetail() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">
-                                    {device.config?.camera_enabled ? 'Active' : 'N/A'}
+                                    {device.config?.camera_enabled ? t('devices.detail_page.active') : t('devices.detail_page.na')}
                                 </p>
-                                <p className="text-sm text-muted-foreground">Camera</p>
+                                <p className="text-sm text-muted-foreground">{t('devices.detail_page.camera')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -215,50 +217,50 @@ function DeviceDetail() {
             {/* Charts */}
             <Tabs defaultValue="all" className="w-full">
                 <TabsList>
-                    <TabsTrigger value="all">All Sensors</TabsTrigger>
-                    <TabsTrigger value="gas">Gas</TabsTrigger>
-                    <TabsTrigger value="temperature">Temperature</TabsTrigger>
-                    <TabsTrigger value="humidity">Humidity</TabsTrigger>
+                    <TabsTrigger value="all">{t('devices.detail_page.tabs.all')}</TabsTrigger>
+                    <TabsTrigger value="gas">{t('devices.detail_page.tabs.gas')}</TabsTrigger>
+                    <TabsTrigger value="temperature">{t('devices.detail_page.tabs.temperature')}</TabsTrigger>
+                    <TabsTrigger value="humidity">{t('devices.detail_page.tabs.humidity')}</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="all" className="mt-4">
-                    <SensorChart data={chartData} title="All Sensors" type="all" />
+                    <SensorChart data={chartData} title={t('devices.detail_page.tabs.all')} type="all" />
                 </TabsContent>
 
                 <TabsContent value="gas" className="mt-4">
-                    <SensorChart data={chartData} title="Gas Level" type="gas" />
+                    <SensorChart data={chartData} title={t('devices.detail_page.tabs.gas')} type="gas" />
                 </TabsContent>
 
                 <TabsContent value="temperature" className="mt-4">
-                    <SensorChart data={chartData} title="Temperature" type="temperature" />
+                    <SensorChart data={chartData} title={t('devices.detail_page.tabs.temperature')} type="temperature" />
                 </TabsContent>
 
                 <TabsContent value="humidity" className="mt-4">
-                    <SensorChart data={chartData} title="Humidity" type="humidity" />
+                    <SensorChart data={chartData} title={t('devices.detail_page.tabs.humidity')} type="humidity" />
                 </TabsContent>
             </Tabs>
 
             {/* Device Info */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Device Information</CardTitle>
+                    <CardTitle>{t('devices.detail_page.info_card_title')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-4 md:grid-cols-2">
                         <div>
-                            <p className="text-sm text-muted-foreground">Device ID</p>
+                            <p className="text-sm text-muted-foreground">{t('devices.detail_page.label_device_id')}</p>
                             <p className="font-mono">{device.device_id}</p>
                         </div>
                         <div>
-                            <p className="text-sm text-muted-foreground">IP Address</p>
-                            <p className="font-mono">{device.ip_address || 'Unknown'}</p>
+                            <p className="text-sm text-muted-foreground">{t('devices.detail_page.ip_address')}</p>
+                            <p className="font-mono">{device.ip_address || t('devices.detail_page.unknown')}</p>
                         </div>
                         <div>
-                            <p className="text-sm text-muted-foreground">MAC Address</p>
-                            <p className="font-mono">{device.mac_address || 'Unknown'}</p>
+                            <p className="text-sm text-muted-foreground">{t('devices.detail_page.mac_address')}</p>
+                            <p className="font-mono">{device.mac_address || t('devices.detail_page.unknown')}</p>
                         </div>
                         <div>
-                            <p className="text-sm text-muted-foreground">Firmware</p>
+                            <p className="text-sm text-muted-foreground">{t('devices.detail_page.firmware')}</p>
                             <p>v{device.firmware_version || '1.0.0'}</p>
                         </div>
                     </div>

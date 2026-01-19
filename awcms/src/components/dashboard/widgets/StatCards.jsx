@@ -1,48 +1,50 @@
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { FileText, Layers, ShoppingBag, Users, HardDrive } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function StatCards({ data, loading, className = '' }) {
+  const { t } = useTranslation();
   const stats = [
     {
-      title: "Total Articles",
+      title: t('dashboard.total_articles'),
       value: data?.articles,
       icon: FileText,
       gradient: "from-blue-500 to-blue-600",
       shadow: "shadow-blue-500/20",
     },
     {
-      title: "Total Pages",
+      title: t('dashboard.total_pages'),
       value: data?.pages,
       icon: Layers,
       gradient: "from-purple-500 to-purple-600",
       shadow: "shadow-purple-500/20",
     },
     {
-      title: "Total Products",
+      title: t('dashboard.products'),
       value: data?.products,
       icon: ShoppingBag,
       gradient: "from-orange-500 to-orange-600",
       shadow: "shadow-orange-500/20",
     },
     {
-      title: "Active Users",
+      title: t('dashboard.active_users'),
       value: data?.users,
       icon: Users,
       gradient: "from-emerald-500 to-emerald-600",
       shadow: "shadow-emerald-500/20",
     },
     {
-      title: "Total Orders",
+      title: t('dashboard.total_orders'),
       value: data?.orders,
       icon: ShoppingBag,
       gradient: "from-teal-500 to-teal-600",
       shadow: "shadow-teal-500/20",
     },
     {
-      title: "Storage Used",
+      title: t('dashboard.storage_used'),
       value: data?.storage,
       icon: HardDrive,
       gradient: "from-slate-600 to-slate-700",

@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -20,6 +21,7 @@ import UserProfile from '@/components/dashboard/UserProfile';
 import { Helmet } from 'react-helmet-async';
 
 function Dashboard() {
+  const { t } = useTranslation();
   const [currentPage, setCurrentPage] = useState('home');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -61,8 +63,8 @@ function Dashboard() {
   return (
     <>
       <Helmet>
-        <title>Dashboard - CMS</title>
-        <meta name="description" content="CMS Dashboard for managing content, users, and permissions" />
+        <title>{t('dashboard_page.title')}</title>
+        <meta name="description" content={t('dashboard_page.meta_description')} />
       </Helmet>
       {/* Force text-slate-900 to ensure high contrast on the light background */}
       <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">

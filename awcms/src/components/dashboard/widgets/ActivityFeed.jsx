@@ -1,14 +1,16 @@
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileEdit } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export function ActivityFeed({ activities }) {
+  const { t } = useTranslation();
   return (
     <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-shadow">
       <CardHeader>
-        <CardTitle>Recent Activity</CardTitle>
+        <CardTitle>{t('dashboard.recent_activity')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -33,7 +35,7 @@ export function ActivityFeed({ activities }) {
             ))
           ) : (
             <div className="text-center text-slate-500 dark:text-slate-400 py-8">
-              No recent activity found.
+              {t('dashboard.no_activity')}
             </div>
           )}
         </div>

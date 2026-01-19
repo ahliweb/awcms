@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/extensions/context_extensions.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../shared/widgets/notification_widgets.dart';
 
@@ -18,14 +19,14 @@ class NotificationsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifikasi'),
+        title: Text(context.l10n.notifications),
         actions: [
           if (notificationState.unreadCount > 0)
             TextButton(
               onPressed: () {
                 ref.read(notificationServiceProvider.notifier).markAllAsRead();
               },
-              child: const Text('Tandai Semua'),
+              child: Text(context.l10n.markAll),
             ),
         ],
       ),
@@ -69,7 +70,7 @@ class NotificationsScreen extends ConsumerWidget {
                     .loadNotifications();
               },
               icon: const Icon(Icons.refresh),
-              label: const Text('Coba Lagi'),
+              label: Text(context.l10n.retry),
             ),
           ],
         ),

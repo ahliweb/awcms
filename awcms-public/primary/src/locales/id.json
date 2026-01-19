@@ -1,1345 +1,1411 @@
 {
-    "common": {
-        "loading": "Memuat...",
-        "back": "Kembali",
-        "read_more": "Baca Selengkapnya",
-        "view_all": "Lihat Semua",
-        "search": "Cari...",
-        "no_results": "Tidak ada hasil ditemukan.",
-        "share": "Bagikan",
-        "categories": "Kategori",
-        "tags": "Tag",
-        "posted_on": "Diposting pada",
-        "by": "oleh",
-        "min_read": "menit baca"
-    },
-    "nav": {
-        "homes": "Beranda",
-        "saas": "SaaS",
-        "startup": "Startup",
-        "mobile_app": "Aplikasi Mobile",
-        "personal": "Pribadi",
-        "pages": "Halaman",
-        "features": "Fitur",
-        "services": "Layanan",
-        "pricing": "Harga",
-        "about": "Tentang Kami",
-        "contact": "Kontak",
-        "terms": "Ketentuan",
-        "privacy": "Kebijakan Privasi",
-        "landing": "Halaman Landas",
-        "lead_generation": "Lead Generation",
-        "long_form_sales": "Penjualan Panjang",
-        "click_through": "Click-Through",
-        "product_details": "Detail Produk",
-        "coming_soon": "Segera Hadir",
-        "subscription": "Berlangganan",
-        "blog": "Blog",
-        "blog_list": "Daftar Blog",
-        "article": "Artikel",
-        "article_mdx": "Artikel (dengan MDX)",
-        "category_page": "Halaman Kategori",
-        "tag_page": "Halaman Tag",
-        "widgets": "Widget",
-        "download": "Unduh"
-    },
-    "footer": {
-        "product": "Produk",
-        "features": "Fitur",
-        "security": "Keamanan",
-        "team": "Tim",
-        "enterprise": "Perusahaan",
-        "customer_stories": "Cerita Pelanggan",
-        "pricing": "Harga",
-        "resources": "Sumber Daya",
-        "platform": "Platform",
-        "developer_api": "API Pengembang",
-        "partners": "Mitra",
-        "atom": "Atom",
-        "electron": "Electron",
-        "desktop": "AstroWind Desktop",
-        "support": "Dukungan",
-        "docs": "Dokumentasi",
-        "community": "Forum Komunitas",
-        "prof_services": "Layanan Profesional",
-        "skills": "Keahlian",
-        "status": "Status",
-        "company": "Perusahaan",
-        "about": "Tentang",
-        "blog": "Blog",
-        "careers": "Karir",
-        "press": "Pers",
-        "inclusion": "Inklusi",
-        "social_impact": "Dampak Sosial",
-        "shop": "Toko",
-        "terms": "Ketentuan",
-        "privacy": "Kebijakan Privasi",
-        "made_by": "Dibuat oleh <a class=\"text-blue-600 underline dark:text-muted\" href=\"https://ahliweb.co.id\"> AWCMS</a> · Hak cipta dilindungi undang-undang."
-    },
+  "common": {
+    "loading": "Memuat...",
+    "back": "Kembali",
+    "read_more": "Baca Selengkapnya",
+    "view_all": "Lihat Semua",
+    "search": "Cari...",
+    "no_results": "Tidak ada hasil ditemukan.",
+    "share": "Bagikan",
+    "categories": "Kategori",
+    "tags": "Tag",
+    "posted_on": "Diposting pada",
+    "by": "oleh",
+    "min_read": "menit baca"
+  },
+  "nav": {
+    "homes": "Beranda",
+    "saas": "SaaS",
+    "startup": "Startup",
+    "mobile_app": "Aplikasi Mobile",
+    "personal": "Pribadi",
+    "pages": "Halaman",
+    "features": "Fitur",
+    "services": "Layanan",
+    "pricing": "Harga",
+    "about": "Tentang Kami",
+    "contact": "Kontak",
+    "terms": "Ketentuan",
+    "privacy": "Kebijakan Privasi",
+    "landing": "Halaman Landas",
+    "lead_generation": "Lead Generation",
+    "long_form_sales": "Penjualan Panjang",
+    "click_through": "Click-Through",
+    "product_details": "Detail Produk",
+    "coming_soon": "Segera Hadir",
+    "subscription": "Berlangganan",
+    "blog": "Blog",
+    "blog_list": "Daftar Blog",
+    "article": "Artikel",
+    "article_mdx": "Artikel (dengan MDX)",
+    "category_page": "Halaman Kategori",
+    "tag_page": "Halaman Tag",
+    "widgets": "Widget",
+    "download": "Unduh"
+  },
+  "footer": {
+    "product": "Produk",
+    "features": "Fitur",
+    "security": "Keamanan",
+    "team": "Tim",
+    "enterprise": "Perusahaan",
+    "customer_stories": "Cerita Pelanggan",
+    "pricing": "Harga",
+    "resources": "Sumber Daya",
+    "platform": "Platform",
+    "developer_api": "API Pengembang",
+    "partners": "Mitra",
+    "atom": "Atom",
+    "electron": "Electron",
+    "desktop": "AstroWind Desktop",
+    "support": "Dukungan",
+    "docs": "Dokumentasi",
+    "community": "Forum Komunitas",
+    "prof_services": "Layanan Profesional",
+    "skills": "Keahlian",
+    "status": "Status",
+    "company": "Perusahaan",
+    "about": "Tentang",
+    "blog": "Blog",
+    "careers": "Karir",
+    "press": "Pers",
+    "inclusion": "Inklusi",
+    "social_impact": "Dampak Sosial",
+    "shop": "Toko",
+    "terms": "Ketentuan",
+    "privacy": "Kebijakan Privasi",
+    "made_by": "Dibuat oleh <a class=\"text-blue-600 underline dark:text-muted\" href=\"https://ahliweb.co.id\"> AWCMS</a> · Hak cipta dilindungi undang-undang."
+  },
+  "hero": {
+    "welcome": "Selamat Datang",
+    "learn_more": "Pelajari Lebih Lanjut",
+    "get_started": "Mulai Sekarang",
+    "contact_us": "Hubungi Kami"
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Berita dan pembaruan terbaru",
+    "read_more": "Baca Selengkapnya",
+    "posted_on": "Diposting pada",
+    "by_author": "oleh",
+    "in_category": "dalam",
+    "related_posts": "Artikel Terkait",
+    "no_posts": "Tidak ada artikel ditemukan."
+  },
+  "contact": {
+    "title": "Hubungi Kami",
+    "subtitle": "Silakan hubungi kami",
+    "name": "Nama",
+    "email": "Email",
+    "phone": "Telepon",
+    "message": "Pesan",
+    "send": "Kirim Pesan",
+    "sending": "Mengirim...",
+    "success": "Pesan berhasil dikirim!",
+    "error": "Gagal mengirim pesan. Silakan coba lagi.",
+    "address": "Alamat",
+    "hours": "Jam Operasional"
+  },
+  "portfolio": {
+    "title": "Portofolio",
+    "subtitle": "Karya terbaru kami",
+    "view_project": "Lihat Proyek",
+    "all": "Semua"
+  },
+  "products": {
+    "title": "Produk",
+    "add_to_cart": "Tambah ke Keranjang",
+    "buy_now": "Beli Sekarang",
+    "price": "Harga",
+    "in_stock": "Tersedia",
+    "out_of_stock": "Stok Habis"
+  },
+  "error": {
+    "404_title": "Halaman Tidak Ditemukan",
+    "404_message": "Halaman yang Anda cari tidak ada.",
+    "500_title": "Kesalahan Server",
+    "500_message": "Terjadi kesalahan. Silakan coba lagi nanti.",
+    "go_home": "Kembali ke Beranda"
+  },
+  "language": {
+    "switch": "Ganti Bahasa",
+    "english": "Inggris",
+    "indonesian": "Indonesia",
+    "switch_to_id": "Ganti ke Indonesia",
+    "switch_to_en": "Ganti ke Inggris"
+  },
+  "home": {
     "hero": {
-        "welcome": "Selamat Datang",
-        "learn_more": "Pelajari Lebih Lanjut",
-        "get_started": "Mulai Sekarang",
-        "contact_us": "Hubungi Kami"
+      "title_html": "Tingkatkan Penjualan dan Identitas Bisnis Anda <span class='hidden xl:inline'>dengan</span> <span class='text-accent dark:text-white'>Solusi Website & Aplikasi</span> dari AWCMS",
+      "subtitle": "AWCMS adalah sistem manajemen konten yang kuat menyediakan solusi Website, Aplikasi, dan ERP untuk memperkuat visi dan misi bisnis Anda.",
+      "subtitle_highlight": "AWCMS: Siap Enterprise.",
+      "description": "Cocok untuk Startup, Bisnis Kecil, Website SaaS, Portofolio Profesional, Website Marketing & Blog."
     },
-    "blog": {
-        "title": "Blog",
-        "subtitle": "Berita dan pembaruan terbaru",
-        "read_more": "Baca Selengkapnya",
-        "posted_on": "Diposting pada",
-        "by_author": "oleh",
-        "in_category": "dalam",
-        "related_posts": "Artikel Terkait",
-        "no_posts": "Tidak ada artikel ditemukan."
+    "note": {
+      "title": "Filosofi:",
+      "description": "Skalabilitas, Teknologi Terbaru dan Manajemen Proyek Scrum"
     },
-    "contact": {
-        "title": "Hubungi Kami",
-        "subtitle": "Silakan hubungi kami",
+    "features": {
+      "tagline": "Fitur",
+      "title": "Apa yang Anda dapatkan dengan AWCMS",
+      "subtitle": "Platform CMS komprehensif dengan billing otomatis, notifikasi WhatsApp real-time, dan teknologi skalabel modern.",
+      "items": {
+        "integration": {
+          "title": "Sistem Billing Otomatis",
+          "desc": "Sistem billing otomatis AWCMS memastikan segalanya berjalan sesuai kebutuhan Anda tanpa intervensi manual."
+        },
+        "components": {
+          "title": "Notifikasi WhatsApp",
+          "desc": "Notifikasi billing dan komunikasi dukungan melalui WhatsApp memastikan semuanya berjalan lancar secara real-time."
+        },
+        "best_practices": {
+          "title": "Teknologi Skalabel & Modern",
+          "desc": "AWCMS selalu mengutamakan update keamanan dan fitur teknologi global terbaru sehingga layanan selalu aman dan terpercaya."
+        },
+        "speed": {
+          "title": "Manajemen Proyek Scrum",
+          "desc": "Manajemen proyek berbasis Scrum memastikan kontrol dan fleksibilitas yang lebih baik untuk proyek Anda."
+        },
+        "seo": {
+          "title": "Pendaftaran Domain",
+          "desc": "Amankan aset digital Anda melalui nama domain unik Indonesia maupun Internasional dengan pendaftaran otomatis."
+        },
+        "contribution": {
+          "title": "Hosting Terpercaya",
+          "desc": "Amankan data dan sistem Anda pada layanan server terpercaya kami dengan infrastruktur kelas enterprise."
+        }
+      }
+    },
+    "content": {
+      "tagline": "Di dalam template",
+      "title": "Cetak Biru AstroWind: Kesenangan Bertemu Fungsionalitas!",
+      "items": {
+        "astro": {
+          "title": "Dibangun di atas Astro 5.0",
+          "desc": "Memanfaatkan kinerja dan fitur ramah pengembang dari generator situs statis modern ini."
+        },
+        "tailwind": {
+          "title": "Didesain menggunakan Tailwind CSS",
+          "desc": "Memfasilitasi desain cepat dan gaya yang konsisten dengan kerangka kerja CSS utility-first yang sangat populer ini."
+        },
+        "cross_browser": {
+          "title": "Kompatibilitas lintas browser",
+          "desc": "Pastikan website Anda terlihat dan berfungsi secara konsisten di berbagai browser web, memberikan pengalaman yang mulus kepada semua pengguna."
+        }
+      },
+      "modern_foundations": {
+        "title": "Membangun di atas fondasi modern",
+        "desc": "Dapatkan keunggulan kompetitif dengan menggabungkan praktik terkemuka di industri"
+      },
+      "customization": "Tingkat kustomisasi tinggi",
+      "customization_desc": "Sesuaikan template dengan mudah agar sesuai dengan identitas dan kebutuhan merek Anda, menjadikan website Anda unik dan menghemat waktu Anda.",
+      "layout": "Berbagai kemungkinan tata letak",
+      "layout_desc": "Jelajahi berbagai opsi tata letak untuk menemukan struktur yang paling baik menyajikan konten Anda, meningkatkan keterlibatan pengguna dan navigasi.",
+      "responsive": "Desain responsif sepenuhnya",
+      "responsive_desc": "Pastikan kinerja optimal website Anda di berbagai perangkat dan ukuran layar, memberikan pengalaman pengguna yang konsisten dan menyenangkan.",
+      "media": "Integrasi media",
+      "media_desc": "Gabungkan gambar, video, dan elemen multimedia dengan mulus yang meningkatkan konten Anda dan melibatkan pengunjung secara efektif.",
+      "engagement": "Peningkatan keterlibatan pengguna",
+      "engagement_desc": "Pikat audiens Anda dengan elemen interaktif, navigasi intuitif, dan tata letak yang menarik secara visual, mendorong kunjungan yang lebih lama.",
+      "improvement": "Perbaikan berkelanjutan",
+      "improvement_desc": "Pastikan website Anda tetap selaras dengan tren dan teknologi terbaru melalui pembaruan dan penyempurnaan rutin.",
+      "efficiency": "Efisiensi waktu dan sumber daya",
+      "efficiency_desc": "Lewati proses yang memakan waktu untuk membangun website dari awal dan luncurkan kehadiran online Anda lebih cepat dengan AstroWind.",
+      "community": "Dukungan komunitas",
+      "community_desc": "Bergabunglah dengan komunitas AstroWind yang berkembang untuk wawasan, sumber daya, dan bantuan, memastikan Anda tidak pernah sendirian dalam perjalanan pengembangan web Anda."
+    },
+    "steps": {
+      "title": "Bangun website impian Anda dan jalankan dalam waktu singkat dengan AstroWind.",
+      "step1": "Langkah 1: <span class='font-medium'>Unduh</span>",
+      "step1_desc": "Mulai dengan GitHub! Baik fork template AstroWind atau cukup klik 'Gunakan template ini'. Kanvas Anda menanti, siap untuk mahakarya digital Anda. Hanya dalam beberapa klik, Anda sudah menetapkan fondasinya.",
+      "step2": "Langkah 2: <span class='font-medium'>Tambahkan konten</span>",
+      "step2_desc": "Tuangkan visi Anda ke dalamnya. Tambahkan gambar, teks, dan semua hal itu untuk menghidupkan ruang digital Anda. Ingat, kontenlah yang menceritakan kisah Anda, jadi buatlah menjadi menawan.",
+      "step3": "Langkah 3: <span class='font-medium'>Sesuaikan gaya</span>",
+      "step3_desc": "Berikan sentuhan pribadi Anda. Sesuaikan warna, font, dan tata letak hingga terasa pas. Bakat unik Anda, diperkuat oleh AstroWind! Presisi dalam desain memastikan pengalaman pengguna yang mulus.",
+      "ready": "Siap!"
+    },
+    "services": {
+      "title": "Layanan Kami",
+      "subtitle": "Layanan Terbaik yang kami sediakan",
+      "tagline": "Layanan"
+    },
+    "projects": {
+      "title": "Proyek Kami",
+      "subtitle": "Lihat pekerjaan terbaru kami",
+      "tagline": "Portofolio"
+    },
+    "team": {
+      "title": "Tim Kami",
+      "subtitle": "Temui para ahli",
+      "tagline": "Tim"
+    },
+    "testimonials": {
+      "title": "Testimoni",
+      "subtitle": "Apa kata klien kami",
+      "tagline": "Umpan Balik"
+    },
+    "partners": {
+      "title": "Mitra Kami"
+    },
+    "cta": {
+      "get_template": "Dapatkan template",
+      "title": "Astro + <br class='block sm:hidden' /><span class='sm:whitespace-nowrap'>Tailwind CSS</span>",
+      "subtitle": "Terkejutlah dengan angka-angka palsu besar yang Anda lihat di halaman ini. <br class='hidden md:inline' />Jangan buang waktu lagi! :P"
+    }
+  },
+  "about": {
+    "title": "Tentang Kami",
+    "hero": {
+      "tagline": "Tentang Kami",
+      "title_html": "Tingkatkan kehadiran online Anda dengan <br /> <span class='text-accent dark:text-white'> Template Website Indah</span> kami",
+      "subtitle": "Donec efficitur, ipsum quis congue luctus, mauris magna convallis mauris, eu auctor nisi lectus non augue. Donec quis lorem non massa vulputate efficitur ac at turpis. Sed tincidunt ex a nunc convallis, et lobortis nisi tempus. Suspendisse vitae nisi eget tortor luctus maximus sed non lectus."
+    },
+    "stats": {
+      "title": "Statistik tentang kami",
+      "offices": "Kantor",
+      "employees": "Karyawan",
+      "templates": "Template",
+      "awards": "Penghargaan"
+    },
+    "features_templates": {
+      "title": "Template kami",
+      "subtitle": "Etiam scelerisque, enim eget vestibulum luctus, nibh mauris blandit nulla, nec vestibulum risus justo ut enim. Praesent lacinia diam et ante imperdiet euismod.",
+      "items": {
+        "educational": {
+          "title": "Pendidikan",
+          "desc": "Morbi faucibus luctus quam, sit amet aliquet felis tempor id. Cras augue massa, ornare quis dignissim a, molestie vel nulla."
+        },
+        "interior": {
+          "title": "Desain Interior",
+          "desc": "Vivamus porttitor, tortor convallis aliquam pretium, turpis enim consectetur elit, vitae egestas purus erat ac nunc nulla."
+        },
+        "photography": {
+          "title": "Fotografi",
+          "desc": "Duis sed lectus in nisl vehicula porttitor eget quis odio. Aliquam erat volutpat. Nulla eleifend nulla id sem fermentum."
+        }
+      }
+    },
+    "features_categories": {
+      "items": {
+        "ecommerce": {
+          "title": "E-commerce",
+          "desc": "Rutrum non odio at vehicula. Proin ipsum justo, dignissim in vehicula sit amet, dignissim id quam. Sed ac tincidunt sapien."
+        },
+        "blog": {
+          "title": "Blog",
+          "desc": "Nullam efficitur volutpat sem sed fringilla. Suspendisse et enim eu orci volutpat laoreet ac vitae libero."
+        },
+        "business": {
+          "title": "Bisnis",
+          "desc": "Morbi et elit finibus, facilisis justo ut, pharetra ipsum. Donec efficitur, ipsum quis congue luctus, mauris magna."
+        },
+        "branding": {
+          "title": "Branding",
+          "desc": "Suspendisse vitae nisi eget tortor luctus maximus sed non lectus. Cras malesuada pretium placerat. Nullam venenatis dolor a ante rhoncus."
+        },
+        "medical": {
+          "title": "Medis",
+          "desc": "Vestibulum malesuada lacus id nibh posuere feugiat. Nam volutpat nulla a felis ultrices, id suscipit mauris congue. In hac habitasse platea dictumst."
+        },
+        "fashion": {
+          "title": "Desain Fashion",
+          "desc": "Maecenas eu tellus eget est scelerisque lacinia et a diam. Aliquam velit lorem, vehicula id fermentum et, rhoncus et purus."
+        }
+      }
+    },
+    "values": {
+      "title": "Nilai-nilai kami",
+      "subtitle": "Maecenas eu tellus eget est scelerisque lacinia et a diam. Aliquam velit lorem, vehicula id fermentum et, rhoncus et purus. Nulla facilisi. Vestibulum malesuada lacus.",
+      "items": {
+        "customer_centric": {
+          "title": "Pendekatan berbasis pelanggan",
+          "desc": "Donec id nibh neque. Quisque et fermentum tortor. Fusce vitae dolor a mauris dignissim commodo. Ut eleifend luctus condimentum."
+        },
+        "improvement": {
+          "title": "Perbaikan Berkelanjutan",
+          "desc": "Phasellus laoreet fermentum venenatis. Vivamus dapibus pulvinar arcu eget mattis. Fusce eget mauris leo."
+        },
+        "ethical": {
+          "title": "Praktik Etis",
+          "desc": "Vestibulum imperdiet libero et lectus molestie, et maximus augue porta. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus."
+        }
+      }
+    },
+    "achievements": {
+      "title": "Pencapaian",
+      "subtitle": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi sagittis, quam nec venenatis lobortis, mi risus tempus nulla, sed porttitor est nibh at nulla.",
+      "cta": "Lihat Lainnya",
+      "items": {
+        "global": {
+          "title": "Jangkauan global",
+          "desc": "Nam malesuada urna in enim imperdiet tincidunt. Phasellus non tincidunt nisi, at elementum mi."
+        },
+        "feedback": {
+          "title": "Umpan balik dan ulasan pelanggan positif",
+          "desc": "Cras semper nulla leo, eget laoreet erat cursus sed. Praesent faucibus massa in purus iaculis dictum."
+        },
+        "awards": {
+          "title": "Penghargaan dan pengakuan sebagai ahli industri",
+          "desc": "Phasellus lacinia cursus velit, eu malesuada magna pretium eu. Etiam aliquet tellus purus, blandit lobortis ex rhoncus vitae."
+        }
+      }
+    },
+    "locations": {
+      "title": "Lokasi kami",
+      "tagline": "Temukan kami",
+      "items": {
+        "us": {
+          "title": "Amerika Serikat",
+          "description": "1234 Lorem Ipsum St, 12345, Miami"
+        },
+        "spain": {
+          "title": "Spanyol",
+          "description": "5678 Lorem Ipsum St, 56789, Madrid"
+        },
+        "australia": {
+          "title": "Australia",
+          "description": "9012 Lorem Ipsum St, 90123, Sydney"
+        },
+        "brazil": {
+          "title": "Brasil",
+          "description": "3456 Lorem Ipsum St, 34567, São Paulo"
+        }
+      }
+    },
+    "support": {
+      "title": "Dukungan Teknis",
+      "tagline": "Hubungi kami",
+      "items": {
+        "chat": {
+          "title": "Chat dengan kami",
+          "desc": "Integer luctus laoreet libero, auctor varius purus rutrum sit amet. Ut nec molestie nisi, quis eleifend mi."
+        },
+        "call": {
+          "title": "Hubungi kami",
+          "desc": "Mauris faucibus finibus orci, in posuere elit viverra non. In hac habitasse platea dictumst. Cras lobortis metus a hendrerit congue."
+        }
+      }
+    }
+  },
+  "services_page": {
+    "hero": {
+      "tagline": "Layanan",
+      "title": "Tingkatkan proyek Anda dengan template kami yang menakjubkan",
+      "subtitle": "Jelajahi template kami yang dibuat dengan cermat yang disesuaikan dengan berbagai industri dan tujuan. Dari presentasi yang menawan hingga desain website fungsional, kami menawarkan alat yang Anda butuhkan untuk sukses.",
+      "cta": "Mulai menjelajah"
+    },
+    "features": {
+      "title": "Jelajahi beragam template kami",
+      "subtitle": "Temukan pilihan kami di bawah ini untuk menyederhanakan dan meningkatkan proyek Anda.",
+      "items": {
+        "educational": {
+          "title": "Pendidikan",
+          "description": "Dengan menyelaraskan desain instruksional dan daya tarik visual, template menyederhanakan pembuatan konten untuk berbagai materi, mempercepat pengembangan dan menumbuhkan ruang pendidikan yang menarik."
+        },
+        "interior": {
+          "title": "Desain Interior",
+          "description": "Menciptakan ruang fungsional yang menarik secara visual untuk penggunaan residensial dan komersial. Template menekankan tata letak, warna, dan pengaturan furnitur, menawarkan toolkit serbaguna untuk visi desain Anda."
+        },
+        "photography": {
+          "title": "Fotografi",
+          "description": "Memberdayakan fotografer, template kami memfasilitasi penceritaan yang menawan. Dengan fokus yang tajam pada tata letak, galeri, dan tipografi, mereka melayani baik profesional maupun penggemar."
+        },
+        "ecommerce": {
+          "title": "E-commerce",
+          "description": "Mengembangkan toko online yang menarik, template E-commerce kami memastikan kehadiran dinamis untuk menampilkan produk secara efektif. Ideal untuk startup atau perombakan."
+        },
+        "blog": {
+          "title": "Blog",
+          "description": "Dengan perhatian pada tipografi, template ini memberdayakan penyajian konten yang efektif untuk penulis di tahap mana pun, memastikan blog yang menarik secara visual dan ramah pengguna."
+        },
+        "business": {
+          "title": "Bisnis",
+          "description": "Menyediakan opsi yang dipoles untuk komunikasi visual yang efektif, template ini memberdayakan baik startup maupun perusahaan mapan untuk kehadiran merek profesional."
+        },
+        "branding": {
+          "title": "Branding",
+          "description": "Menawarkan elemen pra-desain untuk identitas merek yang konsisten, termasuk logo dan materi pemasaran. Ideal untuk usaha baru atau perombakan."
+        },
+        "medical": {
+          "title": "Medis",
+          "description": "Dari presentasi hingga formulir pasien, alat-alat ini meningkatkan efektivitas komunikasi bagi profesional perawatan kesehatan. Ideal untuk praktik medis dan pengejaran penelitian."
+        },
+        "fashion": {
+          "title": "Desain Mode",
+          "description": "Dengan perhatian terhadap detail, kustomisasi, dan desain kontemporer, mereka memberdayakan desainer untuk memamerkan ide secara kohesif. Ideal untuk semua level desainer."
+        }
+      }
+    },
+    "main_features": {
+      "title": "Fitur Utama",
+      "items": {
+        "quality": {
+          "title": "Desain Berkualitas Tinggi",
+          "desc": "Template kami menampilkan desain tingkat atas yang memastikan penampilan profesional dan dipoles untuk proyek Anda."
+        },
+        "customization": {
+          "title": "Alat Kustomisasi",
+          "desc": "Sesuaikan setiap template dengan kebutuhan unik Anda dengan alat kustomisasi yang ramah pengguna yang memungkinkan Anda mempersonalisasi warna, font, dan konten."
+        },
+        "elements": {
+          "title": "Elemen Pra-Desain",
+          "desc": "Hemat waktu dan tenaga dengan elemen siap pakai kami, termasuk grafik, ikon, dan tata letak yang meningkatkan daya tarik visual kreasi Anda."
+        },
+        "preview": {
+          "title": "Tampilan Pratinjau dan Mockup",
+          "desc": "Visualisasikan hasil akhir sebelum membuat perubahan apa pun menggunakan tampilan pratinjau dan mockup kami, memastikan proyek Anda memenuhi harapan Anda."
+        }
+      }
+    },
+    "benefits": {
+      "title": "Manfaat",
+      "items": {
+        "time": "Hemat Waktu",
+        "time_desc": "Sederhanakan alur kerja Anda, memungkinkan Anda membuat materi yang menakjubkan secara efisien dan mengalokasikan lebih banyak waktu untuk tugas inti Anda.",
+        "appearance": "Penampilan Profesional",
+        "appearance_desc": "Tingkatkan proyek Anda dengan tampilan yang dipoles dan canggih yang disediakan template kami, membuat kesan abadi pada audiens Anda.",
+        "cost": "Efisiensi Biaya",
+        "cost_desc": "Manfaatkan penghematan biaya dengan menghindari kebutuhan akan pekerjaan desain khusus, karena template kami menawarkan desain tingkat profesional dengan sebagian kecil biaya.",
+        "download": "Unduhan Instan",
+        "download_desc": "Nikmati akses segera ke template pilihan Anda setelah pembelian, memungkinkan Anda mulai mengerjakan proyek Anda tanpa penundaan."
+      }
+    },
+    "testimonials": {
+      "title": "Kata pelanggan nyata",
+      "cta": "Lebih banyak testimoni...",
+      "items": {
+        "emily": {
+          "testimonial": "Desainnya tidak hanya menarik secara visual tetapi juga sangat profesional. Template ini telah menghemat banyak waktu saya sekaligus membantu saya memberikan kesan mendalam pada klien saya.",
+          "name": "Emily Kennedy",
+          "job": "Pengembang Front-end"
+        },
+        "sarah": {
+          "testimonial": "Ini menampilkan karya saya dengan indah, dengan desain yang bersih dan elegan yang membuat foto-foto saya bersinar. Kustomisasi sangat mudah, bahkan untuk orang non-teknis seperti saya. Hasilnya adalah portofolio profesional dan imersif yang mendapat banyak pujian.",
+          "name": "Sarah Hansen",
+          "job": "Fotografer"
+        },
+        "mark": {
+          "testimonial": "Saya menemukan template ini dan saya terkesan dengan variasi dan kualitasnya. Mereka telah membantu saya membangun citra merek yang konsisten di seluruh pemasaran dan platform sosial saya, meningkatkan penampilan bisnis saya secara keseluruhan.",
+          "name": "Mark Wilkinson",
+          "job": "Pemilik usaha kecil"
+        }
+      }
+    },
+    "cta": {
+      "title": "Selami koleksi template kami",
+      "subtitle": "Baik Anda dalam bisnis, desain, atau pendidikan, template kami ada di sini untuk meningkatkan proyek Anda.",
+      "action": "Mulai menjelajah"
+    }
+  },
+  "announcement": {
+    "badge": "BARU",
+    "content": "AWCMS kini tersedia di GitHub! »",
+    "tooltip": "Beri kami bintang di GitHub untuk mendukung pengembangan AWCMS."
+  },
+  "contact_page": {
+    "hero": {
+      "title": "Mari Terhubung!",
+      "tagline": "Kontak"
+    },
+    "form": {
+      "title": "Kirim pesan kepada kami hari ini!",
+      "subtitle": "Untuk jawaban lebih cepat, jelajahi bagian FAQ kami. Anda mungkin menemukan solusi yang Anda cari di sana! Jika tidak, tim dukungan kami dengan senang hati membantu Anda.",
+      "inputs": {
         "name": "Nama",
         "email": "Email",
-        "phone": "Telepon",
-        "message": "Pesan",
-        "send": "Kirim Pesan",
-        "sending": "Mengirim...",
-        "success": "Pesan berhasil dikirim!",
-        "error": "Gagal mengirim pesan. Silakan coba lagi.",
-        "address": "Alamat",
-        "hours": "Jam Operasional"
+        "message": "Pesan"
+      },
+      "disclaimer": "Dengan mengirimkan formulir kontak ini, Anda mengakui dan menyetujui pengumpulan informasi pribadi Anda.",
+      "description": "Tim dukungan kami biasanya merespons dalam 24 jam kerja."
     },
-    "portfolio": {
-        "title": "Portofolio",
-        "subtitle": "Karya terbaru kami",
-        "view_project": "Lihat Proyek",
-        "all": "Semua"
-    },
-    "products": {
-        "title": "Produk",
-        "add_to_cart": "Tambah ke Keranjang",
-        "buy_now": "Beli Sekarang",
-        "price": "Harga",
-        "in_stock": "Tersedia",
-        "out_of_stock": "Stok Habis"
-    },
-    "error": {
-        "404_title": "Halaman Tidak Ditemukan",
-        "404_message": "Halaman yang Anda cari tidak ada.",
-        "500_title": "Kesalahan Server",
-        "500_message": "Terjadi kesalahan. Silakan coba lagi nanti.",
-        "go_home": "Kembali ke Beranda"
-    },
-    "language": {
-        "switch": "Ganti Bahasa",
-        "english": "Inggris",
-        "indonesian": "Indonesia",
-        "switch_to_id": "Ganti ke Indonesia",
-        "switch_to_en": "Ganti ke Inggris"
-    },
-    "home": {
-        "hero": {
-            "title_html": "Tingkatkan Penjualan dan Identitas Bisnis Anda <span class='hidden xl:inline'>dengan</span> <span class='text-accent dark:text-white'>Solusi Website & Aplikasi</span> dari AWCMS",
-            "subtitle": "AWCMS adalah sistem manajemen konten yang kuat menyediakan solusi Website, Aplikasi, dan ERP untuk memperkuat visi dan misi bisnis Anda.",
-            "subtitle_highlight": "AWCMS: Siap Enterprise.",
-            "description": "Cocok untuk Startup, Bisnis Kecil, Website SaaS, Portofolio Profesional, Website Marketing & Blog."
-        },
-        "note": {
-            "title": "Filosofi:",
-            "description": "Skalabilitas, Teknologi Terbaru dan Manajemen Proyek Scrum"
-        },
-        "features": {
-            "tagline": "Fitur",
-            "title": "Apa yang Anda dapatkan dengan AWCMS",
-            "subtitle": "Platform CMS komprehensif dengan billing otomatis, notifikasi WhatsApp real-time, dan teknologi skalabel modern.",
-            "items": {
-                "integration": {
-                    "title": "Sistem Billing Otomatis",
-                    "desc": "Sistem billing otomatis AWCMS memastikan segalanya berjalan sesuai kebutuhan Anda tanpa intervensi manual."
-                },
-                "components": {
-                    "title": "Notifikasi WhatsApp",
-                    "desc": "Notifikasi billing dan komunikasi dukungan melalui WhatsApp memastikan semuanya berjalan lancar secara real-time."
-                },
-                "best_practices": {
-                    "title": "Teknologi Skalabel & Modern",
-                    "desc": "AWCMS selalu mengutamakan update keamanan dan fitur teknologi global terbaru sehingga layanan selalu aman dan terpercaya."
-                },
-                "speed": {
-                    "title": "Manajemen Proyek Scrum",
-                    "desc": "Manajemen proyek berbasis Scrum memastikan kontrol dan fleksibilitas yang lebih baik untuk proyek Anda."
-                },
-                "seo": {
-                    "title": "Pendaftaran Domain",
-                    "desc": "Amankan aset digital Anda melalui nama domain unik Indonesia maupun Internasional dengan pendaftaran otomatis."
-                },
-                "contribution": {
-                    "title": "Hosting Terpercaya",
-                    "desc": "Amankan data dan sistem Anda pada layanan server terpercaya kami dengan infrastruktur kelas enterprise."
-                }
-            }
-        },
-        "content": {
-            "tagline": "Di dalam template",
-            "title": "Cetak Biru AstroWind: Kesenangan Bertemu Fungsionalitas!",
-            "items": {
-                "astro": {
-                    "title": "Dibangun di atas Astro 5.0",
-                    "desc": "Memanfaatkan kinerja dan fitur ramah pengembang dari generator situs statis modern ini."
-                },
-                "tailwind": {
-                    "title": "Didesain menggunakan Tailwind CSS",
-                    "desc": "Memfasilitasi desain cepat dan gaya yang konsisten dengan kerangka kerja CSS utility-first yang sangat populer ini."
-                },
-                "cross_browser": {
-                    "title": "Kompatibilitas lintas browser",
-                    "desc": "Pastikan website Anda terlihat dan berfungsi secara konsisten di berbagai browser web, memberikan pengalaman yang mulus kepada semua pengguna."
-                }
-            },
-            "modern_foundations": {
-                "title": "Membangun di atas fondasi modern",
-                "desc": "Dapatkan keunggulan kompetitif dengan menggabungkan praktik terkemuka di industri"
-            },
-            "customization": "Tingkat kustomisasi tinggi",
-            "customization_desc": "Sesuaikan template dengan mudah agar sesuai dengan identitas dan kebutuhan merek Anda, menjadikan website Anda unik dan menghemat waktu Anda.",
-            "layout": "Berbagai kemungkinan tata letak",
-            "layout_desc": "Jelajahi berbagai opsi tata letak untuk menemukan struktur yang paling baik menyajikan konten Anda, meningkatkan keterlibatan pengguna dan navigasi.",
-            "responsive": "Desain responsif sepenuhnya",
-            "responsive_desc": "Pastikan kinerja optimal website Anda di berbagai perangkat dan ukuran layar, memberikan pengalaman pengguna yang konsisten dan menyenangkan.",
-            "media": "Integrasi media",
-            "media_desc": "Gabungkan gambar, video, dan elemen multimedia dengan mulus yang meningkatkan konten Anda dan melibatkan pengunjung secara efektif.",
-            "engagement": "Peningkatan keterlibatan pengguna",
-            "engagement_desc": "Pikat audiens Anda dengan elemen interaktif, navigasi intuitif, dan tata letak yang menarik secara visual, mendorong kunjungan yang lebih lama.",
-            "improvement": "Perbaikan berkelanjutan",
-            "improvement_desc": "Pastikan website Anda tetap selaras dengan tren dan teknologi terbaru melalui pembaruan dan penyempurnaan rutin.",
-            "efficiency": "Efisiensi waktu dan sumber daya",
-            "efficiency_desc": "Lewati proses yang memakan waktu untuk membangun website dari awal dan luncurkan kehadiran online Anda lebih cepat dengan AstroWind.",
-            "community": "Dukungan komunitas",
-            "community_desc": "Bergabunglah dengan komunitas AstroWind yang berkembang untuk wawasan, sumber daya, dan bantuan, memastikan Anda tidak pernah sendirian dalam perjalanan pengembangan web Anda."
-        },
-        "steps": {
-            "title": "Bangun website impian Anda dan jalankan dalam waktu singkat dengan AstroWind.",
-            "step1": "Langkah 1: <span class='font-medium'>Unduh</span>",
-            "step1_desc": "Mulai dengan GitHub! Baik fork template AstroWind atau cukup klik 'Gunakan template ini'. Kanvas Anda menanti, siap untuk mahakarya digital Anda. Hanya dalam beberapa klik, Anda sudah menetapkan fondasinya.",
-            "step2": "Langkah 2: <span class='font-medium'>Tambahkan konten</span>",
-            "step2_desc": "Tuangkan visi Anda ke dalamnya. Tambahkan gambar, teks, dan semua hal itu untuk menghidupkan ruang digital Anda. Ingat, kontenlah yang menceritakan kisah Anda, jadi buatlah menjadi menawan.",
-            "step3": "Langkah 3: <span class='font-medium'>Sesuaikan gaya</span>",
-            "step3_desc": "Berikan sentuhan pribadi Anda. Sesuaikan warna, font, dan tata letak hingga terasa pas. Bakat unik Anda, diperkuat oleh AstroWind! Presisi dalam desain memastikan pengalaman pengguna yang mulus.",
-            "ready": "Siap!"
-        },
-        "services": {
-            "title": "Layanan Kami",
-            "subtitle": "Layanan Terbaik yang kami sediakan",
-            "tagline": "Layanan"
-        },
-        "projects": {
-            "title": "Proyek Kami",
-            "subtitle": "Lihat pekerjaan terbaru kami",
-            "tagline": "Portofolio"
-        },
-        "team": {
-            "title": "Tim Kami",
-            "subtitle": "Temui para ahli",
-            "tagline": "Tim"
-        },
-        "testimonials": {
-            "title": "Testimoni",
-            "subtitle": "Apa kata klien kami",
-            "tagline": "Umpan Balik"
-        },
-        "partners": {
-            "title": "Mitra Kami"
-        },
-        "cta": {
-            "get_template": "Dapatkan template",
-            "title": "Astro + <br class='block sm:hidden' /><span class='sm:whitespace-nowrap'>Tailwind CSS</span>",
-            "subtitle": "Terkejutlah dengan angka-angka palsu besar yang Anda lihat di halaman ini. <br class='hidden md:inline' />Jangan buang waktu lagi! :P"
-        }
-    },
-    "about": {
-        "title": "Tentang Kami",
-        "hero": {
-            "tagline": "Tentang Kami",
-            "title_html": "Tingkatkan kehadiran online Anda dengan <br /> <span class='text-accent dark:text-white'> Template Website Indah</span> kami",
-            "subtitle": "Donec efficitur, ipsum quis congue luctus, mauris magna convallis mauris, eu auctor nisi lectus non augue. Donec quis lorem non massa vulputate efficitur ac at turpis. Sed tincidunt ex a nunc convallis, et lobortis nisi tempus. Suspendisse vitae nisi eget tortor luctus maximus sed non lectus."
-        },
-        "stats": {
-            "title": "Statistik tentang kami",
-            "offices": "Kantor",
-            "employees": "Karyawan",
-            "templates": "Template",
-            "awards": "Penghargaan"
-        },
-        "features_templates": {
-            "title": "Template kami",
-            "subtitle": "Etiam scelerisque, enim eget vestibulum luctus, nibh mauris blandit nulla, nec vestibulum risus justo ut enim. Praesent lacinia diam et ante imperdiet euismod.",
-            "items": {
-                "educational": {
-                    "title": "Pendidikan",
-                    "desc": "Morbi faucibus luctus quam, sit amet aliquet felis tempor id. Cras augue massa, ornare quis dignissim a, molestie vel nulla."
-                },
-                "interior": {
-                    "title": "Desain Interior",
-                    "desc": "Vivamus porttitor, tortor convallis aliquam pretium, turpis enim consectetur elit, vitae egestas purus erat ac nunc nulla."
-                },
-                "photography": {
-                    "title": "Fotografi",
-                    "desc": "Duis sed lectus in nisl vehicula porttitor eget quis odio. Aliquam erat volutpat. Nulla eleifend nulla id sem fermentum."
-                }
-            }
-        },
-        "features_categories": {
-            "items": {
-                "ecommerce": {
-                    "title": "E-commerce",
-                    "desc": "Rutrum non odio at vehicula. Proin ipsum justo, dignissim in vehicula sit amet, dignissim id quam. Sed ac tincidunt sapien."
-                },
-                "blog": {
-                    "title": "Blog",
-                    "desc": "Nullam efficitur volutpat sem sed fringilla. Suspendisse et enim eu orci volutpat laoreet ac vitae libero."
-                },
-                "business": {
-                    "title": "Bisnis",
-                    "desc": "Morbi et elit finibus, facilisis justo ut, pharetra ipsum. Donec efficitur, ipsum quis congue luctus, mauris magna."
-                },
-                "branding": {
-                    "title": "Branding",
-                    "desc": "Suspendisse vitae nisi eget tortor luctus maximus sed non lectus. Cras malesuada pretium placerat. Nullam venenatis dolor a ante rhoncus."
-                },
-                "medical": {
-                    "title": "Medis",
-                    "desc": "Vestibulum malesuada lacus id nibh posuere feugiat. Nam volutpat nulla a felis ultrices, id suscipit mauris congue. In hac habitasse platea dictumst."
-                },
-                "fashion": {
-                    "title": "Desain Fashion",
-                    "desc": "Maecenas eu tellus eget est scelerisque lacinia et a diam. Aliquam velit lorem, vehicula id fermentum et, rhoncus et purus."
-                }
-            }
-        },
-        "values": {
-            "title": "Nilai-nilai kami",
-            "subtitle": "Maecenas eu tellus eget est scelerisque lacinia et a diam. Aliquam velit lorem, vehicula id fermentum et, rhoncus et purus. Nulla facilisi. Vestibulum malesuada lacus.",
-            "items": {
-                "customer_centric": {
-                    "title": "Pendekatan berbasis pelanggan",
-                    "desc": "Donec id nibh neque. Quisque et fermentum tortor. Fusce vitae dolor a mauris dignissim commodo. Ut eleifend luctus condimentum."
-                },
-                "improvement": {
-                    "title": "Perbaikan Berkelanjutan",
-                    "desc": "Phasellus laoreet fermentum venenatis. Vivamus dapibus pulvinar arcu eget mattis. Fusce eget mauris leo."
-                },
-                "ethical": {
-                    "title": "Praktik Etis",
-                    "desc": "Vestibulum imperdiet libero et lectus molestie, et maximus augue porta. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus."
-                }
-            }
-        },
-        "achievements": {
-            "title": "Pencapaian",
-            "subtitle": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi sagittis, quam nec venenatis lobortis, mi risus tempus nulla, sed porttitor est nibh at nulla.",
-            "cta": "Lihat Lainnya",
-            "items": {
-                "global": {
-                    "title": "Jangkauan global",
-                    "desc": "Nam malesuada urna in enim imperdiet tincidunt. Phasellus non tincidunt nisi, at elementum mi."
-                },
-                "feedback": {
-                    "title": "Umpan balik dan ulasan pelanggan positif",
-                    "desc": "Cras semper nulla leo, eget laoreet erat cursus sed. Praesent faucibus massa in purus iaculis dictum."
-                },
-                "awards": {
-                    "title": "Penghargaan dan pengakuan sebagai ahli industri",
-                    "desc": "Phasellus lacinia cursus velit, eu malesuada magna pretium eu. Etiam aliquet tellus purus, blandit lobortis ex rhoncus vitae."
-                }
-            }
-        },
-        "locations": {
-            "title": "Lokasi kami",
-            "tagline": "Temukan kami"
-        },
-        "support": {
-            "title": "Dukungan Teknis",
-            "tagline": "Hubungi kami",
-            "items": {
-                "chat": {
-                    "title": "Chat dengan kami",
-                    "desc": "Integer luctus laoreet libero, auctor varius purus rutrum sit amet. Ut nec molestie nisi, quis eleifend mi."
-                },
-                "call": {
-                    "title": "Hubungi kami",
-                    "desc": "Mauris faucibus finibus orci, in posuere elit viverra non. In hac habitasse platea dictumst. Cras lobortis metus a hendrerit congue."
-                }
-            }
-        }
-    },
-    "services_page": {
-        "hero": {
-            "tagline": "Layanan",
-            "title": "Tingkatkan proyek Anda dengan template kami yang menakjubkan",
-            "subtitle": "Jelajahi template kami yang dibuat dengan cermat yang disesuaikan dengan berbagai industri dan tujuan. Dari presentasi yang menawan hingga desain website fungsional, kami menawarkan alat yang Anda butuhkan untuk sukses.",
-            "cta": "Mulai menjelajah"
-        },
-        "features": {
-            "title": "Jelajahi beragam template kami",
-            "subtitle": "Temukan pilihan kami di bawah ini untuk menyederhanakan dan meningkatkan proyek Anda.",
-            "items": {
-                "educational": "Dengan menyelaraskan desain instruksional dan daya tarik visual, template menyederhanakan pembuatan konten untuk berbagai materi, mempercepat pengembangan dan menumbuhkan ruang pendidikan yang menarik.",
-                "interior": "Menciptakan ruang fungsional yang menarik secara visual untuk penggunaan residensial dan komersial. Template menekankan tata letak, warna, dan pengaturan furnitur, menawarkan toolkit serbaguna untuk visi desain Anda.",
-                "photography": "Memberdayakan fotografer, template kami memfasilitasi penceritaan yang menawan. Dengan fokus yang tajam pada tata letak, galeri, dan tipografi, mereka melayani baik profesional maupun penggemar.",
-                "ecommerce": "Mengembangkan toko online yang menarik, template E-commerce kami memastikan kehadiran dinamis untuk menampilkan produk secara efektif. Ideal untuk startup atau perombakan.",
-                "blog": "Dengan perhatian pada tipografi, template ini memberdayakan penyajian konten yang efektif untuk penulis di tahap mana pun, memastikan blog yang menarik secara visual dan ramah pengguna.",
-                "business": "Menyediakan opsi yang dipoles untuk komunikasi visual yang efektif, template ini memberdayakan baik startup maupun perusahaan mapan untuk kehadiran merek profesional.",
-                "branding": "Menawarkan elemen pra-desain untuk identitas merek yang konsisten, termasuk logo dan materi pemasaran. Ideal untuk usaha baru atau perombakan.",
-                "medical": "Dari presentasi hingga formulir pasien, alat-alat ini meningkatkan efektivitas komunikasi bagi profesional perawatan kesehatan. Ideal untuk praktik medis dan pengejaran penelitian.",
-                "fashion": "Dengan perhatian terhadap detail, kustomisasi, dan desain kontemporer, mereka memberdayakan desainer untuk memamerkan ide secara kohesif. Ideal untuk semua level desainer."
-            }
-        },
-        "main_features": {
-            "title": "Fitur Utama",
-            "items": {
-                "quality": {
-                    "title": "Desain Berkualitas Tinggi",
-                    "desc": "Template kami menampilkan desain tingkat atas yang memastikan penampilan profesional dan dipoles untuk proyek Anda."
-                },
-                "customization": {
-                    "title": "Alat Kustomisasi",
-                    "desc": "Sesuaikan setiap template dengan kebutuhan unik Anda dengan alat kustomisasi yang ramah pengguna yang memungkinkan Anda mempersonalisasi warna, font, dan konten."
-                },
-                "elements": {
-                    "title": "Elemen Pra-Desain",
-                    "desc": "Hemat waktu dan tenaga dengan elemen siap pakai kami, termasuk grafik, ikon, dan tata letak yang meningkatkan daya tarik visual kreasi Anda."
-                },
-                "preview": {
-                    "title": "Tampilan Pratinjau dan Mockup",
-                    "desc": "Visualisasikan hasil akhir sebelum membuat perubahan apa pun menggunakan tampilan pratinjau dan mockup kami, memastikan proyek Anda memenuhi harapan Anda."
-                }
-            }
-        },
-        "benefits": {
-            "title": "Manfaat",
-            "items": {
-                "time": "Hemat Waktu",
-                "time_desc": "Sederhanakan alur kerja Anda, memungkinkan Anda membuat materi yang menakjubkan secara efisien dan mengalokasikan lebih banyak waktu untuk tugas inti Anda.",
-                "appearance": "Penampilan Profesional",
-                "appearance_desc": "Tingkatkan proyek Anda dengan tampilan yang dipoles dan canggih yang disediakan template kami, membuat kesan abadi pada audiens Anda.",
-                "cost": "Efisiensi Biaya",
-                "cost_desc": "Manfaatkan penghematan biaya dengan menghindari kebutuhan akan pekerjaan desain khusus, karena template kami menawarkan desain tingkat profesional dengan sebagian kecil biaya.",
-                "download": "Unduhan Instan",
-                "download_desc": "Nikmati akses segera ke template pilihan Anda setelah pembelian, memungkinkan Anda mulai mengerjakan proyek Anda tanpa penundaan."
-            }
-        },
-        "testimonials": {
-            "title": "Kata pelanggan nyata",
-            "cta": "Lebih banyak testimoni..."
-        },
-        "cta": {
-            "title": "Selami koleksi template kami",
-            "subtitle": "Baik Anda dalam bisnis, desain, atau pendidikan, template kami ada di sini untuk meningkatkan proyek Anda.",
-            "action": "Mulai menjelajah"
-        }
-    },
-    "announcement": {
-        "badge": "BARU",
-        "content": "AWCMS kini tersedia di GitHub! »",
-        "tooltip": "Beri kami bintang di GitHub untuk mendukung pengembangan AWCMS."
-    },
-    "contact_page": {
-        "hero": {
-            "title": "Mari Terhubung!",
-            "tagline": "Kontak"
-        },
-        "form": {
-            "title": "Kirim pesan kepada kami hari ini!",
-            "subtitle": "Untuk jawaban lebih cepat, jelajahi bagian FAQ kami. Anda mungkin menemukan solusi yang Anda cari di sana! Jika tidak, tim dukungan kami dengan senang hati membantu Anda.",
-            "inputs": {
-                "name": "Nama",
-                "email": "Email",
-                "message": "Pesan"
-            },
-            "disclaimer": "Dengan mengirimkan formulir kontak ini, Anda mengakui dan menyetujui pengumpulan informasi pribadi Anda.",
-            "description": "Tim dukungan kami biasanya merespons dalam 24 jam kerja."
-        },
-        "features": {
-            "title": "Kami di sini untuk membantu!",
-            "items": {
-                "general": {
-                    "title": "Dukungan umum",
-                    "desc": "Chat dengan kami untuk pertanyaan terkait manajemen akun, navigasi situs web, masalah pembayaran, mengakses template yang dibeli, atau pertanyaan umum tentang fungsionalitas situs web."
-                },
-                "sales": {
-                    "title": "Hubungi penjualan",
-                    "desc": "Chat dengan kami untuk pertanyaan tentang pembelian, opsi kustomisasi, lisensi untuk penggunaan komersial, pertanyaan tentang template tertentu, dll."
-                },
-                "technical": {
-                    "title": "Dukungan teknis",
-                    "desc": "Chat dengan kami saat menghadapi masalah seperti instalasi template, kesulitan pengeditan, masalah kompatibilitas dengan perangkat lunak atau kesalahan unduhan, atau tantangan teknis lainnya terkait penggunaan template."
-                },
-                "phone": {
-                    "title": "Telepon"
-                },
-                "email": {
-                    "title": "Email"
-                },
-                "location": {
-                    "title": "Lokasi"
-                }
-            }
-        }
-    },
-    "pricing_page": {
-        "hero": {
-            "title": "Harga Luar Biasa untuk Setiap Perjalanan",
-            "tagline": "Harga",
-            "subtitle": "Pilih paket sempurna yang selaras dengan tujuan kosmik Anda."
-        },
-        "prices": {
-            "title": "Harga kami",
-            "subtitle": "Hanya bayar untuk apa yang Anda butuhkan",
-            "per_month": "per bulan",
-            "get_started": "Mulai sekarang",
-            "basic": {
-                "title": "dasar",
-                "subtitle": "Pilihan optimal untuk penggunaan pribadi",
-                "items": [
-                    "Etiam in libero, et volutpat",
-                    "Aenean ac nunc dolor tristique",
-                    "Cras scelerisque accumsan lib",
-                    "In hac habitasse"
-                ]
-            },
-            "standard": {
-                "title": "standar",
-                "subtitle": "Pilihan optimal untuk tim kecil",
-                "ribbon": "populer",
-                "items": [
-                    "Proin vel laoreet",
-                    "Ut efficitur habitasse egestas",
-                    "Volutpat hac curabitur",
-                    "Pellentesque blandit ut nibh",
-                    "Donec fringilla sem"
-                ]
-            },
-            "premium": {
-                "title": "premium",
-                "subtitle": "Pilihan optimal untuk perusahaan",
-                "items": [
-                    "Curabitur suscipit risus",
-                    "Aliquam habitasse malesuada",
-                    "Suspendisse sit amet blandit",
-                    "Suspendisse auctor blandit dui"
-                ]
-            }
-        },
-        "features": {
-            "title": "Fitur terkait harga",
-            "subtitle": "Temukan keuntungan memilih paket kami",
-            "items": {
-                "tiered": {
-                    "title": "Paket Harga Bertingkat",
-                    "desc": "Pilih dari berbagai paket harga yang dirancang untuk mengakomodasi berbagai anggaran dan kebutuhan."
-                },
-                "transparent": {
-                    "title": "Harga Transparan",
-                    "desc": "Detail harga yang ditampilkan dengan jelas untuk setiap paket, tanpa biaya tersembunyi atau biaya tak terduga."
-                },
-                "secure": {
-                    "title": "Metode Pembayaran Aman",
-                    "desc": "Gerbang pembayaran yang aman untuk melindungi informasi keuangan Anda selama transaksi."
-                },
-                "access": {
-                    "title": "Akses Instan",
-                    "desc": "Akses segera ke fitur dan template paket pilihan Anda setelah berlangganan."
-                },
-                "upgrade": {
-                    "title": "Nilai Peningkatan",
-                    "desc": "Tingkatkan ke paket tingkat lebih tinggi untuk membuka lebih banyak fitur dan manfaat untuk pengalaman yang ditingkatkan."
-                },
-                "support": {
-                    "title": "Dukungan 24J",
-                    "desc": "Pertanyaan dijawab melalui obrolan langsung, email, atau telepon, setiap hari kalender."
-                }
-            }
-        },
-        "steps": {
-            "title": "Perjalanan terpandu dari rencana ke kreativitas",
-            "tagline": "proses yang disederhanakan",
-            "items": {
-                "explore": "Jelajahi paket",
-                "select": "Pilih paket",
-                "signup": "Daftar / Masuk",
-                "review": "Tinjau pesanan",
-                "payment": "Masukkan detail pembayaran",
-                "confirm": "Konfirmasi",
-                "download": "Unduh dan mulai gunakan template"
-            }
-        },
-        "faqs": {
-            "title": "FAQ Harga",
-            "subtitle": "Memilih paket yang tepat itu penting, dan kami di sini untuk menjawab pertanyaan Anda. Jika Anda memiliki pertanyaan tentang opsi harga kami, Anda berada di tempat yang tepat.",
-            "items": {
-                "support": {
-                    "title": "Apakah paket dilengkapi dengan dukungan pelanggan?",
-                    "desc": "Tentu saja, semua paket mencakup akses ke dukungan pelanggan khusus kami untuk membantu Anda dengan segala pertanyaan atau masalah."
-                },
-                "trial": {
-                    "title": "Apakah ada masa percobaan untuk berbagai paket?",
-                    "desc": "Sayangnya, kami tidak menawarkan masa percobaan untuk paket. Namun, Anda dapat memeriksa bagian demo kami untuk melihat pratinjau kualitas template kami."
-                },
-                "switch": {
-                    "title": "Bisakah saya beralih antar paket?",
-                    "desc": "Tentu saja! Anda dapat dengan mudah meningkatkan atau menurunkan paket Anda, kapan saja, untuk menemukan yang paling sesuai dengan kebutuhan Anda yang terus berkembang."
-                },
-                "payment": {
-                    "title": "Metode pembayaran apa yang Anda terima?",
-                    "desc": "Kami menerima kartu kredit utama dan metode pembayaran online untuk memastikan proses transaksi yang nyaman dan aman."
-                },
-                "fees": {
-                    "title": "Apakah ada biaya tersembunyi di luar biaya yang ditampilkan?",
-                    "desc": "Tidak, biaya berlangganan mencakup semua fitur dan template yang tercantum di bawah setiap paket. Tidak ada biaya tersembunyi atau biaya tambahan."
-                }
-            }
-        },
-        "cta": {
-            "title": "Siap meningkatkan proyek Anda?",
-            "subtitle": "Bergabunglah dengan komunitas pelanggan kami yang puas yang telah mengubah pekerjaan mereka dengan template kami.",
-            "action": "Mulai sekarang"
-        }
-    },
-    "blog_page": {
-        "list": {
-            "title": "Blog",
-            "subtitle": "Contoh blog yang dibuat secara statis dengan berita, tutorial, sumber daya, dan konten menarik lainnya terkait AstroWind",
-            "metadata_title": "Blog"
-        },
-        "category": {
-            "title_prefix": "Kategori"
-        },
-        "tag": {
-            "headline_prefix": "Tag: ",
-            "metadata_title_prefix": "Postingan dengan tag '"
-        },
-        "shared": {
-            "page_prefix": " — Halaman "
-        }
-    },
-    "news_page": {
-        "metadata": {
-            "title": "Berita & Artikel",
-            "description": "Berita, pembaruan, dan artikel terbaru"
-        },
-        "header": {
-            "title": "Berita & Artikel",
-            "subtitle": "Tetap terinformasi dengan berita, pengumuman, dan wawasan terbaru kami."
-        },
-        "filter": {
-            "category": "Kategori:",
-            "tag": "Tag:"
-        },
-        "list": {
-            "no_articles": "Tidak ada artikel ditemukan",
-            "check_back": "Periksa kembali nanti untuk konten baru.",
-            "views": "tayangan"
-        },
-        "pagination": {
-            "previous": "Sebelumnya",
-            "next": "Selanjutnya",
-            "page": "Halaman",
-            "of": "dari"
-        },
-        "article": {
-            "views": "tayangan",
-            "back_to_news": "Kembali ke Berita",
-            "visual_content_placeholder": "Konten visual akan segera hadir..."
-        }
-    },
-    "blog_post": {
-        "min_read": "menit baca",
-        "related_posts": "Artikel Terkait",
-        "view_all": "Lihat Semua Artikel",
-        "back_to_blog": "Kembali ke Blog"
-    },
-    "error_page": {
-        "404": {
-            "title": "Error 404",
-            "message": "Maaf, kami tidak dapat menemukan halaman ini.",
-            "description": "Tapi jangan khawatir, Anda dapat menemukan banyak hal lain di beranda kami.",
-            "back_to_home": "Kembali ke beranda"
-        }
-    },
-    "homes": {
-        "saas": {
-            "metadata": {
-                "title": "SaaS Landing Page"
-            },
-            "header": {
-                "actions": {
-                    "login": "Login",
-                    "sign_up": "Sign Up"
-                }
-            },
-            "hero": {
-                "tagline": "SaaS Web Demo",
-                "actions": {
-                    "get_started": "Get Started",
-                    "learn_more": "Learn more"
-                },
-                "title": "Simplify web design with Astrowind: <br /> your ultimate <span class=\"text-accent dark:text-white\">SaaS</span> companion<br />",
-                "subtitle": "<span class=\"hidden sm:inline\">Elevate your website creation process with <span class=\"font-semibold\">AstroWind</span>'s SaaS solutions.</span> Seamlessly blend the power of Astro 5.0 and Tailwind CSS to craft websites that resonate with your brand and audience."
-            },
-            "features": {
-                "title": "Why choose AstroWind?",
-                "subtitle": "Each of the following features enhances AstroWind's value proposition.",
-                "items": [
-                    {
-                        "title": "Integration of Astro 5.0 and Tailwind CSS",
-                        "description": "Offers a powerful combination that enhances both the development process and the end-user experience. Also, allows to build dynamic and visually stunning websites with optimized performance."
-                    },
-                    {
-                        "title": "Versatile design for startups, small businesses, and more",
-                        "description": "Easily customize AstroWind to harmonize with the unique branding and identity of your venture. AstroWind's versatile design adapts to suit your needs."
-                    },
-                    {
-                        "title": "Effortless customization for portfolios and marketing sites",
-                        "description": "With intuitive customization, easily showcase portfolio pieces, case studies, project highlights, and relevant content. Ideal for creative professionals and businesses looking to highlight their expertise."
-                    },
-                    {
-                        "title": "Optimized landing pages and engaging blogs",
-                        "description": "Landing pages are strategically designed to captivate visitors and prompt specific actions. Additionally, the blog creation feature empowers sharing insights, engaging the audience."
-                    },
-                    {
-                        "title": "Fast loading times and production-ready code",
-                        "description": "Using Astro 5.0 ensures fast loading and seamless rendering, enhancing browsing. The code follows best practices, improving user experience, SEO, and reducing bounce rates."
-                    },
-                    {
-                        "title": "SEO-optimized structure for enhanced visibility",
-                        "description": "Follows SEO best practices with clean code, semantic HTML markup, and fast loading, enhancing search engine rankings. AstroWind's SEO structure ensures visibility to potential customers and clients."
-                    }
-                ]
-            },
-            "use_cases": {
-                "use_cases_title": "Use cases",
-                "use_cases_subtitle": "Discover how AstroWind's versatile template serves as the ideal solution for various use cases, providing tailored solutions to drive success.",
-                "startup": {
-                    "description_title": "Description:",
-                    "description": "Are you a startup with big dreams? AstroWind propels your success. Our template forges a seamless online presence, attracting investors and customers from day one. Astro 5.0 and Tailwind CSS ensure striking, responsive sites, leaving lasting impressions. Countless startups leverage AstroWind to kickstart their journey and resonate with audiences.",
-                    "benefits_title": "Benefits:",
-                    "benefits": "Allow startups to quickly create professional websites without investing extensive time and resources. <br /> Make a memorable first impression with visually appealing design elements that highlight your startup's unique value proposition. <br /> Ensures your website looks stunning and works well on all devices. <br /> Engage potential investors and customers with engaging content, clear messaging, and intuitive navigation.",
-                    "content_title": "Startup success stories: <br /><span class=\"text-2xl\">Launching with AstroWind</span>"
-                },
-                "saas": {
-                    "description_title": "Description:",
-                    "description": "For SaaS businesses, user experience is key. AstroWind enhances showcasing SaaS solutions intuitively. The template's Astro 5.0 and Tailwind CSS integration guarantees user-friendly experience, mirroring your software's efficiency. Customize pages to communicate SaaS value and solutions for your audience.",
-                    "benefits_title": "Benefits:",
-                    "benefits": "Ensuring a cohesive and user-centric design for your SaaS website. <br /> Effectively communicate complex SaaS features through visual aids, animations, and interactive elements. <br /> Prioritize user needs and pain points through well-structured layouts and clear navigation. <br /> Encourage visitors to take action with strategically placed CTAs. <br /> Ensures your SaaS website works seamlessly across all devices.",
-                    "content_title": "SaaS showcase: <br /><span class=\"text-2xl\">Streamlining user experience</span>"
-                },
-                "portfolio": {
-                    "description_title": "Description:",
-                    "description": "Your portfolio is your masterpiece, and AstroWind is your canvas. Whether you're a designer, photographer, artist, or any other creative professional, AstroWind empowers you to showcase your work with elegance and sophistication. Tailored to highlight your creative projects, AstroWind's templates offer a visually immersive experience that lets your portfolio shine.",
-                    "benefits_title": "Benefits:",
-                    "benefits": "Serve as a captivating backdrop to showcase your creative work, capturing attention and leaving a lasting impression. <br /> Tailor your portfolio to reflect your unique style and artistic vision. <br /> Prioritizes visuals, allowing you to present your work in high-resolution detail that draws viewers into your creations. <br /> Enables seamless navigation for effortless portfolio exploration.",
-                    "content_title": "Creative portfolios: <br /><span class=\"text-2xl\">Highlighting your work</span>"
-                },
-                "small_business": {
-                    "description_title": "Description:",
-                    "description": "For small businesses, a well-crafted website can be a game-changer. AstroWind empowers small businesses to not only establish a credible online presence but also convert visitors into loyal customers. The template's thoughtful design and optimization features ensure that your website doesn't just attract attention but also guides visitors through a seamless journey, ultimately leading to conversions.",
-                    "benefits_title": "Benefits:",
-                    "benefits": "Present your small business with a professional and polished website that instills confidence and trust among visitors. <br /> Strategically placed CTAs, user-friendly forms, and optimized layouts work together to drive user engagement and conversions. <br /> Ensure a smooth browsing experience, reducing bounce rates and encouraging interaction.",
-                    "content_title": "Small business growth: <br /><span class=\"text-2xl\">Converting visitors into customers</span>"
-                }
-            },
-            "pricing": {
-                "title": "Flexible pricing plans",
-                "plans": [
-                    {
-                        "title": "free",
-                        "subtitle": "Access to core features and a wide range of templates",
-                        "call_to_action": "Get Started for Free"
-                    },
-                    {
-                        "title": "pro",
-                        "subtitle": "Premium templates and advanced customization",
-                        "call_to_action": "Upgrade to Pro",
-                        "ribbon_title": "popular"
-                    },
-                    {
-                        "title": "Enterprise",
-                        "subtitle": "Tailored solutions for large-scale projects",
-                        "call_to_action": "Unlock Enterprise Features"
-                    }
-                ]
-            },
-            "faqs": {
-                "title": "Frequently Asked Questions",
-                "items": [
-                    {
-                        "title": "Is AstroWind compatible with the latest versions of Astro and Tailwind CSS?",
-                        "description": "Yes, AstroWind is designed to be compatible with the latest versions of both Astro and Tailwind CSS. This ensures that you can harness the full capabilities of these technologies while benefiting from the features offered by AstroWind."
-                    },
-                    {
-                        "title": "Can I use AstroWind for both personal and commercial projects?",
-                        "description": "Certainly! AstroWind is versatile and can be used for a wide range of projects, including both personal and commercial endeavors. Whether you're building a professional portfolio, launching a startup, or creating a marketing website, AstroWind has you covered."
-                    },
-                    {
-                        "title": "What level of coding knowledge is required to use AstroWind?",
-                        "description": "While some familiarity with HTML, CSS, and web development concepts is helpful, the user-friendly interface and customization options allow those with limited coding experience to create impressive websites. For more advanced users, AstroWind offers extensive customization capabilities."
-                    },
-                    {
-                        "title": "Is customer support available for AstroWind users seeking guidance?",
-                        "description": "Absolutely, our dedicated customer support team is here to assist you with any questions or challenges you may encounter. Feel free to reach out to us through our support channels, and we'll be happy to provide the help you need."
-                    }
-                ]
-            },
-            "contact": {
-                "title": "Reach out to us",
-                "subtitle": "Have questions? Feel free to contact us using the form below. We're here to help!",
-                "call_to_action": "Contact us",
-                "items": {
-                    "email": "Email us",
-                    "call": "Call us",
-                    "follow": "Follow us"
-                }
-            },
-            "blog_latest": {
-                "title": "Stay informed with AstroWind's blog",
-                "information": "Explore our collection of articles, guides, and tutorials on web development, design trends, and using AstroWind effectively for your projects."
-            }
-        },
-        "mobile_app": {
-            "metadata": {
-                "title": "Beranda Aplikasi Seluler"
-            },
-            "header": {
-                "links": {
-                    "services": "Layanan",
-                    "features": "Fitur",
-                    "about": "Tentang"
-                },
-                "actions": {
-                    "download": "Unduh"
-                }
-            },
-            "hero": {
-                "tagline": "Demo Web Aplikasi Seluler",
-                "title_html": "<span class=\"text-accent dark:text-white\">Aplikasi AstroWind</span>: <br /> situs web profesional <span class=\"hidden xl:inline\">menjadi mudah</span>",
-                "subtitle": "Buka kreativitas tanpa batas di ujung jari Anda: gerbang Anda menuju desain inovatif.",
-                "subtitle_continued": "Unduh sekarang dan mulailah perjalanan untuk meningkatkan proyek Anda yang belum pernah ada sebelumnya.",
-                "cta": {
-                    "download_app": "Unduh Aplikasi"
-                }
-            },
-            "features": {
-                "title": "Bagaimana cara menggunakan aplikasi kami?",
-                "subtitle": "Lelah menghabiskan waktu berjam-jam membuat dokumen dari awal? Aplikasi kami menawarkan solusi inovatif. Dengan beragam template yang dirancang secara profesional, kini Anda dapat membuat dokumen yang menakjubkan dalam hitungan menit. Jelajahi template kami sekarang dan rasakan perbedaannya.",
-                "tagline": "Panduan langkah demi langkah",
-                "items": [
-                    {
-                        "title": "Unduh dan instal aplikasi",
-                        "description": "Mulailah perjalanan Anda dengan mengunduh aplikasi ramah pengguna kami dari toko aplikasi perangkat Anda atau situs web resmi kami."
-                    },
-                    {
-                        "title": "Daftar",
-                        "description": "Buat akun Anda dengan memberikan informasi yang diperlukan, memungkinkan Anda mengakses berbagai fitur lengkap kami."
-                    },
-                    {
-                        "title": "Jelajahi template",
-                        "description": "Jelajahi koleksi beragam template situs web kami, dikategorikan untuk navigasi yang mudah."
-                    },
-                    {
-                        "title": "Pratinjau dan pilih template",
-                        "description": "Visualisasikan potensi setiap template melalui pratinjau, lalu pilih salah satu yang paling sesuai dengan kebutuhan proyek Anda."
-                    }
-                ]
-            },
-            "main_features": {
-                "title": "Fitur Utama",
-                "items": [
-                    {
-                        "title": "Antarmuka ramah pengguna",
-                        "description": "Antarmuka yang intuitif dan mudah dinavigasi yang memungkinkan pengguna dengan cepat menelusuri dan menemukan template yang mereka butuhkan."
-                    },
-                    {
-                        "title": "Opsi personalisasi",
-                        "description": "Sertakan alat penyesuaian dasar yang memungkinkan pengguna memodifikasi teks, warna, gambar, dan elemen lain dalam template."
-                    },
-                    {
-                        "title": "Komponen siap pakai",
-                        "description": "Tingkatkan desain Anda dengan elemen siap pakai seperti grafik, ikon, dan tata letak, menghemat waktu Anda dan meningkatkan daya tarik visual."
-                    },
-                    {
-                        "title": "Mode Pratinjau",
-                        "description": "Berikan pratinjau setiap template, memungkinkan pengguna melihat tampilannya sebelum melakukan pembelian."
-                    }
-                ]
-            },
-            "other_features": {
-                "title": "Fitur lainnya",
-                "items": [
-                    {
-                        "title": "Akses Offline",
-                        "description": "Tawarkan opsi bagi pengguna untuk mengunduh template yang dibeli untuk penggunaan offline."
-                    },
-                    {
-                        "title": "Penyimpanan Cloud Aman",
-                        "description": "Sediakan penyimpanan cloud untuk template yang dibeli, memastikan pengguna dapat mengakses dan mencadangkan template mereka dari mana saja dengan aman."
-                    },
-                    {
-                        "title": "Pembaruan Berkala",
-                        "description": "Terus tambahkan template dan fitur baru agar aplikasi tetap segar dan menarik bagi pengguna."
-                    },
-                    {
-                        "title": "Keinginan",
-                        "description": "Izinkan pengguna membuat daftar keinginan template yang mereka minati, sehingga memudahkan mereka untuk mengunjungi kembali dan berpotensi membeli nanti."
-                    }
-                ]
-            },
-            "stats": {
-                "title": "Statistik aplikasi kami"
-            },
-            "testimonials": {
-                "title": "Apa kata pengguna kami?",
-                "read_more": "Baca lebih banyak testimoni",
-                "items": [
-                    {
-                        "testimonial": "Ini membuat penjelajahan dan pengunduhan template situs web menjadi mudah. Antarmukanya intuitif, dan saya tidak mengalami kesulitan menemukan template yang sempurna untuk proyek saya. Ini adalah aplikasi yang benar-benar memberdayakan pengguna.",
-                        "name": "Cary Kennedy",
-                        "job": "Sutradara Film"
-                    },
-                    {
-                        "testimonial": "Proses pengunduhan aplikasi yang mulus dan tata letak yang intuitif telah membuat pemilihan template menjadi pengalaman yang menyenangkan. Mampu mempratinjau dan bereksperimen dengan desain yang berbeda sebelum berkomitmen telah menghemat waktu saya dan memastikan saya mendapatkan tampilan yang sempurna untuk situs web saya.",
-                        "name": "Josh Wilkinson",
-                        "job": "Manajer Produk"
-                    },
-                    {
-                        "testimonial": "Saya dapat mengunduh dan menggunakan template situs web profesional dalam hitungan menit. Proses langkah demi langkah dan antarmuka yang ramah pengguna memudahkan saya membuat situs web yang terlihat seolah-olah dirancang oleh seorang profesional.",
-                        "name": "Sidney Hansen",
-                        "job": "Dekorator"
-                    }
-                ]
-            },
-            "faqs": {
-                "title": "Masih ada keraguan?",
-                "items": [
-                    {
-                        "title": "Apa yang dilakukan aplikasi ini?",
-                        "description": "Aplikasi ini menyediakan platform bagi Anda untuk menelusuri, membeli, mengunduh, dan menggunakan berbagai template situs web untuk proyek Anda dengan mudah."
-                    },
-                    {
-                        "title": "Bagaimana aplikasi ini dapat memecahkan masalah saya?",
-                        "description": "Aplikasi ini menyederhanakan proses penemuan dan penerapan desain situs web profesional, menghemat waktu dan upaya Anda dalam membuat situs web yang menarik secara visual dan fungsional."
-                    },
-                    {
-                        "title": "Apakah tersedia untuk perangkat saya?",
-                        "description": "Aplikasi kami dirancang untuk kompatibilitas di berbagai perangkat dan platform, memastikan aksesibilitas baik Anda menggunakan ponsel cerdas, tablet, atau komputer."
-                    },
-                    {
-                        "title": "Apa yang membedakan aplikasi ini dari yang lain?",
-                        "description": "Aplikasi kami menonjol karena antarmukanya yang ramah pengguna, koleksi template yang luas, dan integrasi yang mulus dari proses pembelian dan pengunduhan, membuatnya sangat efisien."
-                    },
-                    {
-                        "title": "Apakah ada biaya yang terlibat?",
-                        "description": "Meskipun aplikasi itu sendiri mungkin gratis untuk diunduh, mungkin ada biaya yang terkait dengan pembelian template tertentu berdasarkan preferensi dan kebutuhan proyek Anda."
-                    }
-                ]
-            },
-            "cta": {
-                "title": "Unduh aplikasi kami sekarang!",
-                "subtitle": "Akses berbagai template yang menakjubkan, sederhanakan proses kreatif Anda, dan tingkatkan kehadiran online Anda."
-            }
-        },
-        "personal": {
-            "metadata": {
-                "title": "Demo Beranda Pribadi"
-            },
-            "header": {
-                "links": {
-                    "home": "Beranda",
-                    "about": "Tentang",
-                    "resume": "Resume",
-                    "porfolio": "Portofolio",
-                    "blog": "Blog",
-                    "github": "Github"
-                },
-                "actions": {
-                    "hire_me": "Rekrut saya"
-                }
-            },
-            "hero": {
-                "title": "Sarah Johnson",
-                "tagline": "Demo Web Pribadi",
-                "subtitle": "Saya seorang Desainer Grafis yang bersemangat dalam menyusun cerita visual. <br /> Dengan pengalaman 5 tahun dan gelar dari School of Design Universitas New York. Saya memberikan vitalitas ke dalam merek dan desain, mengubah konsep menjadi kenyataan yang menawan."
-            },
-            "about": {
-                "title": "Tentang saya",
-                "p1": "Selamat datang di perjalanan kreatif saya. Pekerjaan saya adalah bukti komitmen saya untuk menghidupkan ide, di mana setiap piksel menjadi sapuan kuas di kanvas imajinasi.",
-                "p2": "Saya menemukan inspirasi di dunia sekeliling saya, baik melalui halaman novel yang menawan, detail tipografi yang rumit, atau warna-warna cerah alam selama petualangan luar ruangan saya.",
-                "p3": "Jika Anda penasaran untuk mendalami pekerjaan saya lebih jauh, Anda dapat mengikuti saya:"
-            },
-            "resume": {
-                "work_experience": {
-                    "title": "Pengalaman kerja",
-                    "items": [
-                        {
-                            "title": "Desainer Grafis <br /> <span class=\"font-normal\">Studio Desain ABC, New York, NY</span> <br /> <span class=\"text-sm font-normal\">2021 - Sekarang</span>",
-                            "description": "Berkolaborasi dengan klien untuk memahami persyaratan dan tujuan desain. <br /> Mengembangkan solusi branding, termasuk logo, palet warna, dan panduan merek. <br /> Merancang materi pemasaran seperti brosur, poster, dan aset digital. <br /> Membuat antarmuka pengguna yang menarik secara visual untuk situs web dan aplikasi."
-                        },
-                        {
-                            "title": "Desainer Grafis Junior <br /> <span class=\"font-normal\">Agensi Kreatif XYZ, Los Angeles, CA</span> <br /> <span class=\"text-sm font-normal\">2018 - 2021</span>",
-                            "description": "Membantu desainer senior dalam membuat konsep desain dan aset visual. <br /> Berkontribusi pada pengembangan identitas merek dan materi pemasaran. <br /> Berkolaborasi dengan tim pemasaran untuk memastikan konsistensi desain di seluruh kampanye. <br /> Mendapatkan pengalaman langsung dalam berbagai perangkat lunak dan alat desain."
-                        }
-                    ]
-                },
-                "education": {
-                    "title": "Pendidikan",
-                    "items": [
-                        {
-                            "title": "Magister Seni Rupa Desain Grafis <br /> <span class=\"font-normal\">School of Design Universitas New York</span> <br /> <span class=\"text-sm font-normal\">2018 - 2020</span>"
-                        },
-                        {
-                            "title": "Sarjana Seni Desain Grafis <br /> <span class=\"font-normal\">School of Design Universitas New York</span> <br /> <span class=\"text-sm font-normal\">2014 - 2018</span>"
-                        }
-                    ]
-                }
-            },
-            "skills": {
-                "title": "Keterampilan",
-                "subtitle": "Temukan keahlian yang memungkinkan saya menghidupkan imajinasi melalui desain.",
-                "items": [
-                    {
-                        "title": "Desain grafis",
-                        "description": "Mahir dalam membuat desain yang menarik secara visual yang menyampaikan pesan secara efektif."
-                    },
-                    {
-                        "title": "Branding dan identitas",
-                        "description": "Terampil dalam mengembangkan identitas merek yang kohesif, termasuk logo dan panduan merek."
-                    },
-                    {
-                        "title": "Desain yang berpusat pada pengguna",
-                        "description": "Berpengalaman dalam membuat antarmuka yang ramah pengguna dan mengoptimalkan pengalaman pengguna."
-                    },
-                    {
-                        "title": "Adobe Creative Suite",
-                        "description": "Terampil menggunakan Photoshop, Illustrator, dan InDesign untuk membuat dan mengedit elemen visual."
-                    },
-                    {
-                        "title": "Tipografi",
-                        "description": "Mahir dalam memilih dan memanipulasi tipografi untuk meningkatkan estetika desain."
-                    },
-                    {
-                        "title": "Teori warna",
-                        "description": "Mahir menggunakan warna untuk membangkitkan emosi dan meningkatkan harmoni visual."
-                    },
-                    {
-                        "title": "Desain cetak dan digital",
-                        "description": "Berpengetahuan luas dalam mendesain untuk materi cetak dan platform digital."
-                    },
-                    {
-                        "title": "Perhatian terhadap detail",
-                        "description": "Rajin dalam menjaga presisi dan kualitas dalam semua pekerjaan desain."
-                    },
-                    {
-                        "title": "Adaptabilitas",
-                        "description": "Cepat beradaptasi dengan tren desain baru, teknologi, dan preferensi klien."
-                    }
-                ]
-            },
-            "portfolio": {
-                "title": "Meningkatkan narasi visual",
-                "subtitle": "Mulailah perjalanan desain yang melampaui piksel, memasuki alam imajinasi. Jelajahi portofolio saya, di mana hasrat dan kreativitas menyatu untuk membentuk narasi visual yang memikat.",
-                "call_to_action": "Pergi ke proyek",
-                "projects": [
-                    {
-                        "title": "Proyek 1: <br /><span class=\"text-2xl\">Identitas merek untuk inovator teknologi</span>",
-                        "description_title": "Deskripsi:",
-                        "description": "Mengembangkan identitas merek yang komprehensif untuk startup teknologi, Tech Innovators, yang berspesialisasi dalam inovasi yang mengganggu. Tujuannya adalah untuk menyampaikan citra modern namun mudah didekati yang beresonansi dengan klien korporat dan penggemar teknologi.",
-                        "role_title": "Peran:",
-                        "role": "Memimpin seluruh proses branding dari konsep hingga eksekusi. Membuat logo dinamis yang melambangkan inovasi, memilih palet warna yang cerah, dan saya merancang alat tulis perusahaan, grafik situs web, dan aset media sosial."
-                    },
-                    {
-                        "title": "Proyek 2: <br /><span class=\"text-2xl\">Poster acara untuk festival seni & musik</span>",
-                        "description_title": "Deskripsi:",
-                        "description": "Merancang poster acara yang menawan untuk festival seni dan musik, \"ArtWave Fusion,\" yang bertujuan untuk memamerkan sinergi antara seni visual dan genre musik.",
-                        "role_title": "Peran:",
-                        "role": "Menerjemahkan tema kreatif festival menjadi poster yang mencolok secara visual. Menggunakan tipografi tebal, warna-warna cerah, dan elemen abstrak untuk menggambarkan perpaduan seni dan musik. Memastikan desain menangkap suasana festival yang semarak."
-                    },
-                    {
-                        "title": "Proyek 3: <br /><span class=\"text-2xl\">Desain ulang situs web e-commerce untuk merek fesyen</span>",
-                        "description_title": "Deskripsi:",
-                        "description": "Mendesain ulang situs web e-commerce untuk merek fesyen yang sadar lingkungan, GreenVogue. Tujuannya adalah untuk menyelaraskan kehadiran online merek dengan etos berkelanjutan dan meningkatkan pengalaman pengguna.",
-                        "role_title": "Peran:",
-                        "role": "Melakukan analisis menyeluruh terhadap nilai-nilai merek dan basis pelanggan untuk menginformasikan arah desain. Membuat antarmuka yang menarik secara visual dengan navigasi intuitif, menyoroti materi berkelanjutan, dan mengintegrasikan pengalaman berbelanja yang ramah pengguna."
-                    }
-                ]
-            },
-            "testimonials": {
-                "title": "Testimoni klien",
-                "subtitle": "Temukan apa yang klien katakan tentang pengalaman mereka bekerja dengan saya.",
-                "items": [
-                    {
-                        "testimonial": "Dia mengambil konsep kami yang samar dan mengubahnya menjadi mahakarya visual yang selaras sempurna dengan tujuan kami. Perhatiannya terhadap detail dan kemampuan menerjemahkan ide menjadi visual yang menarik melebihi harapan kami.",
-                        "name": "Mark Thompson",
-                        "job": "Direktur kreatif"
-                    },
-                    {
-                        "testimonial": "Dia mengubah identitas merek kami dengan kemahiran kreatifnya, menangkap esensi kami di setiap elemen. Dedikasi dan bakatnya benar-benar bersinar melalui karyanya.",
-                        "name": "Emily Martinez",
-                        "job": "CEO"
-                    },
-                    {
-                        "testimonial": "Dia memiliki kemampuan luar biasa untuk mengkomunikasikan emosi dan cerita. Dia membuat logo untuk LSM kami yang tidak hanya mewakili tujuan kami tetapi juga membangkitkan empati. Profesionalisme dan komitmennya menjadikannya desainer dengan kaliber luar biasa.",
-                        "name": "Laura Simmons",
-                        "job": "Pendiri LSM"
-                    },
-                    {
-                        "testimonial": "Kami mempercayakan Sarah untuk mengubah antarmuka pengguna situs web kami, dan hasilnya sangat mencengangkan. Rasa desain intuitifnya meningkatkan pengalaman pengguna, yang mengarah pada peningkatan keterlibatan yang signifikan. Dia adalah seorang desainer yang benar-benar memahami sinergi estetika dan fungsionalitas.",
-                        "name": "Alex Foster",
-                        "job": "Direktur layanan web"
-                    },
-                    {
-                        "testimonial": "Dia mengambil visi kami dan mengangkatnya melampaui imajinasi. Kemampuannya untuk menangkap esensi merek dan menerjemahkannya ke dalam desain sungguh luar biasa. Bekerja dengannya telah menjadi perjalanan yang menginspirasi.",
-                        "name": "Jessica Collins",
-                        "job": "Manajer Produk"
-                    },
-                    {
-                        "testimonial": "Kemampuannya untuk mengubah konsep menjadi visual yang menawan sungguh luar biasa. Dia mengambil ide poster acara kami dan mengubahnya menjadi mahakarya visual yang dengan sempurna menangkap esensi festival kami. Dedikasi, kreativitas, dan bakat Sarah dalam memberikan lebih dari yang diharapkan menjadikannya aset yang sangat berharga untuk proyek apa pun.",
-                        "name": "Michael Carter",
-                        "job": "Koordinator Acara"
-                    }
-                ]
-            },
-            "cta": {
-                "title": "Mari berkreasi bersama",
-                "subtitle": "Siap mengubah visi Anda menjadi desain yang menawan?",
-                "actions": {
-                    "hire_me": "Rekrut saya"
-                }
-            },
-            "blog_latest": {
-                "title": "Jelajahi artikel-artikel saya yang berwawasan luas di blog saya",
-                "information": "Selami dunia kebijaksanaan desain dan inspirasi kreatif, di mana Anda akan menemukan wawasan berharga, kiat praktis, dan narasi menawan yang mengangkat dan memperkaya perjalanan kreatif Anda."
-            }
-        },
-        "startup": {
-            "metadata": {
-                "title": "Halaman Arahan Startup"
-            },
-            "hero": {
-                "tagline": "Demo Web Startup",
-                "actions": {
-                    "get_templates": "Dapatkan template",
-                    "learn_more": "Pelajari lebih lanjut"
-                },
-                "title": "Tingkatkan <span class=\"hidden sm:inline\">kehadiran online</span> <span class=\"text-accent dark:text-white\">Startup</span> Anda dengan template Astrowind",
-                "subtitle": "Melangkah menjadi sorotan dengan template <span class=\"font-semibold\">Astrowind</span>, jalan Anda untuk memperkuat jejak digital startup Anda, mendorong kredibilitas, dan memperluas jangkauan Anda."
-            },
-            "about": {
-                "title": "Tentang kami",
-                "subtitle": "Kami percaya pada keajaiban mengubah mimpi menjadi kenyataan yang menakjubkan. Didirikan oleh pengembang yang bersemangat dengan visi bersama, kami memutuskan untuk menyederhanakan proses pembuatan situs web. Template kami menyatukan inovasi Astro 5.0 dan fleksibilitas Tailwind CSS, memungkinkan Anda mengekspresikan identitas merek unik Anda yang belum pernah ada sebelumnya."
-            },
-            "stats": {
-                "title": "Temukan dampak mengesankan dari Astrowind",
-                "subtitle": "Angka-angka di bawah ini mencerminkan kepercayaan yang diberikan pengguna kami dan hasil luar biasa yang telah kami bantu mereka capai.",
-                "items": [
-                    {
-                        "title": "Unduhan"
-                    },
-                    {
-                        "title": "Situs Web Diluncurkan"
-                    },
-                    {
-                        "title": "Peringkat Pengguna"
-                    },
-                    {
-                        "title": "Klien Puas"
-                    }
-                ]
-            },
-            "brands": {
-                "title": "Kemitraan & Kolaborasi",
-                "subtitle": "Di Astrowind, kami percaya pada kekuatan kolaborasi untuk mendorong inovasi dan menciptakan pengalaman luar biasa."
-            },
-            "services": {
-                "title": "Layanan apa yang kami sediakan?",
-                "subtitle": "Kami menawarkan berbagai template situs web yang sesuai dengan berbagai industri dan tujuan seperti bisnis, portofolio, e-niaga, blog, dll.",
-                "items": [
-                    {
-                        "title": "Instruksi Instalasi",
-                        "description": "Tawarkan instruksi yang jelas tentang cara mengunduh template yang dibeli dan menginstalnya di berbagai platform situs web atau sistem manajemen konten."
-                    },
-                    {
-                        "title": "Demo dan Pratinjau",
-                        "description": "Sediakan demo interaktif dan pratinjau yang memungkinkan pelanggan melihat tampilan dan fungsi template pilihan mereka sebelum melakukan pembelian."
-                    },
-                    {
-                        "title": "Dukungan Teknis",
-                        "description": "Menyediakan dukungan pelanggan untuk masalah teknis terkait template atau implementasinya."
-                    }
-                ]
-            },
-            "features": {
-                "title": "Fitur utama template kami",
-                "subtitle": "Memiliki beberapa karakteristik utama untuk secara efektif melayani kebutuhan startup dan pengusaha.",
-                "items": [
-                    {
-                        "title": "Desain Modern dan Profesional",
-                        "description": "Memiliki desain kontemporer yang mencerminkan tren desain saat ini dan memberikan kesan profesional."
-                    },
-                    {
-                        "title": "Responsif dan Ramah Seluler",
-                        "description": "Beradaptasi dengan mulus ke berbagai ukuran layar dan perangkat untuk memastikan pengalaman yang konsisten."
-                    },
-                    {
-                        "title": "Dapat Disesuaikan",
-                        "description": "Mudah disesuaikan, memungkinkan pengguna menyesuaikan desain, warna, tipografi, dan konten agar sesuai dengan identitas merek mereka."
-                    },
-                    {
-                        "title": "Waktu Muat Cepat",
-                        "description": "Dioptimalkan untuk kecepatan guna memastikan pengalaman pengguna yang lancar dan peringkat mesin pencari yang menguntungkan."
-                    },
-                    {
-                        "title": "Optimisasi Mesin Pencari (SEO)",
-                        "description": "Gabungkan praktik terbaik SEO dalam struktur dan kode template untuk meningkatkan visibilitas dalam hasil mesin pencari."
-                    },
-                    {
-                        "title": "Kompatibilitas",
-                        "description": "Template bekerja dengan mulus di berbagai sistem manajemen konten dan pembuat situs web."
-                    }
-                ]
-            },
-            "faqs": {
-                "title": "Pertanyaan yang Sering Diajukan",
-                "items": [
-                    {
-                        "title": "Apa itu template halaman arahan?",
-                        "description": "Template halaman arahan adalah tata letak halaman web yang dirancang sebelumnya yang secara khusus dibuat sebagai dasar untuk membangun halaman arahan yang efektif. Template ini dirancang untuk menarik perhatian pengunjung dan memandu mereka menuju tindakan atau tujuan tertentu, seperti mendaftar buletin, melakukan pembelian, atau mengunduh sumber daya."
-                    },
-                    {
-                        "title": "Mengapa saya harus menggunakan template?",
-                        "description": "Beberapa keuntungannya adalah menyediakan struktur siap pakai, menghemat waktu Anda secara signifikan. Dirancang dengan mempertimbangkan keramahan pengguna dan memberikan alternatif hemat biaya, menghemat uang Anda sambil tetap memberikan hasil yang berkualitas."
-                    },
-                    {
-                        "title": "Bisakah saya mempratinjau template sebelum membeli?",
-                        "description": "Ya, template memungkinkan Anda mempratinjaunya sebelum melakukan pembelian. Ada tombol \"Demo\" yang terkait dengan setiap template."
-                    },
-                    {
-                        "title": "Apakah saya memerlukan keterampilan teknis untuk menggunakan template?",
-                        "description": "Keterampilan teknis tingkat lanjut tidak diperlukan untuk menggunakan template, tetapi memiliki pemahaman dasar tentang navigasi web dan keakraban dengan menggunakan alat online masih bisa bermanfaat. Jika Anda memiliki kebutuhan penyesuaian yang lebih spesifik, Anda mungkin perlu berkonsultasi dengan panduan atau menghubungi dukungan pelanggan untuk mendapatkan bantuan."
-                    },
-                    {
-                        "title": "Bisakah saya menggunakan template di beberapa situs web?",
-                        "description": "Tidak, template dilengkapi dengan lisensi sekali pakai, artinya Anda hanya dapat menggunakan template di satu situs web atau proyek saja. Menggunakan template di situs web tambahan akan memerlukan pembelian lisensi tambahan."
-                    },
-                    {
-                        "title": "Bagaimana jika saya butuh bantuan dengan penyesuaian?",
-                        "description": "Template menyediakan panduan langkah demi langkah komprehensif yang memandu Anda melalui proses penyesuaian. Jika Anda masih ragu, Anda dapat menghubungi tim dukungan pelanggan kami. Mereka dapat menjawab pertanyaan Anda, memberikan panduan tentang penyesuaian, dan mengatasi masalah apa pun yang Anda hadapi."
-                    }
-                ]
-            },
-            "contact": {
-                "title": "Beri tahu kami bagaimana kami dapat membantu",
-                "subtitle": "Kami di sini untuk membantu dan menjawab pertanyaan apa pun yang mungkin Anda miliki.",
-                "items": {
-                    "phone": {
-                        "title": "Telepon",
-                        "call_to_action": "Hubungi kami"
-                    },
-                    "email": {
-                        "title": "Email",
-                        "call_to_action": "Tulis kepada kami"
-                    },
-                    "chat_sales": {
-                        "title": "Mengobrol dengan penjualan",
-                        "call_to_action": "Mulai mengobrol"
-                    },
-                    "chat_support": {
-                        "title": "Mengobrol dengan dukungan",
-                        "call_to_action": "Mulai mengobrol"
-                    }
-                }
-            },
-            "call_to_action": {
-                "title": "Jadilah bagian dari visi kami",
-                "subtitle": "Temukan lingkungan kerja yang dinamis, peluang pertumbuhan yang tak tertandingi, dan kesempatan untuk membuat dampak yang berarti.",
-                "actions": {
-                    "get_templates": "Dapatkan template"
-                }
-            }
-        }
-    },
-    "landing": {
-        "coming_soon": {
-            "title": "Segera Hadir",
-            "subtitle": "Kami sedang mengerjakan konten halaman demo ini. Anda akan segera melihatnya. Tetap pantau!",
-            "action": "Unduh Template"
-        },
-        "hero": {
-            "actions": {
-                "cta": "Tombol Aksi",
-                "learn_more": "Pelajari lebih lanjut"
-            }
-        },
-        "click_through": {
-            "metadata": {
-                "title": "Demo Halaman Arahan Click-through"
-            },
-            "hero": {
-                "tagline": "Demo Click-through",
-                "title": "Halaman Arahan Click-through: Jembatan Sempurna menuju Konversi!",
-                "subtitle": "Pelajari cara mendesain Halaman Arahan Click-Through yang memandu pengunjung ke penawaran utama Anda dengan mulus.",
-                "image_alt": "Gambar Hero Halaman Arahan Click-through"
-            }
-        },
-        "lead_generation": {
-            "metadata": {
-                "title": "Demo Halaman Arahan Pembuatan Prospek"
-            },
-            "hero": {
-                "tagline": "Demo Arahan Pembuatan Prospek",
-                "title": "Halaman Arahan Pembuatan Prospek yang Efektif: Buka Rahasianya",
-                "subtitle": "Temukan rahasia untuk membuat Halaman Arahan yang mengubah pengunjung yang penasaran menjadi prospek yang bersemangat. (Hero Anda harus menarik perhatian seketika. Gunakan judul kuat yang berbicara langsung kepada audiens target Anda.)",
-                "image_alt": "Magnet menarik sekrup. Demo halaman arahan pembuatan prospek"
-            }
-        },
-        "pre_launch": {
-            "metadata": {
-                "title": "Halaman Arahan Pra-Peluncuran"
-            },
-            "hero": {
-                "tagline": "Demo Pra-peluncuran",
-                "title": "Halaman Arahan Pra-peluncuran: Bangun Antusiasme Sebelum Pengungkapan Besar!",
-                "subtitle": "Buat Halaman Segera Hadir atau Pra-Peluncuran yang menggoda yang membuat pengunjung menantikan peluncuran Anda.",
-                "image_alt": "Toko dengan tanda Segera Hadir. Halaman Arahan Pra-peluncuran"
-            }
-        },
-        "product": {
-            "metadata": {
-                "title": "Demo Halaman Arahan Detail Produk"
-            },
-            "hero": {
-                "tagline": "Demo Detail Produk",
-                "title": "Halaman Arahan Produk: Pamerkan dengan Presisi dan Semangat!",
-                "subtitle": "Panduan langkah demi langkah untuk mendesain Halaman Arahan yang menyoroti setiap aspek produk atau layanan Anda.",
-                "image_alt": "Pusat perhatian pada produk. Demo Halaman Arahan Detail Produk"
-            }
+    "features": {
+      "title": "Kami di sini untuk membantu!",
+      "items": {
+        "general": {
+          "title": "Dukungan umum",
+          "desc": "Chat dengan kami untuk pertanyaan terkait manajemen akun, navigasi situs web, masalah pembayaran, mengakses template yang dibeli, atau pertanyaan umum tentang fungsionalitas situs web."
         },
         "sales": {
-            "metadata": {
-                "title": "Demo Halaman Arahan Penjualan"
-            },
-            "hero": {
-                "tagline": "Demo Penjualan Bentuk Panjang",
-                "title": "Penjualan Bentuk Panjang: Menjual dengan Cerita: Cara Bentuk Panjang!",
-                "subtitle": "Selami lebih dalam pembuatan Halaman Arahan yang menceritakan, membujuk, dan mengonversi.",
-                "image_alt": "Anak-anak bercerita. Demo Halaman Arahan Penjualan Bentuk Panjang"
-            }
+          "title": "Hubungi penjualan",
+          "desc": "Chat dengan kami untuk pertanyaan tentang pembelian, opsi kustomisasi, lisensi untuk penggunaan komersial, pertanyaan tentang template tertentu, dll."
         },
-        "subscription": {
-            "metadata": {
-                "title": "Demo Halaman Arahan Berlangganan"
-            },
-            "hero": {
-                "tagline": "Demo Arahan Berlangganan",
-                "title": "Halaman Arahan Berlangganan: Ubah Pengunjung Biasa Menjadi Pelanggan Setia!",
-                "subtitle": "Buka formula untuk Halaman Arahan Berlangganan yang membuat audiens Anda kembali lagi.",
-                "image_alt": "Gambar ironis terkait pembatalan langganan. Demo Halaman Arahan Berlangganan"
-            }
+        "technical": {
+          "title": "Dukungan teknis",
+          "desc": "Chat dengan kami saat menghadapi masalah seperti instalasi template, kesulitan pengeditan, masalah kompatibilitas dengan perangkat lunak atau kesalahan unduhan, atau tantangan teknis lainnya terkait penggunaan template."
+        },
+        "phone": {
+          "title": "Telepon",
+          "description": "+1 (234) 567-890"
+        },
+        "email": {
+          "title": "Email",
+          "description": "contact@support.com"
+        },
+        "location": {
+          "title": "Lokasi",
+          "description": "1234 Lorem Ipsum St, 12345, Miami, EEUU"
         }
+      }
     }
+  },
+  "pricing_page": {
+    "hero": {
+      "title": "Harga Luar Biasa untuk Setiap Perjalanan",
+      "tagline": "Harga",
+      "subtitle": "Pilih paket sempurna yang selaras dengan tujuan kosmik Anda."
+    },
+    "currency": "Rp",
+    "prices": {
+      "title": "Harga kami",
+      "subtitle": "Hanya bayar untuk apa yang Anda butuhkan",
+      "per_month": "per bulan",
+      "get_started": "Mulai sekarang",
+      "basic": {
+        "title": "dasar",
+        "subtitle": "Pilihan optimal untuk penggunaan pribadi",
+        "items": [
+          "Etiam in libero, et volutpat",
+          "Aenean ac nunc dolor tristique",
+          "Cras scelerisque accumsan lib",
+          "In hac habitasse"
+        ]
+      },
+      "standard": {
+        "title": "standar",
+        "subtitle": "Pilihan optimal untuk tim kecil",
+        "ribbon": "populer",
+        "items": [
+          "Proin vel laoreet",
+          "Ut efficitur habitasse egestas",
+          "Volutpat hac curabitur",
+          "Pellentesque blandit ut nibh",
+          "Donec fringilla sem"
+        ]
+      },
+      "premium": {
+        "title": "premium",
+        "subtitle": "Pilihan optimal untuk perusahaan",
+        "items": [
+          "Curabitur suscipit risus",
+          "Aliquam habitasse malesuada",
+          "Suspendisse sit amet blandit",
+          "Suspendisse auctor blandit dui"
+        ]
+      }
+    },
+    "features": {
+      "title": "Fitur terkait harga",
+      "subtitle": "Temukan keuntungan memilih paket kami",
+      "items": {
+        "tiered": {
+          "title": "Paket Harga Bertingkat",
+          "desc": "Pilih dari berbagai paket harga yang dirancang untuk mengakomodasi berbagai anggaran dan kebutuhan."
+        },
+        "transparent": {
+          "title": "Harga Transparan",
+          "desc": "Detail harga yang ditampilkan dengan jelas untuk setiap paket, tanpa biaya tersembunyi atau biaya tak terduga."
+        },
+        "secure": {
+          "title": "Metode Pembayaran Aman",
+          "desc": "Gerbang pembayaran yang aman untuk melindungi informasi keuangan Anda selama transaksi."
+        },
+        "access": {
+          "title": "Akses Instan",
+          "desc": "Akses segera ke fitur dan template paket pilihan Anda setelah berlangganan."
+        },
+        "upgrade": {
+          "title": "Nilai Peningkatan",
+          "desc": "Tingkatkan ke paket tingkat lebih tinggi untuk membuka lebih banyak fitur dan manfaat untuk pengalaman yang ditingkatkan."
+        },
+        "support": {
+          "title": "Dukungan 24J",
+          "desc": "Pertanyaan dijawab melalui obrolan langsung, email, atau telepon, setiap hari kalender."
+        }
+      }
+    },
+    "steps": {
+      "title": "Perjalanan terpandu dari rencana ke kreativitas",
+      "tagline": "proses yang disederhanakan",
+      "items": {
+        "explore": "Jelajahi paket",
+        "select": "Pilih paket",
+        "signup": "Daftar / Masuk",
+        "review": "Tinjau pesanan",
+        "payment": "Masukkan detail pembayaran",
+        "confirm": "Konfirmasi",
+        "download": "Unduh dan mulai gunakan template"
+      }
+    },
+    "faqs": {
+      "title": "FAQ Harga",
+      "subtitle": "Memilih paket yang tepat itu penting, dan kami di sini untuk menjawab pertanyaan Anda. Jika Anda memiliki pertanyaan tentang opsi harga kami, Anda berada di tempat yang tepat.",
+      "items": {
+        "support": {
+          "title": "Apakah paket dilengkapi dengan dukungan pelanggan?",
+          "desc": "Tentu saja, semua paket mencakup akses ke dukungan pelanggan khusus kami untuk membantu Anda dengan segala pertanyaan atau masalah."
+        },
+        "trial": {
+          "title": "Apakah ada masa percobaan untuk berbagai paket?",
+          "desc": "Sayangnya, kami tidak menawarkan masa percobaan untuk paket. Namun, Anda dapat memeriksa bagian demo kami untuk melihat pratinjau kualitas template kami."
+        },
+        "switch": {
+          "title": "Bisakah saya beralih antar paket?",
+          "desc": "Tentu saja! Anda dapat dengan mudah meningkatkan atau menurunkan paket Anda, kapan saja, untuk menemukan yang paling sesuai dengan kebutuhan Anda yang terus berkembang."
+        },
+        "payment": {
+          "title": "Metode pembayaran apa yang Anda terima?",
+          "desc": "Kami menerima kartu kredit utama dan metode pembayaran online untuk memastikan proses transaksi yang nyaman dan aman."
+        },
+        "fees": {
+          "title": "Apakah ada biaya tersembunyi di luar biaya yang ditampilkan?",
+          "desc": "Tidak, biaya berlangganan mencakup semua fitur dan template yang tercantum di bawah setiap paket. Tidak ada biaya tersembunyi atau biaya tambahan."
+        }
+      }
+    },
+    "cta": {
+      "title": "Siap meningkatkan proyek Anda?",
+      "subtitle": "Bergabunglah dengan komunitas pelanggan kami yang puas yang telah mengubah pekerjaan mereka dengan template kami.",
+      "action": "Mulai sekarang"
+    }
+  },
+  "blog_page": {
+    "list": {
+      "title": "Blog",
+      "subtitle": "Contoh blog yang dibuat secara statis dengan berita, tutorial, sumber daya, dan konten menarik lainnya terkait AstroWind",
+      "metadata_title": "Blog"
+    },
+    "category": {
+      "title_prefix": "Kategori"
+    },
+    "tag": {
+      "headline_prefix": "Tag: ",
+      "metadata_title_prefix": "Postingan dengan tag '"
+    },
+    "shared": {
+      "page_prefix": " — Halaman "
+    }
+  },
+  "news_page": {
+    "metadata": {
+      "title": "Berita & Artikel",
+      "description": "Berita, pembaruan, dan artikel terbaru"
+    },
+    "header": {
+      "title": "Berita & Artikel",
+      "subtitle": "Tetap terinformasi dengan berita, pengumuman, dan wawasan terbaru kami."
+    },
+    "filter": {
+      "category": "Kategori:",
+      "tag": "Tag:"
+    },
+    "list": {
+      "no_articles": "Tidak ada artikel ditemukan",
+      "check_back": "Periksa kembali nanti untuk konten baru.",
+      "views": "tayangan"
+    },
+    "pagination": {
+      "previous": "Sebelumnya",
+      "next": "Selanjutnya",
+      "page": "Halaman",
+      "of": "dari"
+    },
+    "article": {
+      "views": "tayangan",
+      "back_to_news": "Kembali ke Berita",
+      "visual_content_placeholder": "Konten visual akan segera hadir..."
+    }
+  },
+  "blog_post": {
+    "min_read": "menit baca",
+    "related_posts": "Artikel Terkait",
+    "view_all": "Lihat Semua Artikel",
+    "back_to_blog": "Kembali ke Blog"
+  },
+  "error_page": {
+    "404": {
+      "title": "Error 404",
+      "message": "Maaf, kami tidak dapat menemukan halaman ini.",
+      "description": "Tapi jangan khawatir, Anda dapat menemukan banyak hal lain di beranda kami.",
+      "back_to_home": "Kembali ke beranda"
+    }
+  },
+  "homes": {
+    "saas": {
+      "metadata": {
+        "title": "SaaS Landing Page"
+      },
+      "header": {
+        "actions": {
+          "login": "Login",
+          "sign_up": "Sign Up"
+        }
+      },
+      "hero": {
+        "tagline": "SaaS Web Demo",
+        "actions": {
+          "get_started": "Get Started",
+          "learn_more": "Learn more"
+        },
+        "title": "Simplify web design with Astrowind: <br /> your ultimate <span class=\"text-accent dark:text-white\">SaaS</span> companion<br />",
+        "subtitle": "<span class=\"hidden sm:inline\">Elevate your website creation process with <span class=\"font-semibold\">AstroWind</span>'s SaaS solutions.</span> Seamlessly blend the power of Astro 5.0 and Tailwind CSS to craft websites that resonate with your brand and audience."
+      },
+      "features": {
+        "title": "Why choose AstroWind?",
+        "subtitle": "Each of the following features enhances AstroWind's value proposition.",
+        "items": [
+          {
+            "title": "Integration of Astro 5.0 and Tailwind CSS",
+            "description": "Offers a powerful combination that enhances both the development process and the end-user experience. Also, allows to build dynamic and visually stunning websites with optimized performance."
+          },
+          {
+            "title": "Versatile design for startups, small businesses, and more",
+            "description": "Easily customize AstroWind to harmonize with the unique branding and identity of your venture. AstroWind's versatile design adapts to suit your needs."
+          },
+          {
+            "title": "Effortless customization for portfolios and marketing sites",
+            "description": "With intuitive customization, easily showcase portfolio pieces, case studies, project highlights, and relevant content. Ideal for creative professionals and businesses looking to highlight their expertise."
+          },
+          {
+            "title": "Optimized landing pages and engaging blogs",
+            "description": "Landing pages are strategically designed to captivate visitors and prompt specific actions. Additionally, the blog creation feature empowers sharing insights, engaging the audience."
+          },
+          {
+            "title": "Fast loading times and production-ready code",
+            "description": "Using Astro 5.0 ensures fast loading and seamless rendering, enhancing browsing. The code follows best practices, improving user experience, SEO, and reducing bounce rates."
+          },
+          {
+            "title": "SEO-optimized structure for enhanced visibility",
+            "description": "Follows SEO best practices with clean code, semantic HTML markup, and fast loading, enhancing search engine rankings. AstroWind's SEO structure ensures visibility to potential customers and clients."
+          }
+        ]
+      },
+      "use_cases": {
+        "use_cases_title": "Use cases",
+        "use_cases_subtitle": "Discover how AstroWind's versatile template serves as the ideal solution for various use cases, providing tailored solutions to drive success.",
+        "startup": {
+          "description_title": "Description:",
+          "description": "Are you a startup with big dreams? AstroWind propels your success. Our template forges a seamless online presence, attracting investors and customers from day one. Astro 5.0 and Tailwind CSS ensure striking, responsive sites, leaving lasting impressions. Countless startups leverage AstroWind to kickstart their journey and resonate with audiences.",
+          "benefits_title": "Benefits:",
+          "benefits": "Allow startups to quickly create professional websites without investing extensive time and resources. <br /> Make a memorable first impression with visually appealing design elements that highlight your startup's unique value proposition. <br /> Ensures your website looks stunning and works well on all devices. <br /> Engage potential investors and customers with engaging content, clear messaging, and intuitive navigation.",
+          "content_title": "Startup success stories: <br /><span class=\"text-2xl\">Launching with AstroWind</span>"
+        },
+        "saas": {
+          "description_title": "Description:",
+          "description": "For SaaS businesses, user experience is key. AstroWind enhances showcasing SaaS solutions intuitively. The template's Astro 5.0 and Tailwind CSS integration guarantees user-friendly experience, mirroring your software's efficiency. Customize pages to communicate SaaS value and solutions for your audience.",
+          "benefits_title": "Benefits:",
+          "benefits": "Ensuring a cohesive and user-centric design for your SaaS website. <br /> Effectively communicate complex SaaS features through visual aids, animations, and interactive elements. <br /> Prioritize user needs and pain points through well-structured layouts and clear navigation. <br /> Encourage visitors to take action with strategically placed CTAs. <br /> Ensures your SaaS website works seamlessly across all devices.",
+          "content_title": "SaaS showcase: <br /><span class=\"text-2xl\">Streamlining user experience</span>"
+        },
+        "portfolio": {
+          "description_title": "Description:",
+          "description": "Your portfolio is your masterpiece, and AstroWind is your canvas. Whether you're a designer, photographer, artist, or any other creative professional, AstroWind empowers you to showcase your work with elegance and sophistication. Tailored to highlight your creative projects, AstroWind's templates offer a visually immersive experience that lets your portfolio shine.",
+          "benefits_title": "Benefits:",
+          "benefits": "Serve as a captivating backdrop to showcase your creative work, capturing attention and leaving a lasting impression. <br /> Tailor your portfolio to reflect your unique style and artistic vision. <br /> Prioritizes visuals, allowing you to present your work in high-resolution detail that draws viewers into your creations. <br /> Enables seamless navigation for effortless portfolio exploration.",
+          "content_title": "Creative portfolios: <br /><span class=\"text-2xl\">Highlighting your work</span>"
+        },
+        "small_business": {
+          "description_title": "Description:",
+          "description": "For small businesses, a well-crafted website can be a game-changer. AstroWind empowers small businesses to not only establish a credible online presence but also convert visitors into loyal customers. The template's thoughtful design and optimization features ensure that your website doesn't just attract attention but also guides visitors through a seamless journey, ultimately leading to conversions.",
+          "benefits_title": "Benefits:",
+          "benefits": "Present your small business with a professional and polished website that instills confidence and trust among visitors. <br /> Strategically placed CTAs, user-friendly forms, and optimized layouts work together to drive user engagement and conversions. <br /> Ensure a smooth browsing experience, reducing bounce rates and encouraging interaction.",
+          "content_title": "Small business growth: <br /><span class=\"text-2xl\">Converting visitors into customers</span>"
+        }
+      },
+      "pricing": {
+        "title": "Flexible pricing plans",
+        "plans": [
+          {
+            "title": "free",
+            "subtitle": "Access to core features and a wide range of templates",
+            "call_to_action": "Get Started for Free"
+          },
+          {
+            "title": "pro",
+            "subtitle": "Premium templates and advanced customization",
+            "call_to_action": "Upgrade to Pro",
+            "ribbon_title": "popular"
+          },
+          {
+            "title": "Enterprise",
+            "subtitle": "Tailored solutions for large-scale projects",
+            "call_to_action": "Unlock Enterprise Features"
+          }
+        ]
+      },
+      "faqs": {
+        "title": "Frequently Asked Questions",
+        "items": [
+          {
+            "title": "Is AstroWind compatible with the latest versions of Astro and Tailwind CSS?",
+            "description": "Yes, AstroWind is designed to be compatible with the latest versions of both Astro and Tailwind CSS. This ensures that you can harness the full capabilities of these technologies while benefiting from the features offered by AstroWind."
+          },
+          {
+            "title": "Can I use AstroWind for both personal and commercial projects?",
+            "description": "Certainly! AstroWind is versatile and can be used for a wide range of projects, including both personal and commercial endeavors. Whether you're building a professional portfolio, launching a startup, or creating a marketing website, AstroWind has you covered."
+          },
+          {
+            "title": "What level of coding knowledge is required to use AstroWind?",
+            "description": "While some familiarity with HTML, CSS, and web development concepts is helpful, the user-friendly interface and customization options allow those with limited coding experience to create impressive websites. For more advanced users, AstroWind offers extensive customization capabilities."
+          },
+          {
+            "title": "Is customer support available for AstroWind users seeking guidance?",
+            "description": "Absolutely, our dedicated customer support team is here to assist you with any questions or challenges you may encounter. Feel free to reach out to us through our support channels, and we'll be happy to provide the help you need."
+          }
+        ]
+      },
+      "contact": {
+        "title": "Reach out to us",
+        "subtitle": "Have questions? Feel free to contact us using the form below. We're here to help!",
+        "call_to_action": "Contact us",
+        "items": {
+          "email": "Email us",
+          "call": "Call us",
+          "follow": "Follow us"
+        }
+      },
+      "blog_latest": {
+        "title": "Stay informed with AstroWind's blog",
+        "information": "Explore our collection of articles, guides, and tutorials on web development, design trends, and using AstroWind effectively for your projects."
+      }
+    },
+    "mobile_app": {
+      "metadata": {
+        "title": "Beranda Aplikasi Seluler"
+      },
+      "header": {
+        "links": {
+          "services": "Layanan",
+          "features": "Fitur",
+          "about": "Tentang"
+        },
+        "actions": {
+          "download": "Unduh"
+        }
+      },
+      "hero": {
+        "tagline": "Demo Web Aplikasi Seluler",
+        "title_html": "<span class=\"text-accent dark:text-white\">Aplikasi AstroWind</span>: <br /> situs web profesional <span class=\"hidden xl:inline\">menjadi mudah</span>",
+        "subtitle": "Buka kreativitas tanpa batas di ujung jari Anda: gerbang Anda menuju desain inovatif.",
+        "subtitle_continued": "Unduh sekarang dan mulailah perjalanan untuk meningkatkan proyek Anda yang belum pernah ada sebelumnya.",
+        "cta": {
+          "download_app": "Unduh Aplikasi"
+        }
+      },
+      "features": {
+        "title": "Bagaimana cara menggunakan aplikasi kami?",
+        "subtitle": "Lelah menghabiskan waktu berjam-jam membuat dokumen dari awal? Aplikasi kami menawarkan solusi inovatif. Dengan beragam template yang dirancang secara profesional, kini Anda dapat membuat dokumen yang menakjubkan dalam hitungan menit. Jelajahi template kami sekarang dan rasakan perbedaannya.",
+        "tagline": "Panduan langkah demi langkah",
+        "items": [
+          {
+            "title": "Unduh dan instal aplikasi",
+            "description": "Mulailah perjalanan Anda dengan mengunduh aplikasi ramah pengguna kami dari toko aplikasi perangkat Anda atau situs web resmi kami."
+          },
+          {
+            "title": "Daftar",
+            "description": "Buat akun Anda dengan memberikan informasi yang diperlukan, memungkinkan Anda mengakses berbagai fitur lengkap kami."
+          },
+          {
+            "title": "Jelajahi template",
+            "description": "Jelajahi koleksi beragam template situs web kami, dikategorikan untuk navigasi yang mudah."
+          },
+          {
+            "title": "Pratinjau dan pilih template",
+            "description": "Visualisasikan potensi setiap template melalui pratinjau, lalu pilih salah satu yang paling sesuai dengan kebutuhan proyek Anda."
+          }
+        ]
+      },
+      "main_features": {
+        "title": "Fitur Utama",
+        "items": [
+          {
+            "title": "Antarmuka ramah pengguna",
+            "description": "Antarmuka yang intuitif dan mudah dinavigasi yang memungkinkan pengguna dengan cepat menelusuri dan menemukan template yang mereka butuhkan."
+          },
+          {
+            "title": "Opsi personalisasi",
+            "description": "Sertakan alat penyesuaian dasar yang memungkinkan pengguna memodifikasi teks, warna, gambar, dan elemen lain dalam template."
+          },
+          {
+            "title": "Komponen siap pakai",
+            "description": "Tingkatkan desain Anda dengan elemen siap pakai seperti grafik, ikon, dan tata letak, menghemat waktu Anda dan meningkatkan daya tarik visual."
+          },
+          {
+            "title": "Mode Pratinjau",
+            "description": "Berikan pratinjau setiap template, memungkinkan pengguna melihat tampilannya sebelum melakukan pembelian."
+          }
+        ]
+      },
+      "other_features": {
+        "title": "Fitur lainnya",
+        "items": [
+          {
+            "title": "Akses Offline",
+            "description": "Tawarkan opsi bagi pengguna untuk mengunduh template yang dibeli untuk penggunaan offline."
+          },
+          {
+            "title": "Penyimpanan Cloud Aman",
+            "description": "Sediakan penyimpanan cloud untuk template yang dibeli, memastikan pengguna dapat mengakses dan mencadangkan template mereka dari mana saja dengan aman."
+          },
+          {
+            "title": "Pembaruan Berkala",
+            "description": "Terus tambahkan template dan fitur baru agar aplikasi tetap segar dan menarik bagi pengguna."
+          },
+          {
+            "title": "Keinginan",
+            "description": "Izinkan pengguna membuat daftar keinginan template yang mereka minati, sehingga memudahkan mereka untuk mengunjungi kembali dan berpotensi membeli nanti."
+          }
+        ]
+      },
+      "stats": {
+        "title": "Statistik aplikasi kami"
+      },
+      "testimonials": {
+        "title": "Apa kata pengguna kami?",
+        "read_more": "Baca lebih banyak testimoni",
+        "items": [
+          {
+            "testimonial": "Ini membuat penjelajahan dan pengunduhan template situs web menjadi mudah. Antarmukanya intuitif, dan saya tidak mengalami kesulitan menemukan template yang sempurna untuk proyek saya. Ini adalah aplikasi yang benar-benar memberdayakan pengguna.",
+            "name": "Cary Kennedy",
+            "job": "Sutradara Film"
+          },
+          {
+            "testimonial": "Proses pengunduhan aplikasi yang mulus dan tata letak yang intuitif telah membuat pemilihan template menjadi pengalaman yang menyenangkan. Mampu mempratinjau dan bereksperimen dengan desain yang berbeda sebelum berkomitmen telah menghemat waktu saya dan memastikan saya mendapatkan tampilan yang sempurna untuk situs web saya.",
+            "name": "Josh Wilkinson",
+            "job": "Manajer Produk"
+          },
+          {
+            "testimonial": "Saya dapat mengunduh dan menggunakan template situs web profesional dalam hitungan menit. Proses langkah demi langkah dan antarmuka yang ramah pengguna memudahkan saya membuat situs web yang terlihat seolah-olah dirancang oleh seorang profesional.",
+            "name": "Sidney Hansen",
+            "job": "Dekorator"
+          }
+        ]
+      },
+      "faqs": {
+        "title": "Masih ada keraguan?",
+        "items": [
+          {
+            "title": "Apa yang dilakukan aplikasi ini?",
+            "description": "Aplikasi ini menyediakan platform bagi Anda untuk menelusuri, membeli, mengunduh, dan menggunakan berbagai template situs web untuk proyek Anda dengan mudah."
+          },
+          {
+            "title": "Bagaimana aplikasi ini dapat memecahkan masalah saya?",
+            "description": "Aplikasi ini menyederhanakan proses penemuan dan penerapan desain situs web profesional, menghemat waktu dan upaya Anda dalam membuat situs web yang menarik secara visual dan fungsional."
+          },
+          {
+            "title": "Apakah tersedia untuk perangkat saya?",
+            "description": "Aplikasi kami dirancang untuk kompatibilitas di berbagai perangkat dan platform, memastikan aksesibilitas baik Anda menggunakan ponsel cerdas, tablet, atau komputer."
+          },
+          {
+            "title": "Apa yang membedakan aplikasi ini dari yang lain?",
+            "description": "Aplikasi kami menonjol karena antarmukanya yang ramah pengguna, koleksi template yang luas, dan integrasi yang mulus dari proses pembelian dan pengunduhan, membuatnya sangat efisien."
+          },
+          {
+            "title": "Apakah ada biaya yang terlibat?",
+            "description": "Meskipun aplikasi itu sendiri mungkin gratis untuk diunduh, mungkin ada biaya yang terkait dengan pembelian template tertentu berdasarkan preferensi dan kebutuhan proyek Anda."
+          }
+        ]
+      },
+      "cta": {
+        "title": "Unduh aplikasi kami sekarang!",
+        "subtitle": "Akses berbagai template yang menakjubkan, sederhanakan proses kreatif Anda, dan tingkatkan kehadiran online Anda."
+      }
+    },
+    "personal": {
+      "metadata": {
+        "title": "Demo Beranda Pribadi"
+      },
+      "header": {
+        "links": {
+          "home": "Beranda",
+          "about": "Tentang",
+          "resume": "Resume",
+          "porfolio": "Portofolio",
+          "blog": "Blog",
+          "github": "Github"
+        },
+        "actions": {
+          "hire_me": "Rekrut saya"
+        }
+      },
+      "hero": {
+        "title": "Sarah Johnson",
+        "tagline": "Demo Web Pribadi",
+        "subtitle": "Saya seorang Desainer Grafis yang bersemangat dalam menyusun cerita visual. <br /> Dengan pengalaman 5 tahun dan gelar dari School of Design Universitas New York. Saya memberikan vitalitas ke dalam merek dan desain, mengubah konsep menjadi kenyataan yang menawan."
+      },
+      "about": {
+        "title": "Tentang saya",
+        "p1": "Selamat datang di perjalanan kreatif saya. Pekerjaan saya adalah bukti komitmen saya untuk menghidupkan ide, di mana setiap piksel menjadi sapuan kuas di kanvas imajinasi.",
+        "p2": "Saya menemukan inspirasi di dunia sekeliling saya, baik melalui halaman novel yang menawan, detail tipografi yang rumit, atau warna-warna cerah alam selama petualangan luar ruangan saya.",
+        "p3": "Jika Anda penasaran untuk mendalami pekerjaan saya lebih jauh, Anda dapat mengikuti saya:"
+      },
+      "resume": {
+        "work_experience": {
+          "title": "Pengalaman kerja",
+          "items": [
+            {
+              "title": "Desainer Grafis <br /> <span class=\"font-normal\">Studio Desain ABC, New York, NY</span> <br /> <span class=\"text-sm font-normal\">2021 - Sekarang</span>",
+              "description": "Berkolaborasi dengan klien untuk memahami persyaratan dan tujuan desain. <br /> Mengembangkan solusi branding, termasuk logo, palet warna, dan panduan merek. <br /> Merancang materi pemasaran seperti brosur, poster, dan aset digital. <br /> Membuat antarmuka pengguna yang menarik secara visual untuk situs web dan aplikasi."
+            },
+            {
+              "title": "Desainer Grafis Junior <br /> <span class=\"font-normal\">Agensi Kreatif XYZ, Los Angeles, CA</span> <br /> <span class=\"text-sm font-normal\">2018 - 2021</span>",
+              "description": "Membantu desainer senior dalam membuat konsep desain dan aset visual. <br /> Berkontribusi pada pengembangan identitas merek dan materi pemasaran. <br /> Berkolaborasi dengan tim pemasaran untuk memastikan konsistensi desain di seluruh kampanye. <br /> Mendapatkan pengalaman langsung dalam berbagai perangkat lunak dan alat desain."
+            }
+          ]
+        },
+        "education": {
+          "title": "Pendidikan",
+          "items": [
+            {
+              "title": "Magister Seni Rupa Desain Grafis <br /> <span class=\"font-normal\">School of Design Universitas New York</span> <br /> <span class=\"text-sm font-normal\">2018 - 2020</span>"
+            },
+            {
+              "title": "Sarjana Seni Desain Grafis <br /> <span class=\"font-normal\">School of Design Universitas New York</span> <br /> <span class=\"text-sm font-normal\">2014 - 2018</span>"
+            }
+          ]
+        }
+      },
+      "skills": {
+        "title": "Keterampilan",
+        "subtitle": "Temukan keahlian yang memungkinkan saya menghidupkan imajinasi melalui desain.",
+        "items": [
+          {
+            "title": "Desain grafis",
+            "description": "Mahir dalam membuat desain yang menarik secara visual yang menyampaikan pesan secara efektif."
+          },
+          {
+            "title": "Branding dan identitas",
+            "description": "Terampil dalam mengembangkan identitas merek yang kohesif, termasuk logo dan panduan merek."
+          },
+          {
+            "title": "Desain yang berpusat pada pengguna",
+            "description": "Berpengalaman dalam membuat antarmuka yang ramah pengguna dan mengoptimalkan pengalaman pengguna."
+          },
+          {
+            "title": "Adobe Creative Suite",
+            "description": "Terampil menggunakan Photoshop, Illustrator, dan InDesign untuk membuat dan mengedit elemen visual."
+          },
+          {
+            "title": "Tipografi",
+            "description": "Mahir dalam memilih dan memanipulasi tipografi untuk meningkatkan estetika desain."
+          },
+          {
+            "title": "Teori warna",
+            "description": "Mahir menggunakan warna untuk membangkitkan emosi dan meningkatkan harmoni visual."
+          },
+          {
+            "title": "Desain cetak dan digital",
+            "description": "Berpengetahuan luas dalam mendesain untuk materi cetak dan platform digital."
+          },
+          {
+            "title": "Perhatian terhadap detail",
+            "description": "Rajin dalam menjaga presisi dan kualitas dalam semua pekerjaan desain."
+          },
+          {
+            "title": "Adaptabilitas",
+            "description": "Cepat beradaptasi dengan tren desain baru, teknologi, dan preferensi klien."
+          }
+        ]
+      },
+      "portfolio": {
+        "title": "Meningkatkan narasi visual",
+        "subtitle": "Mulailah perjalanan desain yang melampaui piksel, memasuki alam imajinasi. Jelajahi portofolio saya, di mana hasrat dan kreativitas menyatu untuk membentuk narasi visual yang memikat.",
+        "call_to_action": "Pergi ke proyek",
+        "projects": [
+          {
+            "title": "Proyek 1: <br /><span class=\"text-2xl\">Identitas merek untuk inovator teknologi</span>",
+            "description_title": "Deskripsi:",
+            "description": "Mengembangkan identitas merek yang komprehensif untuk startup teknologi, Tech Innovators, yang berspesialisasi dalam inovasi yang mengganggu. Tujuannya adalah untuk menyampaikan citra modern namun mudah didekati yang beresonansi dengan klien korporat dan penggemar teknologi.",
+            "role_title": "Peran:",
+            "role": "Memimpin seluruh proses branding dari konsep hingga eksekusi. Membuat logo dinamis yang melambangkan inovasi, memilih palet warna yang cerah, dan saya merancang alat tulis perusahaan, grafik situs web, dan aset media sosial."
+          },
+          {
+            "title": "Proyek 2: <br /><span class=\"text-2xl\">Poster acara untuk festival seni & musik</span>",
+            "description_title": "Deskripsi:",
+            "description": "Merancang poster acara yang menawan untuk festival seni dan musik, \"ArtWave Fusion,\" yang bertujuan untuk memamerkan sinergi antara seni visual dan genre musik.",
+            "role_title": "Peran:",
+            "role": "Menerjemahkan tema kreatif festival menjadi poster yang mencolok secara visual. Menggunakan tipografi tebal, warna-warna cerah, dan elemen abstrak untuk menggambarkan perpaduan seni dan musik. Memastikan desain menangkap suasana festival yang semarak."
+          },
+          {
+            "title": "Proyek 3: <br /><span class=\"text-2xl\">Desain ulang situs web e-commerce untuk merek fesyen</span>",
+            "description_title": "Deskripsi:",
+            "description": "Mendesain ulang situs web e-commerce untuk merek fesyen yang sadar lingkungan, GreenVogue. Tujuannya adalah untuk menyelaraskan kehadiran online merek dengan etos berkelanjutan dan meningkatkan pengalaman pengguna.",
+            "role_title": "Peran:",
+            "role": "Melakukan analisis menyeluruh terhadap nilai-nilai merek dan basis pelanggan untuk menginformasikan arah desain. Membuat antarmuka yang menarik secara visual dengan navigasi intuitif, menyoroti materi berkelanjutan, dan mengintegrasikan pengalaman berbelanja yang ramah pengguna."
+          }
+        ]
+      },
+      "testimonials": {
+        "title": "Testimoni klien",
+        "subtitle": "Temukan apa yang klien katakan tentang pengalaman mereka bekerja dengan saya.",
+        "items": [
+          {
+            "testimonial": "Dia mengambil konsep kami yang samar dan mengubahnya menjadi mahakarya visual yang selaras sempurna dengan tujuan kami. Perhatiannya terhadap detail dan kemampuan menerjemahkan ide menjadi visual yang menarik melebihi harapan kami.",
+            "name": "Mark Thompson",
+            "job": "Direktur kreatif"
+          },
+          {
+            "testimonial": "Dia mengubah identitas merek kami dengan kemahiran kreatifnya, menangkap esensi kami di setiap elemen. Dedikasi dan bakatnya benar-benar bersinar melalui karyanya.",
+            "name": "Emily Martinez",
+            "job": "CEO"
+          },
+          {
+            "testimonial": "Dia memiliki kemampuan luar biasa untuk mengkomunikasikan emosi dan cerita. Dia membuat logo untuk LSM kami yang tidak hanya mewakili tujuan kami tetapi juga membangkitkan empati. Profesionalisme dan komitmennya menjadikannya desainer dengan kaliber luar biasa.",
+            "name": "Laura Simmons",
+            "job": "Pendiri LSM"
+          },
+          {
+            "testimonial": "Kami mempercayakan Sarah untuk mengubah antarmuka pengguna situs web kami, dan hasilnya sangat mencengangkan. Rasa desain intuitifnya meningkatkan pengalaman pengguna, yang mengarah pada peningkatan keterlibatan yang signifikan. Dia adalah seorang desainer yang benar-benar memahami sinergi estetika dan fungsionalitas.",
+            "name": "Alex Foster",
+            "job": "Direktur layanan web"
+          },
+          {
+            "testimonial": "Dia mengambil visi kami dan mengangkatnya melampaui imajinasi. Kemampuannya untuk menangkap esensi merek dan menerjemahkannya ke dalam desain sungguh luar biasa. Bekerja dengannya telah menjadi perjalanan yang menginspirasi.",
+            "name": "Jessica Collins",
+            "job": "Manajer Produk"
+          },
+          {
+            "testimonial": "Kemampuannya untuk mengubah konsep menjadi visual yang menawan sungguh luar biasa. Dia mengambil ide poster acara kami dan mengubahnya menjadi mahakarya visual yang dengan sempurna menangkap esensi festival kami. Dedikasi, kreativitas, dan bakat Sarah dalam memberikan lebih dari yang diharapkan menjadikannya aset yang sangat berharga untuk proyek apa pun.",
+            "name": "Michael Carter",
+            "job": "Koordinator Acara"
+          }
+        ]
+      },
+      "cta": {
+        "title": "Mari berkreasi bersama",
+        "subtitle": "Siap mengubah visi Anda menjadi desain yang menawan?",
+        "actions": {
+          "hire_me": "Rekrut saya"
+        }
+      },
+      "blog_latest": {
+        "title": "Jelajahi artikel-artikel saya yang berwawasan luas di blog saya",
+        "information": "Selami dunia kebijaksanaan desain dan inspirasi kreatif, di mana Anda akan menemukan wawasan berharga, kiat praktis, dan narasi menawan yang mengangkat dan memperkaya perjalanan kreatif Anda."
+      }
+    },
+    "startup": {
+      "metadata": {
+        "title": "Halaman Arahan Startup"
+      },
+      "hero": {
+        "tagline": "Demo Web Startup",
+        "actions": {
+          "get_templates": "Dapatkan template",
+          "learn_more": "Pelajari lebih lanjut"
+        },
+        "title": "Tingkatkan <span class=\"hidden sm:inline\">kehadiran online</span> <span class=\"text-accent dark:text-white\">Startup</span> Anda dengan template Astrowind",
+        "subtitle": "Melangkah menjadi sorotan dengan template <span class=\"font-semibold\">Astrowind</span>, jalan Anda untuk memperkuat jejak digital startup Anda, mendorong kredibilitas, dan memperluas jangkauan Anda."
+      },
+      "about": {
+        "title": "Tentang kami",
+        "subtitle": "Kami percaya pada keajaiban mengubah mimpi menjadi kenyataan yang menakjubkan. Didirikan oleh pengembang yang bersemangat dengan visi bersama, kami memutuskan untuk menyederhanakan proses pembuatan situs web. Template kami menyatukan inovasi Astro 5.0 dan fleksibilitas Tailwind CSS, memungkinkan Anda mengekspresikan identitas merek unik Anda yang belum pernah ada sebelumnya."
+      },
+      "stats": {
+        "title": "Temukan dampak mengesankan dari Astrowind",
+        "subtitle": "Angka-angka di bawah ini mencerminkan kepercayaan yang diberikan pengguna kami dan hasil luar biasa yang telah kami bantu mereka capai.",
+        "items": [
+          {
+            "title": "Unduhan"
+          },
+          {
+            "title": "Situs Web Diluncurkan"
+          },
+          {
+            "title": "Peringkat Pengguna"
+          },
+          {
+            "title": "Klien Puas"
+          }
+        ]
+      },
+      "brands": {
+        "title": "Kemitraan & Kolaborasi",
+        "subtitle": "Di Astrowind, kami percaya pada kekuatan kolaborasi untuk mendorong inovasi dan menciptakan pengalaman luar biasa."
+      },
+      "services": {
+        "title": "Layanan apa yang kami sediakan?",
+        "subtitle": "Kami menawarkan berbagai template situs web yang sesuai dengan berbagai industri dan tujuan seperti bisnis, portofolio, e-niaga, blog, dll.",
+        "items": [
+          {
+            "title": "Instruksi Instalasi",
+            "description": "Tawarkan instruksi yang jelas tentang cara mengunduh template yang dibeli dan menginstalnya di berbagai platform situs web atau sistem manajemen konten."
+          },
+          {
+            "title": "Demo dan Pratinjau",
+            "description": "Sediakan demo interaktif dan pratinjau yang memungkinkan pelanggan melihat tampilan dan fungsi template pilihan mereka sebelum melakukan pembelian."
+          },
+          {
+            "title": "Dukungan Teknis",
+            "description": "Menyediakan dukungan pelanggan untuk masalah teknis terkait template atau implementasinya."
+          }
+        ]
+      },
+      "features": {
+        "title": "Fitur utama template kami",
+        "subtitle": "Memiliki beberapa karakteristik utama untuk secara efektif melayani kebutuhan startup dan pengusaha.",
+        "items": [
+          {
+            "title": "Desain Modern dan Profesional",
+            "description": "Memiliki desain kontemporer yang mencerminkan tren desain saat ini dan memberikan kesan profesional."
+          },
+          {
+            "title": "Responsif dan Ramah Seluler",
+            "description": "Beradaptasi dengan mulus ke berbagai ukuran layar dan perangkat untuk memastikan pengalaman yang konsisten."
+          },
+          {
+            "title": "Dapat Disesuaikan",
+            "description": "Mudah disesuaikan, memungkinkan pengguna menyesuaikan desain, warna, tipografi, dan konten agar sesuai dengan identitas merek mereka."
+          },
+          {
+            "title": "Waktu Muat Cepat",
+            "description": "Dioptimalkan untuk kecepatan guna memastikan pengalaman pengguna yang lancar dan peringkat mesin pencari yang menguntungkan."
+          },
+          {
+            "title": "Optimisasi Mesin Pencari (SEO)",
+            "description": "Gabungkan praktik terbaik SEO dalam struktur dan kode template untuk meningkatkan visibilitas dalam hasil mesin pencari."
+          },
+          {
+            "title": "Kompatibilitas",
+            "description": "Template bekerja dengan mulus di berbagai sistem manajemen konten dan pembuat situs web."
+          }
+        ]
+      },
+      "faqs": {
+        "title": "Pertanyaan yang Sering Diajukan",
+        "items": [
+          {
+            "title": "Apa itu template halaman arahan?",
+            "description": "Template halaman arahan adalah tata letak halaman web yang dirancang sebelumnya yang secara khusus dibuat sebagai dasar untuk membangun halaman arahan yang efektif. Template ini dirancang untuk menarik perhatian pengunjung dan memandu mereka menuju tindakan atau tujuan tertentu, seperti mendaftar buletin, melakukan pembelian, atau mengunduh sumber daya."
+          },
+          {
+            "title": "Mengapa saya harus menggunakan template?",
+            "description": "Beberapa keuntungannya adalah menyediakan struktur siap pakai, menghemat waktu Anda secara signifikan. Dirancang dengan mempertimbangkan keramahan pengguna dan memberikan alternatif hemat biaya, menghemat uang Anda sambil tetap memberikan hasil yang berkualitas."
+          },
+          {
+            "title": "Bisakah saya mempratinjau template sebelum membeli?",
+            "description": "Ya, template memungkinkan Anda mempratinjaunya sebelum melakukan pembelian. Ada tombol \"Demo\" yang terkait dengan setiap template."
+          },
+          {
+            "title": "Apakah saya memerlukan keterampilan teknis untuk menggunakan template?",
+            "description": "Keterampilan teknis tingkat lanjut tidak diperlukan untuk menggunakan template, tetapi memiliki pemahaman dasar tentang navigasi web dan keakraban dengan menggunakan alat online masih bisa bermanfaat. Jika Anda memiliki kebutuhan penyesuaian yang lebih spesifik, Anda mungkin perlu berkonsultasi dengan panduan atau menghubungi dukungan pelanggan untuk mendapatkan bantuan."
+          },
+          {
+            "title": "Bisakah saya menggunakan template di beberapa situs web?",
+            "description": "Tidak, template dilengkapi dengan lisensi sekali pakai, artinya Anda hanya dapat menggunakan template di satu situs web atau proyek saja. Menggunakan template di situs web tambahan akan memerlukan pembelian lisensi tambahan."
+          },
+          {
+            "title": "Bagaimana jika saya butuh bantuan dengan penyesuaian?",
+            "description": "Template menyediakan panduan langkah demi langkah komprehensif yang memandu Anda melalui proses penyesuaian. Jika Anda masih ragu, Anda dapat menghubungi tim dukungan pelanggan kami. Mereka dapat menjawab pertanyaan Anda, memberikan panduan tentang penyesuaian, dan mengatasi masalah apa pun yang Anda hadapi."
+          }
+        ]
+      },
+      "contact": {
+        "title": "Beri tahu kami bagaimana kami dapat membantu",
+        "subtitle": "Kami di sini untuk membantu dan menjawab pertanyaan apa pun yang mungkin Anda miliki.",
+        "items": {
+          "phone": {
+            "title": "Telepon",
+            "call_to_action": "Hubungi kami"
+          },
+          "email": {
+            "title": "Email",
+            "call_to_action": "Tulis kepada kami"
+          },
+          "chat_sales": {
+            "title": "Mengobrol dengan penjualan",
+            "call_to_action": "Mulai mengobrol"
+          },
+          "chat_support": {
+            "title": "Mengobrol dengan dukungan",
+            "call_to_action": "Mulai mengobrol"
+          }
+        }
+      },
+      "call_to_action": {
+        "title": "Jadilah bagian dari visi kami",
+        "subtitle": "Temukan lingkungan kerja yang dinamis, peluang pertumbuhan yang tak tertandingi, dan kesempatan untuk membuat dampak yang berarti.",
+        "actions": {
+          "get_templates": "Dapatkan template"
+        }
+      }
+    }
+  },
+  "landing": {
+    "coming_soon": {
+      "title": "Segera Hadir",
+      "subtitle": "Kami sedang mengerjakan konten halaman demo ini. Anda akan segera melihatnya. Tetap pantau!",
+      "action": "Unduh Template"
+    },
+    "hero": {
+      "actions": {
+        "cta": "Tombol Aksi",
+        "learn_more": "Pelajari lebih lanjut"
+      }
+    },
+    "click_through": {
+      "metadata": {
+        "title": "Demo Halaman Arahan Click-through"
+      },
+      "hero": {
+        "tagline": "Demo Click-through",
+        "title": "Halaman Arahan Click-through: Jembatan Sempurna menuju Konversi!",
+        "subtitle": "Pelajari cara mendesain Halaman Arahan Click-Through yang memandu pengunjung ke penawaran utama Anda dengan mulus.",
+        "image_alt": "Gambar Hero Halaman Arahan Click-through"
+      }
+    },
+    "lead_generation": {
+      "metadata": {
+        "title": "Demo Halaman Arahan Pembuatan Prospek"
+      },
+      "hero": {
+        "tagline": "Demo Arahan Pembuatan Prospek",
+        "title": "Halaman Arahan Pembuatan Prospek yang Efektif: Buka Rahasianya",
+        "subtitle": "Temukan rahasia untuk membuat Halaman Arahan yang mengubah pengunjung yang penasaran menjadi prospek yang bersemangat. (Hero Anda harus menarik perhatian seketika. Gunakan judul kuat yang berbicara langsung kepada audiens target Anda.)",
+        "image_alt": "Magnet menarik sekrup. Demo halaman arahan pembuatan prospek"
+      }
+    },
+    "pre_launch": {
+      "metadata": {
+        "title": "Halaman Arahan Pra-Peluncuran"
+      },
+      "hero": {
+        "tagline": "Demo Pra-peluncuran",
+        "title": "Halaman Arahan Pra-peluncuran: Bangun Antusiasme Sebelum Pengungkapan Besar!",
+        "subtitle": "Buat Halaman Segera Hadir atau Pra-Peluncuran yang menggoda yang membuat pengunjung menantikan peluncuran Anda.",
+        "image_alt": "Toko dengan tanda Segera Hadir. Halaman Arahan Pra-peluncuran"
+      }
+    },
+    "product": {
+      "metadata": {
+        "title": "Demo Halaman Arahan Detail Produk"
+      },
+      "hero": {
+        "tagline": "Demo Detail Produk",
+        "title": "Halaman Arahan Produk: Pamerkan dengan Presisi dan Semangat!",
+        "subtitle": "Panduan langkah demi langkah untuk mendesain Halaman Arahan yang menyoroti setiap aspek produk atau layanan Anda.",
+        "image_alt": "Pusat perhatian pada produk. Demo Halaman Arahan Detail Produk"
+      }
+    },
+    "sales": {
+      "metadata": {
+        "title": "Demo Halaman Arahan Penjualan"
+      },
+      "hero": {
+        "tagline": "Demo Penjualan Bentuk Panjang",
+        "title": "Penjualan Bentuk Panjang: Menjual dengan Cerita: Cara Bentuk Panjang!",
+        "subtitle": "Selami lebih dalam pembuatan Halaman Arahan yang menceritakan, membujuk, dan mengonversi.",
+        "image_alt": "Anak-anak bercerita. Demo Halaman Arahan Penjualan Bentuk Panjang"
+      }
+    },
+    "subscription": {
+      "metadata": {
+        "title": "Demo Halaman Arahan Berlangganan"
+      },
+      "hero": {
+        "tagline": "Demo Arahan Berlangganan",
+        "title": "Halaman Arahan Berlangganan: Ubah Pengunjung Biasa Menjadi Pelanggan Setia!",
+        "subtitle": "Buka formula untuk Halaman Arahan Berlangganan yang membuat audiens Anda kembali lagi.",
+        "image_alt": "Gambar ironis terkait pembatalan langganan. Demo Halaman Arahan Berlangganan"
+      }
+    }
+  }
 }

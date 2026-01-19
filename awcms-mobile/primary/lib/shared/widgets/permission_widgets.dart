@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/extensions/context_extensions.dart';
 import '../../core/services/permission_service.dart';
 
 /// Widget yang hanya ditampilkan jika user punya permission
@@ -127,15 +128,12 @@ class MobileRestrictedButton extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.computer, size: 48),
-        title: const Text('Akses Terbatas'),
-        content: const Text(
-          'Fitur ini hanya tersedia di web dashboard untuk keamanan dan governance. '
-          'Silakan gunakan web admin untuk melakukan aksi ini.',
-        ),
+        title: Text(context.l10n.accessRestricted),
+        content: Text(context.l10n.webDashboardOnly),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Mengerti'),
+            child: Text(context.l10n.understood),
           ),
         ],
       ),
@@ -159,7 +157,7 @@ class RoleBadge extends ConsumerWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        _getRoleLabel(role),
+        _getRoleLabel(context, role),
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
@@ -185,24 +183,24 @@ class RoleBadge extends ConsumerWidget {
     }
   }
 
-  String _getRoleLabel(UserRole role) {
+  String _getRoleLabel(BuildContext context, UserRole role) {
     switch (role) {
       case UserRole.owner:
-        return 'OWNER';
+        return context.l10n.roleOwner;
       case UserRole.superAdmin:
-        return 'SUPER ADMIN';
+        return context.l10n.roleSuperAdmin;
       case UserRole.admin:
-        return 'ADMIN';
+        return context.l10n.roleAdmin;
       case UserRole.editor:
-        return 'EDITOR';
+        return context.l10n.roleEditor;
       case UserRole.author:
-        return 'AUTHOR';
+        return context.l10n.roleAuthor;
       case UserRole.member:
-        return 'MEMBER';
+        return context.l10n.roleMember;
       case UserRole.subscriber:
-        return 'SUBSCRIBER';
+        return context.l10n.roleSubscriber;
       default:
-        return 'PUBLIC';
+        return context.l10n.rolePublic;
     }
   }
 }

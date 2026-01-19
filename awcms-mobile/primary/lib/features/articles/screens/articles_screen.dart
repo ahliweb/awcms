@@ -12,6 +12,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/services/sync_service.dart';
 import '../../../shared/widgets/offline_indicator.dart';
+import '../../../core/extensions/context_extensions.dart';
 import '../providers/articles_provider.dart';
 
 class ArticlesScreen extends ConsumerWidget {
@@ -23,7 +24,7 @@ class ArticlesScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Artikel'),
+        title: Text(context.l10n.articles),
         actions: [
           const SyncStatusChip(),
           const SizedBox(width: 8),
@@ -56,12 +57,12 @@ class ArticlesScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Belum ada artikel',
+                          context.l10n.noArticles,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Pull to refresh saat online',
+                          context.l10n.pullToRefresh,
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
@@ -95,7 +96,7 @@ class ArticlesScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Gagal memuat artikel',
+                      context.l10n.failedToLoadArticles,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -107,7 +108,7 @@ class ArticlesScreen extends ConsumerWidget {
                     const SizedBox(height: 16),
                     FilledButton.tonal(
                       onPressed: () => ref.invalidate(articlesProvider),
-                      child: const Text('Coba Lagi'),
+                      child: Text(context.l10n.retry),
                     ),
                   ],
                 ),

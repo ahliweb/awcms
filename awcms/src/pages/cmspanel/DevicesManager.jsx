@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ import DeviceCard from '@/components/esp32/DeviceCard';
 import { Skeleton } from '@/components/ui/skeleton';
 
 function DevicesManager() {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const { devices, loading, onlineCount, totalCount, registerDevice, deleteDevice, fetchDevices } = useDevices();
     const { hasPermission } = usePermissions();
@@ -76,14 +78,14 @@ function DevicesManager() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold">IoT Devices</h1>
-                    <p className="text-muted-foreground">Manage ESP32 devices and sensors</p>
+                    <h1 className="text-2xl font-bold">{t('devices.title')}</h1>
+                    <p className="text-muted-foreground">{t('devices.subtitle')}</p>
                 </div>
 
                 {canManage && (
                     <Button onClick={() => setShowAddDialog(true)}>
                         <Plus className="mr-2 h-4 w-4" />
-                        Add Device
+                        {t('devices.add_device')}
                     </Button>
                 )}
             </div>
@@ -98,7 +100,7 @@ function DevicesManager() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">{totalCount}</p>
-                                <p className="text-sm text-muted-foreground">Total Devices</p>
+                                <p className="text-sm text-muted-foreground">{t('devices.total_devices')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -112,7 +114,7 @@ function DevicesManager() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">{onlineCount}</p>
-                                <p className="text-sm text-muted-foreground">Online</p>
+                                <p className="text-sm text-muted-foreground">{t('devices.online')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -126,7 +128,7 @@ function DevicesManager() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">{totalCount - onlineCount}</p>
-                                <p className="text-sm text-muted-foreground">Offline</p>
+                                <p className="text-sm text-muted-foreground">{t('devices.offline')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -138,7 +140,7 @@ function DevicesManager() {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search devices..."
+                        placeholder={t('devices.search_placeholder')}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="pl-10"
@@ -168,14 +170,14 @@ function DevicesManager() {
                 <Card>
                     <CardContent className="py-12 text-center">
                         <Cpu className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-medium">No devices found</h3>
+                        <h3 className="text-lg font-medium">{t('devices.no_devices')}</h3>
                         <p className="text-muted-foreground mb-4">
-                            {search ? 'Try a different search term' : 'Add your first ESP32 device'}
+                            {search ? t('devices.try_different_search') : t('devices.add_first_device')}
                         </p>
                         {canManage && !search && (
                             <Button onClick={() => setShowAddDialog(true)}>
                                 <Plus className="mr-2 h-4 w-4" />
-                                Add Device
+                                {t('devices.add_device')}
                             </Button>
                         )}
                     </CardContent>
@@ -198,21 +200,21 @@ function DevicesManager() {
             <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Add New Device</DialogTitle>
+                        <DialogTitle>{t('devices.dialog_add_title')}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div>
-                            <Label>Device ID</Label>
+                            <Label>{t('devices.label_device_id')}</Label>
                             <Input
-                                placeholder="esp32-001"
+                                placeholder={t('devices.placeholder_device_id')}
                                 value={newDevice.device_id}
                                 onChange={(e) => setNewDevice({ ...newDevice, device_id: e.target.value })}
                             />
                         </div>
                         <div>
-                            <Label>Device Name</Label>
+                            <Label>{t('devices.label_device_name')}</Label>
                             <Input
-                                placeholder="Living Room Sensor"
+                                placeholder={t('devices.placeholder_device_name')}
                                 value={newDevice.device_name}
                                 onChange={(e) => setNewDevice({ ...newDevice, device_name: e.target.value })}
                             />
@@ -220,10 +222,10 @@ function DevicesManager() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-                            Cancel
+                            {t('devices.cancel')}
                         </Button>
                         <Button onClick={handleAddDevice} disabled={!newDevice.device_id}>
-                            Add Device
+                            {t('devices.add_device')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -233,16 +235,15 @@ function DevicesManager() {
             <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Device?</AlertDialogTitle>
+                        <AlertDialogTitle>{t('devices.delete_title')}</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will remove "{deleteTarget?.device_name || deleteTarget?.device_id}" from your device list.
-                            This action cannot be undone.
+                            {t('devices.delete_desc', { name: deleteTarget?.device_name || deleteTarget?.device_id })}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>{t('devices.cancel')}</AlertDialogCancel>
                         <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-                            Delete
+                            {t('devices.delete_confirm')}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

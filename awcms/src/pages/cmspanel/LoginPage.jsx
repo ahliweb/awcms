@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -14,6 +15,7 @@ import * as OTPAuth from 'otpauth';
 
 
 const LoginPage = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -60,8 +62,8 @@ const LoginPage = () => {
             if (userData?.deleted_at) {
               toast({
                 variant: "destructive",
-                title: "Account Disabled",
-                description: "Your account has been deactivated."
+                title: t('login_page.account_disabled_title'),
+                description: t('login_page.account_disabled_desc')
               });
               await signOut();
               return;
@@ -93,7 +95,7 @@ const LoginPage = () => {
     checkUserStatus();
 
     return () => { mounted = false; };
-  }, [user, requires2FA, isLoading, navigate, signOut, toast]);
+  }, [user, requires2FA, isLoading, navigate, signOut, toast, t]);
 
 
   const handleLogin = async (e) => {
@@ -108,9 +110,9 @@ const LoginPage = () => {
       // Ensure we have a token before attempting login (unless strictly dev mode bypassing it, but Supabase will likely reject if protection is on)
       if (!turnstileToken && !isLocalhost) {
         if (turnstileError) {
-          throw new Error('Security check failed to load. Please refresh the page.');
+          throw new Error(t('login_page.security_check_failed'));
         }
-        throw new Error('Please complete the security check (CAPTCHA).');
+        throw new Error(t('login_page.complete_captcha'));
       }
 
       // 1.5 Verify Turnstile token via Edge Function (server-side verification)
@@ -125,7 +127,7 @@ const LoginPage = () => {
           if (window.turnstileReset) {
             window.turnstileReset();
           }
-          throw new Error('Security verification failed. Please try again.');
+          throw new Error(t('login_page.verification_failed'));
         }
       }
 
@@ -205,8 +207,8 @@ const LoginPage = () => {
       await supabase.rpc('cleanup_old_login_audit_logs');
 
       toast({
-        title: "Welcome back!",
-        description: "Successfully logged in.",
+        title: t('login_page.welcome_back_title'),
+        description: t('login_page.login_success'),
       });
       navigate('/cmspanel', { replace: true });
 
@@ -234,8 +236,8 @@ const LoginPage = () => {
 
       toast({
         variant: "destructive",
-        title: "Login Failed",
-        description: error.message || "Please check your credentials.",
+        title: t('login_page.login_failed'),
+        description: error.message || t('login_page.check_credentials'),
       });
       setIsLoading(false);
     }
@@ -257,7 +259,7 @@ const LoginPage = () => {
 
       if (error || !data) {
         console.error("2FA Fetch Error:", error);
-        throw new Error("Could not verify 2FA settings. Please try signing in again.");
+        throw new Error(t('two_factor.fetch_error'));
       }
 
       let isValid = false;
@@ -287,15 +289,12 @@ const LoginPage = () => {
 
           sessionStorage.setItem('awcms_2fa_verified', 'true');
           sessionStorage.setItem('awcms_2fa_timestamp', Date.now().toString());
-
-          toast({ title: "Backup Code Used", description: "We recommend generating new codes soon." });
+          toast({ title: t('two_factor.backup_used_title'), description: t('two_factor.backup_used_desc') });
         } else {
           await supabase.from('two_factor_audit_logs').insert({ user_id: pendingUserId, event_type: 'verified' });
-
           sessionStorage.setItem('awcms_2fa_verified', 'true');
           sessionStorage.setItem('awcms_2fa_timestamp', Date.now().toString());
-
-          toast({ title: "Verified", description: "Authentication successful." });
+          toast({ title: t('two_factor.verified'), description: t('two_factor.auth_success') });
         }
 
         // Log successful 2FA login
@@ -331,7 +330,7 @@ const LoginPage = () => {
 
         navigate('/cmspanel', { replace: true });
       } else {
-        throw new Error("Invalid code. Please try again.");
+        throw new Error(t('two_factor.invalid_code'));
       }
 
     } catch (err) {
@@ -370,7 +369,7 @@ const LoginPage = () => {
       setTwoFactorCode('');
       setPendingUserId(null);
       setIsLoading(false);
-      toast({ description: "Verification cancelled." });
+      toast({ description: t('two_factor.cancelled') });
     }
   };
 
@@ -387,8 +386,8 @@ const LoginPage = () => {
               <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-blue-100">
                 <ShieldCheck className="w-8 h-8 text-blue-600" />
               </div>
-              <h1 className="text-2xl font-bold text-slate-900">Two-Factor Authentication</h1>
-              <p className="text-slate-500">Enter the 6-digit code from your authenticator app.</p>
+              <h1 className="text-2xl font-bold text-slate-900">{t('two_factor.title')}</h1>
+              <p className="text-slate-500">{t('two_factor.subtitle')}</p>
             </div>
             <form onSubmit={verify2FA} className="space-y-6">
               <div className="space-y-4">
@@ -411,16 +410,16 @@ const LoginPage = () => {
               </div>
               <div className="flex flex-col gap-3">
                 <Button type="submit" className="w-full h-11 bg-blue-600 hover:bg-blue-700" disabled={isLoading || twoFactorCode.length < 3}>
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Verify Identity'}
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('two_factor.verify_identity')}
                 </Button>
                 <Button type="button" variant="ghost" className="text-slate-500 text-xs" onClick={handleCancelVerification} disabled={isLoading}>
-                  Cancel verification
+                  {t('two_factor.cancel')}
                 </Button>
               </div>
             </form>
           </div>
-        </motion.div>
-      </div>
+        </motion.div >
+      </div >
     );
   }
 
@@ -433,13 +432,13 @@ const LoginPage = () => {
       >
         <div className="p-8 md:p-10 space-y-8">
           <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Welcome Back</h1>
-            <p className="text-slate-500">Sign in to access your CMS dashboard</p>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('login_page.welcome_back')}</h1>
+            <p className="text-slate-500">{t('login_page.sign_in_subtitle')}</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email">{t('login_page.email_address_label')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -451,7 +450,7 @@ const LoginPage = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('login_page.password_label')}</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -491,23 +490,23 @@ const LoginPage = () => {
                   theme="light"
                 />
                 {!turnstileReady && !turnstileError && (
-                  <p className="text-xs text-slate-400 text-center mt-1">Verifying security...</p>
+                  <p className="text-xs text-slate-400 text-center mt-1">{t('login_page.verifying_security')}</p>
                 )}
               </div>
             </div>
             <Button type="submit" className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all" disabled={isLoading || (!turnstileReady && !turnstileError)}>
-              {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (!turnstileReady && !turnstileError) ? 'Waiting for security check...' : 'Sign In'}
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (!turnstileReady && !turnstileError) ? t('login_page.waiting_security') : t('login_page.sign_in_button')}
             </Button>
             <div className="text-center mt-4 space-y-2">
               <div>
-                <span className="text-slate-500 text-sm">Don't have an account? </span>
+                <span className="text-slate-500 text-sm">{t('login_page.no_account')} </span>
                 <Link to="/register" className="text-slate-900 font-medium text-sm hover:underline">
-                  Apply for access
+                  {t('login_page.apply_access')}
                 </Link>
               </div>
               <div>
                 <Link to="/forgot-password" className="text-slate-500 text-sm hover:text-slate-900 hover:underline">
-                  Forgot your password?
+                  {t('login_page.forgot_password_link')}
                 </Link>
               </div>
             </div>

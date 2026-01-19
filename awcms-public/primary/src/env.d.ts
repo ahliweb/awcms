@@ -5,15 +5,15 @@
 /// <reference types="../vendor/integration/types.d.ts" />
 
 declare namespace App {
-    interface Locals {
-        tenant_id: string;
-        tenant_slug: string;
-        host: string;
-        tenant_source: 'path' | 'host';
-        ref_code: string | null;
-        locale: string;
-        runtime: {
-            env: Record<string, string>;
-        };
-    }
+  interface Locals {
+    tenant_id: string;
+    tenant_slug: string;
+    host: string;
+    tenant_source: "path" | "host";
+    ref_code: string | null;
+    locale: string;
+    runtime: {
+      env: Record<string, string>;
+    };
+  }
 }

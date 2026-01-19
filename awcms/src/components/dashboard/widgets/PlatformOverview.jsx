@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePlatformStats } from '@/hooks/usePlatformStats';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Users, Database, ShieldCheck, TrendingUp, Activity } from 'lucide-react';
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function PlatformOverview() {
+    const { t } = useTranslation();
     const { stats, loading } = usePlatformStats();
 
     if (loading) {
@@ -28,7 +30,7 @@ export function PlatformOverview() {
                     <ShieldCheck className="w-6 h-6" />
                 </div>
                 <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300">
-                    Platform Overview
+                    {t('dashboard.platform.overview')}
                 </h2>
             </div>
 
@@ -36,17 +38,17 @@ export function PlatformOverview() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Tenants</CardTitle>
+                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.total_tenants')}</CardTitle>
                         <Building2 className="h-4 w-4 text-indigo-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalTenants}</div>
                         <div className="mt-2 text-xs flex gap-2">
                             <Badge variant="outline" className="bg-blue-50/50 text-blue-700 border-blue-200">
-                                {stats.tenantsByTier.pro} Pro
+                                {stats.tenantsByTier.pro} {t('dashboard.platform.tier_pro')}
                             </Badge>
                             <Badge variant="outline" className="bg-purple-50/50 text-purple-700 border-purple-200">
-                                {stats.tenantsByTier.enterprise} Ent
+                                {stats.tenantsByTier.enterprise} {t('dashboard.platform.tier_ent')}
                             </Badge>
                         </div>
                     </CardContent>
@@ -54,18 +56,18 @@ export function PlatformOverview() {
 
                 <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">System Users</CardTitle>
+                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.system_users')}</CardTitle>
                         <Users className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalUsers}</div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Active across all data</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">{t('dashboard.platform.active_across_data')}</p>
                     </CardContent>
                 </Card>
 
                 <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">System Storage</CardTitle>
+                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.system_storage')}</CardTitle>
                         <Database className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent>
@@ -81,12 +83,12 @@ export function PlatformOverview() {
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 transition-transform duration-700 group-hover:scale-150"></div>
 
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                        <CardTitle className="text-sm font-medium text-indigo-100">Platform Health</CardTitle>
+                        <CardTitle className="text-sm font-medium text-indigo-100">{t('dashboard.platform.health')}</CardTitle>
                         <Activity className="h-4 w-4 text-indigo-200 animate-pulse" />
                     </CardHeader>
                     <CardContent className="relative z-10">
                         <div className="text-3xl font-extrabold text-white">100%</div>
-                        <p className="text-xs text-indigo-100 mt-1">All systems operational</p>
+                        <p className="text-xs text-indigo-100 mt-1">{t('dashboard.platform.systems_operational')}</p>
                     </CardContent>
                 </Card>
             </div>
@@ -96,7 +98,7 @@ export function PlatformOverview() {
                 <CardHeader>
                     <CardTitle className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-slate-400" />
-                        Recent Registrations
+                        {t('dashboard.platform.recent_registrations')}
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -109,7 +111,7 @@ export function PlatformOverview() {
                                     </div>
                                     <div>
                                         <p className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{tenant.name}</p>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Joined {format(new Date(tenant.created_at), 'MMM d, yyyy')}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t('dashboard.platform.joined')} {format(new Date(tenant.created_at), 'MMM d, yyyy')}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">

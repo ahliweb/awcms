@@ -6,6 +6,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:awcms_mobile/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/supabase_config.dart';
@@ -57,6 +59,15 @@ class AWCMSMobileApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'AWCMS Mobile',
       debugShowCheckedModeBanner: false,
+
+      // Localization
+      localizationsDelegates: [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
 
       // Theme
       theme: AppTheme.lightTheme,

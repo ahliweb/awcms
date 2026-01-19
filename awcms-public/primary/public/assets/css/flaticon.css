@@ -1,4 +1,4 @@
-	/*
+/*
   	Flaticon icon font: Flaticon
   	Creation date: 30/06/2019 06:11
   	*/
@@ -6,51 +6,102 @@
 @font-face {
   font-family: "Flaticon";
   src: url("../fonts/Flaticon.eot");
-  src: url("../fonts/Flaticon.eot%3F") format("embedded-opentype"),
-       url("../fonts/Flaticon.woff2") format("woff2"),
-       url("../fonts/Flaticon.woff") format("woff"),
-       url("../fonts/Flaticon.ttf") format("truetype"),
-       url("../fonts/Flaticon.svg") format("svg");
+  src:
+    url("../fonts/Flaticon.eot%3F") format("embedded-opentype"),
+    url("../fonts/Flaticon.woff2") format("woff2"),
+    url("../fonts/Flaticon.woff") format("woff"),
+    url("../fonts/Flaticon.ttf") format("truetype"),
+    url("../fonts/Flaticon.svg") format("svg");
   font-weight: normal;
   font-style: normal;
 }
 
-@media screen and (-webkit-min-device-pixel-ratio:0) {
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
   @font-face {
     font-family: "Flaticon";
     src: url("../fonts/Flaticon.svg") format("svg");
   }
 }
 
-[class^="flaticon-"]:before, [class*=" flaticon-"]:before,
-[class^="flaticon-"]:after, [class*=" flaticon-"]:after {   
+[class^="flaticon-"]:before,
+[class*=" flaticon-"]:before,
+[class^="flaticon-"]:after,
+[class*=" flaticon-"]:after {
   font-family: Flaticon;
-        font-size: 20px;
-font-style: normal;
-margin-left: 20px;
+  font-size: 20px;
+  font-style: normal;
+  margin-left: 20px;
 }
 
-.flaticon-play-button:before { content: "\f100"; }
-.flaticon-play-button-1:before { content: "\f101"; }
-.flaticon-play-button-2:before { content: "\f102"; }
-.flaticon-back:before { content: "\f103"; }
-.flaticon-next:before { content: "\f104"; }
-.flaticon-right-quote:before { content: "\f105"; }
-.flaticon-left-quote:before { content: "\f106"; }
-.flaticon-solar-energy:before { content: "\f107"; }
-.flaticon-plug:before { content: "\f108"; }
-.flaticon-piston:before { content: "\f109"; }
-.flaticon-transmission:before { content: "\f10a"; }
-.flaticon-oil-barrel:before { content: "\f10b"; }
-.flaticon-oil:before { content: "\f10c"; }
-.flaticon-oil-1:before { content: "\f10d"; }
-.flaticon-truck:before { content: "\f10e"; }
-.flaticon-order:before { content: "\f10f"; }
-.flaticon-gears:before { content: "\f110"; }
-.flaticon-factory:before { content: "\f111"; }
-.flaticon-diamond:before { content: "\f112"; }
-.flaticon-happiness:before { content: "\f113"; }
-.flaticon-happy:before { content: "\f114"; }
-.flaticon-idea:before { content: "\f115"; }
-.flaticon-start:before { content: "\f116"; }
-.flaticon-medal:before { content: "\f117"; }
+.flaticon-play-button:before {
+  content: "\f100";
+}
+.flaticon-play-button-1:before {
+  content: "\f101";
+}
+.flaticon-play-button-2:before {
+  content: "\f102";
+}
+.flaticon-back:before {
+  content: "\f103";
+}
+.flaticon-next:before {
+  content: "\f104";
+}
+.flaticon-right-quote:before {
+  content: "\f105";
+}
+.flaticon-left-quote:before {
+  content: "\f106";
+}
+.flaticon-solar-energy:before {
+  content: "\f107";
+}
+.flaticon-plug:before {
+  content: "\f108";
+}
+.flaticon-piston:before {
+  content: "\f109";
+}
+.flaticon-transmission:before {
+  content: "\f10a";
+}
+.flaticon-oil-barrel:before {
+  content: "\f10b";
+}
+.flaticon-oil:before {
+  content: "\f10c";
+}
+.flaticon-oil-1:before {
+  content: "\f10d";
+}
+.flaticon-truck:before {
+  content: "\f10e";
+}
+.flaticon-order:before {
+  content: "\f10f";
+}
+.flaticon-gears:before {
+  content: "\f110";
+}
+.flaticon-factory:before {
+  content: "\f111";
+}
+.flaticon-diamond:before {
+  content: "\f112";
+}
+.flaticon-happiness:before {
+  content: "\f113";
+}
+.flaticon-happy:before {
+  content: "\f114";
+}
+.flaticon-idea:before {
+  content: "\f115";
+}
+.flaticon-start:before {
+  content: "\f116";
+}
+.flaticon-medal:before {
+  content: "\f117";
+}

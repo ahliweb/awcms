@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/extensions/context_extensions.dart';
 import '../../core/services/location_service.dart';
 
 /// Location status indicator chip
@@ -27,38 +28,38 @@ class LocationStatusChip extends ConsumerWidget {
         icon = Icons.location_on;
         bgColor = colorScheme.primaryContainer;
         fgColor = colorScheme.onPrimaryContainer;
-        label = 'GPS Aktif';
+        label = context.l10n.locationActive;
         break;
       case LocationStatus.fetching:
         icon = Icons.my_location;
         bgColor = colorScheme.secondaryContainer;
         fgColor = colorScheme.onSecondaryContainer;
-        label = 'Memuat...';
+        label = context.l10n.loading;
         break;
       case LocationStatus.fakeDetected:
         icon = Icons.gps_off;
         bgColor = colorScheme.errorContainer;
         fgColor = colorScheme.onErrorContainer;
-        label = 'GPS Palsu!';
+        label = context.l10n.locationFake;
         break;
       case LocationStatus.permissionDenied:
       case LocationStatus.permissionDeniedForever:
         icon = Icons.location_disabled;
         bgColor = colorScheme.tertiaryContainer;
         fgColor = colorScheme.onTertiaryContainer;
-        label = 'Izin Ditolak';
+        label = context.l10n.locationPermissionDenied;
         break;
       case LocationStatus.serviceDisabled:
         icon = Icons.location_off;
         bgColor = colorScheme.surfaceContainerHighest;
         fgColor = colorScheme.onSurfaceVariant;
-        label = 'GPS Mati';
+        label = context.l10n.locationDisabled;
         break;
       default:
         icon = Icons.location_searching;
         bgColor = colorScheme.surfaceContainerHighest;
         fgColor = colorScheme.onSurfaceVariant;
-        label = 'GPS';
+        label = context.l10n.gps;
     }
 
     return InkWell(
@@ -127,16 +128,17 @@ class FakeLocationWarning extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Lokasi Palsu Terdeteksi',
-                  style: TextStyle(
+                Text(
+                  context.l10n.fakeLocationDetected,
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                     fontSize: 13,
                   ),
                 ),
                 Text(
-                  locationState.errorMessage ?? 'Aplikasi fake GPS terdeteksi',
+                  locationState.errorMessage ??
+                      context.l10n.fakeLocationMessage,
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
@@ -159,19 +161,16 @@ class LocationPermissionDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       icon: const Icon(Icons.location_on, size: 48),
-      title: const Text('Izin Lokasi Diperlukan'),
-      content: const Text(
-        'Aplikasi memerlukan akses lokasi untuk fitur ini. '
-        'Silakan aktifkan izin lokasi di pengaturan.',
-      ),
+      title: Text(context.l10n.locationPermissionRequired),
+      content: Text(context.l10n.locationPermissionExplanation),
       actions: [
         TextButton(
           onPressed: onCancel ?? () => Navigator.of(context).pop(),
-          child: const Text('Batal'),
+          child: Text(context.l10n.cancel),
         ),
         FilledButton(
           onPressed: onSettings ?? () => Navigator.of(context).pop(),
-          child: const Text('Buka Pengaturan'),
+          child: Text(context.l10n.openSettings),
         ),
       ],
     );
@@ -218,14 +217,14 @@ class LocationCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Lokasi GPS',
+                        context.l10n.locationGPS,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       Text(
                         locationState.isMocked
-                            ? 'Lokasi tidak valid'
-                            : _getStatusText(locationState.status),
+                            ? context.l10n.invalidLocation
+                            : _getStatusText(context, locationState.status),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -256,20 +255,20 @@ class LocationCard extends ConsumerWidget {
               const SizedBox(height: 12),
               _buildCoordRow(
                 context,
-                'Latitude',
+                context.l10n.latitude,
                 locationState.position!.latitude.toStringAsFixed(6),
               ),
               const SizedBox(height: 8),
               _buildCoordRow(
                 context,
-                'Longitude',
+                context.l10n.longitude,
                 locationState.position!.longitude.toStringAsFixed(6),
               ),
               const SizedBox(height: 8),
               _buildCoordRow(
                 context,
-                'Akurasi',
-                '${locationState.position!.accuracy.toStringAsFixed(0)} meter',
+                context.l10n.accuracy,
+                '${locationState.position!.accuracy.toStringAsFixed(0)} ${context.l10n.meters}',
               ),
             ],
           ],
@@ -299,20 +298,20 @@ class LocationCard extends ConsumerWidget {
     );
   }
 
-  String _getStatusText(LocationStatus status) {
+  String _getStatusText(BuildContext context, LocationStatus status) {
     switch (status) {
       case LocationStatus.success:
-        return 'Lokasi berhasil didapat';
+        return context.l10n.locationObtained;
       case LocationStatus.fetching:
-        return 'Mendapatkan lokasi...';
+        return context.l10n.gettingLocation;
       case LocationStatus.error:
-        return 'Gagal mendapatkan lokasi';
+        return context.l10n.locationError;
       case LocationStatus.permissionDenied:
-        return 'Izin lokasi ditolak';
+        return context.l10n.locationPermissionDenied;
       case LocationStatus.serviceDisabled:
-        return 'Layanan GPS tidak aktif';
+        return context.l10n.locationServiceDisabled;
       default:
-        return 'Belum ada lokasi';
+        return context.l10n.noLocation;
     }
   }
 }

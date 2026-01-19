@@ -1,1345 +1,1411 @@
 {
-    "common": {
-        "loading": "Loading...",
-        "back": "Back",
-        "read_more": "Read More",
-        "view_all": "View All",
-        "search": "Search...",
-        "no_results": "No results found.",
-        "share": "Share",
-        "categories": "Categories",
-        "tags": "Tags",
-        "posted_on": "Posted on",
-        "by": "by",
-        "min_read": "min read"
-    },
-    "nav": {
-        "homes": "Homes",
-        "saas": "SaaS",
-        "startup": "Startup",
-        "mobile_app": "Mobile App",
-        "personal": "Personal",
-        "pages": "Pages",
-        "features": "Features",
-        "services": "Services",
-        "pricing": "Pricing",
-        "about": "About us",
-        "contact": "Contact",
-        "terms": "Terms",
-        "privacy": "Privacy Policy",
-        "landing": "Landing",
-        "lead_generation": "Lead Generation",
-        "long_form_sales": "Long-form Sales",
-        "click_through": "Click-Through",
-        "product_details": "Product Details",
-        "coming_soon": "Coming Soon",
-        "subscription": "Subscription",
-        "blog": "Blog",
-        "blog_list": "Blog List",
-        "article": "Article",
-        "article_mdx": "Article (with MDX)",
-        "category_page": "Category Page",
-        "tag_page": "Tag Page",
-        "widgets": "Widgets",
-        "download": "Download"
-    },
-    "footer": {
-        "product": "Product",
-        "features": "Features",
-        "security": "Security",
-        "team": "Team",
-        "enterprise": "Enterprise",
-        "customer_stories": "Customer Stories",
-        "pricing": "Pricing",
-        "resources": "Resources",
-        "platform": "Platform",
-        "developer_api": "Developer API",
-        "partners": "Partners",
-        "atom": "Atom",
-        "electron": "Electron",
-        "desktop": "AstroWind Desktop",
-        "support": "Support",
-        "docs": "Docs",
-        "community": "Community Forum",
-        "prof_services": "Professional Services",
-        "skills": "Skills",
-        "status": "Status",
-        "company": "Company",
-        "about": "About",
-        "blog": "Blog",
-        "careers": "Careers",
-        "press": "Press",
-        "inclusion": "Inclusion",
-        "social_impact": "Social Impact",
-        "shop": "Shop",
-        "terms": "Terms",
-        "privacy": "Privacy Policy",
-        "made_by": "Made by <a class=\"text-blue-600 underline dark:text-muted\" href=\"https://ahliweb.co.id\"> AWCMS</a> · All rights reserved."
-    },
+  "common": {
+    "loading": "Loading...",
+    "back": "Back",
+    "read_more": "Read More",
+    "view_all": "View All",
+    "search": "Search...",
+    "no_results": "No results found.",
+    "share": "Share",
+    "categories": "Categories",
+    "tags": "Tags",
+    "posted_on": "Posted on",
+    "by": "by",
+    "min_read": "min read"
+  },
+  "nav": {
+    "homes": "Homes",
+    "saas": "SaaS",
+    "startup": "Startup",
+    "mobile_app": "Mobile App",
+    "personal": "Personal",
+    "pages": "Pages",
+    "features": "Features",
+    "services": "Services",
+    "pricing": "Pricing",
+    "about": "About us",
+    "contact": "Contact",
+    "terms": "Terms",
+    "privacy": "Privacy Policy",
+    "landing": "Landing",
+    "lead_generation": "Lead Generation",
+    "long_form_sales": "Long-form Sales",
+    "click_through": "Click-Through",
+    "product_details": "Product Details",
+    "coming_soon": "Coming Soon",
+    "subscription": "Subscription",
+    "blog": "Blog",
+    "blog_list": "Blog List",
+    "article": "Article",
+    "article_mdx": "Article (with MDX)",
+    "category_page": "Category Page",
+    "tag_page": "Tag Page",
+    "widgets": "Widgets",
+    "download": "Download"
+  },
+  "footer": {
+    "product": "Product",
+    "features": "Features",
+    "security": "Security",
+    "team": "Team",
+    "enterprise": "Enterprise",
+    "customer_stories": "Customer Stories",
+    "pricing": "Pricing",
+    "resources": "Resources",
+    "platform": "Platform",
+    "developer_api": "Developer API",
+    "partners": "Partners",
+    "atom": "Atom",
+    "electron": "Electron",
+    "desktop": "AstroWind Desktop",
+    "support": "Support",
+    "docs": "Docs",
+    "community": "Community Forum",
+    "prof_services": "Professional Services",
+    "skills": "Skills",
+    "status": "Status",
+    "company": "Company",
+    "about": "About",
+    "blog": "Blog",
+    "careers": "Careers",
+    "press": "Press",
+    "inclusion": "Inclusion",
+    "social_impact": "Social Impact",
+    "shop": "Shop",
+    "terms": "Terms",
+    "privacy": "Privacy Policy",
+    "made_by": "Made by <a class=\"text-blue-600 underline dark:text-muted\" href=\"https://ahliweb.co.id\"> AWCMS</a> · All rights reserved."
+  },
+  "hero": {
+    "welcome": "Welcome",
+    "learn_more": "Learn More",
+    "get_started": "Get Started",
+    "contact_us": "Contact Us"
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Latest news and updates",
+    "read_more": "Read More",
+    "posted_on": "Posted on",
+    "by_author": "by",
+    "in_category": "in",
+    "related_posts": "Related Posts",
+    "no_posts": "No posts found."
+  },
+  "contact": {
+    "title": "Contact Us",
+    "subtitle": "Get in touch with us",
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "message": "Message",
+    "send": "Send Message",
+    "sending": "Sending...",
+    "success": "Message sent successfully!",
+    "error": "Failed to send message. Please try again.",
+    "address": "Address",
+    "hours": "Business Hours"
+  },
+  "portfolio": {
+    "title": "Portfolio",
+    "subtitle": "Our latest work",
+    "view_project": "View Project",
+    "all": "All"
+  },
+  "products": {
+    "title": "Products",
+    "add_to_cart": "Add to Cart",
+    "buy_now": "Buy Now",
+    "price": "Price",
+    "in_stock": "In Stock",
+    "out_of_stock": "Out of Stock"
+  },
+  "error": {
+    "404_title": "Page Not Found",
+    "404_message": "The page you're looking for doesn't exist.",
+    "500_title": "Server Error",
+    "500_message": "Something went wrong. Please try again later.",
+    "go_home": "Go Home"
+  },
+  "language": {
+    "switch": "Switch Language",
+    "english": "English",
+    "indonesian": "Indonesian",
+    "switch_to_id": "Switch to Indonesian",
+    "switch_to_en": "Switch to English"
+  },
+  "home": {
     "hero": {
-        "welcome": "Welcome",
-        "learn_more": "Learn More",
-        "get_started": "Get Started",
-        "contact_us": "Contact Us"
+      "title_html": "Boost Your Sales and Business Identity <span class='hidden xl:inline'>with</span> <span class='text-accent dark:text-white'>Website & App Solutions</span> from AWCMS",
+      "subtitle": "AWCMS is a powerful content management system providing Website, Application, and ERP solutions to strengthen your business vision and mission.",
+      "subtitle_highlight": "AWCMS: Enterprise-ready.",
+      "description": "Suitable for Startups, Small Business, SaaS websites, Professional Portfolios, Marketing websites, Landing Pages & Blogs."
     },
-    "blog": {
-        "title": "Blog",
-        "subtitle": "Latest news and updates",
-        "read_more": "Read More",
-        "posted_on": "Posted on",
-        "by_author": "by",
-        "in_category": "in",
-        "related_posts": "Related Posts",
-        "no_posts": "No posts found."
+    "note": {
+      "title": "Philosophy:",
+      "description": "Scalability, Latest Technology and Scrum Project Management"
     },
-    "contact": {
-        "title": "Contact Us",
-        "subtitle": "Get in touch with us",
+    "features": {
+      "tagline": "Features",
+      "title": "What you get with AWCMS",
+      "subtitle": "A comprehensive CMS platform with automatic billing, real-time WhatsApp notifications, and modern scalable technology.",
+      "items": {
+        "integration": {
+          "title": "Automatic Billing System",
+          "desc": "The AWCMS automatic billing system ensures everything runs according to your needs without manual intervention."
+        },
+        "components": {
+          "title": "WhatsApp Notifications",
+          "desc": "Billing notifications and support communication via WhatsApp ensures everything runs smoothly in real-time."
+        },
+        "best_practices": {
+          "title": "Scalable & Modern Technology",
+          "desc": "AWCMS always prioritizes security updates and the latest global technology features so services are always safe and reliable."
+        },
+        "speed": {
+          "title": "Scrum Project Management",
+          "desc": "Scrum-based project management ensures better control and flexibility for your projects."
+        },
+        "seo": {
+          "title": "Domain Registration",
+          "desc": "Secure your digital assets through unique Indonesian and International domain names with automatic registration."
+        },
+        "contribution": {
+          "title": "Reliable Hosting",
+          "desc": "Secure your data and systems on our trusted server services with enterprise-grade infrastructure."
+        }
+      }
+    },
+    "content": {
+      "tagline": "Inside template",
+      "title": "AstroWind's Blueprint: Fun Meets Functionality!",
+      "items": {
+        "astro": {
+          "title": "Built on top of Astro 5.0",
+          "desc": "Benefiting from the performance and developer-friendly features of this modern static site generator."
+        },
+        "tailwind": {
+          "title": "Styled using Tailwind CSS",
+          "desc": "Facilitating rapid design and consistent styling with this highly popular utility-first CSS framework."
+        },
+        "cross_browser": {
+          "title": "Cross-browser compatibility",
+          "desc": "Ensure your website looks and functions consistently across various web browsers, delivering a seamless experience to all users."
+        }
+      },
+      "modern_foundations": {
+        "title": "Building on modern foundations",
+        "desc": "Gain a competitive advantage by incorporating industry leading practices"
+      },
+      "customization": "High level of customization",
+      "customization_desc": "Tailor the template effortlessly to match your brand's identity and requirements, making your website distinct and saving you time.",
+      "layout": "Multiple layout possibilities",
+      "layout_desc": "Explore various layout options to find the structure that best presents your content, enhancing user engagement and navigation.",
+      "responsive": "Fully responsive design",
+      "responsive_desc": "Ensure your website's optimal performance on various devices and screen sizes, providing a consistent and enjoyable user experience.",
+      "media": "Integration of media",
+      "media_desc": "Seamlessly incorporate images, videos, and multimedia elements that enhance your content and engage visitors effectively.",
+      "engagement": "Enhanced user engagement",
+      "engagement_desc": "Captivate your audience with interactive elements, intuitive navigation, and visually appealing layouts, encouraging longer visits.",
+      "improvement": "Continuous improvement",
+      "improvement_desc": "Ensure your website stays aligned with the latest trends and technologies through regular updates and enhancements.",
+      "efficiency": "Time and resource efficiency",
+      "efficiency_desc": "Skip the time-consuming process of building a website from scratch and launch your online presence sooner with AstroWind.",
+      "community": "Community support",
+      "community_desc": "Join the growing AstroWind community for insights, resources, and assistance, ensuring you're never alone on your web development journey."
+    },
+    "steps": {
+      "title": "Get your dream website up and running in no time with AstroWind.",
+      "step1": "Step 1: <span class='font-medium'>Download</span>",
+      "step1_desc": "Kickstart with GitHub! Either fork the AstroWind template or simply click 'Use this template'. Your canvas awaits, ready for your digital masterpiece. In just a few clicks, you've already set the foundation.",
+      "step2": "Step 2: <span class='font-medium'>Add content</span>",
+      "step2_desc": "Pour your vision into it. Add images, text, and all that jazz to breathe life into your digital space. Remember, it's the content that tells your story, so make it captivating.",
+      "step3": "Step 3: <span class='font-medium'>Customize styles</span>",
+      "step3_desc": "Give it your personal touch. Tailor colors, fonts, and layouts until it feels just right. Your unique flair, amplified by AstroWind! Precision in design ensures a seamless user experience.",
+      "ready": "Ready!"
+    },
+    "services": {
+      "title": "Our Services",
+      "subtitle": "The Best Services we provide",
+      "tagline": "Services"
+    },
+    "projects": {
+      "title": "Our Projects",
+      "subtitle": "Check out our latest work",
+      "tagline": "Portfolio"
+    },
+    "team": {
+      "title": "Our Team",
+      "subtitle": "Meet the experts",
+      "tagline": "Team"
+    },
+    "testimonials": {
+      "title": "Testimonials",
+      "subtitle": "What our clients say",
+      "tagline": "Feedback"
+    },
+    "partners": {
+      "title": "Our Partners"
+    },
+    "cta": {
+      "get_template": "Get template",
+      "title": "Astro + <br class='block sm:hidden' /><span class='sm:whitespace-nowrap'>Tailwind CSS</span>",
+      "subtitle": "Be very surprised by these huge fake numbers you are seeing on this page. <br class='hidden md:inline' />Don't waste more time! :P"
+    }
+  },
+  "about": {
+    "title": "About us",
+    "hero": {
+      "tagline": "About us",
+      "title_html": "Elevate your online presence with our <br /> <span class='text-accent dark:text-white'> Beautiful Website Templates</span>",
+      "subtitle": "Donec efficitur, ipsum quis congue luctus, mauris magna convallis mauris, eu auctor nisi lectus non augue. Donec quis lorem non massa vulputate efficitur ac at turpis. Sed tincidunt ex a nunc convallis, et lobortis nisi tempus. Suspendisse vitae nisi eget tortor luctus maximus sed non lectus."
+    },
+    "stats": {
+      "title": "Statistics about us",
+      "offices": "Offices",
+      "employees": "Employees",
+      "templates": "Templates",
+      "awards": "Awards"
+    },
+    "features_templates": {
+      "title": "Our templates",
+      "subtitle": "Etiam scelerisque, enim eget vestibulum luctus, nibh mauris blandit nulla, nec vestibulum risus justo ut enim. Praesent lacinia diam et ante imperdiet euismod.",
+      "items": {
+        "educational": {
+          "title": "Educational",
+          "desc": "Morbi faucibus luctus quam, sit amet aliquet felis tempor id. Cras augue massa, ornare quis dignissim a, molestie vel nulla."
+        },
+        "interior": {
+          "title": "Interior Design",
+          "desc": "Vivamus porttitor, tortor convallis aliquam pretium, turpis enim consectetur elit, vitae egestas purus erat ac nunc nulla."
+        },
+        "photography": {
+          "title": "Photography",
+          "desc": "Duis sed lectus in nisl vehicula porttitor eget quis odio. Aliquam erat volutpat. Nulla eleifend nulla id sem fermentum."
+        }
+      }
+    },
+    "features_categories": {
+      "items": {
+        "ecommerce": {
+          "title": "E-commerce",
+          "desc": "Rutrum non odio at vehicula. Proin ipsum justo, dignissim in vehicula sit amet, dignissim id quam. Sed ac tincidunt sapien."
+        },
+        "blog": {
+          "title": "Blog",
+          "desc": "Nullam efficitur volutpat sem sed fringilla. Suspendisse et enim eu orci volutpat laoreet ac vitae libero."
+        },
+        "business": {
+          "title": "Business",
+          "desc": "Morbi et elit finibus, facilisis justo ut, pharetra ipsum. Donec efficitur, ipsum quis congue luctus, mauris magna."
+        },
+        "branding": {
+          "title": "Branding",
+          "desc": "Suspendisse vitae nisi eget tortor luctus maximus sed non lectus. Cras malesuada pretium placerat. Nullam venenatis dolor a ante rhoncus."
+        },
+        "medical": {
+          "title": "Medical",
+          "desc": "Vestibulum malesuada lacus id nibh posuere feugiat. Nam volutpat nulla a felis ultrices, id suscipit mauris congue. In hac habitasse platea dictumst."
+        },
+        "fashion": {
+          "title": "Fashion Design",
+          "desc": "Maecenas eu tellus eget est scelerisque lacinia et a diam. Aliquam velit lorem, vehicula id fermentum et, rhoncus et purus."
+        }
+      }
+    },
+    "values": {
+      "title": "Our values",
+      "subtitle": "Maecenas eu tellus eget est scelerisque lacinia et a diam. Aliquam velit lorem, vehicula id fermentum et, rhoncus et purus. Nulla facilisi. Vestibulum malesuada lacus.",
+      "items": {
+        "customer_centric": {
+          "title": "Customer-centric approach",
+          "desc": "Donec id nibh neque. Quisque et fermentum tortor. Fusce vitae dolor a mauris dignissim commodo. Ut eleifend luctus condimentum."
+        },
+        "improvement": {
+          "title": "Constant Improvement",
+          "desc": "Phasellus laoreet fermentum venenatis. Vivamus dapibus pulvinar arcu eget mattis. Fusce eget mauris leo."
+        },
+        "ethical": {
+          "title": "Ethical Practices",
+          "desc": "Vestibulum imperdiet libero et lectus molestie, et maximus augue porta. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus."
+        }
+      }
+    },
+    "achievements": {
+      "title": "Achievements",
+      "subtitle": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi sagittis, quam nec venenatis lobortis, mi risus tempus nulla, sed porttitor est nibh at nulla.",
+      "cta": "See more",
+      "items": {
+        "global": {
+          "title": "Global reach",
+          "desc": "Nam malesuada urna in enim imperdiet tincidunt. Phasellus non tincidunt nisi, at elementum mi."
+        },
+        "feedback": {
+          "title": "Positive customer feedback and reviews",
+          "desc": "Cras semper nulla leo, eget laoreet erat cursus sed. Praesent faucibus massa in purus iaculis dictum."
+        },
+        "awards": {
+          "title": "Awards and recognition as industry experts",
+          "desc": "Phasellus lacinia cursus velit, eu malesuada magna pretium eu. Etiam aliquet tellus purus, blandit lobortis ex rhoncus vitae."
+        }
+      }
+    },
+    "locations": {
+      "title": "Our locations",
+      "tagline": "Find us",
+      "items": {
+        "us": {
+          "title": "EE.UU",
+          "description": "1234 Lorem Ipsum St, 12345, Miami"
+        },
+        "spain": {
+          "title": "Spain",
+          "description": "5678 Lorem Ipsum St, 56789, Madrid"
+        },
+        "australia": {
+          "title": "Australia",
+          "description": "9012 Lorem Ipsum St, 90123, Sydney"
+        },
+        "brazil": {
+          "title": "Brazil",
+          "description": "3456 Lorem Ipsum St, 34567, São Paulo"
+        }
+      }
+    },
+    "support": {
+      "title": "Technical Support",
+      "tagline": "Contact us",
+      "items": {
+        "chat": {
+          "title": "Chat with us",
+          "desc": "Integer luctus laoreet libero, auctor varius purus rutrum sit amet. Ut nec molestie nisi, quis eleifend mi."
+        },
+        "call": {
+          "title": "Call us",
+          "desc": "Mauris faucibus finibus orci, in posuere elit viverra non. In hac habitasse platea dictumst. Cras lobortis metus a hendrerit congue."
+        }
+      }
+    }
+  },
+  "services_page": {
+    "hero": {
+      "tagline": "Services",
+      "title": "Elevate your projects with our stunning templates",
+      "subtitle": "Explore our meticulously crafted templates tailored to various industries and purposes. From captivating presentations to functional website designs, we offer the tools you need to succeed.",
+      "cta": "Start exploring"
+    },
+    "features": {
+      "title": "Explore our diverse templates",
+      "subtitle": "Discover our selection below to streamline and elevate your projects.",
+      "items": {
+        "educational": {
+          "title": "Educational",
+          "description": "By harmonizing instructional design and visual appeal, templates streamline content creation for varied materials, expediting development and cultivating engaging educational spaces."
+        },
+        "interior": {
+          "title": "Interior Design",
+          "description": "Crafting functional, visually appealing spaces for residential and commercial use. Templates emphasize layout, colors, and furniture setups, offering a versatile toolkit for your design vision."
+        },
+        "photography": {
+          "title": "Photography",
+          "description": "Empowering photographers, our templates facilitate captivating storytelling. With a keen focus on layout, galleries, and typography, they cater to both professionals and enthusiasts."
+        },
+        "ecommerce": {
+          "title": "E-commerce",
+          "description": "Developing engaging online stores, our E-commerce templates ensure a dynamic presence to effectively showcase products. Ideal for startups or revamps."
+        },
+        "blog": {
+          "title": "Blog",
+          "description": "With attention to typography, these templates empower effective content presentation for writers at any stage, ensuring visually engaging and user-friendly blogs."
+        },
+        "business": {
+          "title": "Business",
+          "description": "Providing polished options for effective visual communication, these templates empower both startups and established companies for a professional brand presence."
+        },
+        "branding": {
+          "title": "Branding",
+          "description": "Offering pre-designed elements for a consistent brand identity, including logos and marketing materials. Ideal for new ventures or revamps."
+        },
+        "medical": {
+          "title": "Medical",
+          "description": "From presentations to patient forms, these tools enhance communication effectiveness for healthcare professionals. Ideal for medical practices and research pursuits."
+        },
+        "fashion": {
+          "title": "Fashion Design",
+          "description": "With attention to detail, customization, and contemporary design, they empower designers to showcase ideas cohesively. Ideal for all levels of designers."
+        }
+      }
+    },
+    "main_features": {
+      "title": "Main Features",
+      "items": {
+        "quality": {
+          "title": "High-Quality Designs",
+          "desc": "Our templates feature top-tier designs that ensure a professional and polished appearance for your projects."
+        },
+        "customization": {
+          "title": "Customization Tools",
+          "desc": "Tailor each template to your unique needs with user-friendly customization tools that let you personalize colors, fonts, and content."
+        },
+        "elements": {
+          "title": "Pre-Designed Elements",
+          "desc": "Save time and effort with our ready-to-use elements, including graphics, icons, and layouts that enhance the visual appeal of your creations."
+        },
+        "preview": {
+          "title": "Preview and Mockup Views",
+          "desc": "Visualize the final outcome before making any changes using our preview and mockup views, ensuring your projects meet your expectations."
+        }
+      }
+    },
+    "benefits": {
+      "title": "Benefits",
+      "items": {
+        "time": "Time Savings",
+        "time_desc": "Streamline your workflow, enabling you to create stunning materials efficiently and allocate more time to your core tasks.",
+        "appearance": "Professional Appearance",
+        "appearance_desc": "Elevate your projects with the polished and sophisticated look that our templates provide, making a lasting impression on your audience.",
+        "cost": "Cost-Efficiency",
+        "cost_desc": "Benefit from cost savings by avoiding the need for custom design work, as our templates offer professional-grade designs at a fraction of the cost.",
+        "download": "Instant Download",
+        "download_desc": "Enjoy immediate access to your chosen templates upon purchase, enabling you to begin working on your projects without delay."
+      }
+    },
+    "testimonials": {
+      "title": "Words from real customers",
+      "cta": "More testimonials...",
+      "items": {
+        "emily": {
+          "testimonial": "The designs are not only visually appealing but also highly professional. The templates have saved me a significant amount of time while helping me make a lasting impression on my clients.",
+          "name": "Emily Kennedy",
+          "job": "Front-end developer"
+        },
+        "sarah": {
+          "testimonial": "It beautifully showcases my work, with its clean and elegant design that lets my photographs shine. Customization was a breeze, even for a non-tech person like me. The result is a professional and immersive portfolio that's garnered numerous compliments.",
+          "name": "Sarah Hansen",
+          "job": "Photographer"
+        },
+        "mark": {
+          "testimonial": "I discovered these templates and I'm impressed by their variety and quality. They've helped me establish a consistent brand image across my marketing and social platforms, elevating my business's overall appearance.",
+          "name": "Mark Wilkinson",
+          "job": "Small business owner"
+        }
+      }
+    },
+    "cta": {
+      "title": "Dive into our template collection",
+      "subtitle": "Whether you're in business, design, or education, our templates are here to elevate your projects.",
+      "action": "Start exploring"
+    }
+  },
+  "announcement": {
+    "badge": "NEW",
+    "content": "AWCMS is now available on GitHub! »",
+    "tooltip": "Star us on GitHub to support AWCMS development."
+  },
+  "contact_page": {
+    "hero": {
+      "title": "Let's Connect!",
+      "tagline": "Contact"
+    },
+    "form": {
+      "title": "Drop us a message today!",
+      "subtitle": "For quicker answers, explore our FAQs section. You may find the solution you're looking  for right there! If not, our support team is delighted to help you.",
+      "inputs": {
         "name": "Name",
         "email": "Email",
-        "phone": "Phone",
-        "message": "Message",
-        "send": "Send Message",
-        "sending": "Sending...",
-        "success": "Message sent successfully!",
-        "error": "Failed to send message. Please try again.",
-        "address": "Address",
-        "hours": "Business Hours"
+        "message": "Message"
+      },
+      "disclaimer": "By submitting this contact form, you acknowledge and agree to the collection of your personal information.",
+      "description": "Our support team typically responds within 24 business hours."
     },
-    "portfolio": {
-        "title": "Portfolio",
-        "subtitle": "Our latest work",
-        "view_project": "View Project",
-        "all": "All"
-    },
-    "products": {
-        "title": "Products",
-        "add_to_cart": "Add to Cart",
-        "buy_now": "Buy Now",
-        "price": "Price",
-        "in_stock": "In Stock",
-        "out_of_stock": "Out of Stock"
-    },
-    "error": {
-        "404_title": "Page Not Found",
-        "404_message": "The page you're looking for doesn't exist.",
-        "500_title": "Server Error",
-        "500_message": "Something went wrong. Please try again later.",
-        "go_home": "Go Home"
-    },
-    "language": {
-        "switch": "Switch Language",
-        "english": "English",
-        "indonesian": "Indonesian",
-        "switch_to_id": "Switch to Indonesian",
-        "switch_to_en": "Switch to English"
-    },
-    "home": {
-        "hero": {
-            "title_html": "Boost Your Sales and Business Identity <span class='hidden xl:inline'>with</span> <span class='text-accent dark:text-white'>Website & App Solutions</span> from AWCMS",
-            "subtitle": "AWCMS is a powerful content management system providing Website, Application, and ERP solutions to strengthen your business vision and mission.",
-            "subtitle_highlight": "AWCMS: Enterprise-ready.",
-            "description": "Suitable for Startups, Small Business, SaaS websites, Professional Portfolios, Marketing websites, Landing Pages & Blogs."
-        },
-        "note": {
-            "title": "Philosophy:",
-            "description": "Scalability, Latest Technology and Scrum Project Management"
-        },
-        "features": {
-            "tagline": "Features",
-            "title": "What you get with AWCMS",
-            "subtitle": "A comprehensive CMS platform with automatic billing, real-time WhatsApp notifications, and modern scalable technology.",
-            "items": {
-                "integration": {
-                    "title": "Automatic Billing System",
-                    "desc": "The AWCMS automatic billing system ensures everything runs according to your needs without manual intervention."
-                },
-                "components": {
-                    "title": "WhatsApp Notifications",
-                    "desc": "Billing notifications and support communication via WhatsApp ensures everything runs smoothly in real-time."
-                },
-                "best_practices": {
-                    "title": "Scalable & Modern Technology",
-                    "desc": "AWCMS always prioritizes security updates and the latest global technology features so services are always safe and reliable."
-                },
-                "speed": {
-                    "title": "Scrum Project Management",
-                    "desc": "Scrum-based project management ensures better control and flexibility for your projects."
-                },
-                "seo": {
-                    "title": "Domain Registration",
-                    "desc": "Secure your digital assets through unique Indonesian and International domain names with automatic registration."
-                },
-                "contribution": {
-                    "title": "Reliable Hosting",
-                    "desc": "Secure your data and systems on our trusted server services with enterprise-grade infrastructure."
-                }
-            }
-        },
-        "content": {
-            "tagline": "Inside template",
-            "title": "AstroWind's Blueprint: Fun Meets Functionality!",
-            "items": {
-                "astro": {
-                    "title": "Built on top of Astro 5.0",
-                    "desc": "Benefiting from the performance and developer-friendly features of this modern static site generator."
-                },
-                "tailwind": {
-                    "title": "Styled using Tailwind CSS",
-                    "desc": "Facilitating rapid design and consistent styling with this highly popular utility-first CSS framework."
-                },
-                "cross_browser": {
-                    "title": "Cross-browser compatibility",
-                    "desc": "Ensure your website looks and functions consistently across various web browsers, delivering a seamless experience to all users."
-                }
-            },
-            "modern_foundations": {
-                "title": "Building on modern foundations",
-                "desc": "Gain a competitive advantage by incorporating industry leading practices"
-            },
-            "customization": "High level of customization",
-            "customization_desc": "Tailor the template effortlessly to match your brand's identity and requirements, making your website distinct and saving you time.",
-            "layout": "Multiple layout possibilities",
-            "layout_desc": "Explore various layout options to find the structure that best presents your content, enhancing user engagement and navigation.",
-            "responsive": "Fully responsive design",
-            "responsive_desc": "Ensure your website's optimal performance on various devices and screen sizes, providing a consistent and enjoyable user experience.",
-            "media": "Integration of media",
-            "media_desc": "Seamlessly incorporate images, videos, and multimedia elements that enhance your content and engage visitors effectively.",
-            "engagement": "Enhanced user engagement",
-            "engagement_desc": "Captivate your audience with interactive elements, intuitive navigation, and visually appealing layouts, encouraging longer visits.",
-            "improvement": "Continuous improvement",
-            "improvement_desc": "Ensure your website stays aligned with the latest trends and technologies through regular updates and enhancements.",
-            "efficiency": "Time and resource efficiency",
-            "efficiency_desc": "Skip the time-consuming process of building a website from scratch and launch your online presence sooner with AstroWind.",
-            "community": "Community support",
-            "community_desc": "Join the growing AstroWind community for insights, resources, and assistance, ensuring you're never alone on your web development journey."
-        },
-        "steps": {
-            "title": "Get your dream website up and running in no time with AstroWind.",
-            "step1": "Step 1: <span class='font-medium'>Download</span>",
-            "step1_desc": "Kickstart with GitHub! Either fork the AstroWind template or simply click 'Use this template'. Your canvas awaits, ready for your digital masterpiece. In just a few clicks, you've already set the foundation.",
-            "step2": "Step 2: <span class='font-medium'>Add content</span>",
-            "step2_desc": "Pour your vision into it. Add images, text, and all that jazz to breathe life into your digital space. Remember, it's the content that tells your story, so make it captivating.",
-            "step3": "Step 3: <span class='font-medium'>Customize styles</span>",
-            "step3_desc": "Give it your personal touch. Tailor colors, fonts, and layouts until it feels just right. Your unique flair, amplified by AstroWind! Precision in design ensures a seamless user experience.",
-            "ready": "Ready!"
-        },
-        "services": {
-            "title": "Our Services",
-            "subtitle": "The Best Services we provide",
-            "tagline": "Services"
-        },
-        "projects": {
-            "title": "Our Projects",
-            "subtitle": "Check out our latest work",
-            "tagline": "Portfolio"
-        },
-        "team": {
-            "title": "Our Team",
-            "subtitle": "Meet the experts",
-            "tagline": "Team"
-        },
-        "testimonials": {
-            "title": "Testimonials",
-            "subtitle": "What our clients say",
-            "tagline": "Feedback"
-        },
-        "partners": {
-            "title": "Our Partners"
-        },
-        "cta": {
-            "get_template": "Get template",
-            "title": "Astro + <br class='block sm:hidden' /><span class='sm:whitespace-nowrap'>Tailwind CSS</span>",
-            "subtitle": "Be very surprised by these huge fake numbers you are seeing on this page. <br class='hidden md:inline' />Don't waste more time! :P"
-        }
-    },
-    "about": {
-        "title": "About us",
-        "hero": {
-            "tagline": "About us",
-            "title_html": "Elevate your online presence with our <br /> <span class='text-accent dark:text-white'> Beautiful Website Templates</span>",
-            "subtitle": "Donec efficitur, ipsum quis congue luctus, mauris magna convallis mauris, eu auctor nisi lectus non augue. Donec quis lorem non massa vulputate efficitur ac at turpis. Sed tincidunt ex a nunc convallis, et lobortis nisi tempus. Suspendisse vitae nisi eget tortor luctus maximus sed non lectus."
-        },
-        "stats": {
-            "title": "Statistics about us",
-            "offices": "Offices",
-            "employees": "Employees",
-            "templates": "Templates",
-            "awards": "Awards"
-        },
-        "features_templates": {
-            "title": "Our templates",
-            "subtitle": "Etiam scelerisque, enim eget vestibulum luctus, nibh mauris blandit nulla, nec vestibulum risus justo ut enim. Praesent lacinia diam et ante imperdiet euismod.",
-            "items": {
-                "educational": {
-                    "title": "Educational",
-                    "desc": "Morbi faucibus luctus quam, sit amet aliquet felis tempor id. Cras augue massa, ornare quis dignissim a, molestie vel nulla."
-                },
-                "interior": {
-                    "title": "Interior Design",
-                    "desc": "Vivamus porttitor, tortor convallis aliquam pretium, turpis enim consectetur elit, vitae egestas purus erat ac nunc nulla."
-                },
-                "photography": {
-                    "title": "Photography",
-                    "desc": "Duis sed lectus in nisl vehicula porttitor eget quis odio. Aliquam erat volutpat. Nulla eleifend nulla id sem fermentum."
-                }
-            }
-        },
-        "features_categories": {
-            "items": {
-                "ecommerce": {
-                    "title": "E-commerce",
-                    "desc": "Rutrum non odio at vehicula. Proin ipsum justo, dignissim in vehicula sit amet, dignissim id quam. Sed ac tincidunt sapien."
-                },
-                "blog": {
-                    "title": "Blog",
-                    "desc": "Nullam efficitur volutpat sem sed fringilla. Suspendisse et enim eu orci volutpat laoreet ac vitae libero."
-                },
-                "business": {
-                    "title": "Business",
-                    "desc": "Morbi et elit finibus, facilisis justo ut, pharetra ipsum. Donec efficitur, ipsum quis congue luctus, mauris magna."
-                },
-                "branding": {
-                    "title": "Branding",
-                    "desc": "Suspendisse vitae nisi eget tortor luctus maximus sed non lectus. Cras malesuada pretium placerat. Nullam venenatis dolor a ante rhoncus."
-                },
-                "medical": {
-                    "title": "Medical",
-                    "desc": "Vestibulum malesuada lacus id nibh posuere feugiat. Nam volutpat nulla a felis ultrices, id suscipit mauris congue. In hac habitasse platea dictumst."
-                },
-                "fashion": {
-                    "title": "Fashion Design",
-                    "desc": "Maecenas eu tellus eget est scelerisque lacinia et a diam. Aliquam velit lorem, vehicula id fermentum et, rhoncus et purus."
-                }
-            }
-        },
-        "values": {
-            "title": "Our values",
-            "subtitle": "Maecenas eu tellus eget est scelerisque lacinia et a diam. Aliquam velit lorem, vehicula id fermentum et, rhoncus et purus. Nulla facilisi. Vestibulum malesuada lacus.",
-            "items": {
-                "customer_centric": {
-                    "title": "Customer-centric approach",
-                    "desc": "Donec id nibh neque. Quisque et fermentum tortor. Fusce vitae dolor a mauris dignissim commodo. Ut eleifend luctus condimentum."
-                },
-                "improvement": {
-                    "title": "Constant Improvement",
-                    "desc": "Phasellus laoreet fermentum venenatis. Vivamus dapibus pulvinar arcu eget mattis. Fusce eget mauris leo."
-                },
-                "ethical": {
-                    "title": "Ethical Practices",
-                    "desc": "Vestibulum imperdiet libero et lectus molestie, et maximus augue porta. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus."
-                }
-            }
-        },
-        "achievements": {
-            "title": "Achievements",
-            "subtitle": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi sagittis, quam nec venenatis lobortis, mi risus tempus nulla, sed porttitor est nibh at nulla.",
-            "cta": "See more",
-            "items": {
-                "global": {
-                    "title": "Global reach",
-                    "desc": "Nam malesuada urna in enim imperdiet tincidunt. Phasellus non tincidunt nisi, at elementum mi."
-                },
-                "feedback": {
-                    "title": "Positive customer feedback and reviews",
-                    "desc": "Cras semper nulla leo, eget laoreet erat cursus sed. Praesent faucibus massa in purus iaculis dictum."
-                },
-                "awards": {
-                    "title": "Awards and recognition as industry experts",
-                    "desc": "Phasellus lacinia cursus velit, eu malesuada magna pretium eu. Etiam aliquet tellus purus, blandit lobortis ex rhoncus vitae."
-                }
-            }
-        },
-        "locations": {
-            "title": "Our locations",
-            "tagline": "Find us"
-        },
-        "support": {
-            "title": "Technical Support",
-            "tagline": "Contact us",
-            "items": {
-                "chat": {
-                    "title": "Chat with us",
-                    "desc": "Integer luctus laoreet libero, auctor varius purus rutrum sit amet. Ut nec molestie nisi, quis eleifend mi."
-                },
-                "call": {
-                    "title": "Call us",
-                    "desc": "Mauris faucibus finibus orci, in posuere elit viverra non. In hac habitasse platea dictumst. Cras lobortis metus a hendrerit congue."
-                }
-            }
-        }
-    },
-    "services_page": {
-        "hero": {
-            "tagline": "Services",
-            "title": "Elevate your projects with our stunning templates",
-            "subtitle": "Explore our meticulously crafted templates tailored to various industries and purposes. From captivating presentations to functional website designs, we offer the tools you need to succeed.",
-            "cta": "Start exploring"
-        },
-        "features": {
-            "title": "Explore our diverse templates",
-            "subtitle": "Discover our selection below to streamline and elevate your projects.",
-            "items": {
-                "educational": "By harmonizing instructional design and visual appeal, templates streamline content creation for varied materials, expediting development and cultivating engaging educational spaces.",
-                "interior": "Crafting functional, visually appealing spaces for residential and commercial use. Templates emphasize layout, colors, and furniture setups, offering a versatile toolkit for your design vision.",
-                "photography": "Empowering photographers, our templates facilitate captivating storytelling. With a keen focus on layout, galleries, and typography, they cater to both professionals and enthusiasts.",
-                "ecommerce": "Developing engaging online stores, our E-commerce templates ensure a dynamic presence to effectively showcase products. Ideal for startups or revamps.",
-                "blog": "With attention to typography, these templates empower effective content presentation for writers at any stage, ensuring visually engaging and user-friendly blogs.",
-                "business": "Providing polished options for effective visual communication, these templates empower both startups and established companies for a professional brand presence.",
-                "branding": "Offering pre-designed elements for a consistent brand identity, including logos and marketing materials. Ideal for new ventures or revamps.",
-                "medical": "From presentations to patient forms, these tools enhance communication effectiveness for healthcare professionals. Ideal for medical practices and research pursuits.",
-                "fashion": "With attention to detail, customization, and contemporary design, they empower designers to showcase ideas cohesively. Ideal for all levels of designers."
-            }
-        },
-        "main_features": {
-            "title": "Main Features",
-            "items": {
-                "quality": {
-                    "title": "High-Quality Designs",
-                    "desc": "Our templates feature top-tier designs that ensure a professional and polished appearance for your projects."
-                },
-                "customization": {
-                    "title": "Customization Tools",
-                    "desc": "Tailor each template to your unique needs with user-friendly customization tools that let you personalize colors, fonts, and content."
-                },
-                "elements": {
-                    "title": "Pre-Designed Elements",
-                    "desc": "Save time and effort with our ready-to-use elements, including graphics, icons, and layouts that enhance the visual appeal of your creations."
-                },
-                "preview": {
-                    "title": "Preview and Mockup Views",
-                    "desc": "Visualize the final outcome before making any changes using our preview and mockup views, ensuring your projects meet your expectations."
-                }
-            }
-        },
-        "benefits": {
-            "title": "Benefits",
-            "items": {
-                "time": "Time Savings",
-                "time_desc": "Streamline your workflow, enabling you to create stunning materials efficiently and allocate more time to your core tasks.",
-                "appearance": "Professional Appearance",
-                "appearance_desc": "Elevate your projects with the polished and sophisticated look that our templates provide, making a lasting impression on your audience.",
-                "cost": "Cost-Efficiency",
-                "cost_desc": "Benefit from cost savings by avoiding the need for custom design work, as our templates offer professional-grade designs at a fraction of the cost.",
-                "download": "Instant Download",
-                "download_desc": "Enjoy immediate access to your chosen templates upon purchase, enabling you to begin working on your projects without delay."
-            }
-        },
-        "testimonials": {
-            "title": "Words from real customers",
-            "cta": "More testimonials..."
-        },
-        "cta": {
-            "title": "Dive into our template collection",
-            "subtitle": "Whether you're in business, design, or education, our templates are here to elevate your projects.",
-            "action": "Start exploring"
-        }
-    },
-    "announcement": {
-        "badge": "NEW",
-        "content": "AWCMS is now available on GitHub! »",
-        "tooltip": "Star us on GitHub to support AWCMS development."
-    },
-    "contact_page": {
-        "hero": {
-            "title": "Let's Connect!",
-            "tagline": "Contact"
-        },
-        "form": {
-            "title": "Drop us a message today!",
-            "subtitle": "For quicker answers, explore our FAQs section. You may find the solution you're looking  for right there! If not, our support team is delighted to help you.",
-            "inputs": {
-                "name": "Name",
-                "email": "Email",
-                "message": "Message"
-            },
-            "disclaimer": "By submitting this contact form, you acknowledge and agree to the collection of your personal information.",
-            "description": "Our support team typically responds within 24 business hours."
-        },
-        "features": {
-            "title": "We are here to help!",
-            "items": {
-                "general": {
-                    "title": "General support",
-                    "desc": "Chat with us for inquiries related to account management, website navigation, payment issues, accessing purchased templates or general questions about the website's functionality."
-                },
-                "sales": {
-                    "title": "Contact sales",
-                    "desc": "Chat with us for questions about purchases, customization options, licensing for commercial use, inquiries about specific template, etc."
-                },
-                "technical": {
-                    "title": "Technical support",
-                    "desc": "Chat with us when facing issues like template installation, problems editing difficulties, compatibility issues with software or download errors, or other technical challenges related to using the templates."
-                },
-                "phone": {
-                    "title": "Phone"
-                },
-                "email": {
-                    "title": "Email"
-                },
-                "location": {
-                    "title": "Location"
-                }
-            }
-        }
-    },
-    "pricing_page": {
-        "hero": {
-            "title": "Stellar Pricing for Every Journey",
-            "tagline": "Pricing",
-            "subtitle": "Choose the perfect plan that aligns with your cosmic goals."
-        },
-        "prices": {
-            "title": "Our prices",
-            "subtitle": "Only pay for what you need",
-            "per_month": "per month",
-            "get_started": "Get started",
-            "basic": {
-                "title": "basic",
-                "subtitle": "Optimal choice for personal use",
-                "items": [
-                    "Etiam in libero, et volutpat",
-                    "Aenean ac nunc dolor tristique",
-                    "Cras scelerisque accumsan lib",
-                    "In hac habitasse"
-                ]
-            },
-            "standard": {
-                "title": "standard",
-                "subtitle": "Optimal choice for small teams",
-                "ribbon": "popular",
-                "items": [
-                    "Proin vel laoreet",
-                    "Ut efficitur habitasse egestas",
-                    "Volutpat hac curabitur",
-                    "Pellentesque blandit ut nibh",
-                    "Donec fringilla sem"
-                ]
-            },
-            "premium": {
-                "title": "premium",
-                "subtitle": "Optimal choice for companies",
-                "items": [
-                    "Curabitur suscipit risus",
-                    "Aliquam habitasse malesuada",
-                    "Suspendisse sit amet blandit",
-                    "Suspendisse auctor blandit dui"
-                ]
-            }
-        },
-        "features": {
-            "title": "Price-related features",
-            "subtitle": "Discover the advantages of choosing our plans",
-            "items": {
-                "tiered": {
-                    "title": "Tiered Pricing Plans",
-                    "desc": "Choose from a range of pricing plans designed to accommodate different budgets and requirements."
-                },
-                "transparent": {
-                    "title": "Transparent Pricing",
-                    "desc": "Clearly displayed pricing details for each plan, with no hidden costs or unexpected charges."
-                },
-                "secure": {
-                    "title": "Secure Payment Methods",
-                    "desc": "Secure payment gateways to protect your financial information during transactions."
-                },
-                "access": {
-                    "title": "Instant Access",
-                    "desc": "Immediate access to your chosen plan's features and templates upon subscription."
-                },
-                "upgrade": {
-                    "title": "Upgrade Value",
-                    "desc": "Upgrade to higher-tier plans to unlock more features and benefits for an enhanced experience."
-                },
-                "support": {
-                    "title": "24H support",
-                    "desc": "Questions answered via live chat, email or phone, every calendar day."
-                }
-            }
-        },
-        "steps": {
-            "title": "A guided journey from plans to creativity",
-            "tagline": "simplified process",
-            "items": {
-                "explore": "Explore plans",
-                "select": "Select a plan",
-                "signup": "Sign Up / Log In",
-                "review": "Review order",
-                "payment": "Enter payment details",
-                "confirm": "Confirmation",
-                "download": "Download and start using the template(s)"
-            }
-        },
-        "faqs": {
-            "title": "Pricing FAQs",
-            "subtitle": "Choosing the right plan is important, and we're here to answer your questions. If you have queries about our pricing options, you're in the right place.",
-            "items": {
-                "support": {
-                    "title": "Do the plans come with customer support?",
-                    "desc": "Absolutely, all plans include access to our dedicated customer support to assist you with any queries or concerns."
-                },
-                "trial": {
-                    "title": "Is there a trial period for the different plans?",
-                    "desc": "Unfortunately, we don't offer trial periods for the plans. However, you can check out our demo section to preview the quality of our templates."
-                },
-                "switch": {
-                    "title": "Can I switch between plans?",
-                    "desc": "Certainly! You can easily upgrade or downgrade your plan, at any time, to find the one that best suits your evolving requirements."
-                },
-                "payment": {
-                    "title": "What payment methods do you accept?",
-                    "desc": "We accept major credit cards and online payment methods to ensure a convenient and secure transaction process."
-                },
-                "fees": {
-                    "title": "Are there any hidden fees beyond the displayed cost?",
-                    "desc": "No, the subscription cost covers all the features and templates listed under each plan. There are no hidden fees or extra charges."
-                }
-            }
-        },
-        "cta": {
-            "title": "Ready to boost your projects?",
-            "subtitle": "Join our community of satisfied customers who have transformed their work with our templates.",
-            "action": "Get started now"
-        }
-    },
-    "blog_page": {
-        "list": {
-            "title": "The Blog",
-            "subtitle": "A statically generated blog example with news, tutorials, resources and other interesting content related to AstroWind",
-            "metadata_title": "Blog"
-        },
-        "category": {
-            "title_prefix": "Category"
-        },
-        "tag": {
-            "headline_prefix": "Tag: ",
-            "metadata_title_prefix": "Posts by tag '"
-        },
-        "shared": {
-            "page_prefix": " — Page "
-        }
-    },
-    "news_page": {
-        "metadata": {
-            "title": "News & Articles",
-            "description": "Latest news, updates, and articles"
-        },
-        "header": {
-            "title": "News & Articles",
-            "subtitle": "Stay updated with our latest news, announcements, and insights."
-        },
-        "filter": {
-            "category": "Category:",
-            "tag": "Tag:"
-        },
-        "list": {
-            "no_articles": "No articles found",
-            "check_back": "Check back later for new content.",
-            "views": "views"
-        },
-        "pagination": {
-            "previous": "Previous",
-            "next": "Next",
-            "page": "Page",
-            "of": "of"
-        },
-        "article": {
-            "views": "views",
-            "back_to_news": "Back to News",
-            "visual_content_placeholder": "Visual content rendering coming soon..."
-        }
-    },
-    "blog_post": {
-        "min_read": "min read",
-        "related_posts": "Related Posts",
-        "view_all": "View All Posts",
-        "back_to_blog": "Back to Blog"
-    },
-    "error_page": {
-        "404": {
-            "title": "Error 404",
-            "message": "Sorry, we couldn't find this page.",
-            "description": "But dont worry, you can find plenty of other things on our homepage.",
-            "back_to_home": "Back to homepage"
-        }
-    },
-    "homes": {
-        "mobile_app": {
-            "metadata": {
-                "title": "Mobile App Homepage"
-            },
-            "header": {
-                "links": {
-                    "services": "Services",
-                    "features": "Features",
-                    "about": "About"
-                },
-                "actions": {
-                    "download": "Download"
-                }
-            },
-            "hero": {
-                "tagline": "Mobile App Web Demo",
-                "title_html": "<span class=\"text-accent dark:text-white\">AstroWind App</span>: <br /> professional websites <span class=\"hidden xl:inline\">made easy</span>",
-                "subtitle": "Unlock boundless creativity at your fingertips: your gateway to innovative design.",
-                "subtitle_continued": "Download now and embark on a journey to elevate your projects like never before.",
-                "cta": {
-                    "download_app": "Download App"
-                }
-            },
-            "features": {
-                "title": "How to use our app?",
-                "subtitle": "Tired of spending hours crafting documents from scratch? Our app offers an innovative solution. With a wide array of professionally designed templates, you can now create stunning documents in minutes. Explore our templates now and experience the difference.",
-                "tagline": "Step-by-step guide",
-                "items": [
-                    {
-                        "title": "Download and install the app",
-                        "description": "Begin your journey by downloading our user-friendly app from your device's app store or our official website."
-                    },
-                    {
-                        "title": "Sign up",
-                        "description": "Create your account by providing the necessary information, enabling you to access our full range of features."
-                    },
-                    {
-                        "title": "Browse templates",
-                        "description": "Explore our diverse collection of website templates, categorized for easy navigation."
-                    },
-                    {
-                        "title": "Preview and select a template",
-                        "description": "Visualize the potential of each template through previews, then choose the one that aligns best with your project's needs."
-                    }
-                ]
-            },
-            "main_features": {
-                "title": "Main Features",
-                "items": [
-                    {
-                        "title": "User-friendly interface",
-                        "description": "An intuitive and easy-to-navigate interface that allows users to quickly browse and find the templates they need."
-                    },
-                    {
-                        "title": "Personalization options",
-                        "description": "Include basic customization tools that let users modify text, colors, images, and other elements within the templates."
-                    },
-                    {
-                        "title": "Ready-to-use components",
-                        "description": "Enhance your designs with ready-to-use elements like graphics, icons, and layouts, saving you time and boosting visual appeal."
-                    },
-                    {
-                        "title": "Preview Mode",
-                        "description": "Provide a preview of each template, allowing users to see how it looks before making a purchase."
-                    }
-                ]
-            },
-            "other_features": {
-                "title": "Other features",
-                "items": [
-                    {
-                        "title": "Offline Access",
-                        "description": "Offer the option for users to download purchased templates for offline use."
-                    },
-                    {
-                        "title": "Secure Cloud Storage",
-                        "description": "Provide cloud storage for purchased templates, ensuring users can access and back up their templates from anywhere securely."
-                    },
-                    {
-                        "title": "Regular Updates",
-                        "description": "Continuously add new templates and features to keep the app fresh and engaging for users."
-                    },
-                    {
-                        "title": "Wishlist",
-                        "description": "Allow users to create a wishlist of templates they're interested in, making it easier for them to revisit and potentially purchase later."
-                    }
-                ]
-            },
-            "stats": {
-                "title": "Statistics of our app"
-            },
-            "testimonials": {
-                "title": "What our users say?",
-                "read_more": "Read more testimonials",
-                "items": [
-                    {
-                        "testimonial": "It's made exploring and downloading website templates a breeze. The interface is intuitive, and I had no trouble finding the perfect template for my project. It's an app that truly empowers users.",
-                        "name": "Cary Kennedy",
-                        "job": "Film director"
-                    },
-                    {
-                        "testimonial": "The app's seamless download process and intuitive layout have made selecting templates an enjoyable experience. Being able to preview and experiment with different designs before committing has saved me time and ensured I get the perfect look for my website.",
-                        "name": "Josh Wilkinson",
-                        "job": "Product Manager"
-                    },
-                    {
-                        "testimonial": "I was able to download and use a professional website template within minutes. The step-by-step process and user-friendly interface made it easy for me to create a website that looks as if it was designed by a pro.",
-                        "name": "Sidney Hansen",
-                        "job": "Decorator"
-                    }
-                ]
-            },
-            "faqs": {
-                "title": "Still have some doubts?",
-                "items": [
-                    {
-                        "title": "What does this app do?",
-                        "description": "This app provides a platform for you to easily browse, purchase, download, and use a wide range of website templates for your projects."
-                    },
-                    {
-                        "title": "How can this app solve my problem?",
-                        "description": "This app streamlines the process of finding and implementing professional website designs, saving you time and effort in creating visually appealing and functional websites."
-                    },
-                    {
-                        "title": "Is it available for my device?",
-                        "description": "Our app is designed for compatibility across various devices and platforms, ensuring accessibility whether you're using a smartphone, tablet, or computer."
-                    },
-                    {
-                        "title": "What makes this app different from others?",
-                        "description": "Our app stands out for its user-friendly interface, extensive template collection, and seamless integration of the purchasing and downloading process, making it highly efficient."
-                    },
-                    {
-                        "title": "Are there any costs involved?",
-                        "description": "While the app itself may be free to download, there may be costs associated with purchasing specific templates based on your preferences and project requirements."
-                    }
-                ]
-            },
-            "cta": {
-                "title": "Download our app now!",
-                "subtitle": "Access a variety of stunning templates, simplify your creative process, and elevate your online presence."
-            }
-        },
-        "personal": {
-            "metadata": {
-                "title": "Personal Homepage Demo"
-            },
-            "header": {
-                "links": {
-                    "home": "Home",
-                    "about": "About",
-                    "resume": "Resume",
-                    "porfolio": "Porfolio",
-                    "blog": "Blog",
-                    "github": "Github"
-                },
-                "actions": {
-                    "hire_me": "Hire me"
-                }
-            },
-            "hero": {
-                "title": "Sarah Johnson",
-                "tagline": "Personal Web Demo",
-                "subtitle": "I'm a Graphic Designer passionate about crafting visual stories. <br /> With 5 years of experience and a degree from New York University's School of Design. I infuse vitality into brands and designs, transforming concepts into captivating realities."
-            },
-            "about": {
-                "title": "About me",
-                "p1": "Welcome to my creative journey. My work is a testament to my commitment to bringing ideas to life, where each pixel becomes a brushstroke in the canvas of imagination.",
-                "p2": "I find inspiration in the world around me, whether through the pages of a captivating novel, the intricate details of typography, or the vibrant hues of nature during my outdoor escapades.",
-                "p3": "If you're curious to dive deeper into my work, you can follow me:"
-            },
-            "resume": {
-                "work_experience": {
-                    "title": "Work experience",
-                    "items": [
-                        {
-                            "title": "Graphic Designer <br /> <span class=\"font-normal\">ABC Design Studio, New York, NY</span> <br /> <span class=\"text-sm font-normal\">2021 - Present</span>",
-                            "description": "Collaborate with clients to understand design requirements and objectives. <br /> Develop branding solutions, including logos, color palettes, and brand guidelines. <br /> Design marketing materials such as brochures, posters, and digital assets. <br /> Create visually appealing user interfaces for websites and applications."
-                        },
-                        {
-                            "title": "Junior Graphic Designer <br /> <span class=\"font-normal\">XYZ Creative Agency, Los Angeles, CA</span> <br /> <span class=\"text-sm font-normal\">2018 - 2021</span>",
-                            "description": "Assisted senior designers in creating design concepts and visual assets. <br /> Contributed to the development of brand identities and marketing collateral. <br /> Collaborated with the marketing team to ensure consistent design across campaigns. <br /> Gained hands-on experience in various design software and tools."
-                        }
-                    ]
-                },
-                "education": {
-                    "title": "Education",
-                    "items": [
-                        {
-                            "title": "Master of Fine Arts in Graphic Design <br /> <span class=\"font-normal\">New York University's School of Design</span> <br /> <span class=\"text-sm font-normal\">2018 - 2020</span>"
-                        },
-                        {
-                            "title": "Bachelor of Arts in Graphic Design <br /> <span class=\"font-normal\">New York University's School of Design</span> <br /> <span class=\"text-sm font-normal\">2014 - 2018</span>"
-                        }
-                    ]
-                }
-            },
-            "skills": {
-                "title": "Skills",
-                "subtitle": "Discover the proficiencies that allow me to bring imagination to life through design.",
-                "items": [
-                    {
-                        "title": "Graphic design",
-                        "description": "Proficient in crafting visually appealing designs that convey messages effectively."
-                    },
-                    {
-                        "title": "Branding and identity",
-                        "description": "Skilled at developing cohesive brand identities, including logos and brand guidelines."
-                    },
-                    {
-                        "title": "User-centered design",
-                        "description": "Experienced in creating user-friendly interfaces and optimizing user experiences."
-                    },
-                    {
-                        "title": "Adobe Creative Suite",
-                        "description": "Skilled in using Photoshop, Illustrator, and InDesign to create and edit visual elements."
-                    },
-                    {
-                        "title": "Typography",
-                        "description": "Adept in selecting and manipulating typefaces to enhance design aesthetics."
-                    },
-                    {
-                        "title": "Color theory",
-                        "description": "Proficient in using color to evoke emotions and enhance visual harmony."
-                    },
-                    {
-                        "title": "Print and digital design",
-                        "description": "Knowledgeable in designing for both print materials and digital platforms."
-                    },
-                    {
-                        "title": "Attention to detail",
-                        "description": "Diligent in maintaining precision and quality in all design work."
-                    },
-                    {
-                        "title": "Adaptability",
-                        "description": "Quick to adapt to new design trends, technologies, and client preferences."
-                    }
-                ]
-            },
-            "portfolio": {
-                "title": "Elevating visual narratives",
-                "subtitle": "Embark on a design journey that surpasses pixels, entering a realm of imagination. Explore my portfolio, where passion and creativity converge to shape enthralling visual narratives.",
-                "call_to_action": "Go to the project",
-                "projects": [
-                    {
-                        "title": "Project 1: <br /><span class=\"text-2xl\">Brand identity for tech innovators</span>",
-                        "description_title": "Description:",
-                        "description": "Developed a comprehensive brand identity for a tech startup, Tech Innovators, specializing in disruptive innovations. The goal was to convey a modern yet approachable image that resonated with both corporate clients and tech enthusiasts.",
-                        "role_title": "Role:",
-                        "role": "Led the entire branding process from concept to execution. Created a dynamic logo that symbolized innovation, selected a vibrant color palette, and I designed corporate stationery, website graphics, and social media assets."
-                    },
-                    {
-                        "title": "Project 2: <br /><span class=\"text-2xl\">Event poster for art & music festival</span>",
-                        "description_title": "Description:",
-                        "description": "Designed a captivating event poster for an art and music festival, \"ArtWave Fusion,\" aiming to showcase the synergy between visual art and music genres.",
-                        "role_title": "Role:",
-                        "role": "Translated the festival's creative theme into a visually striking poster. Used bold typography, vibrant colors, and abstract elements to depict the fusion of art and music. Ensured the design captured the festival's vibrant atmosphere."
-                    },
-                    {
-                        "title": "Project 3: <br /><span class=\"text-2xl\">E-commerce website redesign for fashion brand</span>",
-                        "description_title": "Description:",
-                        "description": "Redesigned the e-commerce website for an eco-conscious fashion brand, GreenVogue. The objective was to align the brand's online presence with its sustainable ethos and improve user experience.",
-                        "role_title": "Role:",
-                        "role": "Conducted a thorough analysis of the brand's values and customer base to inform the design direction. Created a visually appealing interface with intuitive navigation, highlighting sustainable materials, and integrating a user-friendly shopping experience."
-                    }
-                ]
-            },
-            "testimonials": {
-                "title": "Client testimonials",
-                "subtitle": "Discover what clients have to say about their experiences working with me.",
-                "items": [
-                    {
-                        "testimonial": "She took our vague concept and turned it into a visual masterpiece that perfectly aligned with our goals. Her attention to detail and ability to translate ideas into compelling visuals exceeded our expectations.",
-                        "name": "Mark Thompson",
-                        "job": "Creative director"
-                    },
-                    {
-                        "testimonial": "She transformed our brand identity with her creative finesse, capturing our essence in every element. Her dedication and talent truly shine through her work.",
-                        "name": "Emily Martinez",
-                        "job": "CEO"
-                    },
-                    {
-                        "testimonial": "She has an uncanny ability to communicate emotions and stories. She crafted a logo for our NGO that not only represents our cause but also evokes empathy. Her professionalism and commitment make her a designer of exceptional caliber.",
-                        "name": "Laura Simmons",
-                        "job": "Founder of an NGO"
-                    },
-                    {
-                        "testimonial": "We entrusted Sarah with revamping our website's user interface, and the results were astounding. Her intuitive design sense enhanced user experience, leading to a significant increase in engagement. She's a designer who truly understands the synergy of aesthetics and functionality.",
-                        "name": "Alex Foster",
-                        "job": "Director of web services"
-                    },
-                    {
-                        "testimonial": "She took our vision and elevated it beyond imagination. Her ability to capture brand essence and translate it into design is nothing short of remarkable. Working with her has been an inspiring journey.",
-                        "name": "Jessica Collins",
-                        "job": "Product Manager"
-                    },
-                    {
-                        "testimonial": "Her ability to transform concepts into captivating visuals is nothing short of extraordinary. She took our event poster idea and turned it into a visual masterpiece that perfectly captured the essence of our festival. Sarah's dedication, creativity, and knack for delivering beyond expectations make her an invaluable asset to any project.",
-                        "name": "Michael Carter",
-                        "job": "Event Coordinator"
-                    }
-                ]
-            },
-            "cta": {
-                "title": "Let's create together",
-                "subtitle": "Ready to transform your vision into captivating designs?",
-                "actions": {
-                    "hire_me": "Hire me"
-                }
-            },
-            "blog_latest": {
-                "title": "Explore my insightful articles on my blog",
-                "information": "Dive into a realm of design wisdom and creative inspiration, where you'll find invaluable insights, practical tips, and captivating narratives that elevate and enrich your creative journey."
-            }
-        },
-        "saas": {
-            "metadata": {
-                "title": "SaaS Landing Page"
-            },
-            "header": {
-                "actions": {
-                    "login": "Login",
-                    "sign_up": "Sign Up"
-                }
-            },
-            "hero": {
-                "tagline": "SaaS Web Demo",
-                "actions": {
-                    "get_started": "Get Started",
-                    "learn_more": "Learn more"
-                },
-                "title": "Simplify web design with Astrowind: <br /> your ultimate <span class=\"text-accent dark:text-white\">SaaS</span> companion<br />",
-                "subtitle": "<span class=\"hidden sm:inline\">Elevate your website creation process with <span class=\"font-semibold\">AstroWind</span>'s SaaS solutions.</span> Seamlessly blend the power of Astro 5.0 and Tailwind CSS to craft websites that resonate with your brand and audience."
-            },
-            "features": {
-                "title": "Why choose AstroWind?",
-                "subtitle": "Each of the following features enhances AstroWind's value proposition.",
-                "items": [
-                    {
-                        "title": "Integration of Astro 5.0 and Tailwind CSS",
-                        "description": "Offers a powerful combination that enhances both the development process and the end-user experience. Also, allows to build dynamic and visually stunning websites with optimized performance."
-                    },
-                    {
-                        "title": "Versatile design for startups, small businesses, and more",
-                        "description": "Easily customize AstroWind to harmonize with the unique branding and identity of your venture. AstroWind's versatile design adapts to suit your needs."
-                    },
-                    {
-                        "title": "Effortless customization for portfolios and marketing sites",
-                        "description": "With intuitive customization, easily showcase portfolio pieces, case studies, project highlights, and relevant content. Ideal for creative professionals and businesses looking to highlight their expertise."
-                    },
-                    {
-                        "title": "Optimized landing pages and engaging blogs",
-                        "description": "Landing pages are strategically designed to captivate visitors and prompt specific actions. Additionally, the blog creation feature empowers sharing insights, engaging the audience."
-                    },
-                    {
-                        "title": "Fast loading times and production-ready code",
-                        "description": "Using Astro 5.0 ensures fast loading and seamless rendering, enhancing browsing. The code follows best practices, improving user experience, SEO, and reducing bounce rates."
-                    },
-                    {
-                        "title": "SEO-optimized structure for enhanced visibility",
-                        "description": "Follows SEO best practices with clean code, semantic HTML markup, and fast loading, enhancing search engine rankings. AstroWind's SEO structure ensures visibility to potential customers and clients."
-                    }
-                ]
-            },
-            "use_cases": {
-                "use_cases_title": "Use cases",
-                "use_cases_subtitle": "Discover how AstroWind's versatile template serves as the ideal solution for various use cases, providing tailored solutions to drive success.",
-                "startup": {
-                    "description_title": "Description:",
-                    "description": "Are you a startup with big dreams? AstroWind propels your success. Our template forges a seamless online presence, attracting investors and customers from day one. Astro 5.0 and Tailwind CSS ensure striking, responsive sites, leaving lasting impressions. Countless startups leverage AstroWind to kickstart their journey and resonate with audiences.",
-                    "benefits_title": "Benefits:",
-                    "benefits": "Allow startups to quickly create professional websites without investing extensive time and resources. <br /> Make a memorable first impression with visually appealing design elements that highlight your startup's unique value proposition. <br /> Ensures your website looks stunning and works well on all devices. <br /> Engage potential investors and customers with engaging content, clear messaging, and intuitive navigation.",
-                    "content_title": "Startup success stories: <br /><span class=\"text-2xl\">Launching with AstroWind</span>"
-                },
-                "saas": {
-                    "description_title": "Description:",
-                    "description": "For SaaS businesses, user experience is key. AstroWind enhances showcasing SaaS solutions intuitively. The template's Astro 5.0 and Tailwind CSS integration guarantees user-friendly experience, mirroring your software's efficiency. Customize pages to communicate SaaS value and solutions for your audience.",
-                    "benefits_title": "Benefits:",
-                    "benefits": "Ensuring a cohesive and user-centric design for your SaaS website. <br /> Effectively communicate complex SaaS features through visual aids, animations, and interactive elements. <br /> Prioritize user needs and pain points through well-structured layouts and clear navigation. <br /> Encourage visitors to take action with strategically placed CTAs. <br /> Ensures your SaaS website works seamlessly across all devices.",
-                    "content_title": "SaaS showcase: <br /><span class=\"text-2xl\">Streamlining user experience</span>"
-                },
-                "portfolio": {
-                    "description_title": "Description:",
-                    "description": "Your portfolio is your masterpiece, and AstroWind is your canvas. Whether you're a designer, photographer, artist, or any other creative professional, AstroWind empowers you to showcase your work with elegance and sophistication. Tailored to highlight your creative projects, AstroWind's templates offer a visually immersive experience that lets your portfolio shine.",
-                    "benefits_title": "Benefits:",
-                    "benefits": "Serve as a captivating backdrop to showcase your creative work, capturing attention and leaving a lasting impression. <br /> Tailor your portfolio to reflect your unique style and artistic vision. <br /> Prioritizes visuals, allowing you to present your work in high-resolution detail that draws viewers into your creations. <br /> Enables seamless navigation for effortless portfolio exploration.",
-                    "content_title": "Creative portfolios: <br /><span class=\"text-2xl\">Highlighting your work</span>"
-                },
-                "small_business": {
-                    "description_title": "Description:",
-                    "description": "For small businesses, a well-crafted website can be a game-changer. AstroWind empowers small businesses to not only establish a credible online presence but also convert visitors into loyal customers. The template's thoughtful design and optimization features ensure that your website doesn't just attract attention but also guides visitors through a seamless journey, ultimately leading to conversions.",
-                    "benefits_title": "Benefits:",
-                    "benefits": "Present your small business with a professional and polished website that instills confidence and trust among visitors. <br /> Strategically placed CTAs, user-friendly forms, and optimized layouts work together to drive user engagement and conversions. <br /> Ensure a smooth browsing experience, reducing bounce rates and encouraging interaction.",
-                    "content_title": "Small business growth: <br /><span class=\"text-2xl\">Converting visitors into customers</span>"
-                }
-            },
-            "pricing": {
-                "title": "Flexible pricing plans",
-                "plans": [
-                    {
-                        "title": "free",
-                        "subtitle": "Access to core features and a wide range of templates",
-                        "call_to_action": "Get Started for Free"
-                    },
-                    {
-                        "title": "pro",
-                        "subtitle": "Premium templates and advanced customization",
-                        "call_to_action": "Upgrade to Pro",
-                        "ribbon_title": "popular"
-                    },
-                    {
-                        "title": "Enterprise",
-                        "subtitle": "Tailored solutions for large-scale projects",
-                        "call_to_action": "Unlock Enterprise Features"
-                    }
-                ]
-            },
-            "faqs": {
-                "title": "Frequently Asked Questions",
-                "items": [
-                    {
-                        "title": "Is AstroWind compatible with the latest versions of Astro and Tailwind CSS?",
-                        "description": "Yes, AstroWind is designed to be compatible with the latest versions of both Astro and Tailwind CSS. This ensures that you can harness the full capabilities of these technologies while benefiting from the features offered by AstroWind."
-                    },
-                    {
-                        "title": "Can I use AstroWind for both personal and commercial projects?",
-                        "description": "Certainly! AstroWind is versatile and can be used for a wide range of projects, including both personal and commercial endeavors. Whether you're building a professional portfolio, launching a startup, or creating a marketing website, AstroWind has you covered."
-                    },
-                    {
-                        "title": "What level of coding knowledge is required to use AstroWind?",
-                        "description": "While some familiarity with HTML, CSS, and web development concepts is helpful, the user-friendly interface and customization options allow those with limited coding experience to create impressive websites. For more advanced users, AstroWind offers extensive customization capabilities."
-                    },
-                    {
-                        "title": "Is customer support available for AstroWind users seeking guidance?",
-                        "description": "Absolutely, our dedicated customer support team is here to assist you with any questions or challenges you may encounter. Feel free to reach out to us through our support channels, and we'll be happy to provide the help you need."
-                    }
-                ]
-            },
-            "contact": {
-                "title": "Reach out to us",
-                "subtitle": "Have questions? Feel free to contact us using the form below. We're here to help!",
-                "call_to_action": "Contact us",
-                "items": {
-                    "email": "Email us",
-                    "call": "Call us",
-                    "follow": "Follow us"
-                }
-            },
-            "blog_latest": {
-                "title": "Stay informed with AstroWind's blog",
-                "information": "Explore our collection of articles, guides, and tutorials on web development, design trends, and using AstroWind effectively for your projects."
-            }
-        },
-        "startup": {
-            "metadata": {
-                "title": "Startup Landing Page"
-            },
-            "hero": {
-                "tagline": "Startup Web Demo",
-                "actions": {
-                    "get_templates": "Get templates",
-                    "learn_more": "Learn more"
-                },
-                "title": "Improve <span class=\"hidden sm:inline\">the online presence of</span> your <span class=\"text-accent dark:text-white\">Startup</span> with Astrowind templates",
-                "subtitle": "Step into the spotlight with <span class=\"font-semibold\">Astrowind</span> templates, your pathway to fortifying your startup's digital footprint, fostering credibility, and expanding your reach."
-            },
-            "about": {
-                "title": "About us",
-                "subtitle": "We believe in the magic of turning dreams into stunning realities. Founded by passionate developers with a shared vision, we set out to simplify the website creation process. Our templates bring together the innovation of Astro 5.0 and the versatility of Tailwind CSS, enabling you to express your unique brand identity like never before."
-            },
-            "stats": {
-                "title": "Discover the impressive impact of Astrowind",
-                "subtitle": "The numbers below reflect the trust our users have placed in us and the remarkable outcomes we've helped them achieve.",
-                "items": [
-                    {
-                        "title": "Downloads"
-                    },
-                    {
-                        "title": "Websites Launched"
-                    },
-                    {
-                        "title": "User Ratings"
-                    },
-                    {
-                        "title": "Satisfied Clients"
-                    }
-                ]
-            },
-            "brands": {
-                "title": "Partnerships & Collaborations",
-                "subtitle": "At Astrowind, we believe in the power of collaboration to drive innovation and create exceptional experiences."
-            },
-            "services": {
-                "title": "What services do we provide?",
-                "subtitle": "We offer a wide range of website templates that suit various industries and purposes such as business, portfolio, e-commerce, blog, etc.",
-                "items": [
-                    {
-                        "title": "Installation Instructions",
-                        "description": "Offer clear instructions on how to download the purchased templates and install them on various website platforms or content management systems."
-                    },
-                    {
-                        "title": "Demo and Previews",
-                        "description": "Provide interactive demos and previews that allow customers to see how their chosen template will look and function before making a purchase."
-                    },
-                    {
-                        "title": "Technical Support",
-                        "description": "Providing customer support for any technical issues related to the templates or their implementation."
-                    }
-                ]
-            },
-            "features": {
-                "title": "Main features of our templates",
-                "subtitle": "Possess several key characteristics to effectively cater to the needs of startups and entrepreneurs.",
-                "items": [
-                    {
-                        "title": "Modern and Professional Design",
-                        "description": "Have a contemporary design that reflects current design trends and gives a professional impression."
-                    },
-                    {
-                        "title": "Responsive and Mobile-Friendly",
-                        "description": "Adapt seamlessly to different screen sizes and devices to ensure a consistent experience."
-                    },
-                    {
-                        "title": "Customizability",
-                        "description": "Easily customizable, allowing users to adapt the design, colors, typography, and content to match their brand identity."
-                    },
-                    {
-                        "title": "Fast Loading Times",
-                        "description": "Optimized for speed to ensure a smooth user experience and favorable search engine rankings."
-                    },
-                    {
-                        "title": "Search Engine Optimization (SEO)",
-                        "description": "Incorporate SEO best practices in template structure and code to improve visibility in search engine results."
-                    },
-                    {
-                        "title": "Compatibility",
-                        "description": "The templates work seamlessly across various content management systems and website builders."
-                    }
-                ]
-            },
-            "faqs": {
-                "title": "Frequently Asked Questions",
-                "items": [
-                    {
-                        "title": "What are landing page templates?",
-                        "description": "Landing page templates are pre-designed web page layouts that are specifically created to serve as a foundation for building effective landing pages. These templates are designed to capture the attention of visitors and guide them towards a specific action or goal, such as signing up for a newsletter, making a purchase, or downloading a resource."
-                    },
-                    {
-                        "title": "Why should I use a template?",
-                        "description": "Some of the advantages are that they provide a ready-to-use structure,  saving you significant time. Are designed with user-friendliness in mind and provide a cost-effective alternative, saving you money while still delivering a quality result."
-                    },
-                    {
-                        "title": "Can I preview templates before buying?",
-                        "description": "Yes, the templates allow you to preview them before making a purchase. There is a \"Demo\" button associated with each template."
-                    },
-                    {
-                        "title": "Do I need technical skills to use a template?",
-                        "description": "Advanced technical skills are not required to use a template, but having a basic understanding of web navigation and familiarity with using online tools can still be beneficial. If you have more specific customization needs, you might need to consult guides or reach out to customer support for assistance."
-                    },
-                    {
-                        "title": "Can I use the template on multiple websites?",
-                        "description": "No, the template comes with a single-use license, meaning you can use the template on one website or project only. Using the template on additional websites would require purchasing additional licenses."
-                    },
-                    {
-                        "title": "What if I need help with customization?",
-                        "description": "The templates provides a comprehensive step-by-step guide that walk you through the customization process. If you still have doubts, you can reach out to our customer support team. They can answer your questions, provide guidance on customization, and address any issues you're facing."
-                    }
-                ]
-            },
-            "contact": {
-                "title": "Let us know how we can help",
-                "subtitle": "We’re here to help and answer any question you might have.",
-                "items": {
-                    "phone": {
-                        "title": "Phone",
-                        "call_to_action": "Call us"
-                    },
-                    "email": {
-                        "title": "Email",
-                        "call_to_action": "Write to us"
-                    },
-                    "chat_sales": {
-                        "title": "Chat with sales",
-                        "call_to_action": "Start chatting"
-                    },
-                    "chat_support": {
-                        "title": "Chat with support",
-                        "call_to_action": "Start chatting"
-                    }
-                }
-            },
-            "call_to_action": {
-                "title": "Be a part of our vision",
-                "subtitle": "Discover a dynamic work environment, unparalleled growth opportunities, and the chance to make a meaningful impact.",
-                "actions": {
-                    "get_templates": "Get templates"
-                }
-            }
-        }
-    },
-    "landing": {
-        "coming_soon": {
-            "title": "Coming soon",
-            "subtitle": "We are working on the content of these demo pages. You will see them very soon. Stay tuned Stay tuned!",
-            "action": "Download Template"
-        },
-        "hero": {
-            "actions": {
-                "cta": "Call to Action",
-                "learn_more": "Learn more"
-            }
-        },
-        "click_through": {
-            "metadata": {
-                "title": "Click-through Landing Page Demo"
-            },
-            "hero": {
-                "tagline": "Click-through Demo",
-                "title": "Click-through Landing Page: The Perfect Bridge to Conversion!",
-                "subtitle": "Learn how to design a Click-Through Landing Page that seamlessly guides visitors to your main offer.",
-                "image_alt": "Click-through Landing Page Hero Image"
-            }
-        },
-        "lead_generation": {
-            "metadata": {
-                "title": "Lead Generation Landing Page Demo"
-            },
-            "hero": {
-                "tagline": "Lead Generation Landing Demo",
-                "title": "Effective Lead Generation Landing Page: Unlock the Secrets",
-                "subtitle": "Discover the secrets to creating a Landing Page that turns curious visitors into eager leads. (Your Hero should grab attention instantly. Use a powerful headline that speaks directly to your target audience.)",
-                "image_alt": "Magnet attracting screws. Lead generation landing page demo"
-            }
-        },
-        "pre_launch": {
-            "metadata": {
-                "title": "Pre-Launch Landing Page"
-            },
-            "hero": {
-                "tagline": "Pre-launch Demo",
-                "title": "Pre-launch Landing Page: Build the Hype Before the Big Reveal!",
-                "subtitle": "Craft a tantalizing Coming Soon or Pre-Launch Landing Page that leaves visitors eagerly awaiting your launch.",
-                "image_alt": "Store with a Coming Soon sign. Pre-launch Landing Page"
-            }
-        },
-        "product": {
-            "metadata": {
-                "title": "Product Details Landing Page Demo"
-            },
-            "hero": {
-                "tagline": "Product Details Demo",
-                "title": "Product Landing Page: Showcase with Precision and Passion!",
-                "subtitle": "Step-by-step guide to designing a Landing Page that highlights every facet of your product or service.",
-                "image_alt": "A spotlight on a product. Product Details Landing Page Demo"
-            }
+    "features": {
+      "title": "We are here to help!",
+      "items": {
+        "general": {
+          "title": "General support",
+          "desc": "Chat with us for inquiries related to account management, website navigation, payment issues, accessing purchased templates or general questions about the website's functionality."
         },
         "sales": {
-            "metadata": {
-                "title": "Sales Landing Page Demo"
-            },
-            "hero": {
-                "tagline": "Long-form Sales Demo",
-                "title": "Long-form Sales: Sell with a Story: The Long-form Way!",
-                "subtitle": "Dive deep into crafting a Landing Page that narrates, persuades, and converts.",
-                "image_alt": "Children telling a story. Long-form Sales Landing Page demo"
-            }
+          "title": "Contact sales",
+          "desc": "Chat with us for questions about purchases, customization options, licensing for commercial use, inquiries about specific template, etc."
         },
-        "subscription": {
-            "metadata": {
-                "title": "Subscription Landing Page Demo"
-            },
-            "hero": {
-                "tagline": "Subscription Landing Demo",
-                "title": "Subscription Landing Page: Turn Casual Browsers into Loyal Subscribers!",
-                "subtitle": "Unlock the formula for a Subscription Landing Page that keeps your audience coming back for more.",
-                "image_alt": "Ironic image associated with canceling a subscription. Subscription Landing Page Demo"
-            }
+        "technical": {
+          "title": "Technical support",
+          "desc": "Chat with us when facing issues like template installation, problems editing difficulties, compatibility issues with software or download errors, or other technical challenges related to using the templates."
+        },
+        "phone": {
+          "title": "Phone",
+          "description": "+1 (234) 567-890"
+        },
+        "email": {
+          "title": "Email",
+          "description": "contact@support.com"
+        },
+        "location": {
+          "title": "Location",
+          "description": "1234 Lorem Ipsum St, 12345, Miami, EEUU"
         }
+      }
     }
+  },
+  "pricing_page": {
+    "hero": {
+      "title": "Stellar Pricing for Every Journey",
+      "tagline": "Pricing",
+      "subtitle": "Choose the perfect plan that aligns with your cosmic goals."
+    },
+    "currency": "$",
+    "prices": {
+      "title": "Our prices",
+      "subtitle": "Only pay for what you need",
+      "per_month": "per month",
+      "get_started": "Get started",
+      "basic": {
+        "title": "basic",
+        "subtitle": "Optimal choice for personal use",
+        "items": [
+          "Etiam in libero, et volutpat",
+          "Aenean ac nunc dolor tristique",
+          "Cras scelerisque accumsan lib",
+          "In hac habitasse"
+        ]
+      },
+      "standard": {
+        "title": "standard",
+        "subtitle": "Optimal choice for small teams",
+        "ribbon": "popular",
+        "items": [
+          "Proin vel laoreet",
+          "Ut efficitur habitasse egestas",
+          "Volutpat hac curabitur",
+          "Pellentesque blandit ut nibh",
+          "Donec fringilla sem"
+        ]
+      },
+      "premium": {
+        "title": "premium",
+        "subtitle": "Optimal choice for companies",
+        "items": [
+          "Curabitur suscipit risus",
+          "Aliquam habitasse malesuada",
+          "Suspendisse sit amet blandit",
+          "Suspendisse auctor blandit dui"
+        ]
+      }
+    },
+    "features": {
+      "title": "Price-related features",
+      "subtitle": "Discover the advantages of choosing our plans",
+      "items": {
+        "tiered": {
+          "title": "Tiered Pricing Plans",
+          "desc": "Choose from a range of pricing plans designed to accommodate different budgets and requirements."
+        },
+        "transparent": {
+          "title": "Transparent Pricing",
+          "desc": "Clearly displayed pricing details for each plan, with no hidden costs or unexpected charges."
+        },
+        "secure": {
+          "title": "Secure Payment Methods",
+          "desc": "Secure payment gateways to protect your financial information during transactions."
+        },
+        "access": {
+          "title": "Instant Access",
+          "desc": "Immediate access to your chosen plan's features and templates upon subscription."
+        },
+        "upgrade": {
+          "title": "Upgrade Value",
+          "desc": "Upgrade to higher-tier plans to unlock more features and benefits for an enhanced experience."
+        },
+        "support": {
+          "title": "24H support",
+          "desc": "Questions answered via live chat, email or phone, every calendar day."
+        }
+      }
+    },
+    "steps": {
+      "title": "A guided journey from plans to creativity",
+      "tagline": "simplified process",
+      "items": {
+        "explore": "Explore plans",
+        "select": "Select a plan",
+        "signup": "Sign Up / Log In",
+        "review": "Review order",
+        "payment": "Enter payment details",
+        "confirm": "Confirmation",
+        "download": "Download and start using the template(s)"
+      }
+    },
+    "faqs": {
+      "title": "Pricing FAQs",
+      "subtitle": "Choosing the right plan is important, and we're here to answer your questions. If you have queries about our pricing options, you're in the right place.",
+      "items": {
+        "support": {
+          "title": "Do the plans come with customer support?",
+          "desc": "Absolutely, all plans include access to our dedicated customer support to assist you with any queries or concerns."
+        },
+        "trial": {
+          "title": "Is there a trial period for the different plans?",
+          "desc": "Unfortunately, we don't offer trial periods for the plans. However, you can check out our demo section to preview the quality of our templates."
+        },
+        "switch": {
+          "title": "Can I switch between plans?",
+          "desc": "Certainly! You can easily upgrade or downgrade your plan, at any time, to find the one that best suits your evolving requirements."
+        },
+        "payment": {
+          "title": "What payment methods do you accept?",
+          "desc": "We accept major credit cards and online payment methods to ensure a convenient and secure transaction process."
+        },
+        "fees": {
+          "title": "Are there any hidden fees beyond the displayed cost?",
+          "desc": "No, the subscription cost covers all the features and templates listed under each plan. There are no hidden fees or extra charges."
+        }
+      }
+    },
+    "cta": {
+      "title": "Ready to boost your projects?",
+      "subtitle": "Join our community of satisfied customers who have transformed their work with our templates.",
+      "action": "Get started now"
+    }
+  },
+  "blog_page": {
+    "list": {
+      "title": "The Blog",
+      "subtitle": "A statically generated blog example with news, tutorials, resources and other interesting content related to AstroWind",
+      "metadata_title": "Blog"
+    },
+    "category": {
+      "title_prefix": "Category"
+    },
+    "tag": {
+      "headline_prefix": "Tag: ",
+      "metadata_title_prefix": "Posts by tag '"
+    },
+    "shared": {
+      "page_prefix": " — Page "
+    }
+  },
+  "news_page": {
+    "metadata": {
+      "title": "News & Articles",
+      "description": "Latest news, updates, and articles"
+    },
+    "header": {
+      "title": "News & Articles",
+      "subtitle": "Stay updated with our latest news, announcements, and insights."
+    },
+    "filter": {
+      "category": "Category:",
+      "tag": "Tag:"
+    },
+    "list": {
+      "no_articles": "No articles found",
+      "check_back": "Check back later for new content.",
+      "views": "views"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page",
+      "of": "of"
+    },
+    "article": {
+      "views": "views",
+      "back_to_news": "Back to News",
+      "visual_content_placeholder": "Visual content rendering coming soon..."
+    }
+  },
+  "blog_post": {
+    "min_read": "min read",
+    "related_posts": "Related Posts",
+    "view_all": "View All Posts",
+    "back_to_blog": "Back to Blog"
+  },
+  "error_page": {
+    "404": {
+      "title": "Error 404",
+      "message": "Sorry, we couldn't find this page.",
+      "description": "But dont worry, you can find plenty of other things on our homepage.",
+      "back_to_home": "Back to homepage"
+    }
+  },
+  "homes": {
+    "mobile_app": {
+      "metadata": {
+        "title": "Mobile App Homepage"
+      },
+      "header": {
+        "links": {
+          "services": "Services",
+          "features": "Features",
+          "about": "About"
+        },
+        "actions": {
+          "download": "Download"
+        }
+      },
+      "hero": {
+        "tagline": "Mobile App Web Demo",
+        "title_html": "<span class=\"text-accent dark:text-white\">AstroWind App</span>: <br /> professional websites <span class=\"hidden xl:inline\">made easy</span>",
+        "subtitle": "Unlock boundless creativity at your fingertips: your gateway to innovative design.",
+        "subtitle_continued": "Download now and embark on a journey to elevate your projects like never before.",
+        "cta": {
+          "download_app": "Download App"
+        }
+      },
+      "features": {
+        "title": "How to use our app?",
+        "subtitle": "Tired of spending hours crafting documents from scratch? Our app offers an innovative solution. With a wide array of professionally designed templates, you can now create stunning documents in minutes. Explore our templates now and experience the difference.",
+        "tagline": "Step-by-step guide",
+        "items": [
+          {
+            "title": "Download and install the app",
+            "description": "Begin your journey by downloading our user-friendly app from your device's app store or our official website."
+          },
+          {
+            "title": "Sign up",
+            "description": "Create your account by providing the necessary information, enabling you to access our full range of features."
+          },
+          {
+            "title": "Browse templates",
+            "description": "Explore our diverse collection of website templates, categorized for easy navigation."
+          },
+          {
+            "title": "Preview and select a template",
+            "description": "Visualize the potential of each template through previews, then choose the one that aligns best with your project's needs."
+          }
+        ]
+      },
+      "main_features": {
+        "title": "Main Features",
+        "items": [
+          {
+            "title": "User-friendly interface",
+            "description": "An intuitive and easy-to-navigate interface that allows users to quickly browse and find the templates they need."
+          },
+          {
+            "title": "Personalization options",
+            "description": "Include basic customization tools that let users modify text, colors, images, and other elements within the templates."
+          },
+          {
+            "title": "Ready-to-use components",
+            "description": "Enhance your designs with ready-to-use elements like graphics, icons, and layouts, saving you time and boosting visual appeal."
+          },
+          {
+            "title": "Preview Mode",
+            "description": "Provide a preview of each template, allowing users to see how it looks before making a purchase."
+          }
+        ]
+      },
+      "other_features": {
+        "title": "Other features",
+        "items": [
+          {
+            "title": "Offline Access",
+            "description": "Offer the option for users to download purchased templates for offline use."
+          },
+          {
+            "title": "Secure Cloud Storage",
+            "description": "Provide cloud storage for purchased templates, ensuring users can access and back up their templates from anywhere securely."
+          },
+          {
+            "title": "Regular Updates",
+            "description": "Continuously add new templates and features to keep the app fresh and engaging for users."
+          },
+          {
+            "title": "Wishlist",
+            "description": "Allow users to create a wishlist of templates they're interested in, making it easier for them to revisit and potentially purchase later."
+          }
+        ]
+      },
+      "stats": {
+        "title": "Statistics of our app"
+      },
+      "testimonials": {
+        "title": "What our users say?",
+        "read_more": "Read more testimonials",
+        "items": [
+          {
+            "testimonial": "It's made exploring and downloading website templates a breeze. The interface is intuitive, and I had no trouble finding the perfect template for my project. It's an app that truly empowers users.",
+            "name": "Cary Kennedy",
+            "job": "Film director"
+          },
+          {
+            "testimonial": "The app's seamless download process and intuitive layout have made selecting templates an enjoyable experience. Being able to preview and experiment with different designs before committing has saved me time and ensured I get the perfect look for my website.",
+            "name": "Josh Wilkinson",
+            "job": "Product Manager"
+          },
+          {
+            "testimonial": "I was able to download and use a professional website template within minutes. The step-by-step process and user-friendly interface made it easy for me to create a website that looks as if it was designed by a pro.",
+            "name": "Sidney Hansen",
+            "job": "Decorator"
+          }
+        ]
+      },
+      "faqs": {
+        "title": "Still have some doubts?",
+        "items": [
+          {
+            "title": "What does this app do?",
+            "description": "This app provides a platform for you to easily browse, purchase, download, and use a wide range of website templates for your projects."
+          },
+          {
+            "title": "How can this app solve my problem?",
+            "description": "This app streamlines the process of finding and implementing professional website designs, saving you time and effort in creating visually appealing and functional websites."
+          },
+          {
+            "title": "Is it available for my device?",
+            "description": "Our app is designed for compatibility across various devices and platforms, ensuring accessibility whether you're using a smartphone, tablet, or computer."
+          },
+          {
+            "title": "What makes this app different from others?",
+            "description": "Our app stands out for its user-friendly interface, extensive template collection, and seamless integration of the purchasing and downloading process, making it highly efficient."
+          },
+          {
+            "title": "Are there any costs involved?",
+            "description": "While the app itself may be free to download, there may be costs associated with purchasing specific templates based on your preferences and project requirements."
+          }
+        ]
+      },
+      "cta": {
+        "title": "Download our app now!",
+        "subtitle": "Access a variety of stunning templates, simplify your creative process, and elevate your online presence."
+      }
+    },
+    "personal": {
+      "metadata": {
+        "title": "Personal Homepage Demo"
+      },
+      "header": {
+        "links": {
+          "home": "Home",
+          "about": "About",
+          "resume": "Resume",
+          "porfolio": "Porfolio",
+          "blog": "Blog",
+          "github": "Github"
+        },
+        "actions": {
+          "hire_me": "Hire me"
+        }
+      },
+      "hero": {
+        "title": "Sarah Johnson",
+        "tagline": "Personal Web Demo",
+        "subtitle": "I'm a Graphic Designer passionate about crafting visual stories. <br /> With 5 years of experience and a degree from New York University's School of Design. I infuse vitality into brands and designs, transforming concepts into captivating realities."
+      },
+      "about": {
+        "title": "About me",
+        "p1": "Welcome to my creative journey. My work is a testament to my commitment to bringing ideas to life, where each pixel becomes a brushstroke in the canvas of imagination.",
+        "p2": "I find inspiration in the world around me, whether through the pages of a captivating novel, the intricate details of typography, or the vibrant hues of nature during my outdoor escapades.",
+        "p3": "If you're curious to dive deeper into my work, you can follow me:"
+      },
+      "resume": {
+        "work_experience": {
+          "title": "Work experience",
+          "items": [
+            {
+              "title": "Graphic Designer <br /> <span class=\"font-normal\">ABC Design Studio, New York, NY</span> <br /> <span class=\"text-sm font-normal\">2021 - Present</span>",
+              "description": "Collaborate with clients to understand design requirements and objectives. <br /> Develop branding solutions, including logos, color palettes, and brand guidelines. <br /> Design marketing materials such as brochures, posters, and digital assets. <br /> Create visually appealing user interfaces for websites and applications."
+            },
+            {
+              "title": "Junior Graphic Designer <br /> <span class=\"font-normal\">XYZ Creative Agency, Los Angeles, CA</span> <br /> <span class=\"text-sm font-normal\">2018 - 2021</span>",
+              "description": "Assisted senior designers in creating design concepts and visual assets. <br /> Contributed to the development of brand identities and marketing collateral. <br /> Collaborated with the marketing team to ensure consistent design across campaigns. <br /> Gained hands-on experience in various design software and tools."
+            }
+          ]
+        },
+        "education": {
+          "title": "Education",
+          "items": [
+            {
+              "title": "Master of Fine Arts in Graphic Design <br /> <span class=\"font-normal\">New York University's School of Design</span> <br /> <span class=\"text-sm font-normal\">2018 - 2020</span>"
+            },
+            {
+              "title": "Bachelor of Arts in Graphic Design <br /> <span class=\"font-normal\">New York University's School of Design</span> <br /> <span class=\"text-sm font-normal\">2014 - 2018</span>"
+            }
+          ]
+        }
+      },
+      "skills": {
+        "title": "Skills",
+        "subtitle": "Discover the proficiencies that allow me to bring imagination to life through design.",
+        "items": [
+          {
+            "title": "Graphic design",
+            "description": "Proficient in crafting visually appealing designs that convey messages effectively."
+          },
+          {
+            "title": "Branding and identity",
+            "description": "Skilled at developing cohesive brand identities, including logos and brand guidelines."
+          },
+          {
+            "title": "User-centered design",
+            "description": "Experienced in creating user-friendly interfaces and optimizing user experiences."
+          },
+          {
+            "title": "Adobe Creative Suite",
+            "description": "Skilled in using Photoshop, Illustrator, and InDesign to create and edit visual elements."
+          },
+          {
+            "title": "Typography",
+            "description": "Adept in selecting and manipulating typefaces to enhance design aesthetics."
+          },
+          {
+            "title": "Color theory",
+            "description": "Proficient in using color to evoke emotions and enhance visual harmony."
+          },
+          {
+            "title": "Print and digital design",
+            "description": "Knowledgeable in designing for both print materials and digital platforms."
+          },
+          {
+            "title": "Attention to detail",
+            "description": "Diligent in maintaining precision and quality in all design work."
+          },
+          {
+            "title": "Adaptability",
+            "description": "Quick to adapt to new design trends, technologies, and client preferences."
+          }
+        ]
+      },
+      "portfolio": {
+        "title": "Elevating visual narratives",
+        "subtitle": "Embark on a design journey that surpasses pixels, entering a realm of imagination. Explore my portfolio, where passion and creativity converge to shape enthralling visual narratives.",
+        "call_to_action": "Go to the project",
+        "projects": [
+          {
+            "title": "Project 1: <br /><span class=\"text-2xl\">Brand identity for tech innovators</span>",
+            "description_title": "Description:",
+            "description": "Developed a comprehensive brand identity for a tech startup, Tech Innovators, specializing in disruptive innovations. The goal was to convey a modern yet approachable image that resonated with both corporate clients and tech enthusiasts.",
+            "role_title": "Role:",
+            "role": "Led the entire branding process from concept to execution. Created a dynamic logo that symbolized innovation, selected a vibrant color palette, and I designed corporate stationery, website graphics, and social media assets."
+          },
+          {
+            "title": "Project 2: <br /><span class=\"text-2xl\">Event poster for art & music festival</span>",
+            "description_title": "Description:",
+            "description": "Designed a captivating event poster for an art and music festival, \"ArtWave Fusion,\" aiming to showcase the synergy between visual art and music genres.",
+            "role_title": "Role:",
+            "role": "Translated the festival's creative theme into a visually striking poster. Used bold typography, vibrant colors, and abstract elements to depict the fusion of art and music. Ensured the design captured the festival's vibrant atmosphere."
+          },
+          {
+            "title": "Project 3: <br /><span class=\"text-2xl\">E-commerce website redesign for fashion brand</span>",
+            "description_title": "Description:",
+            "description": "Redesigned the e-commerce website for an eco-conscious fashion brand, GreenVogue. The objective was to align the brand's online presence with its sustainable ethos and improve user experience.",
+            "role_title": "Role:",
+            "role": "Conducted a thorough analysis of the brand's values and customer base to inform the design direction. Created a visually appealing interface with intuitive navigation, highlighting sustainable materials, and integrating a user-friendly shopping experience."
+          }
+        ]
+      },
+      "testimonials": {
+        "title": "Client testimonials",
+        "subtitle": "Discover what clients have to say about their experiences working with me.",
+        "items": [
+          {
+            "testimonial": "She took our vague concept and turned it into a visual masterpiece that perfectly aligned with our goals. Her attention to detail and ability to translate ideas into compelling visuals exceeded our expectations.",
+            "name": "Mark Thompson",
+            "job": "Creative director"
+          },
+          {
+            "testimonial": "She transformed our brand identity with her creative finesse, capturing our essence in every element. Her dedication and talent truly shine through her work.",
+            "name": "Emily Martinez",
+            "job": "CEO"
+          },
+          {
+            "testimonial": "She has an uncanny ability to communicate emotions and stories. She crafted a logo for our NGO that not only represents our cause but also evokes empathy. Her professionalism and commitment make her a designer of exceptional caliber.",
+            "name": "Laura Simmons",
+            "job": "Founder of an NGO"
+          },
+          {
+            "testimonial": "We entrusted Sarah with revamping our website's user interface, and the results were astounding. Her intuitive design sense enhanced user experience, leading to a significant increase in engagement. She's a designer who truly understands the synergy of aesthetics and functionality.",
+            "name": "Alex Foster",
+            "job": "Director of web services"
+          },
+          {
+            "testimonial": "She took our vision and elevated it beyond imagination. Her ability to capture brand essence and translate it into design is nothing short of remarkable. Working with her has been an inspiring journey.",
+            "name": "Jessica Collins",
+            "job": "Product Manager"
+          },
+          {
+            "testimonial": "Her ability to transform concepts into captivating visuals is nothing short of extraordinary. She took our event poster idea and turned it into a visual masterpiece that perfectly captured the essence of our festival. Sarah's dedication, creativity, and knack for delivering beyond expectations make her an invaluable asset to any project.",
+            "name": "Michael Carter",
+            "job": "Event Coordinator"
+          }
+        ]
+      },
+      "cta": {
+        "title": "Let's create together",
+        "subtitle": "Ready to transform your vision into captivating designs?",
+        "actions": {
+          "hire_me": "Hire me"
+        }
+      },
+      "blog_latest": {
+        "title": "Explore my insightful articles on my blog",
+        "information": "Dive into a realm of design wisdom and creative inspiration, where you'll find invaluable insights, practical tips, and captivating narratives that elevate and enrich your creative journey."
+      }
+    },
+    "saas": {
+      "metadata": {
+        "title": "SaaS Landing Page"
+      },
+      "header": {
+        "actions": {
+          "login": "Login",
+          "sign_up": "Sign Up"
+        }
+      },
+      "hero": {
+        "tagline": "SaaS Web Demo",
+        "actions": {
+          "get_started": "Get Started",
+          "learn_more": "Learn more"
+        },
+        "title": "Simplify web design with Astrowind: <br /> your ultimate <span class=\"text-accent dark:text-white\">SaaS</span> companion<br />",
+        "subtitle": "<span class=\"hidden sm:inline\">Elevate your website creation process with <span class=\"font-semibold\">AstroWind</span>'s SaaS solutions.</span> Seamlessly blend the power of Astro 5.0 and Tailwind CSS to craft websites that resonate with your brand and audience."
+      },
+      "features": {
+        "title": "Why choose AstroWind?",
+        "subtitle": "Each of the following features enhances AstroWind's value proposition.",
+        "items": [
+          {
+            "title": "Integration of Astro 5.0 and Tailwind CSS",
+            "description": "Offers a powerful combination that enhances both the development process and the end-user experience. Also, allows to build dynamic and visually stunning websites with optimized performance."
+          },
+          {
+            "title": "Versatile design for startups, small businesses, and more",
+            "description": "Easily customize AstroWind to harmonize with the unique branding and identity of your venture. AstroWind's versatile design adapts to suit your needs."
+          },
+          {
+            "title": "Effortless customization for portfolios and marketing sites",
+            "description": "With intuitive customization, easily showcase portfolio pieces, case studies, project highlights, and relevant content. Ideal for creative professionals and businesses looking to highlight their expertise."
+          },
+          {
+            "title": "Optimized landing pages and engaging blogs",
+            "description": "Landing pages are strategically designed to captivate visitors and prompt specific actions. Additionally, the blog creation feature empowers sharing insights, engaging the audience."
+          },
+          {
+            "title": "Fast loading times and production-ready code",
+            "description": "Using Astro 5.0 ensures fast loading and seamless rendering, enhancing browsing. The code follows best practices, improving user experience, SEO, and reducing bounce rates."
+          },
+          {
+            "title": "SEO-optimized structure for enhanced visibility",
+            "description": "Follows SEO best practices with clean code, semantic HTML markup, and fast loading, enhancing search engine rankings. AstroWind's SEO structure ensures visibility to potential customers and clients."
+          }
+        ]
+      },
+      "use_cases": {
+        "use_cases_title": "Use cases",
+        "use_cases_subtitle": "Discover how AstroWind's versatile template serves as the ideal solution for various use cases, providing tailored solutions to drive success.",
+        "startup": {
+          "description_title": "Description:",
+          "description": "Are you a startup with big dreams? AstroWind propels your success. Our template forges a seamless online presence, attracting investors and customers from day one. Astro 5.0 and Tailwind CSS ensure striking, responsive sites, leaving lasting impressions. Countless startups leverage AstroWind to kickstart their journey and resonate with audiences.",
+          "benefits_title": "Benefits:",
+          "benefits": "Allow startups to quickly create professional websites without investing extensive time and resources. <br /> Make a memorable first impression with visually appealing design elements that highlight your startup's unique value proposition. <br /> Ensures your website looks stunning and works well on all devices. <br /> Engage potential investors and customers with engaging content, clear messaging, and intuitive navigation.",
+          "content_title": "Startup success stories: <br /><span class=\"text-2xl\">Launching with AstroWind</span>"
+        },
+        "saas": {
+          "description_title": "Description:",
+          "description": "For SaaS businesses, user experience is key. AstroWind enhances showcasing SaaS solutions intuitively. The template's Astro 5.0 and Tailwind CSS integration guarantees user-friendly experience, mirroring your software's efficiency. Customize pages to communicate SaaS value and solutions for your audience.",
+          "benefits_title": "Benefits:",
+          "benefits": "Ensuring a cohesive and user-centric design for your SaaS website. <br /> Effectively communicate complex SaaS features through visual aids, animations, and interactive elements. <br /> Prioritize user needs and pain points through well-structured layouts and clear navigation. <br /> Encourage visitors to take action with strategically placed CTAs. <br /> Ensures your SaaS website works seamlessly across all devices.",
+          "content_title": "SaaS showcase: <br /><span class=\"text-2xl\">Streamlining user experience</span>"
+        },
+        "portfolio": {
+          "description_title": "Description:",
+          "description": "Your portfolio is your masterpiece, and AstroWind is your canvas. Whether you're a designer, photographer, artist, or any other creative professional, AstroWind empowers you to showcase your work with elegance and sophistication. Tailored to highlight your creative projects, AstroWind's templates offer a visually immersive experience that lets your portfolio shine.",
+          "benefits_title": "Benefits:",
+          "benefits": "Serve as a captivating backdrop to showcase your creative work, capturing attention and leaving a lasting impression. <br /> Tailor your portfolio to reflect your unique style and artistic vision. <br /> Prioritizes visuals, allowing you to present your work in high-resolution detail that draws viewers into your creations. <br /> Enables seamless navigation for effortless portfolio exploration.",
+          "content_title": "Creative portfolios: <br /><span class=\"text-2xl\">Highlighting your work</span>"
+        },
+        "small_business": {
+          "description_title": "Description:",
+          "description": "For small businesses, a well-crafted website can be a game-changer. AstroWind empowers small businesses to not only establish a credible online presence but also convert visitors into loyal customers. The template's thoughtful design and optimization features ensure that your website doesn't just attract attention but also guides visitors through a seamless journey, ultimately leading to conversions.",
+          "benefits_title": "Benefits:",
+          "benefits": "Present your small business with a professional and polished website that instills confidence and trust among visitors. <br /> Strategically placed CTAs, user-friendly forms, and optimized layouts work together to drive user engagement and conversions. <br /> Ensure a smooth browsing experience, reducing bounce rates and encouraging interaction.",
+          "content_title": "Small business growth: <br /><span class=\"text-2xl\">Converting visitors into customers</span>"
+        }
+      },
+      "pricing": {
+        "title": "Flexible pricing plans",
+        "plans": [
+          {
+            "title": "free",
+            "subtitle": "Access to core features and a wide range of templates",
+            "call_to_action": "Get Started for Free"
+          },
+          {
+            "title": "pro",
+            "subtitle": "Premium templates and advanced customization",
+            "call_to_action": "Upgrade to Pro",
+            "ribbon_title": "popular"
+          },
+          {
+            "title": "Enterprise",
+            "subtitle": "Tailored solutions for large-scale projects",
+            "call_to_action": "Unlock Enterprise Features"
+          }
+        ]
+      },
+      "faqs": {
+        "title": "Frequently Asked Questions",
+        "items": [
+          {
+            "title": "Is AstroWind compatible with the latest versions of Astro and Tailwind CSS?",
+            "description": "Yes, AstroWind is designed to be compatible with the latest versions of both Astro and Tailwind CSS. This ensures that you can harness the full capabilities of these technologies while benefiting from the features offered by AstroWind."
+          },
+          {
+            "title": "Can I use AstroWind for both personal and commercial projects?",
+            "description": "Certainly! AstroWind is versatile and can be used for a wide range of projects, including both personal and commercial endeavors. Whether you're building a professional portfolio, launching a startup, or creating a marketing website, AstroWind has you covered."
+          },
+          {
+            "title": "What level of coding knowledge is required to use AstroWind?",
+            "description": "While some familiarity with HTML, CSS, and web development concepts is helpful, the user-friendly interface and customization options allow those with limited coding experience to create impressive websites. For more advanced users, AstroWind offers extensive customization capabilities."
+          },
+          {
+            "title": "Is customer support available for AstroWind users seeking guidance?",
+            "description": "Absolutely, our dedicated customer support team is here to assist you with any questions or challenges you may encounter. Feel free to reach out to us through our support channels, and we'll be happy to provide the help you need."
+          }
+        ]
+      },
+      "contact": {
+        "title": "Reach out to us",
+        "subtitle": "Have questions? Feel free to contact us using the form below. We're here to help!",
+        "call_to_action": "Contact us",
+        "items": {
+          "email": "Email us",
+          "call": "Call us",
+          "follow": "Follow us"
+        }
+      },
+      "blog_latest": {
+        "title": "Stay informed with AstroWind's blog",
+        "information": "Explore our collection of articles, guides, and tutorials on web development, design trends, and using AstroWind effectively for your projects."
+      }
+    },
+    "startup": {
+      "metadata": {
+        "title": "Startup Landing Page"
+      },
+      "hero": {
+        "tagline": "Startup Web Demo",
+        "actions": {
+          "get_templates": "Get templates",
+          "learn_more": "Learn more"
+        },
+        "title": "Improve <span class=\"hidden sm:inline\">the online presence of</span> your <span class=\"text-accent dark:text-white\">Startup</span> with Astrowind templates",
+        "subtitle": "Step into the spotlight with <span class=\"font-semibold\">Astrowind</span> templates, your pathway to fortifying your startup's digital footprint, fostering credibility, and expanding your reach."
+      },
+      "about": {
+        "title": "About us",
+        "subtitle": "We believe in the magic of turning dreams into stunning realities. Founded by passionate developers with a shared vision, we set out to simplify the website creation process. Our templates bring together the innovation of Astro 5.0 and the versatility of Tailwind CSS, enabling you to express your unique brand identity like never before."
+      },
+      "stats": {
+        "title": "Discover the impressive impact of Astrowind",
+        "subtitle": "The numbers below reflect the trust our users have placed in us and the remarkable outcomes we've helped them achieve.",
+        "items": [
+          {
+            "title": "Downloads"
+          },
+          {
+            "title": "Websites Launched"
+          },
+          {
+            "title": "User Ratings"
+          },
+          {
+            "title": "Satisfied Clients"
+          }
+        ]
+      },
+      "brands": {
+        "title": "Partnerships & Collaborations",
+        "subtitle": "At Astrowind, we believe in the power of collaboration to drive innovation and create exceptional experiences."
+      },
+      "services": {
+        "title": "What services do we provide?",
+        "subtitle": "We offer a wide range of website templates that suit various industries and purposes such as business, portfolio, e-commerce, blog, etc.",
+        "items": [
+          {
+            "title": "Installation Instructions",
+            "description": "Offer clear instructions on how to download the purchased templates and install them on various website platforms or content management systems."
+          },
+          {
+            "title": "Demo and Previews",
+            "description": "Provide interactive demos and previews that allow customers to see how their chosen template will look and function before making a purchase."
+          },
+          {
+            "title": "Technical Support",
+            "description": "Providing customer support for any technical issues related to the templates or their implementation."
+          }
+        ]
+      },
+      "features": {
+        "title": "Main features of our templates",
+        "subtitle": "Possess several key characteristics to effectively cater to the needs of startups and entrepreneurs.",
+        "items": [
+          {
+            "title": "Modern and Professional Design",
+            "description": "Have a contemporary design that reflects current design trends and gives a professional impression."
+          },
+          {
+            "title": "Responsive and Mobile-Friendly",
+            "description": "Adapt seamlessly to different screen sizes and devices to ensure a consistent experience."
+          },
+          {
+            "title": "Customizability",
+            "description": "Easily customizable, allowing users to adapt the design, colors, typography, and content to match their brand identity."
+          },
+          {
+            "title": "Fast Loading Times",
+            "description": "Optimized for speed to ensure a smooth user experience and favorable search engine rankings."
+          },
+          {
+            "title": "Search Engine Optimization (SEO)",
+            "description": "Incorporate SEO best practices in template structure and code to improve visibility in search engine results."
+          },
+          {
+            "title": "Compatibility",
+            "description": "The templates work seamlessly across various content management systems and website builders."
+          }
+        ]
+      },
+      "faqs": {
+        "title": "Frequently Asked Questions",
+        "items": [
+          {
+            "title": "What are landing page templates?",
+            "description": "Landing page templates are pre-designed web page layouts that are specifically created to serve as a foundation for building effective landing pages. These templates are designed to capture the attention of visitors and guide them towards a specific action or goal, such as signing up for a newsletter, making a purchase, or downloading a resource."
+          },
+          {
+            "title": "Why should I use a template?",
+            "description": "Some of the advantages are that they provide a ready-to-use structure,  saving you significant time. Are designed with user-friendliness in mind and provide a cost-effective alternative, saving you money while still delivering a quality result."
+          },
+          {
+            "title": "Can I preview templates before buying?",
+            "description": "Yes, the templates allow you to preview them before making a purchase. There is a \"Demo\" button associated with each template."
+          },
+          {
+            "title": "Do I need technical skills to use a template?",
+            "description": "Advanced technical skills are not required to use a template, but having a basic understanding of web navigation and familiarity with using online tools can still be beneficial. If you have more specific customization needs, you might need to consult guides or reach out to customer support for assistance."
+          },
+          {
+            "title": "Can I use the template on multiple websites?",
+            "description": "No, the template comes with a single-use license, meaning you can use the template on one website or project only. Using the template on additional websites would require purchasing additional licenses."
+          },
+          {
+            "title": "What if I need help with customization?",
+            "description": "The templates provides a comprehensive step-by-step guide that walk you through the customization process. If you still have doubts, you can reach out to our customer support team. They can answer your questions, provide guidance on customization, and address any issues you're facing."
+          }
+        ]
+      },
+      "contact": {
+        "title": "Let us know how we can help",
+        "subtitle": "We’re here to help and answer any question you might have.",
+        "items": {
+          "phone": {
+            "title": "Phone",
+            "call_to_action": "Call us"
+          },
+          "email": {
+            "title": "Email",
+            "call_to_action": "Write to us"
+          },
+          "chat_sales": {
+            "title": "Chat with sales",
+            "call_to_action": "Start chatting"
+          },
+          "chat_support": {
+            "title": "Chat with support",
+            "call_to_action": "Start chatting"
+          }
+        }
+      },
+      "call_to_action": {
+        "title": "Be a part of our vision",
+        "subtitle": "Discover a dynamic work environment, unparalleled growth opportunities, and the chance to make a meaningful impact.",
+        "actions": {
+          "get_templates": "Get templates"
+        }
+      }
+    }
+  },
+  "landing": {
+    "coming_soon": {
+      "title": "Coming soon",
+      "subtitle": "We are working on the content of these demo pages. You will see them very soon. Stay tuned Stay tuned!",
+      "action": "Download Template"
+    },
+    "hero": {
+      "actions": {
+        "cta": "Call to Action",
+        "learn_more": "Learn more"
+      }
+    },
+    "click_through": {
+      "metadata": {
+        "title": "Click-through Landing Page Demo"
+      },
+      "hero": {
+        "tagline": "Click-through Demo",
+        "title": "Click-through Landing Page: The Perfect Bridge to Conversion!",
+        "subtitle": "Learn how to design a Click-Through Landing Page that seamlessly guides visitors to your main offer.",
+        "image_alt": "Click-through Landing Page Hero Image"
+      }
+    },
+    "lead_generation": {
+      "metadata": {
+        "title": "Lead Generation Landing Page Demo"
+      },
+      "hero": {
+        "tagline": "Lead Generation Landing Demo",
+        "title": "Effective Lead Generation Landing Page: Unlock the Secrets",
+        "subtitle": "Discover the secrets to creating a Landing Page that turns curious visitors into eager leads. (Your Hero should grab attention instantly. Use a powerful headline that speaks directly to your target audience.)",
+        "image_alt": "Magnet attracting screws. Lead generation landing page demo"
+      }
+    },
+    "pre_launch": {
+      "metadata": {
+        "title": "Pre-Launch Landing Page"
+      },
+      "hero": {
+        "tagline": "Pre-launch Demo",
+        "title": "Pre-launch Landing Page: Build the Hype Before the Big Reveal!",
+        "subtitle": "Craft a tantalizing Coming Soon or Pre-Launch Landing Page that leaves visitors eagerly awaiting your launch.",
+        "image_alt": "Store with a Coming Soon sign. Pre-launch Landing Page"
+      }
+    },
+    "product": {
+      "metadata": {
+        "title": "Product Details Landing Page Demo"
+      },
+      "hero": {
+        "tagline": "Product Details Demo",
+        "title": "Product Landing Page: Showcase with Precision and Passion!",
+        "subtitle": "Step-by-step guide to designing a Landing Page that highlights every facet of your product or service.",
+        "image_alt": "A spotlight on a product. Product Details Landing Page Demo"
+      }
+    },
+    "sales": {
+      "metadata": {
+        "title": "Sales Landing Page Demo"
+      },
+      "hero": {
+        "tagline": "Long-form Sales Demo",
+        "title": "Long-form Sales: Sell with a Story: The Long-form Way!",
+        "subtitle": "Dive deep into crafting a Landing Page that narrates, persuades, and converts.",
+        "image_alt": "Children telling a story. Long-form Sales Landing Page demo"
+      }
+    },
+    "subscription": {
+      "metadata": {
+        "title": "Subscription Landing Page Demo"
+      },
+      "hero": {
+        "tagline": "Subscription Landing Demo",
+        "title": "Subscription Landing Page: Turn Casual Browsers into Loyal Subscribers!",
+        "subtitle": "Unlock the formula for a Subscription Landing Page that keeps your audience coming back for more.",
+        "image_alt": "Ironic image associated with canceling a subscription. Subscription Landing Page Demo"
+      }
+    }
+  }
 }

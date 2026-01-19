@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,25 +40,26 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 
 function PushNotificationsManager() {
-    const { notifications, loading, createNotification, sendNotification, deleteNotification, fetchNotifications } = usePushNotifications();
+    const { t } = useTranslation();
+    const { notifications, loading, stats, createNotification, sendNotification, deleteNotification, fetchNotifications } = usePushNotifications();
     const { hasPermission } = usePermissions();
 
-    const [showCreateDialog, setShowCreateDialog] = useState(false);
+    const [createDialog, setCreateDialog] = useState(false);
     const [newNotification, setNewNotification] = useState({
         title: '',
-        body: '',
+        message: '',
         target_type: 'all',
     });
 
     const canManage = hasPermission('mobile.push.manage') || hasPermission('tenant.settings.update');
 
-    const handleCreate = async () => {
+    const handleCreate = async (isDraft = true) => {
         if (!newNotification.title) return;
 
         try {
-            await createNotification(newNotification);
-            setShowCreateDialog(false);
-            setNewNotification({ title: '', body: '', target_type: 'all' });
+            await createNotification(newNotification, isDraft);
+            setCreateDialog(false);
+            setNewNotification({ title: '', message: '', target_type: 'all' });
         } catch (err) {
             // Error handled in hook
         }
@@ -83,14 +85,14 @@ function PushNotificationsManager() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold">Push Notifications</h1>
-                    <p className="text-muted-foreground">Send notifications to mobile app users</p>
+                    <h1 className="text-2xl font-bold">{t('push_notifications.title')}</h1>
+                    <p className="text-muted-foreground">{t('push_notifications.subtitle')}</p>
                 </div>
 
                 {canManage && (
-                    <Button onClick={() => setShowCreateDialog(true)}>
+                    <Button onClick={() => setCreateDialog(true)}>
                         <Plus className="mr-2 h-4 w-4" />
-                        New Notification
+                        {t('push_notifications.button_new')}
                     </Button>
                 )}
             </div>
@@ -104,8 +106,8 @@ function PushNotificationsManager() {
                                 <Bell className="h-5 w-5 text-primary" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{notifications.length}</p>
-                                <p className="text-sm text-muted-foreground">Total</p>
+                                <p className="text-2xl font-bold">{stats?.total || 0}</p>
+                                <p className="text-sm text-muted-foreground">{t('push_notifications.stat_total')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -119,9 +121,9 @@ function PushNotificationsManager() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">
-                                    {notifications.filter((n) => n.status === 'sent').length}
+                                    {stats?.sent || 0}
                                 </p>
-                                <p className="text-sm text-muted-foreground">Sent</p>
+                                <p className="text-sm text-muted-foreground">{t('push_notifications.stat_sent')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -135,9 +137,9 @@ function PushNotificationsManager() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">
-                                    {notifications.filter((n) => n.status === 'draft').length}
+                                    {stats?.drafts || 0}
                                 </p>
-                                <p className="text-sm text-muted-foreground">Drafts</p>
+                                <p className="text-sm text-muted-foreground">{t('push_notifications.stat_drafts')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -147,7 +149,7 @@ function PushNotificationsManager() {
             {/* Table */}
             <Card>
                 <CardHeader className="flex-row items-center justify-between">
-                    <CardTitle>Notification History</CardTitle>
+                    <CardTitle>{t('push_notifications.history_title')}</CardTitle>
                     <Button variant="outline" size="sm" onClick={fetchNotifications}>
                         <RefreshCw className="h-4 w-4" />
                     </Button>
@@ -156,10 +158,10 @@ function PushNotificationsManager() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Title</TableHead>
-                                <TableHead>Target</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Sent</TableHead>
+                                <TableHead>{t('push_notifications.table_title')}</TableHead>
+                                <TableHead>{t('push_notifications.table_target')}</TableHead>
+                                <TableHead>{t('push_notifications.table_status')}</TableHead>
+                                <TableHead>{t('push_notifications.table_sent')}</TableHead>
                                 {canManage && <TableHead className="w-24"></TableHead>}
                             </TableRow>
                         </TableHeader>
@@ -171,12 +173,13 @@ function PushNotificationsManager() {
                                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                                         <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                                        {canManage && <TableCell><Skeleton className="h-4 w-16" /></TableCell>}
                                     </TableRow>
                                 ))
                             ) : notifications.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                        No notifications yet
+                                    <TableCell colSpan={canManage ? 5 : 4} className="text-center py-8 text-muted-foreground">
+                                        {t('push_notifications.no_notifications')}
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -228,30 +231,30 @@ function PushNotificationsManager() {
             </Card>
 
             {/* Create Dialog */}
-            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <Dialog open={createDialog} onOpenChange={setCreateDialog}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>New Push Notification</DialogTitle>
+                        <DialogTitle>{t('push_notifications.dialog_create_title')}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div>
-                            <Label>Title</Label>
+                            <Label>{t('push_notifications.label_title')}</Label>
                             <Input
-                                placeholder="Notification title"
+                                placeholder={t('push_notifications.placeholder_title')}
                                 value={newNotification.title}
                                 onChange={(e) => setNewNotification({ ...newNotification, title: e.target.value })}
                             />
                         </div>
                         <div>
-                            <Label>Body</Label>
+                            <Label>{t('push_notifications.label_message')}</Label>
                             <Textarea
-                                placeholder="Notification message..."
-                                value={newNotification.body}
-                                onChange={(e) => setNewNotification({ ...newNotification, body: e.target.value })}
+                                placeholder={t('push_notifications.placeholder_message')}
+                                value={newNotification.message}
+                                onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
                             />
                         </div>
                         <div>
-                            <Label>Target</Label>
+                            <Label>{t('push_notifications.label_target')}</Label>
                             <Select
                                 value={newNotification.target_type}
                                 onValueChange={(v) => setNewNotification({ ...newNotification, target_type: v })}
@@ -260,19 +263,20 @@ function PushNotificationsManager() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">All Users</SelectItem>
-                                    <SelectItem value="topic">Topic</SelectItem>
-                                    <SelectItem value="segment">Segment</SelectItem>
+                                    <SelectItem value="all">{t('push_notifications.target_all')}</SelectItem>
+                                    <SelectItem value="topic">{t('push_notifications.target_topic')}</SelectItem>
+                                    <SelectItem value="segment">{t('push_notifications.target_segment')}</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                            Cancel
+                        <Button variant="outline" onClick={() => handleCreate(true)} disabled={!newNotification.title}>
+                            {t('push_notifications.button_draft')}
                         </Button>
-                        <Button onClick={handleCreate} disabled={!newNotification.title}>
-                            Create Draft
+                        <Button onClick={() => handleCreate(false)} disabled={!newNotification.title}>
+                            <Send className="mr-2 h-4 w-4" />
+                            {t('push_notifications.button_send')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -17,6 +17,11 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Database**:
   - **Hard Delete**: Added `{ force: true }` support to `UnifiedDataManager` for permanent deletions.
   - **Synchronization**: Repaired migration history and fully synced local/remote schemas.
+- **Global Localization**:
+  - **Audit**: Completed comprehensive audit of all hardcoded strings across `awcms`, `awcms-public`, and `awcms-mobile`.
+  - **Admin Panel**: Localized `Dashboard`, `Login`, and `Widget` components with `i18next`.
+  - **Public Portal**: Localized `Hero`, `Features`, `Contact`, `About`, and `Pricing` pages with `id`/`en` JSON resources.
+  - **Mobile App**: Implemented `flutter_localizations` with ARB files and refactored core screens (`Home`, `Login`, `Notifications`).
 
 ### Fixed
 

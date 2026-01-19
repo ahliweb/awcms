@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Input } from '@/components/ui/input';
@@ -8,73 +8,94 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Eye, EyeOff, Loader2, Lock } from 'lucide-react';
+import { Helmet } from 'react-helmet-async';
 
 const UpdatePasswordPage = () => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check if we have a session (user clicked email link)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
+    const accessToken = searchParams.get('access_token');
+    const refreshToken = searchParams.get('refresh_token');
+
+    if (!accessToken || !refreshToken) {
+      toast({
+        variant: 'destructive',
+        title: t('update_password.toast_invalid_link_title'),
+        description: t('update_password.toast_invalid_link_desc'),
+      });
+      navigate('/cmspanel/login');
+      return;
+    }
+
+    // Set session from URL parameters
+    supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    }).then(({ error }) => {
+      if (error) {
         toast({
-            variant: "destructive",
-            title: "Invalid Link",
-            description: "This password reset link is invalid or has expired."
+          variant: 'destructive',
+          title: t('update_password.toast_invalid_link_title'),
+          description: error.message || t('update_password.toast_invalid_link_desc'),
         });
-        navigate('/login');
+        navigate('/cmspanel/login');
       }
     });
-  }, [navigate, toast]);
+
+  }, [navigate, toast, searchParams, t]);
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
-    
+
     if (password !== confirmPassword) {
       toast({
-        variant: "destructive",
-        title: "Passwords don't match",
-        description: "Please make sure your passwords match."
+        variant: 'destructive',
+        title: t('update_password.toast_mismatch_title'),
+        description: t('update_password.toast_mismatch_desc'),
       });
       return;
     }
 
     if (password.length < 6) {
-        toast({
-            variant: "destructive",
-            title: "Password too short",
-            description: "Password must be at least 6 characters long."
-        });
-        return;
+      toast({
+        variant: "destructive",
+        title: t('update_password.toast_password_short_title'),
+        description: t('update_password.toast_password_short_desc'),
+      });
+      return;
     }
 
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({ 
-        password: password 
+      const { error } = await supabase.auth.updateUser({
+        password: password
       });
 
       if (error) throw error;
 
       toast({
-        title: "Password Updated",
-        description: "Your password has been successfully updated. You can now log in.",
+        title: t('update_password.toast_success_title'),
+        description: t('update_password.toast_success_desc'),
       });
-      
+
       // Navigate to login after successful update
-      navigate('/login');
+      navigate('/cmspanel/login');
 
     } catch (error) {
       console.error('Update password error:', error);
       toast({
         variant: "destructive",
-        title: "Update Failed",
-        description: error.message || "Failed to update password."
+        title: t('update_password.toast_failed_title'),
+        description: error.message || t('update_password.toast_failed_desc')
       });
     } finally {
       setIsLoading(false);
@@ -83,23 +104,26 @@ const UpdatePasswordPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <motion.div 
+      <Helmet>
+        <title>{t('update_password.title')} - {t('login.app_name')}</title>
+      </Helmet>
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200"
       >
         <div className="p-8 md:p-10 space-y-8">
           <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Set New Password</h1>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('update_password.title')}</h1>
             <p className="text-slate-500">
-              Please enter your new password below.
+              {t('update_password.subtitle')}
             </p>
           </div>
 
           <form onSubmit={handleUpdatePassword} className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="password">New Password</Label>
+                <Label htmlFor="password">{t('update_password.new_password_label')}</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -138,8 +162,8 @@ const UpdatePasswordPage = () => {
               </div>
             </div>
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium"
               disabled={isLoading}
             >

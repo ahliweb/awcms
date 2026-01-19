@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getPluginComponent } from '@/lib/pluginRegistry';
@@ -42,6 +43,7 @@ import NotificationsManager from '@/components/dashboard/notifications/Notificat
 import NotificationDetail from '@/components/dashboard/notifications/NotificationDetail';
 
 function Dashboard() {
+  const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [extensionRoutes, setExtensionRoutes] = useState({});
   const location = useLocation();
@@ -130,8 +132,8 @@ function Dashboard() {
   return (
     <>
       <Helmet>
-        <title>Dashboard - CMS</title>
-        <meta name="description" content="CMS Dashboard for managing content, users, and permissions" />
+        <title>{t('dashboard_page.title')}</title>
+        <meta name="description" content={t('dashboard_page.meta_description')} />
         <meta http-equiv="X-Content-Type-Options" content="nosniff" />
         <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
       </Helmet>

@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
 
 function MobileUsersManager() {
+    const { t } = useTranslation();
     const { users, loading, stats, fetchUsers, deleteUser } = useMobileUsers();
     const { hasPermission } = usePermissions();
     const [search, setSearch] = useState('');
@@ -61,8 +63,8 @@ function MobileUsersManager() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold">Mobile Users</h1>
-                <p className="text-muted-foreground">Registered mobile app users and devices</p>
+                <h1 className="text-2xl font-bold">{t('mobile_users.title')}</h1>
+                <p className="text-muted-foreground">{t('mobile_users.subtitle')}</p>
             </div>
 
             {/* Stats */}
@@ -75,7 +77,7 @@ function MobileUsersManager() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">{stats.total}</p>
-                                <p className="text-sm text-muted-foreground">Total Users</p>
+                                <p className="text-sm text-muted-foreground">{t('mobile_users.stat_total')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -117,7 +119,7 @@ function MobileUsersManager() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">{stats.active}</p>
-                                <p className="text-sm text-muted-foreground">Active (7d)</p>
+                                <p className="text-sm text-muted-foreground">{t('mobile_users.stat_active')}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -129,23 +131,16 @@ function MobileUsersManager() {
                 <div className="relative flex-1 min-w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search users..."
+                        placeholder={t('mobile_users.search_placeholder')}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="pl-10"
                     />
                 </div>
                 <div className="flex gap-2">
-                    {['all', 'ios', 'android'].map((p) => (
-                        <Button
-                            key={p}
-                            variant={platformFilter === p ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setPlatformFilter(p)}
-                        >
-                            {p === 'all' ? 'All' : p === 'ios' ? 'iOS' : 'Android'}
-                        </Button>
-                    ))}
+                    <Button variant={platformFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setPlatformFilter('all')}>{t('mobile_users.filter_all')}</Button>
+                    <Button variant={platformFilter === 'ios' ? 'default' : 'outline'} size="sm" onClick={() => setPlatformFilter('ios')}>{t('mobile_users.filter_ios')}</Button>
+                    <Button variant={platformFilter === 'android' ? 'default' : 'outline'} size="sm" onClick={() => setPlatformFilter('android')}>{t('mobile_users.filter_android')}</Button>
                 </div>
                 <Button variant="outline" onClick={fetchUsers}>
                     <RefreshCw className="h-4 w-4" />
@@ -158,11 +153,11 @@ function MobileUsersManager() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>User</TableHead>
-                                <TableHead>Device</TableHead>
-                                <TableHead>Version</TableHead>
-                                <TableHead>Last Active</TableHead>
-                                <TableHead>Push</TableHead>
+                                <TableHead>{t('mobile_users.table_user')}</TableHead>
+                                <TableHead>{t('mobile_users.table_device')}</TableHead>
+                                <TableHead>{t('mobile_users.table_version')}</TableHead>
+                                <TableHead>{t('mobile_users.table_last_active')}</TableHead>
+                                <TableHead>{t('mobile_users.table_push')}</TableHead>
                                 {canManage && <TableHead className="w-16"></TableHead>}
                             </TableRow>
                         </TableHeader>
@@ -180,7 +175,7 @@ function MobileUsersManager() {
                             ) : filteredUsers.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                        No mobile users found
+                                        {t('mobile_users.no_users')}
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -188,7 +183,7 @@ function MobileUsersManager() {
                                     <TableRow key={u.id}>
                                         <TableCell>
                                             <div>
-                                                <p className="font-medium">{u.user?.full_name || 'Anonymous'}</p>
+                                                <p className="font-medium">{u.user?.full_name || t('mobile_users.user_anonymous')}</p>
                                                 <p className="text-sm text-muted-foreground">{u.user?.email}</p>
                                             </div>
                                         </TableCell>
@@ -208,11 +203,11 @@ function MobileUsersManager() {
                                         <TableCell>
                                             {u.last_active
                                                 ? formatDistanceToNow(new Date(u.last_active), { addSuffix: true })
-                                                : 'Never'}
+                                                : t('mobile_users.never')}
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant={u.push_enabled ? 'default' : 'secondary'}>
-                                                {u.push_enabled ? 'On' : 'Off'}
+                                                {u.push_enabled ? t('mobile_users.status_on') : t('mobile_users.status_off')}
                                             </Badge>
                                         </TableCell>
                                         {canManage && (
@@ -238,15 +233,15 @@ function MobileUsersManager() {
             <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Remove Device?</AlertDialogTitle>
+                        <AlertDialogTitle>{t('mobile_users.dialog_remove_title')}</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will remove the device registration. The user will need to re-register on their next app launch.
+                            {t('mobile_users.dialog_remove_desc')}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>{t('mobile_users.cancel')}</AlertDialogCancel>
                         <AlertDialogAction onClick={handleDelete} className="bg-destructive">
-                            Remove
+                            {t('mobile_users.button_remove')}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/services/auth_service.dart';
 import '../../../routes/app_router.dart';
+import '../../../core/extensions/context_extensions.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -63,15 +64,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           size: 48,
           color: Theme.of(context).colorScheme.error,
         ),
-        title: const Text('Perangkat Tidak Aman'),
-        content: const Text(
-          'Login tidak dapat dilakukan pada perangkat yang telah di-root atau jailbreak '
-          'demi keamanan data Anda.',
-        ),
+        title: Text(context.l10n.insecureDevice),
+        content: Text(context.l10n.insecureDeviceMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Mengerti'),
+            child: Text(context.l10n.understand),
           ),
         ],
       ),
@@ -101,7 +99,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Login'),
+        title: Text(context.l10n.login),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () =>
@@ -158,7 +156,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                 // Title
                 Text(
-                  'Selamat Datang',
+                  context.l10n.welcome,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -166,7 +164,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Masuk dengan akun AWCMS Anda',
+                  context.l10n.loginSubtitle,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -182,7 +180,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.email],
                   decoration: InputDecoration(
-                    labelText: 'Email',
+                    labelText: context.l10n.email,
                     prefixIcon: const Icon(Icons.email_outlined),
                     filled: true,
                     fillColor: colorScheme.surfaceContainerHighest.withValues(
@@ -206,10 +204,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Email harus diisi';
+                      return context.l10n.emailRequired;
                     }
                     if (!value.contains('@')) {
-                      return 'Email tidak valid';
+                      return context.l10n.emailInvalid;
                     }
                     return null;
                   },
@@ -225,7 +223,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   autofillHints: const [AutofillHints.password],
                   onFieldSubmitted: (_) => _handleLogin(),
                   decoration: InputDecoration(
-                    labelText: 'Password',
+                    labelText: context.l10n.password,
                     prefixIcon: const Icon(Icons.lock_outlined),
                     filled: true,
                     fillColor: colorScheme.surfaceContainerHighest.withValues(
@@ -261,10 +259,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Password harus diisi';
+                      return context.l10n.passwordRequired;
                     }
                     if (value.length < 6) {
-                      return 'Password minimal 6 karakter';
+                      return context.l10n.passwordMinLength;
                     }
                     return null;
                   },
@@ -290,9 +288,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text(
-                          'Masuk',
-                          style: TextStyle(
+                      : Text(
+                          context.l10n.loginButton,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -304,14 +302,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 // Create Account Button
                 TextButton(
                   onPressed: () => _showRegister(context),
-                  child: const Text('Create Account'),
+                  child: Text(context.l10n.registerButton),
                 ),
                 // Back Button
                 TextButton(
                   onPressed: () => context.canPop()
                       ? context.pop()
                       : context.go(AppRoutes.home),
-                  child: const Text('Kembali ke Beranda'),
+                  child: Text(context.l10n.backToHome),
                 ),
               ],
             ),
@@ -324,11 +322,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _showRegister(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(Icons.info_outlined, color: Colors.white),
-            SizedBox(width: 12),
-            Text('Contact admin to create an account'),
+            const Icon(Icons.info_outlined, color: Colors.white),
+            const SizedBox(width: 12),
+            Text(context.l10n.contactAdminToRegister),
           ],
         ),
         behavior: SnackBarBehavior.floating,

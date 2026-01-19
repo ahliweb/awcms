@@ -79,5 +79,152 @@
   
   "pushNotifications": "Push Notifications",
   "enableNotifications": "Enable Notifications",
-  "notificationSettings": "Notification Settings"
+  "notificationSettings": "Notification Settings",
+
+  "welcome": "Welcome!",
+  "menu": "Menu",
+  "seeAllArticles": "See all articles",
+  "viewPhotosVideos": "Photos & Videos",
+  "products": "Products",
+  "productCatalog": "Product Catalog",
+  "appInfo": "App Info",
+  "comingSoon": "Coming soon!",
+  "copyright": "© 2024 AhliWeb.com\nAll rights reserved.",
+  "welcomeUser": "Welcome, {name}!",
+  "@welcomeUser": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "itemsPendingSync": "{count} items pending sync",
+  "@itemsPendingSync": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "dataSynced": "Data synced",
+  "lastSync": "Last sync: {time}",
+  "@lastSync": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "justNow": "Just now",
+  "minAgo": "{count} min ago",
+  "@minAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "hoursAgo": "{count} hours ago",
+  "@hoursAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "daysAgo": "{count} days ago",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  
+  "insecureDevice": "Insecure Device",
+  "insecureDeviceMessage": "Login cannot be performed on a rooted or jailbroken device for security reasons.",
+  "understand": "Understand",
+  "loginSubtitle": "Sign in with your AWCMS account",
+  "emailRequired": "Email is required",
+  "emailInvalid": "Invalid email",
+  "passwordRequired": "Password is required",
+  "passwordMinLength": "Password must be at least 6 characters",
+  "backToHome": "Back to Home",
+  "backToHome": "Back to Home",
+  "contactAdminToRegister": "Contact admin to create an account",
+  "noArticles": "No articles yet",
+  "pullToRefresh": "Pull to refresh to update",
+  "failedToLoadArticles": "Failed to load articles",
+  "articleNotFound": "Article not found",
+  "syncing": "Syncing...",
+  "markAll": "Mark All",
+  "emptyNotifications": "No notifications",
+  "emptyNotificationsDesc": "Notifications will appear here",
+  "justNow": "Just now",
+  "minutesAgo": "{count, plural, =1{1 minute ago} other{{count} minutes ago}}",
+  "@minutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hoursAgo": "{count, plural, =1{1 hour ago} other{{count} hours ago}}",
+  "@hoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daysAgo": "{count, plural, =1{1 day ago} other{{count} days ago}}",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "accessRestricted": "Access Restricted",
+  "webDashboardOnly": "This feature is only available on the web dashboard for security and governance. Please use web admin to perform this action.",
+  "understood": "Understood",
+  "roleOwner": "OWNER",
+  "roleSuperAdmin": "SUPER ADMIN",
+  "roleAdmin": "ADMIN",
+  "roleEditor": "EDITOR",
+  "roleAuthor": "AUTHOR",
+  "roleMember": "MEMBER",
+  "roleSubscriber": "SUBSCRIBER",
+  "rolePublic": "PUBLIC",
+  "featureImageUpload": "Image Upload",
+  "featureFileDownload": "File Download",
+  "featurePdfView": "PDF View",
+  "featureMediaGallery": "Media Gallery",
+  "featureStorageAccess": "Storage Access",
+  "featureNotAvailableOffline": "{feature} is not available offline",
+  "@featureNotAvailableOffline": {
+    "placeholders": {
+      "feature": {
+        "type": "String"
+      }
+    }
+  },
+  "featureNotAvailableOffline": "{feature} is not available offline",
+  "connectToInternet": "Connect to internet to access this feature.",
+
+  "locationActive": "GPS Active",
+  "locationFake": "Fake GPS!",
+  "locationDisabled": "GPS Disabled",
+  "gps": "GPS",
+  "fakeLocationDetected": "Fake Location Detected",
+  "fakeLocationMessage": "Fake GPS application detected",
+  "locationPermissionRequired": "Location Permission Required",
+  "locationPermissionExplanation": "App requires location access for this feature. Please enable location in settings.",
+  "openSettings": "Open Settings",
+  "locationGPS": "GPS Location",
+  "invalidLocation": "Invalid Location",
+  "locationObtained": "Location obtained successfully",
+  "locationError": "Failed to get location",
+  "locationServiceDisabled": "GPS service is disabled",
+  "noLocation": "No location yet",
+  "latitude": "Latitude",
+  "longitude": "Longitude",
+  "accuracy": "Accuracy",
+  "meters": "meters",
+
+  "checkingDeviceSecurity": "Checking device security...",
+  "deviceRootedMessage": "App cannot run on rooted or jailbroken devices.",
+  "deviceModifiedMessage": "For your data security, this app does not support modified devices.",
+
+  "checkConnection": "Check your connection and try again",
+  "serverError": "Server error occurred",
+  "tryAgainLater": "Please try again later"
 }

@@ -6,7 +6,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart';
 
+import '../../../core/extensions/context_extensions.dart';
 import '../providers/articles_provider.dart';
 
 class ArticleDetailScreen extends ConsumerWidget {
@@ -23,7 +25,7 @@ class ArticleDetailScreen extends ConsumerWidget {
       body: articleAsync.when(
         data: (article) {
           if (article == null) {
-            return const Center(child: Text('Artikel tidak ditemukan'));
+            return Center(child: Text(context.l10n.articleNotFound));
           }
 
           final coverImage = article.coverImage;
@@ -77,7 +79,7 @@ class ArticleDetailScreen extends ConsumerWidget {
                         const Spacer(),
                         if (createdAt != null)
                           Text(
-                            _formatDate(createdAt),
+                            _formatDate(context, createdAt),
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: colorScheme.outline),
                           ),
@@ -109,14 +111,14 @@ class ArticleDetailScreen extends ConsumerWidget {
               Icon(Icons.error_outline, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
               Text(
-                'Gagal memuat artikel',
+                context.l10n.failedToLoadArticles,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 16),
               FilledButton.tonal(
                 onPressed: () =>
                     ref.invalidate(articleDetailProvider(articleId)),
-                child: const Text('Coba Lagi'),
+                child: Text(context.l10n.retry),
               ),
             ],
           ),
@@ -125,22 +127,10 @@ class ArticleDetailScreen extends ConsumerWidget {
     );
   }
 
-  String _formatDate(DateTime date) {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  String _formatDate(BuildContext context, DateTime date) {
+    return DateFormat.yMMMd(
+      Localizations.localeOf(context).toString(),
+    ).format(date);
   }
 
   String _stripHtml(String html) {

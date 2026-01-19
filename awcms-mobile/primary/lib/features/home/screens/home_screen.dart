@@ -12,6 +12,7 @@ import '../../../core/services/sync_service.dart';
 import '../../../routes/app_router.dart';
 import '../../../shared/widgets/offline_indicator.dart';
 import '../../../shared/widgets/permission_widgets.dart';
+import '../../../core/extensions/context_extensions.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -24,7 +25,7 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AWCMS Mobile'),
+        title: Text(context.l10n.appTitle),
         actions: [
           const SyncStatusChip(),
           const SizedBox(width: 8),
@@ -36,7 +37,7 @@ class HomeScreen extends ConsumerWidget {
           else
             TextButton(
               onPressed: () => context.push(AppRoutes.login),
-              child: const Text('Login'),
+              child: Text(context.l10n.login),
             ),
         ],
       ),
@@ -71,7 +72,7 @@ class HomeScreen extends ConsumerWidget {
 
                     // Quick Actions
                     Text(
-                      'Menu',
+                      context.l10n.menu,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
@@ -88,29 +89,29 @@ class HomeScreen extends ConsumerWidget {
                       children: [
                         _MenuCard(
                           icon: Icons.article,
-                          title: 'Artikel',
-                          subtitle: 'Lihat semua artikel',
+                          title: context.l10n.articles,
+                          subtitle: context.l10n.seeAllArticles,
                           color: colorScheme.primary,
                           onTap: () => context.push(AppRoutes.articles),
                         ),
                         _MenuCard(
                           icon: Icons.image,
-                          title: 'Galeri',
-                          subtitle: 'Foto & Video',
+                          title: context.l10n.gallery,
+                          subtitle: context.l10n.viewPhotosVideos,
                           color: colorScheme.tertiary,
                           onTap: () => _showComingSoon(context),
                         ),
                         _MenuCard(
                           icon: Icons.shopping_bag,
-                          title: 'Produk',
-                          subtitle: 'Katalog produk',
+                          title: context.l10n.products,
+                          subtitle: context.l10n.productCatalog,
                           color: colorScheme.secondary,
                           onTap: () => _showComingSoon(context),
                         ),
                         _MenuCard(
                           icon: Icons.info,
-                          title: 'Tentang',
-                          subtitle: 'Info aplikasi',
+                          title: context.l10n.aboutApp,
+                          subtitle: context.l10n.appInfo,
                           color: colorScheme.outline,
                           onTap: () => _showAbout(context),
                         ),
@@ -129,11 +130,11 @@ class HomeScreen extends ConsumerWidget {
   void _showComingSoon(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(Icons.construction, color: Colors.white),
-            SizedBox(width: 12),
-            Text('Coming soon!'),
+            const Icon(Icons.construction, color: Colors.white),
+            const SizedBox(width: 12),
+            Text(context.l10n.comingSoon),
           ],
         ),
         behavior: SnackBarBehavior.floating,
@@ -145,7 +146,7 @@ class HomeScreen extends ConsumerWidget {
   void _showAbout(BuildContext context) {
     showAboutDialog(
       context: context,
-      applicationName: 'AWCMS Mobile',
+      applicationName: context.l10n.appTitle,
       applicationVersion: '1.0.0',
       applicationIcon: Container(
         padding: const EdgeInsets.all(8),
@@ -159,7 +160,7 @@ class HomeScreen extends ConsumerWidget {
           color: Theme.of(context).colorScheme.primary,
         ),
       ),
-      applicationLegalese: '© 2024 AhliWeb.com\nAll rights reserved.',
+      applicationLegalese: context.l10n.copyright,
     );
   }
 }
@@ -198,7 +199,7 @@ class _WelcomeCard extends ConsumerWidget {
                   Row(
                     children: [
                       Text(
-                        'Selamat Datang!',
+                        context.l10n.welcome,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -256,8 +257,8 @@ class _SyncStatusCard extends StatelessWidget {
                 children: [
                   Text(
                     syncState.hasPending
-                        ? '${syncState.pendingCount} item menunggu sinkronisasi'
-                        : 'Data tersinkronisasi',
+                        ? context.l10n.itemsPendingSync(syncState.pendingCount)
+                        : context.l10n.dataSynced,
                     style: TextStyle(
                       fontWeight: FontWeight.w500,
                       color: syncState.hasPending
@@ -267,7 +268,9 @@ class _SyncStatusCard extends StatelessWidget {
                   ),
                   if (syncState.lastSyncAt != null)
                     Text(
-                      'Terakhir: ${_formatTime(syncState.lastSyncAt!)}',
+                      context.l10n.lastSync(
+                        _formatTime(context, syncState.lastSyncAt!),
+                      ),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),
@@ -281,14 +284,14 @@ class _SyncStatusCard extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime time) {
+  String _formatTime(BuildContext context, DateTime time) {
     final now = DateTime.now();
     final diff = now.difference(time);
 
-    if (diff.inMinutes < 1) return 'Baru saja';
-    if (diff.inHours < 1) return '${diff.inMinutes} menit lalu';
-    if (diff.inDays < 1) return '${diff.inHours} jam lalu';
-    return '${diff.inDays} hari lalu';
+    if (diff.inMinutes < 1) return context.l10n.justNow;
+    if (diff.inHours < 1) return context.l10n.minAgo(diff.inMinutes);
+    if (diff.inDays < 1) return context.l10n.hoursAgo(diff.inHours);
+    return context.l10n.daysAgo(diff.inDays);
   }
 }
 

@@ -6,7 +6,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
+import '../../core/extensions/context_extensions.dart';
 import '../../core/services/notification_service.dart';
 
 /// Notification bell icon with badge
@@ -143,7 +145,7 @@ class NotificationItem extends StatelessWidget {
                       ],
                       const SizedBox(height: 8),
                       Text(
-                        _formatTime(notification.createdAt),
+                        _formatTime(context, notification.createdAt),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.outline,
                           fontSize: 11,
@@ -194,15 +196,18 @@ class NotificationItem extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime time) {
+  String _formatTime(BuildContext context, DateTime time) {
     final now = DateTime.now();
     final diff = now.difference(time);
 
-    if (diff.inMinutes < 1) return 'Baru saja';
-    if (diff.inHours < 1) return '${diff.inMinutes} menit lalu';
-    if (diff.inDays < 1) return '${diff.inHours} jam lalu';
-    if (diff.inDays < 7) return '${diff.inDays} hari lalu';
-    return '${time.day}/${time.month}/${time.year}';
+    if (diff.inMinutes < 1) return context.l10n.justNow;
+    if (diff.inHours < 1) return context.l10n.minutesAgo(diff.inMinutes);
+    if (diff.inDays < 1) return context.l10n.hoursAgo(diff.inHours);
+    if (diff.inDays < 7) return context.l10n.daysAgo(diff.inDays);
+
+    return DateFormat.yMMMd(
+      Localizations.localeOf(context).toString(),
+    ).format(time);
   }
 }
 
@@ -223,12 +228,12 @@ class EmptyNotifications extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Tidak ada notifikasi',
+            context.l10n.emptyNotifications,
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
           Text(
-            'Notifikasi akan muncul di sini',
+            context.l10n.emptyNotificationsDesc,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.outline,
             ),

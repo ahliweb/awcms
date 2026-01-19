@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -12,6 +13,7 @@ import Turnstile from '@/components/ui/Turnstile';
 import { Loader2, ArrowLeft, Mail, CheckCircle2 } from 'lucide-react';
 
 const ForgotPasswordPage = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -34,7 +36,7 @@ const ForgotPasswordPage = () => {
 
       if (!shouldSkipTurnstile) {
         if (!turnstileToken) {
-          throw new Error('Please complete the security verification.');
+          throw new Error(t('forgot_password.verification_needed'));
         }
 
         const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-turnstile', {
@@ -47,7 +49,7 @@ const ForgotPasswordPage = () => {
           if (window.turnstileReset) {
             window.turnstileReset();
           }
-          throw new Error(verifyData?.error || 'Security verification failed. Please try again.');
+          throw new Error(verifyData?.error || t('forgot_password.verification_failed_msg') || 'Security verification failed. Please try again.');
         }
       }
 
@@ -66,8 +68,8 @@ const ForgotPasswordPage = () => {
       console.error('Reset password error:', error);
       toast({
         variant: "destructive",
-        title: "Reset Failed",
-        description: error.message || "Please try again.",
+        title: t('forgot_password.reset_failed'),
+        description: error.message || t('forgot_password.try_again'),
       });
     } finally {
       setIsLoading(false);
@@ -83,11 +85,11 @@ const ForgotPasswordPage = () => {
       >
         <div className="p-8 md:p-10 space-y-8">
           <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Reset Password</h1>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('forgot_password.title')}</h1>
             <p className="text-slate-500">
               {isSuccess
-                ? "Check your email for the reset link"
-                : "Enter your email to receive a reset link"
+                ? t('forgot_password.check_email')
+                : t('forgot_password.enter_email')
               }
             </p>
           </div>
@@ -99,19 +101,19 @@ const ForgotPasswordPage = () => {
                   <CheckCircle2 className="w-8 h-8 text-green-600" />
                 </div>
                 <p className="text-center text-slate-600">
-                  We have sent a password reset link to <span className="font-semibold text-slate-900">{email}</span>.
+                  {t('forgot_password.sent_message')} <span className="font-semibold text-slate-900">{email}</span>.
                 </p>
               </div>
 
               <Button asChild className="w-full h-11 bg-slate-900 hover:bg-slate-800">
-                <Link to="/login">Back to Login</Link>
+                <Link to="/login">{t('forgot_password.back_to_login')}</Link>
               </Button>
             </div>
           ) : (
             <form onSubmit={handleReset} className="space-y-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
+                  <Label htmlFor="email">{t('login_page.email_address_label')}</Label>
                   <div className="relative">
                     <Input
                       id="email"
@@ -150,13 +152,13 @@ const ForgotPasswordPage = () => {
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                 ) : (
-                  'Send Reset Link'
+                  t('forgot_password.send_link')
                 )}
               </Button>
 
               <div className="text-center">
                 <Link to="/login" className="text-sm text-slate-500 hover:text-slate-900 flex items-center justify-center gap-2">
-                  <ArrowLeft className="w-4 h-4" /> Back to Login
+                  <ArrowLeft className="w-4 h-4" /> {t('forgot_password.back_to_login')}
                 </Link>
               </div>
             </form>

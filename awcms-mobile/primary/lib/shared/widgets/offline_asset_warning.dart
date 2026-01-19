@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/extensions/context_extensions.dart';
 import '../../core/services/connectivity_service.dart';
 
 /// Feature types that require online access
@@ -20,18 +21,18 @@ enum OnlineFeature {
 
 /// Extension to get feature display names
 extension OnlineFeatureExtension on OnlineFeature {
-  String get displayName {
+  String getDisplayName(BuildContext context) {
     switch (this) {
       case OnlineFeature.imageUpload:
-        return 'Upload Gambar';
+        return context.l10n.featureImageUpload;
       case OnlineFeature.fileDownload:
-        return 'Download File';
+        return context.l10n.featureFileDownload;
       case OnlineFeature.pdfView:
-        return 'Lihat PDF';
+        return context.l10n.featurePdfView;
       case OnlineFeature.mediaGallery:
-        return 'Galeri Media';
+        return context.l10n.featureMediaGallery;
       case OnlineFeature.storageAccess:
-        return 'Akses Storage';
+        return context.l10n.featureStorageAccess;
     }
   }
 
@@ -107,7 +108,7 @@ class _OfflineAssetWarningBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Mode Offline',
+                  context.l10n.offlineMode,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: colorScheme.onErrorContainer,
@@ -115,7 +116,9 @@ class _OfflineAssetWarningBanner extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${feature.displayName} tidak tersedia saat offline',
+                  context.l10n.featureNotAvailableOffline(
+                    feature.getDisplayName(context),
+                  ),
                   style: TextStyle(
                     color: colorScheme.onErrorContainer,
                     fontSize: 12,
@@ -145,16 +148,16 @@ Future<void> showOfflineAssetWarning(
     context: context,
     builder: (context) => AlertDialog(
       icon: const Icon(Icons.cloud_off, size: 48),
-      title: const Text('Mode Offline'),
+      title: Text(context.l10n.offlineMode),
       content: Text(
         customMessage ??
-            '${feature.displayName} tidak tersedia saat offline. '
-                'Hubungkan ke internet untuk mengakses fitur ini.',
+            '${context.l10n.featureNotAvailableOffline(feature.getDisplayName(context))}\n'
+                '${context.l10n.connectToInternet}',
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Mengerti'),
+          child: Text(context.l10n.understood),
         ),
       ],
     ),
@@ -172,7 +175,11 @@ void showOfflineAssetSnackbar(
         children: [
           const Icon(Icons.cloud_off, color: Colors.white, size: 20),
           const SizedBox(width: 12),
-          Text('${feature.displayName} tidak tersedia offline'),
+          Text(
+            context.l10n.featureNotAvailableOffline(
+              feature.getDisplayName(context),
+            ),
+          ),
         ],
       ),
       backgroundColor: Theme.of(context).colorScheme.error,

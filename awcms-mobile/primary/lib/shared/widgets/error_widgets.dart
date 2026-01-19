@@ -5,6 +5,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../core/extensions/context_extensions.dart';
+
 /// Generic error widget with retry
 class ErrorDisplay extends StatelessWidget {
   final String message;
@@ -54,7 +56,7 @@ class ErrorDisplay extends StatelessWidget {
               FilledButton.tonalIcon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Coba Lagi'),
+                label: Text(context.l10n.retry),
               ),
             ],
           ],
@@ -152,8 +154,8 @@ class NetworkError extends StatelessWidget {
   Widget build(BuildContext context) {
     return ErrorDisplay(
       icon: Icons.wifi_off,
-      message: 'Tidak ada koneksi internet',
-      details: 'Periksa koneksi Anda dan coba lagi',
+      message: context.l10n.noConnection,
+      details: context.l10n.checkConnection,
       onRetry: onRetry,
     );
   }
@@ -169,8 +171,8 @@ class ServerError extends StatelessWidget {
   Widget build(BuildContext context) {
     return ErrorDisplay(
       icon: Icons.cloud_off,
-      message: 'Terjadi kesalahan server',
-      details: 'Silakan coba beberapa saat lagi',
+      message: context.l10n.serverError,
+      details: context.l10n.tryAgainLater,
       onRetry: onRetry,
     );
   }
