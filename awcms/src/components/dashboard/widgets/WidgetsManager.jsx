@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Layers, Plus, Settings, Trash2, GripVertical, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,6 +15,7 @@ import WidgetEditor from './WidgetEditor';
 
 const WidgetsManager = () => {
     const { templateParts } = useTemplates();
+    const { t } = useTranslation();
     const { userRole, hasPermission } = usePermissions();
     const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
 
@@ -35,8 +37,8 @@ const WidgetsManager = () => {
                 <div className="p-4 bg-red-50 rounded-full mb-4">
                     <ShieldAlert className="w-12 h-12 text-red-500" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-800">Access Denied</h3>
-                <p className="text-slate-500 mt-2">You do not have permission to view widgets.</p>
+                <h3 className="text-xl font-bold text-slate-800">{t('common.access_denied')}</h3>
+                <p className="text-slate-500 mt-2">{t('widgets_manager.access_denied_desc')}</p>
             </div>
         );
     }
@@ -45,17 +47,17 @@ const WidgetsManager = () => {
         <div className="p-6 max-w-7xl mx-auto space-y-8">
             <div>
                 <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-                    <Layers className="w-8 h-8 text-indigo-600" /> Widgets
+                    <Layers className="w-8 h-8 text-indigo-600" /> {t('widgets_manager.title')}
                 </h1>
-                <p className="text-slate-500 mt-1">Manage content blocks for sidebars and other widget areas.</p>
+                <p className="text-slate-500 mt-1">{t('widgets_manager.subtitle')}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 {/* Sidebar: Area Selector */}
                 <div className="md:col-span-1 space-y-4">
-                    <h3 className="font-semibold text-slate-900">Widget Areas</h3>
+                    <h3 className="font-semibold text-slate-900">{t('widgets_manager.areas_title')}</h3>
                     {widgetAreas.length === 0 ? (
-                        <p className="text-sm text-slate-500">No widget areas found defined in Template Parts.</p>
+                        <p className="text-sm text-slate-500">{t('widgets_manager.no_areas')}</p>
                     ) : (
                         <div className="space-y-1">
                             {widgetAreas.map(area => (
@@ -80,7 +82,7 @@ const WidgetsManager = () => {
                         <AreaEditor areaId={selectedAreaId} areaName={widgetAreas.find(a => a.id === selectedAreaId)?.name} isPlatformAdmin={isPlatformAdmin} />
                     ) : (
                         <div className="h-64 flex items-center justify-center border-2 border-dashed rounded-lg bg-slate-50 text-slate-400">
-                            Select an area to manage widgets
+                            {t('widgets_manager.select_area_prompt')}
                         </div>
                     )}
                 </div>
@@ -90,6 +92,7 @@ const WidgetsManager = () => {
 };
 
 const AreaEditor = ({ areaId, areaName, isPlatformAdmin }) => {
+    const { t } = useTranslation();
     const { widgets, loading, addWidget, updateWidget, deleteWidget } = useWidgets(areaId);
     const availableWidgets = getRegistryWidgets();
     const [editingWidget, setEditingWidget] = useState(null);
@@ -108,7 +111,7 @@ const AreaEditor = ({ areaId, areaName, isPlatformAdmin }) => {
         }
     };
 
-    if (loading) return <div>Loading widgets...</div>;
+    if (loading) return <div>{t('common.loading')}</div>;
 
     return (
         <div className="space-y-6">
@@ -118,12 +121,12 @@ const AreaEditor = ({ areaId, areaName, isPlatformAdmin }) => {
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
                         <Button>
-                            <Plus className="w-4 h-4 mr-2" /> Add Widget
+                            <Plus className="w-4 h-4 mr-2" /> {t('widgets_manager.add_button')}
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
                         <div className="grid gap-4 py-4">
-                            <h3 className="font-semibold mb-2">Select Widget Type</h3>
+                            <h3 className="font-semibold mb-2">{t('widgets_manager.select_type_title')}</h3>
                             <div className="grid grid-cols-2 gap-4">
                                 {availableWidgets.map(w => (
                                     <button
@@ -144,7 +147,7 @@ const AreaEditor = ({ areaId, areaName, isPlatformAdmin }) => {
             <div className="space-y-4">
                 {widgets.length === 0 ? (
                     <div className="py-12 text-center text-slate-500 bg-slate-50 rounded-lg">
-                        This area is empty. Add a widget to get started.
+                        {t('widgets_manager.empty_area')}
                     </div>
                 ) : (
                     widgets.map((widget, index) => {
@@ -164,7 +167,7 @@ const AreaEditor = ({ areaId, areaName, isPlatformAdmin }) => {
                                         <div className="font-medium text-slate-900">{def?.name || widget.type}</div>
                                         {isPlatformAdmin && (
                                             <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded mr-2">
-                                                {widget.tenant?.name || '(Unknown)'}
+                                                {widget.tenant?.name || t('widgets_manager.unknown_tenant')}
                                             </span>
                                         )}
                                         <div className="text-xs text-slate-500 truncate max-w-[300px]">

@@ -983,5 +983,32 @@
       "deleted": "Policy moved to trash.",
       "delete_failed": "Delete Failed"
     }
+  },
+  "widgets_manager": {
+    "title": "Widgets",
+    "subtitle": "Manage content blocks for sidebars and other widget areas.",
+    "areas_title": "Widget Areas",
+    "no_areas": "No widget areas found defined in Template Parts.",
+    "select_area_prompt": "Select an area to manage widgets",
+    "add_button": "Add Widget",
+    "select_type_title": "Select Widget Type",
+    "empty_area": "This area is empty. Add a widget to get started.",
+    "access_denied_desc": "You do not have permission to view widgets.",
+    "unknown_tenant": "(Unknown)",
+    "editor": {
+      "edit_prefix": "Edit",
+      "save_button": "Save Widget",
+      "content_label": "Content (HTML supported)",
+      "render_html_label": "Render as raw HTML",
+      "image_url_label": "Image URL",
+      "alt_text_label": "Alt Text",
+      "button_text_label": "Button Text",
+      "url_label": "URL",
+      "menu_id_label": "Menu ID (UUID)",
+      "menu_help": "Select a menu from Menus manager",
+      "generic_notice": "Generic Editor (JSON)",
+      "config_json_label": "Config JSON",
+      "placeholder_uuid": "Paste format-uuid here"
+    }
   }
 }

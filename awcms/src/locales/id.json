@@ -983,5 +983,32 @@
       "deleted": "Kebijakan dipindahkan ke sampah.",
       "delete_failed": "Gagal Menghapus"
     }
+  },
+  "widgets_manager": {
+    "title": "Widget",
+    "subtitle": "Kelola blok konten untuk sidebar dan area widget lainnya.",
+    "areas_title": "Area Widget",
+    "no_areas": "Tidak ada area widget yang ditemukan di Bagian Template.",
+    "select_area_prompt": "Pilih area untuk mengelola widget",
+    "add_button": "Tambah Widget",
+    "select_type_title": "Pilih Tipe Widget",
+    "empty_area": "Area ini kosong. Tambahkan widget untuk memulai.",
+    "access_denied_desc": "Anda tidak memiliki izin untuk melihat widget.",
+    "unknown_tenant": "(Tidak Diketahui)",
+    "editor": {
+      "edit_prefix": "Edit",
+      "save_button": "Simpan Widget",
+      "content_label": "Konten (Mendukung HTML)",
+      "render_html_label": "Render sebagai HTML mentah",
+      "image_url_label": "URL Gambar",
+      "alt_text_label": "Teks Alt",
+      "button_text_label": "Teks Tombol",
+      "url_label": "URL",
+      "menu_id_label": "ID Menu (UUID)",
+      "menu_help": "Pilih menu dari Manajer Menu",
+      "generic_notice": "Editor Umum (JSON)",
+      "config_json_label": "Konfigurasi JSON",
+      "placeholder_uuid": "Tempel format-uuid di sini"
+    }
   }
 }

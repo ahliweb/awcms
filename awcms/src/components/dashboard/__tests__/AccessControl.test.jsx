@@ -84,7 +84,7 @@ describe('Access Control', () => {
 
             // Expect Access Denied UI
             await waitFor(() => {
-                expect(screen.getByText(/Access Denied/i)).toBeInTheDocument();
+                expect(screen.getByText('seo_manager.access_denied')).toBeInTheDocument();
             });
             // Expect AdminPageLayout NOT to be rendered
             expect(screen.queryByTestId('admin-layout')).not.toBeInTheDocument();
@@ -121,7 +121,7 @@ describe('Access Control', () => {
             render(<WidgetsManager />);
 
             await waitFor(() => {
-                expect(screen.getByText(/Access Denied/i)).toBeInTheDocument();
+                expect(screen.getByText('common.access_denied')).toBeInTheDocument();
             });
         });
 
@@ -136,7 +136,7 @@ describe('Access Control', () => {
 
             // If granted, it should NOT show Access Denied.
             await waitFor(() => {
-                expect(screen.queryByText(/Access Denied/i)).not.toBeInTheDocument();
+                expect(screen.queryByText('common.access_denied')).not.toBeInTheDocument();
             });
         });
     });

@@ -5,8 +5,6 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
-## [2.20.0] "Vanguard" - 2026-01-20
-
 ### Added
 
 - **RLS Security**: Implemented `auth_is_admin()` SECURITY DEFINER function to safely bypass RLS recursion for platform admins.
