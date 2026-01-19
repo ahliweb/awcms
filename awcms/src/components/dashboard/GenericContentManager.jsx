@@ -75,6 +75,10 @@ const GenericContentManager = ({
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState(null);
 
+    // Permanent Delete state
+    const [permDeleteDialogOpen, setPermDeleteDialogOpen] = useState(false);
+    const [itemToPermDelete, setItemToPermDelete] = useState(null);
+
     // Computed Permissions - Using frontend pattern (tenant.module.*)
     const canView = viewPermission
         ? hasPermission(viewPermission)
@@ -85,6 +89,7 @@ const GenericContentManager = ({
     const canRestore = restorePermission
         ? hasPermission(restorePermission)
         : hasPermission(`tenant.${permissionPrefix}.restore`);
+    const canPermDelete = hasPermission(`tenant.${permissionPrefix}.delete_permanent`);
     const softDeleteEnabled = true;
 
     const fetchItems = async () => {
@@ -214,6 +219,36 @@ const GenericContentManager = ({
         } catch (err) {
             console.error('Restore error:', err);
             toast({ variant: 'destructive', title: 'Error', description: err.message });
+        }
+    };
+
+    const handlePermDelete = (item) => {
+        if (!checkAccess('delete_permanent', permissionPrefix)) {
+            toast({ variant: 'destructive', title: 'Access Denied', description: 'You generally do not have permission to permanently delete content.' });
+            return;
+        }
+        setItemToPermDelete(item);
+        setPermDeleteDialogOpen(true);
+    };
+
+    const confirmPermDelete = async () => {
+        if (!itemToPermDelete) return;
+
+        try {
+            const { error } = await udm.from(tableName)
+                .delete({ force: true })
+                .eq('id', itemToPermDelete.id);
+
+            if (error) throw error;
+            toast({ title: 'Permanently Deleted', description: `${resourceName} has been permanently removed.` });
+
+            fetchItems();
+        } catch (err) {
+            console.error('Permanent Delete error:', err);
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
+        } finally {
+            setPermDeleteDialogOpen(false);
+            setItemToPermDelete(null);
         }
     };
 
@@ -408,6 +443,14 @@ const GenericContentManager = ({
                                                 <RotateCcw className="w-4 h-4" />
                                             </Button>
                                         )}
+                                        {canPermDelete && (
+                                            <Button size="icon" variant="ghost" onClick={() => handlePermDelete(item)} className="text-red-700 hover:bg-red-100" title="Permanently Delete">
+                                                <div className="relative">
+                                                    <Trash2 className="w-4 h-4" />
+                                                    <span className="absolute -top-1 -right-1 text-[10px] font-bold">×</span>
+                                                </div>
+                                            </Button>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -423,7 +466,8 @@ const GenericContentManager = ({
                         }}
                     />
                 </>
-            )}
+            )
+            }
 
             {/* Delete Confirmation Dialog */}
             <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -443,7 +487,25 @@ const GenericContentManager = ({
                 </AlertDialogContent>
             </AlertDialog>
 
-        </div>
+            {/* Permanent Delete Confirmation Dialog */}
+            <AlertDialog open={permDeleteDialogOpen} onOpenChange={setPermDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-destructive">Permanently Delete?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete the <strong>{resourceName}</strong> from the database.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setItemToPermDelete(null)}>{t('common.cancel')}</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmPermDelete} className="bg-destructive hover:bg-destructive/90">
+                            Delete Permanently
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+        </div >
     );
 };
 

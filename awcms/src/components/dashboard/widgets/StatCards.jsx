@@ -75,7 +75,7 @@ export function StatCards({ data, loading, className = '' }) {
         return (
           <Card
             key={index}
-            className="group relative overflow-hidden bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+            className="group relative overflow-hidden bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
           >
             {/* Subtle Gradient Glow Background */}
             <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br ${stat.gradient} opacity-10 blur-2xl group-hover:opacity-20 transition-opacity`}></div>

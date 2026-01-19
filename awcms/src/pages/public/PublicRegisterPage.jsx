@@ -17,7 +17,6 @@ const PublicRegisterPage = () => {
     });
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
-    // eslint-disable-next-line no-unused-vars
     const [turnstileToken, setTurnstileToken] = useState('');
 
     const { toast } = useToast();
@@ -36,7 +35,7 @@ const PublicRegisterPage = () => {
                     action: 'submit_application',
                     email: formData.email,
                     full_name: formData.full_name,
-                    // turnstileToken // Ideally verifying turnstile in backend too, but keeping simple for now
+                    turnstileToken,
                 }
             });
 
@@ -130,6 +129,8 @@ const PublicRegisterPage = () => {
                             <div className="pt-2">
                                 <Turnstile
                                     siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                                    onVerify={(token) => setTurnstileToken(token)}
+                                    onError={() => setTurnstileToken('')}
                                 />
                             </div>
                         </div>

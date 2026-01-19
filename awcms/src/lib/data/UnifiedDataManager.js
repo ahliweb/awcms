@@ -47,8 +47,9 @@ class UnifiedDataManager {
         return this;
     }
 
-    delete() {
+    delete(options = {}) {
         this.query.type = 'delete';
+        this.query.options = options;
         return this;
     }
 
@@ -290,7 +291,14 @@ class UnifiedDataManager {
 
         // DELETE
         if (this.query.type === 'delete') {
-            builder = builder.update({ deleted_at: new Date().toISOString() });
+            if (this.query.options?.force) {
+                // Hard Delete
+                builder = builder.delete();
+            } else {
+                // Soft Delete (Default)
+                builder = builder.update({ deleted_at: new Date().toISOString() });
+            }
+
             this.query.filters.forEach(f => {
                 if (f.operator === '=') builder = builder.eq(f.column, f.value);
                 if (f.operator === '!=') builder = builder.neq(f.column, f.value);

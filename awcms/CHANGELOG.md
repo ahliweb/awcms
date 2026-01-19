@@ -11,6 +11,12 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - **RLS Security**: Implemented `auth_is_admin()` SECURITY DEFINER function to safely bypass RLS recursion for platform admins.
 - **Permission Templates**: Restored functionality for "Viewer Set", "Editor Set", and "Manager Set" buttons in Role Editor for all tenant roles.
+- **Admin Dashboard**:
+  - **Neo-Glass Aesthetic**: Standardized `StatCards`, `ActivityFeed`, and `PlatformOverview` with consistent blur/opacity (`bg-white/60`, `backdrop-blur-xl`) and typography.
+  - **Console Fix**: Resolved Recharts `width(-1)` warning by enforcing minimum container dimensions.
+- **Database**:
+  - **Hard Delete**: Added `{ force: true }` support to `UnifiedDataManager` for permanent deletions.
+  - **Synchronization**: Repaired migration history and fully synced local/remote schemas.
 
 ### Fixed
 

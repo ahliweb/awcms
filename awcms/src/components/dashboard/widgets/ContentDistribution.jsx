@@ -19,7 +19,8 @@ export function ContentDistribution({ data }) {
       <CardContent className="p-6">
         {chartData.length > 0 ? (
           <div className="w-full h-[300px] relative" style={{ minHeight: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%">
+            {/* minWidth/minHeight added to suppress Recharts warning during initial render/animation */}
+            <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
               <PieChart>
                 <Pie
                   data={chartData}
@@ -31,14 +32,26 @@ export function ContentDistribution({ data }) {
                   dataKey="value"
                 >
                   {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  itemStyle={{ color: '#1e293b' }}
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    borderRadius: '12px',
+                    border: 'none',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                    padding: '8px 12px'
+                  }}
+                  itemStyle={{ color: '#1e293b', fontWeight: 500, fontSize: '13px' }}
+                  cursor={false}
                 />
-                <Legend verticalAlign="bottom" height={36} />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  iconType="circle"
+                  formatter={(value) => <span className="text-sm font-medium text-slate-600 dark:text-slate-300 ml-1">{value}</span>}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>

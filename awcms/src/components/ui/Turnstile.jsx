@@ -101,9 +101,13 @@ const Turnstile = ({
         console.log('[Turnstile] USING SITE KEY:', siteKey);
 
         // Render new widget
+        // Render new widget
         try {
+            // NOTE: Using production key in local development as requested.
+            // If localhost needs test key, it must be manually supplied or env configured.
+
             const renderOptions = {
-                sitekey: siteKey,
+                sitekey: siteKey, // Directly use the provided key (Production)
                 callback: (token) => {
                     console.log('[Turnstile] Verification successful', token ? '(Token received)' : '(No token)');
                     onVerify?.(token);
@@ -133,6 +137,7 @@ const Turnstile = ({
 
             // Construct options object cleanly - no undefined keys
             renderOptions.appearance = appearance || 'always'; // Default to always if undefined
+            renderOptions.execution = 'render'; // MANAGED MODE: Ensure auto-render
             renderOptions.theme = theme || 'auto';
 
             // Only add size if it is explicitly defined

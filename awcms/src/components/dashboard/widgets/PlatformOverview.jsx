@@ -34,7 +34,7 @@ export function PlatformOverview() {
 
             {/* Top Stats - Neo Glass */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card className="bg-white/40 dark:bg-slate-800/40 backdrop-blur-md border-white/20 dark:border-slate-700/30 shadow-sm hover:shadow-lg transition-all duration-300">
+                <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Tenants</CardTitle>
                         <Building2 className="h-4 w-4 text-indigo-500" />
@@ -52,7 +52,7 @@ export function PlatformOverview() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-white/40 dark:bg-slate-800/40 backdrop-blur-md border-white/20 dark:border-slate-700/30 shadow-sm hover:shadow-lg transition-all duration-300">
+                <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">System Users</CardTitle>
                         <Users className="h-4 w-4 text-emerald-500" />
@@ -63,7 +63,7 @@ export function PlatformOverview() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-white/40 dark:bg-slate-800/40 backdrop-blur-md border-white/20 dark:border-slate-700/30 shadow-sm hover:shadow-lg transition-all duration-300">
+                <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">System Storage</CardTitle>
                         <Database className="h-4 w-4 text-orange-500" />

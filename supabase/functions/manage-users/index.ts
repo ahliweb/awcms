@@ -60,6 +60,48 @@ Deno.serve(async (req: Request) => {
 
         if (action === 'submit_application') {
             console.log('Processing public application submit')
+
+            // --- Security: Verify Turnstile Token ---
+            const { turnstileToken } = body
+
+            // Helper to verify Turnstile
+            const verifyTurnstile = async (token: string) => {
+                const secretKey = Deno.env.get('TURNSTILE_SECRET_KEY')
+                if (!secretKey) {
+                    console.error('TURNSTILE_SECRET_KEY missing in environment')
+                    // Fail closed for security
+                    return { success: false, error: 'Server configuration error' }
+                }
+
+                const formData = new FormData()
+                formData.append('secret', secretKey)
+                formData.append('response', token)
+                // formData.append('remoteip', req.headers.get('x-forwarded-for') || '') 
+
+                try {
+                    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+                        method: 'POST',
+                        body: formData,
+                    })
+                    return await res.json()
+                } catch (err) {
+                    console.error('Turnstile verification fetch error:', err)
+                    return { success: false, error: 'Failed to connect to verification service' }
+                }
+            }
+
+            if (!turnstileToken) {
+                throw new Error('Security check required (missing token)')
+            }
+
+            const verification = await verifyTurnstile(turnstileToken)
+
+            if (!verification.success) {
+                console.warn('Turnstile verification failed:', verification)
+                throw new Error('Security check failed. Please refresh and try again.')
+            }
+            // ----------------------------------------
+
             if (!email || !full_name) throw new Error('Email and Full Name are required')
 
             // Check if email already exists in users or requests
