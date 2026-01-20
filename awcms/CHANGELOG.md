@@ -3,7 +3,7 @@
 
 All notable changes to the **AWCMS** project will be documented in this file.
 
-## [Unreleased]
+## [2.21.1] "Synchronization" - 2026-01-20
 
 ### Added
 
