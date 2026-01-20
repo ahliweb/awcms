@@ -69,6 +69,7 @@ const NotificationDetail = lazy(() => import('@/components/dashboard/notificatio
 const SSOManager = lazy(() => import('@/components/dashboard/SSOManager'));
 const ExtensionLogs = lazy(() => import('@/components/dashboard/ExtensionLogs'));
 const SidebarMenuManager = lazy(() => import('@/components/dashboard/SidebarMenuManager'));
+const ModulesManager = lazy(() => import('@/pages/cmspanel/ModulesManager'));
 
 const SettingsManager = lazy(() => import('@/components/dashboard/SettingsManager'));
 const AuditLogsManager = lazy(() => import('@/components/dashboard/AuditLogsManager'));
@@ -230,6 +231,7 @@ const MainRouter = () => {
 
 
           <Route path="admin-navigation" element={<SidebarMenuManager />} />
+          <Route path="modules" element={<ModulesManager />} />
           <Route path="tenants" element={<TenantsManager />} />
 
           <Route path="notifications" element={<NotificationsManager />} />

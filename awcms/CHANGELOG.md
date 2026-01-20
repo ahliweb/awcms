@@ -5,11 +5,16 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.23.0] "Vortex" - 2026-01-21
+
 ### Added
 
 - **Sidebar Admin**:
   - `SidebarMenuManager` with role-based filtering, icon picker, and nested group support.
   - Updated `Sidebar` component with permission checks, collapsible sections, and favorites.
+- **Module Management**:
+  - `ModulesManager` component for listing all system modules (Owner/SuperAdmin view all, Admin view tenant-scoped).
+  - Database migration for `modules` table with RLS policies and `tenant.modules.read` permission.
 
 ### Fixed
 
@@ -18,6 +23,8 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Database Synchronization**:
   - Repaired migration history to resolve timestamps conflicts.
   - Successfully synced local migration files with remote database (`npx supabase db push`) and resolved all schema diffs (`npx supabase db pull`).
+- **Code Quality**:
+  - Resolved ESLint warnings in `ModulesManager.jsx` (unused variables, hooks dependencies).
 
 ### Security
 
