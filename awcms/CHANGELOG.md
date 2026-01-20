@@ -11,6 +11,15 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - **Baselining**: Consolidated fragmented migration history into a single baseline file (`20260119230212_remote_schema.sql`) to resolve persistent "Duplicate Primary Key" conflicts during `db pull`.
   - **Stability**: Verified full synchronization between local environment and remote database.
 
+### Fixed
+
+- **Migration Mismatch**:
+  - Resolved "Remote migration versions not found" in CI by synchronizing root (`supabase/migrations`) and sub-project (`awcms/supabase/migrations`) directories.
+  - Removed 37 obsolete migration files from root directory to match remote database state.
+- **RLS Security**:
+  - Added `auth_is_admin()` SECURITY DEFINER function via `20260120000001` migration to safely bypass RLS recursion.
+  - Pulled latest remote schema changes (`20260120002708_remote_schema.sql`) to ensure full alignment.
+
 ## [2.21.0] "Nexus" - 2026-01-20
 
 ### Added
