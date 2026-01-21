@@ -11,6 +11,9 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - Renamed "SEO" to "SEO Default" in Sidebar and SEO Manager for clarity.
   - Implemented automatic pre-filling of global SEO settings (Title, Description, Keyword, OG Image) when creating new Pages.
   - Updated `PageEditor` to fetch default values from `seo_global` settings.
+- **Public Portal (Astro)**:
+  - Initialized Astro project configuration and directory structure for public school templates.
+  - Configured `@astrojs/tailwind`, `@astrojs/sitemap`, and `astro-icon` integrations.
 - **Theme Management**:
   - **Dark Mode Support**: Added dedicated "Dark Mode" color configuration in Theme Editor.
   - **Dual-Mode Theming**: Implemented independent light/dark CSS variable injection via `themeUtils`.
@@ -21,6 +24,9 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - **Localization**:
   - Updated Indonesian (`id.json`) translations for "SEO Default Configuration".
+- **Code Refactor**:
+  - Centralized Supabase client imports across Admin components.
+  - Standardized `PageHeader` component path references.
 
 ### Fixed
 
@@ -29,6 +35,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - Optimized localized list processing with explicit type casting in Astro templates.
   - Cleaned up unused imports and variables across the entire template.
   - Restored missing critical imports in financial, achievement, and service pages.
+  - Resolved deployment build errors by adding `VITE_` prefix fallbacks for Supabase credentials in `src/lib/supabase.ts`.
 
 ## [2.23.0] "Vortex" - 2026-01-21
 
