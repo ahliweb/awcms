@@ -28,14 +28,62 @@
       "en": "<p>SMA Negeri 2 Pangkalan Bun was established in 1985 based on the Decree of the Minister of Education and Culture of the Republic of Indonesia. This school is the second high school established in Pangkalan Bun City, Kotawaringin Barat Regency, Central Kalimantan.</p><h3>Early Period (1985-1995)</h3><p>At the beginning of its establishment, this school only had 6 classrooms with approximately 180 students. Facilities were still very limited, but the spirit to advance education in this area was very high.</p><h3>Development Period (1995-2010)</h3><p>Over time, SMAN 2 Pangkalan Bun continued to develop. Additional facilities such as science laboratories, computer laboratories, and libraries were added gradually. The number of students also increased significantly.</p><h3>Modern Era (2010-Present)</h3><p>Currently, SMAN 2 Pangkalan Bun has become one of the leading high schools in Kotawaringin Barat Regency. With A accreditation, this school continues to innovate in learning and produces quality graduates spread across various leading universities in Indonesia.</p>"
     },
     "milestones": [
-      { "year": "1985", "event": { "id": "Pendirian SMAN 2 Pangkalan Bun", "en": "Establishment of SMAN 2 Pangkalan Bun" } },
-      { "year": "1990", "event": { "id": "Pembangunan Laboratorium IPA", "en": "Construction of Science Laboratory" } },
-      { "year": "1998", "event": { "id": "Akreditasi pertama dengan nilai B", "en": "First accreditation with B grade" } },
-      { "year": "2005", "event": { "id": "Pembangunan Laboratorium Komputer", "en": "Construction of Computer Laboratory" } },
-      { "year": "2010", "event": { "id": "Mendapat status Sekolah Standar Nasional", "en": "Obtained National Standard School status" } },
-      { "year": "2015", "event": { "id": "Akreditasi A pertama kali", "en": "First A accreditation" } },
-      { "year": "2019", "event": { "id": "Penghargaan Sekolah Adiwiyata", "en": "Adiwiyata School Award" } },
-      { "year": "2023", "event": { "id": "Re-akreditasi dengan nilai A (Unggul)", "en": "Re-accreditation with A grade (Excellent)" } }
+      {
+        "year": "1985",
+        "event": {
+          "id": "Pendirian SMAN 2 Pangkalan Bun",
+          "en": "Establishment of SMAN 2 Pangkalan Bun"
+        }
+      },
+      {
+        "year": "1990",
+        "event": {
+          "id": "Pembangunan Laboratorium IPA",
+          "en": "Construction of Science Laboratory"
+        }
+      },
+      {
+        "year": "1998",
+        "event": {
+          "id": "Akreditasi pertama dengan nilai B",
+          "en": "First accreditation with B grade"
+        }
+      },
+      {
+        "year": "2005",
+        "event": {
+          "id": "Pembangunan Laboratorium Komputer",
+          "en": "Construction of Computer Laboratory"
+        }
+      },
+      {
+        "year": "2010",
+        "event": {
+          "id": "Mendapat status Sekolah Standar Nasional",
+          "en": "Obtained National Standard School status"
+        }
+      },
+      {
+        "year": "2015",
+        "event": {
+          "id": "Akreditasi A pertama kali",
+          "en": "First A accreditation"
+        }
+      },
+      {
+        "year": "2019",
+        "event": {
+          "id": "Penghargaan Sekolah Adiwiyata",
+          "en": "Adiwiyata School Award"
+        }
+      },
+      {
+        "year": "2023",
+        "event": {
+          "id": "Re-akreditasi dengan nilai A (Unggul)",
+          "en": "Re-accreditation with A grade (Excellent)"
+        }
+      }
     ]
   },
   "visionMission": {
@@ -71,7 +119,7 @@
       ]
     },
     "motto": {
-      "id": "SMANDA JAYA - Unggul dalam Prestasi, Berkarakter Mulia",
+      "id": "SMANDA JAYA - Beriman, Cerdas, Berprestasi (BERDASI)",
       "en": "SMANDA JAYA - Excellence in Achievement, Noble Character"
     }
   },
@@ -104,64 +152,124 @@
     },
     "items": [
       {
-        "name": { "id": "Ruang Kelas", "en": "Classrooms" },
+        "name": {
+          "id": "Ruang Kelas",
+          "en": "Classrooms"
+        },
         "count": 36,
         "condition": "Baik",
-        "description": { "id": "Dilengkapi AC dan LCD Projector", "en": "Equipped with AC and LCD Projector" }
+        "description": {
+          "id": "Dilengkapi AC dan LCD Projector",
+          "en": "Equipped with AC and LCD Projector"
+        }
       },
       {
-        "name": { "id": "Laboratorium IPA", "en": "Science Laboratory" },
+        "name": {
+          "id": "Laboratorium IPA",
+          "en": "Science Laboratory"
+        },
         "count": 3,
         "condition": "Baik",
-        "description": { "id": "Lab Fisika, Kimia, dan Biologi", "en": "Physics, Chemistry, and Biology Labs" }
+        "description": {
+          "id": "Lab Fisika, Kimia, dan Biologi",
+          "en": "Physics, Chemistry, and Biology Labs"
+        }
       },
       {
-        "name": { "id": "Laboratorium Komputer", "en": "Computer Laboratory" },
+        "name": {
+          "id": "Laboratorium Komputer",
+          "en": "Computer Laboratory"
+        },
         "count": 2,
         "condition": "Baik",
-        "description": { "id": "60 unit komputer dengan internet", "en": "60 computer units with internet" }
+        "description": {
+          "id": "60 unit komputer dengan internet",
+          "en": "60 computer units with internet"
+        }
       },
       {
-        "name": { "id": "Laboratorium Bahasa", "en": "Language Laboratory" },
+        "name": {
+          "id": "Laboratorium Bahasa",
+          "en": "Language Laboratory"
+        },
         "count": 1,
         "condition": "Baik",
-        "description": { "id": "40 booth dengan headset", "en": "40 booths with headsets" }
+        "description": {
+          "id": "40 booth dengan headset",
+          "en": "40 booths with headsets"
+        }
       },
       {
-        "name": { "id": "Perpustakaan", "en": "Library" },
+        "name": {
+          "id": "Perpustakaan",
+          "en": "Library"
+        },
         "count": 1,
         "condition": "Baik",
-        "description": { "id": "12,000+ koleksi buku", "en": "12,000+ book collection" }
+        "description": {
+          "id": "12,000+ koleksi buku",
+          "en": "12,000+ book collection"
+        }
       },
       {
-        "name": { "id": "Masjid", "en": "Mosque" },
+        "name": {
+          "id": "Masjid",
+          "en": "Mosque"
+        },
         "count": 1,
         "condition": "Baik",
-        "description": { "id": "Kapasitas 500 jamaah", "en": "Capacity 500 worshippers" }
+        "description": {
+          "id": "Kapasitas 500 jamaah",
+          "en": "Capacity 500 worshippers"
+        }
       },
       {
-        "name": { "id": "Aula", "en": "Hall" },
+        "name": {
+          "id": "Aula",
+          "en": "Hall"
+        },
         "count": 1,
         "condition": "Baik",
-        "description": { "id": "Kapasitas 800 orang", "en": "Capacity 800 people" }
+        "description": {
+          "id": "Kapasitas 800 orang",
+          "en": "Capacity 800 people"
+        }
       },
       {
-        "name": { "id": "Lapangan Olahraga", "en": "Sports Field" },
+        "name": {
+          "id": "Lapangan Olahraga",
+          "en": "Sports Field"
+        },
         "count": 3,
         "condition": "Baik",
-        "description": { "id": "Basket, Voli, dan Futsal", "en": "Basketball, Volleyball, and Futsal" }
+        "description": {
+          "id": "Basket, Voli, dan Futsal",
+          "en": "Basketball, Volleyball, and Futsal"
+        }
       },
       {
-        "name": { "id": "Kantin", "en": "Canteen" },
+        "name": {
+          "id": "Kantin",
+          "en": "Canteen"
+        },
         "count": 1,
         "condition": "Baik",
-        "description": { "id": "Kantin sehat dan bersih", "en": "Healthy and clean canteen" }
+        "description": {
+          "id": "Kantin sehat dan bersih",
+          "en": "Healthy and clean canteen"
+        }
       },
       {
-        "name": { "id": "UKS", "en": "Health Room" },
+        "name": {
+          "id": "UKS",
+          "en": "Health Room"
+        },
         "count": 1,
         "condition": "Baik",
-        "description": { "id": "Dilengkapi peralatan medis dasar", "en": "Equipped with basic medical equipment" }
+        "description": {
+          "id": "Dilengkapi peralatan medis dasar",
+          "en": "Equipped with basic medical equipment"
+        }
       }
     ]
   },
@@ -178,9 +286,27 @@
       "en": "<p>SMAN 2 Pangkalan Bun has successfully received the National Adiwiyata School award as a form of commitment to protecting and preserving the environment.</p><h3>Featured Programs</h3><ul><li>School Waste Bank</li><li>Medicinal Plant Garden</li><li>Greenhouse and School Garden</li><li>Energy Saving Program</li><li>Plastic-Free Canteen</li></ul>"
     },
     "awards": [
-      { "year": "2019", "title": { "id": "Adiwiyata Tingkat Kabupaten", "en": "Regency Level Adiwiyata" } },
-      { "year": "2020", "title": { "id": "Adiwiyata Tingkat Provinsi", "en": "Provincial Level Adiwiyata" } },
-      { "year": "2022", "title": { "id": "Adiwiyata Nasional", "en": "National Adiwiyata" } }
+      {
+        "year": "2019",
+        "title": {
+          "id": "Adiwiyata Tingkat Kabupaten",
+          "en": "Regency Level Adiwiyata"
+        }
+      },
+      {
+        "year": "2020",
+        "title": {
+          "id": "Adiwiyata Tingkat Provinsi",
+          "en": "Provincial Level Adiwiyata"
+        }
+      },
+      {
+        "year": "2022",
+        "title": {
+          "id": "Adiwiyata Nasional",
+          "en": "National Adiwiyata"
+        }
+      }
     ]
   }
 }

@@ -220,7 +220,7 @@ export async function getSiteData(): Promise<SiteData> {
     const defaultData: SiteData = {
         site: {
             name: 'SMAN 2 Pangkalan Bun',
-            tagline: 'Unggul dalam Prestasi, Berkarakter Mulia',
+            tagline: 'Beriman, Cerdas, Berprestasi (BERDASI)',
             description: 'Sekolah Menengah Atas Negeri 2 Pangkalan Bun',
         },
         contact: {
