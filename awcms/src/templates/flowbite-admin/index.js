@@ -14,7 +14,7 @@ export { default as Sidebar } from './components/Sidebar';
 export { default as Footer } from './components/Footer';
 
 // Data Display Components (Legacy/Shared)
-// Restored PageTabs - still actively used by ArticlesManager, PagesManager, UsersManager, TemplatesManager
+// Restored PageTabs - still actively used by BlogsManager, PagesManager, UsersManager, TemplatesManager
 export { PageTabs, TabsList, TabsTrigger, TabsContent } from './components/PageTabs';
 // The following legacy components were removed (not used anywhere):
 // DataTable, EmptyState, LoadingSkeleton, TenantBadge, FormWrapper, NotAuthorized

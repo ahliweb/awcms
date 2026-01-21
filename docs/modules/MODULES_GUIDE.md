@@ -23,7 +23,7 @@ Modules are categorized to match the **Permission Matrix**.
 
 ### 1. Content
 
-- **Articles** (`ArticlesManager.jsx`)
+- **Blogs** (`BlogsManager.jsx`)
 - **Pages** (`PagesManager.jsx`)
 - **Visual Pages** (`VisualPagesManager.jsx`) - *New*
 - **Widgets** (`WidgetsManager.jsx`) - *New*

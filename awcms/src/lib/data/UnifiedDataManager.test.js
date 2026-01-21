@@ -59,9 +59,9 @@ describe('UnifiedDataManager', () => {
                 error: null
             }));
 
-            const result = await udm.from('articles').select('*');
+            const result = await udm.from('blogs').select('*');
 
-            expect(mocks.mockFrom).toHaveBeenCalledWith('articles');
+            expect(mocks.mockFrom).toHaveBeenCalledWith('blogs');
             expect(result.data).toEqual([{ id: 1, title: 'Test' }]);
         });
     });

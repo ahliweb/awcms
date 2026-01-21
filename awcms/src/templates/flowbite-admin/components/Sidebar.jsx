@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-    LayoutDashboard,
-    Settings,
-    FileText,
-    Users,
-    ShoppingBag,
-    ChevronDown,
-    ChevronUp,
-    Megaphone,
-    Puzzle
+    Search
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAdminMenu } from '@/hooks/useAdminMenu';
+import { useTranslation } from 'react-i18next';
+import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
+import { checkTierAccess } from '@/lib/tierFeatures';
+import { getIconComponent } from '@/lib/adminIcons';
 
 const SidebarItem = ({ href, icon: Icon, label, active }) => (
     <li>
@@ -22,144 +20,74 @@ const SidebarItem = ({ href, icon: Icon, label, active }) => (
                 active && "bg-accent"
             )}
         >
-            <Icon className="w-6 h-6 text-muted-foreground transition duration-75 group-hover:text-foreground" />
-            <span className="ml-3">{label}</span>
+            {Icon && <Icon className="w-6 h-6 text-muted-foreground transition duration-75 group-hover:text-foreground" />}
+            <span className="ml-3 truncate">{label}</span>
         </Link>
     </li>
 );
 
-const SidebarDropdown = ({ icon: Icon, label, children, id, active }) => {
-    const [isOpen, setIsOpen] = useState(active);
 
-    return (
-        <li>
-            <button
-                type="button"
-                className="flex items-center w-full p-2 text-base text-foreground transition duration-75 rounded-lg group hover:bg-accent"
-                onClick={() => setIsOpen(!isOpen)}
-                aria-controls={`dropdown-${id}`}
-                aria-expanded={isOpen}
-            >
-                <Icon className="flex-shrink-0 w-6 h-6 text-muted-foreground transition duration-75 group-hover:text-foreground" />
-                <span className="flex-1 ml-3 text-left whitespace-nowrap">{label}</span>
-                {isOpen ? (
-                    <ChevronUp className="w-6 h-6" />
-                ) : (
-                    <ChevronDown className="w-6 h-6" />
-                )}
-            </button>
-            <ul id={`dropdown-${id}`} className={cn("py-2 space-y-2", !isOpen && "hidden")}>
-                {children}
-            </ul>
-        </li>
-    );
-};
 
 const Sidebar = ({ isOpen, onClose }) => {
     const location = useLocation();
-    const path = location.pathname;
+    const { t } = useTranslation();
+    const { menuItems, loading } = useAdminMenu();
+    const { hasPermission, userRole } = usePermissions();
+    const { currentTenant } = useTenant(); // Added
+
+    // Path cleanup logic (same as other Sidebar)
+
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Helper to check active state
-    const isActive = (p) => path === p || path.startsWith(`${p}/`);
+    const isActive = (path) => {
+        if (!path) return false;
+        // Exact match or sub-path
+        return location.pathname === `/cmspanel/${path}` || location.pathname.startsWith(`/cmspanel/${path}/`);
+    };
 
-    const MENU_ITEMS = [
-        { label: 'Dashboard', href: '/cmspanel', icon: LayoutDashboard },
-        {
-            label: 'Content',
-            icon: FileText,
-            id: 'content',
-            children: [
-                { label: 'Articles', href: '/cmspanel/articles' },
-                { label: 'Pages', href: '/cmspanel/pages' },
-                { label: 'Visual Pages', href: '/cmspanel/visual-pages' },
-                { label: 'Categories', href: '/cmspanel/categories' },
-                { label: 'Tags', href: '/cmspanel/tags' },
-                { label: 'Media Library', href: '/cmspanel/files' },
-            ]
-        },
-        {
-            label: 'Commerce & Services',
-            icon: ShoppingBag,
-            id: 'commerce',
-            children: [
-                { label: 'Products', href: '/cmspanel/products' },
-                { label: 'Orders', href: '/cmspanel/orders' },
-                { label: 'Services', href: '/cmspanel/services' },
-                { label: 'Portfolio', href: '/cmspanel/portfolio' },
-                { label: 'Promotions', href: '/cmspanel/promotions' },
-            ]
-        },
-        {
-            label: 'Engagement',
-            icon: Megaphone,
-            id: 'engagement',
-            children: [
-                { label: 'Announcements', href: '/cmspanel/announcements' },
-                { label: 'Testimonies', href: '/cmspanel/testimonies' },
-                { label: 'Messages', href: '/cmspanel/messages' },
-                { label: 'Photo Gallery', href: '/cmspanel/photo-gallery' },
-                { label: 'Video Gallery', href: '/cmspanel/video-gallery' },
-            ]
-        },
-        {
-            label: 'Extension & UI',
-            icon: Puzzle,
-            id: 'extension',
-            children: [
-                { label: 'Themes', href: '/cmspanel/themes' },
-                { label: 'Extensions', href: '/cmspanel/extensions' },
-                { label: 'Templates', href: '/cmspanel/templates' },
-                { label: 'Widgets', href: '/cmspanel/widgets' },
-            ]
-        },
-        {
-            label: 'Access Control',
-            icon: Users,
-            id: 'users',
-            children: [
-                { label: 'Users', href: '/cmspanel/users' },
-                { label: 'Roles', href: '/cmspanel/roles' },
-                { label: 'Permissions', href: '/cmspanel/permissions' },
-                { label: 'Mobile Users', href: '/cmspanel/mobile/users' },
-            ]
-        },
-        {
-            label: 'System',
-            icon: Settings,
-            id: 'system',
-            children: [
-                { label: 'Settings', href: '/cmspanel/settings/general' },
-                { label: 'SEO Default', href: '/cmspanel/seo' },
-                { label: 'Audit Logs', href: '/cmspanel/logs' },
-                { label: 'Tenants', href: '/cmspanel/tenants' },
-                { label: 'IoT Devices', href: '/cmspanel/devices' },
-            ]
-        }
-    ];
+    // Filter and Group Logic
+    const groupedMenus = React.useMemo(() => {
+        if (loading) return {};
 
-    const filteredItems = MENU_ITEMS.map(item => {
-        if (item.children) {
-            const visibleChildren = item.children.filter(child =>
-                child.label.toLowerCase().includes(searchQuery.toLowerCase())
-            );
+        const authorizedItems = menuItems.filter(item => {
+            if (!item.is_visible) return false;
+            if (item.permission === 'super_admin_only') return ['super_admin', 'owner'].includes(userRole);
+            if (item.permission === 'platform_admin_only') return userRole === 'owner';
 
-            // If main label matches, show all children. Else, show only matching children.
-            if (item.label.toLowerCase().includes(searchQuery.toLowerCase())) {
-                return { ...item, isOpen: true }; // Force open if parent matches
+            // Check Subscription Tier
+            if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) return false;
+
+            if (item.permission) return hasPermission(item.permission);
+            return true;
+        });
+
+        // Filter by Search Query
+        const filteredItems = searchQuery
+            ? authorizedItems.filter(item =>
+                item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                t(`menu.${item.key}`, item.label).toLowerCase().includes(searchQuery.toLowerCase())
+            )
+            : authorizedItems;
+
+        // Grouping
+        const groups = {};
+        filteredItems.forEach(item => {
+            const groupLabel = item.group_label || 'General';
+            if (!groups[groupLabel]) {
+                groups[groupLabel] = { order: item.group_order || 999, items: [] };
             }
+            groups[groupLabel].items.push(item);
+        });
 
-            if (visibleChildren.length > 0) {
-                return { ...item, children: visibleChildren, isOpen: true }; // Force open if children match
-            }
-            return null; // Hide if no match
-        } else {
-            if (item.label.toLowerCase().includes(searchQuery.toLowerCase())) {
-                return item;
-            }
-            return null;
-        }
-    }).filter(Boolean);
+        // Sort items within groups
+        Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a.order - b.order));
+
+        return groups;
+    }, [menuItems, loading, userRole, hasPermission, searchQuery, t, currentTenant?.subscription_tier]);
+
+    const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
+        groupedMenus[a].order - groupedMenus[b].order
+    );
 
     return (
         <>
@@ -176,8 +104,6 @@ const Sidebar = ({ isOpen, onClose }) => {
                 className={cn(
                     "fixed top-0 left-0 z-20 flex flex-col flex-shrink-0 w-64 h-full pt-16 font-normal duration-200 transition-transform",
                     "bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700",
-                    // On mobile: hidden by default, slide in when isOpen
-                    // On desktop (lg+): always visible
                     isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
                 )}
                 aria-label="Sidebar"
@@ -190,53 +116,67 @@ const Sidebar = ({ isOpen, onClose }) => {
                                 <label htmlFor="sidebar-search" className="sr-only">Search</label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                        <svg className="w-5 h-5 text-muted-foreground" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd"></path>
-                                        </svg>
+                                        <Search className="w-5 h-5 text-muted-foreground" />
                                     </div>
                                     <input
                                         type="text"
                                         name="search"
                                         id="sidebar-search"
                                         className="block w-full pl-10 p-2.5 text-sm rounded-lg focus:ring-primary focus:border-primary transition-colors !bg-slate-950/50 !text-slate-200 !border-slate-800 placeholder:text-slate-500"
-                                        placeholder="Search"
+                                        placeholder={t('sidebar.search_placeholder', 'Search')}
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                     />
                                 </div>
                             </div>
 
+                            {/* Dynamic Menu Rendering */}
                             <ul className="pb-2 space-y-2">
-                                {filteredItems.map((item, index) => (
-                                    item.children ? (
-                                        <SidebarDropdown
-                                            key={index}
-                                            icon={item.icon}
-                                            label={item.label}
-                                            id={item.id}
-                                            active={item.isOpen}
-                                        >
-                                            {item.children.map((child, cIndex) => (
-                                                <li key={cIndex}>
-                                                    <Link to={child.href} className="flex items-center p-2 text-base text-foreground transition duration-75 rounded-lg pl-11 group hover:bg-accent">
-                                                        {child.label}
-                                                    </Link>
-                                                </li>
-                                            ))}
-                                        </SidebarDropdown>
-                                    ) : (
-                                        <SidebarItem
-                                            key={index}
-                                            href={item.href}
-                                            icon={item.icon}
-                                            label={item.label}
-                                            active={item.toCheck ? isActive(item.toCheck) : (path === item.href)}
-                                        />
+                                {loading && (
+                                    <div className="space-y-4 px-2">
+                                        {[1, 2, 3].map(i => (
+                                            <div key={i} className="h-10 w-full bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+                                        ))}
+                                    </div>
+                                )}
+
+                                {!loading && sortedGroupKeys.map(groupLabel => {
+                                    const group = groupedMenus[groupLabel];
+                                    // Identify if we want to render groups as labeled sections or collapsible
+                                    // For Flowbite theme, typically acts as a list. Warning: Flowbite sidebar design is flat or nested? 
+                                    // The updated design supports groups. Let's just render a divider title if needed, 
+                                    // or just render items.
+                                    // However, the previous hardcoded menu had nested Dropdowns. 
+                                    // Our dynamic structure is flat list with groups. 
+                                    // To match the previous UX ("Content" -> "Blogs"), we might need to map groups to Dropdowns?
+                                    // OR, we just render headers for groups.
+
+                                    // Option A: Render Group Header and Items
+                                    return (
+                                        <div key={groupLabel} className="pt-2">
+                                            {groupLabel !== 'General' && (
+                                                <h3 className="px-2 pb-2 text-xs font-semibold text-gray-500 uppercase dark:text-gray-400">
+                                                    {groupLabel}
+                                                </h3>
+                                            )}
+                                            {group.items.map(item => {
+                                                const Icon = getIconComponent(item.icon);
+                                                // Assuming flat structure for now as per `useAdminMenu` output
+                                                // If `useAdminMenu` returns a flat list (which it does), we render them.
+                                                return (
+                                                    <SidebarItem
+                                                        key={item.id}
+                                                        href={`/cmspanel/${item.path}`}
+                                                        icon={Icon}
+                                                        label={t(`menu.${item.key}`, item.label)}
+                                                        active={isActive(item.path)}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
                                     )
-                                ))}
+                                })}
                             </ul>
-
-
                         </div>
                     </div>
                 </div>

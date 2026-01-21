@@ -2,7 +2,7 @@
  * SeoMetadataPanel - Reusable collapsible SEO metadata editing panel.
  * 
  * Provides fields for meta title, description, keywords, OG image, and canonical URL.
- * Used by both UnifiedContentEditor, PagesManager, and ArticleEditor.
+ * Used by both UnifiedContentEditor, PagesManager, and BlogEditor.
  */
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Globe, Share2 } from 'lucide-react';

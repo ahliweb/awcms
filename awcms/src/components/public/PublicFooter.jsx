@@ -26,8 +26,10 @@ function PublicFooter({ tenant }) {
     const keyMap = {
       'home': 'menu.home',
       'beranda': 'menu.home',
-      'articles': 'menu.articles',
-      'artikel': 'menu.articles',
+      'blogs': 'menu.blogs',
+      'blog': 'menu.blogs',
+      'articles': 'menu.blogs',
+      'artikel': 'menu.blogs',
       'products': 'menu.products',
       'produk': 'menu.products',
       'portfolio': 'menu.portfolio',

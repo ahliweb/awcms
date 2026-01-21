@@ -3,12 +3,12 @@
 part of 'app_database.dart';
 
 // ignore_for_file: type=lint
-class $LocalArticlesTable extends LocalArticles
-    with TableInfo<$LocalArticlesTable, LocalArticle> {
+class $LocalBlogsTable extends LocalBlogs
+    with TableInfo<$LocalBlogsTable, LocalBlog> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $LocalArticlesTable(this.attachedDatabase, [this._alias]);
+  $LocalBlogsTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -143,10 +143,10 @@ class $LocalArticlesTable extends LocalArticles
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'local_articles';
+  static const String $name = 'local_blogs';
   @override
   VerificationContext validateIntegrity(
-    Insertable<LocalArticle> instance, {
+    Insertable<LocalBlog> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -224,9 +224,9 @@ class $LocalArticlesTable extends LocalArticles
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  LocalArticle map(Map<String, dynamic> data, {String? tablePrefix}) {
+  LocalBlog map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return LocalArticle(
+    return LocalBlog(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -275,19 +275,19 @@ class $LocalArticlesTable extends LocalArticles
   }
 
   @override
-  $LocalArticlesTable createAlias(String alias) {
-    return $LocalArticlesTable(attachedDatabase, alias);
+  $LocalBlogsTable createAlias(String alias) {
+    return $LocalBlogsTable(attachedDatabase, alias);
   }
 }
 
-class LocalArticle extends DataClass implements Insertable<LocalArticle> {
-  /// Article UUID from Supabase
+class LocalBlog extends DataClass implements Insertable<LocalBlog> {
+  /// Blog UUID from Supabase
   final String id;
 
   /// Tenant ID for multi-tenant support
   final String? tenantId;
 
-  /// Article title
+  /// Blog title
   final String title;
 
   /// Full HTML content
@@ -311,7 +311,7 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
 
   /// When this record was last synced
   final DateTime? syncedAt;
-  const LocalArticle({
+  const LocalBlog({
     required this.id,
     this.tenantId,
     required this.title,
@@ -357,8 +357,8 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
     return map;
   }
 
-  LocalArticlesCompanion toCompanion(bool nullToAbsent) {
-    return LocalArticlesCompanion(
+  LocalBlogsCompanion toCompanion(bool nullToAbsent) {
+    return LocalBlogsCompanion(
       id: Value(id),
       tenantId: tenantId == null && nullToAbsent
           ? const Value.absent()
@@ -389,12 +389,12 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
     );
   }
 
-  factory LocalArticle.fromJson(
+  factory LocalBlog.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return LocalArticle(
+    return LocalBlog(
       id: serializer.fromJson<String>(json['id']),
       tenantId: serializer.fromJson<String?>(json['tenantId']),
       title: serializer.fromJson<String>(json['title']),
@@ -426,7 +426,7 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
     };
   }
 
-  LocalArticle copyWith({
+  LocalBlog copyWith({
     String? id,
     Value<String?> tenantId = const Value.absent(),
     String? title,
@@ -438,7 +438,7 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
     Value<DateTime?> createdAt = const Value.absent(),
     Value<DateTime?> updatedAt = const Value.absent(),
     Value<DateTime?> syncedAt = const Value.absent(),
-  }) => LocalArticle(
+  }) => LocalBlog(
     id: id ?? this.id,
     tenantId: tenantId.present ? tenantId.value : this.tenantId,
     title: title ?? this.title,
@@ -451,8 +451,8 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
   );
-  LocalArticle copyWithCompanion(LocalArticlesCompanion data) {
-    return LocalArticle(
+  LocalBlog copyWithCompanion(LocalBlogsCompanion data) {
+    return LocalBlog(
       id: data.id.present ? data.id.value : this.id,
       tenantId: data.tenantId.present ? data.tenantId.value : this.tenantId,
       title: data.title.present ? data.title.value : this.title,
@@ -471,7 +471,7 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
 
   @override
   String toString() {
-    return (StringBuffer('LocalArticle(')
+    return (StringBuffer('LocalBlog(')
           ..write('id: $id, ')
           ..write('tenantId: $tenantId, ')
           ..write('title: $title, ')
@@ -504,7 +504,7 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is LocalArticle &&
+      (other is LocalBlog &&
           other.id == this.id &&
           other.tenantId == this.tenantId &&
           other.title == this.title &&
@@ -518,7 +518,7 @@ class LocalArticle extends DataClass implements Insertable<LocalArticle> {
           other.syncedAt == this.syncedAt);
 }
 
-class LocalArticlesCompanion extends UpdateCompanion<LocalArticle> {
+class LocalBlogsCompanion extends UpdateCompanion<LocalBlog> {
   final Value<String> id;
   final Value<String?> tenantId;
   final Value<String> title;
@@ -531,7 +531,7 @@ class LocalArticlesCompanion extends UpdateCompanion<LocalArticle> {
   final Value<DateTime?> updatedAt;
   final Value<DateTime?> syncedAt;
   final Value<int> rowid;
-  const LocalArticlesCompanion({
+  const LocalBlogsCompanion({
     this.id = const Value.absent(),
     this.tenantId = const Value.absent(),
     this.title = const Value.absent(),
@@ -545,7 +545,7 @@ class LocalArticlesCompanion extends UpdateCompanion<LocalArticle> {
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  LocalArticlesCompanion.insert({
+  LocalBlogsCompanion.insert({
     required String id,
     this.tenantId = const Value.absent(),
     required String title,
@@ -560,7 +560,7 @@ class LocalArticlesCompanion extends UpdateCompanion<LocalArticle> {
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title);
-  static Insertable<LocalArticle> custom({
+  static Insertable<LocalBlog> custom({
     Expression<String>? id,
     Expression<String>? tenantId,
     Expression<String>? title,
@@ -590,7 +590,7 @@ class LocalArticlesCompanion extends UpdateCompanion<LocalArticle> {
     });
   }
 
-  LocalArticlesCompanion copyWith({
+  LocalBlogsCompanion copyWith({
     Value<String>? id,
     Value<String?>? tenantId,
     Value<String>? title,
@@ -604,7 +604,7 @@ class LocalArticlesCompanion extends UpdateCompanion<LocalArticle> {
     Value<DateTime?>? syncedAt,
     Value<int>? rowid,
   }) {
-    return LocalArticlesCompanion(
+    return LocalBlogsCompanion(
       id: id ?? this.id,
       tenantId: tenantId ?? this.tenantId,
       title: title ?? this.title,
@@ -664,7 +664,7 @@ class LocalArticlesCompanion extends UpdateCompanion<LocalArticle> {
 
   @override
   String toString() {
-    return (StringBuffer('LocalArticlesCompanion(')
+    return (StringBuffer('LocalBlogsCompanion(')
           ..write('id: $id, ')
           ..write('tenantId: $tenantId, ')
           ..write('title: $title, ')
@@ -1547,24 +1547,24 @@ class SyncMetadataCompanion extends UpdateCompanion<SyncMeta> {
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
-  late final $LocalArticlesTable localArticles = $LocalArticlesTable(this);
+  late final $LocalBlogsTable localBlogs = $LocalBlogsTable(this);
   late final $SyncQueueTable syncQueue = $SyncQueueTable(this);
   late final $SyncMetadataTable syncMetadata = $SyncMetadataTable(this);
-  late final ArticlesDao articlesDao = ArticlesDao(this as AppDatabase);
+  late final BlogsDao blogsDao = BlogsDao(this as AppDatabase);
   late final SyncDao syncDao = SyncDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
-    localArticles,
+    localBlogs,
     syncQueue,
     syncMetadata,
   ];
 }
 
-typedef $$LocalArticlesTableCreateCompanionBuilder =
-    LocalArticlesCompanion Function({
+typedef $$LocalBlogsTableCreateCompanionBuilder =
+    LocalBlogsCompanion Function({
       required String id,
       Value<String?> tenantId,
       required String title,
@@ -1578,8 +1578,8 @@ typedef $$LocalArticlesTableCreateCompanionBuilder =
       Value<DateTime?> syncedAt,
       Value<int> rowid,
     });
-typedef $$LocalArticlesTableUpdateCompanionBuilder =
-    LocalArticlesCompanion Function({
+typedef $$LocalBlogsTableUpdateCompanionBuilder =
+    LocalBlogsCompanion Function({
       Value<String> id,
       Value<String?> tenantId,
       Value<String> title,
@@ -1594,9 +1594,9 @@ typedef $$LocalArticlesTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
-class $$LocalArticlesTableFilterComposer
-    extends Composer<_$AppDatabase, $LocalArticlesTable> {
-  $$LocalArticlesTableFilterComposer({
+class $$LocalBlogsTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalBlogsTable> {
+  $$LocalBlogsTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -1659,9 +1659,9 @@ class $$LocalArticlesTableFilterComposer
   );
 }
 
-class $$LocalArticlesTableOrderingComposer
-    extends Composer<_$AppDatabase, $LocalArticlesTable> {
-  $$LocalArticlesTableOrderingComposer({
+class $$LocalBlogsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalBlogsTable> {
+  $$LocalBlogsTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -1724,9 +1724,9 @@ class $$LocalArticlesTableOrderingComposer
   );
 }
 
-class $$LocalArticlesTableAnnotationComposer
-    extends Composer<_$AppDatabase, $LocalArticlesTable> {
-  $$LocalArticlesTableAnnotationComposer({
+class $$LocalBlogsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalBlogsTable> {
+  $$LocalBlogsTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -1769,35 +1769,35 @@ class $$LocalArticlesTableAnnotationComposer
       $composableBuilder(column: $table.syncedAt, builder: (column) => column);
 }
 
-class $$LocalArticlesTableTableManager
+class $$LocalBlogsTableTableManager
     extends
         RootTableManager<
           _$AppDatabase,
-          $LocalArticlesTable,
-          LocalArticle,
-          $$LocalArticlesTableFilterComposer,
-          $$LocalArticlesTableOrderingComposer,
-          $$LocalArticlesTableAnnotationComposer,
-          $$LocalArticlesTableCreateCompanionBuilder,
-          $$LocalArticlesTableUpdateCompanionBuilder,
+          $LocalBlogsTable,
+          LocalBlog,
+          $$LocalBlogsTableFilterComposer,
+          $$LocalBlogsTableOrderingComposer,
+          $$LocalBlogsTableAnnotationComposer,
+          $$LocalBlogsTableCreateCompanionBuilder,
+          $$LocalBlogsTableUpdateCompanionBuilder,
           (
-            LocalArticle,
-            BaseReferences<_$AppDatabase, $LocalArticlesTable, LocalArticle>,
+            LocalBlog,
+            BaseReferences<_$AppDatabase, $LocalBlogsTable, LocalBlog>,
           ),
-          LocalArticle,
+          LocalBlog,
           PrefetchHooks Function()
         > {
-  $$LocalArticlesTableTableManager(_$AppDatabase db, $LocalArticlesTable table)
+  $$LocalBlogsTableTableManager(_$AppDatabase db, $LocalBlogsTable table)
     : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$LocalArticlesTableFilterComposer($db: db, $table: table),
+              $$LocalBlogsTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$LocalArticlesTableOrderingComposer($db: db, $table: table),
+              $$LocalBlogsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$LocalArticlesTableAnnotationComposer($db: db, $table: table),
+              $$LocalBlogsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -1812,7 +1812,7 @@ class $$LocalArticlesTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => LocalArticlesCompanion(
+              }) => LocalBlogsCompanion(
                 id: id,
                 tenantId: tenantId,
                 title: title,
@@ -1840,7 +1840,7 @@ class $$LocalArticlesTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => LocalArticlesCompanion.insert(
+              }) => LocalBlogsCompanion.insert(
                 id: id,
                 tenantId: tenantId,
                 title: title,
@@ -1862,21 +1862,18 @@ class $$LocalArticlesTableTableManager
       );
 }
 
-typedef $$LocalArticlesTableProcessedTableManager =
+typedef $$LocalBlogsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
-      $LocalArticlesTable,
-      LocalArticle,
-      $$LocalArticlesTableFilterComposer,
-      $$LocalArticlesTableOrderingComposer,
-      $$LocalArticlesTableAnnotationComposer,
-      $$LocalArticlesTableCreateCompanionBuilder,
-      $$LocalArticlesTableUpdateCompanionBuilder,
-      (
-        LocalArticle,
-        BaseReferences<_$AppDatabase, $LocalArticlesTable, LocalArticle>,
-      ),
-      LocalArticle,
+      $LocalBlogsTable,
+      LocalBlog,
+      $$LocalBlogsTableFilterComposer,
+      $$LocalBlogsTableOrderingComposer,
+      $$LocalBlogsTableAnnotationComposer,
+      $$LocalBlogsTableCreateCompanionBuilder,
+      $$LocalBlogsTableUpdateCompanionBuilder,
+      (LocalBlog, BaseReferences<_$AppDatabase, $LocalBlogsTable, LocalBlog>),
+      LocalBlog,
       PrefetchHooks Function()
     >;
 typedef $$SyncQueueTableCreateCompanionBuilder =
@@ -2322,8 +2319,8 @@ typedef $$SyncMetadataTableProcessedTableManager =
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
-  $$LocalArticlesTableTableManager get localArticles =>
-      $$LocalArticlesTableTableManager(_db, _db.localArticles);
+  $$LocalBlogsTableTableManager get localBlogs =>
+      $$LocalBlogsTableTableManager(_db, _db.localBlogs);
   $$SyncQueueTableTableManager get syncQueue =>
       $$SyncQueueTableTableManager(_db, _db.syncQueue);
   $$SyncMetadataTableTableManager get syncMetadata =>

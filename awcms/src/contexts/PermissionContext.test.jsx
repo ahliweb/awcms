@@ -81,7 +81,7 @@ describe('PermissionContext', () => {
                 roles: {
                     name: 'editor',
                     role_permissions: [
-                        { permissions: { name: 'article.read' } }
+                        { permissions: { name: 'blog.read' } }
                     ]
                 }
             }
@@ -98,7 +98,7 @@ describe('PermissionContext', () => {
 
         render(
             <PermissionProvider>
-                <TestComponent checkPermission="article.delete" />
+                <TestComponent checkPermission="blog.delete" />
             </PermissionProvider>
         );
 
@@ -116,7 +116,7 @@ describe('PermissionContext', () => {
                 roles: {
                     name: 'editor',
                     role_permissions: [
-                        { permissions: { name: 'article.create' } }
+                        { permissions: { name: 'blog.create' } }
                     ]
                 }
             }
@@ -129,7 +129,7 @@ describe('PermissionContext', () => {
 
         render(
             <PermissionProvider>
-                <TestComponent checkPermission="article.create" />
+                <TestComponent checkPermission="blog.create" />
             </PermissionProvider>
         );
 

@@ -32,8 +32,8 @@ class SupabaseService {
   ///
   /// Example:
   /// ```dart
-  /// final articles = await supabaseService.select(
-  ///   'articles',
+  /// final blogs = await supabaseService.select(
+  ///   'blogs',
   ///   columns: 'id, title, content, cover_image',
   ///   filters: {'status': 'published'},
   ///   orderBy: 'created_at',

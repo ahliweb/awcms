@@ -1,9 +1,9 @@
 {
-  "articles": [
+  "blogs": [
     {
-      "id": "news-001",
+      "id": "blog-001",
       "slug": "sman-2-pangkalan-bun-raih-juara-osn-tingkat-provinsi",
-      "category": "News",
+      "category": "Blog",
       "tag": "prestasi",
       "title": {
         "id": "SMAN 2 Pangkalan Bun Raih Juara OSN Tingkat Provinsi",
@@ -23,9 +23,9 @@
       "featured": true
     },
     {
-      "id": "news-002",
+      "id": "blog-002",
       "slug": "kegiatan-masa-pengenalan-lingkungan-sekolah",
-      "category": "News",
+      "category": "Blog",
       "tag": "kegiatan",
       "title": {
         "id": "Kegiatan Masa Pengenalan Lingkungan Sekolah (MPLS) 2024",
@@ -45,9 +45,9 @@
       "featured": true
     },
     {
-      "id": "news-003",
+      "id": "blog-001",
       "slug": "peringatan-hari-pendidikan-nasional",
-      "category": "News",
+      "category": "Blog",
       "tag": "kegiatan",
       "title": {
         "id": "Peringatan Hari Pendidikan Nasional 2024",
@@ -93,23 +93,47 @@
     "events": [
       {
         "date": "2024-12-16",
-        "title": { "id": "Ujian Akhir Semester Ganjil", "en": "Odd Semester Final Exam" },
-        "description": { "id": "Ujian akhir semester untuk seluruh siswa", "en": "Final semester exam for all students" }
+        "title": {
+          "id": "Ujian Akhir Semester Ganjil",
+          "en": "Odd Semester Final Exam"
+        },
+        "description": {
+          "id": "Ujian akhir semester untuk seluruh siswa",
+          "en": "Final semester exam for all students"
+        }
       },
       {
         "date": "2024-12-23",
-        "title": { "id": "Pembagian Rapor", "en": "Report Card Distribution" },
-        "description": { "id": "Pembagian rapor semester ganjil", "en": "Odd semester report card distribution" }
+        "title": {
+          "id": "Pembagian Rapor",
+          "en": "Report Card Distribution"
+        },
+        "description": {
+          "id": "Pembagian rapor semester ganjil",
+          "en": "Odd semester report card distribution"
+        }
       },
       {
         "date": "2025-01-06",
-        "title": { "id": "Masuk Sekolah Semester Genap", "en": "Even Semester Start" },
-        "description": { "id": "Awal semester genap tahun ajaran 2024/2025", "en": "Start of even semester 2024/2025" }
+        "title": {
+          "id": "Masuk Sekolah Semester Genap",
+          "en": "Even Semester Start"
+        },
+        "description": {
+          "id": "Awal semester genap tahun ajaran 2024/2025",
+          "en": "Start of even semester 2024/2025"
+        }
       },
       {
         "date": "2025-02-01",
-        "title": { "id": "Pendaftaran PPDB 2025", "en": "PPDB Registration 2025" },
-        "description": { "id": "Pembukaan pendaftaran peserta didik baru", "en": "Opening of new student registration" }
+        "title": {
+          "id": "Pendaftaran PPDB 2025",
+          "en": "PPDB Registration 2025"
+        },
+        "description": {
+          "id": "Pembukaan pendaftaran peserta didik baru",
+          "en": "Opening of new student registration"
+        }
       }
     ]
   },
@@ -124,20 +148,46 @@
     },
     "albums": [
       {
-        "title": { "id": "Kegiatan Belajar Mengajar", "en": "Teaching and Learning Activities" },
-        "images": ["/images/gallery/kbm-1.jpg", "/images/gallery/kbm-2.jpg", "/images/gallery/kbm-3.jpg"]
+        "title": {
+          "id": "Kegiatan Belajar Mengajar",
+          "en": "Teaching and Learning Activities"
+        },
+        "images": [
+          "/images/gallery/kbm-1.jpg",
+          "/images/gallery/kbm-2.jpg",
+          "/images/gallery/kbm-3.jpg"
+        ]
       },
       {
-        "title": { "id": "Ekstrakurikuler", "en": "Extracurricular" },
-        "images": ["/images/gallery/ekskul-1.jpg", "/images/gallery/ekskul-2.jpg", "/images/gallery/ekskul-3.jpg"]
+        "title": {
+          "id": "Ekstrakurikuler",
+          "en": "Extracurricular"
+        },
+        "images": [
+          "/images/gallery/ekskul-1.jpg",
+          "/images/gallery/ekskul-2.jpg",
+          "/images/gallery/ekskul-3.jpg"
+        ]
       },
       {
-        "title": { "id": "Upacara dan Peringatan", "en": "Ceremonies and Commemorations" },
-        "images": ["/images/gallery/upacara-1.jpg", "/images/gallery/upacara-2.jpg"]
+        "title": {
+          "id": "Upacara dan Peringatan",
+          "en": "Ceremonies and Commemorations"
+        },
+        "images": [
+          "/images/gallery/upacara-1.jpg",
+          "/images/gallery/upacara-2.jpg"
+        ]
       },
       {
-        "title": { "id": "Prestasi Siswa", "en": "Student Achievements" },
-        "images": ["/images/gallery/prestasi-1.jpg", "/images/gallery/prestasi-2.jpg"]
+        "title": {
+          "id": "Prestasi Siswa",
+          "en": "Student Achievements"
+        },
+        "images": [
+          "/images/gallery/prestasi-1.jpg",
+          "/images/gallery/prestasi-2.jpg"
+        ]
       }
     ]
   }

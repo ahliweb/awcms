@@ -69,8 +69,8 @@ function SidebarMenuManager() {
         group_order: 0
     });
 
-    const canView = hasPermission('tenant.setting.read');
-    const canEdit = hasPermission('tenant.setting.update');
+    const canView = hasPermission('platform.sidebar.read');
+    const canEdit = hasPermission('platform.sidebar.update');
     const isSuperAdmin = ['super_admin', 'owner'].includes(userRole);
 
     useEffect(() => {

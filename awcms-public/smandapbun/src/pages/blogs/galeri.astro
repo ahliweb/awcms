@@ -27,11 +27,11 @@ const { gallery } = galleryData;
           >Beranda</a
         >
         <span class="mx-2">/</span>
-        <a href={getLocalizedPath("/berita", locale)} class="hover:text-white"
-          >{t("news.title", locale)}</a
+        <a href={getLocalizedPath("/blogs", locale)} class="hover:text-white"
+          >{t("blogs.title", locale)}</a
         >
         <span class="mx-2">/</span>
-        <span class="text-white">{t("news.gallery", locale)}</span>
+        <span class="text-white">{t("blogs.gallery", locale)}</span>
       </nav>
       <h1 class="text-3xl md:text-4xl font-bold font-heading">
         {getLocalizedValue(gallery.title, locale)}
@@ -76,9 +76,9 @@ const { gallery } = galleryData;
       <!-- Back Button -->
       <div class="mt-8 text-center">
         <a
-          href={getLocalizedPath("/berita", locale)}
+          href={getLocalizedPath("/blogs", locale)}
           class="btn-outline"
-          data-testid="back-to-news"
+          data-testid="back-to-blogs"
         >
           <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
           {t("common.back", locale)}

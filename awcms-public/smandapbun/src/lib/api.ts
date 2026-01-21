@@ -3,12 +3,12 @@ import contactDefault from '../data/pages/contact.json';
 import profileDefault from '../data/pages/profile.json';
 import organizationDefault from '../data/pages/organization.json';
 import servicesDefault from '../data/pages/services.json';
-import financeDefault from '../data/articles/finance.json';
+import financeDefault from '../data/blogs/finance.json';
 import achievementsDefault from '../data/pages/achievements.json';
 import alumniDefault from '../data/pages/alumni.json';
 import staffDefault from '../data/pages/staff.json';
 import imagesDefault from '../data/images.json';
-import newsDefault from '../data/articles/news.json';
+import blogsDefault from '../data/blogs/blogs.json';
 
 
 const TENANT_SLUG = 'smandapbun';
@@ -620,7 +620,7 @@ export interface SiteImages {
     laboratory: string[];
     library: string[];
     sports: string[];
-    news: string[];
+    blogs: string[];
     gallery: {
         kbm: string[];
         ekskul: string[];
@@ -630,7 +630,7 @@ export interface SiteImages {
 
 export async function getImagesData(): Promise<SiteImages> {
     const tenantId = await getTenantId();
-    if (!tenantId) return imagesDefault as SiteImages;
+    if (!tenantId) return (imagesDefault as unknown) as SiteImages;
 
     const { data } = await supabase
         .from('settings')
@@ -642,12 +642,16 @@ export async function getImagesData(): Promise<SiteImages> {
     if (data?.value) {
         try {
             const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+            // Map legacy news to blogs
+            if (parsed.news && !parsed.blogs) {
+                parsed.blogs = parsed.news;
+            }
             return { ...imagesDefault, ...parsed } as SiteImages;
         } catch (e) {
             console.error('Error parsing site images data:', e);
         }
     }
-    return imagesDefault as SiteImages;
+    return (imagesDefault as unknown) as SiteImages;
 }
 
 export interface AgendaData {
@@ -666,7 +670,7 @@ export interface AgendaData {
 
 export async function getAgendaData(): Promise<AgendaData> {
     const tenantId = await getTenantId();
-    if (!tenantId) return newsDefault as unknown as AgendaData;
+    if (!tenantId) return blogsDefault as unknown as AgendaData;
 
     const { data } = await supabase
         .from('settings')
@@ -678,12 +682,12 @@ export async function getAgendaData(): Promise<AgendaData> {
     if (data?.value) {
         try {
             const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-            return { ...newsDefault, ...parsed } as unknown as AgendaData;
+            return { ...blogsDefault, ...parsed } as unknown as AgendaData;
         } catch (e) {
             console.error('Error parsing agenda data:', e);
         }
     }
-    return newsDefault as unknown as AgendaData;
+    return blogsDefault as unknown as AgendaData;
 }
 
 export interface GalleryData {
@@ -701,7 +705,7 @@ export interface GalleryData {
 
 export async function getGalleryData(): Promise<GalleryData> {
     const tenantId = await getTenantId();
-    if (!tenantId) return newsDefault as unknown as GalleryData;
+    if (!tenantId) return blogsDefault as unknown as GalleryData;
 
     const { data } = await supabase
         .from('settings')
@@ -713,12 +717,12 @@ export async function getGalleryData(): Promise<GalleryData> {
     if (data?.value) {
         try {
             const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-            return { ...newsDefault, ...parsed } as unknown as GalleryData;
+            return { ...blogsDefault, ...parsed } as unknown as GalleryData;
         } catch (e) {
             console.error('Error parsing gallery data:', e);
         }
     }
-    return newsDefault as unknown as GalleryData;
+    return blogsDefault as unknown as GalleryData;
 }
 
 export interface SchoolInfoData {
@@ -733,7 +737,7 @@ export interface SchoolInfoData {
 
 export async function getSchoolInfoData(): Promise<SchoolInfoData> {
     const tenantId = await getTenantId();
-    if (!tenantId) return newsDefault as unknown as SchoolInfoData;
+    if (!tenantId) return blogsDefault as unknown as SchoolInfoData;
 
     const { data } = await supabase
         .from('settings')
@@ -745,12 +749,12 @@ export async function getSchoolInfoData(): Promise<SchoolInfoData> {
     if (data?.value) {
         try {
             const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-            return { ...newsDefault, ...parsed } as unknown as SchoolInfoData;
+            return { ...blogsDefault, ...parsed } as unknown as SchoolInfoData;
         } catch (e) {
             console.error('Error parsing school info data:', e);
         }
     }
-    return newsDefault as unknown as SchoolInfoData;
+    return blogsDefault as unknown as SchoolInfoData;
 }
 
 // Update interface
@@ -773,7 +777,7 @@ export async function getPosts(limit = 6): Promise<Post[]> {
     if (!tenantId) return [];
 
     const { data, error } = await supabase
-        .from('articles')
+        .from('blogs')
         .select('*, categories(name)') // Join categories
         .eq('tenant_id', tenantId)
         .eq('status', 'published')

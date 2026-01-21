@@ -1,8 +1,8 @@
-# Articles Module Documentation
+# Blogs Module Documentation
 
 ## Purpose
 
-Describe the article workflows and data model used by the CMS.
+Describe the blog workflows and data model used by the CMS. (Note: Historically referred to as "Articles" in the database).
 
 ## Audience
 
@@ -14,7 +14,7 @@ Describe the article workflows and data model used by the CMS.
 - `docs/architecture/soft-delete.md`
 - `docs/security/abac.md`
 
-The Articles module is a full-featured blogging and news management system designed for high-performance publishing. It integrates a headless TipTap editor with a strict publishing workflow.
+The Blogs module is a full-featured blogging and news management system designed for high-performance publishing. It integrates a headless TipTap editor with a strict publishing workflow.
 
 ## Core Concepts
 
@@ -27,10 +27,10 @@ The Articles module is a full-featured blogging and news management system desig
 
 Stored in `articles` table:
 
-- `slug`: Unique identifier for routing (e.g., `/blog/my-post`).
+- `slug`: Unique identifier for routing (e.g., `/blogs/my-post`).
 - `tiptap_doc_jsonb`: The source of truth for content.
-- `content`: HTML fallback (optional/legacy).
-- `puck_layout_jsonb`: Optional Visual Builder layout for "Long-form" articles.
+- `content`: HTML fallback (optional).
+- `puck_layout_jsonb`: Optional Visual Builder layout for "Long-form" posts.
 
 ## Implementation Patterns
 
@@ -41,11 +41,11 @@ Stored in `articles` table:
 
 ## Operational Concerns
 
-The Public Portal fetches articles via `published_articles_view` to ensure:
+The Public Portal fetches posts via `published_articles_view` to ensure:
 
 1. Only `status = 'published'` items are fetched.
 2. Internal fields (like internal notes) are stripped.
-3. `tiptap_doc_jsonb` is rendered using `TipTapRenderer.tsx`.
+3. `tiptap_doc_jsonb` is rendered using specialized renders.
 
 ### TipTap Rendering
 
@@ -55,7 +55,7 @@ The `TipTapRenderer` converts the JSON document into accessible React components
 
 ## Permissions and Access
 
-- Use `tenant.article.*` permission keys for article actions.
+- Use `tenant.article.*` permission keys for blog actions (mapped for legacy compatibility).
 
 ## Security and Compliance Notes
 

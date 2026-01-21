@@ -233,7 +233,7 @@ function PermissionsManager() {
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div>
-              <Label>Name (e.g. view_articles)</Label>
+              <Label>Name (e.g. view_blogs)</Label>
               <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
             </div>
             <div className="grid grid-cols-2 gap-4">

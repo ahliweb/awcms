@@ -21,9 +21,9 @@ export async function getStaticPaths() {
 
 const { post, locale } = Astro.props as { post: any; locale: Locale };
 
-// Get related articles (same category, exclude current)
-const allPosts = await getPosts(100); // Fetch all posts again for related articles
-const relatedArticles = allPosts
+// Get related blogs (same category, exclude current)
+const allPosts = await getPosts(100); // Fetch all posts again for related blogs
+const relatedBlogs = allPosts
   .filter((a) => a.category === post.category && a.id !== post.id)
   .slice(0, 3);
 ---
@@ -32,7 +32,7 @@ const relatedArticles = allPosts
   <!-- Hero -->
   <section
     class="hero-gradient text-white py-16 md:py-20"
-    data-testid="article-hero"
+    data-testid="blog-hero"
   >
     <div class="container-custom">
       <nav class="text-sm text-blue-200 mb-4">
@@ -40,8 +40,8 @@ const relatedArticles = allPosts
           >Beranda</a
         >
         <span class="mx-2">/</span>
-        <a href={getLocalizedPath("/berita", locale)} class="hover:text-white"
-          >{t("news.title", locale)}</a
+        <a href={getLocalizedPath("/blogs", locale)} class="hover:text-white"
+          >{t("blogs.title", locale)}</a
         >
         <span class="mx-2">/</span>
         <span class="text-white">{getLocalizedValue(post.title, locale)}</span>
@@ -77,7 +77,7 @@ const relatedArticles = allPosts
   </section>
 
   <!-- Content -->
-  <section class="py-16 bg-gray-50" data-testid="article-content">
+  <section class="py-16 bg-gray-50" data-testid="blog-content">
     <div class="container-custom">
       <div class="grid lg:grid-cols-3 gap-8">
         <!-- Main Content -->
@@ -95,7 +95,7 @@ const relatedArticles = allPosts
               />
             </div>
 
-            <!-- Article Body -->
+            <!-- Blog Body -->
             <div class="p-8 md:p-12">
               <div
                 class="prose prose-lg max-w-none"
@@ -109,7 +109,7 @@ const relatedArticles = allPosts
                     <div class="flex items-center gap-2">
                       <Icon name="tabler:tag" class="w-5 h-5 text-gray-400" />
                       <span class="text-gray-500">
-                        {t("news.tags", locale)}:
+                        {t("blogs.tags", locale)}:
                       </span>
                       <span class="bg-primary-100 text-primary-600 px-3 py-1 rounded-full text-sm">
                         {post.tag}
@@ -154,9 +154,9 @@ const relatedArticles = allPosts
           <!-- Back Button -->
           <div class="mt-8">
             <a
-              href={getLocalizedPath("/berita", locale)}
+              href={getLocalizedPath("/blogs", locale)}
               class="btn-outline"
-              data-testid="back-to-news"
+              data-testid="back-to-blogs"
             >
               <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
               {t("common.back", locale)}
@@ -166,20 +166,20 @@ const relatedArticles = allPosts
 
         <!-- Sidebar -->
         <div class="space-y-6">
-          <!-- Related Articles -->
+          <!-- Related Blogs -->
           {
-            relatedArticles.length > 0 && (
+            relatedBlogs.length > 0 && (
               <div
                 class="bg-white rounded-xl shadow-lg p-6"
-                data-testid="related-articles"
+                data-testid="related-blogs"
               >
                 <h3 class="font-bold text-lg text-gray-900 mb-4">
-                  {locale === "id" ? "Berita Terkait" : "Related News"}
+                  {locale === "id" ? "Blog Terkait" : "Related Blogs"}
                 </h3>
                 <div class="space-y-4">
-                  {relatedArticles.map((related: any) => (
+                  {relatedBlogs.map((related: any) => (
                     <a
-                      href={getLocalizedPath(`/berita/${related.slug}`, locale)}
+                      href={getLocalizedPath(`/blogs/${related.slug}`, locale)}
                       class="block group"
                     >
                       <div class="flex gap-3">
@@ -218,21 +218,21 @@ const relatedArticles = allPosts
             </h3>
             <div class="space-y-2">
               <a
-                href={getLocalizedPath("/berita", locale)}
+                href={getLocalizedPath("/blogs", locale)}
                 class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <span class="text-gray-700">{t("news.latest", locale)}</span>
+                <span class="text-gray-700">{t("blogs.latest", locale)}</span>
                 <Icon
                   name="tabler:chevron-right"
                   class="w-5 h-5 text-gray-400"
                 />
               </a>
               <a
-                href={getLocalizedPath("/berita/info-sekolah", locale)}
+                href={getLocalizedPath("/blogs/info-sekolah", locale)}
                 class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <span class="text-gray-700"
-                  >{t("news.school_info", locale)}</span
+                  >{t("blogs.school_info", locale)}</span
                 >
                 <Icon
                   name="tabler:chevron-right"
@@ -240,10 +240,10 @@ const relatedArticles = allPosts
                 />
               </a>
               <a
-                href={getLocalizedPath("/berita/galeri", locale)}
+                href={getLocalizedPath("/blogs/galeri", locale)}
                 class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <span class="text-gray-700">{t("news.gallery", locale)}</span>
+                <span class="text-gray-700">{t("blogs.gallery", locale)}</span>
                 <Icon
                   name="tabler:chevron-right"
                   class="w-5 h-5 text-gray-400"

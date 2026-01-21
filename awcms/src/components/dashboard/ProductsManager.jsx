@@ -153,7 +153,7 @@ function ProductsManager() {
     { key: 'name', label: t('products.category_name'), required: true },
     { key: 'slug', label: t('common.slug') },
     { key: 'description', label: t('common.description'), type: 'textarea' },
-    { key: 'type', label: t('articles.type'), type: 'hidden', defaultValue: 'product' }
+    { key: 'type', label: t('blogs.type'), type: 'hidden', defaultValue: 'product' }
   ];
 
   // Breadcrumbs for PageHeader

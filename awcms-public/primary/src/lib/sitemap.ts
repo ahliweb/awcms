@@ -1,6 +1,6 @@
 /**
  * Sitemap generator for dynamic content from Supabase.
- * Generates XML sitemap entries for pages, articles, and other content.
+ * Generates XML sitemap entries for pages, blogs, and other content.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -8,13 +8,13 @@ export interface SitemapEntry {
   loc: string;
   lastmod?: string;
   changefreq?:
-    | "always"
-    | "hourly"
-    | "daily"
-    | "weekly"
-    | "monthly"
-    | "yearly"
-    | "never";
+  | "always"
+  | "hourly"
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "yearly"
+  | "never";
   priority?: number;
 }
 
@@ -53,15 +53,15 @@ export async function getPagesSitemapEntries(
 }
 
 /**
- * Generate sitemap entries for all published articles
+ * Generate sitemap entries for all published blogs
  */
-export async function getArticlesSitemapEntries(
+export async function getBlogsSitemapEntries(
   supabase: SupabaseClient,
   baseUrl: string,
   tenantId?: string | null,
 ): Promise<SitemapEntry[]> {
   let query = supabase
-    .from("articles")
+    .from("blogs")
     .select("slug, updated_at, published_at")
     .eq("status", "published")
     .is("deleted_at", null)
@@ -74,13 +74,13 @@ export async function getArticlesSitemapEntries(
   const { data, error } = await query;
 
   if (error) {
-    console.error("[Sitemap] Error fetching articles:", error.message);
+    console.error("[Sitemap] Error fetching blogs:", error.message);
     return [];
   }
 
-  return (data || []).map((article) => ({
-    loc: `${baseUrl}/news/${article.slug}`,
-    lastmod: article.updated_at || article.published_at,
+  return (data || []).map((blog) => ({
+    loc: `${baseUrl}/blogs/${blog.slug}`,
+    lastmod: blog.updated_at || blog.published_at,
     changefreq: "weekly" as const,
     priority: 0.7,
   }));
@@ -94,22 +94,19 @@ export function generateSitemapXml(entries: SitemapEntry[]): string {
     .map(
       (entry) => `
   <url>
-    <loc>${escapeXml(entry.loc)}</loc>${
-      entry.lastmod
-        ? `
+    <loc>${escapeXml(entry.loc)}</loc>${entry.lastmod
+          ? `
     <lastmod>${new Date(entry.lastmod).toISOString()}</lastmod>`
-        : ""
-    }${
-      entry.changefreq
-        ? `
+          : ""
+        }${entry.changefreq
+          ? `
     <changefreq>${entry.changefreq}</changefreq>`
-        : ""
-    }${
-      entry.priority !== undefined
-        ? `
+          : ""
+        }${entry.priority !== undefined
+          ? `
     <priority>${entry.priority.toFixed(1)}</priority>`
-        : ""
-    }
+          : ""
+        }
   </url>`,
     )
     .join("");
@@ -129,12 +126,11 @@ export function generateSitemapIndexXml(
     .map(
       (sitemap) => `
   <sitemap>
-    <loc>${escapeXml(sitemap.loc)}</loc>${
-      sitemap.lastmod
-        ? `
+    <loc>${escapeXml(sitemap.loc)}</loc>${sitemap.lastmod
+          ? `
     <lastmod>${new Date(sitemap.lastmod).toISOString()}</lastmod>`
-        : ""
-    }
+          : ""
+        }
   </sitemap>`,
     )
     .join("");
@@ -161,17 +157,17 @@ export async function getAllSitemapEntries(
   baseUrl: string,
   tenantId?: string | null,
 ): Promise<SitemapEntry[]> {
-  const [pages, articles] = await Promise.all([
+  const [pages, blogs] = await Promise.all([
     getPagesSitemapEntries(supabase, baseUrl, tenantId),
-    getArticlesSitemapEntries(supabase, baseUrl, tenantId),
+    getBlogsSitemapEntries(supabase, baseUrl, tenantId),
   ]);
 
   // Add static pages
   const staticEntries: SitemapEntry[] = [
     { loc: baseUrl, changefreq: "daily", priority: 1.0 },
-    { loc: `${baseUrl}/news`, changefreq: "daily", priority: 0.9 },
+    { loc: `${baseUrl}/blogs`, changefreq: "daily", priority: 0.9 },
     { loc: `${baseUrl}/contact`, changefreq: "monthly", priority: 0.5 },
   ];
 
-  return [...staticEntries, ...pages, ...articles];
+  return [...staticEntries, ...pages, ...blogs];
 }

@@ -126,7 +126,7 @@ function PublicPageDetail() {
     return (
         <div className="bg-slate-50 min-h-screen pb-20 font-sans">
             <SeoHelmet
-                type="article"
+                type="page_detail"
                 id={page.id}
                 title={page.meta_title || page.title}
                 description={page.meta_description || page.excerpt}

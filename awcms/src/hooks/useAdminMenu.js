@@ -7,7 +7,7 @@ import { hooks } from '@/lib/hooks';
 const DEFAULT_MENU_CONFIG = [
   // CONTENT Group
   { id: 'home', key: 'home', label: 'Dashboard', path: 'home', icon: 'LayoutDashboard', permission: null, group_label: 'CONTENT', group_order: 10, order: 10, is_visible: true },
-  { id: 'articles', key: 'articles', label: 'Articles', path: 'articles', icon: 'FileText', permission: 'tenant.article.read', group_label: 'CONTENT', group_order: 10, order: 20, is_visible: true },
+  { id: 'blogs', key: 'blogs', label: 'Blogs', path: 'blogs', icon: 'FileText', permission: 'tenant.blog.read', group_label: 'CONTENT', group_order: 10, order: 20, is_visible: true },
   { id: 'pages', key: 'pages', label: 'Pages', path: 'pages', icon: 'FileEdit', permission: 'tenant.page.read', group_label: 'CONTENT', group_order: 10, order: 30, is_visible: true },
   { id: 'visual_builder', key: 'visual_builder', label: 'Visual Builder', path: 'visual-pages', icon: 'Layout', permission: 'tenant.visual_pages.read', group_label: 'CONTENT', group_order: 10, order: 35, is_visible: true },
   { id: 'themes', key: 'themes', label: 'Themes', path: 'themes', icon: 'Palette', permission: 'tenant.theme.read', group_label: 'CONTENT', group_order: 10, order: 40, is_visible: true },
@@ -44,7 +44,8 @@ const DEFAULT_MENU_CONFIG = [
   { id: 'seo_manager', key: 'seo_manager', label: 'SEO Manager', path: 'seo', icon: 'Search', permission: 'tenant.seo.read', group_label: 'SYSTEM', group_order: 60, order: 10, is_visible: true },
   { id: 'languages', key: 'languages', label: 'Languages', path: 'languages', icon: 'Languages', permission: 'tenant.languages.read', group_label: 'SYSTEM', group_order: 60, order: 20, is_visible: true },
   { id: 'extensions', key: 'extensions', label: 'Extensions', path: 'extensions', icon: 'Puzzle', permission: 'platform.extensions.read', group_label: 'SYSTEM', group_order: 60, order: 30, is_visible: true },
-  { id: 'sidebar_manager', key: 'sidebar_manager', label: 'Sidebar Manager', path: 'admin-navigation', icon: 'List', permission: 'tenant.sidebar_manager.delete', group_label: 'SYSTEM', group_order: 60, order: 40, is_visible: true },
+  { id: 'modules', key: 'modules', label: 'Modules', path: 'modules', icon: 'Box', permission: 'platform.modules.read', group_label: 'SYSTEM', group_order: 60, order: 35, is_visible: true },
+  { id: 'sidebar_manager', key: 'sidebar_manager', label: 'Sidebar Manager', path: 'admin-navigation', icon: 'List', permission: 'platform.sidebar.read', group_label: 'SYSTEM', group_order: 60, order: 40, is_visible: true },
   { id: 'notifications', key: 'notifications', label: 'Notifications', path: 'notifications', icon: 'MessageSquareQuote', permission: 'tenant.notification.read', group_label: 'SYSTEM', group_order: 60, order: 50, is_visible: true },
   { id: 'audit_logs', key: 'audit_logs', label: 'Audit Logs', path: 'audit-logs', icon: 'FileClock', permission: 'tenant.audit.view', group_label: 'SYSTEM', group_order: 60, order: 60, is_visible: true },
 

@@ -13,7 +13,7 @@ import { getSiteData, getPosts } from "../lib/api";
 const locale = getLocale(Astro.url) as Locale;
 const site = await getSiteData();
 const posts = await getPosts();
-const featuredNews = posts.filter((a) => a.featured).slice(0, 3);
+const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
 ---
 
 <Layout title={t("home.school_name", locale)}>
@@ -265,20 +265,20 @@ const featuredNews = posts.filter((a) => a.featured).slice(0, 3);
     </div>
   </section>
 
-  <!-- Latest News Section -->
-  <section class="py-16 md:py-24 bg-gray-50" data-testid="news-section">
+  <!-- Latest Blogs Section -->
+  <section class="py-16 md:py-24 bg-gray-50" data-testid="blogs-section">
     <div class="container-custom">
       <div class="flex justify-between items-end mb-12">
         <div>
           <p class="text-primary-600 font-medium mb-2">
-            {t("news.title", locale)}
+            {t("blogs.title", locale)}
           </p>
-          <h2 class="section-title mb-0">{t("home.latest_news", locale)}</h2>
+          <h2 class="section-title mb-0">{t("home.latest_blogs", locale)}</h2>
         </div>
         <a
-          href={getLocalizedPath("/berita", locale)}
+          href={getLocalizedPath("/blogs", locale)}
           class="hidden md:flex items-center text-primary-600 font-medium hover:text-primary-700"
-          data-testid="news-view-all"
+          data-testid="blogs-view-all"
         >
           {t("common.view_all", locale)}
           <Icon name="tabler:arrow-right" class="w-5 h-5 ml-1" />
@@ -286,53 +286,61 @@ const featuredNews = posts.filter((a) => a.featured).slice(0, 3);
       </div>
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
         {
-          featuredNews.map((news) => (
+          featuredBlogs.map((blog: any) => (
             <article
-              class="card group hover:shadow-xl transition-shadow"
-              data-testid={`news-card-${news.id}`}
+              class="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group h-full flex flex-col"
+              data-testid={`blog-card-${blog.slug}`}
             >
               <div class="aspect-video bg-gray-200 overflow-hidden">
                 <img
                   src={
-                    news.image ||
+                    blog.image ||
                     `https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=400&h=225&fit=crop`
                   }
-                  alt={getLocalizedValue(news.title, locale)}
-                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  alt={getLocalizedValue(blog.title, locale)}
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
-              <div class="p-6">
-                <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
-                  <Icon name="tabler:calendar" class="w-4 h-4" />
-                  {new Date(news.published_at).toLocaleDateString(
-                    locale === "id" ? "id-ID" : "en-US",
-                    {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    },
-                  )}
+              <div class="p-6 flex flex-col flex-grow">
+                <div class="flex items-center gap-3 mb-4">
+                  <span class="px-3 py-1 bg-primary-50 text-primary-600 text-xs font-semibold rounded-full uppercase tracking-wider">
+                    {blog.category}
+                  </span>
+                  <span class="text-gray-400 text-xs">
+                    {new Date(blog.published_at).toLocaleDateString(
+                      locale === "id" ? "id-ID" : "en-US",
+                      {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      },
+                    )}
+                  </span>
                 </div>
-                <h3 class="font-bold text-lg text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
-                  {getLocalizedValue(news.title, locale)}
+                <h3 class="text-xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors line-clamp-2">
+                  {getLocalizedValue(blog.title, locale)}
                 </h3>
-                <p class="text-gray-600 text-sm line-clamp-2 mb-4">
-                  {getLocalizedValue(news.excerpt, locale)}
+                <p class="text-gray-600 text-sm mb-6 line-clamp-3">
+                  {getLocalizedValue(blog.excerpt, locale)}
                 </p>
-                <a
-                  href={getLocalizedPath(`/berita/${news.slug}`, locale)}
-                  class="text-primary-600 font-medium text-sm flex items-center hover:text-primary-700"
-                >
-                  {t("common.read_more", locale)}
-                  <Icon name="tabler:arrow-right" class="w-4 h-4 ml-1" />
-                </a>
+                <div class="mt-auto pt-6 border-t border-gray-100">
+                  <span class="inline-flex items-center text-primary-600 font-semibold text-sm group-hover:gap-2 transition-all">
+                    {t("common.read_more", locale)}
+                    <Icon name="tabler:arrow-right" class="w-4 h-4 ml-1" />
+                  </span>
+                </div>
               </div>
+              <a
+                href={getLocalizedPath(`/blogs/${blog.slug}`, locale)}
+                class="absolute inset-0 z-10"
+                aria-label={getLocalizedValue(blog.title, locale)}
+              />
             </article>
           ))
         }
       </div>
       <div class="mt-8 text-center md:hidden">
-        <a href={getLocalizedPath("/berita", locale)} class="btn-primary">
+        <a href={getLocalizedPath("/blogs", locale)} class="btn-primary">
           {t("common.view_all", locale)}
         </a>
       </div>

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import DashboardHome from '@/components/dashboard/DashboardHome';
-import ArticlesManager from '@/components/dashboard/ArticlesManager';
+import BlogsManager from '@/components/dashboard/BlogsManager';
 import PagesManager from '@/components/dashboard/PagesManager';
 import ProductsManager from '@/components/dashboard/ProductsManager';
 import PortfolioManager from '@/components/dashboard/PortfolioManager';
@@ -29,8 +29,8 @@ function Dashboard() {
     switch (currentPage) {
       case 'home':
         return <DashboardHome />;
-      case 'articles':
-        return <ArticlesManager />;
+      case 'blogs':
+        return <BlogsManager />;
       case 'pages':
         return <PagesManager />;
       case 'products':

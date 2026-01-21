@@ -22,8 +22,8 @@ const AdminLayout = lazy(() => import('@/components/dashboard/AdminLayout'));
 
 // Admin Pages (Lazy Loaded)
 const DashboardHome = lazy(() => import('@/components/dashboard/DashboardHome'));
-const ArticlesManager = lazy(() => import('@/components/dashboard/ArticlesManager'));
-const ArticleEditor = lazy(() => import('@/components/dashboard/ArticleEditor'));
+const BlogsManager = lazy(() => import('@/components/dashboard/BlogsManager'));
+const BlogEditor = lazy(() => import('@/components/dashboard/BlogEditor'));
 const PagesManager = lazy(() => import('@/components/dashboard/PagesManager'));
 const VisualPagesManager = lazy(() => import('@/components/dashboard/VisualPagesManager'));
 const VisualPageBuilder = lazy(() => import('@/components/visual-builder/VisualPageBuilder'));
@@ -155,9 +155,9 @@ const MainRouter = () => {
           }
         >
           <Route index element={<DashboardHome />} />
-          <Route path="articles" element={<ArticlesManager />} />
-          <Route path="articles/new" element={<ArticleEditor />} />
-          <Route path="articles/edit/:id" element={<ArticleEditor />} />
+          <Route path="blogs" element={<BlogsManager />} />
+          <Route path="blogs/new" element={<BlogEditor />} />
+          <Route path="blogs/edit/:id" element={<BlogEditor />} />
 
           <Route path="pages" element={<PagesManager />} />
           <Route path="pages/new" element={<PageEditor />} />

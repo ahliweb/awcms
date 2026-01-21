@@ -85,14 +85,30 @@ function Sidebar({ isOpen, setIsOpen }) {
 
   const groupedMenus = useMemo(() => {
     if (loading) return {};
+    // DEBUG: Log initial count
+    console.log('[Sidebar] Menu Items Count:', menuItems.length);
+    console.log('[Sidebar] User Role:', userRole);
+    console.log('[Sidebar] Current Tenant Tier:', currentTenant?.subscription_tier);
+
     const authorizedItems = menuItems.filter(item => {
-      if (!item.is_visible) return false;
+      if (!item.is_visible) {
+        if (item.key === 'sidebar_manager') console.log('[Sidebar] Hidden: is_visible false');
+        return false;
+      }
       if (item.permission === 'super_admin_only') return ['super_admin', 'owner'].includes(userRole);
       if (item.permission === 'platform_admin_only') return userRole === 'owner';
-      // Check Subscription Tier
-      if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) return false;
 
-      if (item.permission) return hasPermission(item.permission);
+      // Check Subscription Tier
+      if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) {
+        if (item.key === 'sidebar_manager') console.log('[Sidebar] Hidden: Tier Restriction', currentTenant?.subscription_tier, item.key);
+        return false;
+      }
+
+      if (item.permission) {
+        const hasPerm = hasPermission(item.permission);
+        if (item.key === 'sidebar_manager') console.log('[Sidebar] Permission Check:', item.permission, hasPerm);
+        return hasPerm;
+      }
       return true;
     });
 
@@ -198,6 +214,15 @@ function Sidebar({ isOpen, setIsOpen }) {
                 }}
               />
             </div>
+          </div>
+
+          {/* DEBUG INFO - REMOVE AFTER FIXING */}
+          <div className="p-2 bg-red-900/50 text-[10px] text-white break-all">
+            <p>Role: {userRole}</p>
+            <p>Tier: {currentTenant?.subscription_tier || 'undefined'}</p>
+            <p>Perm: {hasPermission('platform.sidebar.read') ? 'YES' : 'NO'}</p>
+            <p>Menu Items: {menuItems?.length}</p>
+            <p>SidebarMgr: {menuItems?.find(i => i.key === 'sidebar_manager') ? 'FOUND' : 'MISSING'}</p>
           </div>
 
           {/* Menu Items */}

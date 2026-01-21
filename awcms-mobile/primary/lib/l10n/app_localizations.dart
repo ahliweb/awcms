@@ -296,11 +296,11 @@ abstract class AppLocalizations {
   /// **'Sync complete'**
   String get syncComplete;
 
-  /// No description provided for @articles.
+  /// No description provided for @blogs.
   ///
   /// In en, this message translates to:
-  /// **'Articles'**
-  String get articles;
+  /// **'Blogs'**
+  String get blogs;
 
   /// No description provided for @readMore.
   ///
@@ -482,11 +482,11 @@ abstract class AppLocalizations {
   /// **'Menu'**
   String get menu;
 
-  /// No description provided for @seeAllArticles.
+  /// No description provided for @seeAllBlogs.
   ///
   /// In en, this message translates to:
-  /// **'See all articles'**
-  String get seeAllArticles;
+  /// **'See all blogs'**
+  String get seeAllBlogs;
 
   /// No description provided for @viewPhotosVideos.
   ///
@@ -632,11 +632,11 @@ abstract class AppLocalizations {
   /// **'Contact admin to create an account'**
   String get contactAdminToRegister;
 
-  /// No description provided for @noArticles.
+  /// No description provided for @noBlogs.
   ///
   /// In en, this message translates to:
-  /// **'No articles yet'**
-  String get noArticles;
+  /// **'No blogs yet'**
+  String get noBlogs;
 
   /// No description provided for @pullToRefresh.
   ///
@@ -644,17 +644,17 @@ abstract class AppLocalizations {
   /// **'Pull to refresh to update'**
   String get pullToRefresh;
 
-  /// No description provided for @failedToLoadArticles.
+  /// No description provided for @failedToLoadBlogs.
   ///
   /// In en, this message translates to:
-  /// **'Failed to load articles'**
-  String get failedToLoadArticles;
+  /// **'Failed to load blogs'**
+  String get failedToLoadBlogs;
 
-  /// No description provided for @articleNotFound.
+  /// No description provided for @blogNotFound.
   ///
   /// In en, this message translates to:
-  /// **'Article not found'**
-  String get articleNotFound;
+  /// **'Blog not found'**
+  String get blogNotFound;
 
   /// No description provided for @syncing.
   ///

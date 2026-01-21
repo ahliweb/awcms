@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
 import { SelectField } from '../fields/SelectField';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
-export const LatestArticlesBlock = ({
+export const LatestBlogsBlock = ({
     count = 3,
     layout = 'grid',
     showImage = true,
@@ -16,16 +16,16 @@ export const LatestArticlesBlock = ({
     titleColor,
     descriptionColor
 }) => {
-    const [articles, setArticles] = useState([]);
+    const [blogs, setBlogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        const fetchArticles = async () => {
+        const fetchBlogs = async () => {
             setLoading(true);
             try {
                 let query = supabase
-                    .from('articles')
+                    .from('blogs')
                     // Foreign key is category_id. We fetch the related category data.
                     // We remove the explicit alias 'main_category' to avoid 'categories_1' auto-alias errors,
                     // or we check if 'main_category' is needed by the UI. 
@@ -44,22 +44,22 @@ export const LatestArticlesBlock = ({
                 const { data, error } = await query;
 
                 // Map data if necessary to match expected props (if UI expects main_category)
-                const mappedData = data ? data.map(article => ({
-                    ...article,
-                    main_category: article.categories // Map default 'categories' response to 'main_category'
+                const mappedData = data ? data.map(blog => ({
+                    ...blog,
+                    main_category: blog.categories // Map default 'categories' response to 'main_category'
                 })) : [];
 
                 if (error) throw error;
-                setArticles(mappedData || []);
+                setBlogs(mappedData || []);
             } catch (err) {
-                console.error('Error fetching articles:', err);
+                console.error('Error fetching blogs:', err);
                 setError(err.message);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchArticles();
+        fetchBlogs();
     }, [count, categoryFilter]);
 
     if (loading) {
@@ -74,15 +74,15 @@ export const LatestArticlesBlock = ({
         return (
             <div className="flex items-center gap-2 p-4 text-red-600 bg-red-50 rounded-lg border border-red-200">
                 <AlertCircle className="w-4 h-4" />
-                <span>Error loading articles: {error}</span>
+                <span>Error loading blogs: {error}</span>
             </div>
         );
     }
 
-    if (articles.length === 0) {
+    if (blogs.length === 0) {
         return (
             <div className="text-center p-8 bg-slate-50 text-slate-500 rounded-lg border border-dashed border-slate-300">
-                No articles found.
+                No blogs found.
             </div>
         );
     }
@@ -91,14 +91,14 @@ export const LatestArticlesBlock = ({
     if (layout === 'grid') {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {articles.map(article => (
-                    <div key={article.id} className="group bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col h-full border border-slate-100">
+                {blogs.map(blog => (
+                    <div key={blog.id} className="group bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col h-full border border-slate-100">
                         {showImage && (
                             <div className="aspect-video w-full overflow-hidden bg-slate-100 relative">
-                                {article.featured_image ? (
+                                {blog.featured_image ? (
                                     <img
-                                        src={article.featured_image}
-                                        alt={article.title}
+                                        src={blog.featured_image}
+                                        alt={blog.title}
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                     />
                                 ) : (
@@ -108,23 +108,23 @@ export const LatestArticlesBlock = ({
                                 )}
                                 <div className="absolute top-4 left-4">
                                     <span className="bg-white/90 backdrop-blur px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full shadow-sm text-slate-800">
-                                        {article.main_category?.title || 'News'}
+                                        {blog.main_category?.title || 'Blog'}
                                     </span>
                                 </div>
                             </div>
                         )}
                         <div className="p-6 flex flex-col flex-1">
-                            {showDate && article.published_at && (
+                            {showDate && blog.published_at && (
                                 <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
                                     <Calendar className="w-3 h-3" />
-                                    {format(new Date(article.published_at), 'MMMM dd, yyyy')}
+                                    {format(new Date(blog.published_at), 'MMMM dd, yyyy')}
                                 </div>
                             )}
                             <h3 className="text-xl font-bold text-slate-900 mb-3 group-hover:text-blue-600 transition-colors line-clamp-2">
-                                <Link to={`/news/${article.slug}`}>{article.title}</Link>
+                                <Link to={`/blog/${blog.slug}`}>{blog.title}</Link>
                             </h3>
                             <p className="text-slate-600 text-sm mb-6 line-clamp-3">
-                                {article.summary || article.meta_description}
+                                {blog.summary || blog.meta_description}
                             </p>
                             <div className="mt-auto">
                                 <Button variant="link" className="p-0 h-auto font-semibold text-blue-600 hover:text-blue-700 hover:no-underline group/btn">
@@ -142,14 +142,14 @@ export const LatestArticlesBlock = ({
     // List Layout
     return (
         <div className="space-y-6 max-w-4xl mx-auto">
-            {articles.map(article => (
-                <div key={article.id} className="group flex flex-col md:flex-row gap-6 bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-slate-100">
+            {blogs.map(blog => (
+                <div key={blog.id} className="group flex flex-col md:flex-row gap-6 bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-slate-100">
                     {showImage && (
                         <div className="w-full md:w-48 aspect-video md:aspect-square shrink-0 rounded-lg overflow-hidden bg-slate-100">
-                            {article.featured_image ? (
+                            {blog.featured_image ? (
                                 <img
-                                    src={article.featured_image}
-                                    alt={article.title}
+                                    src={blog.featured_image}
+                                    alt={blog.title}
                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                 />
                             ) : (
@@ -162,26 +162,26 @@ export const LatestArticlesBlock = ({
                     <div className="flex-1 py-1">
                         <div className="flex items-center gap-3 mb-2">
                             <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
-                                {article.main_category?.title || 'News'}
+                                {blog.main_category?.title || 'Blog'}
                             </span>
-                            {showDate && article.published_at && (
+                            {showDate && blog.published_at && (
                                 <>
                                     <span className="w-1 h-1 rounded-full bg-slate-300"></span>
                                     <span className="text-xs text-slate-500 flex items-center gap-1">
                                         <Calendar className="w-3 h-3" />
-                                        {format(new Date(article.published_at), 'MMMM dd, yyyy')}
+                                        {format(new Date(blog.published_at), 'MMMM dd, yyyy')}
                                     </span>
                                 </>
                             )}
                         </div>
                         <h3 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">
-                            <Link to={`/news/${article.slug}`}>{article.title}</Link>
+                            <Link to={`/blog/${blog.slug}`}>{blog.title}</Link>
                         </h3>
                         <p className="text-slate-600 text-sm mb-4 line-clamp-2">
-                            {article.summary || article.meta_description}
+                            {blog.summary || blog.meta_description}
                         </p>
                         <Button variant="link" className="p-0 h-auto font-semibold text-blue-600 hover:text-blue-700 hover:no-underline flex items-center gap-1">
-                            Read article <ArrowRight className="w-4 h-4" />
+                            Read Blog <ArrowRight className="w-4 h-4" />
                         </Button>
                     </div>
                 </div>
@@ -190,10 +190,10 @@ export const LatestArticlesBlock = ({
     );
 };
 
-export const LatestArticlesBlockFields = {
+export const LatestBlogsBlockFields = {
     count: {
         type: 'select',
-        label: 'Number of Articles',
+        label: 'Number of Blogs',
         options: [
             { label: '3', value: 3 },
             { label: '6', value: 6 },

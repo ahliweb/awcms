@@ -15,7 +15,7 @@
   "nav": {
     "home": "Beranda",
     "profile": "Profil Sekolah",
-    "news": "Berita",
+    "blogs": "Blog",
     "finance": "Keuangan",
     "services": "Layanan",
     "achievements": "Prestasi",
@@ -33,7 +33,7 @@
     "stats_teachers": "Guru",
     "stats_staff": "Staf",
     "stats_extracurriculars": "Ekstrakurikuler",
-    "latest_news": "Berita Terbaru",
+    "latest_blogs": "Blog Terbaru",
     "quick_links": "Tautan Cepat",
     "ppdb": "Penerimaan Siswa Baru",
     "academic_calendar": "Kalender Akademik",
@@ -54,9 +54,9 @@
     "mission": "Misi",
     "motto": "Motto"
   },
-  "news": {
-    "title": "Berita",
-    "latest": "Berita Terbaru",
+  "blogs": {
+    "title": "Blog",
+    "latest": "Blog Terbaru",
     "school_info": "Info Sekolah",
     "agenda": "Agenda",
     "gallery": "Galeri",

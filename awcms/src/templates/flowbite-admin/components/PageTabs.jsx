@@ -2,7 +2,7 @@
  * PageTabs Component
  * 
  * A simple tabbed interface for switching between content sections.
- * API-compatible with existing usage in ArticlesManager, PagesManager, etc.
+ * API-compatible with existing usage in BlogsManager, PagesManager, etc.
  * Now with proper dark mode support.
  */
 

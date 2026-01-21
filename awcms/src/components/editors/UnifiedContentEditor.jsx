@@ -1,7 +1,7 @@
 /**
  * UnifiedContentEditor - A multi-mode content editor supporting Visual, RichText, and Markdown modes.
  * 
- * This component serves as the core editor for both pages and articles,
+ * This component serves as the core editor for both pages and blogs,
  * providing a consistent editing experience with mode switching capabilities.
  */
 import React, { useState, useCallback, useEffect } from 'react';
@@ -60,11 +60,11 @@ const EDITOR_MODES = {
  * UnifiedContentEditor Component
  * 
  * @param {Object} props
- * @param {Object} props.content - The content object (page or article)
- * @param {'page' | 'article'} props.contentType - Type of content being edited
+ * @param {Object} props.content - The content object (page or blog)
+ * @param {'page' | 'blog'} props.contentType - Type of content being edited
  * @param {Function} props.onClose - Callback when editor is closed
  * @param {Function} props.onSuccess - Callback on successful save
- * @param {string} props.tableName - Database table name ('pages' or 'articles')
+ * @param {string} props.tableName - Database table name ('pages' or 'blogs')
  * @param {string} props.permissionPrefix - Permission prefix for ABAC checks
  */
 function UnifiedContentEditor({
@@ -130,7 +130,7 @@ function UnifiedContentEditor({
 
     const fetchCategories = async () => {
         try {
-            const categoryType = contentType === 'article' ? 'articles' : 'page';
+            const categoryType = contentType === 'blog' ? 'blog' : 'page';
             let q = supabase
                 .from('categories')
                 .select('id, name')
@@ -236,7 +236,7 @@ function UnifiedContentEditor({
                 savedId = data.id;
             }
 
-            // Sync tags for pages (articles use sync_resource_tags RPC)
+            // Sync tags for pages (blogs use sync_resource_tags RPC handled by the backend or a separate hook)
             if (tableName === 'pages' && savedId && formData.tags.length > 0) {
                 // Clear existing tags
                 await supabase

@@ -1,6 +1,6 @@
 /**
- * Content fetching utilities for dynamic pages and articles from Supabase.
- * Used by dynamic routes like /p/[slug] and /news/[slug]
+ * Content fetching utilities for dynamic pages and blogs from Supabase.
+ * Used by dynamic routes like /p/[slug] and /blogs/[slug]
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -30,7 +30,7 @@ export interface PageData {
   updated_at: string;
 }
 
-export interface ArticleData {
+export interface BlogData {
   id: string;
   title: string;
   slug: string;
@@ -112,19 +112,19 @@ export async function getAllPages(
 }
 
 /**
- * Fetch a single article by its slug
+ * Fetch a single blog by its slug
  */
-export async function getArticleBySlug(
+export async function getBlogBySlug(
   supabase: SupabaseClient,
   slug: string,
   tenantId?: string | null,
-): Promise<ArticleData | null> {
+): Promise<BlogData | null> {
   let query = supabase
-    .from("articles")
+    .from("blogs")
     .select(
       `
       *,
-      category:categories!articles_category_id_fkey(id, name, slug)
+      category:categories!blogs_category_id_fkey(id, name, slug)
     `,
     )
     .eq("slug", slug)
@@ -137,29 +137,29 @@ export async function getArticleBySlug(
   const { data, error } = await query.single();
 
   if (error) {
-    console.error("[Content] Error fetching article:", error.message);
+    console.error("[Content] Error fetching blog:", error.message);
     return null;
   }
 
-  return data as ArticleData;
+  return data as BlogData;
 }
 
 /**
- * Fetch all published articles with pagination
+ * Fetch all published blogs with pagination
  */
-export async function getArticles(
+export async function getBlogs(
   supabase: SupabaseClient,
   tenantId?: string | null,
   options: { limit?: number; offset?: number; categorySlug?: string } = {},
-): Promise<{ articles: ArticleData[]; total: number }> {
+): Promise<{ blogs: BlogData[]; total: number }> {
   const { limit = 10, offset = 0, categorySlug } = options;
 
   let query = supabase
-    .from("articles")
+    .from("blogs")
     .select(
       `
       *,
-      category:categories!articles_category_id_fkey(id, name, slug)
+      category:categories!blogs_category_id_fkey(id, name, slug)
     `,
       { count: "exact" },
     )
@@ -179,22 +179,22 @@ export async function getArticles(
   const { data, error, count } = await query;
 
   if (error) {
-    console.error("[Content] Error fetching articles:", error.message);
-    return { articles: [], total: 0 };
+    console.error("[Content] Error fetching blogs:", error.message);
+    return { blogs: [], total: 0 };
   }
 
   return {
-    articles: (data || []) as ArticleData[],
+    blogs: (data || []) as BlogData[],
     total: count || 0,
   };
 }
 
 /**
- * Increment article view count
+ * Increment blog view count
  */
-export async function incrementArticleViews(
+export async function incrementBlogViews(
   supabase: SupabaseClient,
-  articleId: string,
+  blogId: string,
 ): Promise<void> {
-  await supabase.rpc("increment_article_views", { article_id: articleId });
+  await supabase.rpc("increment_blog_views", { blog_id: blogId });
 }

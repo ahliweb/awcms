@@ -30,7 +30,7 @@ const GenericContentManager = ({
     formFields,
     permissionPrefix,
     customSelect, // Allow overriding the default select query
-    defaultFilters = {}, // Allow filtering by default (e.g., { type: 'articles' })
+    defaultFilters = {}, // Allow filtering by default (e.g., { type: 'blogs' })
     customRowActions, // Allow injecting custom action buttons
     viewPermission,
     createPermission,
@@ -127,7 +127,7 @@ const GenericContentManager = ({
                 }
             }
 
-            // Apply default filters (e.g., { type: 'articles' } for categories)
+            // Apply default filters (e.g., { type: 'blogs' } for categories)
             if (defaultFilters && Object.keys(defaultFilters).length > 0) {
                 Object.entries(defaultFilters).forEach(([key, value]) => {
                     q = q.eq(key, value);
@@ -303,7 +303,7 @@ const GenericContentManager = ({
             {showEditor ? (
                 EditorComponent ? (
                     <EditorComponent
-                        article={selectedItem}
+                        item={selectedItem}
                         onClose={() => { setShowEditor(false); setSelectedItem(null); }}
                         onSuccess={fetchItems}
                     />

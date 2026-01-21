@@ -1,12 +1,12 @@
 /**
  * Search index utilities for full-text search using PostgreSQL pg_trgm.
- * Provides search functionality for pages, articles, and other content.
+ * Provides search functionality for pages, blogs, and other content.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface SearchResult {
   id: string;
-  type: "page" | "article" | "product";
+  type: "page" | "blog" | "product";
   title: string;
   slug: string;
   excerpt?: string;
@@ -15,7 +15,7 @@ export interface SearchResult {
 }
 
 export interface SearchOptions {
-  types?: ("page" | "article" | "product")[];
+  types?: ("page" | "blog" | "product")[];
   limit?: number;
   offset?: number;
 }
@@ -29,7 +29,7 @@ export async function searchContent(
   tenantId?: string | null,
   options: SearchOptions = {},
 ): Promise<SearchResult[]> {
-  const { types = ["page", "article"], limit = 20, offset = 0 } = options;
+  const { types = ["page", "blog"], limit = 20, offset = 0 } = options;
 
   if (!query.trim()) return [];
 
@@ -47,15 +47,15 @@ export async function searchContent(
     results.push(...pageResults);
   }
 
-  // Search articles
-  if (types.includes("article")) {
-    const articleResults = await searchArticles(
+  // Search blogs
+  if (types.includes("blog")) {
+    const blogResults = await searchBlogs(
       supabase,
       searchTerm,
       tenantId,
       limit,
     );
-    results.push(...articleResults);
+    results.push(...blogResults);
   }
 
   // Sort by score and apply pagination
@@ -103,14 +103,14 @@ async function searchPages(
   }));
 }
 
-async function searchArticles(
+async function searchBlogs(
   supabase: SupabaseClient,
   searchTerm: string,
   tenantId?: string | null,
   limit: number = 10,
 ): Promise<SearchResult[]> {
   let query = supabase
-    .from("articles")
+    .from("blogs")
     .select("id, title, slug, excerpt")
     .eq("status", "published")
     .is("deleted_at", null)
@@ -126,18 +126,18 @@ async function searchArticles(
   const { data, error } = await query;
 
   if (error) {
-    console.error("[Search] Error searching articles:", error.message);
+    console.error("[Search] Error searching blogs:", error.message);
     return [];
   }
 
-  return (data || []).map((article) => ({
-    id: article.id,
-    type: "article" as const,
-    title: article.title,
-    slug: article.slug,
-    excerpt: article.excerpt || undefined,
-    url: `/news/${article.slug}`,
-    score: calculateScore(article.title, searchTerm),
+  return (data || []).map((blog) => ({
+    id: blog.id,
+    type: "blog" as const,
+    title: blog.title,
+    slug: blog.slug,
+    excerpt: blog.excerpt || undefined,
+    url: `/blogs/${blog.slug}`,
+    score: calculateScore(blog.title, searchTerm),
   }));
 }
 

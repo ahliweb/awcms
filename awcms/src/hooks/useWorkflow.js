@@ -30,7 +30,7 @@ export function useWorkflow(initialState = 'draft', resourceType = 'posts', reso
     const canTransition = useCallback((targetState) => {
         if (!user) return false;
 
-        const permissionResource = resourceType === 'articles' ? 'post' : resourceType;
+        const permissionResource = resourceType === 'blog' ? 'blog' : resourceType;
 
         // Simple State Machine Logic:
         switch (targetState) {
@@ -68,7 +68,7 @@ export function useWorkflow(initialState = 'draft', resourceType = 'posts', reso
 
         setLoading(true);
         try {
-            const table = resourceType === 'page' ? 'pages' : (resourceType === 'articles' ? 'articles' : 'posts');
+            const table = resourceType === 'page' ? 'pages' : (resourceType === 'blog' ? 'blogs' : 'posts');
 
             const payload = {
                 workflow_state: newState,

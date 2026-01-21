@@ -10,11 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_service.dart';
 
 /// Channel enum untuk multi-device access control
-enum AppChannel {
-  web,
-  mobile,
-  api,
-}
+enum AppChannel { web, mobile, api }
 
 /// Permission actions
 enum PermissionAction {
@@ -207,7 +203,9 @@ class PermissionService extends Notifier<PermissionState> {
           .select('permissions(name)')
           .eq('roles.name', roleName);
 
-      return (result as List).map((r) => r['permissions']['name'] as String).toList();
+      return (result as List)
+          .map((r) => r['permissions']['name'] as String)
+          .toList();
     } catch (_) {
       return [];
     }
@@ -223,7 +221,7 @@ class PermissionService extends Notifier<PermissionState> {
     return state.permissions.contains(permission);
   }
 
-  /// Check module permission (e.g., 'tenant.article.read')
+  /// Check module permission (e.g., 'tenant.blogs.read')
   bool canAccess(String module, PermissionAction action) {
     final permission = 'tenant.$module.${action.name}';
     return hasPermission(permission);

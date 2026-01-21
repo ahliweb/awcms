@@ -7,7 +7,7 @@ export function useDashboardData() {
   const { session } = useAuth();
   const [data, setData] = useState({
     overview: {
-      articles: 0,
+      blogs: 0,
       pages: 0,
       products: 0,
       users: 0,
@@ -35,7 +35,7 @@ export function useDashboardData() {
     try {
       // 1. Fetch Overview Counts
       const results = await Promise.allSettled([
-        supabase.from('articles').select('*', { count: 'exact', head: true }).is('deleted_at', null),
+        supabase.from('blogs').select('*', { count: 'exact', head: true }).is('deleted_at', null),
         supabase.from('pages').select('*', { count: 'exact', head: true }).is('deleted_at', null),
         supabase.from('products').select('*', { count: 'exact', head: true }).is('deleted_at', null),
         supabase.from('users').select('*', { count: 'exact', head: true }).is('deleted_at', null),
@@ -44,7 +44,7 @@ export function useDashboardData() {
       ]);
 
       const [
-        articlesRes,
+        blogsRes,
         pagesRes,
         productsRes,
         usersRes,
@@ -61,7 +61,7 @@ export function useDashboardData() {
         }
       });
 
-      const articlesCount = articlesRes.status === 'fulfilled' ? articlesRes.value.count : 0;
+      const blogCount = blogsRes.status === 'fulfilled' ? blogsRes.value.count : 0;
       const pagesCount = pagesRes.status === 'fulfilled' ? pagesRes.value.count : 0;
       const productsCount = productsRes.status === 'fulfilled' ? productsRes.value.count : 0;
       const usersCount = usersRes.status === 'fulfilled' ? usersRes.value.count : 0;
@@ -73,8 +73,8 @@ export function useDashboardData() {
       const storageMB = (totalBytes / (1024 * 1024)).toFixed(2);
 
       // 2. Fetch Recent Activity (Simulated by combining recent updates)
-      const { data: recentArticles } = await supabase
-        .from('articles')
+      const { data: recentBlogs } = await supabase
+        .from('blogs')
         .select('title, updated_at, users!created_by(full_name)')
         .order('updated_at', { ascending: false })
         .limit(5);
@@ -86,8 +86,8 @@ export function useDashboardData() {
         .limit(5);
 
       const combinedActivity = [
-        ...(recentArticles || []).map(a => ({
-          type: 'article',
+        ...(recentBlogs || []).map(a => ({
+          type: 'blog',
           action: 'updated',
           title: a.title,
           user: a.users?.full_name || 'Unknown',
@@ -103,15 +103,15 @@ export function useDashboardData() {
       ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 10);
 
       // 3. Fetch Top Content (Most Viewed)
-      const { data: topArticles } = await supabase
-        .from('articles')
+      const { data: topBlogs } = await supabase
+        .from('blogs')
         .select('title, views, status')
         .order('views', { ascending: false })
         .limit(5);
 
       setData({
         overview: {
-          articles: articlesCount || 0,
+          blogs: blogCount || 0,
           pages: pagesCount || 0,
           products: productsCount || 0,
           orders: ordersCount || 0,
@@ -119,7 +119,7 @@ export function useDashboardData() {
           storage: `${storageMB} MB`
         },
         activity: combinedActivity,
-        topContent: topArticles || [],
+        topContent: topBlogs || [],
         systemHealth: {
           database: 'connected', // Assumed if queries worked
           storage: 'connected',

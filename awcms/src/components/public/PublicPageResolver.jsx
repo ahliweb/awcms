@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import PublicPageDetail from '@/pages/public/PublicPageDetail';
-import PublicArticleDetail from '@/pages/public/PublicArticleDetail';
+import PublicBlogDetail from '@/pages/public/PublicBlogDetail';
 import PublicProductDetail from '@/pages/public/PublicProductDetail';
 import PublicPortfolioDetail from '@/pages/public/PublicPortfolioDetail';
 import PublicPromotionDetail from '@/pages/public/PublicPromotionDetail';
@@ -21,7 +21,7 @@ const PublicPageResolver = () => {
     // We check a broad set of permissions to cover admins, editors, etc.
     const canViewDrafts = hasAnyPermission([
         'edit_pages', 'edit_visual_pages', 'manage_pages',
-        'edit_articles', 'manage_articles', 'super_admin'
+        'edit_blogs', 'manage_blogs', 'super_admin'
     ]);
 
     useEffect(() => {
@@ -43,16 +43,16 @@ const PublicPageResolver = () => {
                     return;
                 }
 
-                // Priority 2: Articles
-                const { data: article } = await supabase
-                    .from('articles')
+                // Priority 2: Blogs
+                const { data: blog } = await supabase
+                    .from('blogs')
                     .select('id, status')
                     .eq('slug', slug)
                     .in('status', statusFilter)
                     .maybeSingle();
 
-                if (article) {
-                    setContentType('article');
+                if (blog) {
+                    setContentType('blog');
                     return;
                 }
 
@@ -124,8 +124,8 @@ const PublicPageResolver = () => {
     switch (contentType) {
         case 'page':
             return <PublicPageDetail />;
-        case 'article':
-            return <PublicArticleDetail />;
+        case 'blog':
+            return <PublicBlogDetail />;
         case 'product':
             return <PublicProductDetail />;
         case 'portfolio':

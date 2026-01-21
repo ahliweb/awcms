@@ -110,7 +110,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         }
         if (templateName === 'Editor') {
           // Editor: Full content management (CRUD + publish) for content modules
-          const contentResources = ['articles', 'pages', 'products', 'files', 'photo_gallery', 'video_gallery',
+          const contentResources = ['blogs', 'pages', 'products', 'files', 'photo_gallery', 'video_gallery',
             'portfolio', 'announcements', 'testimonies', 'promotions', 'galleries',
             'menus', 'categories', 'tags', 'visual_pages'];
           return ['read', 'view', 'create', 'update', 'edit', 'publish', 'delete', 'restore'].includes(p.action)

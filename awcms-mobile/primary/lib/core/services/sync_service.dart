@@ -80,11 +80,11 @@ class SyncService extends Notifier<SyncState> {
       await _pushPendingChanges();
 
       // Then pull new data
-      await _pullArticles();
+      await _pullBlogs();
 
       // Update pending count
       final pendingCount = await _db.syncDao.getPendingCount();
-      final lastSync = await _db.syncDao.getLastSyncTime('articles');
+      final lastSync = await _db.syncDao.getLastSyncTime('blogs');
 
       state = state.copyWith(
         status: SyncStatus.success,
@@ -100,17 +100,17 @@ class SyncService extends Notifier<SyncState> {
     }
   }
 
-  /// Pull articles from Supabase
-  Future<void> _pullArticles() async {
+  /// Pull blogs from Supabase
+  Future<void> _pullBlogs() async {
     final tenantId = ref.read(tenantIdProvider);
     final lastSync = await _db.syncDao.getLastSyncTime(
-      'articles',
+      'blogs',
       tenantId: tenantId,
     );
 
     // Build query
     var query = _supabase
-        .from('articles')
+        .from('blogs')
         .select(
           'id, tenant_id, title, content, excerpt, cover_image, status, owner_id, created_at, updated_at',
         )
@@ -128,14 +128,14 @@ class SyncService extends Notifier<SyncState> {
     }
 
     final response = await query.order('updated_at', ascending: true);
-    final articles = List<Map<String, dynamic>>.from(response);
+    final blogs = List<Map<String, dynamic>>.from(response);
 
-    if (articles.isEmpty) return;
+    if (blogs.isEmpty) return;
 
     // Convert to Drift companions and upsert
-    final companions = articles
+    final companions = blogs
         .map(
-          (row) => LocalArticlesCompanion(
+          (row) => LocalBlogsCompanion(
             id: Value(row['id'] as String),
             tenantId: Value(row['tenant_id'] as String?),
             title: Value(row['title'] as String? ?? ''),
@@ -155,11 +155,11 @@ class SyncService extends Notifier<SyncState> {
         )
         .toList();
 
-    await _db.articlesDao.upsertArticles(companions);
+    await _db.blogsDao.upsertBlogs(companions);
 
     // Update last sync time
     await _db.syncDao.setLastSyncTime(
-      'articles',
+      'blogs',
       DateTime.now(),
       tenantId: tenantId,
     );
@@ -198,9 +198,10 @@ class SyncService extends Notifier<SyncState> {
             .eq('id', item.recordId);
         break;
       case 'delete':
-        await _supabase.from(item.targetTable).update({
-          'deleted_at': DateTime.now().toUtc().toIso8601String(),
-        }).eq('id', item.recordId);
+        await _supabase
+            .from(item.targetTable)
+            .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+            .eq('id', item.recordId);
         break;
     }
   }

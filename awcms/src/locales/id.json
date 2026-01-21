@@ -80,7 +80,7 @@
   "menu": {
     "home": "Beranda",
     "dashboard": "Dasbor",
-    "articles": "Artikel",
+    "blogs": "Blog",
     "pages": "Halaman",
     "products": "Produk",
     "product_types": "Jenis Produk",
@@ -121,7 +121,7 @@
     "loading": "Memuat menu..."
   },
   "dashboard": {
-    "total_articles": "Total Artikel",
+    "total_blogs": "Total Blog",
     "active_users": "Pengguna Aktif",
     "products": "Produk",
     "system_status": "Status Sistem",
@@ -382,11 +382,11 @@
       "unknown": "Tidak Diketahui"
     }
   },
-  "articles": {
-    "title": "Manajer Artikel",
-    "subtitle": "Buat dan kelola posting blog dan berita.",
+  "blogs": {
+    "title": "Manajer Blog",
+    "subtitle": "Buat dan kelola blog.",
     "form": {
-      "title": "Judul Artikel",
+      "title": "Judul Blog",
       "slug_desc": "Pengenal unik untuk URL",
       "excerpt": "Kutipan",
       "excerpt_desc": "Ringkasan pendek untuk daftar",
@@ -613,7 +613,7 @@
         "description": "Deskripsi",
         "type": "Tipe",
         "type_page": "Halaman",
-        "type_article": "Artikel",
+        "type_blog": "Blog",
         "type_product": "Produk"
       }
     }
@@ -833,7 +833,7 @@
   "public": {
     "hero_title": "Selamat Datang di AhliWeb",
     "hero_subtitle": "Temukan pembaruan terbaru, penawaran spesial, dan portofolio kreatif kami.",
-    "latest_articles": "Artikel Terbaru",
+    "latest_blogs": "Blog Terbaru",
     "view_portfolio": "Lihat Portofolio",
     "contact_us": "Hubungi Kami",
     "privacy_policy": "Kebijakan Privasi",

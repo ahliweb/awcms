@@ -42,19 +42,19 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-function ArticleEditor({ article, onClose, onSuccess }) {
+function BlogEditor({ item, onClose, onSuccess }) {
     const { toast } = useToast();
     const { user } = useAuth();
     const { currentTenant } = useTenant();
     const { hasPermission } = usePermissions();
     const [loading, setLoading] = useState(false);
     const [categories, setCategories] = useState([]);
-    const [currentState, setCurrentState] = useState(article?.workflow_state || 'draft');
+    const [currentState, setCurrentState] = useState(item?.workflow_state || 'draft');
 
     // Detect Visual Builder Mode
     // Check strict editor_type first, then fallback to content shape inspection
-    const isVisualContent = article?.editor_type === 'visual' ||
-        (article?.content && typeof article.content === 'object' && !Array.isArray(article.content) && article.content.root);
+    const isVisualContent = item?.editor_type === 'visual' ||
+        (item?.content && typeof item.content === 'object' && !Array.isArray(item.content) && item.content.root);
 
     const [useVisualBuilder, setUseVisualBuilder] = useState(isVisualContent);
 
@@ -64,37 +64,37 @@ function ArticleEditor({ article, onClose, onSuccess }) {
 
     // Initial Form Data State
     const [formData, setFormData] = useState({
-        title: article?.title || '',
-        slug: article?.slug || '',
-        content: article?.content || '',
-        excerpt: article?.excerpt || '',
-        featured_image: article?.featured_image || '',
-        status: article?.status || 'draft',
-        workflow_state: article?.workflow_state || 'draft',
-        is_active: article?.is_active ?? true,
-        is_public: article?.is_public ?? false,
-        editor_type: article?.editor_type || (isVisualContent ? 'visual' : 'richtext'),
-        category_id: article?.category_id || '',
-        tags: article?.tags || [],
+        title: item?.title || '',
+        slug: item?.slug || '',
+        content: item?.content || '',
+        excerpt: item?.excerpt || '',
+        featured_image: item?.featured_image || '',
+        status: item?.status || 'draft',
+        workflow_state: item?.workflow_state || 'draft',
+        is_active: item?.is_active ?? true,
+        is_public: item?.is_public ?? false,
+        editor_type: item?.editor_type || (isVisualContent ? 'visual' : 'richtext'),
+        category_id: item?.category_id || '',
+        tags: item?.tags || [],
 
         // SEO
-        meta_title: article?.meta_title || '',
-        meta_description: article?.meta_description || '',
-        meta_keywords: article?.meta_keywords || '',
-        canonical_url: article?.canonical_url || '',
-        robots: article?.robots || 'index, follow',
+        meta_title: item?.meta_title || '',
+        meta_description: item?.meta_description || '',
+        meta_keywords: item?.meta_keywords || '',
+        canonical_url: item?.canonical_url || '',
+        robots: item?.robots || 'index, follow',
 
         // Social
-        og_title: article?.og_title || '',
-        og_description: article?.og_description || '',
-        og_image: article?.og_image || '',
-        twitter_card_type: article?.twitter_card_type || 'summary',
-        twitter_image: article?.twitter_image || '',
+        og_title: item?.og_title || '',
+        og_description: item?.og_description || '',
+        og_image: item?.og_image || '',
+        twitter_card_type: item?.twitter_card_type || 'summary',
+        twitter_image: item?.twitter_image || '',
 
-        published_at: article?.published_at ? new Date(article.published_at).toISOString().slice(0, 16) : ''
+        published_at: item?.published_at ? new Date(item.published_at).toISOString().slice(0, 16) : ''
     });
 
-    const isEditMode = !!article;
+    const isEditMode = !!item;
     const WORKFLOW_STATES = {
         DRAFT: 'draft',
         REVIEWED: 'reviewed',
@@ -104,8 +104,8 @@ function ArticleEditor({ article, onClose, onSuccess }) {
     };
 
     // Permissions
-    const canEdit = hasPermission('tenant.articles.update') || (user?.id === article?.author_id);
-    const canPublish = hasPermission('tenant.articles.publish');
+    const canEdit = hasPermission('tenant.blog.update') || (user?.id === item?.author_id);
+    const canPublish = hasPermission('tenant.blog.publish');
 
     useEffect(() => {
         fetchCategories();
@@ -117,7 +117,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
             let q = supabase
                 .from('categories')
                 .select('id, name')
-                .eq('type', 'articles');
+                .eq('type', 'blog');
 
             if (currentTenant?.id) {
                 q = q.eq('tenant_id', currentTenant.id);
@@ -132,7 +132,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
     };
 
     const handleWorkflowAction = async (newState) => {
-        await saveArticle(newState);
+        await saveItem(newState);
     };
 
     const generateSlug = (text) => {
@@ -142,9 +142,9 @@ function ArticleEditor({ article, onClose, onSuccess }) {
             .replace(/(^-|-$)/g, '');
     };
 
-    const saveArticle = async (workflowStateOverride = null) => {
+    const saveItem = async (workflowStateOverride = null) => {
         if (!canEdit) {
-            toast({ variant: 'destructive', title: 'Permission Denied', description: 'You cannot save this article.' });
+            toast({ variant: 'destructive', title: 'Permission Denied', description: 'You cannot save this blog.' });
             return;
         }
 
@@ -204,34 +204,34 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                 dataToSave.author_id = user.id;
             }
 
-            let savedArticleId = article?.id;
+            let savedItemId = item?.id;
 
-            if (article) {
+            if (item) {
                 delete dataToSave.tenant_id; // Don't update tenant_id
                 const { error } = await supabase
-                    .from('articles')
+                    .from('blogs')
                     .update(dataToSave)
-                    .eq('id', article.id);
+                    .eq('id', item.id);
 
                 if (error) throw error;
-                toast({ title: "Success", description: `Article saved as ${finalWorkflowState}` });
+                toast({ title: "Success", description: `Blog saved as ${finalWorkflowState}` });
             } else {
                 const { data, error } = await supabase
-                    .from('articles')
+                    .from('blogs')
                     .insert([dataToSave])
                     .select('id')
                     .single();
 
                 if (error) throw error;
-                savedArticleId = data.id;
-                toast({ title: "Success", description: "Article created successfully" });
+                savedItemId = data.id;
+                toast({ title: "Success", description: "Blog created successfully" });
             }
 
             // Sync Tags
-            if (savedArticleId) {
+            if (savedItemId) {
                 await supabase.rpc('sync_resource_tags', {
-                    p_resource_id: savedArticleId,
-                    p_resource_type: 'articles',
+                    p_resource_id: savedItemId,
+                    p_resource_type: 'blogs',
                     p_tags: formData.tags,
                     p_tenant_id: currentTenant.id
                 });
@@ -256,7 +256,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
             toast({
                 variant: "destructive",
                 title: "Error",
-                description: error.message || "Failed to save article"
+                description: error.message || "Failed to save blog"
             });
         } finally {
             setLoading(false);
@@ -276,11 +276,11 @@ function ArticleEditor({ article, onClose, onSuccess }) {
     if (useVisualBuilder) {
         return createPortal(
             <VisualPageBuilder
-                page={article}
+                page={item}
                 onClose={onClose}
                 onSuccess={onSuccess}
-                mode="article" // Custom prop we added support for
-                pageId={article?.id} // Helper for mode='article' logic
+                mode="blog" // Custom prop we added support for
+                pageId={item?.id} // Helper for mode='blog' logic
             />,
             document.body
         );
@@ -312,9 +312,9 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                         <div className="flex items-center gap-2">
                             <Input
                                 value={formData.title}
-                                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value, slug: !article ? generateSlug(e.target.value) : prev.slug }))}
+                                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value, slug: !item ? generateSlug(e.target.value) : prev.slug }))}
                                 className="border-none shadow-none bg-transparent text-lg font-bold px-0 h-auto focus-visible:ring-0 placeholder:text-slate-400 min-w-[300px]"
-                                placeholder="Untitled Article"
+                                placeholder="Untitled Blog"
                             />
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -380,7 +380,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                     )}
 
                     <Button
-                        onClick={() => saveArticle(currentState === WORKFLOW_STATES.PUBLISHED ? null : WORKFLOW_STATES.PUBLISHED)}
+                        onClick={() => saveItem(currentState === WORKFLOW_STATES.PUBLISHED ? null : WORKFLOW_STATES.PUBLISHED)}
                         className={`${currentState === WORKFLOW_STATES.PUBLISHED ? 'bg-slate-900' : 'bg-emerald-600 hover:bg-emerald-700'} text-white shadow-lg shadow-emerald-500/20`}
                         disabled={loading}
                     >
@@ -448,7 +448,7 @@ function ArticleEditor({ article, onClose, onSuccess }) {
                         {/* Mobile Sidebar Header */}
                         {showMobileSettings && (
                             <div className="flex items-center justify-between p-4 border-b lg:hidden">
-                                <span className="font-semibold">Article Settings</span>
+                                <span className="font-semibold">Blog Settings</span>
                                 <Button variant="ghost" size="icon" onClick={() => setShowMobileSettings(false)}>
                                     <X className="w-5 h-5" />
                                 </Button>
@@ -598,4 +598,4 @@ function ArticleEditor({ article, onClose, onSuccess }) {
     return createPortal(renderEditor(), document.body);
 }
 
-export default ArticleEditor;
+export default BlogEditor;

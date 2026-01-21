@@ -80,7 +80,7 @@
   "menu": {
     "home": "Home",
     "dashboard": "Dashboard",
-    "articles": "Articles",
+    "blogs": "Blogs",
     "pages": "Pages",
     "products": "Products",
     "product_types": "Product Types",
@@ -121,7 +121,7 @@
     "loading": "Loading menu..."
   },
   "dashboard": {
-    "total_articles": "Total Articles",
+    "total_blogs": "Total Blogs",
     "active_users": "Active Users",
     "products": "Products",
     "system_status": "System Status",
@@ -382,11 +382,11 @@
       "unknown": "Unknown"
     }
   },
-  "articles": {
-    "title": "Articles Manager",
-    "subtitle": "Create and manage blog posts and news.",
+  "blogs": {
+    "title": "Blogs Manager",
+    "subtitle": "Create and manage blogs.",
     "form": {
-      "title": "Article Title",
+      "title": "Blog Title",
       "slug_desc": "Unique identifier for URL",
       "excerpt": "Excerpt",
       "excerpt_desc": "Short summary for lists",
@@ -613,7 +613,7 @@
         "description": "Description",
         "type": "Type",
         "type_page": "Pages",
-        "type_article": "Articles",
+        "type_blog": "Blogs",
         "type_product": "Products"
       }
     }
@@ -833,7 +833,7 @@
   "public": {
     "hero_title": "Welcome to AhliWeb",
     "hero_subtitle": "Discover our latest updates, special offers, and creative portfolio.",
-    "latest_articles": "Latest Articles",
+    "latest_blogs": "Latest Blogs",
     "view_portfolio": "View Portfolio",
     "contact_us": "Contact Us",
     "privacy_policy": "Privacy Policy",

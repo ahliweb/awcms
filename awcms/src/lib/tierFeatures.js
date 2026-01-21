@@ -6,7 +6,7 @@
 
 export const TIER_FEATURES = {
     free: [
-        'home', 'articles', 'pages', 'visual_builder',
+        'home', 'blogs', 'pages', 'visual_builder',
         'categories', 'tags', 'files', 'portfolio', 'testimonials',
         'announcements', 'promotions', 'contact_messages', 'contacts', 'menus', 'products',
         'product_types', 'orders', 'users'
@@ -16,12 +16,12 @@ export const TIER_FEATURES = {
         'ALL_FREE',
         'themes', 'widgets', 'roles', 'permissions', 'policies', 'seo_manager', 'languages',
         'notifications', 'audit_logs', 'settings_branding', 'backup', 'regions',
-        'photo_gallery', 'video_gallery'
+        'photo_gallery', 'video_gallery', 'sidebar_manager'
     ],
     enterprise: [
         // Includes all Pro features
         'ALL_PRO',
-        'sso', 'extensions', 'sidebar_manager', 'settings_general', 'tenants',
+        'sso', 'extensions', 'settings_general', 'tenants',
         'email_settings', 'email_logs', 'iot_devices', 'mobile_users', 'push_notifications', 'mobile_config'
     ]
 };

@@ -1,6 +1,6 @@
-/// AWCMS Mobile - Article Detail Screen
+/// AWCMS Mobile - Blog Detail Screen
 ///
-/// Halaman detail artikel dari local database.
+/// Blog detail page from local database.
 library;
 
 import 'package:flutter/material.dart';
@@ -9,29 +9,29 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/extensions/context_extensions.dart';
-import '../providers/articles_provider.dart';
+import '../providers/blogs_provider.dart';
 
-class ArticleDetailScreen extends ConsumerWidget {
-  final String articleId;
+class BlogDetailScreen extends ConsumerWidget {
+  final String blogId;
 
-  const ArticleDetailScreen({super.key, required this.articleId});
+  const BlogDetailScreen({super.key, required this.blogId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final articleAsync = ref.watch(articleDetailProvider(articleId));
+    final blogAsync = ref.watch(blogDetailProvider(blogId));
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: articleAsync.when(
-        data: (article) {
-          if (article == null) {
-            return Center(child: Text(context.l10n.articleNotFound));
+      body: blogAsync.when(
+        data: (blog) {
+          if (blog == null) {
+            return Center(child: Text(context.l10n.blogNotFound));
           }
 
-          final coverImage = article.coverImage;
-          final title = article.title;
-          final content = article.content ?? '';
-          final createdAt = article.createdAt;
+          final coverImage = blog.coverImage;
+          final title = blog.title;
+          final content = blog.content ?? '';
+          final createdAt = blog.createdAt;
 
           return CustomScrollView(
             slivers: [
@@ -111,13 +111,12 @@ class ArticleDetailScreen extends ConsumerWidget {
               Icon(Icons.error_outline, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
               Text(
-                context.l10n.failedToLoadArticles,
+                context.l10n.failedToLoadBlogs,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 16),
               FilledButton.tonal(
-                onPressed: () =>
-                    ref.invalidate(articleDetailProvider(articleId)),
+                onPressed: () => ref.invalidate(blogDetailProvider(blogId)),
                 child: Text(context.l10n.retry),
               ),
             ],

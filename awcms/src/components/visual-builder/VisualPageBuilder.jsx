@@ -29,7 +29,7 @@ import { Settings } from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext'; // Added TenantContext
 
-const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
+const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess }) => {
     // Permission Hook
     const { hasPermission, checkAccess, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant(); // Get current tenant
@@ -41,7 +41,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
     const templateId = searchParams.get('templateId');
     const partId = searchParams.get('partId');
     const pageId = searchParams.get('pageId'); // Optional, to support deep linking 
-    const mode = partId ? 'part' : (templateId ? 'template' : 'page');
+    const mode = initialMode || (partId ? 'part' : (templateId ? 'template' : 'page'));
 
     // State
     const [page, setPage] = useState(initialPage || null);
@@ -113,7 +113,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
         const loadData = async () => {
             if (initialPage) return; // Already have data from props
 
-            if (initialPage && (initialPage.id || initialPage.editor_type === 'visual')) return; // Already have data from props, possibly new Visual Article
+            if (initialPage && (initialPage.id || initialPage.editor_type === 'visual')) return; // Already have data from props, possibly new Visual Blog
             try {
                 let fetchedData = null;
                 // CHANGED: Added tenant isolation to queries
@@ -166,8 +166,8 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                         published_at: ''
                     });
 
-                } else if (mode === 'article' && pageId) {
-                    let q = udm.from('articles').select('*').eq('id', pageId);
+                } else if (mode === 'blog' && pageId) {
+                    let q = udm.from('blogs').select('*').eq('id', pageId);
                     q = applyTenantFilter(q);
                     const { data: art, error } = await q.single();
                     if (error) throw error;
@@ -203,7 +203,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
 
                 if (fetchedData) {
                     setPage(fetchedData);
-                    // For articles, we might need to be careful if content is HTML string (legacy) vs JSON (visual)
+                    // For blogs, we might need to be careful if content is HTML string (legacy) vs JSON (visual)
                     const initialContent = fetchedData.content_draft ||
                         (typeof fetchedData.content === 'object' ? fetchedData.content : null) ||
                         fetchedData.data ||
@@ -350,8 +350,8 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                     })
                     .eq('id', partId);
                 error = err;
-            } else if (mode === 'article') {
-                console.log('Saving article:', page?.id ? page.id : 'NEW');
+            } else if (mode === 'blog') {
+                console.log('Saving blog:', page?.id ? page.id : 'NEW');
 
                 const payload = {
                     content: contentData,
@@ -368,24 +368,24 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
 
                 if (page?.id) {
                     const { error: err } = await udm
-                        .from('articles')
+                        .from('blogs')
                         .update(payload)
                         .eq('id', page.id);
                     error = err;
                 } else {
-                    // Create new article
+                    // Create new blog
                     // If offline or just standard practice, we might want to generate ID, 
                     // but for now let's rely on UDM/Supabase to return the created record.
-                    const { data: newArticle, error: err } = await udm
-                        .from('articles')
+                    const { data: newBlog, error: err } = await udm
+                        .from('blogs')
                         .insert([payload])
                         .select()
                         .single();
 
                     error = err;
 
-                    if (newArticle) {
-                        setPage(newArticle);
+                    if (newBlog) {
+                        setPage(newBlog);
                         // Update the URL without reloading? 
                         // Or just inform the user. Better to update state so subsequent saves are updates.
                         // We also need to update the history object if necessary, but 'page' state is key.
@@ -608,7 +608,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
                             <h1 className="text-lg font-bold text-foreground tracking-tight leading-none bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-                                {pageMetadata.title || 'Untitled Page'}
+                                {pageMetadata.title || (mode === 'blog' ? 'Untitled Blog' : 'Untitled Page')}
                             </h1>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${pageMetadata.status === 'published'
                                 ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
@@ -745,9 +745,11 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
             <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                 <DialogContent className="sm:max-w-[500px] bg-background/95 backdrop-blur-xl border-border shadow-2xl">
                     <DialogHeader className="pb-4 border-b border-border">
-                        <DialogTitle className="text-xl font-bold text-foreground tracking-tight">Page Settings</DialogTitle>
+                        <DialogTitle className="text-xl font-bold text-foreground tracking-tight">
+                            {mode === 'blog' ? 'Blog Settings' : 'Page Settings'}
+                        </DialogTitle>
                         <DialogDescription className="text-muted-foreground">
-                            Configure page properties, SEO metadata, and publication status.
+                            Configure {mode === 'blog' ? 'blog' : 'page'} properties, SEO metadata, and publication status.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-6 py-6">
@@ -757,7 +759,9 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                                 General Information
                             </h3>
                             <div className="grid gap-3">
-                                <Label htmlFor="title" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Page Title</Label>
+                                <Label htmlFor="title" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                    {mode === 'blog' ? 'Blog Title' : 'Page Title'}
+                                </Label>
                                 <Input
                                     id="title"
                                     value={pageMetadata.title}
@@ -787,7 +791,7 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                                     onChange={(val) => handleMetadataChange('category_id', val)}
                                     labelKey="name"
                                     valueKey="id"
-                                    filter={{ type: mode === 'article' ? 'article' : 'page' }}
+                                    filter={{ type: mode === 'blog' ? 'blog' : 'page' }}
                                     placeholder="No Category"
                                 />
                             </div>
@@ -820,8 +824,8 @@ const VisualPageBuilder = ({ page: initialPage, onClose, onSuccess }) => {
                                     <Label className="text-base font-semibold text-foreground">Publish Status</Label>
                                     <p className="text-xs text-muted-foreground font-medium">
                                         {pageMetadata.status === 'published'
-                                            ? 'Page is live and visible to visitors.'
-                                            : 'Page is hidden and only visible to editors.'}
+                                            ? `${mode === 'blog' ? 'Blog' : 'Page'} is live and visible to visitors.`
+                                            : `${mode === 'blog' ? 'Blog' : 'Page'} is hidden and only visible to editors.`}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-3">

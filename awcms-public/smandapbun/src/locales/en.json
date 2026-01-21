@@ -15,7 +15,7 @@
   "nav": {
     "home": "Home",
     "profile": "School Profile",
-    "news": "News",
+    "blogs": "Blogs",
     "finance": "Finance",
     "services": "Services",
     "achievements": "Achievements",
@@ -33,7 +33,7 @@
     "stats_teachers": "Teachers",
     "stats_staff": "Staff",
     "stats_extracurriculars": "Extracurriculars",
-    "latest_news": "Latest News",
+    "latest_blogs": "Latest Blogs",
     "quick_links": "Quick Links",
     "ppdb": "New Student Admission",
     "academic_calendar": "Academic Calendar",
@@ -54,9 +54,9 @@
     "mission": "Mission",
     "motto": "Motto"
   },
-  "news": {
-    "title": "News",
-    "latest": "Latest News",
+  "blogs": {
+    "title": "Blogs",
+    "latest": "Latest Blogs",
     "school_info": "School Info",
     "agenda": "Agenda",
     "gallery": "Gallery",

@@ -3,7 +3,22 @@
 
 All notable changes to the **AWCMS** project will be documented in this file.
 
-## [Unreleased]
+## [2.23.1] "Antigravity" - 2026-01-22
+
+### Changed
+
+- **Project-Wide Terminology Standardization**:
+  - Renamed "News" and "Article" to "Blog" across all repositories (`awcms`, `awcms-public`, `awcms-mobile`).
+  - Updated Smandapbun template: renamed `/berita` routes to `/blogs`, updated translation keys, and standardized internal components.
+  - Refactored Admin Panel: Renamed `ArticlesManager` to `BlogsManager`, updated `ArticleEditor` to `BlogEditor`, and standardized Visual Builder blocks.
+  - Updated Mobile App: Refactored DAOs and Services to use "blog" terminology (`BlogsDao`, `SyncService`).
+  - Standardized database conventions and localization resources (`en.json`, `id.json`, `app_en.arb`, `app_id.arb`).
+
+### Fixed
+
+- **Public Portal (Smandapbun)**:
+  - Fixed `SiteImages` type mismatch in `api.ts` with legacy mapping support.
+  - Resolved missing terminology in navigation and footer components.
 
 ### Added
 
@@ -36,6 +51,16 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - Cleaned up unused imports and variables across the entire template.
   - Restored missing critical imports in financial, achievement, and service pages.
   - Resolved deployment build errors by adding `VITE_` prefix fallbacks for Supabase credentials in `src/lib/supabase.ts`.
+
+## [Unreleased]
+
+### Changed
+
+- **Database Migrations**: Added `20260121235324_remote_schema.sql` after syncing the remote schema via `supabase db pull`.
+
+### Fixed
+
+- **Database Migrations**: Guarded `ALTER TABLE public.blogs` with `IF EXISTS` in `20260120091500_unified_content_model.sql` to prevent `db pull` failures when `blogs` does not exist.
 
 ## [2.23.0] "Vortex" - 2026-01-21
 

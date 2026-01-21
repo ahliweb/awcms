@@ -36,7 +36,8 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
     addFilter('admin_menu_items', 'mailketing_menu', (items) => [
         ...items,
         {
-            label: 'Email Settings',
+            id: 'mailketing-settings',
+            label: 'Mailketing',
             path: 'email-settings',
             icon: 'Mail',
             group: 'CONFIGURATION',

@@ -36,8 +36,8 @@
     "subscription": "Subscription",
     "blog": "Blog",
     "blog_list": "Blog List",
-    "article": "Article",
-    "article_mdx": "Article (with MDX)",
+    "blog_detail": "Blog Detail",
+    "blog_mdx": "Blog (with MDX)",
     "category_page": "Category Page",
     "tag_page": "Tag Page",
     "widgets": "Widgets",
@@ -685,21 +685,21 @@
       "page_prefix": " — Page "
     }
   },
-  "news_page": {
+  "blogs_page": {
     "metadata": {
-      "title": "News & Articles",
-      "description": "Latest news, updates, and articles"
+      "title": "Blogs",
+      "description": "Latest blogs, updates, and articles"
     },
     "header": {
-      "title": "News & Articles",
-      "subtitle": "Stay updated with our latest news, announcements, and insights."
+      "title": "Blogs",
+      "subtitle": "Stay updated with our latest blogs, announcements, and insights."
     },
     "filter": {
       "category": "Category:",
       "tag": "Tag:"
     },
     "list": {
-      "no_articles": "No articles found",
+      "no_blogs": "No blogs found",
       "check_back": "Check back later for new content.",
       "views": "views"
     },
@@ -709,9 +709,9 @@
       "page": "Page",
       "of": "of"
     },
-    "article": {
+    "blog": {
       "views": "views",
-      "back_to_news": "Back to News",
+      "back_to_blogs": "Back to Blogs",
       "visual_content_placeholder": "Visual content rendering coming soon..."
     }
   },

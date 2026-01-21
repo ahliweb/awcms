@@ -42,7 +42,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 
 | Module        | Permission Prefix        | Actions                                                          |
 | :------------ | :----------------------- | :--------------------------------------------------------------- |
-| Articles      | `tenant.article.*`       | read, create, update, delete, restore, permanent_delete, publish |
+| Blogs         | `tenant.article.*`       | read, create, update, delete, restore, permanent_delete, publish |
 | Pages         | `tenant.page.*`          | read, create, update, delete, restore, permanent_delete, publish |
 | Visual Pages  | `tenant.visual_pages.*`  | read, create, update, delete, restore, permanent_delete          |
 | Portfolio     | `tenant.portfolio.*`     | read, create, update, delete, restore, permanent_delete          |

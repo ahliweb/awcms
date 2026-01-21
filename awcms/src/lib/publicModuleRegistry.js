@@ -27,7 +27,7 @@ export const PUBLIC_MODULES = [
     { key: 'contact', label: 'Contact', url: '/contact', icon: 'Mail', group: 'Main', order: 30 },
 
     // Content modules
-    { key: 'articles', label: 'Articles', url: '/articles', icon: 'FileText', group: 'Content', order: 100 },
+    { key: 'blogs', label: 'Blogs', url: '/blogs', icon: 'FileText', group: 'Content', order: 100 },
     { key: 'pages', label: 'Pages', url: '/pages', icon: 'FileEdit', group: 'Content', order: 110 },
     { key: 'portfolio', label: 'Portfolio', url: '/portfolio', icon: 'Briefcase', group: 'Content', order: 120 },
     { key: 'testimonials', label: 'Testimonials', url: '/testimonials', icon: 'MessageSquareQuote', group: 'Content', order: 130 },

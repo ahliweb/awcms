@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label';
 
 const MODULES = [
     { value: 'all', label: 'All Modules' },
-    { value: 'articles', label: 'Articles' },
+    { value: 'blogs', label: 'Blogs' },
     { value: 'pages', label: 'Pages' },
     { value: 'products', label: 'Products' },
     { value: 'portfolio', label: 'Portfolio' },

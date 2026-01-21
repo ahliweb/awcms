@@ -12,8 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { useSearch } from '@/hooks/useSearch';
 import { stripHtml } from '@/utils/textUtils';
 
-function PublicArticles() {
-    const [articles, setArticles] = useState([]);
+function PublicBlogs() {
+    const [blogs, setBlogs] = useState([]);
     const [categories, setCategories] = useState([]);
     const [activeCategory, setActiveCategory] = useState(null);
 
@@ -38,7 +38,7 @@ function PublicArticles() {
             const { data } = await supabase
                 .from('categories')
                 .select('*')
-                .eq('type', 'articles')
+                .eq('type', 'blog')
                 .is('deleted_at', null)
                 .order('name');
             if (data) setCategories(data);
@@ -46,18 +46,18 @@ function PublicArticles() {
         fetchCategories();
     }, []);
 
-    const fetchArticles = useCallback(async () => {
+    const fetchBlogs = useCallback(async () => {
         setSearchLoading(true);
         const from = (currentPage - 1) * itemsPerPage;
         const to = from + itemsPerPage - 1;
 
         try {
             let queryBuilder = supabase
-                .from('articles')
+                .from('blogs')
                 .select(`
             *, 
             categories(name), 
-            author:users!articles_author_id_fkey(full_name)
+            author:users!blogs_author_id_fkey(full_name)
         `, { count: 'exact' })
                 .eq('status', 'published')
                 .is('deleted_at', null)
@@ -76,7 +76,7 @@ function PublicArticles() {
 
             if (error) throw error;
 
-            setArticles(data || []);
+            setBlogs(data || []);
             setTotalItems(count || 0);
         } catch (err) {
             console.error("Fetch Error:", err);
@@ -86,21 +86,21 @@ function PublicArticles() {
     }, [currentPage, itemsPerPage, activeCategory, debouncedQuery, setSearchLoading]);
 
     useEffect(() => {
-        fetchArticles();
+        fetchBlogs();
         window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, [fetchArticles]);
+    }, [fetchBlogs]);
 
 
     const totalPages = Math.ceil(totalItems / itemsPerPage);
 
     return (
         <div className="bg-slate-50 min-h-screen pb-20">
-            <SeoHelmet type="articles" defaultTitle="Articles & Blog | AhliWeb" defaultDescription="Read our latest news, insights and updates." />
+            <SeoHelmet type="blogs" defaultTitle="Blogs | AhliWeb" defaultDescription="Read our latest blogs, insights and updates." />
 
             <div className="bg-white border-b border-slate-200 pt-16 pb-12">
                 <div className="container mx-auto px-4 text-center max-w-2xl">
                     <h1 className="text-4xl font-bold text-slate-900 mb-4 tracking-tight">Our Latest Insights</h1>
-                    <p className="text-lg text-slate-600">Discover articles, tutorials, and news curated by our team of experts.</p>
+                    <p className="text-lg text-slate-600">Discover blogs, tutorials, and insights curated by our team of experts.</p>
                 </div>
             </div>
 
@@ -110,7 +110,7 @@ function PublicArticles() {
                         <div className="relative">
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                             <Input
-                                placeholder={`Search articles (${minLength}+ chars)...`}
+                                placeholder={`Search blogs (${minLength}+ chars)...`}
                                 value={query}
                                 onChange={(e) => { setQuery(e.target.value); setCurrentPage(1); }}
                                 className={`pl-9 pr-16 bg-slate-50 border-slate-200 transition-colors ${!isValid ? 'border-amber-300 focus:ring-amber-200' : ''}`}
@@ -148,9 +148,9 @@ function PublicArticles() {
                     </div>
                 ) : (
                     <>
-                        {articles.length > 0 ? (
+                        {blogs.length > 0 ? (
                             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-                                {articles.map((item, i) => (
+                                {blogs.map((item, i) => (
                                     <motion.div
                                         key={item.id}
                                         initial={{ opacity: 0, y: 20 }}
@@ -158,7 +158,7 @@ function PublicArticles() {
                                         transition={{ delay: i * 0.05 }}
                                         className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col h-full"
                                     >
-                                        <Link to={`/articles/${item.slug}`} className="block relative overflow-hidden h-52 bg-slate-100">
+                                        <Link to={`/blogs/${item.slug}`} className="block relative overflow-hidden h-52 bg-slate-100">
                                             {item.featured_image ? (
                                                 <img src={item.featured_image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                                             ) : (
@@ -183,14 +183,14 @@ function PublicArticles() {
                                                 </span>
                                             </div>
                                             <h3 className="font-bold text-xl text-slate-900 mb-3 line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">
-                                                <Link to={`/articles/${item.slug}`}>{item.title}</Link>
+                                                <Link to={`/blogs/${item.slug}`}>{item.title}</Link>
                                             </h3>
                                             <p className="text-slate-600 text-sm line-clamp-3 mb-6 flex-1 leading-relaxed">
                                                 {item.excerpt || stripHtml(item.content).substring(0, 150) + '...'}
                                             </p>
                                             <div className="pt-4 border-t border-slate-100 flex justify-between items-center mt-auto">
-                                                <Link to={`/articles/${item.slug}`} className="inline-flex items-center text-sm font-semibold text-blue-600 hover:text-blue-700">
-                                                    Read Article <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                                                <Link to={`/blogs/${item.slug}`} className="inline-flex items-center text-sm font-semibold text-blue-600 hover:text-blue-700">
+                                                    Read Blog <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                                                 </Link>
                                                 {item.views > 0 && (
                                                     <span className="text-xs text-slate-400 flex items-center gap-1">
@@ -207,18 +207,18 @@ function PublicArticles() {
                                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <Search className="w-8 h-8 text-slate-300" />
                                 </div>
-                                <h3 className="text-lg font-medium text-slate-900">No articles found</h3>
+                                <h3 className="text-lg font-medium text-slate-900">No blogs found</h3>
                                 <p className="text-slate-500 max-w-sm mx-auto mt-2">
                                     {debouncedQuery
                                         ? `No results found for "${debouncedQuery}". Try different keywords.`
-                                        : "We couldn't find any articles matching your filters."}
+                                        : "We couldn't find any blogs matching your filters."}
                                 </p>
                                 <button onClick={() => { clearSearch(); setActiveCategory(null); }} className="mt-6 text-blue-600 hover:underline text-sm font-medium">
                                     Clear all filters
                                 </button>
                             </div>
                         )}
-                        {articles.length > 0 && (
+                        {blogs.length > 0 && (
                             <div className="flex justify-center mt-8">
                                 <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
                             </div>
@@ -230,4 +230,4 @@ function PublicArticles() {
     );
 }
 
-export default PublicArticles;
+export default PublicBlogs;

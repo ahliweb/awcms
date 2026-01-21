@@ -12,7 +12,7 @@ import { PluginAction } from '@/contexts/PluginContext';
 import { PlatformOverview } from './widgets/PlatformOverview';
 import { MyApprovals } from './widgets/MyApprovals';
 import { UsageWidget } from './widgets/UsageWidget';
-import { TopArticlesWidget } from './widgets/TopArticlesWidget';
+import { TopBlogsWidget } from './widgets/TopBlogsWidget';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
 function AdminDashboard() {
@@ -103,7 +103,7 @@ function AdminDashboard() {
 
                     {/* Quick Links / Top Content - Neo-Glass style */}
                     <div className="min-w-0">
-                        <TopArticlesWidget data={data.topContent} loading={loading} />
+                        <TopBlogsWidget data={data.topContent} loading={loading} />
                     </div>
                 </div>
 

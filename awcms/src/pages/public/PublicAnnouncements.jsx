@@ -45,7 +45,7 @@ function PublicAnnouncements() {
                         <Bell className="w-6 h-6" />
                     </div>
                     <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-3">Latest Announcements</h1>
-                    <p className="text-muted-foreground">Stay updated with our latest news and updates.</p>
+                    <p className="text-muted-foreground">Stay updated with our latest blogs and updates.</p>
                 </motion.div>
 
                 {loading ? (

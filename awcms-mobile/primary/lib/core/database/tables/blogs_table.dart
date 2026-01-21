@@ -1,20 +1,20 @@
-/// AWCMS Mobile - Local Articles Table
+/// AWCMS Mobile - Local Blogs Table
 ///
-/// Drift table definition for offline articles storage.
+/// Drift table definition for offline blogs storage.
 library;
 
 import 'package:drift/drift.dart';
 
-/// Local cache of articles from Supabase
-@DataClassName('LocalArticle')
-class LocalArticles extends Table {
-  /// Article UUID from Supabase
+/// Local cache of blogs from Supabase
+@DataClassName('LocalBlog')
+class LocalBlogs extends Table {
+  /// Blog UUID from Supabase
   TextColumn get id => text()();
 
   /// Tenant ID for multi-tenant support
   TextColumn get tenantId => text().nullable()();
 
-  /// Article title
+  /// Blog title
   TextColumn get title => text()();
 
   /// Full HTML content

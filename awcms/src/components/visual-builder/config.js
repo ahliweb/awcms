@@ -22,7 +22,7 @@ import { YouTubeBlock, YouTubeBlockFields } from './blocks/YouTubeBlock';
 import { StatsBlock, StatsBlockFields } from './blocks/StatsBlock';
 import { PricingBlock, PricingBlockFields } from './blocks/PricingBlock';
 import { AccordionBlock, AccordionBlockFields } from './blocks/AccordionBlock';
-import { LatestArticlesBlock, LatestArticlesBlockFields } from './blocks/LatestArticlesBlock';
+import { LatestBlogsBlock, LatestBlogsBlockFields } from './blocks/LatestBlogsBlock';
 import { ImageField, MultiImageField } from './fields/ImageField';
 
 import { WidgetAreaBlock, WidgetAreaBlockFields } from './blocks/WidgetAreaBlock';
@@ -44,7 +44,7 @@ export const puckConfig = {
         },
         dynamic: {
             title: 'Dynamic & Interactive',
-            components: ['LatestArticles', 'Promotion', 'Gallery', 'ContactForm', 'Navigation']
+            components: ['LatestBlogs', 'Promotion', 'Gallery', 'ContactForm', 'Navigation']
         }
     },
     components: {
@@ -344,16 +344,16 @@ export const puckConfig = {
         },
 
         // --- Dynamic Integrations ---
-        LatestArticles: {
-            label: 'Latest Articles',
-            fields: LatestArticlesBlockFields,
+        LatestBlogs: {
+            label: 'Latest Blogs',
+            fields: LatestBlogsBlockFields,
             defaultProps: {
                 count: 3,
                 layout: 'grid',
                 showImage: true,
                 showDate: true
             },
-            render: LatestArticlesBlock
+            render: LatestBlogsBlock
         },
         Promotion: {
             label: 'Promotion / Ad',

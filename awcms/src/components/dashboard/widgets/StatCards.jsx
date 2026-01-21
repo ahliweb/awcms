@@ -9,8 +9,8 @@ export function StatCards({ data, loading, className = '' }) {
   const { t } = useTranslation();
   const stats = [
     {
-      title: t('dashboard.total_articles'),
-      value: data?.articles,
+      title: t('dashboard.total_blogs'),
+      value: data?.blogs,
       icon: FileText,
       gradient: "from-blue-500 to-blue-600",
       shadow: "shadow-blue-500/20",

@@ -36,8 +36,8 @@
     "subscription": "Berlangganan",
     "blog": "Blog",
     "blog_list": "Daftar Blog",
-    "article": "Artikel",
-    "article_mdx": "Artikel (dengan MDX)",
+    "blog_detail": "Detail Blog",
+    "blog_mdx": "Blog (dengan MDX)",
     "category_page": "Halaman Kategori",
     "tag_page": "Halaman Tag",
     "widgets": "Widget",
@@ -89,8 +89,8 @@
     "posted_on": "Diposting pada",
     "by_author": "oleh",
     "in_category": "dalam",
-    "related_posts": "Artikel Terkait",
-    "no_posts": "Tidak ada artikel ditemukan."
+    "related_posts": "Blog Terkait",
+    "no_posts": "Tidak ada blog ditemukan."
   },
   "contact": {
     "title": "Hubungi Kami",
@@ -685,21 +685,21 @@
       "page_prefix": " — Halaman "
     }
   },
-  "news_page": {
+  "blogs_page": {
     "metadata": {
-      "title": "Berita & Artikel",
-      "description": "Berita, pembaruan, dan artikel terbaru"
+      "title": "Blog",
+      "description": "Blog, pembaruan, dan konten terbaru"
     },
     "header": {
-      "title": "Berita & Artikel",
-      "subtitle": "Tetap terinformasi dengan berita, pengumuman, dan wawasan terbaru kami."
+      "title": "Blog",
+      "subtitle": "Tetap terinformasi dengan blog, pengumuman, dan wawasan terbaru kami."
     },
     "filter": {
       "category": "Kategori:",
       "tag": "Tag:"
     },
     "list": {
-      "no_articles": "Tidak ada artikel ditemukan",
+      "no_blogs": "Tidak ada blog ditemukan",
       "check_back": "Periksa kembali nanti untuk konten baru.",
       "views": "tayangan"
     },
@@ -709,16 +709,16 @@
       "page": "Halaman",
       "of": "dari"
     },
-    "article": {
+    "blog": {
       "views": "tayangan",
-      "back_to_news": "Kembali ke Berita",
+      "back_to_blogs": "Kembali ke Blog",
       "visual_content_placeholder": "Konten visual akan segera hadir..."
     }
   },
   "blog_post": {
     "min_read": "menit baca",
-    "related_posts": "Artikel Terkait",
-    "view_all": "Lihat Semua Artikel",
+    "related_posts": "Blog Terkait",
+    "view_all": "Lihat Semua Blog",
     "back_to_blog": "Kembali ke Blog"
   },
   "error_page": {

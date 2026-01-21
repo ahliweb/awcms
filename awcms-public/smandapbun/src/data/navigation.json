@@ -20,67 +20,100 @@
       "children": [
         {
           "id": "principal-message",
-          "label": { "id": "Sambutan Kepala Sekolah", "en": "Principal's Welcome Message" },
+          "label": {
+            "id": "Sambutan Kepala Sekolah",
+            "en": "Principal's Welcome Message"
+          },
           "href": "/profil/sambutan-kepala-sekolah",
           "category": "Profile"
         },
         {
           "id": "history",
-          "label": { "id": "Sejarah", "en": "History" },
+          "label": {
+            "id": "Sejarah",
+            "en": "History"
+          },
           "href": "/profil/sejarah",
           "category": "Profile"
         },
         {
           "id": "vision-mission",
-          "label": { "id": "Visi & Misi", "en": "Vision & Mission" },
+          "label": {
+            "id": "Visi & Misi",
+            "en": "Vision & Mission"
+          },
           "href": "/profil/visi-misi",
           "category": "Profile"
         },
         {
           "id": "school-condition",
-          "label": { "id": "Kondisi Sekolah", "en": "School Condition" },
+          "label": {
+            "id": "Kondisi Sekolah",
+            "en": "School Condition"
+          },
           "href": "/profil/kondisi-sekolah",
           "category": "Profile"
         },
         {
           "id": "facilities",
-          "label": { "id": "Sarana & Prasarana", "en": "Facilities & Infrastructure" },
+          "label": {
+            "id": "Sarana & Prasarana",
+            "en": "Facilities & Infrastructure"
+          },
           "href": "/profil/sarana-prasarana",
           "category": "Profile"
         },
         {
           "id": "adiwiyata",
-          "label": { "id": "Adiwiyata", "en": "Adiwiyata" },
+          "label": {
+            "id": "Adiwiyata",
+            "en": "Adiwiyata"
+          },
           "href": "/profil/adiwiyata",
           "category": "Profile"
         },
         {
           "id": "organization",
-          "label": { "id": "Struktur Organisasi", "en": "Organizational Structure" },
+          "label": {
+            "id": "Struktur Organisasi",
+            "en": "Organizational Structure"
+          },
           "href": "/profil/struktur-organisasi",
           "category": "Profile",
           "children": [
             {
               "id": "org-school",
-              "label": { "id": "Sekolah", "en": "School" },
+              "label": {
+                "id": "Sekolah",
+                "en": "School"
+              },
               "href": "/profil/struktur-organisasi/sekolah",
               "category": "Profile"
             },
             {
               "id": "org-committee",
-              "label": { "id": "Komite Sekolah", "en": "School Committee" },
+              "label": {
+                "id": "Komite Sekolah",
+                "en": "School Committee"
+              },
               "href": "/profil/struktur-organisasi/komite-sekolah",
               "category": "Profile"
             },
             {
               "id": "org-osis",
-              "label": { "id": "OSIS", "en": "Student Council (OSIS)" },
+              "label": {
+                "id": "OSIS",
+                "en": "Student Council (OSIS)"
+              },
               "href": "/profil/struktur-organisasi/osis",
               "category": "Profile"
             },
             {
               "id": "org-mpk",
-              "label": { "id": "MPK", "en": "Student Representative Council (MPK)" },
+              "label": {
+                "id": "MPK",
+                "en": "Student Representative Council (MPK)"
+              },
               "href": "/profil/struktur-organisasi/mpk",
               "category": "Profile"
             }
@@ -88,19 +121,28 @@
         },
         {
           "id": "staff",
-          "label": { "id": "Tenaga Pendidik & Kependidikan", "en": "Staff" },
+          "label": {
+            "id": "Tenaga Pendidik & Kependidikan",
+            "en": "Staff"
+          },
           "href": "/profil/tenaga-pendidik",
           "category": "Profile",
           "children": [
             {
               "id": "teachers",
-              "label": { "id": "Tenaga Pendidik", "en": "Teaching Staff" },
+              "label": {
+                "id": "Tenaga Pendidik",
+                "en": "Teaching Staff"
+              },
               "href": "/profil/tenaga-pendidik/guru",
               "category": "Profile"
             },
             {
               "id": "admin-staff",
-              "label": { "id": "Tenaga Kependidikan", "en": "Administrative Staff" },
+              "label": {
+                "id": "Tenaga Kependidikan",
+                "en": "Administrative Staff"
+              },
               "href": "/profil/tenaga-pendidik/tata-usaha",
               "category": "Profile"
             }
@@ -109,38 +151,50 @@
       ]
     },
     {
-      "id": "news",
+      "id": "blogs",
       "label": {
-        "id": "Berita",
-        "en": "News"
+        "id": "Blog",
+        "en": "Blogs"
       },
-      "href": "/berita",
+      "href": "/blogs",
       "icon": "tabler:news",
       "children": [
         {
-          "id": "latest-news",
-          "label": { "id": "Berita Terbaru", "en": "Latest News" },
-          "href": "/berita",
-          "category": "News"
+          "id": "latest-blogs",
+          "label": {
+            "id": "Blog Terbaru",
+            "en": "Latest Blogs"
+          },
+          "href": "/blogs",
+          "category": "Blog"
         },
         {
           "id": "school-info",
-          "label": { "id": "Info Sekolah", "en": "School Info" },
-          "href": "/berita/info-sekolah",
+          "label": {
+            "id": "Info Sekolah",
+            "en": "School Info"
+          },
+          "href": "/blogs/info-sekolah",
           "category": "Info",
           "tag": "general"
         },
         {
           "id": "agenda",
-          "label": { "id": "Agenda", "en": "Agenda" },
-          "href": "/berita/agenda",
+          "label": {
+            "id": "Agenda",
+            "en": "Agenda"
+          },
+          "href": "/blogs/agenda",
           "category": "Agenda",
           "tag": "general"
         },
         {
           "id": "gallery",
-          "label": { "id": "Galeri", "en": "Gallery" },
-          "href": "/berita/galeri",
+          "label": {
+            "id": "Galeri",
+            "en": "Gallery"
+          },
+          "href": "/blogs/galeri",
           "category": "Gallery",
           "tag": "general"
         }
@@ -157,21 +211,30 @@
       "children": [
         {
           "id": "bos",
-          "label": { "id": "BOS", "en": "BOS" },
+          "label": {
+            "id": "BOS",
+            "en": "BOS"
+          },
           "href": "/keuangan/bos",
           "category": "BOS",
           "tag": "general"
         },
         {
           "id": "apbd",
-          "label": { "id": "APBD", "en": "APBD" },
+          "label": {
+            "id": "APBD",
+            "en": "APBD"
+          },
           "href": "/keuangan/apbd",
           "category": "APBD",
           "tag": "general"
         },
         {
           "id": "committee-finance",
-          "label": { "id": "Komite", "en": "Committee" },
+          "label": {
+            "id": "Komite",
+            "en": "Committee"
+          },
           "href": "/keuangan/komite",
           "category": "Committee",
           "tag": "general"
@@ -189,25 +252,37 @@
       "children": [
         {
           "id": "extracurricular",
-          "label": { "id": "Ekstrakurikuler", "en": "Extracurricular" },
+          "label": {
+            "id": "Ekstrakurikuler",
+            "en": "Extracurricular"
+          },
           "href": "/layanan/ekstrakurikuler",
           "category": "Extracurricular"
         },
         {
           "id": "service-classes",
-          "label": { "id": "Kelas Layanan", "en": "Service Classes" },
+          "label": {
+            "id": "Kelas Layanan",
+            "en": "Service Classes"
+          },
           "href": "/layanan/kelas-layanan",
           "category": "ServiceClasses",
           "children": [
             {
               "id": "osn",
-              "label": { "id": "OSN", "en": "OSN" },
+              "label": {
+                "id": "OSN",
+                "en": "OSN"
+              },
               "href": "/layanan/kelas-layanan/osn",
               "category": "OSN"
             },
             {
               "id": "research",
-              "label": { "id": "Penelitian", "en": "Research" },
+              "label": {
+                "id": "Penelitian",
+                "en": "Research"
+              },
               "href": "/layanan/kelas-layanan/penelitian",
               "category": "Research"
             }
@@ -215,31 +290,46 @@
         },
         {
           "id": "laboratory",
-          "label": { "id": "Laboratorium", "en": "Laboratory" },
+          "label": {
+            "id": "Laboratorium",
+            "en": "Laboratory"
+          },
           "href": "/layanan/laboratorium",
           "category": "Laboratory"
         },
         {
           "id": "library",
-          "label": { "id": "Perpustakaan", "en": "Library" },
+          "label": {
+            "id": "Perpustakaan",
+            "en": "Library"
+          },
           "href": "/layanan/perpustakaan",
           "category": "Library"
         },
         {
           "id": "service-survey",
-          "label": { "id": "Survei Kepuasan Layanan", "en": "Service Quality Survey" },
+          "label": {
+            "id": "Survei Kepuasan Layanan",
+            "en": "Service Quality Survey"
+          },
           "href": "/layanan/survei-kepuasan",
           "category": "ServiceSurvey"
         },
         {
           "id": "student-affairs",
-          "label": { "id": "Layanan Kesiswaan", "en": "Student Affairs Services" },
+          "label": {
+            "id": "Layanan Kesiswaan",
+            "en": "Student Affairs Services"
+          },
           "href": "/layanan/kesiswaan",
           "category": "StudentAffairs"
         },
         {
           "id": "mentoring-form",
-          "label": { "id": "Form Pendampingan Ekskul", "en": "Extracurricular Mentoring Form" },
+          "label": {
+            "id": "Form Pendampingan Ekskul",
+            "en": "Extracurricular Mentoring Form"
+          },
           "href": "/layanan/form-pendampingan",
           "category": "Mentoring"
         }

@@ -26,7 +26,7 @@ export function MyApprovals() {
         try {
             // Fetch posts in 'reviewed' state
             const { data: posts, error } = await supabase
-                .from('articles') // Note: table is 'articles' not 'posts' in some schemas, checking ArticlesManager it uses 'articles'
+                .from('blogs') // Updated to 'blogs' table
                 .select('id, title, updated_at, author:users!created_by(email)')
                 .eq('workflow_state', 'reviewed')
                 .limit(5);
@@ -75,7 +75,7 @@ export function MyApprovals() {
                                         by {item.author?.email || 'Unknown'}
                                     </span>
                                     <Button asChild size="sm" variant="ghost" className="h-6 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30">
-                                        <Link to={`/cmspanel/articles?edit=${item.id}`}>Review</Link>
+                                        <Link to={`/cmspanel/blogs?edit=${item.id}`}>Review</Link>
                                     </Button>
                                 </div>
                             </div>
@@ -89,7 +89,7 @@ export function MyApprovals() {
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
-                    <Link to="/cmspanel/articles?status=reviewed" className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center w-full">
+                    <Link to="/cmspanel/blogs?status=reviewed" className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center w-full">
                         View All Queue <ArrowRight className="w-4 h-4 ml-1" />
                     </Link>
                 </div>

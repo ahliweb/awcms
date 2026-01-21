@@ -93,14 +93,14 @@ export const headerData = {
           href: getBlogPermalink(),
         },
         {
-          text: "nav.article",
+          text: "nav.blog",
           href: getPermalink(
             "get-started-website-with-astro-tailwind-css",
             "post",
           ),
         },
         {
-          text: "nav.article_mdx",
+          text: "nav.blog",
           href: getPermalink("markdown-elements-demo-post", "post"),
         },
         {

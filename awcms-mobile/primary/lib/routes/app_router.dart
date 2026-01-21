@@ -10,16 +10,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/services/auth_service.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/auth/screens/login_screen.dart';
-import '../features/articles/screens/articles_screen.dart';
-import '../features/articles/screens/article_detail_screen.dart';
+import '../features/blogs/screens/blogs_screen.dart';
+import '../features/blogs/screens/blog_detail_screen.dart';
 import '../features/notifications/screens/notifications_screen.dart';
 
 /// Route names
 class AppRoutes {
   static const String home = '/';
   static const String login = '/login';
-  static const String articles = '/articles';
-  static const String articleDetail = '/articles/:id';
+  static const String blogs = '/blogs';
+  static const String blogDetail = '/blogs/:id';
   static const String notifications = '/notifications';
 }
 
@@ -60,16 +60,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
-        path: AppRoutes.articles,
-        name: 'articles',
-        builder: (context, state) => const ArticlesScreen(),
+        path: AppRoutes.blogs,
+        name: 'blogs',
+        builder: (context, state) => const BlogsScreen(),
       ),
       GoRoute(
-        path: AppRoutes.articleDetail,
-        name: 'articleDetail',
+        path: AppRoutes.blogDetail,
+        name: 'blogDetail',
         builder: (context, state) {
           final id = state.pathParameters['id']!;
-          return ArticleDetailScreen(articleId: id);
+          return BlogDetailScreen(blogId: id);
         },
       ),
       GoRoute(

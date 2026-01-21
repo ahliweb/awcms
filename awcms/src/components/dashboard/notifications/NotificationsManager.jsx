@@ -319,7 +319,7 @@ function NotificationsManager() {
                                     <div className="space-y-2">
                                         <Label>Link (Optional)</Label>
                                         <Input
-                                            placeholder="/cmspanel/articles/123"
+                                            placeholder="/cmspanel/blogs/123"
                                             value={formData.link}
                                             onChange={e => setFormData({ ...formData, link: e.target.value })}
                                         />

@@ -13,7 +13,7 @@ import Header from '@/components/dashboard/Header';
 
 // Dashboard Modules
 import AdminDashboard from '@/components/dashboard/AdminDashboard';
-import ArticlesManager from '@/components/dashboard/ArticlesManager';
+import BlogsManager from '@/components/dashboard/BlogsManager';
 import PagesManager from '@/components/dashboard/PagesManager';
 import ProductsManager from '@/components/dashboard/ProductsManager';
 import ProductTypesManager from '@/components/dashboard/ProductTypesManager';
@@ -90,7 +90,7 @@ function Dashboard() {
     switch (currentPage) {
       case 'home': return <AdminDashboard />;
       case 'files': return <FilesManager />;
-      case 'articles': return <ArticlesManager />;
+      case 'blogs': return <BlogsManager />;
       case 'pages': return <PagesManager />;
       case 'themes': return <ThemesManager />;
       case 'products': return <ProductsManager />;

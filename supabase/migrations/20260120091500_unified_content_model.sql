@@ -15,7 +15,7 @@ ALTER TABLE public.pages
 CREATE INDEX IF NOT EXISTS idx_pages_category_id ON public.pages(category_id);
 
 -- =============================================================================
--- 2. Create page_tags junction table (mirrors article_tags)
+-- 2. Create page_tags junction table (mirrors blog_tags)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.page_tags (
   page_id UUID NOT NULL REFERENCES public.pages(id) ON DELETE CASCADE,
@@ -53,7 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_page_files_tenant_id ON public.page_files(tenant_
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.content_translations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  content_type TEXT NOT NULL CHECK (content_type IN ('page', 'article')),
+  content_type TEXT NOT NULL CHECK (content_type IN ('page', 'blog')),
   content_id UUID NOT NULL,
   locale TEXT NOT NULL,
   title TEXT,
@@ -78,7 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_content_translations_tenant_id ON public.content_
 ALTER TABLE public.pages 
   ADD COLUMN IF NOT EXISTS sync_source_id UUID;
 
-ALTER TABLE public.articles 
+ALTER TABLE IF EXISTS public.blogs 
   ADD COLUMN IF NOT EXISTS sync_source_id UUID;
 
 ALTER TABLE public.categories 

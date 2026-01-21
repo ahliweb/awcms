@@ -71,7 +71,7 @@ export function hasValidTenantPrefix(
 /**
  * Extract tenant slug from pathname.
  *
- * @param pathname - The URL pathname (e.g., "/primary/articles")
+ * @param pathname - The URL pathname (e.g., "/primary/blogs")
  * @returns The tenant slug or null if not found
  */
 export function extractTenantFromPath(pathname: string): string | null {
@@ -89,8 +89,8 @@ export function extractTenantFromPath(pathname: string): string | null {
 /**
  * Extract the remaining path after tenant segment.
  *
- * @param pathname - The URL pathname (e.g., "/primary/articles/my-post")
- * @returns The path without tenant prefix (e.g., "/articles/my-post")
+ * @param pathname - The URL pathname (e.g., "/primary/blogs/my-post")
+ * @returns The path without tenant prefix (e.g., "/blogs/my-post")
  */
 export function extractPathAfterTenant(pathname: string): string {
   const segments = pathname.replace(/^\//, "").split("/");

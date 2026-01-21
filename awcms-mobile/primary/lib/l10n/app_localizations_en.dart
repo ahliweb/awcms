@@ -108,7 +108,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncComplete => 'Sync complete';
 
   @override
-  String get articles => 'Articles';
+  String get blogs => 'Blogs';
 
   @override
   String get readMore => 'Read More';
@@ -201,7 +201,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get menu => 'Menu';
 
   @override
-  String get seeAllArticles => 'See all articles';
+  String get seeAllBlogs => 'See all blogs';
 
   @override
   String get viewPhotosVideos => 'Photos & Videos';
@@ -301,16 +301,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contactAdminToRegister => 'Contact admin to create an account';
 
   @override
-  String get noArticles => 'No articles yet';
+  String get noBlogs => 'No blogs yet';
 
   @override
   String get pullToRefresh => 'Pull to refresh to update';
 
   @override
-  String get failedToLoadArticles => 'Failed to load articles';
+  String get failedToLoadBlogs => 'Failed to load blogs';
 
   @override
-  String get articleNotFound => 'Article not found';
+  String get blogNotFound => 'Blog not found';
 
   @override
   String get syncing => 'Syncing...';

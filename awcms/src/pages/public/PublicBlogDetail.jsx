@@ -10,38 +10,38 @@ import { Button } from '@/components/ui/button';
 import { sanitizeHTML } from '@/utils/sanitize';
 import { stripHtml } from '@/utils/textUtils';
 
-function PublicArticleDetail() {
+function PublicBlogDetail() {
     const { slug } = useParams();
-    const [article, setArticle] = useState(null);
+    const [blog, setBlog] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [relatedArticles, setRelatedArticles] = useState([]);
+    const [relatedBlogs, setRelatedBlogs] = useState([]);
 
     useEffect(() => {
         const fetchDetail = async () => {
             setLoading(true);
-            // Fetch article details
+            // Fetch blog details
             const { data, error } = await supabase
-                .from('articles')
-                .select(`*, categories(name), author:users!articles_author_id_fkey(full_name)`)
+                .from('blogs')
+                .select(`*, categories(name), author:users!blogs_author_id_fkey(full_name)`)
                 .eq('slug', slug)
                 .eq('status', 'published') // Strict check
                 .maybeSingle();
 
             if (!error && data) {
-                setArticle(data);
+                setBlog(data);
                 incrementViews(data.id);
                 fetchRelated(data.category_id, data.id);
             } else {
                 // Fallback without author if FK issue
                 if (error && error.code === 'PGRST201') {
                     const { data: fallbackData } = await supabase
-                        .from('articles')
+                        .from('blogs')
                         .select(`*, categories(name)`)
                         .eq('slug', slug)
                         .eq('status', 'published')
                         .maybeSingle();
                     if (fallbackData) {
-                        setArticle(fallbackData);
+                        setBlog(fallbackData);
                         incrementViews(fallbackData.id);
                         fetchRelated(fallbackData.category_id, fallbackData.id);
                     }
@@ -54,21 +54,21 @@ function PublicArticleDetail() {
 
     const incrementViews = async (id) => {
         // Optimistic update without waiting
-        await supabase.rpc('increment_article_view', { article_id: id }).catch(() => { });
+        await supabase.rpc('increment_blog_view', { blog_id: id }).catch(() => { });
         // Alternative simple update if RPC not exists: 
-        // await supabase.from('articles').update({ views: (article.views || 0) + 1 }).eq('id', id);
+        // await supabase.from('blogs').update({ views: (blog.views || 0) + 1 }).eq('id', id);
     };
 
     const fetchRelated = async (categoryId, currentId) => {
         if (!categoryId) return;
         const { data } = await supabase
-            .from('articles')
+            .from('blogs')
             .select('id, title, slug, featured_image, published_at')
             .eq('category_id', categoryId)
             .eq('status', 'published')
             .neq('id', currentId)
             .limit(3);
-        if (data) setRelatedArticles(data);
+        if (data) setRelatedBlogs(data);
     };
 
     if (loading) {
@@ -88,71 +88,71 @@ function PublicArticleDetail() {
         );
     }
 
-    if (!article) return (
+    if (!blog) return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4">
             <div className="text-center">
-                <h2 className="text-3xl font-bold text-slate-800 mb-4">Article Not Found</h2>
-                <p className="text-slate-500 mb-8">The article you're looking for might have been removed or is temporarily unavailable.</p>
-                <Link to="/articles">
-                    <Button className="bg-blue-600">Back to Articles</Button>
+                <h2 className="text-3xl font-bold text-slate-800 mb-4">Blog Post Not Found</h2>
+                <p className="text-slate-500 mb-8">The blog post you're looking for might have been removed or is temporarily unavailable.</p>
+                <Link to="/blogs">
+                    <Button className="bg-blue-600">Back to Blogs</Button>
                 </Link>
             </div>
         </div>
     );
 
-    const readingTime = Math.max(1, Math.ceil((article.content?.length || 0) / 1000));
+    const readingTime = Math.max(1, Math.ceil((blog.content?.length || 0) / 1000));
     const shareUrl = window.location.href;
 
     return (
         <article className="bg-slate-50 min-h-screen pb-20">
             <SeoHelmet
-                type="article_detail"
-                id={article.id}
-                defaultTitle={`${article.title} | Blog`}
-                defaultDescription={article.excerpt || stripHtml(article.content).substring(0, 150)}
-                defaultImage={article.featured_image}
+                type="blog_detail"
+                id={blog.id}
+                defaultTitle={`${blog.title} | Blog`}
+                defaultDescription={blog.excerpt || stripHtml(blog.content).substring(0, 150)}
+                defaultImage={blog.featured_image}
             />
 
             {/* Modern Hero Section */}
             <div className="relative h-[60vh] min-h-[500px] w-full bg-slate-900 overflow-hidden">
-                {article.featured_image && (
+                {blog.featured_image && (
                     <div className="absolute inset-0">
-                        <img src={article.featured_image} alt="" className="w-full h-full object-cover opacity-60" />
+                        <img src={blog.featured_image} alt="" className="w-full h-full object-cover opacity-60" />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent"></div>
                     </div>
                 )}
 
                 <div className="absolute inset-0 flex flex-col justify-end pb-20 pt-32 container mx-auto px-4">
-                    <Link to="/articles" className="inline-flex items-center text-sm font-medium text-slate-300 hover:text-white mb-8 transition-colors bg-black/20 backdrop-blur-sm w-fit px-4 py-2 rounded-full border border-white/10 hover:bg-black/40">
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Blog
+                    <Link to="/blogs" className="inline-flex items-center text-sm font-medium text-slate-300 hover:text-white mb-8 transition-colors bg-black/20 backdrop-blur-sm w-fit px-4 py-2 rounded-full border border-white/10 hover:bg-black/40">
+                        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Blogs
                     </Link>
 
                     <div className="max-w-4xl">
                         <div className="flex flex-wrap items-center gap-3 mb-6">
-                            {article.categories && (
+                            {blog.categories && (
                                 <Badge className="bg-blue-600 hover:bg-blue-700 border-none text-white px-3 py-1 text-sm">
-                                    {article.categories.name}
+                                    {blog.categories.name}
                                 </Badge>
                             )}
-                            {article.published_at && (
+                            {blog.published_at && (
                                 <span className="text-slate-300 text-sm bg-black/30 px-3 py-1 rounded-full backdrop-blur-sm border border-white/10 flex items-center gap-2">
                                     <Calendar className="w-3.5 h-3.5" />
-                                    {new Date(article.published_at).toLocaleDateString()}
+                                    {new Date(blog.published_at).toLocaleDateString()}
                                 </span>
                             )}
                         </div>
 
                         <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-8 leading-tight drop-shadow-sm">
-                            {article.title}
+                            {blog.title}
                         </h1>
 
                         <div className="flex flex-wrap items-center gap-6 text-slate-300 text-sm font-medium">
-                            {article.author?.full_name && (
+                            {blog.author?.full_name && (
                                 <span className="flex items-center gap-2">
                                     <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-400/30 text-blue-200">
                                         <User className="w-4 h-4" />
                                     </div>
-                                    {article.author.full_name}
+                                    {blog.author.full_name}
                                 </span>
                             )}
                             <span className="flex items-center gap-2">
@@ -172,15 +172,15 @@ function PublicArticleDetail() {
                         className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8 md:p-12"
                     >
                         <div className="prose prose-slate prose-lg max-w-none leading-relaxed text-slate-700">
-                            <div dangerouslySetInnerHTML={sanitizeHTML(article.content)} />
+                            <div dangerouslySetInnerHTML={sanitizeHTML(blog.content)} />
                         </div>
 
                         {/* Footer of Content */}
                         <div className="mt-12 pt-8 border-t border-slate-100">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                                {article.tags && article.tags.length > 0 && (
+                                {blog.tags && blog.tags.length > 0 && (
                                     <div className="flex flex-wrap gap-2">
-                                        {article.tags.map((tag, i) => (
+                                        {blog.tags.map((tag, i) => (
                                             <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 text-slate-600 text-sm hover:bg-slate-100 transition-colors border border-slate-200 cursor-default">
                                                 <Tag className="w-3 h-3 text-slate-400" /> {tag}
                                             </span>
@@ -192,7 +192,7 @@ function PublicArticleDetail() {
                                     <Button variant="outline" size="icon" className="rounded-full text-slate-500 hover:text-blue-600 hover:border-blue-200" onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`, '_blank')}>
                                         <Facebook className="w-4 h-4" />
                                     </Button>
-                                    <Button variant="outline" size="icon" className="rounded-full text-slate-500 hover:text-sky-500 hover:border-sky-200" onClick={() => window.open(`https://twitter.com/intent/tweet?url=${shareUrl}&text=${article.title}`, '_blank')}>
+                                    <Button variant="outline" size="icon" className="rounded-full text-slate-500 hover:text-sky-500 hover:border-sky-200" onClick={() => window.open(`https://twitter.com/intent/tweet?url=${shareUrl}&text=${blog.title}`, '_blank')}>
                                         <Twitter className="w-4 h-4" />
                                     </Button>
                                     <Button variant="outline" size="icon" className="rounded-full text-slate-500 hover:text-blue-800 hover:border-blue-300" onClick={() => window.open(`https://www.linkedin.com/shareArticle?mini=true&url=${shareUrl}`, '_blank')}>
@@ -214,7 +214,7 @@ function PublicArticleDetail() {
                                 <User className="w-8 h-8" />
                             </div>
                             <div>
-                                <h4 className="font-bold text-slate-900 text-lg">{article.author?.full_name || 'AhliWeb Team'}</h4>
+                                <h4 className="font-bold text-slate-900 text-lg">{blog.author?.full_name || 'AhliWeb Team'}</h4>
                                 <p className="text-slate-500 text-sm">Content Creator</p>
                             </div>
                         </div>
@@ -223,13 +223,13 @@ function PublicArticleDetail() {
                         </p>
                     </div>
 
-                    {/* Related Articles */}
-                    {relatedArticles.length > 0 && (
+                    {/* Related Blogs */}
+                    {relatedBlogs.length > 0 && (
                         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-                            <h3 className="font-bold text-slate-900 mb-6 text-sm uppercase tracking-wider">Related Articles</h3>
+                            <h3 className="font-bold text-slate-900 mb-6 text-sm uppercase tracking-wider">Related Blogs</h3>
                             <div className="space-y-6">
-                                {relatedArticles.map(rel => (
-                                    <Link key={rel.id} to={`/articles/${rel.slug}`} className="flex gap-4 group">
+                                {relatedBlogs.map(rel => (
+                                    <Link key={rel.id} to={`/blogs/${rel.slug}`} className="flex gap-4 group">
                                         <div className="w-20 h-20 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
                                             {rel.featured_image ? (
                                                 <img src={rel.featured_image} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
@@ -256,4 +256,4 @@ function PublicArticleDetail() {
     );
 }
 
-export default PublicArticleDetail;
+export default PublicBlogDetail;

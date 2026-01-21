@@ -1,11 +1,11 @@
 ---
 /**
- * Dynamic Article/News Route - Renders articles from Supabase 'articles' table
- * Path: /news/{slug}
+ * Dynamic Blog Route - Renders blogs from Supabase 'blogs' table
+ * Path: /blogs/[slug]
  */
 import Layout from "~/layouts/PageLayout.astro";
 import { createClientFromEnv } from "~/lib/supabase";
-import { getArticleBySlug } from "~/lib/content";
+import { getBlogBySlug } from "~/lib/content";
 import { Icon } from "astro-icon/components";
 import { getLocale, t } from "~/utils/i18n";
 
@@ -29,22 +29,22 @@ const supabase = createClientFromEnv(
 );
 
 if (!supabase) {
-    console.error("[Article] Supabase client not available");
+    console.error("[Blog] Supabase client not available");
     return Astro.redirect("/404");
 }
 
-// Fetch article data
-const article = await getArticleBySlug(supabase, slug, tenant_id);
+// Fetch blog data
+const blog = await getBlogBySlug(supabase, slug, tenant_id);
 
-if (!article) {
-    console.log(`[Article] Article not found: ${slug}`);
+if (!blog) {
+    console.log(`[Blog] Blog not found: ${slug}`);
     return Astro.redirect("/404");
 }
 
 // Format dates
-const publishedDate = article.published_at
-    ? new Date(article.published_at)
-    : new Date(article.created_at);
+const publishedDate = blog.published_at
+    ? new Date(blog.published_at)
+    : new Date(blog.created_at);
 
 const formattedDate = publishedDate.toLocaleDateString(locale, {
     year: "numeric",
@@ -54,39 +54,39 @@ const formattedDate = publishedDate.toLocaleDateString(locale, {
 
 // Metadata for SEO
 const metadata = {
-    title: article.title,
-    description: article.excerpt || "",
+    title: blog.title,
+    description: blog.excerpt || "",
     openGraph: {
         type: "article",
         article: {
-            publishedTime: article.published_at,
-            modifiedTime: article.updated_at,
+            publishedTime: blog.published_at,
+            modifiedTime: blog.updated_at,
         },
-        images: article.featured_image
-            ? [{ url: article.featured_image }]
+        images: blog.featured_image
+            ? [{ url: blog.featured_image }]
             : undefined,
     },
 };
 
 // Content
-const isVisual = article.editor_type === "visual";
-const htmlContent = article.content || "";
+const isVisual = blog.editor_type === "visual";
+const htmlContent = blog.content || "";
 ---
 
 <Layout metadata={metadata}>
     <article class="py-12 sm:py-16 lg:py-20">
         <div class="mx-auto max-w-4xl px-6 sm:px-8">
-            <!-- Article Header -->
+            <!-- Blog Header -->
             <header class="mb-8">
                 <!-- Category Badge -->
                 {
-                    article.category && (
+                    blog.category && (
                         <a
-                            href={`/news?category=${article.category.slug}`}
+                            href={`/blogs?category=${blog.category.slug}`}
                             class="inline-block mb-4 px-3 py-1 text-sm font-medium rounded-full
                    bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                         >
-                            {article.category.name}
+                            {blog.category.name}
                         </a>
                     )
                 }
@@ -95,7 +95,7 @@ const htmlContent = article.content || "";
                 <h1
                     class="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-tight dark:text-slate-200"
                 >
-                    {article.title}
+                    {blog.title}
                 </h1>
 
                 <!-- Meta Info -->
@@ -103,7 +103,7 @@ const htmlContent = article.content || "";
                     class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground"
                 >
                     <time
-                        datetime={article.published_at || article.created_at}
+                        datetime={blog.published_at || blog.created_at}
                         class="flex items-center gap-1"
                     >
                         <Icon name="tabler:calendar" class="w-4 h-4" />
@@ -111,11 +111,11 @@ const htmlContent = article.content || "";
                     </time>
 
                     {
-                        article.views > 0 && (
+                        blog.views > 0 && (
                             <span class="flex items-center gap-1">
                                 <Icon name="tabler:eye" class="w-4 h-4" />
-                                {article.views.toLocaleString()}{" "}
-                                {t("news_page.article.views", locale)}
+                                {blog.views.toLocaleString()}{" "}
+                                {t("blogs_page.blog.views", locale)}
                             </span>
                         )
                     }
@@ -123,9 +123,9 @@ const htmlContent = article.content || "";
 
                 <!-- Excerpt -->
                 {
-                    article.excerpt && (
+                    blog.excerpt && (
                         <p class="mt-6 text-xl text-muted-foreground dark:text-slate-400 leading-relaxed">
-                            {article.excerpt}
+                            {blog.excerpt}
                         </p>
                     )
                 }
@@ -133,11 +133,11 @@ const htmlContent = article.content || "";
 
             <!-- Featured Image -->
             {
-                article.featured_image && (
+                blog.featured_image && (
                     <figure class="mb-10 -mx-6 sm:-mx-8 lg:-mx-16">
                         <img
-                            src={article.featured_image}
-                            alt={article.title}
+                            src={blog.featured_image}
+                            alt={blog.title}
                             class="w-full aspect-video object-cover rounded-none sm:rounded-xl shadow-lg"
                             loading="eager"
                         />
@@ -145,13 +145,13 @@ const htmlContent = article.content || "";
                 )
             }
 
-            <!-- Article Content -->
+            <!-- Blog Content -->
             {
                 isVisual ? (
                     <div class="visual-content prose prose-lg dark:prose-invert max-w-none">
                         <p class="text-muted-foreground">
                             {t(
-                                "news_page.article.visual_content_placeholder",
+                                "blogs_page.blog.visual_content_placeholder",
                                 locale,
                             )}
                         </p>
@@ -168,15 +168,15 @@ const htmlContent = article.content || "";
                 )
             }
 
-            <!-- Article Footer -->
+            <!-- Blog Footer -->
             <footer class="mt-12 pt-8 border-t border-border">
                 <!-- Tags -->
                 {
-                    article.tags && article.tags.length > 0 && (
+                    blog.tags && blog.tags.length > 0 && (
                         <div class="flex flex-wrap gap-2 mb-6">
-                            {article.tags.map((tag) => (
+                            {blog.tags.map((tag) => (
                                 <a
-                                    href={`/news?tag=${tag.slug}`}
+                                    href={`/blogs?tag=${tag.slug}`}
                                     class="px-3 py-1 text-sm rounded-full border border-border 
                        hover:bg-muted transition-colors"
                                 >
@@ -189,11 +189,11 @@ const htmlContent = article.content || "";
 
                 <!-- Back Link -->
                 <a
-                    href="/news"
+                    href="/blogs"
                     class="inline-flex items-center gap-2 text-primary hover:underline"
                 >
                     <Icon name="tabler:arrow-left" class="w-4 h-4" />
-                    {t("news_page.article.back_to_news", locale)}
+                    {t("blogs_page.blog.back_to_blogs", locale)}
                 </a>
             </footer>
         </div>

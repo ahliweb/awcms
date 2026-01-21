@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 // Defined Resource Categories for better organization
 const RESOURCE_CATEGORIES = {
     'Content': [
-        'articles', 'pages', 'visual_pages', 'portfolio', 'testimonies',
+        'blogs', 'pages', 'visual_pages', 'portfolio', 'testimonies',
         'announcements', 'promotions', 'products', 'product_types',
         'themes', 'widgets', 'templates', 'contact_messages'
     ],

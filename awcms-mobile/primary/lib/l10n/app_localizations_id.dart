@@ -108,7 +108,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncComplete => 'Sinkronisasi selesai';
 
   @override
-  String get articles => 'Artikel';
+  String get blogs => 'Blog';
 
   @override
   String get readMore => 'Baca Selengkapnya';
@@ -201,7 +201,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get menu => 'Menu';
 
   @override
-  String get seeAllArticles => 'Lihat semua artikel';
+  String get seeAllBlogs => 'Lihat semua blog';
 
   @override
   String get viewPhotosVideos => 'Foto & Video';
@@ -289,16 +289,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get contactAdminToRegister => 'Hubungi admin untuk membuat akun';
 
   @override
-  String get noArticles => 'Belum ada artikel';
+  String get noBlogs => 'Belum ada blog';
 
   @override
   String get pullToRefresh => 'Tarik untuk menyegarkan';
 
   @override
-  String get failedToLoadArticles => 'Gagal memuat artikel';
+  String get failedToLoadBlogs => 'Gagal memuat blog';
 
   @override
-  String get articleNotFound => 'Artikel tidak ditemukan';
+  String get blogNotFound => 'Blog tidak ditemukan';
 
   @override
   String get syncing => 'Menyinkronkan...';

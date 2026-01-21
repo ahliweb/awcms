@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface Translation {
   id: string;
-  content_type: "page" | "article" | "category" | "tag" | "menu";
+  content_type: "page" | "blog" | "category" | "tag" | "menu";
   content_id: string;
   locale: string;
   title: string;

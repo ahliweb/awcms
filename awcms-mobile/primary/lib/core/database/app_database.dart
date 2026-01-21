@@ -6,18 +6,18 @@ library;
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
-import 'tables/articles_table.dart';
+import 'tables/blogs_table.dart';
 import 'tables/sync_queue_table.dart';
 import 'tables/sync_metadata_table.dart';
-import 'daos/articles_dao.dart';
+import 'daos/blogs_dao.dart';
 import 'daos/sync_dao.dart';
 
 part 'app_database.g.dart';
 
 /// Main application database
 @DriftDatabase(
-  tables: [LocalArticles, SyncQueue, SyncMetadata],
-  daos: [ArticlesDao, SyncDao],
+  tables: [LocalBlogs, SyncQueue, SyncMetadata],
+  daos: [BlogsDao, SyncDao],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Clear all data (for logout/reset)
   Future<void> clearAllData() async {
-    await delete(localArticles).go();
+    await delete(localBlogs).go();
     await delete(syncQueue).go();
     await delete(syncMetadata).go();
   }

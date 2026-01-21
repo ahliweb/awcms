@@ -1,6 +1,6 @@
-/// AWCMS Mobile - Articles Screen
+/// AWCMS Mobile - Blogs Screen
 ///
-/// Daftar artikel dari local database dengan offline support.
+/// List of blogs from local database with offline support.
 library;
 
 import 'package:flutter/material.dart';
@@ -13,18 +13,20 @@ import '../../../core/database/app_database.dart';
 import '../../../core/services/sync_service.dart';
 import '../../../shared/widgets/offline_indicator.dart';
 import '../../../core/extensions/context_extensions.dart';
-import '../providers/articles_provider.dart';
+import '../providers/blogs_provider.dart';
 
-class ArticlesScreen extends ConsumerWidget {
-  const ArticlesScreen({super.key});
+class BlogsScreen extends ConsumerWidget {
+  const BlogsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final articlesAsync = ref.watch(articlesProvider);
+    // Note: In some setups, you might need to pass tenantId to blogsProvider
+    // For now, assuming it watches all or tenant is handled in DAO
+    final blogsAsync = ref.watch(blogsProvider(null));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(context.l10n.articles),
+        title: Text(context.l10n.blogs),
         actions: [
           const SyncStatusChip(),
           const SizedBox(width: 8),
@@ -41,11 +43,11 @@ class ArticlesScreen extends ConsumerWidget {
           // Offline indicator banner
           const OfflineIndicator(),
 
-          // Articles list
+          // Blogs list
           Expanded(
-            child: articlesAsync.when(
-              data: (articles) {
-                if (articles.isEmpty) {
+            child: blogsAsync.when(
+              data: (blogs) {
+                if (blogs.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -57,7 +59,7 @@ class ArticlesScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          context.l10n.noArticles,
+                          context.l10n.noBlogs,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
@@ -76,15 +78,15 @@ class ArticlesScreen extends ConsumerWidget {
                   },
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: articles.length,
+                    itemCount: blogs.length,
                     itemBuilder: (context, index) {
-                      final article = articles[index];
-                      return _ArticleCard(article: article);
+                      final blog = blogs[index];
+                      return _BlogCard(blog: blog);
                     },
                   ),
                 );
               },
-              loading: () => const _ArticlesShimmer(),
+              loading: () => const _BlogsShimmer(),
               error: (error, stack) => Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -96,7 +98,7 @@ class ArticlesScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      context.l10n.failedToLoadArticles,
+                      context.l10n.failedToLoadBlogs,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -107,7 +109,7 @@ class ArticlesScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     FilledButton.tonal(
-                      onPressed: () => ref.invalidate(articlesProvider),
+                      onPressed: () => ref.invalidate(blogsProvider),
                       child: Text(context.l10n.retry),
                     ),
                   ],
@@ -121,25 +123,25 @@ class ArticlesScreen extends ConsumerWidget {
   }
 }
 
-class _ArticleCard extends StatelessWidget {
-  final LocalArticle article;
+class _BlogCard extends StatelessWidget {
+  final LocalBlog blog;
 
-  const _ArticleCard({required this.article});
+  const _BlogCard({required this.blog});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final coverImage = article.coverImage;
-    final title = article.title;
-    final excerpt = article.excerpt ?? '';
-    final createdAt = article.createdAt;
+    final coverImage = blog.coverImage;
+    final title = blog.title;
+    final excerpt = blog.excerpt ?? '';
+    final createdAt = blog.createdAt;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          context.push('/articles/${article.id}');
+          context.push('/blogs/${blog.id}');
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,7 +209,7 @@ class _ArticleCard extends StatelessWidget {
                         ),
                         const Spacer(),
                         // Sync indicator
-                        if (article.syncedAt != null)
+                        if (blog.syncedAt != null)
                           Icon(
                             Icons.cloud_done,
                             size: 14,
@@ -230,8 +232,8 @@ class _ArticleCard extends StatelessWidget {
   }
 }
 
-class _ArticlesShimmer extends StatelessWidget {
-  const _ArticlesShimmer();
+class _BlogsShimmer extends StatelessWidget {
+  const _BlogsShimmer();
 
   @override
   Widget build(BuildContext context) {

@@ -31,8 +31,7 @@ AWCMS uses PostgreSQL via Supabase. This document describes the core database sc
        │                   │            ┌──────┴──────┐
        │                   │            │             │
        ▼                   ▼            ▼             ▼
-┌─────────────┐     ┌─────────────┐  ┌─────────┐  ┌─────────────────┐
-│    files    │     │  articles   │  │  menus  │  │ role_permissions│
+│    files    │     │   blogs     │  │  menus  │  │ role_permissions│
 └─────────────┘     └─────────────┘  └─────────┘  └─────────────────┘
        │
        │
@@ -154,7 +153,7 @@ CREATE TABLE permissions (
 
 -- Example permissions
 INSERT INTO permissions (name, description, module, action) VALUES
-  ('view_articles', 'View articles', 'articles', 'view'),
+  ('view_articles', 'View blogs', 'articles', 'view'),
   ('create_articles', 'Create articles', 'articles', 'create'),
   ('edit_articles', 'Edit articles', 'articles', 'edit'),
   ('delete_articles', 'Delete articles', 'articles', 'delete'),
@@ -175,7 +174,7 @@ CREATE TABLE role_permissions (
 
 ## Content Tables
 
-### articles
+### blogs (Table name: `articles`)
 
 ```sql
 CREATE TABLE articles (
@@ -297,7 +296,7 @@ CREATE INDEX idx_tags_tenant_id ON tags(tenant_id);
 CREATE INDEX idx_tags_is_active ON tags(is_active) WHERE deleted_at IS NULL;
 ```
 
-### article_tags
+### blog_tags (Table name: `article_tags`)
 
 ```sql
 CREATE TABLE article_tags (
@@ -368,7 +367,7 @@ USING (auth.uid() = author_id);
 
 ### published_articles_view
 
-Allows the Public Portal to fetch content without exposing internal columns.
+Allows the Public Portal to fetch blog content without exposing internal columns.
 
 ```sql
 CREATE VIEW published_articles_view AS

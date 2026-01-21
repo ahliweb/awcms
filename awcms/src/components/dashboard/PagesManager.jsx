@@ -171,7 +171,7 @@ function PagesManager({ onlyVisual = false }) {
     {
       key: 'type', label: t('pages.category.form.type'), type: 'select', options: [
         { value: 'page', label: t('pages.category.form.type_page') },
-        { value: 'article', label: t('pages.category.form.type_article') },
+        { value: 'blog', label: t('pages.category.form.type_blog') },
         { value: 'product', label: t('pages.category.form.type_product') }
       ], defaultValue: 'page'
     }

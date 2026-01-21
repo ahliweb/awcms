@@ -89,10 +89,10 @@ class HomeScreen extends ConsumerWidget {
                       children: [
                         _MenuCard(
                           icon: Icons.article,
-                          title: context.l10n.articles,
-                          subtitle: context.l10n.seeAllArticles,
+                          title: context.l10n.blogs,
+                          subtitle: context.l10n.seeAllBlogs,
                           color: colorScheme.primary,
-                          onTap: () => context.push(AppRoutes.articles),
+                          onTap: () => context.push(AppRoutes.blogs),
                         ),
                         _MenuCard(
                           icon: Icons.image,
