@@ -31,54 +31,69 @@ const { alumniPage, featuredAlumni, alumniStats, alumniAssociation } =
 
   <!-- Stats -->
   <section
-    class="py-8 bg-white shadow-sm relative -mt-8 z-10"
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm relative -mt-8 z-10 rounded-xl max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 transition-colors duration-200"
     data-testid="alumni-stats"
   >
     <div class="container-custom">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div class="text-center">
-          <div class="text-3xl font-bold text-primary-600">
+          <div
+            class="text-3xl font-bold text-primary-600 dark:text-primary-400"
+          >
             {alumniStats.totalRegistered.toLocaleString()}+
           </div>
-          <div class="text-sm text-gray-500">Alumni Terdaftar</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Alumni Terdaftar
+          </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-green-600">
+          <div class="text-3xl font-bold text-green-600 dark:text-green-400">
             {alumniStats.universities}+
           </div>
-          <div class="text-sm text-gray-500">Perguruan Tinggi</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Perguruan Tinggi
+          </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-orange-600">
+          <div class="text-3xl font-bold text-orange-600 dark:text-orange-400">
             {alumniStats.workingSector.private}
           </div>
-          <div class="text-sm text-gray-500">Sektor Swasta</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Sektor Swasta
+          </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-purple-600">
+          <div class="text-3xl font-bold text-purple-600 dark:text-purple-400">
             {alumniStats.workingSector.government}
           </div>
-          <div class="text-sm text-gray-500">Sektor Pemerintah</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Sektor Pemerintah
+          </div>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Featured Alumni -->
-  <section class="py-16 bg-gray-50" data-testid="featured-alumni">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="featured-alumni"
+  >
     <div class="container-custom">
       <div class="text-center mb-12">
-        <h2 class="section-title">{t("alumni.featured", locale)}</h2>
+        <h2 class="section-title dark:text-white">
+          {t("alumni.featured", locale)}
+        </h2>
       </div>
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
         {
           featuredAlumni.map((alumni: any) => (
             <div
-              class="bg-white rounded-2xl shadow-lg overflow-hidden group"
+              class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden group transition-colors duration-200"
               data-testid={`alumni-${alumni.name.toLowerCase().replace(/\s+/g, "-")}`}
             >
-              <div class="h-48 bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center">
-                <div class="w-24 h-24 bg-white rounded-full flex items-center justify-center text-3xl font-bold text-primary-600">
+              <div class="h-48 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900/50 dark:to-primary-800/30 flex items-center justify-center">
+                <div class="w-24 h-24 bg-white dark:bg-slate-700 rounded-full flex items-center justify-center text-3xl font-bold text-primary-600 dark:text-primary-400">
                   {alumni.name
                     .split(" ")
                     .map((n: string) => n[0])
@@ -87,16 +102,16 @@ const { alumniPage, featuredAlumni, alumniStats, alumniAssociation } =
                 </div>
               </div>
               <div class="p-6">
-                <div class="text-sm text-primary-600 font-medium mb-1">
+                <div class="text-sm text-primary-600 dark:text-primary-400 font-medium mb-1">
                   {t("alumni.graduation_year", locale)} {alumni.graduationYear}
                 </div>
-                <h3 class="font-bold text-xl text-gray-900 mb-2">
+                <h3 class="font-bold text-xl text-gray-900 dark:text-white mb-2">
                   {alumni.name}
                 </h3>
-                <p class="text-gray-600 text-sm mb-3">
+                <p class="text-gray-600 dark:text-gray-400 text-sm mb-3">
                   {getLocalizedValue(alumni.currentPosition, locale)}
                 </p>
-                <p class="text-gray-500 text-xs">
+                <p class="text-gray-500 dark:text-gray-500 text-xs">
                   {getLocalizedValue(alumni.achievement, locale)}
                 </p>
               </div>
@@ -108,13 +123,16 @@ const { alumniPage, featuredAlumni, alumniStats, alumniAssociation } =
   </section>
 
   <!-- Alumni Association -->
-  <section class="py-16 bg-white" data-testid="alumni-association">
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="alumni-association"
+  >
     <div class="container-custom">
       <div class="max-w-3xl mx-auto text-center">
-        <h2 class="section-title">
+        <h2 class="section-title dark:text-white">
           {getLocalizedValue(alumniAssociation.name, locale)}
         </h2>
-        <p class="text-gray-600 mb-8">
+        <p class="text-gray-600 dark:text-gray-400 mb-8">
           {
             locale === "id"
               ? "Bergabunglah dengan komunitas alumni SMAN 2 Pangkalan Bun untuk tetap terhubung dan berkontribusi."
@@ -125,12 +143,12 @@ const { alumniPage, featuredAlumni, alumniStats, alumniAssociation } =
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {
             alumniAssociation.activities.map((activity: any) => (
-              <div class="bg-gray-50 p-4 rounded-xl">
+              <div class="bg-gray-50 dark:bg-slate-700 p-4 rounded-xl transition-colors">
                 <Icon
                   name="tabler:check"
-                  class="w-6 h-6 text-primary-600 mx-auto mb-2"
+                  class="w-6 h-6 text-primary-600 dark:text-primary-400 mx-auto mb-2"
                 />
-                <div class="text-sm font-medium text-gray-700">
+                <div class="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {getLocalizedValue(activity, locale)}
                 </div>
               </div>

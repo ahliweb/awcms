@@ -40,26 +40,33 @@ const { history } = profileData;
   </section>
 
   <!-- Content -->
-  <section class="py-16 bg-gray-50" data-testid="history-content">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="history-content"
+  >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
         <!-- Main Content -->
-        <div class="bg-white rounded-2xl shadow-lg p-8 md:p-12 mb-12">
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 md:p-12 mb-12 transition-colors"
+        >
           <div
-            class="prose prose-lg max-w-none"
+            class="prose dark:prose-invert prose-lg max-w-none"
             set:html={getLocalizedValue(history.content, locale)}
           />
         </div>
 
         <!-- Timeline -->
         <div class="mb-12">
-          <h2 class="text-2xl font-bold text-gray-900 mb-8 text-center">
+          <h2
+            class="text-2xl font-bold text-gray-900 dark:text-white mb-8 text-center"
+          >
             {locale === "id" ? "Tonggak Sejarah" : "Historical Milestones"}
           </h2>
           <div class="relative">
             <!-- Timeline Line -->
             <div
-              class="absolute left-4 md:left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 via-primary-400 to-primary-300 rounded-full"
+              class="absolute left-4 md:left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 via-primary-400 to-primary-300 dark:from-primary-600 dark:via-primary-500 dark:to-primary-400 rounded-full"
             >
             </div>
 
@@ -72,16 +79,16 @@ const { history } = profileData;
                   <div
                     class={`w-full md:w-1/2 ${index % 2 === 0 ? "md:pl-12" : "md:pr-12 md:text-right"} pl-16 md:pl-0`}
                   >
-                    <div class="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                      <div class="text-2xl font-bold text-primary-600 mb-2">
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-200">
+                      <div class="text-2xl font-bold text-primary-600 dark:text-primary-400 mb-2">
                         {milestone.year}
                       </div>
-                      <p class="text-gray-600">
+                      <p class="text-gray-600 dark:text-gray-400">
                         {getLocalizedValue(milestone.event, locale)}
                       </p>
                     </div>
                   </div>
-                  <div class="absolute left-4 md:left-1/2 w-8 h-8 bg-primary-600 rounded-full transform md:-translate-x-1/2 -translate-x-1/2 border-4 border-white shadow-lg flex items-center justify-center">
+                  <div class="absolute left-4 md:left-1/2 w-8 h-8 bg-primary-600 dark:bg-primary-500 rounded-full transform md:-translate-x-1/2 -translate-x-1/2 border-4 border-white dark:border-slate-900 shadow-lg flex items-center justify-center transition-colors">
                     <Icon name="tabler:star" class="w-4 h-4 text-white" />
                   </div>
                 </div>
@@ -91,7 +98,9 @@ const { history } = profileData;
         </div>
 
         <!-- Stats -->
-        <div class="bg-primary-600 rounded-2xl p-8 text-white text-center">
+        <div
+          class="bg-primary-600 dark:bg-primary-800 rounded-2xl p-8 text-white text-center transition-colors"
+        >
           <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div>
               <div class="text-4xl font-bold">
@@ -126,7 +135,7 @@ const { history } = profileData;
         <div class="mt-8 text-center">
           <a
             href={getLocalizedPath("/profil", locale)}
-            class="btn-outline"
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
             data-testid="back-to-profile"
           >
             <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

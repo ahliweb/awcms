@@ -77,54 +77,54 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
 
   <!-- Stats Section -->
   <section
-    class="py-12 bg-white relative -mt-8 z-20"
+    class="py-12 bg-white dark:bg-slate-800 relative -mt-8 z-20 transition-colors duration-200"
     data-testid="stats-section"
   >
     <div class="container-custom">
       <div
-        class="bg-white rounded-2xl shadow-2xl p-6 md:p-8 grid grid-cols-2 md:grid-cols-4 gap-6"
+        class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 md:p-8 grid grid-cols-2 md:grid-cols-4 gap-6 transition-colors duration-200"
       >
         <div class="text-center">
           <div
-            class="text-3xl md:text-4xl font-bold text-primary-600 mb-1"
+            class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-blue-400 mb-1"
             data-testid="stat-students"
           >
             {site.stats.students.toLocaleString()}+
           </div>
-          <div class="text-gray-500 text-sm">
+          <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_students", locale)}
           </div>
         </div>
         <div class="text-center">
           <div
-            class="text-3xl md:text-4xl font-bold text-primary-600 mb-1"
+            class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-blue-400 mb-1"
             data-testid="stat-teachers"
           >
             {site.stats.teachers}+
           </div>
-          <div class="text-gray-500 text-sm">
+          <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_teachers", locale)}
           </div>
         </div>
         <div class="text-center">
           <div
-            class="text-3xl md:text-4xl font-bold text-primary-600 mb-1"
+            class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-blue-400 mb-1"
             data-testid="stat-staff"
           >
             {site.stats.staff}+
           </div>
-          <div class="text-gray-500 text-sm">
+          <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_staff", locale)}
           </div>
         </div>
         <div class="text-center">
           <div
-            class="text-3xl md:text-4xl font-bold text-primary-600 mb-1"
+            class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-blue-400 mb-1"
             data-testid="stat-extracurriculars"
           >
             {site.stats.extracurriculars}+
           </div>
-          <div class="text-gray-500 text-sm">
+          <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_extracurriculars", locale)}
           </div>
         </div>
@@ -133,27 +133,42 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
   </section>
 
   <!-- About Section -->
-  <section class="py-16 md:py-24 bg-gray-50" data-testid="about-section">
+  <section
+    class="py-16 md:py-24 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="about-section"
+  >
     <div class="container-custom">
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <div>
-          <p class="text-primary-600 font-medium mb-2">
+          <p class="text-primary-600 dark:text-blue-400 font-medium mb-2">
             {t("home.about_title", locale)}
           </p>
-          <h2 class="section-title">{site.site.name}</h2>
-          <p class="text-gray-600 mb-6">{t("home.about_desc", locale)}</p>
+          <h2 class="section-title text-gray-900 dark:text-white">
+            {site.site.name}
+          </h2>
+          <p class="text-gray-600 dark:text-gray-300 mb-6">
+            {t("home.about_desc", locale)}
+          </p>
           <div class="grid grid-cols-2 gap-4 mb-6">
-            <div class="bg-white p-4 rounded-xl">
-              <div class="text-2xl font-bold text-primary-600">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm">
+              <div
+                class="text-2xl font-bold text-primary-600 dark:text-blue-400"
+              >
                 {site.accreditation}
               </div>
-              <div class="text-sm text-gray-500">Akreditasi</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">
+                Akreditasi
+              </div>
             </div>
-            <div class="bg-white p-4 rounded-xl">
-              <div class="text-2xl font-bold text-primary-600">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm">
+              <div
+                class="text-2xl font-bold text-primary-600 dark:text-blue-400"
+              >
                 {site.established}
               </div>
-              <div class="text-sm text-gray-500">Berdiri</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">
+                Berdiri
+              </div>
             </div>
           </div>
           <a
@@ -189,10 +204,15 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
   </section>
 
   <!-- Quick Links Section -->
-  <section class="py-16 bg-white" data-testid="quick-links-section">
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="quick-links-section"
+  >
     <div class="container-custom">
       <div class="text-center mb-12">
-        <h2 class="section-title">{t("home.quick_links", locale)}</h2>
+        <h2 class="section-title text-gray-900 dark:text-white">
+          {t("home.quick_links", locale)}
+        </h2>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
         <a
@@ -208,7 +228,11 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
               class="w-8 h-8 text-primary-600 group-hover:text-white transition-colors"
             />
           </div>
-          <h3 class="font-semibold text-gray-900">{t("home.ppdb", locale)}</h3>
+          <h3
+            class="font-semibold text-gray-900 dark:text-white transition-colors"
+          >
+            {t("home.ppdb", locale)}
+          </h3>
         </a>
         <a
           href="#"
@@ -223,7 +247,9 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
               class="w-8 h-8 text-green-600 group-hover:text-white transition-colors"
             />
           </div>
-          <h3 class="font-semibold text-gray-900">
+          <h3
+            class="font-semibold text-gray-900 dark:text-white transition-colors"
+          >
             {t("home.academic_calendar", locale)}
           </h3>
         </a>
@@ -240,7 +266,9 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
               class="w-8 h-8 text-orange-600 group-hover:text-white transition-colors"
             />
           </div>
-          <h3 class="font-semibold text-gray-900">
+          <h3
+            class="font-semibold text-gray-900 dark:text-white transition-colors"
+          >
             {t("home.e_learning", locale)}
           </h3>
         </a>
@@ -257,7 +285,9 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
               class="w-8 h-8 text-purple-600 group-hover:text-white transition-colors"
             />
           </div>
-          <h3 class="font-semibold text-gray-900">
+          <h3
+            class="font-semibold text-gray-900 dark:text-white transition-colors"
+          >
             {t("home.digital_library", locale)}
           </h3>
         </a>
@@ -266,14 +296,19 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
   </section>
 
   <!-- Latest Blogs Section -->
-  <section class="py-16 md:py-24 bg-gray-50" data-testid="blogs-section">
+  <section
+    class="py-16 md:py-24 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="blogs-section"
+  >
     <div class="container-custom">
       <div class="flex justify-between items-end mb-12">
         <div>
-          <p class="text-primary-600 font-medium mb-2">
+          <p class="text-primary-600 dark:text-blue-400 font-medium mb-2">
             {t("blogs.title", locale)}
           </p>
-          <h2 class="section-title mb-0">{t("home.latest_blogs", locale)}</h2>
+          <h2 class="section-title mb-0 text-gray-900 dark:text-white">
+            {t("home.latest_blogs", locale)}
+          </h2>
         </div>
         <a
           href={getLocalizedPath("/blogs", locale)}
@@ -288,7 +323,7 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
         {
           featuredBlogs.map((blog: any) => (
             <article
-              class="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group h-full flex flex-col"
+              class="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 group h-full flex flex-col"
               data-testid={`blog-card-${blog.slug}`}
             >
               <div class="aspect-video bg-gray-200 overflow-hidden">
@@ -317,14 +352,14 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
                     )}
                   </span>
                 </div>
-                <h3 class="text-xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors line-clamp-2">
+                <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-primary-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">
                   {getLocalizedValue(blog.title, locale)}
                 </h3>
-                <p class="text-gray-600 text-sm mb-6 line-clamp-3">
+                <p class="text-gray-600 dark:text-gray-300 text-sm mb-6 line-clamp-3">
                   {getLocalizedValue(blog.excerpt, locale)}
                 </p>
-                <div class="mt-auto pt-6 border-t border-gray-100">
-                  <span class="inline-flex items-center text-primary-600 font-semibold text-sm group-hover:gap-2 transition-all">
+                <div class="mt-auto pt-6 border-t border-gray-100 dark:border-gray-700">
+                  <span class="inline-flex items-center text-primary-600 dark:text-blue-400 font-semibold text-sm group-hover:gap-2 transition-all">
                     {t("common.read_more", locale)}
                     <Icon name="tabler:arrow-right" class="w-4 h-4 ml-1" />
                   </span>

@@ -75,40 +75,50 @@ const featuredBlogs = posts;
   </section>
 
   <!-- Stats Section -->
-  <section class="py-12 bg-white relative -mt-8 z-20">
+  <section
+    class="py-12 bg-white dark:bg-slate-800 relative -mt-8 z-20 transition-colors duration-200"
+  >
     <div class="container-custom">
       <div
-        class="bg-white rounded-2xl shadow-2xl p-6 md:p-8 grid grid-cols-2 md:grid-cols-4 gap-6"
+        class="bg-white dark:bg-slate-700 rounded-2xl shadow-2xl p-6 md:p-8 grid grid-cols-2 md:grid-cols-4 gap-6 transition-colors"
       >
         <div class="text-center">
-          <div class="text-3xl md:text-4xl font-bold text-primary-600 mb-1">
+          <div
+            class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-primary-400 mb-1"
+          >
             {site.stats?.students?.toLocaleString() || "1000+"}
           </div>
-          <div class="text-gray-500 text-sm">
+          <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_students", locale)}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl md:text-4xl font-bold text-primary-600 mb-1">
+          <div
+            class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-primary-400 mb-1"
+          >
             {site.stats?.teachers || "50+"}
           </div>
-          <div class="text-gray-500 text-sm">
+          <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_teachers", locale)}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl md:text-4xl font-bold text-primary-600 mb-1">
+          <div
+            class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-primary-400 mb-1"
+          >
             {site.stats?.staff || "20+"}
           </div>
-          <div class="text-gray-500 text-sm">
+          <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_staff", locale)}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl md:text-4xl font-bold text-primary-600 mb-1">
+          <div
+            class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-primary-400 mb-1"
+          >
             {site.stats?.extracurriculars || "15+"}
           </div>
-          <div class="text-gray-500 text-sm">
+          <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_extracurriculars", locale)}
           </div>
         </div>
@@ -117,23 +127,45 @@ const featuredBlogs = posts;
   </section>
 
   <!-- About Section -->
-  <section class="py-16 md:py-24 bg-gray-50">
+  <section
+    class="py-16 md:py-24 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+  >
     <div class="container-custom">
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <div>
-          <p class="text-primary-600 font-medium mb-2">
+          <p class="text-primary-600 dark:text-primary-400 font-medium mb-2">
             {t("home.about_title", locale)}
           </p>
-          <h2 class="section-title">{site.site.name}</h2>
-          <p class="text-gray-600 mb-6">{site.site.description}</p>
+          <h2 class="section-title text-gray-900 dark:text-white">
+            {site.site.name}
+          </h2>
+          <p class="text-gray-600 dark:text-gray-300 mb-6">
+            {site.site.description}
+          </p>
           <div class="grid grid-cols-2 gap-4 mb-6">
-            <div class="bg-white p-4 rounded-xl">
-              <div class="text-2xl font-bold text-primary-600">A</div>
-              <div class="text-sm text-gray-500">Accreditation</div>
+            <div
+              class="bg-white dark:bg-slate-800 p-4 rounded-xl transition-colors"
+            >
+              <div
+                class="text-2xl font-bold text-primary-600 dark:text-primary-400"
+              >
+                A
+              </div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">
+                Accreditation
+              </div>
             </div>
-            <div class="bg-white p-4 rounded-xl">
-              <div class="text-2xl font-bold text-primary-600">1985</div>
-              <div class="text-sm text-gray-500">Established</div>
+            <div
+              class="bg-white dark:bg-slate-800 p-4 rounded-xl transition-colors"
+            >
+              <div
+                class="text-2xl font-bold text-primary-600 dark:text-primary-400"
+              >
+                1985
+              </div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">
+                Established
+              </div>
             </div>
           </div>
           <a
@@ -146,12 +178,12 @@ const featuredBlogs = posts;
         </div>
         <div class="relative">
           <div
-            class="aspect-video bg-gradient-to-br from-primary-100 to-primary-200 rounded-2xl overflow-hidden"
+            class="aspect-video bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900 dark:to-primary-800 rounded-2xl overflow-hidden"
           >
             <img
               src="https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=800&h=450&fit=crop"
               alt="School"
-              class="w-full h-full object-cover"
+              class="w-full h-full object-cover mix-blend-overlay dark:mix-blend-normal dark:opacity-70"
             />
           </div>
           <div
@@ -168,18 +200,22 @@ const featuredBlogs = posts;
   </section>
 
   <!-- Latest Blogs Section -->
-  <section class="py-16 md:py-24 bg-gray-50">
+  <section
+    class="py-16 md:py-24 bg-gray-50 dark:bg-slate-800 transition-colors duration-200"
+  >
     <div class="container-custom">
       <div class="flex justify-between items-end mb-12">
         <div>
-          <p class="text-primary-600 font-medium mb-2">
+          <p class="text-primary-600 dark:text-primary-400 font-medium mb-2">
             {t("blogs.title", locale)}
           </p>
-          <h2 class="section-title mb-0">{t("home.latest_blogs", locale)}</h2>
+          <h2 class="section-title mb-0 text-gray-900 dark:text-white">
+            {t("home.latest_blogs", locale)}
+          </h2>
         </div>
         <a
           href={getLocalizedPath("/blogs", locale)}
-          class="hidden md:flex items-center text-primary-600 font-medium hover:text-primary-700"
+          class="hidden md:flex items-center text-primary-600 dark:text-primary-400 font-medium hover:text-primary-700 dark:hover:text-primary-300"
           data-testid="blogs-view-all"
         >
           {t("common.view_all", locale)}
@@ -189,8 +225,8 @@ const featuredBlogs = posts;
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
         {
           featuredBlogs.map((blog: any) => (
-            <article class="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group h-full flex flex-col">
-              <div class="aspect-video bg-gray-200 overflow-hidden relative">
+            <article class="bg-white dark:bg-slate-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group h-full flex flex-col">
+              <div class="aspect-video bg-gray-200 dark:bg-slate-600 overflow-hidden relative">
                 <img
                   src={blog.image}
                   alt={getLocalizedValue(blog.title, locale)}
@@ -203,7 +239,7 @@ const featuredBlogs = posts;
                 </div>
               </div>
               <div class="p-6 flex flex-col flex-grow">
-                <div class="flex items-center text-sm text-gray-500 mb-3">
+                <div class="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-3">
                   <Icon name="tabler:calendar" class="w-4 h-4 mr-1" />
                   {new Date(blog.created_at).toLocaleDateString("en-US", {
                     day: "numeric",
@@ -211,15 +247,15 @@ const featuredBlogs = posts;
                     year: "numeric",
                   })}
                 </div>
-                <h3 class="text-xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors line-clamp-2">
+                <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors line-clamp-2">
                   {getLocalizedValue(blog.title, locale)}
                 </h3>
-                <p class="text-gray-600 mb-6 line-clamp-3 text-sm flex-grow">
+                <p class="text-gray-600 dark:text-gray-300 mb-6 line-clamp-3 text-sm flex-grow">
                   {getLocalizedValue(blog.excerpt, locale)}
                 </p>
                 <a
                   href={getLocalizedPath(`/blogs/${blog.slug}`, locale)}
-                  class="text-primary-600 font-medium text-sm flex items-center hover:text-primary-700"
+                  class="text-primary-600 dark:text-primary-400 font-medium text-sm flex items-center hover:text-primary-700 dark:hover:text-primary-300"
                 >
                   Read More
                   <Icon name="tabler:arrow-right" class="w-4 h-4 ml-1" />

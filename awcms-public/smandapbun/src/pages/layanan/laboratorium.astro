@@ -41,16 +41,19 @@ const { laboratory } = servicesData;
   </section>
 
   <!-- Labs Grid -->
-  <section class="py-16 bg-gray-50" data-testid="labs-grid">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="labs-grid"
+  >
     <div class="container-custom">
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
         {
           laboratory.labs.map((lab: any, index: number) => (
             <div
-              class="bg-white rounded-2xl shadow-lg overflow-hidden group"
+              class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden group transition-colors duration-200"
               data-testid={`lab-card-${index}`}
             >
-              <div class="h-48 bg-gradient-to-br from-purple-100 to-purple-200 overflow-hidden">
+              <div class="h-48 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900 dark:to-purple-800 overflow-hidden">
                 <img
                   src={
                     imagesData.laboratory[index % imagesData.laboratory.length]
@@ -60,14 +63,14 @@ const { laboratory } = servicesData;
                 />
               </div>
               <div class="p-6">
-                <h3 class="font-bold text-xl text-gray-900 mb-2">
+                <h3 class="font-bold text-xl text-gray-900 dark:text-white mb-2">
                   {getLocalizedValue(lab.name, locale)}
                 </h3>
-                <p class="text-gray-600 mb-4">
+                <p class="text-gray-600 dark:text-gray-400 mb-4">
                   {getLocalizedValue(lab.description, locale)}
                 </p>
                 <div class="flex items-center justify-between">
-                  <span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                  <span class="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 px-3 py-1 rounded-full text-sm font-medium">
                     {locale === "id" ? "Kapasitas" : "Capacity"}: {lab.capacity}
                   </span>
                   <Icon name="tabler:flask" class="w-6 h-6 text-purple-400" />
@@ -79,9 +82,11 @@ const { laboratory } = servicesData;
       </div>
 
       <!-- Lab Rules -->
-      <div class="mt-12 bg-white rounded-2xl shadow-lg p-8">
+      <div
+        class="mt-12 bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 transition-colors duration-200"
+      >
         <h2
-          class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3"
+          class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3"
         >
           <Icon name="tabler:alert-circle" class="w-6 h-6 text-orange-500" />
           {locale === "id" ? "Tata Tertib Laboratorium" : "Laboratory Rules"}
@@ -89,7 +94,7 @@ const { laboratory } = servicesData;
         <div class="grid md:grid-cols-2 gap-4">
           <div class="flex items-start gap-3">
             <Icon name="tabler:check" class="w-5 h-5 text-green-500 mt-0.5" />
-            <span class="text-gray-600"
+            <span class="text-gray-600 dark:text-gray-400"
               >{
                 locale === "id"
                   ? "Wajib memakai jas laboratorium"
@@ -99,7 +104,7 @@ const { laboratory } = servicesData;
           </div>
           <div class="flex items-start gap-3">
             <Icon name="tabler:check" class="w-5 h-5 text-green-500 mt-0.5" />
-            <span class="text-gray-600"
+            <span class="text-gray-600 dark:text-gray-400"
               >{
                 locale === "id"
                   ? "Dilarang membawa makanan dan minuman"
@@ -109,7 +114,7 @@ const { laboratory } = servicesData;
           </div>
           <div class="flex items-start gap-3">
             <Icon name="tabler:check" class="w-5 h-5 text-green-500 mt-0.5" />
-            <span class="text-gray-600"
+            <span class="text-gray-600 dark:text-gray-400"
               >{
                 locale === "id"
                   ? "Gunakan peralatan sesuai prosedur"
@@ -119,7 +124,7 @@ const { laboratory } = servicesData;
           </div>
           <div class="flex items-start gap-3">
             <Icon name="tabler:check" class="w-5 h-5 text-green-500 mt-0.5" />
-            <span class="text-gray-600"
+            <span class="text-gray-600 dark:text-gray-400"
               >{
                 locale === "id"
                   ? "Jaga kebersihan dan kerapihan"
@@ -134,7 +139,7 @@ const { laboratory } = servicesData;
       <div class="mt-8 text-center">
         <a
           href={getLocalizedPath("/layanan", locale)}
-          class="btn-outline"
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
           data-testid="back-to-services"
         >
           <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

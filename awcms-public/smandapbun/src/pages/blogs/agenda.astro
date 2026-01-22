@@ -49,18 +49,21 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
   </section>
 
   <!-- Agenda Content -->
-  <section class="py-16 bg-gray-50" data-testid="agenda-content">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="agenda-content"
+  >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
         <!-- Upcoming Events -->
         {
           upcomingEvents.length > 0 && (
             <div class="mb-12">
-              <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center transition-colors">
                   <Icon
                     name="tabler:calendar-event"
-                    class="w-5 h-5 text-green-600"
+                    class="w-5 h-5 text-green-600 dark:text-green-400"
                   />
                 </div>
                 {locale === "id" ? "Agenda Mendatang" : "Upcoming Events"}
@@ -68,16 +71,16 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
               <div class="space-y-4">
                 {upcomingEvents.map((event: any) => (
                   <div
-                    class="bg-white rounded-xl p-6 shadow-sm border-l-4 border-green-500 hover:shadow-md transition-shadow"
+                    class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border-l-4 border-green-500 hover:shadow-md transition-all duration-200"
                     data-testid={`event-${event.date}`}
                   >
                     <div class="flex flex-col md:flex-row md:items-center gap-4">
                       <div class="flex-shrink-0 text-center md:text-left">
-                        <div class="inline-block bg-green-100 px-4 py-2 rounded-lg">
-                          <div class="text-2xl font-bold text-green-600">
+                        <div class="inline-block bg-green-100 dark:bg-green-900/30 px-4 py-2 rounded-lg transition-colors">
+                          <div class="text-2xl font-bold text-green-600 dark:text-green-400">
                             {new Date(event.date).getDate()}
                           </div>
-                          <div class="text-sm text-green-700">
+                          <div class="text-sm text-green-700 dark:text-green-300">
                             {new Date(event.date).toLocaleDateString(
                               locale === "id" ? "id-ID" : "en-US",
                               { month: "short", year: "numeric" },
@@ -86,10 +89,10 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
                         </div>
                       </div>
                       <div class="flex-grow">
-                        <h3 class="font-bold text-gray-900 text-lg">
+                        <h3 class="font-bold text-gray-900 dark:text-white text-lg">
                           {getLocalizedValue(event.title, locale)}
                         </h3>
-                        <p class="text-gray-600">
+                        <p class="text-gray-600 dark:text-gray-400">
                           {getLocalizedValue(event.description, locale)}
                         </p>
                       </div>
@@ -105,22 +108,25 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
         {
           pastEvents.length > 0 && (
             <div>
-              <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                <div class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                  <Icon name="tabler:history" class="w-5 h-5 text-gray-600" />
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
+                <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center transition-colors">
+                  <Icon
+                    name="tabler:history"
+                    class="w-5 h-5 text-gray-600 dark:text-gray-400"
+                  />
                 </div>
                 {locale === "id" ? "Agenda Sebelumnya" : "Past Events"}
               </h2>
               <div class="space-y-4">
                 {pastEvents.map((event: any) => (
-                  <div class="bg-white rounded-xl p-6 shadow-sm border-l-4 border-gray-300 opacity-75">
+                  <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border-l-4 border-gray-300 dark:border-gray-600 opacity-75 dark:opacity-60 transition-colors">
                     <div class="flex flex-col md:flex-row md:items-center gap-4">
                       <div class="flex-shrink-0 text-center md:text-left">
-                        <div class="inline-block bg-gray-100 px-4 py-2 rounded-lg">
-                          <div class="text-2xl font-bold text-gray-500">
+                        <div class="inline-block bg-gray-100 dark:bg-slate-700 px-4 py-2 rounded-lg transition-colors">
+                          <div class="text-2xl font-bold text-gray-500 dark:text-gray-400">
                             {new Date(event.date).getDate()}
                           </div>
-                          <div class="text-sm text-gray-500">
+                          <div class="text-sm text-gray-500 dark:text-gray-400">
                             {new Date(event.date).toLocaleDateString(
                               locale === "id" ? "id-ID" : "en-US",
                               { month: "short", year: "numeric" },
@@ -129,10 +135,10 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
                         </div>
                       </div>
                       <div class="flex-grow">
-                        <h3 class="font-bold text-gray-700 text-lg">
+                        <h3 class="font-bold text-gray-700 dark:text-gray-300 text-lg">
                           {getLocalizedValue(event.title, locale)}
                         </h3>
-                        <p class="text-gray-500">
+                        <p class="text-gray-500 dark:text-gray-400">
                           {getLocalizedValue(event.description, locale)}
                         </p>
                       </div>
@@ -148,7 +154,7 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
         <div class="mt-12 text-center">
           <a
             href={getLocalizedPath("/blogs", locale)}
-            class="btn-outline"
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
             data-testid="back-to-blogs"
           >
             <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

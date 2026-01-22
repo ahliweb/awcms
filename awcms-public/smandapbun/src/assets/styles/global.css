@@ -10,7 +10,7 @@
   }
   
   body {
-    @apply bg-white text-gray-900 antialiased;
+    @apply bg-white text-gray-900 antialiased dark:bg-slate-900 dark:text-gray-100 transition-colors duration-200;
     font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
   }
 }
@@ -33,19 +33,19 @@
   }
   
   .card {
-    @apply bg-white rounded-xl shadow-lg overflow-hidden;
+    @apply bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden transition-colors duration-200;
   }
   
   .section-title {
-    @apply text-3xl md:text-4xl font-bold text-gray-900 mb-4;
+    @apply text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4 transition-colors duration-200;
   }
   
   .section-subtitle {
-    @apply text-lg text-gray-600 mb-8;
+    @apply text-lg text-gray-600 dark:text-gray-300 mb-8 transition-colors duration-200;
   }
   
   .nav-link {
-    @apply text-gray-700 hover:text-primary-500 font-medium transition-colors duration-200;
+    @apply text-gray-700 dark:text-gray-200 hover:text-primary-500 dark:hover:text-blue-400 font-medium transition-colors duration-200;
   }
   
   .nav-link-active {

@@ -47,27 +47,29 @@ const {
   </section>
 
   <!-- Navigation Tabs -->
-  <section class="py-4 bg-white shadow-sm sticky top-20 z-30">
+  <section
+    class="py-4 bg-white dark:bg-slate-800 shadow-sm sticky top-20 z-30 transition-colors duration-200"
+  >
     <div class="container-custom">
       <div class="flex flex-wrap gap-2">
         <a
           href="#school"
-          class="px-4 py-2 rounded-full bg-primary-100 text-primary-600 text-sm font-medium"
+          class="px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-sm font-medium transition-colors"
           >{locale === "id" ? "Sekolah" : "School"}</a
         >
         <a
           href="#committee"
-          class="px-4 py-2 rounded-full bg-gray-100 text-gray-700 text-sm font-medium hover:bg-primary-100 hover:text-primary-600"
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-primary-100 dark:hover:bg-primary-900/40 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
           >{locale === "id" ? "Komite" : "Committee"}</a
         >
         <a
           href="#osis"
-          class="px-4 py-2 rounded-full bg-gray-100 text-gray-700 text-sm font-medium hover:bg-primary-100 hover:text-primary-600"
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-primary-100 dark:hover:bg-primary-900/40 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
           >OSIS</a
         >
         <a
           href="#mpk"
-          class="px-4 py-2 rounded-full bg-gray-100 text-gray-700 text-sm font-medium hover:bg-primary-100 hover:text-primary-600"
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-primary-100 dark:hover:bg-primary-900/40 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
           >MPK</a
         >
       </div>
@@ -75,26 +77,35 @@ const {
   </section>
 
   <!-- School Organization -->
-  <section id="school" class="py-16 bg-gray-50" data-testid="school-org">
+  <section
+    id="school"
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="school-org"
+  >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
         <h2
-          class="text-2xl font-bold text-gray-900 mb-8 flex items-center gap-3"
+          class="text-2xl font-bold text-gray-900 dark:text-white mb-8 flex items-center gap-3"
         >
           <div
-            class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center"
+            class="w-10 h-10 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center transition-colors"
           >
-            <Icon name="tabler:building" class="w-5 h-5 text-primary-600" />
+            <Icon
+              name="tabler:building"
+              class="w-5 h-5 text-primary-600 dark:text-primary-400"
+            />
           </div>
           {getLocalizedValue(schoolOrganization.title, locale)}
         </h2>
 
-        <div class="bg-white rounded-2xl shadow-lg p-8">
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 transition-colors"
+        >
           <!-- Principal at top -->
           <div class="text-center mb-8">
             <div class="inline-block">
               <div
-                class="w-24 h-24 bg-primary-600 rounded-full mx-auto mb-3 flex items-center justify-center text-white text-2xl font-bold"
+                class="w-24 h-24 bg-primary-600 dark:bg-primary-500 rounded-full mx-auto mb-3 flex items-center justify-center text-white text-2xl font-bold"
               >
                 {
                   schoolOrganization.positions[0].name
@@ -104,10 +115,10 @@ const {
                     .join("")
                 }
               </div>
-              <h3 class="font-bold text-gray-900">
+              <h3 class="font-bold text-gray-900 dark:text-white">
                 {schoolOrganization.positions[0].name}
               </h3>
-              <p class="text-sm text-gray-500">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
                 {
                   getLocalizedValue(
                     schoolOrganization.positions[0].position,
@@ -122,18 +133,18 @@ const {
           <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
             {
               schoolOrganization.positions.slice(1).map((person: any) => (
-                <div class="text-center p-4 bg-gray-50 rounded-xl">
-                  <div class="w-16 h-16 bg-primary-100 rounded-full mx-auto mb-2 flex items-center justify-center text-primary-600 font-bold">
+                <div class="text-center p-4 bg-gray-50 dark:bg-slate-700 rounded-xl transition-colors">
+                  <div class="w-16 h-16 bg-primary-100 dark:bg-primary-900/40 rounded-full mx-auto mb-2 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold transition-colors">
                     {person.name
                       .split(" ")
                       .map((n: string) => n[0])
                       .slice(0, 2)
                       .join("")}
                   </div>
-                  <h4 class="font-semibold text-gray-900 text-sm">
+                  <h4 class="font-semibold text-gray-900 dark:text-white text-sm">
                     {person.name}
                   </h4>
-                  <p class="text-xs text-gray-500">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
                     {getLocalizedValue(person.position, locale)}
                   </p>
                 </div>
@@ -146,20 +157,27 @@ const {
   </section>
 
   <!-- Committee Organization -->
-  <section id="committee" class="py-16 bg-white" data-testid="committee-org">
+  <section
+    id="committee"
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="committee-org"
+  >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
         <h2
-          class="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-3"
+          class="text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3"
         >
           <div
-            class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center"
+            class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center transition-colors"
           >
-            <Icon name="tabler:users-group" class="w-5 h-5 text-green-600" />
+            <Icon
+              name="tabler:users-group"
+              class="w-5 h-5 text-green-600 dark:text-green-400"
+            />
           </div>
           {getLocalizedValue(committeeOrganization.title, locale)}
         </h2>
-        <p class="text-gray-500 mb-8 ml-13">
+        <p class="text-gray-500 dark:text-gray-400 mb-8 ml-13">
           {locale === "id" ? "Periode" : "Period"}: {
             committeeOrganization.period
           }
@@ -168,8 +186,8 @@ const {
         <div class="grid md:grid-cols-2 gap-4">
           {
             committeeOrganization.positions.map((person: any) => (
-              <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                <div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold flex-shrink-0">
+              <div class="flex items-center gap-4 p-4 bg-gray-50 dark:bg-slate-700 rounded-xl transition-colors">
+                <div class="w-14 h-14 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400 font-bold flex-shrink-0 transition-colors">
                   {person.name
                     .split(" ")
                     .map((n: string) => n[0])
@@ -177,8 +195,10 @@ const {
                     .join("")}
                 </div>
                 <div>
-                  <h4 class="font-semibold text-gray-900">{person.name}</h4>
-                  <p class="text-sm text-gray-500">
+                  <h4 class="font-semibold text-gray-900 dark:text-white">
+                    {person.name}
+                  </h4>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
                     {getLocalizedValue(person.position, locale)}
                   </p>
                 </div>
@@ -191,29 +211,38 @@ const {
   </section>
 
   <!-- OSIS Organization -->
-  <section id="osis" class="py-16 bg-gray-50" data-testid="osis-org">
+  <section
+    id="osis"
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="osis-org"
+  >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
         <h2
-          class="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-3"
+          class="text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3"
         >
           <div
-            class="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center"
+            class="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center transition-colors"
           >
-            <Icon name="tabler:flag" class="w-5 h-5 text-orange-600" />
+            <Icon
+              name="tabler:flag"
+              class="w-5 h-5 text-orange-600 dark:text-orange-400"
+            />
           </div>
           {getLocalizedValue(osisOrganization.title, locale)}
         </h2>
-        <p class="text-gray-500 mb-8 ml-13">
+        <p class="text-gray-500 dark:text-gray-400 mb-8 ml-13">
           {locale === "id" ? "Periode" : "Period"}: {osisOrganization.period}
         </p>
 
-        <div class="bg-white rounded-2xl shadow-lg p-8 mb-6">
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 mb-6 transition-colors"
+        >
           <div class="grid md:grid-cols-2 gap-4">
             {
               osisOrganization.positions.map((person: any) => (
-                <div class="flex items-center gap-4 p-4 bg-orange-50 rounded-xl">
-                  <div class="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold flex-shrink-0">
+                <div class="flex items-center gap-4 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-xl transition-colors">
+                  <div class="w-14 h-14 bg-orange-100 dark:bg-orange-900/40 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold flex-shrink-0 transition-colors">
                     {person.name
                       .split(" ")
                       .map((n: string) => n[0])
@@ -221,12 +250,16 @@ const {
                       .join("")}
                   </div>
                   <div>
-                    <h4 class="font-semibold text-gray-900">{person.name}</h4>
-                    <p class="text-sm text-gray-500">
+                    <h4 class="font-semibold text-gray-900 dark:text-white">
+                      {person.name}
+                    </h4>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
                       {getLocalizedValue(person.position, locale)}
                     </p>
                     {person.class && (
-                      <p class="text-xs text-orange-600">{person.class}</p>
+                      <p class="text-xs text-orange-600 dark:text-orange-400">
+                        {person.class}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -236,14 +269,16 @@ const {
         </div>
 
         <!-- OSIS Divisions -->
-        <div class="bg-white rounded-xl p-6">
-          <h3 class="font-bold text-gray-900 mb-4">
+        <div
+          class="bg-white dark:bg-slate-800 rounded-xl p-6 transition-colors"
+        >
+          <h3 class="font-bold text-gray-900 dark:text-white mb-4">
             {locale === "id" ? "Bidang Kegiatan" : "Activity Divisions"}
           </h3>
           <div class="flex flex-wrap gap-2">
             {
               osisOrganization.divisions.map((division: any) => (
-                <span class="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
+                <span class="px-3 py-1 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 rounded-full text-sm transition-colors">
                   {getLocalizedValue(division, locale)}
                 </span>
               ))
@@ -255,32 +290,41 @@ const {
   </section>
 
   <!-- MPK Organization -->
-  <section id="mpk" class="py-16 bg-white" data-testid="mpk-org">
+  <section
+    id="mpk"
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="mpk-org"
+  >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
         <h2
-          class="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-3"
+          class="text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3"
         >
           <div
-            class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center"
+            class="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center transition-colors"
           >
-            <Icon name="tabler:gavel" class="w-5 h-5 text-purple-600" />
+            <Icon
+              name="tabler:gavel"
+              class="w-5 h-5 text-purple-600 dark:text-purple-400"
+            />
           </div>
           {getLocalizedValue(mpkOrganization.title, locale)}
         </h2>
-        <p class="text-gray-500 mb-8 ml-13">
+        <p class="text-gray-500 dark:text-gray-400 mb-8 ml-13">
           {locale === "id" ? "Periode" : "Period"}: {mpkOrganization.period}
         </p>
 
-        <div class="bg-purple-50 rounded-2xl p-8 mb-6">
-          <p class="text-gray-700 mb-6">
+        <div
+          class="bg-purple-50 dark:bg-purple-900/20 rounded-2xl p-8 mb-6 transition-colors"
+        >
+          <p class="text-gray-700 dark:text-gray-300 mb-6">
             {getLocalizedValue(mpkOrganization.description, locale)}
           </p>
           <div class="grid md:grid-cols-2 gap-4">
             {
               mpkOrganization.positions.map((person: any) => (
-                <div class="flex items-center gap-4 p-4 bg-white rounded-xl">
-                  <div class="w-14 h-14 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold flex-shrink-0">
+                <div class="flex items-center gap-4 p-4 bg-white dark:bg-slate-700 rounded-xl transition-colors">
+                  <div class="w-14 h-14 bg-purple-100 dark:bg-purple-900/40 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold flex-shrink-0 transition-colors">
                     {person.name
                       .split(" ")
                       .map((n: string) => n[0])
@@ -288,12 +332,16 @@ const {
                       .join("")}
                   </div>
                   <div>
-                    <h4 class="font-semibold text-gray-900">{person.name}</h4>
-                    <p class="text-sm text-gray-500">
+                    <h4 class="font-semibold text-gray-900 dark:text-white">
+                      {person.name}
+                    </h4>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
                       {getLocalizedValue(person.position, locale)}
                     </p>
                     {person.class && (
-                      <p class="text-xs text-purple-600">{person.class}</p>
+                      <p class="text-xs text-purple-600 dark:text-purple-400">
+                        {person.class}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -306,7 +354,7 @@ const {
         <div class="text-center">
           <a
             href={getLocalizedPath("/profil", locale)}
-            class="btn-outline"
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-700"
             data-testid="back-to-profile"
           >
             <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

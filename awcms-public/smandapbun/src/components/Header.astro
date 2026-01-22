@@ -8,6 +8,7 @@ import {
 } from "../utils/i18n";
 import navigation from "../data/navigation.json";
 import site from "../data/site.json";
+import ThemeToggle from "./ThemeToggle.astro";
 
 export interface Props {
   locale: Locale;
@@ -21,7 +22,9 @@ function getLabel(item: any): string {
 }
 ---
 
-<header class="bg-white shadow-sm sticky top-0 z-50">
+<header
+  class="bg-white dark:bg-slate-900 shadow-sm sticky top-0 z-50 transition-colors duration-200"
+>
   <!-- Top Bar -->
   <div class="bg-primary-600 text-white py-2">
     <div
@@ -85,7 +88,7 @@ function getLabel(item: any): string {
                 }
                 class={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
                   locale === lang
-                    ? "bg-white text-primary-600"
+                    ? "bg-white dark:bg-slate-800 text-primary-600 dark:text-blue-400"
                     : "hover:bg-primary-500"
                 }`}
               >
@@ -94,6 +97,8 @@ function getLabel(item: any): string {
             ))
           }
         </div>
+        <!-- Theme Toggle -->
+        <ThemeToggle />
       </div>
     </div>
   </div>
@@ -109,10 +114,14 @@ function getLabel(item: any): string {
           S2
         </div>
         <div>
-          <div class="font-bold text-lg text-primary-600 leading-tight">
+          <div
+            class="font-bold text-lg text-primary-600 dark:text-blue-400 leading-tight"
+          >
             {site.site.name}
           </div>
-          <div class="text-xs text-gray-500">{site.site.tagline}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400">
+            {site.site.tagline}
+          </div>
         </div>
       </a>
 
@@ -126,8 +135,8 @@ function getLabel(item: any): string {
                 class={`nav-link px-3 py-2 rounded-lg flex items-center gap-1 ${
                   currentPath === item.href ||
                   currentPath.startsWith(item.href + "/")
-                    ? "nav-link-active bg-primary-50"
-                    : "hover:bg-gray-50"
+                    ? "nav-link-active bg-primary-50 dark:bg-slate-800 text-primary-600 dark:text-blue-400"
+                    : "hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-200"
                 }`}
                 data-testid={`nav-${item.id}`}
               >
@@ -139,12 +148,12 @@ function getLabel(item: any): string {
 
               {item.children && (
                 <div class="absolute left-0 top-full pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                  <div class="bg-white rounded-lg shadow-xl border border-gray-100 py-2 min-w-[220px]">
+                  <div class="bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700 py-2 min-w-[220px]">
                     {item.children.map((child: any) => (
                       <div>
                         <a
                           href={getLocalizedPath(child.href, locale)}
-                          class="block px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600 transition-colors"
+                          class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-blue-400 transition-colors"
                           data-testid={`nav-${child.id}`}
                         >
                           {getLabel(child)}
@@ -154,7 +163,7 @@ function getLabel(item: any): string {
                             {child.children.map((subChild: any) => (
                               <a
                                 href={getLocalizedPath(subChild.href, locale)}
-                                class="block px-4 py-1.5 text-xs text-gray-500 hover:bg-primary-50 hover:text-primary-600 transition-colors"
+                                class="block px-4 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-blue-400 transition-colors"
                                 data-testid={`nav-${subChild.id}`}
                               >
                                 {getLabel(subChild)}
@@ -195,7 +204,7 @@ function getLabel(item: any): string {
 
   <!-- Mobile Navigation -->
   <div
-    class="lg:hidden hidden bg-white border-t border-gray-100"
+    class="lg:hidden hidden bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-gray-800"
     id="mobile-menu"
   >
     <nav class="container-custom py-4 space-y-2">
@@ -207,8 +216,8 @@ function getLabel(item: any): string {
               class={`block px-4 py-2 rounded-lg font-medium ${
                 currentPath === item.href ||
                 currentPath.startsWith(item.href + "/")
-                  ? "bg-primary-50 text-primary-600"
-                  : "text-gray-700 hover:bg-gray-50"
+                  ? "bg-primary-50 dark:bg-slate-800 text-primary-600 dark:text-blue-400"
+                  : "text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800"
               }`}
             >
               {getLabel(item)}
@@ -218,7 +227,7 @@ function getLabel(item: any): string {
                 {item.children.map((child: any) => (
                   <a
                     href={getLocalizedPath(child.href, locale)}
-                    class="block px-4 py-1.5 text-sm text-gray-600 hover:text-primary-600"
+                    class="block px-4 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-blue-400"
                   >
                     {getLabel(child)}
                   </a>

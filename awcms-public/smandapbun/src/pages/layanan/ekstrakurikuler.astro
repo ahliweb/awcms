@@ -43,38 +43,42 @@ const { extracurricular } = servicesData;
   </section>
 
   <!-- Stats -->
-  <section class="py-8 bg-white shadow-sm relative -mt-6 z-10">
+  <section
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm relative -mt-6 z-10 transition-colors duration-200"
+  >
     <div class="container-custom">
       <div class="grid grid-cols-3 gap-6">
         <div class="text-center">
-          <div class="text-3xl font-bold text-primary-600">
+          <div
+            class="text-3xl font-bold text-primary-600 dark:text-primary-400"
+          >
             {extracurricular.activities.length}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Kegiatan" : "Activities"}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-green-600">
+          <div class="text-3xl font-bold text-green-600 dark:text-green-400">
             {
               extracurricular.activities.filter(
                 (a: any) => a.category === "Wajib",
               ).length
             }
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Wajib" : "Mandatory"}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-orange-600">
+          <div class="text-3xl font-bold text-orange-600 dark:text-orange-400">
             {
               extracurricular.activities.filter(
                 (a: any) => a.category === "Pilihan",
               ).length
             }
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Pilihan" : "Optional"}
           </div>
         </div>
@@ -83,17 +87,23 @@ const { extracurricular } = servicesData;
   </section>
 
   <!-- Activities List -->
-  <section class="py-16 bg-gray-50" data-testid="activities-list">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="activities-list"
+  >
     <div class="container-custom">
       <!-- Wajib -->
       <div class="mb-12">
         <h2
-          class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3"
+          class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3"
         >
           <div
-            class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center"
+            class="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center"
           >
-            <Icon name="tabler:star-filled" class="w-5 h-5 text-red-600" />
+            <Icon
+              name="tabler:star-filled"
+              class="w-5 h-5 text-red-600 dark:text-red-400"
+            />
           </div>
           {
             locale === "id"
@@ -107,18 +117,18 @@ const { extracurricular } = servicesData;
               .filter((a: any) => a.category === "Wajib")
               .map((activity: any) => (
                 <div
-                  class="bg-white rounded-xl p-6 shadow-sm border-l-4 border-red-500"
+                  class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border-l-4 border-red-500 dark:border-red-600 transition-colors"
                   data-testid={`ekskul-${activity.name.toLowerCase().replace(/\s+/g, "-")}`}
                 >
-                  <h3 class="font-bold text-gray-900 text-lg mb-2">
+                  <h3 class="font-bold text-gray-900 dark:text-white text-lg mb-2">
                     {activity.name}
                   </h3>
                   <div class="space-y-2 text-sm">
-                    <div class="flex items-center gap-2 text-gray-600">
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                       <Icon name="tabler:clock" class="w-4 h-4 text-gray-400" />
                       {activity.schedule}
                     </div>
-                    <div class="flex items-center gap-2 text-gray-600">
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                       <Icon name="tabler:user" class="w-4 h-4 text-gray-400" />
                       {activity.coach}
                     </div>
@@ -132,12 +142,15 @@ const { extracurricular } = servicesData;
       <!-- Pilihan -->
       <div>
         <h2
-          class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3"
+          class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3"
         >
           <div
-            class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center"
+            class="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center"
           >
-            <Icon name="tabler:list-check" class="w-5 h-5 text-primary-600" />
+            <Icon
+              name="tabler:list-check"
+              class="w-5 h-5 text-primary-600 dark:text-primary-400"
+            />
           </div>
           {
             locale === "id"
@@ -151,18 +164,18 @@ const { extracurricular } = servicesData;
               .filter((a: any) => a.category === "Pilihan")
               .map((activity: any) => (
                 <div
-                  class="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow"
+                  class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow transition-colors"
                   data-testid={`ekskul-${activity.name.toLowerCase().replace(/\s+/g, "-")}`}
                 >
-                  <h3 class="font-bold text-gray-900 text-lg mb-2">
+                  <h3 class="font-bold text-gray-900 dark:text-white text-lg mb-2">
                     {activity.name}
                   </h3>
                   <div class="space-y-2 text-sm">
-                    <div class="flex items-center gap-2 text-gray-600">
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                       <Icon name="tabler:clock" class="w-4 h-4 text-gray-400" />
                       {activity.schedule}
                     </div>
-                    <div class="flex items-center gap-2 text-gray-600">
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                       <Icon name="tabler:user" class="w-4 h-4 text-gray-400" />
                       {activity.coach}
                     </div>
@@ -177,7 +190,7 @@ const { extracurricular } = servicesData;
       <div class="mt-12 text-center">
         <a
           href={getLocalizedPath("/layanan", locale)}
-          class="btn-outline"
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
           data-testid="back-to-services"
         >
           <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

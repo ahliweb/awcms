@@ -32,7 +32,10 @@ const posts = await getPosts(100);
   </section>
 
   <!-- Blogs Grid -->
-  <section class="py-16 bg-gray-50" data-testid="blogs-list">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="blogs-list"
+  >
     <div class="container-custom">
       <div class="grid lg:grid-cols-3 gap-8">
         <!-- Main Content -->
@@ -41,10 +44,10 @@ const posts = await getPosts(100);
             {
               posts.map((blog: any) => (
                 <article
-                  class="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group h-full flex flex-col"
+                  class="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group h-full flex flex-col"
                   data-testid={`blog-card-${blog.slug}`}
                 >
-                  <div class="aspect-video bg-gray-200 overflow-hidden relative">
+                  <div class="aspect-video bg-gray-200 dark:bg-slate-700 overflow-hidden relative">
                     <img
                       src={blog.image}
                       alt={getLocalizedValue(blog.title, locale)}
@@ -57,22 +60,22 @@ const posts = await getPosts(100);
                     </div>
                   </div>
                   <div class="p-6 flex flex-col flex-grow">
-                    <div class="flex items-center text-sm text-gray-500 mb-3">
+                    <div class="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-3">
                       <Icon name="tabler:calendar" class="w-4 h-4 mr-1" />
                       {new Date(blog.created_at).toLocaleDateString(
                         locale === "id" ? "id-ID" : "en-US",
                         { day: "numeric", month: "long", year: "numeric" },
                       )}
                     </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-3 group-hover:text-primary-600 transition-colors line-clamp-2">
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors line-clamp-2">
                       {getLocalizedValue(blog.title, locale)}
                     </h3>
-                    <p class="text-gray-600 mb-6 line-clamp-3 text-sm flex-grow">
+                    <p class="text-gray-600 dark:text-gray-300 mb-6 line-clamp-3 text-sm flex-grow">
                       {getLocalizedValue(blog.excerpt, locale)}
                     </p>
                     <a
                       href={getLocalizedPath(`/blogs/${blog.slug}`, locale)}
-                      class="text-primary-600 font-medium text-sm flex items-center hover:text-primary-700"
+                      class="text-primary-600 dark:text-primary-400 font-medium text-sm flex items-center hover:text-primary-700 dark:hover:text-primary-300"
                     >
                       {t("common.read_more", locale)}
                       <Icon name="tabler:arrow-right" class="w-4 h-4 ml-1" />
@@ -88,16 +91,20 @@ const posts = await getPosts(100);
         <div class="space-y-6">
           <a
             href={getLocalizedPath("/blogs/agenda", locale)}
-            class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
+            class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
           >
-            <span class="text-gray-700">{t("blogs.agenda", locale)}</span>
+            <span class="text-gray-700 dark:text-gray-300"
+              >{t("blogs.agenda", locale)}</span
+            >
             <Icon name="tabler:chevron-right" class="w-5 h-5 text-gray-400" />
           </a>
           <a
             href={getLocalizedPath("/blogs/galeri", locale)}
-            class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
+            class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
           >
-            <span class="text-gray-700">{t("blogs.gallery", locale)}</span>
+            <span class="text-gray-700 dark:text-gray-300"
+              >{t("blogs.gallery", locale)}</span
+            >
             <Icon name="tabler:chevron-right" class="w-5 h-5 text-gray-400" />
           </a>
         </div>

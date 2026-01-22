@@ -44,40 +44,44 @@ const { teachingStaff, administrativeStaff } = staffData;
   </section>
 
   <!-- Stats -->
-  <section class="py-8 bg-white shadow-sm relative -mt-6 z-10">
+  <section
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm relative -mt-6 z-10 transition-colors duration-200"
+  >
     <div class="container-custom">
       <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
         <div class="text-center">
-          <div class="text-3xl font-bold text-primary-600">
+          <div
+            class="text-3xl font-bold text-primary-600 dark:text-primary-400"
+          >
             {teachingStaff.summary.total}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Total Guru" : "Total Teachers"}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-green-600">
+          <div class="text-3xl font-bold text-green-600 dark:text-green-400">
             {teachingStaff.summary.pns}
           </div>
-          <div class="text-sm text-gray-500">PNS</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">PNS</div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-orange-600">
+          <div class="text-3xl font-bold text-orange-600 dark:text-orange-400">
             {teachingStaff.summary.nonPns}
           </div>
-          <div class="text-sm text-gray-500">Non-PNS</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">Non-PNS</div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-purple-600">
+          <div class="text-3xl font-bold text-purple-600 dark:text-purple-400">
             {teachingStaff.summary.s2}
           </div>
-          <div class="text-sm text-gray-500">S2/Master</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">S2/Master</div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-blue-600">
+          <div class="text-3xl font-bold text-blue-600 dark:text-blue-400">
             {administrativeStaff.summary.total}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Staf TU" : "Admin Staff"}
           </div>
         </div>
@@ -86,55 +90,67 @@ const { teachingStaff, administrativeStaff } = staffData;
   </section>
 
   <!-- Teaching Staff -->
-  <section class="py-16 bg-gray-50" data-testid="teaching-staff">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="teaching-staff"
+  >
     <div class="container-custom">
-      <h2 class="text-2xl font-bold text-gray-900 mb-8 flex items-center gap-3">
+      <h2
+        class="text-2xl font-bold text-gray-900 dark:text-white mb-8 flex items-center gap-3"
+      >
         <div
-          class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center"
+          class="w-10 h-10 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center transition-colors"
         >
-          <Icon name="tabler:chalkboard" class="w-5 h-5 text-primary-600" />
+          <Icon
+            name="tabler:chalkboard"
+            class="w-5 h-5 text-primary-600 dark:text-primary-400"
+          />
         </div>
         {getLocalizedValue(teachingStaff.title, locale)}
       </h2>
       <div class="overflow-x-auto">
-        <table class="w-full bg-white rounded-xl shadow-sm overflow-hidden">
-          <thead class="bg-primary-50">
+        <table
+          class="w-full bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden transition-colors"
+        >
+          <thead class="bg-primary-50 dark:bg-primary-900/20 transition-colors">
             <tr>
               <th
-                class="px-6 py-4 text-left text-sm font-semibold text-gray-900"
+                class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white"
                 >No</th
               >
               <th
-                class="px-6 py-4 text-left text-sm font-semibold text-gray-900"
+                class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white"
                 >{locale === "id" ? "Nama" : "Name"}</th
               >
               <th
-                class="px-6 py-4 text-left text-sm font-semibold text-gray-900"
+                class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white"
                 >{locale === "id" ? "Mata Pelajaran" : "Subject"}</th
               >
               <th
-                class="px-6 py-4 text-left text-sm font-semibold text-gray-900"
+                class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white"
                 >Status</th
               >
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100">
+          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
             {
               teachingStaff.staff.map((staff: any, index: number) => (
-                <tr class="hover:bg-gray-50">
-                  <td class="px-6 py-4 text-sm text-gray-600">{index + 1}</td>
-                  <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                <tr class="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                  <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                    {index + 1}
+                  </td>
+                  <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                     {staff.name}
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-600">
+                  <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
                     {staff.subject}
                   </td>
                   <td class="px-6 py-4">
                     <span
                       class={`px-2 py-1 rounded text-xs font-medium ${
                         staff.status === "PNS"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-orange-100 text-orange-700"
+                          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                          : "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
                       }`}
                     >
                       {staff.status}
@@ -150,55 +166,69 @@ const { teachingStaff, administrativeStaff } = staffData;
   </section>
 
   <!-- Administrative Staff -->
-  <section class="py-16 bg-white" data-testid="admin-staff">
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="admin-staff"
+  >
     <div class="container-custom">
-      <h2 class="text-2xl font-bold text-gray-900 mb-8 flex items-center gap-3">
+      <h2
+        class="text-2xl font-bold text-gray-900 dark:text-white mb-8 flex items-center gap-3"
+      >
         <div
-          class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center"
+          class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center transition-colors"
         >
-          <Icon name="tabler:users" class="w-5 h-5 text-green-600" />
+          <Icon
+            name="tabler:users"
+            class="w-5 h-5 text-green-600 dark:text-green-400"
+          />
         </div>
         {getLocalizedValue(administrativeStaff.title, locale)}
       </h2>
       <div class="overflow-x-auto">
-        <table class="w-full bg-gray-50 rounded-xl overflow-hidden">
-          <thead class="bg-green-50">
+        <table
+          class="w-full bg-gray-50 dark:bg-slate-700 rounded-xl overflow-hidden transition-colors"
+        >
+          <thead class="bg-green-50 dark:bg-green-900/20 transition-colors">
             <tr>
               <th
-                class="px-6 py-4 text-left text-sm font-semibold text-gray-900"
+                class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white"
                 >No</th
               >
               <th
-                class="px-6 py-4 text-left text-sm font-semibold text-gray-900"
+                class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white"
                 >{locale === "id" ? "Nama" : "Name"}</th
               >
               <th
-                class="px-6 py-4 text-left text-sm font-semibold text-gray-900"
+                class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white"
                 >{locale === "id" ? "Jabatan" : "Position"}</th
               >
               <th
-                class="px-6 py-4 text-left text-sm font-semibold text-gray-900"
+                class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white"
                 >Status</th
               >
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100 bg-white">
+          <tbody
+            class="divide-y divide-gray-100 dark:divide-gray-600 bg-white dark:bg-slate-800 transition-colors"
+          >
             {
               administrativeStaff.staff.map((staff: any, index: number) => (
-                <tr class="hover:bg-gray-50">
-                  <td class="px-6 py-4 text-sm text-gray-600">{index + 1}</td>
-                  <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                <tr class="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                  <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                    {index + 1}
+                  </td>
+                  <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                     {staff.name}
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-600">
+                  <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
                     {staff.position}
                   </td>
                   <td class="px-6 py-4">
                     <span
                       class={`px-2 py-1 rounded text-xs font-medium ${
                         staff.status === "PNS"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-orange-100 text-orange-700"
+                          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                          : "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
                       }`}
                     >
                       {staff.status}
@@ -215,7 +245,7 @@ const { teachingStaff, administrativeStaff } = staffData;
       <div class="mt-12 text-center">
         <a
           href={getLocalizedPath("/profil", locale)}
-          class="btn-outline"
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-700"
           data-testid="back-to-profile"
         >
           <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

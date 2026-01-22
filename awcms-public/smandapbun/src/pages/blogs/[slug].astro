@@ -77,15 +77,20 @@ const relatedBlogs = allPosts
   </section>
 
   <!-- Content -->
-  <section class="py-16 bg-gray-50" data-testid="blog-content">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="blog-content"
+  >
     <div class="container-custom">
       <div class="grid lg:grid-cols-3 gap-8">
         <!-- Main Content -->
         <div class="lg:col-span-2">
-          <article class="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <article
+            class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden transition-colors duration-200"
+          >
             <!-- Featured Image -->
             <div
-              class="aspect-video bg-gradient-to-br from-primary-100 to-primary-200"
+              class="aspect-video bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900 dark:to-primary-800"
             >
               <img
                 src={post.image ||
@@ -98,20 +103,20 @@ const relatedBlogs = allPosts
             <!-- Blog Body -->
             <div class="p-8 md:p-12">
               <div
-                class="prose prose-lg max-w-none"
+                class="prose prose-lg dark:prose-invert max-w-none"
                 set:html={getLocalizedValue(post.content, locale)}
               />
 
               <!-- Tags -->
               {
                 post.tag && (
-                  <div class="mt-8 pt-6 border-t border-gray-200">
+                  <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
                     <div class="flex items-center gap-2">
                       <Icon name="tabler:tag" class="w-5 h-5 text-gray-400" />
-                      <span class="text-gray-500">
+                      <span class="text-gray-500 dark:text-gray-400">
                         {t("blogs.tags", locale)}:
                       </span>
-                      <span class="bg-primary-100 text-primary-600 px-3 py-1 rounded-full text-sm">
+                      <span class="bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-300 px-3 py-1 rounded-full text-sm">
                         {post.tag}
                       </span>
                     </div>
@@ -120,29 +125,31 @@ const relatedBlogs = allPosts
               }
 
               <!-- Share Buttons -->
-              <div class="mt-8 pt-6 border-t border-gray-200">
+              <div
+                class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700"
+              >
                 <div class="flex items-center gap-4">
-                  <span class="text-gray-500 font-medium"
+                  <span class="text-gray-500 dark:text-gray-400 font-medium"
                     >{t("common.share", locale)}:</span
                   >
                   <a
                     href={`https://www.facebook.com/sharer/sharer.php?u=${Astro.url}`}
                     target="_blank"
-                    class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center hover:bg-blue-500 hover:text-white transition-colors text-blue-600"
+                    class="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center hover:bg-blue-500 hover:text-white transition-colors text-blue-600 dark:text-blue-400"
                   >
                     <Icon name="tabler:brand-facebook" class="w-5 h-5" />
                   </a>
                   <a
                     href={`https://twitter.com/intent/tweet?url=${Astro.url}&text=${getLocalizedValue(post.title, locale)}`}
                     target="_blank"
-                    class="w-10 h-10 bg-sky-100 rounded-full flex items-center justify-center hover:bg-sky-500 hover:text-white transition-colors text-sky-600"
+                    class="w-10 h-10 bg-sky-100 dark:bg-sky-900/30 rounded-full flex items-center justify-center hover:bg-sky-500 hover:text-white transition-colors text-sky-600 dark:text-sky-400"
                   >
                     <Icon name="tabler:brand-twitter" class="w-5 h-5" />
                   </a>
                   <a
                     href={`https://wa.me/?text=${getLocalizedValue(post.title, locale)} ${Astro.url}`}
                     target="_blank"
-                    class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center hover:bg-green-500 hover:text-white transition-colors text-green-600"
+                    class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center hover:bg-green-500 hover:text-white transition-colors text-green-600 dark:text-green-400"
                   >
                     <Icon name="tabler:brand-whatsapp" class="w-5 h-5" />
                   </a>
@@ -155,7 +162,7 @@ const relatedBlogs = allPosts
           <div class="mt-8">
             <a
               href={getLocalizedPath("/blogs", locale)}
-              class="btn-outline"
+              class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
               data-testid="back-to-blogs"
             >
               <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
@@ -170,10 +177,10 @@ const relatedBlogs = allPosts
           {
             relatedBlogs.length > 0 && (
               <div
-                class="bg-white rounded-xl shadow-lg p-6"
+                class="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 transition-colors duration-200"
                 data-testid="related-blogs"
               >
-                <h3 class="font-bold text-lg text-gray-900 mb-4">
+                <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-4">
                   {locale === "id" ? "Blog Terkait" : "Related Blogs"}
                 </h3>
                 <div class="space-y-4">
@@ -183,7 +190,7 @@ const relatedBlogs = allPosts
                       class="block group"
                     >
                       <div class="flex gap-3">
-                        <div class="w-20 h-14 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                        <div class="w-20 h-14 bg-gray-200 dark:bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
                           <img
                             src={
                               related.image ||
@@ -194,10 +201,10 @@ const relatedBlogs = allPosts
                           />
                         </div>
                         <div>
-                          <h4 class="font-medium text-gray-900 text-sm line-clamp-2 group-hover:text-primary-600 transition-colors">
+                          <h4 class="font-medium text-gray-900 dark:text-white text-sm line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                             {getLocalizedValue(related.title, locale)}
                           </h4>
-                          <p class="text-xs text-gray-500 mt-1">
+                          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             {new Date(related.published_at).toLocaleDateString(
                               locale === "id" ? "id-ID" : "en-US",
                             )}
@@ -212,16 +219,20 @@ const relatedBlogs = allPosts
           }
 
           <!-- Quick Links -->
-          <div class="bg-white rounded-xl shadow-lg p-6">
-            <h3 class="font-bold text-lg text-gray-900 mb-4">
+          <div
+            class="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 transition-colors duration-200"
+          >
+            <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-4">
               {locale === "id" ? "Kategori" : "Categories"}
             </h3>
             <div class="space-y-2">
               <a
                 href={getLocalizedPath("/blogs", locale)}
-                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
               >
-                <span class="text-gray-700">{t("blogs.latest", locale)}</span>
+                <span class="text-gray-700 dark:text-gray-300"
+                  >{t("blogs.latest", locale)}</span
+                >
                 <Icon
                   name="tabler:chevron-right"
                   class="w-5 h-5 text-gray-400"
@@ -229,9 +240,9 @@ const relatedBlogs = allPosts
               </a>
               <a
                 href={getLocalizedPath("/blogs/info-sekolah", locale)}
-                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
               >
-                <span class="text-gray-700"
+                <span class="text-gray-700 dark:text-gray-300"
                   >{t("blogs.school_info", locale)}</span
                 >
                 <Icon
@@ -241,9 +252,11 @@ const relatedBlogs = allPosts
               </a>
               <a
                 href={getLocalizedPath("/blogs/galeri", locale)}
-                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
               >
-                <span class="text-gray-700">{t("blogs.gallery", locale)}</span>
+                <span class="text-gray-700 dark:text-gray-300"
+                  >{t("blogs.gallery", locale)}</span
+                >
                 <Icon
                   name="tabler:chevron-right"
                   class="w-5 h-5 text-gray-400"

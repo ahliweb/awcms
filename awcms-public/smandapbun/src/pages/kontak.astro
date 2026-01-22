@@ -30,88 +30,107 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
   </section>
 
   <!-- Contact Content -->
-  <section class="py-16 bg-gray-50" data-testid="contact-content">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="contact-content"
+  >
     <div class="container-custom">
       <div class="grid lg:grid-cols-2 gap-12">
         <!-- Contact Info -->
         <div>
-          <h2 class="text-2xl font-bold text-gray-900 mb-6">
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
             {t("footer.contact_info", locale)}
           </h2>
 
           <div class="space-y-6">
             <div
-              class="flex items-start gap-4 bg-white p-5 rounded-xl shadow-sm"
+              class="flex items-start gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm transition-colors duration-200"
               data-testid="contact-address"
             >
               <div
-                class="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0"
+                class="w-12 h-12 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center flex-shrink-0"
               >
-                <Icon name="tabler:map-pin" class="w-6 h-6 text-primary-600" />
+                <Icon
+                  name="tabler:map-pin"
+                  class="w-6 h-6 text-primary-600 dark:text-primary-300"
+                />
               </div>
               <div>
-                <h3 class="font-semibold text-gray-900 mb-1">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-1">
                   {t("contact.address", locale)}
                 </h3>
-                <p class="text-gray-600">
+                <p class="text-gray-600 dark:text-gray-300">
                   {getLocalizedValue(contactInfo.address, locale)}
                 </p>
               </div>
             </div>
 
             <div
-              class="flex items-start gap-4 bg-white p-5 rounded-xl shadow-sm"
+              class="flex items-start gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm transition-colors duration-200"
               data-testid="contact-phone"
             >
               <div
-                class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"
+                class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0"
               >
-                <Icon name="tabler:phone" class="w-6 h-6 text-green-600" />
+                <Icon
+                  name="tabler:phone"
+                  class="w-6 h-6 text-green-600 dark:text-green-400"
+                />
               </div>
               <div>
-                <h3 class="font-semibold text-gray-900 mb-1">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-1">
                   {t("contact.phone", locale)} / {t("contact.fax", locale)}
                 </h3>
-                <p class="text-gray-600">{contactInfo.phone}</p>
-                <p class="text-gray-600">Fax: {contactInfo.fax}</p>
+                <p class="text-gray-600 dark:text-gray-300">
+                  {contactInfo.phone}
+                </p>
+                <p class="text-gray-600 dark:text-gray-300">
+                  Fax: {contactInfo.fax}
+                </p>
               </div>
             </div>
 
             <div
-              class="flex items-start gap-4 bg-white p-5 rounded-xl shadow-sm"
+              class="flex items-start gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm transition-colors duration-200"
               data-testid="contact-email"
             >
               <div
-                class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0"
+                class="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center flex-shrink-0"
               >
-                <Icon name="tabler:mail" class="w-6 h-6 text-orange-600" />
+                <Icon
+                  name="tabler:mail"
+                  class="w-6 h-6 text-orange-600 dark:text-orange-400"
+                />
               </div>
               <div>
-                <h3 class="font-semibold text-gray-900 mb-1">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-1">
                   {t("contact.email", locale)}
                 </h3>
                 <a
                   href={`mailto:${contactInfo.email}`}
-                  class="text-primary-600 hover:text-primary-700"
+                  class="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
                   >{contactInfo.email}</a
                 >
               </div>
             </div>
 
             <div
-              class="flex items-start gap-4 bg-white p-5 rounded-xl shadow-sm"
+              class="flex items-start gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm transition-colors duration-200"
               data-testid="contact-hours"
             >
               <div
-                class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0"
+                class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center flex-shrink-0"
               >
-                <Icon name="tabler:clock" class="w-6 h-6 text-purple-600" />
+                <Icon
+                  name="tabler:clock"
+                  class="w-6 h-6 text-purple-600 dark:text-purple-400"
+                />
               </div>
               <div>
-                <h3 class="font-semibold text-gray-900 mb-1">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-1">
                   {t("contact.hours", locale)}
                 </h3>
-                <p class="text-gray-600 whitespace-pre-line">
+                <p class="text-gray-600 dark:text-gray-300 whitespace-pre-line">
                   {getLocalizedValue(contactInfo.operationalHours, locale)}
                 </p>
               </div>
@@ -120,7 +139,7 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
 
           <!-- Social Media -->
           <div class="mt-8">
-            <h3 class="font-semibold text-gray-900 mb-4">
+            <h3 class="font-semibold text-gray-900 dark:text-white mb-4">
               {t("footer.follow_us", locale)}
             </h3>
             <div class="flex gap-3">
@@ -130,7 +149,7 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
                     href={social.url}
                     target="_blank"
                     rel="noopener"
-                    class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors"
+                    class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center hover:bg-primary-500 dark:hover:bg-primary-600 hover:text-white dark:text-gray-200 transition-colors"
                     data-testid={`social-${social.platform.toLowerCase()}`}
                   >
                     <Icon name={social.icon} class="w-5 h-5" />
@@ -143,24 +162,24 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
 
         <!-- Contact Form -->
         <div
-          class="bg-white rounded-2xl shadow-lg p-8"
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 transition-colors duration-200"
           data-testid="contact-form"
         >
-          <h2 class="text-2xl font-bold text-gray-900 mb-6">
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
             {t("contact.send_message", locale)}
           </h2>
           <form class="space-y-5">
             <div>
               <label
                 for="name"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >{t("contact.name", locale)}</label
               >
               <input
                 type="text"
                 id="name"
                 name="name"
-                class="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all"
+                class="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 outline-none transition-all"
                 required
                 data-testid="contact-input-name"
               />
@@ -168,14 +187,14 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
             <div>
               <label
                 for="email"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >{t("contact.email", locale)}</label
               >
               <input
                 type="email"
                 id="email"
                 name="email"
-                class="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all"
+                class="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 outline-none transition-all"
                 required
                 data-testid="contact-input-email"
               />
@@ -183,14 +202,14 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
             <div>
               <label
                 for="subject"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >{t("contact.subject", locale)}</label
               >
               <input
                 type="text"
                 id="subject"
                 name="subject"
-                class="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all"
+                class="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 outline-none transition-all"
                 required
                 data-testid="contact-input-subject"
               />
@@ -198,14 +217,14 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
             <div>
               <label
                 for="message"
-                class="block text-sm font-medium text-gray-700 mb-1"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >{t("contact.message", locale)}</label
               >
               <textarea
                 id="message"
                 name="message"
                 rows="5"
-                class="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all resize-none"
+                class="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 outline-none transition-all resize-none"
                 required
                 data-testid="contact-input-message"></textarea>
             </div>

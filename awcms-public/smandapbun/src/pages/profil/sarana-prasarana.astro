@@ -40,38 +40,48 @@ const { facilities, schoolCondition } = profileData;
   </section>
 
   <!-- Area Stats -->
-  <section class="py-8 bg-white shadow-sm relative -mt-6 z-10">
+  <section
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm relative -mt-6 z-10 rounded-xl max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 transition-colors duration-200"
+  >
     <div class="container-custom">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div class="text-center">
-          <div class="text-2xl md:text-3xl font-bold text-primary-600">
+          <div
+            class="text-2xl md:text-3xl font-bold text-primary-600 dark:text-primary-400"
+          >
             {schoolCondition.statistics.landArea}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Luas Tanah" : "Land Area"}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-2xl md:text-3xl font-bold text-green-600">
+          <div
+            class="text-2xl md:text-3xl font-bold text-green-600 dark:text-green-400"
+          >
             {schoolCondition.statistics.buildingArea}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Luas Bangunan" : "Building Area"}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-2xl md:text-3xl font-bold text-emerald-600">
+          <div
+            class="text-2xl md:text-3xl font-bold text-emerald-600 dark:text-emerald-400"
+          >
             {schoolCondition.statistics.greenArea}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Area Hijau" : "Green Area"}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-2xl md:text-3xl font-bold text-orange-600">
+          <div
+            class="text-2xl md:text-3xl font-bold text-orange-600 dark:text-orange-400"
+          >
             {schoolCondition.statistics.parkingArea}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {locale === "id" ? "Area Parkir" : "Parking Area"}
           </div>
         </div>
@@ -80,21 +90,24 @@ const { facilities, schoolCondition } = profileData;
   </section>
 
   <!-- Facilities Grid -->
-  <section class="py-16 bg-gray-50" data-testid="facilities-grid">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="facilities-grid"
+  >
     <div class="container-custom">
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {
           facilities.items.map((facility: any, index: number) => (
             <div
-              class="bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow overflow-hidden group"
+              class="bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 overflow-hidden group"
               data-testid={`facility-card-${index}`}
             >
-              <div class="h-48 bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center relative overflow-hidden">
-                <div class="absolute inset-0 bg-primary-600/10 group-hover:bg-primary-600/20 transition-colors" />
-                <div class="text-6xl font-bold text-primary-600/30">
+              <div class="h-48 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900/40 dark:to-primary-800/40 flex items-center justify-center relative overflow-hidden transition-colors">
+                <div class="absolute inset-0 bg-primary-600/10 dark:bg-primary-600/20 group-hover:bg-primary-600/20 dark:group-hover:bg-primary-600/30 transition-colors" />
+                <div class="text-6xl font-bold text-primary-600/30 dark:text-primary-400/20 transition-colors">
                   {facility.count}
                 </div>
-                <div class="absolute bottom-4 right-4 w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
+                <div class="absolute bottom-4 right-4 w-12 h-12 bg-white dark:bg-slate-700 rounded-full flex items-center justify-center shadow-lg transition-colors">
                   <Icon
                     name={
                       facility.name.en.includes("Class")
@@ -120,28 +133,28 @@ const { facilities, schoolCondition } = profileData;
                                           ? "tabler:first-aid-kit"
                                           : "tabler:building"
                     }
-                    class="w-6 h-6 text-primary-600"
+                    class="w-6 h-6 text-primary-600 dark:text-primary-400"
                   />
                 </div>
               </div>
               <div class="p-6">
                 <div class="flex items-center justify-between mb-2">
-                  <h3 class="font-bold text-lg text-gray-900">
+                  <h3 class="font-bold text-lg text-gray-900 dark:text-white">
                     {getLocalizedValue(facility.name, locale)}
                   </h3>
-                  <span class="text-3xl font-bold text-primary-600">
+                  <span class="text-3xl font-bold text-primary-600 dark:text-primary-400">
                     {facility.count}
                   </span>
                 </div>
-                <p class="text-gray-600 text-sm mb-3">
+                <p class="text-gray-600 dark:text-gray-400 text-sm mb-3">
                   {getLocalizedValue(facility.description, locale)}
                 </p>
                 <div class="flex items-center gap-2">
                   <span
-                    class={`px-2 py-1 rounded text-xs font-medium ${
+                    class={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                       facility.condition === "Baik"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-yellow-100 text-yellow-700"
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                        : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
                     }`}
                   >
                     {facility.condition === "Baik"
@@ -161,7 +174,7 @@ const { facilities, schoolCondition } = profileData;
       <div class="mt-12 text-center">
         <a
           href={getLocalizedPath("/profil", locale)}
-          class="btn-outline"
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
           data-testid="back-to-profile"
         >
           <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

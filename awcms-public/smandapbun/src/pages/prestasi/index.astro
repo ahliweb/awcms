@@ -37,40 +37,42 @@ const groupedAchievements = achievements.reduce((acc: any, item: any) => {
 
   <!-- Stats -->
   <section
-    class="py-8 bg-white shadow-sm relative -mt-8 z-10"
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm relative -mt-8 z-10 rounded-xl max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 transition-colors duration-200"
     data-testid="achievements-stats"
   >
     <div class="container-custom">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div class="text-center">
-          <div class="text-3xl font-bold text-primary-600">
+          <div
+            class="text-3xl font-bold text-primary-600 dark:text-primary-400"
+          >
             {achievements.filter((a: any) => a.category === "Akademik").length}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {t("achievements.academic", locale)}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-green-600">
+          <div class="text-3xl font-bold text-green-600 dark:text-green-400">
             {achievements.filter((a: any) => a.category === "Olahraga").length}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {t("achievements.sports", locale)}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-purple-600">
+          <div class="text-3xl font-bold text-purple-600 dark:text-purple-400">
             {achievements.filter((a: any) => a.category === "Seni").length}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {t("achievements.arts", locale)}
           </div>
         </div>
         <div class="text-center">
-          <div class="text-3xl font-bold text-orange-600">
+          <div class="text-3xl font-bold text-orange-600 dark:text-orange-400">
             {achievements.filter((a: any) => a.category === "Teknologi").length}
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             {t("achievements.technology", locale)}
           </div>
         </div>
@@ -79,13 +81,16 @@ const groupedAchievements = achievements.reduce((acc: any, item: any) => {
   </section>
 
   <!-- Achievements List -->
-  <section class="py-16 bg-gray-50" data-testid="achievements-list">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="achievements-list"
+  >
     <div class="container-custom">
       {
         Object.entries(groupedAchievements).map(
           ([category, items]: [string, any]) => (
             <div class="mb-12">
-              <h2 class="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+              <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
                 <span
                   class={`w-3 h-3 rounded-full ${
                     category === "Akademik"
@@ -106,21 +111,21 @@ const groupedAchievements = achievements.reduce((acc: any, item: any) => {
               <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {items.map((achievement: any) => (
                   <div
-                    class="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow"
+                    class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200"
                     data-testid={`achievement-${achievement.year}-${category}`}
                   >
                     <div class="flex items-start justify-between mb-3">
-                      <span class="bg-primary-100 text-primary-600 text-xs font-bold px-2 py-1 rounded">
+                      <span class="bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-xs font-bold px-2 py-1 rounded transition-colors">
                         {achievement.year}
                       </span>
-                      <span class="text-xs text-gray-500">
+                      <span class="text-xs text-gray-500 dark:text-gray-400">
                         {getLocalizedValue(achievement.level, locale)}
                       </span>
                     </div>
-                    <h3 class="font-semibold text-gray-900 mb-2">
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-2">
                       {getLocalizedValue(achievement.title, locale)}
                     </h3>
-                    <p class="text-sm text-gray-500 flex items-center gap-1">
+                    <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
                       <Icon name="tabler:user" class="w-4 h-4" />
                       {achievement.participant}
                     </p>

@@ -41,7 +41,10 @@ const { library } = servicesData;
   </section>
 
   <!-- Library Content -->
-  <section class="py-16 bg-gray-50" data-testid="library-content">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="library-content"
+  >
     <div class="container-custom">
       <div class="grid lg:grid-cols-2 gap-12 items-start">
         <!-- Image Gallery -->
@@ -72,24 +75,38 @@ const { library } = servicesData;
 
         <!-- Info -->
         <div>
-          <div class="bg-white rounded-2xl shadow-lg p-8 mb-6">
+          <div
+            class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 mb-6 transition-colors duration-200"
+          >
             <div
-              class="prose prose-lg max-w-none"
+              class="prose prose-lg dark:prose-invert max-w-none"
               set:html={getLocalizedValue(library.content, locale)}
             />
           </div>
 
           <!-- Quick Stats -->
           <div class="grid grid-cols-2 gap-4">
-            <div class="bg-orange-100 p-6 rounded-xl text-center">
-              <div class="text-3xl font-bold text-orange-600">12,000+</div>
-              <div class="text-sm text-orange-700">
+            <div
+              class="bg-orange-100 dark:bg-orange-900/30 p-6 rounded-xl text-center transition-colors"
+            >
+              <div
+                class="text-3xl font-bold text-orange-600 dark:text-orange-400"
+              >
+                12,000+
+              </div>
+              <div class="text-sm text-orange-700 dark:text-orange-300">
                 {locale === "id" ? "Koleksi Buku" : "Book Collection"}
               </div>
             </div>
-            <div class="bg-green-100 p-6 rounded-xl text-center">
-              <div class="text-3xl font-bold text-green-600">100+</div>
-              <div class="text-sm text-green-700">
+            <div
+              class="bg-green-100 dark:bg-green-900/30 p-6 rounded-xl text-center transition-colors"
+            >
+              <div
+                class="text-3xl font-bold text-green-600 dark:text-green-400"
+              >
+                100+
+              </div>
+              <div class="text-sm text-green-700 dark:text-green-300">
                 {locale === "id" ? "Kapasitas" : "Capacity"}
               </div>
             </div>
@@ -98,44 +115,54 @@ const { library } = servicesData;
       </div>
 
       <!-- Services -->
-      <div class="mt-12 bg-white rounded-2xl shadow-lg p-8">
-        <h2 class="text-xl font-bold text-gray-900 mb-6">
+      <div
+        class="mt-12 bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 transition-colors duration-200"
+      >
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6">
           {locale === "id" ? "Layanan Perpustakaan" : "Library Services"}
         </h2>
         <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="p-4 bg-gray-50 rounded-xl text-center">
+          <div
+            class="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl text-center transition-colors"
+          >
             <Icon
               name="tabler:book"
-              class="w-8 h-8 text-primary-600 mx-auto mb-2"
+              class="w-8 h-8 text-primary-600 dark:text-primary-400 mx-auto mb-2"
             />
-            <div class="font-medium text-gray-900">
+            <div class="font-medium text-gray-900 dark:text-white">
               {locale === "id" ? "Peminjaman Buku" : "Book Lending"}
             </div>
           </div>
-          <div class="p-4 bg-gray-50 rounded-xl text-center">
+          <div
+            class="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl text-center transition-colors"
+          >
             <Icon
               name="tabler:device-laptop"
-              class="w-8 h-8 text-primary-600 mx-auto mb-2"
+              class="w-8 h-8 text-primary-600 dark:text-primary-400 mx-auto mb-2"
             />
-            <div class="font-medium text-gray-900">
+            <div class="font-medium text-gray-900 dark:text-white">
               {locale === "id" ? "E-Library" : "E-Library"}
             </div>
           </div>
-          <div class="p-4 bg-gray-50 rounded-xl text-center">
+          <div
+            class="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl text-center transition-colors"
+          >
             <Icon
               name="tabler:printer"
-              class="w-8 h-8 text-primary-600 mx-auto mb-2"
+              class="w-8 h-8 text-primary-600 dark:text-primary-400 mx-auto mb-2"
             />
-            <div class="font-medium text-gray-900">
+            <div class="font-medium text-gray-900 dark:text-white">
               {locale === "id" ? "Fotokopi & Print" : "Photocopy & Print"}
             </div>
           </div>
-          <div class="p-4 bg-gray-50 rounded-xl text-center">
+          <div
+            class="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl text-center transition-colors"
+          >
             <Icon
               name="tabler:users"
-              class="w-8 h-8 text-primary-600 mx-auto mb-2"
+              class="w-8 h-8 text-primary-600 dark:text-primary-400 mx-auto mb-2"
             />
-            <div class="font-medium text-gray-900">
+            <div class="font-medium text-gray-900 dark:text-white">
               {locale === "id" ? "Ruang Diskusi" : "Discussion Room"}
             </div>
           </div>
@@ -146,7 +173,7 @@ const { library } = servicesData;
       <div class="mt-8 text-center">
         <a
           href={getLocalizedPath("/layanan", locale)}
-          class="btn-outline"
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
           data-testid="back-to-services"
         >
           <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

@@ -40,12 +40,15 @@ const { visionMission } = profileData;
   </section>
 
   <!-- Content -->
-  <section class="py-16 bg-gray-50" data-testid="vision-content">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="vision-content"
+  >
     <div class="container-custom">
       <div class="max-w-5xl mx-auto">
         <!-- Vision -->
         <div
-          class="bg-primary-600 text-white p-8 md:p-12 rounded-2xl mb-8 relative overflow-hidden"
+          class="bg-primary-600 dark:bg-primary-800 text-white p-8 md:p-12 rounded-2xl mb-8 relative overflow-hidden transition-colors"
           data-testid="vision-card"
         >
           <div
@@ -69,16 +72,19 @@ const { visionMission } = profileData;
 
         <!-- Mission -->
         <div
-          class="bg-white rounded-2xl shadow-lg p-8 md:p-12 mb-8"
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 md:p-12 mb-8 transition-colors"
           data-testid="mission-card"
         >
           <div class="flex items-center gap-4 mb-8">
             <div
-              class="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center"
+              class="w-16 h-16 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center transition-colors"
             >
-              <Icon name="tabler:target" class="w-8 h-8 text-primary-600" />
+              <Icon
+                name="tabler:target"
+                class="w-8 h-8 text-primary-600 dark:text-primary-400"
+              />
             </div>
-            <h2 class="text-3xl font-bold text-gray-900">
+            <h2 class="text-3xl font-bold text-gray-900 dark:text-white">
               {t("profile.mission", locale)}
             </h2>
           </div>
@@ -88,13 +94,13 @@ const { visionMission } = profileData;
                 getLocalizedValue(visionMission.mission, locale) as string[]
               )?.map((item: string, index: number) => (
                 <div
-                  class="flex items-start gap-4 p-4 bg-gray-50 rounded-xl hover:bg-primary-50 transition-colors"
+                  class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl hover:bg-primary-50 dark:hover:bg-slate-700 transition-colors"
                   data-testid={`mission-${index + 1}`}
                 >
-                  <span class="w-10 h-10 bg-primary-600 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+                  <span class="w-10 h-10 bg-primary-600 dark:bg-primary-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0 transition-colors">
                     {index + 1}
                   </span>
-                  <p class="text-gray-700 pt-2">{item}</p>
+                  <p class="text-gray-700 dark:text-gray-300 pt-2">{item}</p>
                 </div>
               ))
             }
@@ -103,7 +109,7 @@ const { visionMission } = profileData;
 
         <!-- Motto -->
         <div
-          class="bg-gradient-to-r from-secondary-500 to-secondary-600 text-white p-8 md:p-12 rounded-2xl text-center"
+          class="bg-gradient-to-r from-secondary-500 to-secondary-600 dark:from-secondary-700 dark:to-secondary-800 text-white p-8 md:p-12 rounded-2xl text-center transition-colors"
           data-testid="motto-card"
         >
           <Icon name="tabler:quote" class="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -117,7 +123,7 @@ const { visionMission } = profileData;
         <div class="mt-8 text-center">
           <a
             href={getLocalizedPath("/profil", locale)}
-            class="btn-outline"
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-700"
             data-testid="back-to-profile"
           >
             <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />

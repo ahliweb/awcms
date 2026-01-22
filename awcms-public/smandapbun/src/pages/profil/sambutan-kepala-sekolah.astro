@@ -42,17 +42,22 @@ const { principalMessage } = profileData;
   </section>
 
   <!-- Content -->
-  <section class="py-16 bg-gray-50" data-testid="principal-content">
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="principal-content"
+  >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
-        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden transition-colors"
+        >
           <!-- Principal Photo & Info -->
           <div
             class="bg-gradient-to-r from-primary-600 to-primary-700 p-8 text-white"
           >
             <div class="flex flex-col md:flex-row items-center gap-6">
               <div
-                class="w-32 h-32 bg-white rounded-full flex items-center justify-center text-4xl font-bold text-primary-600 shadow-lg"
+                class="w-32 h-32 bg-white text-primary-600 rounded-full flex items-center justify-center text-4xl font-bold shadow-lg"
               >
                 {
                   principalMessage.author
@@ -72,26 +77,28 @@ const { principalMessage } = profileData;
           <!-- Message Content -->
           <div class="p-8 md:p-12">
             <div
-              class="prose prose-lg max-w-none"
+              class="prose dark:prose-invert prose-lg max-w-none"
               set:html={getLocalizedValue(principalMessage.content, locale)}
             />
 
             <!-- Signature -->
-            <div class="mt-12 pt-8 border-t border-gray-200">
+            <div
+              class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700 transition-colors"
+            >
               <div class="flex items-center gap-4">
                 <div
-                  class="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center"
+                  class="w-16 h-16 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center transition-colors"
                 >
                   <Icon
                     name="tabler:signature"
-                    class="w-8 h-8 text-primary-600"
+                    class="w-8 h-8 text-primary-600 dark:text-primary-400"
                   />
                 </div>
                 <div>
-                  <p class="font-bold text-gray-900">
+                  <p class="font-bold text-gray-900 dark:text-white">
                     {principalMessage.author}
                   </p>
-                  <p class="text-sm text-gray-500">
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
                     {principalMessage.position} SMAN 2 Pangkalan Bun
                   </p>
                 </div>
@@ -104,7 +111,7 @@ const { principalMessage } = profileData;
         <div class="mt-8 text-center">
           <a
             href={getLocalizedPath("/profil", locale)}
-            class="btn-outline"
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
             data-testid="back-to-profile"
           >
             <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
