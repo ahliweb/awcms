@@ -61,6 +61,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 ### Fixed
 
 - **Database Migrations**: Guarded `ALTER TABLE public.blogs` with `IF EXISTS` in `20260120091500_unified_content_model.sql` to prevent `db pull` failures when `blogs` does not exist.
+- **Security**: Pinned `lodash` to `^4.17.21` across public templates and admin packages to address prototype pollution alerts.
 
 ## [2.23.0] "Vortex" - 2026-01-21
 

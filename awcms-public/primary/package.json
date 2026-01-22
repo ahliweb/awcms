@@ -73,6 +73,7 @@
   "overrides": {
     "undici": "^7.18.2",
     "diff": "^8.0.3",
-    "wrangler": "^4.59.3"
+    "wrangler": "^4.59.3",
+    "lodash": "^4.17.21"
   }
 }

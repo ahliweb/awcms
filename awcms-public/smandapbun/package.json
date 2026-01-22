@@ -25,6 +25,9 @@
     "react-dom": "^19.2.3",
     "sharp": "^0.34.5"
   },
+  "overrides": {
+    "lodash": "^4.17.21"
+  },
   "devDependencies": {
     "@astrojs/check": "^0.9.6",
     "@astrojs/tailwind": "^5.1.5",
