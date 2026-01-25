@@ -11,11 +11,7 @@ on:
 
 env:
   NODE_VERSION: '20'
-  # Global Environment Variables
-  VITE_SUPABASE_URL: "${{ secrets.VITE_SUPABASE_URL }}"
-  VITE_SUPABASE_ANON_KEY: "${{ secrets.VITE_SUPABASE_ANON_KEY }}"
-  PUBLIC_SUPABASE_URL: "${{ secrets.VITE_SUPABASE_URL }}"
-  PUBLIC_SUPABASE_ANON_KEY: "${{ secrets.VITE_SUPABASE_ANON_KEY }}"
+
 
 permissions:
   contents: read
@@ -30,9 +26,6 @@ jobs:
     defaults:
       run:
         working-directory: ./awcms
-    env:
-      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
     steps:
       - name: Checkout code
@@ -53,9 +46,15 @@ jobs:
 
       - name: Run Tests
         run: npm run test -- --run
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Build
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
   # ============================================
   # Lint & Build - Public Portal (Astro)
@@ -83,6 +82,9 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
   # ============================================
   # Flutter Build - Mobile App
@@ -148,6 +150,8 @@ jobs:
     needs: [lint-test-admin, lint-build-public]
     # Only deploy when on main branch AND secrets are configured
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.CLOUDFLARE_ENABLED == 'true' }}
+    environment:
+      name: production
     
     steps:
       - name: Checkout code
@@ -163,6 +167,9 @@ jobs:
         run: |
           npm ci
           npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
