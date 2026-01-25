@@ -23,6 +23,7 @@ jobs:
   lint-test-admin:
     name: Lint & Test (Admin)
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     defaults:
       run:
         working-directory: ./awcms
@@ -62,6 +63,7 @@ jobs:
   lint-build-public:
     name: Lint & Build (Public Portal)
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     defaults:
       run:
         working-directory: ./awcms-public/primary
@@ -150,8 +152,7 @@ jobs:
     needs: [lint-test-admin, lint-build-public]
     # Only deploy when on main branch AND secrets are configured
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.CLOUDFLARE_ENABLED == 'true' }}
-    environment:
-      name: production
+    environment: 'production'
     
     steps:
       - name: Checkout code
