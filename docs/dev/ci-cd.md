@@ -18,22 +18,23 @@ Describe the GitHub Actions workflows used for AWCMS.
 
 ### Workflow Location
 
-- `.github/workflows/ci.yml`
+- `.github/workflows/ci-push.yml` (pushes to `main`/`develop`, deploys)
+- `.github/workflows/ci-pr.yml` (pull requests to `main`)
 
 ### Trigger Events
 
-- Push to `main` or `develop`
-- Pull requests targeting `main`
+- Push to `main` or `develop` (ci-push)
+- Pull requests targeting `main` (ci-pr)
 
 ### Jobs
 
-| Job | Purpose | Working Directory |
-| --- | --- | --- |
-| `lint-test-admin` | Lint, test, build admin | `awcms/` |
-| `lint-build-public` | Build public portal | `awcms-public/primary/` |
-| `build-mobile` | Flutter build and tests | `awcms-mobile/primary/` |
-| `db-check` | Supabase migration lint | `awcms/supabase` |
-| `deploy-production` | Cloudflare Pages deploy | `awcms/` |
+| Job | Purpose | Working Directory | Workflow |
+| --- | --- | --- | --- |
+| `lint-test-admin` | Lint, test, build admin | `awcms/` | ci-push, ci-pr |
+| `lint-build-public` | Build public portal | `awcms-public/primary/` | ci-push, ci-pr |
+| `build-mobile` | Flutter build and tests | `awcms-mobile/primary/` | ci-push, ci-pr |
+| `db-check` | Supabase migration lint | `awcms/supabase` | ci-pr |
+| `deploy-production` | Cloudflare Pages deploy | `awcms/` | ci-push |
 
 ### Required Secrets
 
@@ -48,10 +49,21 @@ Describe the GitHub Actions workflows used for AWCMS.
 Run locally before pushing:
 
 ```bash
+# Admin Panel
 cd awcms
 npm run lint
 npm run test -- --run
 npm run build
+
+# Public Portal
+cd ../awcms-public/primary
+npm run build
+
+# Mobile
+cd ../../awcms-mobile/primary
+flutter pub get
+flutter analyze
+flutter test
 ```
 
 ## Troubleshooting

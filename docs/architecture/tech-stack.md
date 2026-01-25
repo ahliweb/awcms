@@ -37,11 +37,9 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | --- | --- | --- | --- |
 | Meta-framework | Astro | 5.12.9 | SSR/Islands |
 | UI library | React | 19.2.3 | Island rendering |
-| Language | TypeScript | 5.x | Typed components |
+| Language | TypeScript | 5.8.3 | Typed components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
 | Supabase JS | @supabase/supabase-js | 2.90.1 | Public API client |
-| Validation | Zod | 4.2.1 | Runtime prop validation |
-| Icons | Lucide React | 0.562.0 | Icon set |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
@@ -49,7 +47,7 @@ Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- |
-| Framework | Flutter | 3.38.5+ | Mobile app |
+| Framework | Flutter | 3.38.5 | Mobile app |
 | State | Riverpod | 3.1.0 | State management |
 | Supabase | supabase_flutter | 2.8.0 | Auth and data |
 | Local DB | Drift | 2.30.0 | Offline cache |

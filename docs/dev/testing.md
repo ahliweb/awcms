@@ -29,7 +29,7 @@ npm run build
 
 ```bash
 cd awcms-public/primary
-npm run test
+npm run check
 npm run build
 ```
 
@@ -57,7 +57,7 @@ npm run docs:check
 ## Troubleshooting
 
 - Missing env vars: check `.env.local` and `.env` files.
-- CI failures: compare commands with `.github/workflows/ci.yml`.
+- CI failures: compare commands with `.github/workflows/ci-push.yml` and `.github/workflows/ci-pr.yml`.
 
 ## References
 

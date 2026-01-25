@@ -87,5 +87,5 @@ const { data } = await supabase
 ## References
 
 - `docs/tenancy/supabase.md`
-- `../02-reference/RLS_POLICIES.md`
+- `docs/security/rls.md`
 - `docs/security/abac.md`

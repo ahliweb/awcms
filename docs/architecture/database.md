@@ -13,7 +13,7 @@ Describe the tenant-scoped PostgreSQL schema used by AWCMS.
 ## Prerequisites
 
 - `docs/tenancy/overview.md`
-- `docs/architecture/soft-delete.md`
+- `docs/security/rls.md`
 
 ## Reference
 
@@ -703,10 +703,10 @@ WHERE deleted_at IS NULL;
 ## Security and Compliance Notes
 
 - All tenant-scoped tables must include `tenant_id` and `deleted_at`.
-- RLS policies and helper functions are defined in `awcms/supabase/migrations`.
+- RLS policies and helper functions are defined in `supabase/migrations` and mirrored in `awcms/supabase/migrations` for CI linting.
 
 ## References
 
-- `../02-reference/RLS_POLICIES.md`
+- `docs/security/rls.md`
 - `docs/architecture/database.md`
 - `../../schema_dump.sql`

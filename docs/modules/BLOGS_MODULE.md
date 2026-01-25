@@ -11,7 +11,7 @@ Describe the blog workflows and data model used by the CMS. (Note: Historically 
 
 ## Prerequisites
 
-- `docs/architecture/soft-delete.md`
+- `docs/architecture/database.md`
 - `docs/security/abac.md`
 
 The Blogs module is a full-featured blogging and news management system designed for high-performance publishing. It integrates a headless TipTap editor with a strict publishing workflow.

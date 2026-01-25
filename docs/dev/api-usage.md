@@ -12,7 +12,7 @@ Document how AWCMS uses the Supabase client APIs for data, auth, storage, and ed
 ## Prerequisites
 
 - `docs/tenancy/supabase.md`
-- `docs/architecture/soft-delete.md`
+- `docs/architecture/database.md`
 
 ## Reference
 
@@ -85,5 +85,5 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 ## References
 
 - `docs/tenancy/supabase.md`
-- `../02-reference/RLS_POLICIES.md`
+- `docs/security/rls.md`
 - `docs/architecture/database.md`

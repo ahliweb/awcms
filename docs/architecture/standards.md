@@ -43,7 +43,7 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 - **Database Security**:
   - Safe client: `awcms/src/lib/customSupabaseClient.js` (RLS enforced)
   - Privileged: `awcms/src/lib/supabaseAdmin.js` (service role only)
-  - Rules: `../02-reference/RLS_POLICIES.md`
+- Rules: `docs/security/rls.md`
 - **Audit and Lifecycle**:
   - Logging: `useAuditLog()`, `useExtensionAudit()`
   - Soft delete only: `docs/architecture/database.md`
@@ -144,7 +144,6 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 #### 3.4 Extension Documentation
 
 - `docs/modules/EXTENSIONS.md`
-- `docs/modules/EXTENSIONS.md`
 - `docs/modules/MODULES_GUIDE.md` (Covers both System Modules and Extensions)
 
 ### 4. Core Documentation
@@ -155,8 +154,8 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 
 - AI Guidelines: `../../AGENTS.md`
 - Docs Index: `../../DOCS_INDEX.md`
-- Admin Docs Index: `../INDEX.md`
-- Tech Reference: `../02-reference/DATABASE_SCHEMA.md`
+- Admin Docs Index: `../../DOCS_INDEX.md`
+- Tech Reference: `docs/architecture/database.md`
 
 ### 5. Additional Standards
 
@@ -193,7 +192,7 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 
 ## Operational Concerns
 
-- Update `awcms/CHANGELOG.md` and `docs/changelog.md` for releases and doc updates.
+- Update `awcms/CHANGELOG.md` for releases and doc updates.
 - Versioning rules live in `docs/modules/VERSIONING.md`.
 
 ## Troubleshooting
@@ -203,5 +202,4 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 ## References
 
 - `../../AGENTS.md`
-- `../../../DOCS_INDEX.md`
-- `../INDEX.md`
+- `../../DOCS_INDEX.md`

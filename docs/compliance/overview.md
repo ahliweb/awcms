@@ -26,7 +26,7 @@ Map AWCMS security controls to common compliance frameworks.
 | Control | AWCMS Feature | Reference |
 | --- | --- | --- |
 | A.5.1 Access Control Policy | ABAC system | `docs/security/abac.md` |
-| A.5.15 Access Control | RLS enforcement | `../02-reference/RLS_POLICIES.md` |
+| A.5.15 Access Control | RLS enforcement | `docs/security/rls.md` |
 | A.5.17 Authentication | Supabase Auth + 2FA | `docs/security/overview.md` |
 | A.8.15 Logging | Audit trail | `docs/modules/AUDIT_TRAIL.md` |
 | A.8.16 Monitoring | Audit logs + platform logs | `docs/modules/MONITORING.md` |

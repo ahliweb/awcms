@@ -13,7 +13,7 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 
 - `docs/security/abac.md`
 - `docs/tenancy/overview.md`
-- `docs/architecture/soft-delete.md`
+- `docs/architecture/database.md`
 
 ## Reference
 

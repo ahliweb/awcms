@@ -111,6 +111,6 @@ This repository currently contains both `supabase/` (root) and `awcms/supabase/`
 
 ## References
 
-- `../02-reference/API_DOCUMENTATION.md`
-- `../02-reference/RLS_POLICIES.md`
+- `docs/dev/api-usage.md`
+- `docs/security/rls.md`
 - `docs/tenancy/overview.md`

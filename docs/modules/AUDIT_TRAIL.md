@@ -209,5 +209,5 @@ WHERE created_at < NOW() - INTERVAL '365 days';
 
 ## References
 
-- `../02-reference/DATABASE_SCHEMA.md`
+- `docs/architecture/database.md`
 - `docs/security/overview.md`

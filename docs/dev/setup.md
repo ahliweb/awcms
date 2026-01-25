@@ -55,5 +55,5 @@ npm run lint
 
 # Public
 cd ../awcms-public/primary
-npm run lint
+npm run check
 ```

@@ -35,7 +35,6 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 | `awcms/src/lib/version.js` | Canonical version object |
 | `awcms/package.json` | npm version (must match) |
 | `awcms/CHANGELOG.md` | Release history |
-| `docs/changelog.md` | Documentation changes |
 
 ## Implementation Patterns
 
