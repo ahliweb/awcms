@@ -1,0 +1,145 @@
+# AWCMS CI - PR Checks
+# Runs on pull requests (supports forks)
+
+name: CI (PR)
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+permissions:
+  contents: read
+
+jobs:
+  # ============================================
+  # Lint & Test - Admin Panel
+  # ============================================
+  lint-test-admin:
+    name: Lint & Test (Admin)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Tests
+        # Skip tests that require secrets if running on fork? 
+        # Or run them with mocks if your tests can handle it.
+        # Assuming tests might fail without real env, we can skip or run with mock.
+        # We will try running with mocks.
+        run: npm run test -- --run
+        env:
+          VITE_SUPABASE_URL: "https://mock.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "mock-anon-key"
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: "https://mock.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "mock-anon-key"
+
+  # ============================================
+  # Lint & Build - Public Portal (Astro)
+  # ============================================
+  lint-build-public:
+    name: Lint & Build (Public Portal)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-public/primary
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms-public/primary/package-lock.json'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+        env:
+          PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
+          PUBLIC_SUPABASE_ANON_KEY: "mock-anon-key"
+
+  # ============================================
+  # Flutter Build - Mobile App
+  # ============================================
+  build-mobile:
+    name: Build (Mobile - Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-mobile/primary
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.5'
+          channel: 'stable'
+          cache: true
+
+      - name: Create .env file
+        run: cp .env.example .env
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+  # ============================================
+  # Database Migrations Check
+  # ============================================
+  db-check:
+    name: Database Migrations Check
+    runs-on: ubuntu-latest
+    # Assuming this check doesn't need secrets in 'db lint'?
+    # Supabase link might need access token? 
+    # db lint is static offline check usually.
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Validate migrations
+        run: |
+          cd awcms/supabase
+          supabase db lint
