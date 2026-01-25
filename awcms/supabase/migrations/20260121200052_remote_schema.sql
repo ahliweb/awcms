@@ -1,58 +1,58 @@
 drop trigger if exists "content_translations_updated_at" on "public"."content_translations";
 
-drop policy "audit_logs_insert" on "public"."audit_logs";
+drop policy if exists "audit_logs_insert" on "public"."audit_logs";
 
-drop policy "audit_logs_select" on "public"."audit_logs";
+drop policy if exists "audit_logs_select" on "public"."audit_logs";
 
-drop policy "content_translations_anon_read" on "public"."content_translations";
+drop policy if exists "content_translations_anon_read" on "public"."content_translations";
 
-drop policy "content_translations_tenant_isolation" on "public"."content_translations";
+drop policy if exists "content_translations_tenant_isolation" on "public"."content_translations";
 
-drop policy "page_files_anon_read" on "public"."page_files";
+drop policy if exists "page_files_anon_read" on "public"."page_files";
 
-drop policy "page_files_tenant_isolation" on "public"."page_files";
+drop policy if exists "page_files_tenant_isolation" on "public"."page_files";
 
-drop policy "page_tags_anon_read" on "public"."page_tags";
+drop policy if exists "page_tags_anon_read" on "public"."page_tags";
 
-drop policy "page_tags_select_public" on "public"."page_tags";
+drop policy if exists "page_tags_select_public" on "public"."page_tags";
 
-drop policy "page_tags_tenant_isolation" on "public"."page_tags";
+drop policy if exists "page_tags_tenant_isolation" on "public"."page_tags";
 
-drop policy "role_permissions_delete_admin" on "public"."role_permissions";
+drop policy if exists "role_permissions_delete_admin" on "public"."role_permissions";
 
-drop policy "role_permissions_insert_admin" on "public"."role_permissions";
+drop policy if exists "role_permissions_insert_admin" on "public"."role_permissions";
 
-drop policy "role_permissions_update_admin" on "public"."role_permissions";
+drop policy if exists "role_permissions_update_admin" on "public"."role_permissions";
 
-drop policy "roles_select_abac" on "public"."roles";
+drop policy if exists "roles_select_abac" on "public"."roles";
 
-drop policy "sso_providers_select_abac" on "public"."sso_providers";
+drop policy if exists "sso_providers_select_abac" on "public"."sso_providers";
 
-drop policy "articles_delete_unified" on "public"."articles";
+-- drop policy if exists "articles_delete_unified" on "public"."articles";
 
-drop policy "articles_insert_unified" on "public"."articles";
+-- drop policy if exists "articles_insert_unified" on "public"."articles";
 
-drop policy "articles_select_unified" on "public"."articles";
+-- drop policy if exists "articles_select_unified" on "public"."articles";
 
-drop policy "articles_update_unified" on "public"."articles";
+-- drop policy if exists "articles_update_unified" on "public"."articles";
 
-drop policy "portfolio_delete_unified" on "public"."portfolio";
+-- drop policy if exists "portfolio_delete_unified" on "public"."portfolio";
 
-drop policy "portfolio_insert_unified" on "public"."portfolio";
+-- drop policy if exists "portfolio_insert_unified" on "public"."portfolio";
 
-drop policy "portfolio_select_unified" on "public"."portfolio";
+-- drop policy if exists "portfolio_select_unified" on "public"."portfolio";
 
-drop policy "portfolio_update_unified" on "public"."portfolio";
+-- drop policy if exists "portfolio_update_unified" on "public"."portfolio";
 
-drop policy "Regions tenant isolation" on "public"."regions";
+drop policy if exists "Regions tenant isolation" on "public"."regions";
 
-drop policy "testimonies_delete_unified" on "public"."testimonies";
+-- drop policy if exists "testimonies_delete_unified" on "public"."testimonies";
 
-drop policy "testimonies_insert_unified" on "public"."testimonies";
+-- drop policy if exists "testimonies_insert_unified" on "public"."testimonies";
 
-drop policy "testimonies_select_unified" on "public"."testimonies";
+-- drop policy if exists "testimonies_select_unified" on "public"."testimonies";
 
-drop policy "testimonies_update_unified" on "public"."testimonies";
+-- drop policy if exists "testimonies_update_unified" on "public"."testimonies";
 
 drop function if exists "public"."auth_is_admin"();
 
@@ -65,7 +65,7 @@ drop function if exists "public"."current_user_tenant_id"();
 drop function if exists "public"."get_current_user_id"();
 
 
-  create table "public"."modules" (
+/*  create table "public"."modules" (
     "id" uuid not null default gen_random_uuid(),
     "tenant_id" uuid not null,
     "name" text not null,
@@ -74,10 +74,10 @@ drop function if exists "public"."get_current_user_id"();
     "status" text default 'active'::text,
     "created_at" timestamp with time zone default now(),
     "updated_at" timestamp with time zone default now()
-      );
+      ); */
 
 
-alter table "public"."modules" enable row level security;
+/* alter table "public"."modules" enable row level security;
 
 CREATE UNIQUE INDEX modules_pkey ON public.modules USING btree (id);
 
@@ -93,7 +93,7 @@ alter table "public"."modules" add constraint "modules_tenant_id_fkey" FOREIGN K
 
 alter table "public"."modules" validate constraint "modules_tenant_id_fkey";
 
-alter table "public"."modules" add constraint "modules_tenant_id_slug_key" UNIQUE using index "modules_tenant_id_slug_key";
+alter table "public"."modules" add constraint "modules_tenant_id_slug_key" UNIQUE using index "modules_tenant_id_slug_key"; */
 
 set check_function_bodies = off;
 
@@ -199,7 +199,7 @@ END;
 $function$
 ;
 
-grant delete on table "public"."modules" to "anon";
+/* grant delete on table "public"."modules" to "anon";
 
 grant insert on table "public"."modules" to "anon";
 
@@ -239,8 +239,10 @@ grant trigger on table "public"."modules" to "service_role";
 
 grant truncate on table "public"."modules" to "service_role";
 
-grant update on table "public"."modules" to "service_role";
+grant update on table "public"."modules" to "service_role"; */
 
+
+drop policy if exists "audit_logs_insert_unified" on "public"."audit_logs";
 
   create policy "audit_logs_insert_unified"
   on "public"."audit_logs"
@@ -251,6 +253,8 @@ with check (((tenant_id = public.current_tenant_id()) OR ((tenant_id IS NULL) AN
 
 
 
+drop policy if exists "audit_logs_select_unified" on "public"."audit_logs";
+
   create policy "audit_logs_select_unified"
   on "public"."audit_logs"
   as permissive
@@ -259,6 +263,8 @@ with check (((tenant_id = public.current_tenant_id()) OR ((tenant_id IS NULL) AN
 using ((((tenant_id = public.current_tenant_id()) AND public.is_admin_or_above()) OR ((tenant_id IS NULL) AND public.is_platform_admin()) OR public.is_platform_admin()));
 
 
+
+drop policy if exists "content_translations_delete_tenant" on "public"."content_translations";
 
   create policy "content_translations_delete_tenant"
   on "public"."content_translations"
@@ -269,6 +275,8 @@ using ((tenant_id = public.get_current_tenant_id()));
 
 
 
+drop policy if exists "content_translations_insert_tenant" on "public"."content_translations";
+
   create policy "content_translations_insert_tenant"
   on "public"."content_translations"
   as permissive
@@ -278,6 +286,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 
 
 
+drop policy if exists "content_translations_read_all" on "public"."content_translations";
+
   create policy "content_translations_read_all"
   on "public"."content_translations"
   as permissive
@@ -286,6 +296,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 using (true);
 
 
+
+drop policy if exists "content_translations_update_tenant" on "public"."content_translations";
 
   create policy "content_translations_update_tenant"
   on "public"."content_translations"
@@ -297,6 +309,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 
 
 
+drop policy if exists "modules_read_policy" on "public"."modules";
+
   create policy "modules_read_policy"
   on "public"."modules"
   as permissive
@@ -305,6 +319,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 using ((public.is_platform_admin() OR ((tenant_id = public.get_current_tenant_id()) AND public.is_admin_or_above())));
 
 
+
+drop policy if exists "page_files_delete_tenant" on "public"."page_files";
 
   create policy "page_files_delete_tenant"
   on "public"."page_files"
@@ -315,6 +331,8 @@ using ((tenant_id = public.get_current_tenant_id()));
 
 
 
+drop policy if exists "page_files_insert_tenant" on "public"."page_files";
+
   create policy "page_files_insert_tenant"
   on "public"."page_files"
   as permissive
@@ -324,6 +342,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 
 
 
+drop policy if exists "page_files_read_all" on "public"."page_files";
+
   create policy "page_files_read_all"
   on "public"."page_files"
   as permissive
@@ -332,6 +352,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 using (true);
 
 
+
+drop policy if exists "page_files_update_tenant" on "public"."page_files";
 
   create policy "page_files_update_tenant"
   on "public"."page_files"
@@ -343,6 +365,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 
 
 
+drop policy if exists "page_tags_delete_tenant" on "public"."page_tags";
+
   create policy "page_tags_delete_tenant"
   on "public"."page_tags"
   as permissive
@@ -351,6 +375,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 using ((tenant_id = public.get_current_tenant_id()));
 
 
+
+drop policy if exists "page_tags_insert_tenant" on "public"."page_tags";
 
   create policy "page_tags_insert_tenant"
   on "public"."page_tags"
@@ -361,6 +387,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 
 
 
+drop policy if exists "page_tags_read_all" on "public"."page_tags";
+
   create policy "page_tags_read_all"
   on "public"."page_tags"
   as permissive
@@ -369,6 +397,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 using (true);
 
 
+
+drop policy if exists "page_tags_update_tenant" on "public"."page_tags";
 
   create policy "page_tags_update_tenant"
   on "public"."page_tags"
@@ -380,6 +410,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 
 
 
+drop policy if exists "role_permissions_insert_policy" on "public"."role_permissions";
+
   create policy "role_permissions_insert_policy"
   on "public"."role_permissions"
   as permissive
@@ -388,6 +420,8 @@ with check ((tenant_id = public.get_current_tenant_id()));
 with check ((public.is_super_admin() AND (deleted_at IS NULL)));
 
 
+
+drop policy if exists "role_permissions_update_policy" on "public"."role_permissions";
 
   create policy "role_permissions_update_policy"
   on "public"."role_permissions"
@@ -399,6 +433,8 @@ with check (public.is_super_admin());
 
 
 
+drop policy if exists "roles_select_unified" on "public"."roles";
+
   create policy "roles_select_unified"
   on "public"."roles"
   as permissive
@@ -407,6 +443,8 @@ with check (public.is_super_admin());
 using (((tenant_id = public.current_tenant_id()) OR (tenant_id IS NULL) OR public.is_platform_admin()));
 
 
+
+drop policy if exists "sso_providers_isolation_policy" on "public"."sso_providers";
 
   create policy "sso_providers_isolation_policy"
   on "public"."sso_providers"
@@ -417,7 +455,7 @@ using ((((tenant_id = public.current_tenant_id()) AND public.is_admin_or_above()
 
 
 
-  create policy "articles_delete_unified"
+/*   create policy "articles_delete_unified"
   on "public"."articles"
   as permissive
   for delete
@@ -485,7 +523,7 @@ using (((tenant_id = public.current_tenant_id()) OR public.is_platform_admin()))
   as permissive
   for update
   to public
-using ((((tenant_id = public.current_tenant_id()) AND public.is_admin_or_above()) OR public.is_platform_admin()));
+using ((((tenant_id = public.current_tenant_id()) AND public.is_admin_or_above()) OR public.is_platform_admin())); */
 
 
 
@@ -498,7 +536,7 @@ using ((tenant_id = ( SELECT public.current_tenant_id() AS current_tenant_id)));
 
 
 
-  create policy "testimonies_delete_unified"
+/*   create policy "testimonies_delete_unified"
   on "public"."testimonies"
   as permissive
   for delete
@@ -530,7 +568,7 @@ using (((tenant_id = public.current_tenant_id()) OR public.is_platform_admin()))
   as permissive
   for update
   to public
-using ((((tenant_id = public.current_tenant_id()) AND public.is_admin_or_above()) OR public.is_platform_admin()));
+using ((((tenant_id = public.current_tenant_id()) AND public.is_admin_or_above()) OR public.is_platform_admin())); */
 
 
 
