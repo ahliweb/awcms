@@ -1,6 +1,6 @@
 {
     "name": "awcms-public-root",
-    "version": "1.0.0",
+  "version": "2.25.0",
     "private": true,
     "scripts": {
         "dev": "pnpm -C primary dev",

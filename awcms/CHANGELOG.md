@@ -3,28 +3,21 @@
 
 All notable changes to the **AWCMS** project will be documented in this file.
 
-## [2.24.0] "Nexus" - 2026-01-23
+## [Unreleased]
 
 ### Added
 
-- **Documentation Overhaul**:
-  - Synchronized `database.md`, `standards.md`, and `AGENTS.md` with the latest database schema and codebase patterns, specifically covering the **Unified Content Model** and **Modules Management** system.
-  - Added detailed schema documentation for `page_tags`, `page_files`, and `content_translations`.
-  - Documented the `modules` table, its RLS policies, and the `tenant.modules.read` permission.
-  - Updated `MODULES_GUIDE.md` to include information about the `Modules Manager`.
-- **School Activity Images**: Added new gallery images to the public portal and updated the gallery page component.
+- None.
 
 ### Changed
 
-- **Database Migrations**: Added `20260121235324_remote_schema.sql` after syncing the remote schema via `supabase db pull`.
+- None.
 
 ### Fixed
 
-- **Performance & Reliability**: Corrected broken relative links across the documentation library to ensure link integrity.
-- **Database Migrations**: Guarded `ALTER TABLE public.blogs` with `IF EXISTS` in `20260120091500_unified_content_model.sql` to prevent `db pull` failures.
-- **Security**: Pinned `lodash` to `^4.17.23` across public templates and admin packages to address prototype pollution alerts.
+- None.
 
-## [Unreleased]
+## [2.25.0] - 2026-01-27
 
 ### Added
 
@@ -49,6 +42,27 @@ All notable changes to the **AWCMS** project will be documented in this file.
 ### Fixed
 
 - **Supabase Lint**: Resolved `extensions.index_advisor` type mismatch warning by casting `statements` to `text[]` when privileges allow.
+
+## [2.24.0] "Nexus" - 2026-01-23
+
+### Added
+
+- **Documentation Overhaul**:
+  - Synchronized `database.md`, `standards.md`, and `AGENTS.md` with the latest database schema and codebase patterns, specifically covering the **Unified Content Model** and **Modules Management** system.
+  - Added detailed schema documentation for `page_tags`, `page_files`, and `content_translations`.
+  - Documented the `modules` table, its RLS policies, and the `tenant.modules.read` permission.
+  - Updated `MODULES_GUIDE.md` to include information about the `Modules Manager`.
+- **School Activity Images**: Added new gallery images to the public portal and updated the gallery page component.
+
+### Changed
+
+- **Database Migrations**: Added `20260121235324_remote_schema.sql` after syncing the remote schema via `supabase db pull`.
+
+### Fixed
+
+- **Performance & Reliability**: Corrected broken relative links across the documentation library to ensure link integrity.
+- **Database Migrations**: Guarded `ALTER TABLE public.blogs` with `IF EXISTS` in `20260120091500_unified_content_model.sql` to prevent `db pull` failures.
+- **Security**: Pinned `lodash` to `^4.17.23` across public templates and admin packages to address prototype pollution alerts.
 
 ## [2.23.1] "Antigravity" - 2026-01-22
 

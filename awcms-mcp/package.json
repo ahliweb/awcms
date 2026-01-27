@@ -1,6 +1,6 @@
 {
   "name": "awcms-mcp",
-  "version": "0.1.0",
+  "version": "2.25.0",
   "type": "module",
   "description": "Model Context Protocol server for AWCMS Supabase integration",
   "scripts": {

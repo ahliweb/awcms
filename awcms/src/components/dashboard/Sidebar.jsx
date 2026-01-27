@@ -131,7 +131,7 @@ function Sidebar({ isOpen, setIsOpen }) {
     });
     Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a.order - b.order));
     return groups;
-  }, [menuItems, loading, userRole, hasPermission, searchQuery, t, applyFilters, currentTenant?.subscription_tier]);
+  }, [menuItems, loading, userRole, hasPermission, isPlatformAdmin, isFullAccess, searchQuery, t, applyFilters, currentTenant?.subscription_tier]);
 
   const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
     groupedMenus[a].order - groupedMenus[b].order

@@ -1,6 +1,6 @@
 {
     "name": "awcms-ext-ahliweb-analytics",
-    "version": "1.0.0",
+    "version": "2.25.0",
     "type": "module",
     "description": "AWCMS External Extension: Advanced Analytics Dashboard",
     "author": "Ahliweb Team",

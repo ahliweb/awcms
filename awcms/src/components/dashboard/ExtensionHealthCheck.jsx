@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, CheckCircle, XCircle, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -8,24 +8,26 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 
+const initialChecks = [
+   { name: 'Database Connection', status: 'pending' },
+   { name: 'Extension Registry', status: 'pending' },
+   { name: 'Route Conflicts', status: 'pending' },
+   { name: 'Permission Integrity', status: 'pending' },
+];
+
 function ExtensionHealthCheck() {
    const { isPlatformAdmin } = usePermissions();
    const { currentTenant } = useTenant();
    const [checking, setChecking] = useState(false);
    const [healthScore, setHealthScore] = useState(100);
-   const [checks, setChecks] = useState([
-      { name: 'Database Connection', status: 'pending' },
-      { name: 'Extension Registry', status: 'pending' },
-      { name: 'Route Conflicts', status: 'pending' },
-      { name: 'Permission Integrity', status: 'pending' },
-   ]);
+   const [checks, setChecks] = useState(() => initialChecks.map(check => ({ ...check })));
 
-   const runDiagnosis = async () => {
+   const runDiagnosis = useCallback(async () => {
       setChecking(true);
       setHealthScore(100);
 
       // Simulate checks sequence
-      const newChecks = [...checks];
+      const newChecks = initialChecks.map(check => ({ ...check }));
 
       // Check 1: DB
       newChecks[0].status = 'running';
@@ -63,11 +65,11 @@ function ExtensionHealthCheck() {
       setChecks([...newChecks]);
 
       setChecking(false);
-   };
+   }, [currentTenant?.id, isPlatformAdmin]);
 
    useEffect(() => {
       runDiagnosis();
-   }, [currentTenant?.id, isPlatformAdmin]);
+   }, [runDiagnosis]);
 
    return (
       <div className="space-y-6">

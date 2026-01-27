@@ -1,6 +1,6 @@
 {
   "name": "smanda-pangkalan-bun",
-  "version": "1.0.0",
+  "version": "2.25.0",
   "description": "Website SMAN 2 Pangkalan Bun - Built with AWCMS Framework (Astro + React + Vite)",
   "type": "module",
   "private": true,

@@ -16,13 +16,10 @@ function ExtensionInstaller({ onInstallComplete }) {
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
   const { currentTenant } = useTenant();
   const [dragActive, setDragActive] = useState(false);
-  // eslint-disable-next-line no-unused-vars
-  const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [installing, setInstalling] = useState(false);
 
   // Permission check - only platform admins or platform.module.create can install
-  // eslint-disable-next-line no-unused-vars
   const isSuperAdmin = isPlatformAdmin || isFullAccess;
   const canInstall = isSuperAdmin || hasPermission('platform.module.create') || hasPermission('ext.manage');
 
@@ -56,7 +53,6 @@ function ExtensionInstaller({ onInstallComplete }) {
       toast({ variant: "destructive", title: "Invalid File", description: "Please upload a valid JSON configuration file." });
       return;
     }
-    setFile(file);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -64,7 +60,7 @@ function ExtensionInstaller({ onInstallComplete }) {
         setPreview(json);
       } catch (err) {
         toast({ variant: "destructive", title: "Parse Error", description: "Could not parse JSON." });
-        setFile(null);
+        setPreview(null);
       }
     };
     reader.readAsText(file);
@@ -104,7 +100,6 @@ function ExtensionInstaller({ onInstallComplete }) {
         description: `${payload.name} has been successfully added to the system.`
       });
 
-      setFile(null);
       setPreview(null);
       if (onInstallComplete) onInstallComplete();
 

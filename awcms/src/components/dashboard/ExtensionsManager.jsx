@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Puzzle, Power, Trash2, Settings,
   Upload, BookOpen, AlertCircle,
@@ -54,15 +54,7 @@ function ExtensionsManager() {
   const canManageGlobal = isSuperAdmin || hasPermission('platform.extensions.update');
   const canView = isSuperAdmin || hasAnyPermission(['platform.extensions.read', 'platform.extensions.update', 'platform.extensions.create']);
 
-  useEffect(() => {
-    if (canView) {
-      fetchExtensions();
-    } else {
-      setLoading(false);
-    }
-  }, [canView, currentTenant?.id, isPlatformAdmin]);
-
-  const fetchExtensions = async () => {
+  const fetchExtensions = useCallback(async () => {
     try {
       setLoading(true);
       let query = supabase
@@ -85,7 +77,15 @@ function ExtensionsManager() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentTenant?.id, isPlatformAdmin, t, toast]);
+
+  useEffect(() => {
+    if (canView) {
+      fetchExtensions();
+    } else {
+      setLoading(false);
+    }
+  }, [canView, fetchExtensions]);
 
   const handleToggleStatus = async (ext) => {
     // Only platform admins should toggle activation state to prevent system breaking

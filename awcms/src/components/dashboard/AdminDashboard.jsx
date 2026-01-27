@@ -18,7 +18,7 @@ import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 function AdminDashboard() {
     console.log('AdminDashboard rendering...');
     const perms = usePermissions() || {};
-    const { isTenantAdmin, isPlatformAdmin } = perms;
+    const { isTenantAdmin, isPlatformAdmin, userRole } = perms;
     const { data, loading, error, lastUpdated, refresh } = useDashboardData();
     const spacingClass = isTenantAdmin ? 'space-y-10' : 'space-y-8';
 

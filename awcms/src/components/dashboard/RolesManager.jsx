@@ -150,7 +150,7 @@ function RolesManager() {
       key: 'name',
       label: t('roles.columns.name'),
       className: 'font-bold w-[200px]',
-      render: (name) => (
+      render: (name, row) => (
         <div className="flex items-center gap-2">
           <Shield className={`w-4 h-4 ${row.is_full_access || row.is_platform_admin ? 'text-primary' : 'text-muted-foreground'}`} />
           {(row.is_platform_admin || row.is_full_access) && <Crown className="w-4 h-4 text-amber-500 fill-amber-500" />}
