@@ -21,7 +21,7 @@ import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
 function PermissionsManager() {
   const { toast } = useToast();
-  const { userRole, loading: permsLoading } = usePermissions();
+  const { isPlatformAdmin, isFullAccess, loading: permsLoading } = usePermissions();
 
   const {
     query,
@@ -45,7 +45,7 @@ function PermissionsManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  const isSuperAdmin = ['super_admin', 'owner'].includes(userRole);
+  const isSuperAdmin = isPlatformAdmin || isFullAccess;
 
   const fetchPermissions = useCallback(async () => {
     try {
@@ -167,7 +167,7 @@ function PermissionsManager() {
       <div className="flex flex-col items-center justify-center min-h-[400px] bg-card rounded-xl border border-border p-12 text-center">
         <Shield className="w-12 h-12 text-destructive mb-4" />
         <h3 className="text-xl font-bold text-foreground">Access Restricted</h3>
-        <p className="text-muted-foreground">Owner or Super Admin only.</p>
+        <p className="text-muted-foreground">Platform admin only.</p>
       </div>
     );
   }

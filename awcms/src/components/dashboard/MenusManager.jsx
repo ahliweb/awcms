@@ -30,9 +30,8 @@ const MENU_LOCATIONS = [
 
 function MenusManager() {
   const { toast } = useToast();
-  const { hasPermission, userRole } = usePermissions();
+  const { hasPermission, isPlatformAdmin } = usePermissions();
   const { currentTenant } = useTenant();
-  const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
 
   // Data State
   const [menus, setMenus] = useState([]); // This will store the TREE structure
@@ -67,7 +66,7 @@ function MenusManager() {
       fetchPages();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView, currentLocation]); // Re-fetch when location changes
+  }, [canView, currentLocation, currentTenant?.id]); // Re-fetch when location or tenant changes
 
   const fetchPages = async () => {
     try {
@@ -138,7 +137,24 @@ function MenusManager() {
   };
 
   const fetchRoles = async () => {
-    const { data } = await supabase.from('roles').select('id, name').is('deleted_at', null);
+    if (!currentTenant?.id && !isPlatformAdmin) {
+      setRoles([]);
+      return;
+    }
+
+    let query = supabase
+      .from('roles')
+      .select('id, name, tenant_id')
+      .is('deleted_at', null)
+      .order('name');
+
+    if (currentTenant?.id) {
+      query = query.eq('tenant_id', currentTenant.id);
+    } else {
+      query = query.is('tenant_id', null);
+    }
+
+    const { data } = await query;
     setRoles(data || []);
   };
 

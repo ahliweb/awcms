@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 import { Badge } from '@/components/ui/badge';
 import { useTranslation } from 'react-i18next';
 import {
@@ -36,7 +37,8 @@ function ExtensionsManager() {
   const { toast } = useToast();
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { userRole, hasPermission, hasAnyPermission } = usePermissions();
+  const { hasPermission, hasAnyPermission, isPlatformAdmin, isFullAccess } = usePermissions();
+  const { currentTenant } = useTenant();
 
   const [extensions, setExtensions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +49,7 @@ function ExtensionsManager() {
   const [showGuide, setShowGuide] = useState(false);
 
   // RBAC & Permissions Logic
-  const isSuperAdmin = ['super_admin', 'owner'].includes(userRole);
+  const isSuperAdmin = isPlatformAdmin || isFullAccess;
   const canCreate = isSuperAdmin || hasPermission('platform.extensions.create');
   const canManageGlobal = isSuperAdmin || hasPermission('platform.extensions.update');
   const canView = isSuperAdmin || hasAnyPermission(['platform.extensions.read', 'platform.extensions.update', 'platform.extensions.create']);
@@ -58,17 +60,22 @@ function ExtensionsManager() {
     } else {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView]);
+  }, [canView, currentTenant?.id, isPlatformAdmin]);
 
   const fetchExtensions = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('extensions')
         .select('*')
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
+
+      if (!isPlatformAdmin && currentTenant?.id) {
+        query = query.eq('tenant_id', currentTenant.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setExtensions(data || []);
@@ -81,9 +88,9 @@ function ExtensionsManager() {
   };
 
   const handleToggleStatus = async (ext) => {
-    // Only super admins should toggle activation state to prevent system breaking
+    // Only platform admins should toggle activation state to prevent system breaking
     if (!isSuperAdmin) {
-      toast({ variant: "destructive", title: t('common.access_denied'), description: "Only Super Admins can activate/deactivate extensions." });
+      toast({ variant: "destructive", title: t('common.access_denied'), description: "Only platform admins can activate/deactivate extensions." });
       return;
     }
 
@@ -109,7 +116,7 @@ function ExtensionsManager() {
   };
 
   const handleDelete = async (ext) => {
-    // Allow Super Admin or the specific Owner to delete
+    // Allow platform admin or the specific Owner to delete
     const isOwner = user?.id === ext.created_by;
 
     if (!isSuperAdmin && !isOwner) {

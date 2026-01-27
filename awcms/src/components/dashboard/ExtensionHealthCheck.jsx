@@ -5,8 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/customSupabaseClient';
+import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
 
 function ExtensionHealthCheck() {
+   const { isPlatformAdmin } = usePermissions();
+   const { currentTenant } = useTenant();
    const [checking, setChecking] = useState(false);
    const [healthScore, setHealthScore] = useState(100);
    const [checks, setChecks] = useState([
@@ -27,7 +31,13 @@ function ExtensionHealthCheck() {
       newChecks[0].status = 'running';
       setChecks([...newChecks]);
       await new Promise(r => setTimeout(r, 800));
-      const { error } = await supabase.from('extensions').select('count').single();
+      let query = supabase.from('extensions').select('count').single();
+      if (currentTenant?.id) {
+         query = query.eq('tenant_id', currentTenant.id);
+      } else if (!isPlatformAdmin) {
+         query = query.eq('tenant_id', null);
+      }
+      const { error } = await query;
       newChecks[0].status = error ? 'error' : 'ok';
       setChecks([...newChecks]);
 
@@ -57,8 +67,7 @@ function ExtensionHealthCheck() {
 
    useEffect(() => {
       runDiagnosis();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, []);
+   }, [currentTenant?.id, isPlatformAdmin]);
 
    return (
       <div className="space-y-6">

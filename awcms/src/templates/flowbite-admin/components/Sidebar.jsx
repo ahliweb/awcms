@@ -32,7 +32,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     const location = useLocation();
     const { t } = useTranslation();
     const { menuItems, loading } = useAdminMenu();
-    const { hasPermission, userRole } = usePermissions();
+    const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
     const { currentTenant } = useTenant(); // Added
 
     // Path cleanup logic (same as other Sidebar)
@@ -51,8 +51,8 @@ const Sidebar = ({ isOpen, onClose }) => {
 
         const authorizedItems = menuItems.filter(item => {
             if (!item.is_visible) return false;
-            if (item.permission === 'super_admin_only') return ['super_admin', 'owner'].includes(userRole);
-            if (item.permission === 'platform_admin_only') return userRole === 'owner';
+            if (item.permission === 'super_admin_only') return isFullAccess || isPlatformAdmin;
+            if (item.permission === 'platform_admin_only') return isPlatformAdmin;
 
             // Check Subscription Tier
             if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) return false;
@@ -83,7 +83,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a.order - b.order));
 
         return groups;
-    }, [menuItems, loading, userRole, hasPermission, searchQuery, t, currentTenant?.subscription_tier]);
+    }, [menuItems, loading, isPlatformAdmin, isFullAccess, hasPermission, searchQuery, t, currentTenant?.subscription_tier]);
 
     const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
         groupedMenus[a].order - groupedMenus[b].order

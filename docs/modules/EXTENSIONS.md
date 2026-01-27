@@ -180,6 +180,15 @@ export { default as AnalyticsDashboard } from './components/AnalyticsDashboard';
 | config | JSONB | Runtime configuration |
 | is_active | BOOLEAN | Activation status |
 
+### Registry Tables
+
+| Table | Notes |
+| ----- | ----- |
+| `extension_menu_items` | Admin menu items per tenant (`tenant_id`) |
+| `extension_routes_registry` | Dynamic admin routes per tenant (`tenant_id`) |
+| `extension_permissions` | Extension permissions metadata per tenant (`tenant_id`) |
+| `extension_rbac_integration` | Role-permission mapping per tenant (`tenant_id`) |
+
 ### `extension_logs`
 
 Audit trail with RLS for all extension actions:

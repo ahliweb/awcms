@@ -69,31 +69,31 @@ const PublicHeader = ({ tenant }) => {
 
   const fetchMenus = async () => {
     try {
-      let roleName = 'public';
+      let roleData = { name: 'public', is_public: true };
       let roleId = null;
 
       if (user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('role_id, roles(name, deleted_at)')
-          .eq('id', user.id)
-          .maybeSingle();
+          const { data: userData } = await supabase
+            .from('users')
+            .select('role_id, roles(name, deleted_at, is_public, is_guest, is_platform_admin, is_full_access)')
+            .eq('id', user.id)
+            .maybeSingle();
 
-        if (userData && userData.roles && !userData.roles.deleted_at) {
-          roleName = userData.roles.name;
-          roleId = userData.role_id;
+          if (userData && userData.roles && !userData.roles.deleted_at) {
+            roleData = userData.roles;
+            roleId = userData.role_id;
+          }
         }
-      }
 
-      if (!roleId && roleName === 'public') {
-        const { data: publicRole } = await supabase
-          .from('roles')
-          .select('id')
-          .eq('name', 'public')
-          .is('deleted_at', null)
-          .maybeSingle();
-        if (publicRole) roleId = publicRole.id;
-      }
+        if (!roleId && roleData?.is_public) {
+          const { data: publicRole } = await supabase
+            .from('roles')
+            .select('id')
+            .eq('is_public', true)
+            .is('deleted_at', null)
+            .maybeSingle();
+          if (publicRole) roleId = publicRole.id;
+        }
 
       // CRITICAL: Filter by Tenant ID
       let query = supabase
@@ -125,10 +125,10 @@ const PublicHeader = ({ tenant }) => {
         }
       }
 
-      const visibleMenus = allMenus.filter(m => {
-        if (roleName === 'super_admin') return true;
+        const visibleMenus = allMenus.filter(m => {
+        if (roleData?.is_platform_admin || roleData?.is_full_access) return true;
         if (allowedMenuIds.has(m.id)) return true;
-        if (roleName === 'public' && m.is_public) return true;
+        if (roleData?.is_public && m.is_public) return true;
         return false;
       });
 

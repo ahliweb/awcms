@@ -16,7 +16,7 @@ import { checkTierAccess } from '@/lib/tierFeatures';
 
 function Sidebar({ isOpen, setIsOpen }) {
   const { t } = useTranslation();
-  const { hasPermission, userRole } = usePermissions();
+  const { hasPermission, userRole, isPlatformAdmin, isFullAccess } = usePermissions();
   const { currentTenant } = useTenant();
   const { signOut } = useAuth();
   const { applyFilters } = usePlugins(); // Moved to top level
@@ -95,8 +95,8 @@ function Sidebar({ isOpen, setIsOpen }) {
         if (item.key === 'sidebar_manager') console.log('[Sidebar] Hidden: is_visible false');
         return false;
       }
-      if (item.permission === 'super_admin_only') return ['super_admin', 'owner'].includes(userRole);
-      if (item.permission === 'platform_admin_only') return userRole === 'owner';
+      if (item.permission === 'super_admin_only') return isFullAccess || isPlatformAdmin;
+      if (item.permission === 'platform_admin_only') return isPlatformAdmin;
 
       // Check Subscription Tier
       if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) {

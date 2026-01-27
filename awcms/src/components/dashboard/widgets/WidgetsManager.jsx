@@ -16,8 +16,7 @@ import WidgetEditor from './WidgetEditor';
 const WidgetsManager = () => {
     const { templateParts } = useTemplates();
     const { t } = useTranslation();
-    const { userRole, hasPermission } = usePermissions();
-    const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
+    const { hasPermission, isPlatformAdmin } = usePermissions();
 
     // Filter only widget areas
     const widgetAreas = templateParts.filter(p => p.type === 'widget_area');

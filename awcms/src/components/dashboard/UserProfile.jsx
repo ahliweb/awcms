@@ -14,7 +14,7 @@ import { ImageUpload } from '@/components/ui/ImageUpload';
 
 function UserProfile() {
   const { user } = useAuth();
-  const { userRole, permissions } = usePermissions();
+  const { userRole, permissions, isPlatformAdmin, isFullAccess } = usePermissions();
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(false);
@@ -45,7 +45,9 @@ function UserProfile() {
               avatar_url,
               roles:roles!users_role_id_fkey (
                 name,
-                description
+                description,
+                is_platform_admin,
+                is_full_access
               )
             `)
             .eq('id', user.id)
@@ -60,7 +62,9 @@ function UserProfile() {
             email: user.email || '',
             avatar_url: data?.avatar_url || user.user_metadata?.avatar_url || '',
             role_name: data?.roles?.name || '',
-            role_description: data?.roles?.description || ''
+            role_description: data?.roles?.description || '',
+            role_is_platform_admin: Boolean(data?.roles?.is_platform_admin),
+            role_is_full_access: Boolean(data?.roles?.is_full_access)
           });
         } catch (err) {
           console.error('Unexpected error in fetchProfile:', err);
@@ -387,11 +391,13 @@ function UserProfile() {
             <div className="p-6 space-y-6 flex-1 flex flex-col">
               <div>
                 <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-wider">Current Role</h4>
-                <div className={`inline-flex items-center px-3 py-1.5 rounded-full font-semibold text-sm border ${(profileData.role_name || userRole) === 'super_admin' || (profileData.role_name || userRole) === 'owner'
+                <div className={`inline-flex items-center px-3 py-1.5 rounded-full font-semibold text-sm border ${(profileData.role_is_platform_admin || profileData.role_is_full_access || isPlatformAdmin || isFullAccess)
                   ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                   }`}>
-                  {(profileData.role_name || userRole) === 'super_admin' || (profileData.role_name || userRole) === 'owner' ? <Crown className="w-3.5 h-3.5 mr-2 text-purple-600 dark:text-purple-400" /> : <Shield className="w-3.5 h-3.5 mr-2" />}
+                  {(profileData.role_is_platform_admin || profileData.role_is_full_access || isPlatformAdmin || isFullAccess)
+                    ? <Crown className="w-3.5 h-3.5 mr-2 text-purple-600 dark:text-purple-400" />
+                    : <Shield className="w-3.5 h-3.5 mr-2" />}
                   {(profileData.role_name || userRole) ? (profileData.role_name || userRole).replace(/_/g, ' ') : 'Guest'}
                 </div>
                 {profileData.role_description && (

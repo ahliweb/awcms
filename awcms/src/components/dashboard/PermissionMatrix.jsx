@@ -341,7 +341,7 @@ const PermissionMatrix = ({ permissions = [], selectedPermissions = new Set(), o
                     <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400">
                         <li><strong>U (Update)</strong>: Authors can only edit <strong>their own</strong> content.</li>
                         <li><strong>RS (Restore)</strong>: Allows bringing items back from Trash.</li>
-                        <li><strong>DP (Delete Permanent)</strong>: Irreversible. Reserved for Owner/Super Admin.</li>
+                        <li><strong>DP (Delete Permanent)</strong>: Irreversible. Reserved for platform admin roles.</li>
                     </ul>
                 </div>
             </div>

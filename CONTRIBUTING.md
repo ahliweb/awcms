@@ -1,9 +1,11 @@
 # Contributing to AWCMS
 
 ## Purpose
+
 Provide contribution guidelines aligned to AWCMS core standards.
 
 ## Prerequisites
+
 - Read `AGENTS.md`
 - Read `awcms/docs/00-core/CORE_STANDARDS.md`
 

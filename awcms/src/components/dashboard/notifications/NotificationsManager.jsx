@@ -29,7 +29,7 @@ function NotificationsManager() {
         markAllAsRead,
         markAsRead
     } = useNotifications();
-    const { hasPermission, userRole, tenantId } = usePermissions();
+    const { hasPermission, tenantId, isPlatformAdmin, isFullAccess } = usePermissions();
     const { toast } = useToast();
     const navigate = useNavigate();
 
@@ -63,8 +63,8 @@ function NotificationsManager() {
         link: ''
     });
 
-    const canCreate = hasPermission('tenant.notification.create') || ['super_admin', 'owner'].includes(userRole);
-    const canDelete = hasPermission('tenant.notification.delete') || ['super_admin', 'owner'].includes(userRole);
+    const canCreate = hasPermission('tenant.notification.create') || isPlatformAdmin || isFullAccess;
+    const canDelete = hasPermission('tenant.notification.delete') || isPlatformAdmin || isFullAccess;
 
     // Initial Fetch & Refetch on filters change
     useEffect(() => {
@@ -85,9 +85,9 @@ function NotificationsManager() {
                 // If tenant admin, only fetch tenant users
                 let query = supabase.from('users').select('id, full_name, email, tenant:tenants(name)');
 
-                // If not super_admin (or owner), restricting to own tenant users usually happens via RLS 
+                // If not platform admin, restricting to own tenant users usually happens via RLS
                 // but explicit filter is good practice if RLS is permissive on read.
-                if (tenantId && userRole !== 'super_admin' && userRole !== 'owner') {
+                if (tenantId && !isPlatformAdmin && !isFullAccess) {
                     // query = query.eq('tenant_id', tenantId); // Assuming users table has tenant_id or relying on RLS
                 }
 
@@ -96,7 +96,7 @@ function NotificationsManager() {
             };
             fetchUsers();
         }
-    }, [canCreate, isOpen, users.length, tenantId, userRole]);
+    }, [canCreate, isOpen, users.length, tenantId, isPlatformAdmin, isFullAccess]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -143,7 +143,7 @@ function NotificationsManager() {
 
     const columns = [
         { key: 'title', label: 'Title', className: 'w-1/4' },
-        ...(userRole === 'owner' ? [{
+        ...((isPlatformAdmin || isFullAccess) ? [{
             key: 'tenant',
             label: 'Tenant',
             render: (_, item) => item.tenant?.name ? (

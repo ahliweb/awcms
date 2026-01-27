@@ -92,11 +92,11 @@ CREATE TABLE users (
   bio TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   -- Approval Workflow
-  approval_status TEXT DEFAULT 'approved', -- 'pending_admin', 'pending_super_admin', 'approved', 'rejected'
+  approval_status TEXT DEFAULT 'approved', -- 'pending_admin', 'pending_super_admin' (platform admin), 'approved', 'rejected'
   admin_approved_at TIMESTAMPTZ,
   admin_approved_by UUID,
-  super_admin_approved_at TIMESTAMPTZ,
-  super_admin_approved_by UUID,
+  super_admin_approved_at TIMESTAMPTZ, -- platform admin approval timestamp
+  super_admin_approved_by UUID, -- platform admin approver
   rejection_reason TEXT,
   
   email_verified_at TIMESTAMPTZ,
@@ -117,12 +117,12 @@ CREATE TABLE account_requests (
   tenant_id UUID REFERENCES tenants(id),
   email TEXT NOT NULL, -- normalized
   full_name TEXT,
-  status TEXT DEFAULT 'pending_admin', -- pending_admin, pending_super_admin, completed, rejected
+  status TEXT DEFAULT 'pending_admin', -- pending_admin, pending_super_admin (platform admin), completed, rejected
   
   admin_approved_at TIMESTAMPTZ,
   admin_approved_by UUID,
-  super_admin_approved_at TIMESTAMPTZ,
-  super_admin_approved_by UUID,
+  super_admin_approved_at TIMESTAMPTZ, -- platform admin approval timestamp
+  super_admin_approved_by UUID, -- platform admin approver
   rejection_reason TEXT,
   
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -139,20 +139,27 @@ CREATE INDEX idx_account_requests_email ON account_requests(email);
 ```sql
 CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
   description TEXT,
+  tenant_id UUID REFERENCES tenants(id),
+  scope TEXT DEFAULT 'tenant',
   is_system BOOLEAN DEFAULT FALSE,
+  is_platform_admin BOOLEAN DEFAULT FALSE,
+  is_full_access BOOLEAN DEFAULT FALSE,
+  is_tenant_admin BOOLEAN DEFAULT FALSE,
+  is_public BOOLEAN DEFAULT FALSE,
+  is_guest BOOLEAN DEFAULT FALSE,
+  is_staff BOOLEAN DEFAULT FALSE,
+  staff_level INTEGER,
+  is_default_public_registration BOOLEAN DEFAULT FALSE,
+  is_default_invite BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Default roles
-INSERT INTO roles (name, description, is_system) VALUES
-  ('super_admin', 'Full system access', TRUE),
-  ('admin', 'Administrative access', TRUE),
-  ('editor', 'Content management', TRUE),
-  ('user', 'Basic user', TRUE),
-  ('public', 'Unauthenticated visitor', TRUE);
+-- Uniqueness: (tenant_id, name) for tenant roles + global unique name when tenant_id IS NULL.
+-- Staff roles are seeded per tenant with staff_level 1-10.
+-- Default onboarding roles are flagged via is_default_public_registration / is_default_invite.
 ```
 
 ### permissions
@@ -526,12 +533,81 @@ Admin sidebar menu items added by extensions.
 CREATE TABLE extension_menu_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   extension_id UUID REFERENCES extensions(id) ON DELETE CASCADE,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
   label TEXT NOT NULL,
   icon TEXT,
   path TEXT NOT NULL,
-  order_num INTEGER DEFAULT 0,
-  is_active BOOLEAN DEFAULT TRUE
+  order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  parent_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID,
+  deleted_at TIMESTAMPTZ
 );
+
+CREATE INDEX idx_extension_menu_items_tenant_id ON extension_menu_items(tenant_id);
+```
+
+### extension_permissions
+
+Extension-defined permission metadata.
+
+```sql
+CREATE TABLE extension_permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  extension_id UUID REFERENCES extensions(id) ON DELETE CASCADE,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  permission_name TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID
+);
+
+CREATE INDEX idx_extension_permissions_tenant_id ON extension_permissions(tenant_id);
+```
+
+### extension_rbac_integration
+
+Role ↔ permission mappings for extension permissions.
+
+```sql
+CREATE TABLE extension_rbac_integration (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  extension_id UUID REFERENCES extensions(id) ON DELETE CASCADE,
+  role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
+  permission_id UUID REFERENCES permissions(id) ON DELETE CASCADE,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID
+);
+
+CREATE INDEX idx_extension_rbac_integration_tenant_id ON extension_rbac_integration(tenant_id);
+```
+
+### extension_routes_registry
+
+Admin route registry for extension routes.
+
+```sql
+CREATE TABLE extension_routes_registry (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  extension_id UUID REFERENCES extensions(id) ON DELETE CASCADE,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  component_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  icon TEXT,
+  requires_auth BOOLEAN DEFAULT TRUE,
+  required_permissions TEXT[],
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID,
+  deleted_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_extension_routes_registry_tenant_id ON extension_routes_registry(tenant_id);
 ```
 
 ### regions (New)

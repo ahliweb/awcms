@@ -4,6 +4,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { getAllPlugins, getPlugin, getPluginComponent } from '@/lib/pluginRegistry';
 import { loadExternalExtension } from '@/lib/externalExtensionLoader';
 import ExtensionErrorBoundary from '@/components/ui/ExtensionErrorBoundary';
+import { useTenant } from '@/contexts/TenantContext';
 
 const PluginContext = createContext(null);
 
@@ -46,6 +47,7 @@ export const PluginProvider = ({ children }) => {
     const [activePlugins, setActivePlugins] = useState([]);
     const [registeredPlugins, setRegisteredPlugins] = useState([]);
     const [externalPlugins, setExternalPlugins] = useState([]);
+    const { currentTenant } = useTenant();
 
     // Expose hook methods
     const { addAction, doAction, addFilter, applyFilters, removeAction, removeFilter } = hooks;
@@ -55,11 +57,19 @@ export const PluginProvider = ({ children }) => {
             setIsLoading(true);
             try {
                 // 1. Fetch active plugins from database
-                const { data: dbPlugins, error } = await supabase
+                let query = supabase
                     .from('extensions')
                     .select('*')
                     .eq('is_active', true)
                     .is('deleted_at', null);
+
+                if (currentTenant?.id) {
+                    query = query.eq('tenant_id', currentTenant.id);
+                } else {
+                    query = query.eq('tenant_id', null);
+                }
+
+                const { data: dbPlugins, error } = await query;
 
                 if (error) throw error;
 
@@ -150,7 +160,7 @@ export const PluginProvider = ({ children }) => {
         };
 
         loadPlugins();
-    }, [addAction, addFilter, doAction]);
+    }, [addAction, addFilter, doAction, currentTenant?.id]);
 
     const value = {
         isLoading,

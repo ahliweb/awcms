@@ -10,9 +10,11 @@ import { supabase } from '@/lib/customSupabaseClient';
 import PermissionMatrix from '@/components/dashboard/PermissionMatrix';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useTenant } from '@/contexts/TenantContext';
 
 const RoleEditor = ({ role, onClose, onSave }) => {
   const { toast } = useToast();
+  const { currentTenant } = useTenant();
 
 
 
@@ -32,8 +34,8 @@ const RoleEditor = ({ role, onClose, onSave }) => {
   const [activeTemplate, setActiveTemplate] = useState('');
 
   // Protect system roles
-  const isSystemRole = ['owner', 'super_admin', 'public', 'guest'].includes(role?.name);
-  const isFullAccessRole = ['owner', 'super_admin'].includes(role?.name);
+  const isSystemRole = Boolean(role?.is_system || role?.is_public || role?.is_guest);
+  const isFullAccessRole = Boolean(role?.is_full_access || role?.is_platform_admin);
   const [syncingFullAccess, setSyncingFullAccess] = useState(false);
 
   useEffect(() => {
@@ -73,7 +75,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     fetchPermissions();
   }, [role, toast]);
 
-  // Auto-select all permissions for System Root Roles (Owner, Super Admin)
+  // Auto-select all permissions for full-access roles
   useEffect(() => {
     if (isFullAccessRole && permissions.length > 0) {
       const allIds = new Set(permissions.map(p => p.id));
@@ -149,7 +151,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     toast({ title: "All Cleared", description: "All permissions deselected." });
   };
 
-  // Sync Full Access: Persist all permissions for owner/super_admin to database
+  // Sync Full Access: Persist all permissions for full-access roles to database
   const syncFullAccess = async () => {
     if (!isFullAccessRole || !role?.id) return;
 
@@ -216,7 +218,9 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           .from('roles')
           .insert({
             name: formData.name,
-            description: formData.description
+            description: formData.description,
+            tenant_id: currentTenant?.id || null,
+            scope: currentTenant?.id ? 'tenant' : 'platform'
           })
           .select()
           .single();
@@ -290,7 +294,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           <div>
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <Shield className={`w-5 h-5 ${isFullAccessRole ? 'text-purple-600' : 'text-blue-600'}`} />
-              {role ? (role.name === 'owner' ? 'Owner Configuration (Global)' : 'Edit Role Configuration') : 'Create New Role'}
+              {role ? (role.scope === 'platform' ? 'Platform Role Configuration' : 'Edit Role Configuration') : 'Create New Role'}
             </h2>
             <p className="text-sm text-slate-500 mt-1">
               {isFullAccessRole ? 'This System Root Role has complete 100% access. Configuration is read-only.' : 'Define access control policies and permission scopes.'}
@@ -330,7 +334,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                 ))}
               </div>
             )}
-            {/* Sync Full Access button for owner/super_admin */}
+            {/* Sync Full Access button for full-access roles */}
             {isFullAccessRole && (
               <Button
                 type="button"

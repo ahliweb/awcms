@@ -15,10 +15,10 @@ import { usePermissions } from '@/contexts/PermissionContext';
 const DynamicTemplate = ({ type, fallback: Fallback, context = {} }) => {
     const [template, setTemplate] = useState(null);
     const [loading, setLoading] = useState(true);
-    const { hasAnyPermission } = usePermissions();
+    const { hasAnyPermission, isPlatformAdmin, isFullAccess } = usePermissions();
 
     // Allow viewing draft system templates if user can edit visual pages
-    const canViewDrafts = hasAnyPermission(['edit_visual_pages', 'manage_pages', 'super_admin']);
+    const canViewDrafts = isPlatformAdmin || isFullAccess || hasAnyPermission(['edit_visual_pages', 'manage_pages']);
 
     useEffect(() => {
         const fetchTemplate = async () => {

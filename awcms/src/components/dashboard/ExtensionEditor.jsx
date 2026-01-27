@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
 import { useTranslation } from 'react-i18next';
 import { syncExtensionToRegistry } from '@/utils/extensionLifecycle';
 
@@ -16,12 +17,13 @@ function ExtensionEditor({ extension = {}, onClose, onSave }) {
   const { toast } = useToast();
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { userRole } = usePermissions();
+  const { isPlatformAdmin, isFullAccess } = usePermissions();
+  const { currentTenant } = useTenant();
   const [loading, setLoading] = useState(false);
 
   // Ownership check
   const isOwner = user?.id === extension.created_by;
-  const isSuperAdmin = ['super_admin', 'owner'].includes(userRole);
+  const isSuperAdmin = isPlatformAdmin || isFullAccess;
   const canEdit = !extension.id || isOwner || isSuperAdmin;
 
   const [formData, setFormData] = useState({
@@ -80,6 +82,7 @@ function ExtensionEditor({ extension = {}, onClose, onSave }) {
         // Create new
         payload.created_by = user.id;
         payload.is_active = true; // Default active on creation
+        payload.tenant_id = currentTenant?.id || null;
         const { data, error: insertError } = await supabase
           .from('extensions')
           .insert([payload])
@@ -122,7 +125,7 @@ function ExtensionEditor({ extension = {}, onClose, onSave }) {
         <div className="bg-red-50 p-6 rounded-lg border border-red-200 text-center">
           <ShieldAlert className="w-12 h-12 text-red-500 mx-auto mb-3" />
           <h3 className="text-lg font-bold text-red-700">Read Only Mode</h3>
-          <p className="text-red-600">You do not have permission to edit this extension as you are not the owner.</p>
+          <p className="text-red-600">You do not have permission to edit this extension.</p>
         </div>
         <div className="bg-white p-6 rounded-lg border border-slate-200">
           <pre className="text-xs text-slate-500 overflow-auto">{JSON.stringify(extension, null, 2)}</pre>

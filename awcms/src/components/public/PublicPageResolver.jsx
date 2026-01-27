@@ -15,13 +15,13 @@ const PublicPageResolver = () => {
     const { slug } = useParams();
     const [contentType, setContentType] = useState(null);
     const [loading, setLoading] = useState(true);
-    const { hasAnyPermission } = usePermissions();
+    const { hasAnyPermission, isPlatformAdmin, isFullAccess } = usePermissions();
 
     // Check if user has permission to view drafts
     // We check a broad set of permissions to cover admins, editors, etc.
-    const canViewDrafts = hasAnyPermission([
+    const canViewDrafts = isPlatformAdmin || isFullAccess || hasAnyPermission([
         'edit_pages', 'edit_visual_pages', 'manage_pages',
-        'edit_blogs', 'manage_blogs', 'super_admin'
+        'edit_blogs', 'manage_blogs'
     ]);
 
     useEffect(() => {

@@ -21,7 +21,7 @@ These are the standard templates provided in the "Roles" manager.
 | Role | Scope | Description |
 | ---- | ----- | ----------- |
 | **Owner** | Global | **Supreme Authority**. Full system access across all tenants. Cannot be restricted. |
-| **Super Admin** | Global | **Platform Manager**. Manages tenants, billing, and global settings. |
+| **Super Admin** | Global | **Platform Admin**. Manages tenants, billing, and global settings (flagged via `is_platform_admin`). |
 | **Admin** | Tenant | **Tenant Manager**. Full access *within* their tenant. Can manage tenant users and roles. |
 | **Editor** | Tenant | **Content Manager**. Can review, approve, and publish content. Cannot manage users/settings. |
 | **Author** | Tenant | **Creator**. Can create and edit *own* content. Needs approval to publish. |
@@ -73,8 +73,18 @@ The following matrix represents the *default* configuration for new tenants.
 CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  tenant_id UUID REFERENCES tenants(id),  -- NULL for global roles
-  is_system BOOLEAN DEFAULT FALSE -- Protected roles
+  tenant_id UUID REFERENCES tenants(id),
+  scope TEXT DEFAULT 'tenant',
+  is_system BOOLEAN DEFAULT FALSE,
+  is_platform_admin BOOLEAN DEFAULT FALSE,
+  is_full_access BOOLEAN DEFAULT FALSE,
+  is_tenant_admin BOOLEAN DEFAULT FALSE,
+  is_public BOOLEAN DEFAULT FALSE,
+  is_guest BOOLEAN DEFAULT FALSE,
+  is_staff BOOLEAN DEFAULT FALSE,
+  staff_level INTEGER,
+  is_default_public_registration BOOLEAN DEFAULT FALSE,
+  is_default_invite BOOLEAN DEFAULT FALSE
 );
 ```
 
@@ -83,12 +93,34 @@ CREATE TABLE roles (
 - **Global Roles** (`tenant_id` is NULL): Visible to all, managed by Platform Admins.
 - **Tenant Roles** (`tenant_id` is set): Visible only to that tenant.
 
+### Staff Hierarchy (Per Tenant)
+
+| Level | Name |
+| ----- | ---- |
+| 10 | super_manager |
+| 9 | senior_manager |
+| 8 | manager |
+| 7 | senior_supervisor |
+| 6 | supervisor |
+| 5 | senior_specialist |
+| 4 | specialist |
+| 3 | associate |
+| 2 | assistant |
+| 1 | internship |
+
+### Default Onboarding Roles
+
+- `is_default_public_registration` marks the role used for public signups.
+- `is_default_invite` marks the role used for invite-based onboarding.
+
 ## DB Helper Functions
 
 > **Warning:** These functions are strictly for **Platform Administration** logic. Do not use them for feature access (use `has_permission` instead).
 
-- `is_super_admin()`: Returns true for Owner/Super Admin.
+- `is_platform_admin()`: Returns true for platform admin/full access roles.
 - `is_admin_or_above()`: **Deprecated** for feature checks.
+
+> Platform admin access is determined by role flags (`is_platform_admin`/`is_full_access`), not role names.
 
 ## References
 

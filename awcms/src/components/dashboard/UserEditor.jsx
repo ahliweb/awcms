@@ -9,10 +9,12 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 
 import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
 
 function UserEditor({ user, onClose, onSave }) {
   const { toast } = useToast();
-  const { tenantId: currentTenantId, isPlatformAdmin } = usePermissions();
+  const { tenantId: userTenantId, isPlatformAdmin } = usePermissions();
+  const { currentTenant } = useTenant();
   const [loading, setLoading] = useState(false);
   const [roles, setRoles] = useState([]);
   const [tenants, setTenants] = useState([]);
@@ -29,7 +31,6 @@ function UserEditor({ user, onClose, onSave }) {
   const isEditing = !!user;
 
   useEffect(() => {
-    fetchRoles();
     fetchTenants(); // Always fetch tenants - visibility depends on role, not admin status
     if (isEditing) {
       setFormData({
@@ -41,16 +42,45 @@ function UserEditor({ user, onClose, onSave }) {
       });
     } else {
       // Default to current tenant for new users
-      setFormData(prev => ({ ...prev, tenant_id: currentTenantId || '' }));
+      setFormData(prev => ({ ...prev, tenant_id: currentTenant?.id || userTenantId || '' }));
     }
-  }, [user, currentTenantId, isEditing]);
+  }, [user, currentTenant?.id, userTenantId, isEditing]);
+
+  useEffect(() => {
+    fetchRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTenant?.id, formData.tenant_id, isPlatformAdmin]);
+
+  const resolveRoleTenantId = () => {
+    const fallbackTenantId = currentTenant?.id || userTenantId || null;
+    const selectedTenantId = formData.tenant_id === '' ? null : formData.tenant_id;
+
+    if (isPlatformAdmin) {
+      return selectedTenantId ?? null;
+    }
+
+    return selectedTenantId || fallbackTenantId;
+  };
 
   const fetchRoles = async () => {
-    const { data } = await supabase
+    const roleTenantId = resolveRoleTenantId();
+    let query = supabase
       .from('roles')
-      .select('id, name')
+      .select('id, name, scope, tenant_id, is_platform_admin, is_full_access, is_public, is_guest')
       .is('deleted_at', null)
       .order('name');
+
+    if (roleTenantId) {
+      if (isPlatformAdmin) {
+        query = query.or(`tenant_id.eq.${roleTenantId},tenant_id.is.null`);
+      } else {
+        query = query.eq('tenant_id', roleTenantId);
+      }
+    } else {
+      query = query.is('tenant_id', null);
+    }
+
+    const { data } = await query;
     if (data) setRoles(data);
   };
 
@@ -69,13 +99,18 @@ function UserEditor({ user, onClose, onSave }) {
     // If role changes, check if it's a global role and clear tenant
     if (name === 'role_id') {
       const selectedRole = roles.find(r => r.id === value);
-      const isGlobalRole = selectedRole && (selectedRole.name === 'owner' || selectedRole.name === 'super_admin');
+      const isGlobalRole = Boolean(selectedRole && (selectedRole.scope === 'platform' || selectedRole.is_platform_admin || selectedRole.is_full_access));
 
       if (isGlobalRole) {
         // Clear tenant_id for global roles
         setFormData(prev => ({ ...prev, [name]: value, tenant_id: '' }));
         return;
       }
+    }
+
+    if (name === 'tenant_id') {
+      setFormData(prev => ({ ...prev, tenant_id: value, role_id: '' }));
+      return;
     }
 
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -86,9 +121,9 @@ function UserEditor({ user, onClose, onSave }) {
     setLoading(true);
 
     try {
-      // Check if selected role is global (owner/super_admin)
+      // Check if selected role is a platform role
       const selectedRole = roles.find(r => r.id === formData.role_id);
-      const isGlobalRole = selectedRole && (selectedRole.name === 'owner' || selectedRole.name === 'super_admin');
+      const isGlobalRole = Boolean(selectedRole && (selectedRole.scope === 'platform' || selectedRole.is_platform_admin || selectedRole.is_full_access));
 
       if (isEditing) {
         // Update existing user (Public Table Only)
@@ -99,7 +134,7 @@ function UserEditor({ user, onClose, onSave }) {
         };
 
         // Always include tenant_id in update:
-        // - For global roles: set to null
+        // - For platform roles: set to null
         // - For tenant-scoped roles: use the selected tenant
         if (isGlobalRole) {
           updatePayload.tenant_id = null;
@@ -287,12 +322,10 @@ function UserEditor({ user, onClose, onSave }) {
               {roles
                 .filter(role => {
                   // Exclude system roles that should not be assignable
-                  const excludedRoles = ['public', 'no_access'];
-                  if (excludedRoles.includes(role.name)) return false;
+                  if (role.is_public || role.is_guest) return false;
 
-                  // Security: Non-Platform Admins cannot assign Global Roles (owner, super_admin)
-                  const globalRoles = ['owner', 'super_admin'];
-                  if (!isPlatformAdmin && globalRoles.includes(role.name)) {
+                  // Security: Non-Platform Admins cannot assign Platform Roles
+                  if (!isPlatformAdmin && (role.scope === 'platform' || role.is_platform_admin || role.is_full_access)) {
                     return false;
                   }
 
@@ -304,12 +337,12 @@ function UserEditor({ user, onClose, onSave }) {
             </select>
           </div>
 
-          {/* Tenant Selector - Shows for non-global roles (all except owner/super_admin) */}
+          {/* Tenant Selector - Shows for tenant-scoped roles */}
           {(() => {
             const selectedRole = roles.find(r => r.id === formData.role_id);
-            const isGlobalRole = selectedRole && (selectedRole.name === 'owner' || selectedRole.name === 'super_admin');
+            const isGlobalRole = Boolean(selectedRole && (selectedRole.scope === 'platform' || selectedRole.is_platform_admin || selectedRole.is_full_access));
 
-            // Don't show tenant selector for global roles (owner, super_admin)
+            // Don't show tenant selector for platform roles
             if (isGlobalRole) return null;
 
             // For tenant-scoped roles, always show and require tenant selection

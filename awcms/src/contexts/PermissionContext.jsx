@@ -8,19 +8,21 @@ export const PermissionProvider = ({ children }) => {
   const { user } = useAuth();
   const [permissions, setPermissions] = useState([]);
   const [userRole, setUserRole] = useState(null);
+  const [role, setRole] = useState(null);
   const [tenantId, setTenantId] = useState(null);
   const [abacPolicies, setAbacPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchUserPermissions = useCallback(async () => {
-    if (!user) {
-      setPermissions([]);
-      setUserRole(null);
-      setTenantId(null);
-      setAbacPolicies([]);
-      setLoading(false);
-      return;
-    }
+      if (!user) {
+        setPermissions([]);
+        setUserRole(null);
+        setRole(null);
+        setTenantId(null);
+        setAbacPolicies([]);
+        setLoading(false);
+        return;
+      }
 
     try {
       // 1. Fetch User Data
@@ -31,6 +33,15 @@ export const PermissionProvider = ({ children }) => {
           *,
           roles!users_role_id_fkey (
             name,
+            scope,
+            is_platform_admin,
+            is_full_access,
+            is_tenant_admin,
+            is_public,
+            is_guest,
+            is_staff,
+            staff_level,
+            is_system,
             role_permissions (
               deleted_at,
               permissions (
@@ -117,15 +128,35 @@ export const PermissionProvider = ({ children }) => {
       let dbRole = null;
       let dbPermissions = [];
       let dbTenantId = null;
+      let roleData = null;
+      let roleFlags = {
+        isPlatformAdmin: false,
+        isFullAccess: false,
+        isTenantAdmin: false,
+        isPublicRole: false,
+        isGuestRole: false,
+        isStaff: false,
+        staffLevel: null,
+        scope: null
+      };
 
       if (userData) {
         dbTenantId = userData.tenant_id;
         if (userData.roles) {
-          dbRole = userData.roles.name;
+          roleData = userData.roles;
+          dbRole = roleData.name;
+          roleFlags = {
+            isPlatformAdmin: Boolean(roleData.is_platform_admin),
+            isFullAccess: Boolean(roleData.is_full_access || roleData.is_platform_admin),
+            isTenantAdmin: Boolean(roleData.is_tenant_admin),
+            isPublicRole: Boolean(roleData.is_public),
+            isGuestRole: Boolean(roleData.is_guest),
+            isStaff: Boolean(roleData.is_staff),
+            staffLevel: roleData.staff_level ?? null,
+            scope: roleData.scope || null
+          };
 
-          if (dbRole === 'super_admin' || dbRole === 'owner') {
-            // Will fetch all perms later
-          } else {
+          if (!roleFlags.isFullAccess) {
             dbPermissions = userData.roles.role_permissions
               ?.filter(rp => !rp.deleted_at && rp.permissions && !rp.permissions.deleted_at)
               .map(rp => rp.permissions?.name)
@@ -143,20 +174,13 @@ export const PermissionProvider = ({ children }) => {
       setTenantId(dbTenantId);
 
       // 3. Determine Final Role
-      const superAdminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
       let finalRole = dbRole || 'guest';
       let finalPermissions = dbPermissions;
-
-      if (superAdminEmail && user.email === superAdminEmail) {
-        if (finalRole !== 'owner') {
-          finalRole = 'super_admin';
-        }
-      }
-
+      setRole(roleData);
       setUserRole(finalRole);
 
       // 4. Load Permissions for Admin Roles
-      if (finalRole === 'super_admin' || finalRole === 'owner') {
+      if (roleFlags.isFullAccess) {
         // Attempt to fetch all permissions from UDM
         const { data: allPerms } = await udm.from('permissions').select('name').is('deleted_at', null);
         if (allPerms) {
@@ -185,23 +209,17 @@ export const PermissionProvider = ({ children }) => {
 
   const hasPermission = useCallback((permission) => {
     if (!permission) return true;
-    if (['super_admin', 'owner'].includes(userRole)) return true;
-
-    // Safety Net
-    const superAdminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
-    if (superAdminEmail && user?.email === superAdminEmail) return true;
+    if (role?.is_full_access || role?.is_platform_admin) return true;
 
     return permissions.includes(permission);
-  }, [permissions, userRole, user]);
+  }, [permissions, role]);
 
   const hasAnyPermission = useCallback((permissionList) => {
-    if (['super_admin', 'owner'].includes(userRole)) return true;
-    const superAdminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL;
-    if (superAdminEmail && user?.email === superAdminEmail) return true;
+    if (role?.is_full_access || role?.is_platform_admin) return true;
 
     if (!permissionList || permissionList.length === 0) return true;
     return permissionList.some(p => permissions.includes(p));
-  }, [permissions, userRole, user]);
+  }, [permissions, role]);
 
   /**
    * Check if the current user owns the record
@@ -215,7 +233,7 @@ export const PermissionProvider = ({ children }) => {
 
   const checkAccess = useCallback((action, resource, record = null) => {
     // Platform admins always have access
-    if (['super_admin', 'owner'].includes(userRole)) return true;
+    if (role?.is_full_access || role?.is_platform_admin) return true;
 
     // Determine the permission key based on scope
     const hasScope = resource.includes('.');
@@ -236,7 +254,7 @@ export const PermissionProvider = ({ children }) => {
     }
 
     return false;
-  }, [permissions, userRole, user, checkOwnership]);
+  }, [permissions, userRole, user, checkOwnership, role]);
 
   /**
    * Shorthand: Can user publish content in this resource?
@@ -267,7 +285,7 @@ export const PermissionProvider = ({ children }) => {
   }, [checkAccess]);
 
   const checkPolicy = useCallback((action, resource, context = {}) => {
-    if (['super_admin', 'owner'].includes(userRole)) return true;
+    if (role?.is_full_access || role?.is_platform_admin) return true;
 
     const finalContext = { channel: 'web', ...context };
 
@@ -283,17 +301,48 @@ export const PermissionProvider = ({ children }) => {
 
     if (denyMatch) return false;
     return true;
-  }, [abacPolicies, userRole]);
+  }, [abacPolicies, role]);
 
   const isPlatformAdmin = useMemo(() => {
-    return ['owner', 'super_admin'].includes(userRole);
-  }, [userRole]);
+    return Boolean(role?.is_platform_admin || role?.is_full_access);
+  }, [role]);
+
+  const isFullAccess = useMemo(() => {
+    return Boolean(role?.is_full_access || role?.is_platform_admin);
+  }, [role]);
+
+  const isTenantAdmin = useMemo(() => {
+    return Boolean(role?.is_tenant_admin);
+  }, [role]);
+
+  const isPublicRole = useMemo(() => {
+    return Boolean(role?.is_public);
+  }, [role]);
+
+  const isGuestRole = useMemo(() => {
+    return Boolean(role?.is_guest);
+  }, [role]);
+
+  const isStaff = useMemo(() => {
+    return Boolean(role?.is_staff);
+  }, [role]);
+
+  const staffLevel = useMemo(() => {
+    return role?.staff_level ?? null;
+  }, [role]);
 
   const value = React.useMemo(() => ({
     permissions,
     userRole,
+    role,
     tenantId,
     isPlatformAdmin,
+    isFullAccess,
+    isTenantAdmin,
+    isPublicRole,
+    isGuestRole,
+    isStaff,
+    staffLevel,
     loading,
     hasPermission,
     hasAnyPermission,
@@ -305,7 +354,7 @@ export const PermissionProvider = ({ children }) => {
     canPermanentDelete,
     canSoftDelete,
     refreshPermissions: fetchUserPermissions
-  }), [permissions, userRole, tenantId, isPlatformAdmin, loading, hasPermission, hasAnyPermission, checkAccess, checkOwnership, checkPolicy, canPublish, canRestore, canPermanentDelete, canSoftDelete, fetchUserPermissions]);
+  }), [permissions, userRole, role, tenantId, isPlatformAdmin, isFullAccess, isTenantAdmin, isPublicRole, isGuestRole, isStaff, staffLevel, loading, hasPermission, hasAnyPermission, checkAccess, checkOwnership, checkPolicy, canPublish, canRestore, canPermanentDelete, canSoftDelete, fetchUserPermissions]);
 
   return (
     <PermissionContext.Provider value={value}>

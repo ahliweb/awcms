@@ -30,10 +30,10 @@ const UserApprovalManager = () => {
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [totalItems, setTotalItems] = useState(0);
 
-    const { userRole, isPlatformAdmin } = usePermissions();
+    const { isPlatformAdmin, isFullAccess } = usePermissions();
     const { toast } = useToast();
 
-    const isSuperAdmin = isPlatformAdmin || ['super_admin', 'owner'].includes(userRole);
+    const isSuperAdmin = isPlatformAdmin || isFullAccess;
 
     // Reset page when tab changes
     useEffect(() => {
@@ -156,7 +156,7 @@ const UserApprovalManager = () => {
     const getStatusBadge = (status) => {
         switch (status) {
             case 'pending_admin': return <Badge className="bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-800">Pending Admin</Badge>;
-            case 'pending_super_admin': return <Badge className="bg-primary/10 text-primary border-primary/20">Pending Super Admin</Badge>;
+            case 'pending_super_admin': return <Badge className="bg-primary/10 text-primary border-primary/20">Pending Platform Admin</Badge>;
             case 'completed': return <Badge className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-800">Approved & Invited</Badge>;
             case 'rejected': return <Badge variant="destructive">Rejected</Badge>;
             default: return <Badge variant="secondary" className="text-secondary-foreground">{status}</Badge>;

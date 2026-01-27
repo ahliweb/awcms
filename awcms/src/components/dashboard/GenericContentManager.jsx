@@ -279,7 +279,7 @@ const GenericContentManager = ({
         }
     ];
 
-    // Added Tenant Column for Platform Admins (owner, super_admin)
+    // Added Tenant Column for platform admins
     const isPlatformAdmin = hasPermission('manage_platform');
     if (isPlatformAdmin) {
         displayColumns.unshift({

@@ -97,7 +97,7 @@ function RolesManager() {
 
   // Open delete confirmation dialog
   const openDeleteDialog = (role) => {
-    if (['owner', 'super_admin', 'admin', 'public', 'guest'].includes(role.name)) {
+    if (role.is_system || role.is_platform_admin || role.is_full_access || role.is_public || role.is_guest) {
       toast({ variant: 'destructive', title: 'Protected Role', description: t('roles.errors.protected_role') });
       return;
     }
@@ -152,11 +152,14 @@ function RolesManager() {
       className: 'font-bold w-[200px]',
       render: (name) => (
         <div className="flex items-center gap-2">
-          <Shield className={`w-4 h-4 ${['super_admin'].includes(name) ? 'text-primary' : 'text-muted-foreground'}`} />
-          {name === 'owner' && <Crown className="w-4 h-4 text-amber-500 fill-amber-500" />}
+          <Shield className={`w-4 h-4 ${row.is_full_access || row.is_platform_admin ? 'text-primary' : 'text-muted-foreground'}`} />
+          {(row.is_platform_admin || row.is_full_access) && <Crown className="w-4 h-4 text-amber-500 fill-amber-500" />}
           <span>{name}</span>
-          {name === 'owner' && <span className="bg-amber-500/10 text-amber-600 dark:text-amber-500 text-[10px] px-1.5 py-0.5 rounded-full uppercase font-bold border border-amber-500/20">{t('roles.badges.owner')}</span>}
-          {name === 'super_admin' && <span className="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-full uppercase font-bold border border-primary/20">{t('roles.badges.tenant_root')}</span>}
+          {(row.is_platform_admin || row.is_full_access) && (
+            <span className="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-full uppercase font-bold border border-primary/20">
+              {t('roles.badges.tenant_root')}
+            </span>
+          )}
         </div>
       )
     },
@@ -167,7 +170,7 @@ function RolesManager() {
       className: 'text-center w-[120px]',
       render: (_, row) => {
         const count = row.role_permissions ? row.role_permissions[0]?.count : 0;
-        if (['owner', 'super_admin'].includes(row.name)) {
+        if (row.is_full_access || row.is_platform_admin) {
           return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">{t('roles.badges.all_access')} ({count || '∞'})</span>;
         }
         return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">{count || 0} {t('roles.columns.permissions')}</span>;

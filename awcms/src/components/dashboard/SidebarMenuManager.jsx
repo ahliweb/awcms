@@ -33,7 +33,7 @@ import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 function SidebarMenuManager() {
     const { t } = useTranslation();
     const { menuItems, loading, updateMenuOrder, toggleVisibility, updateMenuItem, updateGroup, fetchMenu } = useAdminMenu();
-    const { hasPermission, userRole, loading: permsLoading } = usePermissions();
+    const { hasPermission, isPlatformAdmin, isFullAccess, loading: permsLoading } = usePermissions();
     const { toast } = useToast();
 
     const {
@@ -71,7 +71,7 @@ function SidebarMenuManager() {
 
     const canView = hasPermission('platform.sidebar.read');
     const canEdit = hasPermission('platform.sidebar.update');
-    const isSuperAdmin = ['super_admin', 'owner'].includes(userRole);
+    const isSuperAdmin = isPlatformAdmin || isFullAccess;
 
     useEffect(() => {
         if (!menuItems.length) return;
@@ -172,7 +172,7 @@ function SidebarMenuManager() {
                     label: `[${newGroupForm.label} Placeholder]`,
                     path: '',
                     icon: 'FolderOpen',
-                    permission: 'super_admin_only', // Hidden from non-super admins
+                    permission: 'super_admin_only', // Hidden from non-platform admins
                     group_label: newGroupForm.label.toUpperCase(),
                     group_order: parseInt(newGroupForm.order) || 100,
                     order: 9999, // At the end of the group

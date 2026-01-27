@@ -36,10 +36,9 @@ const getFileUrl = (file) => {
 
 const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isTrashView = false }) => {
     const { toast } = useToast();
-    const { checkAccess, userRole } = usePermissions();
+    const { checkAccess, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant();
     const tenantId = currentTenant?.id;
-    const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
 
     const canUpload = checkAccess('create', 'files');
     const canDelete = checkAccess('delete', 'files');

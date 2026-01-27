@@ -8,19 +8,22 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { syncExtensionToRegistry } from '@/utils/extensionLifecycle';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
 
 function ExtensionInstaller({ onInstallComplete }) {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { hasPermission, isSuperAdmin } = usePermissions();
+  const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
+  const { currentTenant } = useTenant();
   const [dragActive, setDragActive] = useState(false);
   // eslint-disable-next-line no-unused-vars
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [installing, setInstalling] = useState(false);
 
-  // Permission check - only super admin or platform.module.create can install
+  // Permission check - only platform admins or platform.module.create can install
   // eslint-disable-next-line no-unused-vars
+  const isSuperAdmin = isPlatformAdmin || isFullAccess;
   const canInstall = isSuperAdmin || hasPermission('platform.module.create') || hasPermission('ext.manage');
 
   const handleDrag = (e) => {
@@ -68,6 +71,10 @@ function ExtensionInstaller({ onInstallComplete }) {
   };
 
   const handleInstall = async () => {
+    if (!canInstall) {
+      toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to install extensions." });
+      return;
+    }
     if (!preview) return;
     setInstalling(true);
 
@@ -82,7 +89,8 @@ function ExtensionInstaller({ onInstallComplete }) {
         icon: preview.icon || '🧩',
         is_active: true,
         config: preview,
-        created_by: user.id
+        created_by: user.id,
+        tenant_id: currentTenant?.id || null
       };
 
       const { data, error } = await supabase.from('extensions').insert([payload]).select().single();

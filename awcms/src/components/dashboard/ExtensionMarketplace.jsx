@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 
 // Mock Data for Marketplace
 const MARKETPLACE_EXTENSIONS = [
@@ -62,6 +63,7 @@ const MARKETPLACE_EXTENSIONS = [
 function ExtensionMarketplace({ onInstall }) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { currentTenant } = useTenant();
   const [installing, setInstalling] = useState(null);
 
   const handleInstall = async (ext) => {
@@ -80,7 +82,8 @@ function ExtensionMarketplace({ onInstall }) {
         icon: ext.icon,
         is_active: true,
         created_by: user.id,
-        config: { installed_from: 'marketplace', original_id: ext.id }
+        config: { installed_from: 'marketplace', original_id: ext.id },
+        tenant_id: currentTenant?.id || null
       };
 
       const { error } = await supabase

@@ -17,7 +17,7 @@ function NotificationDetail({ id: propId }) {
     const { id: paramId } = useParams();
     const navigate = useNavigate();
     const { markAsRead, deleteNotification } = useNotifications();
-    const { hasPermission, userRole } = usePermissions();
+    const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
     const [notification, setNotification] = useState(null);
     const [readers, setReaders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -26,7 +26,7 @@ function NotificationDetail({ id: propId }) {
     // Prioritize propId (passed from Dashboard) over paramId (from Router)
     const id = propId || paramId;
 
-    const isSuperAdmin = ['super_admin', 'owner'].includes(userRole);
+    const isSuperAdmin = isPlatformAdmin || isFullAccess;
     const canViewReaders = isSuperAdmin || hasPermission('tenant.notification.read');
     const canDelete = isSuperAdmin || hasPermission('tenant.notification.delete');
 

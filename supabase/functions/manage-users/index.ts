@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
         // Fetch requester role/tenant
         const { data: userData, error: userDataError } = await supabaseAdmin
             .from('users')
-            .select('role_id, tenant_id, role:roles!users_role_id_fkey(name)')
+            .select('role_id, tenant_id, role:roles!users_role_id_fkey(name, is_platform_admin, is_full_access, is_tenant_admin)')
             .eq('id', requestingUser.id)
             .single()
 
@@ -161,8 +161,8 @@ Deno.serve(async (req: Request) => {
 
         const roleName = userData.role.name
         const requesterTenantId = userData.tenant_id
-        const isSuperAdmin = ['super_admin', 'owner'].includes(roleName)
-        const isAdmin = ['admin', 'owner'].includes(roleName) || isSuperAdmin
+        const isSuperAdmin = Boolean(userData.role.is_platform_admin || userData.role.is_full_access)
+        const isAdmin = isSuperAdmin || Boolean(userData.role.is_tenant_admin)
 
         if (!isAdmin) {
             throw new Error('Forbidden: Insufficient privileges')
@@ -201,7 +201,7 @@ Deno.serve(async (req: Request) => {
             }
 
             case 'approve_application_super_admin': {
-                if (!isSuperAdmin) throw new Error(`Forbidden: Super Admin only. Role detected: '${roleName}' for User: ${requestingUser.email}`)
+                if (!isSuperAdmin) throw new Error(`Forbidden: Platform admin only. Role detected: '${roleName}' for User: ${requestingUser.email}`)
                 if (!request_id) throw new Error('request_id required')
 
                 // Get request
@@ -359,4 +359,3 @@ Deno.serve(async (req: Request) => {
         })
     }
 })
-

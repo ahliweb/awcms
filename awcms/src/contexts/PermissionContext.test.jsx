@@ -38,14 +38,14 @@ const TestComponent = ({ checkPermission, checkRole }) => {
 };
 
 describe('PermissionContext', () => {
-    it('allows super_admin to access everything', async () => {
-        // Mock UDM to return a super_admin user
+    it('allows full-access roles to access everything', async () => {
+        // Mock UDM to return a full-access role
         const { udm } = await import('@/lib/data/UnifiedDataManager');
         udm.from().select().eq().single.mockResolvedValueOnce({
             data: {
                 id: '123',
                 email: 'admin@example.com',
-                roles: { name: 'super_admin' },
+                roles: { name: 'super_admin', is_full_access: true, is_platform_admin: true },
                 role_id: '1',
                 tenant_id: 'tenant-1'
             }

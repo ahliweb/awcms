@@ -73,8 +73,7 @@ const ThemesManager = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [themeToDelete, setThemeToDelete] = useState(null);
 
-    const { hasPermission, userRole } = usePermissions();
-    const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
+    const { hasPermission, isPlatformAdmin } = usePermissions();
 
     const fetchThemes = useCallback(async () => {
         setLoading(true);

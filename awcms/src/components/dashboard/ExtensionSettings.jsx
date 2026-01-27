@@ -7,9 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
 
 function ExtensionSettings() {
   const { toast } = useToast();
+  const { isPlatformAdmin } = usePermissions();
+  const { currentTenant } = useTenant();
   const [extensions, setExtensions] = useState([]);
   const [selectedExtension, setSelectedExtension] = useState(null);
   const [settings, setSettings] = useState({});
@@ -17,15 +21,24 @@ function ExtensionSettings() {
 
   useEffect(() => {
     fetchActiveExtensions();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTenant?.id, isPlatformAdmin]);
 
   const fetchActiveExtensions = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('extensions')
         .select('id, name, config')
         .eq('is_active', true)
         .is('deleted_at', null);
+
+      if (currentTenant?.id) {
+        query = query.eq('tenant_id', currentTenant.id);
+      } else if (!isPlatformAdmin) {
+        query = query.eq('tenant_id', null);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setExtensions(data || []);

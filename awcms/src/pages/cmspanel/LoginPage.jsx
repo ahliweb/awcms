@@ -53,7 +53,7 @@ const LoginPage = () => {
           // Check if user is active (soft deletion check)
           const { data: userData } = await supabase
             .from('users')
-            .select('deleted_at, roles(name)')
+              .select('deleted_at, roles(name, is_public, is_guest)')
             .eq('id', user.id)
             .maybeSingle();
 
@@ -71,7 +71,7 @@ const LoginPage = () => {
 
             // Hard block: if user has no role or is 'public' (guest) only
             // NOTE: Adjust logic based on your requirement. Here we block if role is purely 'guest' or null.
-            if (!userData?.roles || userData.roles.name === 'public' || userData.roles.name === 'guest') {
+            if (!userData?.roles || userData.roles.is_public || userData.roles.is_guest) {
               // For now we allow 'guest' if you want them to see dashboard, but usually we restrict.
               // Assuming 'public' role is for frontend users who shouldn't access CMS.
               // toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to access the CMS." });

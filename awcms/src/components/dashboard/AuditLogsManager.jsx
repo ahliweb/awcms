@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 
 function AuditLogsManager() {
     const { t } = useTranslation();
-    const { tenantId, userRole, hasPermission } = usePermissions();
+    const { tenantId, hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -26,7 +26,7 @@ function AuditLogsManager() {
     const [limit, setLimit] = useState(50);
     const [totalCount, setTotalCount] = useState(0);
 
-    const canView = hasPermission('tenant.audit.view') || ['super_admin', 'owner'].includes(userRole);
+    const canView = hasPermission('tenant.audit.view') || isPlatformAdmin || isFullAccess;
 
     const fetchLogs = async () => {
         if (!canView) return;
@@ -60,11 +60,11 @@ function AuditLogsManager() {
     };
 
     useEffect(() => {
-        if (canView && (tenantId || userRole === 'owner')) {
+        if (canView && (tenantId || isPlatformAdmin || isFullAccess)) {
             fetchLogs();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tenantId, userRole, page, limit, searchQuery, canView]);
+    }, [tenantId, page, limit, searchQuery, canView, isPlatformAdmin, isFullAccess]);
 
     const getChannelIcon = (channel) => {
         switch (channel) {

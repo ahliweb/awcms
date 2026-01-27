@@ -22,10 +22,10 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 | Function | Returns | Purpose |
 | --- | --- | --- |
 | `current_tenant_id()` | UUID | Tenant from `app.current_tenant_id` or user profile |
-| `auth_is_admin()` | boolean | **SECURITY DEFINER**: Checks if user is Owner/Super Admin. Bypasses RLS recursion. |
-| `is_platform_admin()` | boolean | **Standard**: Checks if user is Owner/Super Admin. Subject to RLS recursion. |
+| `auth_is_admin()` | boolean | **SECURITY DEFINER**: Checks platform admin/full-access flags. Bypasses RLS recursion. |
+| `is_platform_admin()` | boolean | **Standard**: Checks platform admin/full-access flags. Subject to RLS recursion. |
 | `has_permission(key)` | boolean | Checks if current user has specific permission key |
-| `is_admin_or_above()` | boolean | **DEPRECATED for Logic** - Returns true for Admin/Super/Owner roles. Use `has_permission` instead. |
+| `is_admin_or_above()` | boolean | **DEPRECATED for Logic** - Returns true for tenant admin or platform admin flags. Use `has_permission` instead. |
 
 `current_tenant_id()` reads `app.current_tenant_id`, which is set from the `x-tenant-id` request header by database helpers.
 

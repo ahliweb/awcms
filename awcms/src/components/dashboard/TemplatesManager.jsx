@@ -8,7 +8,7 @@ import { Layout, Puzzle, Link2, Languages } from 'lucide-react';
 
 /**
  * TemplatesManager - Manages admin templates and configurations.
- * RESTRICTED: Only accessible to users with 'owner' or 'super_admin' roles.
+ * RESTRICTED: Only accessible to platform admin or full-access roles.
  * Refactored to use awadmintemplate01 with ABAC enforcement.
  */
 const TemplatesManager = () => {

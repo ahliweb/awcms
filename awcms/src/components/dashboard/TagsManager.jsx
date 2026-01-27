@@ -40,7 +40,7 @@ const MODULES = [
 
 function TagsManager() {
     const { toast } = useToast();
-    const { hasPermission, userRole } = usePermissions();
+    const { hasPermission, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant();
 
     // Search
@@ -86,7 +86,6 @@ function TagsManager() {
     const [saving, setSaving] = useState(false);
 
     // Permissions (using tenant.tag.* pattern)
-    const isPlatformAdmin = userRole === 'super_admin' || userRole === 'owner';
     const canCreate = hasPermission('tenant.tag.create');
     const canEdit = hasPermission('tenant.tag.update');
     const canSoftDelete = hasPermission('tenant.tag.delete');

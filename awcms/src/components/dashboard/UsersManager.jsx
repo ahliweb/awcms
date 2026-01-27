@@ -94,7 +94,7 @@ function UsersManager() {
     setLoading(true);
     try {
       let q = udm.from('users')
-        .select('*, roles!users_role_id_fkey(name), tenant:tenants(name)', { count: 'exact' })
+        .select('*, roles!users_role_id_fkey(name, is_platform_admin, is_full_access), tenant:tenants(name)', { count: 'exact' })
         .is('deleted_at', null);
 
       // Strict Multi-Tenancy
@@ -188,11 +188,11 @@ function UsersManager() {
       label: t('users.columns.role'),
       render: (r) => {
         if (!r?.name) return <span className="text-muted-foreground text-xs">{t('users.guest')}</span>;
-        if (r.name === 'owner') {
+        if (r.is_platform_admin || r.is_full_access) {
           return (
             <span className="flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-full text-xs font-bold text-amber-600 dark:text-amber-500 border border-amber-500/20">
               <Crown className="w-3 h-3 fill-amber-500 text-amber-500" />
-              {t('roles.badges.owner')}
+              {t('roles.badges.tenant_root')}
             </span>
           );
         }

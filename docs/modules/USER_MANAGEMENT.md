@@ -37,12 +37,12 @@ Supabase separates Auth Users (`auth.users`) from Application Data. AWCMS bridge
 
 Roles are assigned via the `role_id` Foreign Key in `public.users`.
 
-- **Default Role**: New users are typically assigned a 'guest' or 'public' role by default, or handled via the `handle_new_user` database function.
-- **Changing Roles**: Only Super Admins or Admins (with `tenant.user.update` permission) can update the `role_id` of a user via the User Manager module.
+- **Default Role**: New users are assigned by `handle_new_user()` using role flags (`is_default_public_registration` or `is_default_invite`).
+- **Changing Roles**: Only platform admins (full access) or tenant admins with `tenant.user.update` can update the `role_id` via the User Manager module.
 
 ## Tenant Roles (Multi-Tenancy)
 
-Users are strictly scoped to a single `tenant_id` (except Super Admins).
+Users are strictly scoped to a single `tenant_id`. Platform admin/full-access roles may be global (`tenant_id` NULL).
 
 | Role | Scope | Default Permissions |
 |------|-------|---------------------|
@@ -53,12 +53,19 @@ Users are strictly scoped to a single `tenant_id` (except Super Admins).
 | **Author** | Tenant | Can Create/Edit *own* content. |
 | **Member** | Tenant | Read-only / Front-end access. |
 
+> Platform admin access is determined by role flags (`is_platform_admin`/`is_full_access`), not role names.
+
 ### Invitation Flow
 
 1. Admin enters email in **User Manager**.
 2. System triggers `manage-users` Edge Function.
 3. New user is created in `auth.users` with `tenant_id` metadata.
 4. Invite email sent.
+
+### Default Role Resolution
+
+- Public registrations use the role flagged `is_default_public_registration` (fallback to `is_public`/`is_guest`).
+- Invites use the role flagged `is_default_invite` (fallback to a tenant role).
 
 ## Security
 
@@ -77,10 +84,10 @@ AWCMS implements a multi-stage approval process for new account requests (Option
 
 2. **Admin Approval**:
     - Tenant Admins (or Platform Admins) review applications in the CMS.
-    - Approving moves status to `pending_super_admin`.
+    - Approving moves status to `pending_super_admin` (platform admin).
 
-3. **Super Admin Approval**:
-    - Super Admins perform final review.
+3. **Platform Admin Approval**:
+    - Platform Admins perform final review.
     - Upon approval, the system:
         - Creates a Supabase Auth user via `inviteUserByEmail`.
         - Sends an email invitation with a magic link/password setup.

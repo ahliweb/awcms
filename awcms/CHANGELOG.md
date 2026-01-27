@@ -3,20 +3,6 @@
 
 All notable changes to the **AWCMS** project will be documented in this file.
 
-## [Unreleased]
-
-### Added
-
-- **Documentation**:
-  - Added "How to Choose and Use AI Models in OpenCode Zen" guide (`docs/guides/opencode-models.md`).
-
-### Changed
-
-- **Public Portal (Smandapbun)**:
-  - Upgraded TailwindCSS to v4.
-- **CI/CD**:
-  - Updated CI workflow configuration.
-
 ## [2.24.0] "Nexus" - 2026-01-23
 
 ### Added
@@ -37,6 +23,32 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Performance & Reliability**: Corrected broken relative links across the documentation library to ensure link integrity.
 - **Database Migrations**: Guarded `ALTER TABLE public.blogs` with `IF EXISTS` in `20260120091500_unified_content_model.sql` to prevent `db pull` failures.
 - **Security**: Pinned `lodash` to `^4.17.23` across public templates and admin packages to address prototype pollution alerts.
+
+## [Unreleased]
+
+### Added
+
+- **Documentation**:
+  - Added "How to Choose and Use AI Models in OpenCode Zen" guide (`docs/guides/opencode-models.md`).
+- **Role Management**:
+  - Added DB-driven role flags, onboarding defaults, and 10-level staff hierarchy support.
+  - Added tenant isolation and tenant IDs for extension registry tables.
+- **Database**:
+  - Added migrations for role flags (`20260127090000`), extension tenant isolation (`20260127094000`), and advisor lint fix (`20260127121000`).
+
+### Changed
+
+- **Access Control**:
+  - Replaced hardcoded role-name checks with role flags across admin/public UI and Edge Functions.
+  - Updated onboarding approval flow to use platform admin flag checks.
+- **Extensions**:
+  - Scoped extension install, registry, and plugin loading to the current tenant.
+- **Documentation**:
+  - Updated role, RLS, extensions, and onboarding docs to match schema and permissions.
+
+### Fixed
+
+- **Supabase Lint**: Resolved `extensions.index_advisor` type mismatch warning by casting `statements` to `text[]` when privileges allow.
 
 ## [2.23.1] "Antigravity" - 2026-01-22
 
@@ -550,7 +562,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Fixed
 
-- **User Approval**: Resolved "Forbidden: Super Admin only" error by deploying updated `manage-users` Edge Function with improved role detection and debug parsing.
+- **User Approval**: Resolved "Forbidden: Platform admin only" error by deploying updated `manage-users` Edge Function with improved role detection and debug parsing.
 - **Users Module**: Confirmed internal logic for SMTP email triggers (`resetPasswordForEmail`, `inviteUserByEmail`) correctly delegates to Supabase Native SMTP.
 
 ### Security
@@ -638,7 +650,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Data Cleanup Migration**: Removes rows with NULL or invalid `tenant_id` (orphaned data)
 - **RLS Enforcement**: All navigation tables now have proper tenant-scoped RLS policies
 - **Media Library Audit**: Verified `files` table compliance (RLS, NOT NULL, ABAC) - no changes needed
-- **Media Role Capabilities**: RLS policies now restrict INSERT/UPDATE/DELETE to manage roles (owner, super_admin, admin, editor, author); read-only for others
+- **Media Role Capabilities**: RLS policies now restrict INSERT/UPDATE/DELETE to manage roles (platform admin/full access, admin, editor, author); read-only for others
 
 ### Changed
 
@@ -688,7 +700,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - `FormWrapper`: Sticky submit bar with unsaved changes warning
   - `EmptyState`, `LoadingSkeleton`, `NotAuthorized`: Consistent state components
   - `TenantBadge`: Displays current tenant context in header
-- **Template Permissions**: `platform.template.read/update/manage` for owner/super_admin only
+- **Template Permissions**: `platform.template.read/update/manage` for platform admin/full access roles only
 - **Documentation**: New `docs/ADMIN_UI_ARCHITECTURE.md` with component reference
 
 ### Changed
@@ -702,7 +714,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Security
 
-- **Template ABAC**: Only `owner` and `super_admin` roles can manage admin templates
+- **Template ABAC**: Only platform admin/full access roles can manage admin templates
 - **Route Guards**: All refactored managers use `AdminPageLayout` permission checks
 
 ### Fixed
@@ -756,7 +768,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Added
 
-- **Nama Tenant Column**: Platform admins (`owner`, `super_admin`) now see tenant names in list views across all 20 modules.
+- **Nama Tenant Column**: Platform admin/full-access roles now see tenant names in list views across all 20 modules.
 - **Public Template System**: New `awtemplate01` template with dedicated layout, header, footer, and components.
 - **Domain Aliasing**: `get_tenant_id_by_host` RPC now supports `-public` domain suffix aliasing.
 - **RLS Pre-request Hook**: Fixed `current_tenant_id()` function to read `app.current_tenant_id` for anonymous users.
@@ -764,13 +776,13 @@ All notable changes to the **AWCMS** project will be documented in this file.
 ### Changed
 
 - **Admin/Public Separation**: Main router now redirects `/` to `/login`, removing all public routes from admin panel.
-- **Visibility Logic**: Nama Tenant column now uses role-based check (`userRole === 'super_admin' || userRole === 'owner'`) instead of tenant context check.
+- **Visibility Logic**: Nama Tenant column now uses platform admin flag checks instead of tenant context checks.
 
 ### Fixed
 
 - **GenericContentManager**: Column was only visible when no tenant was selected; now visible for platform admins regardless.
 - **Custom Modules**: Added tenant query joins and display badges to TagsManager, ThemesManager, MenusManager, MediaLibrary, and WidgetsManager.
-- **Permission Deduplication**: Removed duplicate permissions and synced `owner` role with `super_admin` (313 permissions each).
+- **Permission Deduplication**: Removed duplicate permissions and synced full-access roles (`owner`, `super_admin`).
 - **Editor Initialization**: Fixed blank page issues in ArticleEditor and PageEditor due to missing state hooks.
 - **SettingsManager**: Fixed `PGRST200` error with `customSelect="*"` and soft-delete/sort column issues.
 
@@ -869,7 +881,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Offline Architecture (CRITICAL)**: Implemented missing `schema.js` and `applySchema` logic in `db.js`, fixing a critical gap where local SQLite tables were not initialized.
 - **Testing Framework**: Established comprehensive automated testing infrastructure using `vitest`, `jsdom`, and `@testing-library`, enabling verifying core system logic.
 - **Unit Tests**:
-  - `PermissionContext.test.jsx`: Added verification for ABAC logic, ABAC fallback, and `super_admin` policies.
+  - `PermissionContext.test.jsx`: Added verification for ABAC logic, ABAC fallback, and full-access policies.
   - `UnifiedDataManager.test.js`: Added verification for offline/online toggle and data fetching delegation.
 
 ## [2.3.0] - 2026-01-04
@@ -924,7 +936,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - Added support for Extension and Plugin menu injection.
 - **Multi-Tenancy**:
   - Enforced `tenant_id` on all File uploads via `useMedia` hook.
-  - Verified `TenantsManager` for Super Admin use.
+  - Verified `TenantsManager` for platform admin use.
 
 ### Fixed
 
@@ -941,7 +953,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Version Badge**: UI component for displaying version in admin panel
 - **Documentation Audit**: 7 new documentation files (CONTRIBUTING, CODE_OF_CONDUCT, LICENSE, OFFLINE_ARCHITECTURE, ROLE_HIERARCHY, AUDIT_TRAIL, RLS_POLICIES)
 - **Role Migration**: Changed `super_super_admin` to `owner` as supreme role
-- **RLS Fix**: Global roles (owner, super_admin) now readable by all users
+- **RLS Fix**: Global roles (platform admin/full access) now readable by all users
 - **Security Hardening**: Added `SET search_path = ''` to SECURITY DEFINER functions
 
 ### Changed
@@ -971,7 +983,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - Menu Grouping consolidated and reorganized
 - User Module tenant selector based on role
-- Dashboard Platform Overview for owner and super_admin
+- Dashboard Platform Overview for platform admins
 
 ### Fixed (1.0.0)
 

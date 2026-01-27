@@ -18,16 +18,29 @@ function ExtensionABACIntegration({ extensionId }) {
    const fetchData = useCallback(async () => {
       setLoading(true);
       try {
-         // 1. Fetch System Roles
-         const { data: rolesData } = await supabase
-            .from('roles')
-            .select('id, name')
-            .is('deleted_at', null);
-         setRoles(rolesData || []);
-
-         // 2. Fetch Extension Config to get defined Permissions
-         const { data: extData } = await supabase.from('extensions').select('config').eq('id', extensionId).single();
+         // 1. Fetch Extension Config to get defined Permissions + tenant scope
+         const { data: extData } = await supabase
+            .from('extensions')
+            .select('config, tenant_id')
+            .eq('id', extensionId)
+            .single();
          const definedPermNames = extData?.config?.permissions || [];
+         const extensionTenantId = extData?.tenant_id || null;
+
+         // 2. Fetch Roles scoped to the extension's tenant
+         let rolesQuery = supabase
+            .from('roles')
+            .select('id, name, tenant_id')
+            .is('deleted_at', null);
+
+         if (extensionTenantId) {
+            rolesQuery = rolesQuery.eq('tenant_id', extensionTenantId);
+         } else {
+            rolesQuery = rolesQuery.is('tenant_id', null);
+         }
+
+         const { data: rolesData } = await rolesQuery;
+         setRoles(rolesData || []);
 
          setExtensionPermissions(definedPermNames);
 
@@ -43,11 +56,13 @@ function ExtensionABACIntegration({ extensionId }) {
             if (corePerms) {
                const permIdMap = {};
                corePerms.forEach(p => permIdMap[p.id] = p.name);
+               const roleIds = rolesData.map(r => r.id);
 
                const { data: rolePerms } = await supabase
                   .from('role_permissions')
                   .select('role_id, permission_id')
                   .in('permission_id', corePerms.map(p => p.id))
+                  .in('role_id', roleIds)
                   .is('deleted_at', null);
 
                const matrix = {};
@@ -105,12 +120,20 @@ function ExtensionABACIntegration({ extensionId }) {
          corePerms.forEach(p => nameToId[p.name] = p.id);
          const targetPermIds = corePerms.map(p => p.id);
 
-         // 2. Clear existing mappings for these specific permissions across ALL roles (or just the ones we edited? safer to clear all involved)
-         // We delete from role_permissions where permission_id is in our target list
+         const roleIds = roles.map(r => r.id);
+         if (roleIds.length === 0) {
+            toast({ title: "No roles available", variant: "warning" });
+            setLoading(false);
+            return;
+         }
+
+         // 2. Clear existing mappings for these specific permissions scoped to the current tenant roles
+         // We delete from role_permissions where permission_id and role_id match our target list
          await supabase
             .from('role_permissions')
             .update({ deleted_at: new Date().toISOString() })
             .in('permission_id', targetPermIds)
+            .in('role_id', roleIds)
             .is('deleted_at', null);
 
          // 3. Insert new mappings

@@ -238,10 +238,6 @@ Agent Action 5: Update documentation if needed
 
 ---
 
-
-
----
-
 ## 🎨 UI Component Patterns
 
 ### Using shadcn/ui Components
@@ -421,24 +417,28 @@ case 'delete': {
 AWCMS provides a "Swiss Army Knife" MCP server in `awcms-mcp/` that grants Agents capabilities across the entire stack.
 
 ### 1. Supabase Tools
-*   `supabase_status`: Check local stack status.
-*   `supabase_db_pull`: Sync remote schema to local migrations.
-*   `supabase_db_push`: Push local migrations to remote.
-*   `supabase_migration_new`: Create new migration files.
-*   `supabase_gen_types`: Generate TypeScript types.
+
+- `supabase_status`: Check local stack status.
+- `supabase_db_pull`: Sync remote schema to local migrations.
+- `supabase_db_push`: Push local migrations to remote.
+- `supabase_migration_new`: Create new migration files.
+- `supabase_gen_types`: Generate TypeScript types.
 
 ### 2. Context7 Tools (AI Documentation)
-*   `context7_search`: Query the Context7 documentation index for up-to-date library usage (e.g., "how to use Supabase Auth with RLS").
-    *   **Requirement**: Set `CONTEXT7_API_KEY` in `.env`.
+
+- `context7_search`: Query the Context7 documentation index for up-to-date library usage (e.g., "how to use Supabase Auth with RLS").
+  - **Requirement**: Set `CONTEXT7_API_KEY` in `.env`.
 
 ### 3. Flutter Tools (Mobile)
-*   `flutter_doctor`: Check mobile environment health.
-*   `flutter_pub_get`: Install mobile dependencies.
-*   `flutter_analyze`: Run static analysis on `awcms-mobile`.
+
+- `flutter_doctor`: Check mobile environment health.
+- `flutter_pub_get`: Install mobile dependencies.
+- `flutter_analyze`: Run static analysis on `awcms-mobile`.
 
 ### Setup
-1.  Ensure `awcms/.env` has `SUPABASE_DB_URL` and `CONTEXT7_API_KEY`.
-2.  Run `cd awcms-mcp && npm run dev`.
+
+1. Ensure `awcms/.env` has `SUPABASE_DB_URL` and `CONTEXT7_API_KEY`.
+2. Run `cd awcms-mcp && npm run dev`.
 
 ---
 
@@ -472,6 +472,8 @@ Agents must strictly adhere to this matrix when implementing access controls:
 
 _\* Author → hanya konten milik sendiri (tenant_id + owner_id)_
 
+> Platform admin access is determined by role flags (`is_platform_admin`/`is_full_access`), not role names.
+
 **Legend:**
 
 - **C**: Create
@@ -490,10 +492,10 @@ Example: `tenant.user.create`, `tenant.article.publish`, `tenant.modules.read`.
 import { usePermissions } from "@/contexts/PermissionContext";
 
 function MyComponent() {
-  const { hasPermission, userRole } = usePermissions();
+  const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
 
-  // Super admin bypasses all checks
-  if (userRole === "super_admin") {
+  // Platform admin/full access bypasses all checks
+  if (isPlatformAdmin || isFullAccess) {
     // Full access
   }
 
