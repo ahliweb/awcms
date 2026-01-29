@@ -15,5 +15,5 @@ awcms-ext/
 
 ## References
 
-- `../awcms/docs/03-features/EXTENSIONS.md`
+- `../docs/modules/EXTENSIONS.md`
 - `../DOCS_INDEX.md`

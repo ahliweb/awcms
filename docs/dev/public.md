@@ -22,9 +22,9 @@ Each tenant has a dedicated directory under `awcms-public/`. We currently use a 
 
 Public portals require:
 
-- `PUBLIC_SUPABASE_URL`
-- `PUBLIC_SUPABASE_ANON_KEY`
-- `PUBLIC_SITE_URL`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_DEV_TENANT_HOST` (local development)
 
 ## 5. Development Workflow
 

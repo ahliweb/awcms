@@ -19,6 +19,8 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 - AWCMS uses logical isolation on a shared database.
 - Tenant context is mandatory for all reads and writes.
 - RLS enforces isolation at the database layer.
+- Tenants can be nested up to 5 levels using `parent_tenant_id` and `hierarchy_path`.
+- Resource sharing is configurable per tenant via `tenant_resource_rules`.
 
 ## How It Works
 
@@ -41,6 +43,7 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 
 - `x-tenant-id` is injected into requests by the admin client and public middleware.
 - SQL functions read `app.current_tenant_id` via `current_tenant_id()`.
+- Hierarchy functions (`is_tenant_descendant`, `tenant_can_access_resource`) enforce shared vs isolated resources.
 
 ## Implementation Patterns
 
@@ -68,16 +71,23 @@ const { data } = await supabase
   .is('deleted_at', null);
 ```
 
+### Hierarchy & Sharing Defaults
+
+- **Shared by default**: `settings` and `branding` (descendants). Tenant admins and full-access roles have read/write access across levels.
+- **Isolated by default**: `content`, `media`, and `users` resources.
+- Rules are stored in `tenant_resource_registry` and `tenant_resource_rules`.
+
 ## Security and Compliance Notes
 
 - Every tenant-scoped table must include `tenant_id` and `deleted_at`.
 - All queries must include tenant filters even when RLS is enabled.
-- Platform admin features are the only exception to cross-tenant access.
+- Cross-tenant access is allowed only for resources marked as shared.
+- Platform admin and full-access roles can access all tenants, including cross-tenant reporting.
 
 ## Operational Concerns
 
 - Tenant domains are configured in the `tenants` table (host/subdomain fields).
-- New tenant creation must seed default roles, templates, and menus via SQL or RPC.
+- New tenant creation seeds default roles, staff hierarchy, and resource rules via SQL/RPC.
 
 ## Troubleshooting
 

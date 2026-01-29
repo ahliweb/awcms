@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 -- Migration: Unified Content Model
 -- Description: Add category_id, SEO fields, page_tags, page_files, content_translations tables
 

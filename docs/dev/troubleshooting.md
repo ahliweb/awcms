@@ -11,7 +11,7 @@ Provide common fixes for local development and deployment issues.
 
 ## Prerequisites
 
-- `awcms/docs/01-guides/CONFIGURATION.md`
+- `docs/dev/setup.md`
 
 ## Steps
 

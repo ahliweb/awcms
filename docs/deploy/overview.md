@@ -11,7 +11,7 @@ Describe deployment steps for each AWCMS package in the monorepo.
 
 ## Prerequisites
 
-- `awcms/docs/01-guides/CONFIGURATION.md`
+- `docs/dev/setup.md`
 - Cloudflare Pages account (admin/public)
 
 ## Steps
@@ -38,13 +38,13 @@ Describe deployment steps for each AWCMS package in the monorepo.
 - Apply migrations from repo root:
 
 ```bash
-supabase db push
+npx supabase db push
 ```
 
 - Deploy edge functions as needed:
 
 ```bash
-supabase functions deploy
+npx supabase functions deploy
 ```
 
 ### 3.1 Supabase Auth URLs

@@ -11,7 +11,7 @@ Explain the Visual Page Builder architecture and integration with public renderi
 
 ## Prerequisites
 
-- `awcms/docs/03-features/TEMPLATE_SYSTEM.md`
+- `docs/modules/TEMPLATE_SYSTEM.md`
 - `docs/security/abac.md`
 
 ## Core Concepts
@@ -56,7 +56,7 @@ Current UI checks include:
 - Visual list: `tenant.visual_pages.read`
 - Edit/publish: `checkAccess('edit', 'pages', page)` and `checkAccess('publish', 'pages', page)`
 
-Refer to `ABAC_SYSTEM.md` for key conventions.
+Refer to `docs/security/abac.md` for key conventions.
 
 ## Security and Compliance Notes
 

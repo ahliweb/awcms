@@ -35,7 +35,7 @@ Use the `usePermissions` hook to guard UI elements:
 ```jsx
 const { hasPermission } = usePermissions();
 
-if (hasPermission('tenant.article.create')) {
+if (hasPermission('tenant.blog.create')) {
   <Button>Create Article</Button>
 }
 ```

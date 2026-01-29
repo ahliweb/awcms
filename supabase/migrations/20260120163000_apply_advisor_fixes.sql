@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 -- Migration: Apply Supabase Advisor Fixes
 -- Description: Split RLS policies for optimization and fix function search_path
 

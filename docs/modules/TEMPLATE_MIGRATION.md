@@ -11,8 +11,8 @@ Provide guidance for migrating legacy templates to the current template system.
 
 ## Prerequisites
 
-- `awcms/docs/03-features/TEMPLATE_SYSTEM.md`
-- Supabase CLI installed
+- `docs/modules/TEMPLATE_SYSTEM.md`
+- Supabase CLI v2.70+ (install globally or use `npx supabase`)
 
 ## Steps
 
@@ -21,7 +21,7 @@ Provide guidance for migrating legacy templates to the current template system.
 From repo root:
 
 ```bash
-supabase db push
+npx supabase db push
 ```
 
 ### 2. Ensure `tenant_id` is Set

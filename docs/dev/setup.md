@@ -6,7 +6,7 @@
 - **npm**: v10+
 - **Flutter**: v3.38.5+ (if working on mobile)
 - **PlatformIO**: Core 6.1+ (if working on IoT)
-- **Supabase CLI**: v1.130+
+- **Supabase CLI**: v2.70+ (install globally or use `npx supabase`)
 
 ## 2. Quick Start (Monorepo)
 
@@ -14,7 +14,7 @@
 
 ```bash
 git clone <repository_url>
-cd awcms
+cd <repo-root>
 ```
 
 ### 2.2 Setup Environment Variables

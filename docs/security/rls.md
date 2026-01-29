@@ -26,13 +26,15 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 | `is_platform_admin()` | boolean | **Standard**: Checks platform admin/full-access flags. Subject to RLS recursion. |
 | `has_permission(key)` | boolean | Checks if current user has specific permission key |
 | `is_admin_or_above()` | boolean | **DEPRECATED for Logic** - Returns true for tenant admin or platform admin flags. Use `has_permission` instead. |
+| `is_tenant_descendant(ancestor, descendant)` | boolean | Checks tenant hierarchy membership (descendant path). |
+| `tenant_can_access_resource(row_tenant, resource_key, action)` | boolean | Enforces shared vs isolated resource access across tenant levels. |
 
 `current_tenant_id()` reads `app.current_tenant_id`, which is set from the `x-tenant-id` request header by database helpers.
 
 ### Table Policy Sources
 
 - `supabase/migrations` contains the canonical SQL definitions.
-- `schema_dump.sql` provides a snapshot for review and diffing.
+- Use `npx supabase db pull` to refresh local schema history when syncing with remote.
 
 ### ⚠️ IMPORTANT: ABAC Policy Pattern (New Standard)
 
@@ -62,6 +64,17 @@ FOR SELECT USING (
 CREATE POLICY "table_insert_abac" ON public.table_name
 FOR INSERT WITH CHECK (
   (tenant_id = public.current_tenant_id() AND public.has_permission('tenant.module.create'))
+  OR public.auth_is_admin()
+);
+```
+
+### Shared Resource Pattern (Hierarchy-Aware)
+
+```sql
+CREATE POLICY "table_select_hierarchy" ON public.table_name
+FOR SELECT USING (
+  tenant_id = public.current_tenant_id()
+  OR public.tenant_can_access_resource(tenant_id, 'content', 'read')
   OR public.auth_is_admin()
 );
 ```

@@ -11,7 +11,7 @@ Describe the monitoring tools and logging practices for AWCMS.
 
 ## Prerequisites
 
-- `awcms/docs/03-features/AUDIT_TRAIL.md`
+- `docs/modules/AUDIT_TRAIL.md`
 
 ## Core Concepts
 

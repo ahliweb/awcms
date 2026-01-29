@@ -113,7 +113,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 ```jsx
 const { hasPermission, userRole, isPlatformAdmin, tenantId } = usePermissions();
 
-if (hasPermission('tenant.article.create')) {
+if (hasPermission('tenant.blog.create')) {
   // Show create button
 }
 ```

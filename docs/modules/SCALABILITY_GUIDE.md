@@ -11,7 +11,7 @@ Outline scalability considerations for AWCMS deployments.
 
 ## Prerequisites
 
-- `awcms/docs/03-features/PERFORMANCE.md`
+- `docs/modules/PERFORMANCE.md`
 
 ## Core Concepts
 

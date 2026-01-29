@@ -29,8 +29,7 @@ awcms-dev/
 ├── awcms-ext/                  # External extensions
 ├── supabase/                   # Migrations and edge functions
 ├── DOCS_INDEX.md               # Monorepo docs index
-├── AGENTS.md                   # AI agent rules (SSOT)
-└── schema_dump.sql             # Database reference snapshot
+└── AGENTS.md                   # AI agent rules (SSOT)
 ```
 
 ### Admin Panel (`awcms/`)
@@ -45,8 +44,7 @@ awcms/
 │   ├── pages/                  # Route components
 │   ├── plugins/                # Core plugins
 │   └── templates/              # Admin templates
-├── docs/                       # Admin documentation tree
-├── supabase/                   # Legacy supabase artifacts (see SUPABASE_INTEGRATION)
+├── supabase/                   # Legacy supabase artifacts (see docs/tenancy/supabase.md)
 ├── package.json
 └── vite.config.js
 ```
@@ -62,8 +60,8 @@ awcms-public/primary/
 │   ├── middleware.ts           # Tenant resolution
 │   ├── pages/                  # Astro routes
 │   └── templates/              # Theme templates
-├── astro.config.mjs
-└── tailwind.config.mjs
+├── astro.config.ts
+└── tailwind.config.js
 ```
 
 ### Mobile (`awcms-mobile/primary`)

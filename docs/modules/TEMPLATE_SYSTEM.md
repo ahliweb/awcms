@@ -11,7 +11,7 @@ Explain how templates, parts, widgets, and assignments drive multi-channel rende
 
 ## Prerequisites
 
-- `awcms/docs/03-features/VISUAL_BUILDER.md`
+- `docs/modules/VISUAL_BUILDER.md`
 - `docs/tenancy/overview.md`
 
 ## Core Concepts

@@ -42,7 +42,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 
 | Module        | Permission Prefix        | Actions                                                          |
 | :------------ | :----------------------- | :--------------------------------------------------------------- |
-| Blogs         | `tenant.article.*`       | read, create, update, delete, restore, permanent_delete, publish |
+| Blogs         | `tenant.blog.*`          | read, create, update, delete, restore, permanent_delete, publish |
 | Pages         | `tenant.page.*`          | read, create, update, delete, restore, permanent_delete, publish |
 | Visual Pages  | `tenant.visual_pages.*`  | read, create, update, delete, restore, permanent_delete          |
 | Portfolio     | `tenant.portfolio.*`     | read, create, update, delete, restore, permanent_delete          |
@@ -116,7 +116,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 
 - **Users**: Linked to roles.
 - **Roles**: Foundational grouping of permissions.
-- **Permissions**: Granular capabilities (e.g. `tenant.article.create`).
+- **Permissions**: Granular capabilities (e.g. `tenant.blog.create`).
 - **Policies**: Advanced deny-rules (e.g., "No delete on mobile").
 
 ### Context API (`usePermissions`)
@@ -143,7 +143,7 @@ function MyComponent() {
 
 ## 3. Best Practices
 
-1. **Check Permissions, Not Roles**: Never check `if (role === 'editor')`. Always check `if (hasPermission('tenant.article.update'))`.
+1. **Check Permissions, Not Roles**: Never check `if (role === 'editor')`. Always check `if (hasPermission('tenant.blog.update'))`.
 2. **Granularity**: Use the specific permission for the resource (e.g., `tenant.visual_pages` vs `tenant.pages`).
 3. **Audit Trail**: All permission changes are logged in `audit_logs`.
 

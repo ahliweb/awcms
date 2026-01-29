@@ -3,7 +3,7 @@
 Aplikasi mobile Flutter untuk AWCMS.
 
 ## Prerequisites
-- Flutter SDK 3.10+
+- Flutter SDK 3.38.5+
 - Dart SDK 3+
 
 ## Quick Start
@@ -31,4 +31,4 @@ SUPABASE_ANON_KEY=...
 ## References
 
 - `../../DOCS_INDEX.md`
-- `../../awcms/docs/01-guides/MOBILE_DEVELOPMENT.md`
+- `../../docs/dev/mobile.md`

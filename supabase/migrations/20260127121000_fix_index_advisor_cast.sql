@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 DO $$
 DECLARE
   proc_oid oid;

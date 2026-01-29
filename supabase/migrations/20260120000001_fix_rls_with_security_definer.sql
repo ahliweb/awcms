@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 -- Migration: Fix RLS with Security Definer
 -- Date: 2026-01-20
 -- Description: Introduces a security definer function to safely check admin status for RLS policies, avoiding recursion or access issues.

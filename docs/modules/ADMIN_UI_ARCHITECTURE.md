@@ -108,7 +108,7 @@ function CustomManager() {
 ```jsx
 const { hasPermission, userRole, isPlatformAdmin } = usePermissions();
 
-if (hasPermission('tenant.article.create')) {
+if (hasPermission('tenant.blog.create')) {
   // Show create button
 }
 ```

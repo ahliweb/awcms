@@ -12,13 +12,14 @@ Define how AWCMS integrates with Supabase for auth, data, storage, and edge func
 ## Prerequisites
 
 - Supabase project with RLS enabled
-- `supabase` CLI installed for migrations
+- Supabase CLI v2.70+ (install globally or use `npx supabase`)
 
 ## Core Concepts
 
 - Supabase is the only backend (no custom servers).
 - RLS is mandatory for all tenant-scoped tables.
 - Tenant context is passed via `x-tenant-id` header and resolved in SQL with `current_tenant_id()`.
+- Tenant hierarchy and resource sharing are enforced with `tenant_can_access_resource()`.
 
 ## How It Works
 
@@ -36,7 +37,7 @@ Define how AWCMS integrates with Supabase for auth, data, storage, and edge func
 
 - Stored in `supabase/functions/*`.
 - Use `supabaseAdmin` (service role) for cross-tenant operations and elevated workflows.
-- Must enforce tenant context checks before mutating data.
+- Must enforce tenant context checks and resource sharing rules before mutating data.
 
 ## Implementation Patterns
 
@@ -46,7 +47,7 @@ Define how AWCMS integrates with Supabase for auth, data, storage, and edge func
 import { supabase } from '@/lib/customSupabaseClient';
 
 const { data, error } = await supabase
-  .from('articles')
+  .from('blogs')
   .select('*')
   .eq('status', 'published')
   .is('deleted_at', null);
@@ -80,7 +81,6 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_SUPER_ADMIN_EMAIL` (optional override)
 - `VITE_TURNSTILE_SITE_KEY` (if Turnstile enabled)
 - `VITE_DEV_TENANT_SLUG` (local development)
 
@@ -95,7 +95,7 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 Run from repo root:
 
 ```bash
-supabase db push
+npx supabase db push
 ```
 
 Supabase CLI configuration lives in `supabase/config.toml`.

@@ -43,7 +43,7 @@ const { data, error } = await supabase.auth.signInWithPassword({
 
 ```javascript
 const { data, error } = await supabase
-  .from('articles')
+  .from('blogs')
   .select('*, author:users(id, full_name)')
   .eq('status', 'published')
   .is('deleted_at', null)
@@ -54,16 +54,16 @@ const { data, error } = await supabase
 
 ```javascript
 const { error } = await supabase
-  .from('articles')
+  .from('blogs')
   .update({ deleted_at: new Date().toISOString() })
-  .eq('id', articleId);
+  .eq('id', blogId);
 ```
 
 ### Storage Upload
 
 ```javascript
 const { data, error } = await supabase.storage
-  .from('articles')
+  .from('cms-uploads')
   .upload(`images/${fileName}`, file, { cacheControl: '3600', upsert: false });
 ```
 

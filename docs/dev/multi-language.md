@@ -32,9 +32,9 @@ function Component() {
 
 **Key Files:**
 
-- [i18n.js](file:///home/data/dev_react/awcms-dev/awcms/src/lib/i18n.js)
-- [en.json](file:///home/data/dev_react/awcms-dev/awcms/src/locales/en.json)
-- [id.json](file:///home/data/dev_react/awcms-dev/awcms/src/locales/id.json)
+- `awcms/src/lib/i18n.js`
+- `awcms/src/locales/en.json`
+- `awcms/src/locales/id.json`
 
 ---
 
@@ -56,10 +56,10 @@ const locale = getLocale(Astro.request);
 
 **Key Files:**
 
-- [i18n.ts](file:///home/data/dev_react/awcms-dev/awcms-public/primary/src/utils/i18n.ts)
-- [en.json](file:///home/data/dev_react/awcms-dev/awcms-public/primary/src/locales/en.json)
-- [id.json](file:///home/data/dev_react/awcms-dev/awcms-public/primary/src/locales/id.json)
-- [LanguageSwitcher.astro](file:///home/data/dev_react/awcms-dev/awcms-public/primary/src/components/common/LanguageSwitcher.astro)
+- `awcms-public/primary/src/utils/i18n.ts`
+- `awcms-public/primary/src/locales/en.json`
+- `awcms-public/primary/src/locales/id.json`
+- `awcms-public/primary/src/components/common/LanguageSwitcher.astro`
 
 **Language Switcher:**
 
@@ -96,9 +96,9 @@ MaterialApp(
 
 **Key Files:**
 
-- [l10n.yaml](file:///home/data/dev_react/awcms-dev/awcms-mobile/primary/l10n.yaml)
-- [app_en.arb](file:///home/data/dev_react/awcms-dev/awcms-mobile/primary/lib/l10n/app_en.arb)
-- [app_id.arb](file:///home/data/dev_react/awcms-dev/awcms-mobile/primary/lib/l10n/app_id.arb)
+- `awcms-mobile/primary/l10n.yaml`
+- `awcms-mobile/primary/lib/l10n/app_en.arb`
+- `awcms-mobile/primary/lib/l10n/app_id.arb`
 
 ---
 
@@ -125,9 +125,9 @@ Edit `config.h`:
 
 **Key Files:**
 
-- [config.h](file:///home/data/dev_react/awcms-dev/awcms-esp32/primary/include/config.h)
-- [lang_en.h](file:///home/data/dev_react/awcms-dev/awcms-esp32/primary/include/lang_en.h)
-- [lang_id.h](file:///home/data/dev_react/awcms-dev/awcms-esp32/primary/include/lang_id.h)
+- `awcms-esp32/primary/include/config.h`
+- `awcms-esp32/primary/include/lang_en.h`
+- `awcms-esp32/primary/include/lang_id.h`
 
 ---
 

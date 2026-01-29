@@ -7,7 +7,7 @@ Provide contribution guidelines aligned to AWCMS core standards.
 ## Prerequisites
 
 - Read `AGENTS.md`
-- Read `awcms/docs/00-core/CORE_STANDARDS.md`
+- Read `docs/architecture/standards.md`
 
 ## Development Setup
 

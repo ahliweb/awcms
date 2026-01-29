@@ -5,7 +5,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 
 export function usePlatformStats() {
     const { session } = useAuth();
-    const { isPlatformAdmin } = usePermissions();
+    const { isPlatformAdmin, isFullAccess, hasPermission } = usePermissions();
     const [stats, setStats] = useState({
         totalTenants: 0,
         totalUsers: 0,
@@ -16,7 +16,8 @@ export function usePlatformStats() {
     const [loading, setLoading] = useState(true);
 
     const fetchStats = useCallback(async () => {
-        if (!session || !isPlatformAdmin) {
+        const canReport = isPlatformAdmin || isFullAccess || hasPermission('platform.reporting.read');
+        if (!session || !canReport) {
             setLoading(false);
             return;
         }
@@ -68,7 +69,7 @@ export function usePlatformStats() {
         } finally {
             setLoading(false);
         }
-    }, [session, isPlatformAdmin]);
+    }, [session, isPlatformAdmin, isFullAccess, hasPermission]);
 
     useEffect(() => {
         fetchStats();

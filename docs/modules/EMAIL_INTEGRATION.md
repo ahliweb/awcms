@@ -33,7 +33,7 @@ MAILKETING_DEFAULT_LIST_ID=1
 ### Deploy Function
 
 ```bash
-supabase functions deploy mailketing
+npx supabase functions deploy mailketing
 ```
 
 ## Implementation Patterns
@@ -60,4 +60,4 @@ await sendEmail({
 ## References
 
 - `docs/tenancy/supabase.md`
-- `../../src/lib/email/mailketingService.js`
+- `awcms/src/lib/email/mailketingService.js`

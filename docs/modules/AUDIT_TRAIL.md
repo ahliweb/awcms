@@ -38,15 +38,13 @@ The audit trail captures all significant system actions, providing:
 | `id` | UUID | Primary key |
 | `tenant_id` | UUID | Tenant isolation |
 | `user_id` | UUID | User who performed action |
-| `action` | TEXT | Action type (create, update, delete, etc.) |
-| `table_name` | TEXT | Affected table |
-| `record_id` | UUID | Affected record ID |
-| `old_value` | JSONB | Previous state (for updates) |
-| `new_value` | JSONB | New state (for creates/updates) |
+| `action` | TEXT | Action type (CREATE/UPDATE/DELETE) |
+| `resource` | TEXT | Table name (`TG_TABLE_NAME`) |
+| `details` | JSONB | Snapshot payload (new or old row) |
 | `ip_address` | TEXT | Request origin IP |
-| `user_agent` | TEXT | Browser/client info |
 | `channel` | TEXT | web, mobile, api |
 | `created_at` | TIMESTAMPTZ | Timestamp |
+| `deleted_at` | TIMESTAMPTZ | Soft delete marker |
 
 ---
 
@@ -54,15 +52,15 @@ The audit trail captures all significant system actions, providing:
 
 | Action | Description | Captures |
 | ------ | ----------- | -------- |
-| `create` | New record created | new_value |
-| `update` | Record modified | old_value, new_value |
-| `delete` | Record soft-deleted | old_value |
-| `restore` | Record restored | old_value, new_value |
-| `hard_delete` | Reserved (permanent delete disabled) | old_value |
-| `login` | User authentication | user details |
-| `logout` | User session ended | - |
-| `permission_change` | Role/permission modified | old_value, new_value |
-| `config_change` | System settings modified | old_value, new_value |
+| `CREATE` | New record created | details payload |
+| `UPDATE` | Record modified | details payload |
+| `DELETE` | Record soft-deleted | details payload |
+| `RESTORE` | Record restored | details payload |
+| `HARD_DELETE` | Reserved (permanent delete disabled) | details payload |
+| `LOGIN` | User authentication | details payload |
+| `LOGOUT` | User session ended | details payload |
+| `PERMISSION_CHANGE` | Role/permission modified | details payload |
+| `CONFIG_CHANGE` | System settings modified | details payload |
 
 ---
 
@@ -73,26 +71,21 @@ The audit trail captures all significant system actions, providing:
 Audit logs are created via PostgreSQL triggers:
 
 ```sql
-CREATE OR REPLACE FUNCTION audit_trigger_function()
+CREATE OR REPLACE FUNCTION log_audit_event()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO audit_logs (
-    tenant_id, user_id, action, table_name, 
-    record_id, old_value, new_value
+    tenant_id, user_id, action, resource, details, created_at
   )
   VALUES (
     COALESCE(NEW.tenant_id, OLD.tenant_id),
     auth.uid(),
     TG_OP,
     TG_TABLE_NAME,
-    COALESCE(NEW.id, OLD.id),
-    CASE WHEN TG_OP = 'DELETE' THEN to_jsonb(OLD) 
-         WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD) 
-         ELSE NULL END,
-    CASE WHEN TG_OP = 'DELETE' THEN NULL 
-         ELSE to_jsonb(NEW) END
+    COALESCE(to_jsonb(NEW), to_jsonb(OLD)),
+    now()
   );
-  RETURN COALESCE(NEW, OLD);
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
@@ -100,10 +93,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 ### Applying Trigger
 
 ```sql
-CREATE TRIGGER audit_articles
-  AFTER INSERT OR UPDATE OR DELETE ON articles
-  FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
+CREATE TRIGGER trg_articles_audit
+  AFTER INSERT OR UPDATE OR DELETE ON blogs
+  FOR EACH ROW EXECUTE FUNCTION log_audit_event();
 ```
+
+Legacy trigger names still use the `trg_articles_audit` prefix even though they target `blogs`.
 
 ---
 
@@ -136,16 +131,22 @@ const { data: logs } = await supabase
 Audit logs are protected by Row Level Security:
 
 ```sql
--- Only Admin+ can view audit logs within their tenant
-CREATE POLICY "audit_select" ON audit_logs
-  FOR SELECT USING (
-    tenant_id = current_tenant_id() 
-    AND is_admin_or_above()
+-- Insert policy used by log_audit_event()
+CREATE POLICY "audit_logs_insert_unified" ON audit_logs
+  FOR INSERT TO public
+  WITH CHECK (
+    tenant_id = current_tenant_id()
+    OR (tenant_id IS NULL AND auth.uid() IS NOT NULL)
   );
 
--- Platform admins can view all logs
-CREATE POLICY "audit_select_platform" ON audit_logs
-  FOR SELECT USING (is_platform_admin());
+-- Unified select policy (legacy naming)
+CREATE POLICY "audit_logs_select_unified" ON audit_logs
+  FOR SELECT TO public
+  USING (
+    (tenant_id = current_tenant_id() AND is_admin_or_above())
+    OR (tenant_id IS NULL AND is_platform_admin())
+    OR is_platform_admin()
+  );
 
 -- No direct modifications (insert only via triggers)
 ```
@@ -188,7 +189,7 @@ WHERE created_at < NOW() - INTERVAL '365 days';
 ## Best Practices
 
 1. **Don't Log Sensitive Data**: Exclude passwords, tokens in new_value
-2. **Enable on Critical Tables**: articles, users, roles, settings
+2. **Enable on Critical Tables**: blogs, users, roles, settings
 3. **Monitor Log Growth**: Large tables need retention policies
 4. **Index Appropriately**: Index `created_at`, `user_id`, `table_name`
 
@@ -196,9 +197,9 @@ WHERE created_at < NOW() - INTERVAL '365 days';
 
 ## Related Documentation
 
-- [Security](docs/security/overview.md)
-- [ABAC System](ABAC_SYSTEM.md)
-- [Monitoring](MONITORING.md)
+- `docs/security/overview.md`
+- `docs/security/abac.md`
+- `docs/modules/MONITORING.md`
 
 ---
 

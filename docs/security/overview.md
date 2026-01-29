@@ -63,7 +63,7 @@ import { sanitizeHTML } from '@/utils/sanitize';
 import { usePermissions } from '@/contexts/PermissionContext';
 
 const { hasPermission } = usePermissions();
-if (!hasPermission('tenant.article.update')) {
+if (!hasPermission('tenant.blog.update')) {
   return <AccessDenied />;
 }
 ```

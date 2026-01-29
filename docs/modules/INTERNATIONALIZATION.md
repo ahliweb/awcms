@@ -136,7 +136,7 @@ For complex examples involving dynamic column headers, form labels, and tab tran
   },
   "menu": {
     "dashboard": "Dashboard",
-    "articles": "Blogs"
+    "blogs": "Blogs"
   }
 }
 ```
@@ -146,7 +146,7 @@ For complex examples involving dynamic column headers, form labels, and tab tran
 | Pattern | Example | Use Case |
 | :------ | :------ | :------- |
 | `{namespace}.{key}` | `common.loading` | Shared UI elements |
-| `{module}.form.{field}` | `articles.form.excerpt` | Form labels (maps to legacy articles namespace) |
+| `{module}.form.{field}` | `blogs.form.excerpt` | Form labels for module-specific fields |
 
 ---
 
@@ -201,8 +201,8 @@ When a user changes their language in `LanguageSettings`, it is saved to the dat
 
 | Component | Path | Purpose |
 | :-------- | :--- | :------ |
-| `LanguageSelector` | `src/components/ui/LanguageSelector.jsx` | Dropdown in header |
-| `LanguageSettings` | `src/components/dashboard/LanguageSettings.jsx` | Full settings page |
+| `LanguageSelector` | `awcms/src/components/ui/LanguageSelector.jsx` | Dropdown in header |
+| `LanguageSettings` | `awcms/src/components/dashboard/LanguageSettings.jsx` | Full settings page |
 
 ---
 
@@ -218,9 +218,9 @@ When a user changes their language in `LanguageSettings`, it is saved to the dat
 
 - [i18next Documentation](https://www.i18next.com/)
 - [react-i18next Documentation](https://react.i18next.com/)
-- [lib/i18n.js](file:///home/data/dev_react/awcms-dev/awcms/src/lib/i18n.js)
-- [en.json](file:///home/data/dev_react/awcms-dev/awcms/src/locales/en.json)
-- [id.json](file:///home/data/dev_react/awcms-dev/awcms/src/locales/id.json)
+- `awcms/src/lib/i18n.js`
+- `awcms/src/locales/en.json`
+- `awcms/src/locales/id.json`
 
 ### Public Portal Namespaces (awcms-public)
 
@@ -247,7 +247,7 @@ The public portal uses the following namespaces in `src/locales/`:
 
 For multi-language implementation across all AWCMS channels, see:
 
-- [Multi-Language Development Guide](file:///home/data/dev_react/awcms-dev/docs/dev/multi-language.md)
+- `docs/dev/multi-language.md`
 
 ### Other Channels
 

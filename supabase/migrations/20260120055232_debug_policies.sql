@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 DO $$
 BEGIN
     IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'content_translations') THEN
@@ -334,6 +336,5 @@ using (((tenant_id = public.current_tenant_id()) OR public.is_platform_admin()))
   for update
   to public
 using ((((tenant_id = public.current_tenant_id()) AND public.is_admin_or_above()) OR public.is_platform_admin()));
-
 
 

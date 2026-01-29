@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Describe the blog workflows and data model used by the CMS. (Note: Historically referred to as "Articles" in the database).
+Describe the blog workflows and data model used by the CMS (legacy index/constraint names may still reference "articles").
 
 ## Audience
 
@@ -25,7 +25,7 @@ The Blogs module is a full-featured blogging and news management system designed
 
 ## How It Works
 
-Stored in `articles` table:
+Stored in `blogs` table:
 
 - `slug`: Unique identifier for routing (e.g., `/blogs/my-post`).
 - `tiptap_doc_jsonb`: The source of truth for content.
@@ -37,11 +37,11 @@ Stored in `articles` table:
 1. **Draft**: Author creates content. Visible only to Author/Editor.
 2. **In Review**: Author submits for review. Editor receives notification.
 3. **Approved**: Editor approves content. Ready for scheduling.
-4. **Published**: Publicly visible via `published_articles_view`.
+4. **Published**: Publicly visible via `published_blogs_view`.
 
 ## Operational Concerns
 
-The Public Portal fetches posts via `published_articles_view` to ensure:
+The Public Portal fetches posts via `published_blogs_view` to ensure:
 
 1. Only `status = 'published'` items are fetched.
 2. Internal fields (like internal notes) are stripped.
@@ -55,7 +55,7 @@ The `TipTapRenderer` converts the JSON document into accessible React components
 
 ## Permissions and Access
 
-- Use `tenant.article.*` permission keys for blog actions (mapped for legacy compatibility).
+- Use `tenant.blog.*` permission keys for blog actions.
 
 ## Security and Compliance Notes
 

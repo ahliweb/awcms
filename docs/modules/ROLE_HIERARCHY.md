@@ -113,6 +113,12 @@ CREATE TABLE roles (
 - `is_default_public_registration` marks the role used for public signups.
 - `is_default_invite` marks the role used for invite-based onboarding.
 
+### Tenant Role Inheritance
+
+- Tenants can inherit roles/permissions from a parent tenant in **auto** mode.
+- In **linked** mode, inheritance occurs only for explicitly linked roles in `tenant_role_links`.
+- The inheritance mode is stored on `tenants.role_inheritance_mode`.
+
 ## DB Helper Functions
 
 > **Warning:** These functions are strictly for **Platform Administration** logic. Do not use them for feature access (use `has_permission` instead).

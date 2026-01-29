@@ -26,7 +26,7 @@ function AuditLogsManager() {
     const [limit, setLimit] = useState(50);
     const [totalCount, setTotalCount] = useState(0);
 
-    const canView = hasPermission('tenant.audit.view') || isPlatformAdmin || isFullAccess;
+    const canView = hasPermission('tenant.audit.view') || hasPermission('platform.reporting.read') || isPlatformAdmin || isFullAccess;
 
     const fetchLogs = async () => {
         if (!canView) return;

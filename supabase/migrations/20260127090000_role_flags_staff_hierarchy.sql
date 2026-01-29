@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 ALTER TABLE public.roles
   ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT 'tenant',
   ADD COLUMN IF NOT EXISTS is_platform_admin boolean NOT NULL DEFAULT false,

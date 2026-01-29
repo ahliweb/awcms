@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 drop trigger if exists "lock_created_by_trg" on "public"."article_tags";
 
 drop trigger if exists "set_created_by_trg" on "public"."article_tags";
@@ -556,5 +558,4 @@ CREATE TRIGGER trg_articles_audit AFTER INSERT OR DELETE OR UPDATE ON public.blo
 CREATE TRIGGER trg_set_tenant_id BEFORE INSERT ON public.blogs FOR EACH ROW EXECUTE FUNCTION public.set_tenant_id();
 
 CREATE TRIGGER update_articles_updated_at BEFORE UPDATE ON public.blogs FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
 

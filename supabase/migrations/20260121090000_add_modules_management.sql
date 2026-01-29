@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 -- Create modules table
 CREATE TABLE IF NOT EXISTS public.modules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

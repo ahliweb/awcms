@@ -1,3 +1,5 @@
+SET client_min_messages TO warning;
+
 ALTER TABLE public.roles
   ADD COLUMN IF NOT EXISTS is_default_public_registration boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS is_default_invite boolean NOT NULL DEFAULT false;

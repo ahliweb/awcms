@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ContentTable from '@/components/dashboard/ContentTable';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { useSearch } from '@/hooks/useSearch';
 import MinCharSearchInput from '@/components/common/MinCharSearchInput';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -66,6 +67,8 @@ function TenantsManager() {
         name: '',
         slug: '',
         domain: '',
+        parent_tenant_id: '',
+        role_inheritance_mode: 'auto',
         status: 'active',
         subscription_tier: 'free',
         subscription_expires_at: '',
@@ -83,6 +86,12 @@ function TenantsManager() {
         mobile: '',
         esp32: ''
     });
+
+    const [resourceRegistry, setResourceRegistry] = useState([]);
+    const [resourceRules, setResourceRules] = useState([]);
+    const [rulesLoading, setRulesLoading] = useState(false);
+    const [roleLinks, setRoleLinks] = useState([]);
+    const [roleLinksLoading, setRoleLinksLoading] = useState(false);
 
     // Delete state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -119,6 +128,8 @@ function TenantsManager() {
             name: '',
             slug: '',
             domain: '',
+            parent_tenant_id: '',
+            role_inheritance_mode: 'auto',
             status: 'active',
             subscription_tier: 'free',
             subscription_expires_at: '',
@@ -130,6 +141,7 @@ function TenantsManager() {
             contact_email: ''
         });
         setChannelDomains({ web_public: '', mobile: '', esp32: '' });
+        loadResourceRules(null);
         setShowEditor(true);
     };
 
@@ -139,6 +151,8 @@ function TenantsManager() {
             name: tenant.name,
             slug: tenant.slug,
             domain: tenant.domain || '',
+            parent_tenant_id: tenant.parent_tenant_id || '',
+            role_inheritance_mode: tenant.role_inheritance_mode || 'auto',
             status: tenant.status,
             subscription_tier: tenant.subscription_tier || 'free',
             subscription_expires_at: tenant.subscription_expires_at ? tenant.subscription_expires_at.split('T')[0] : '',
@@ -164,9 +178,107 @@ function TenantsManager() {
         } catch (err) {
             console.error('Failed to load channels:', err);
         }
-
+        loadResourceRules(tenant.id);
         setShowEditor(true);
     };
+
+    const loadResourceRules = useCallback(async (tenantId) => {
+        setRulesLoading(true);
+        try {
+            const { data: registryData, error: registryError } = await supabase
+                .from('tenant_resource_registry')
+                .select('resource_key, description, default_share_mode, default_access_mode')
+                .order('resource_key');
+
+            if (registryError) throw registryError;
+            setResourceRegistry(registryData || []);
+
+            let existingRules = [];
+            if (tenantId) {
+                const { data: rulesData, error: rulesError } = await supabase
+                    .from('tenant_resource_rules')
+                    .select('resource_key, share_mode, access_mode')
+                    .eq('tenant_id', tenantId);
+
+                if (rulesError) throw rulesError;
+                existingRules = rulesData || [];
+            }
+
+            const ruleMap = new Map(existingRules.map(rule => [rule.resource_key, rule]));
+            const rules = (registryData || []).map(rule => ({
+                resource_key: rule.resource_key,
+                description: rule.description,
+                share_mode: ruleMap.get(rule.resource_key)?.share_mode || rule.default_share_mode,
+                access_mode: ruleMap.get(rule.resource_key)?.access_mode || rule.default_access_mode
+            }));
+            setResourceRules(rules);
+        } catch (err) {
+            console.error('Failed to load resource rules:', err);
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load resource sharing rules.' });
+        } finally {
+            setRulesLoading(false);
+        }
+    }, [toast]);
+
+    const loadRoleLinks = useCallback(async (tenantId, parentTenantId) => {
+        if (!tenantId || !parentTenantId) {
+            setRoleLinks([]);
+            return;
+        }
+        setRoleLinksLoading(true);
+        try {
+            const [{ data: parentRoles, error: parentError }, { data: childRoles, error: childError }, { data: linkData, error: linkError }] = await Promise.all([
+                supabase
+                    .from('roles')
+                    .select('id, name')
+                    .eq('tenant_id', parentTenantId)
+                    .is('deleted_at', null),
+                supabase
+                    .from('roles')
+                    .select('id, name')
+                    .eq('tenant_id', tenantId)
+                    .is('deleted_at', null),
+                supabase
+                    .from('tenant_role_links')
+                    .select('parent_role_id, child_role_id')
+                    .eq('tenant_id', tenantId)
+            ]);
+
+            if (parentError || childError || linkError) throw parentError || childError || linkError;
+
+            const childMap = new Map((childRoles || []).map(role => [role.name, role]));
+            const linkSet = new Set((linkData || []).map(link => `${link.parent_role_id}:${link.child_role_id}`));
+
+            const merged = (parentRoles || []).map(parentRole => {
+                const childRole = childMap.get(parentRole.name);
+                const linkKey = childRole ? `${parentRole.id}:${childRole.id}` : null;
+                return {
+                    name: parentRole.name,
+                    parent_role_id: parentRole.id,
+                    child_role_id: childRole?.id || null,
+                    linked: linkKey ? linkSet.has(linkKey) : false
+                };
+            });
+
+            setRoleLinks(merged);
+        } catch (err) {
+            console.error('Failed to load role links:', err);
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load role links.' });
+        } finally {
+            setRoleLinksLoading(false);
+        }
+    }, [toast]);
+
+    useEffect(() => {
+        if (!showEditor || !editingTenant) {
+            return;
+        }
+        if (formData.role_inheritance_mode === 'linked' && formData.parent_tenant_id) {
+            loadRoleLinks(editingTenant.id, formData.parent_tenant_id);
+        } else {
+            setRoleLinks([]);
+        }
+    }, [showEditor, editingTenant, formData.parent_tenant_id, formData.role_inheritance_mode, loadRoleLinks]);
 
     const handleSave = async () => {
         if (!formData.name || !formData.slug) {
@@ -192,6 +304,8 @@ function TenantsManager() {
                 name: formData.name,
                 slug: formData.slug,
                 domain: formData.domain || null,
+                parent_tenant_id: formData.parent_tenant_id || null,
+                role_inheritance_mode: formData.role_inheritance_mode || 'auto',
                 status: formData.status,
                 subscription_tier: formData.subscription_tier,
                 subscription_expires_at: formData.subscription_expires_at || null,
@@ -212,16 +326,28 @@ function TenantsManager() {
                     .eq('id', editingTenant.id);
                 error = updateError;
             } else {
-                const { data: insertedTenant, error: insertError } = await supabase
-                    .from('tenants')
-                    .insert(payload)
-                    .select('id, slug')
-                    .single();
+                const { data: createdTenant, error: insertError } = await supabase
+                    .rpc('create_tenant_with_defaults', {
+                        p_name: payload.name,
+                        p_slug: payload.slug,
+                        p_domain: payload.domain,
+                        p_tier: payload.subscription_tier,
+                        p_parent_tenant_id: payload.parent_tenant_id,
+                        p_role_inheritance_mode: payload.role_inheritance_mode
+                    });
                 error = insertError;
-                if (insertedTenant) newTenantId = insertedTenant.id;
+                if (createdTenant?.tenant_id) newTenantId = createdTenant.tenant_id;
             }
 
             if (error) throw error;
+
+            if (!editingTenant && newTenantId) {
+                const { error: updateError } = await supabase
+                    .from('tenants')
+                    .update(payload)
+                    .eq('id', newTenantId);
+                if (updateError) throw updateError;
+            }
 
             // Save channel domains for tenant (both new and existing)
             const tenantId = editingTenant?.id || newTenantId;
@@ -245,6 +371,45 @@ function TenantsManager() {
                         if (channelError) console.error('Channel upsert error:', channelError);
                     }
                 }
+            }
+
+            if (tenantId && resourceRules.length > 0) {
+                const rulesPayload = resourceRules.map(rule => ({
+                    tenant_id: tenantId,
+                    resource_key: rule.resource_key,
+                    share_mode: rule.share_mode,
+                    access_mode: rule.access_mode
+                }));
+                const { error: rulesError } = await supabase
+                    .from('tenant_resource_rules')
+                    .upsert(rulesPayload, { onConflict: 'tenant_id,resource_key' });
+                if (rulesError) throw rulesError;
+            }
+
+            if (tenantId && payload.role_inheritance_mode === 'linked') {
+                await supabase
+                    .from('tenant_role_links')
+                    .delete()
+                    .eq('tenant_id', tenantId);
+
+                const linkPayload = roleLinks
+                    .filter(link => link.linked && link.child_role_id)
+                    .map(link => ({
+                        tenant_id: tenantId,
+                        parent_role_id: link.parent_role_id,
+                        child_role_id: link.child_role_id
+                    }));
+
+                if (linkPayload.length > 0) {
+                    const { error: linkError } = await supabase
+                        .from('tenant_role_links')
+                        .insert(linkPayload);
+                    if (linkError) throw linkError;
+                }
+            }
+
+            if (tenantId && payload.parent_tenant_id) {
+                await supabase.rpc('apply_tenant_role_inheritance', { p_tenant_id: tenantId });
             }
 
             toast({ title: 'Success', description: `Tenant ${editingTenant ? 'updated' : 'created'} successfully` });
@@ -303,9 +468,12 @@ function TenantsManager() {
         setCurrentPage(1);
     }, [debouncedQuery]);
 
+    const hasRegistry = resourceRegistry.length > 0;
+
     const columns = [
         { key: 'name', label: 'Name', className: 'font-semibold' },
         { key: 'slug', label: 'Slug', className: 'text-muted-foreground font-mono text-xs' },
+        { key: 'level', label: 'Level', className: 'text-xs text-muted-foreground text-center w-[80px]' },
         {
             key: 'status',
             label: 'Status',
@@ -517,6 +685,64 @@ function TenantsManager() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="grid gap-2">
+                                    <Label>Parent Tenant</Label>
+                                    <Select
+                                        value={formData.parent_tenant_id || 'none'}
+                                        onValueChange={v => setFormData({ ...formData, parent_tenant_id: v === 'none' ? '' : v })}
+                                    >
+                                        <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">None (Top-Level)</SelectItem>
+                                            {tenants
+                                                .filter(t => !editingTenant || t.id !== editingTenant.id)
+                                                .map(t => (
+                                                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                                ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Role Inheritance</Label>
+                                    <Select
+                                        value={formData.role_inheritance_mode}
+                                        onValueChange={v => setFormData({ ...formData, role_inheritance_mode: v })}
+                                    >
+                                        <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="auto">Auto Inherit</SelectItem>
+                                            <SelectItem value="linked">Linked Only</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            {formData.role_inheritance_mode === 'linked' && formData.parent_tenant_id && (
+                                <div className="pt-4 border-t border-border">
+                                    <h4 className="text-sm font-semibold text-foreground mb-3">Linked Roles</h4>
+                                    {roleLinksLoading ? (
+                                        <div className="text-xs text-muted-foreground">Loading role links...</div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {roleLinks.map(link => (
+                                                <div key={link.parent_role_id} className="flex items-center gap-2">
+                                                    <Checkbox
+                                                        checked={link.linked}
+                                                        disabled={!link.child_role_id}
+                                                        onCheckedChange={value => setRoleLinks(prev => prev.map(item => item.parent_role_id === link.parent_role_id ? { ...item, linked: Boolean(value) } : item))}
+                                                    />
+                                                    <span className="text-sm text-foreground">
+                                                        {link.name}
+                                                    </span>
+                                                    {!link.child_role_id && (
+                                                        <span className="text-xs text-muted-foreground">Missing child role</span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid gap-2">
                                     <Label>Status</Label>
                                     <Select value={formData.status} onValueChange={v => setFormData({ ...formData, status: v })}>
                                         <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
@@ -604,6 +830,57 @@ function TenantsManager() {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                            </div>
+
+                            {/* Resource Sharing Section */}
+                            <div className="pt-4 border-t border-border">
+                                <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                                    <Building className="w-4 h-4 text-muted-foreground" /> Resource Sharing
+                                </h4>
+                                <p className="text-xs text-muted-foreground mb-3">
+                                    Configure which resources are shared across tenant levels. Shared resources allow read/write access for tenant admins.
+                                </p>
+                                {rulesLoading ? (
+                                    <div className="text-xs text-muted-foreground">Loading resource rules...</div>
+                                ) : !hasRegistry ? (
+                                    <div className="text-xs text-muted-foreground">Resource registry not available.</div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {resourceRules.map(rule => (
+                                            <div key={rule.resource_key} className="grid grid-cols-[1fr_160px_160px] gap-3 items-center">
+                                                <div>
+                                                    <div className="text-sm font-medium text-foreground">{rule.resource_key}</div>
+                                                    {rule.description && (
+                                                        <div className="text-xs text-muted-foreground">{rule.description}</div>
+                                                    )}
+                                                </div>
+                                                <Select
+                                                    value={rule.share_mode}
+                                                    onValueChange={value => setResourceRules(prev => prev.map(item => item.resource_key === rule.resource_key ? { ...item, share_mode: value } : item))}
+                                                >
+                                                    <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="isolated">Isolated</SelectItem>
+                                                        <SelectItem value="shared_descendants">Share to Descendants</SelectItem>
+                                                        <SelectItem value="shared_ancestors">Share to Ancestors</SelectItem>
+                                                        <SelectItem value="shared_all">Share All Levels</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <Select
+                                                    value={rule.access_mode}
+                                                    onValueChange={value => setResourceRules(prev => prev.map(item => item.resource_key === rule.resource_key ? { ...item, access_mode: value } : item))}
+                                                >
+                                                    <SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="read">Read Only</SelectItem>
+                                                        <SelectItem value="write">Write Only</SelectItem>
+                                                        <SelectItem value="read_write">Read & Write</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Contact & Notes */}

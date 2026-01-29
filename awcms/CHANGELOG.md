@@ -7,15 +7,31 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Added
 
-- None.
+- **Tenant Hierarchy**:
+  - Added parent/level/path fields for up to five tenant levels.
+  - Added configurable resource sharing with registry and per-tenant rules.
+- **Role Inheritance**:
+  - Added auto vs linked inheritance mode and tenant role links.
+- **Reporting Permissions**:
+  - Added platform reporting permissions for read and bulk actions.
 
 ### Changed
 
-- None.
+- **Tenant Management**:
+  - Added parent tenant selection, resource sharing rules, and role link controls.
+  - Tenant creation now uses `create_tenant_with_defaults` for consistent seeding.
+- **Access Control**:
+  - Updated RLS policies to respect shared vs isolated resources across tenant levels.
+- **Documentation**:
+  - Synchronized numerous `docs/` guides (setup, CI/CD, deploy, tenancy, architecture, modules, i18n, security) with current paths, `VITE_*` env var usage, `npx supabase` commands, and the `blogs` table naming conventions.
+  - Normalized all cross-doc references to the new root `docs/` tree instead of legacy `awcms/docs` paths.
 
 ### Fixed
 
-- None.
+- **Reporting**:
+  - Platform reporting now checks explicit `platform.reporting.read` permission.
+- **Database Tooling**:
+  - Added `SET client_min_messages TO warning` at the start of several migrations so `npx supabase db pull` runs without noisy "does not exist" notices.
 
 ## [2.25.0] - 2026-01-27
 
