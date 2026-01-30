@@ -23,6 +23,11 @@ const staffTitle = staffPage?.title ?? {
   id: "Tenaga Pendidik & Kependidikan",
   en: "Teaching & Administrative Staff",
 };
+const fallbackPhoto = teacherList[0]?.photo ?? "/images/staff/teachers/teacher-01.webp";
+const galleryPhotos = teacherList
+  .map((teacher: any) => teacher.photo)
+  .filter(Boolean)
+  .slice(0, 4);
 ---
 
 <Layout title={getLocalizedValue(staffTitle, locale)}>
@@ -130,6 +135,56 @@ const staffTitle = staffPage?.title ?? {
     </div>
   </section>
 
+  <!-- Staff Gallery -->
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="staff-gallery"
+  >
+    <div class="container-custom">
+      <div class="grid lg:grid-cols-2 gap-8 items-center">
+        <div>
+          <h2 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-4">
+            {locale === "id" ? "Potret Dewan Guru" : "Teaching Council Portrait"}
+          </h2>
+          <p class="text-gray-600 dark:text-gray-300 leading-relaxed">
+            {locale === "id"
+              ? "Dokumentasi kebersamaan dewan guru SMANDA sebagai fondasi budaya belajar yang hangat, kolaboratif, dan berorientasi pada mutu."
+              : "Snapshots of the SMANDA teaching council that reflect a warm, collaborative, and quality-driven learning culture."}
+          </p>
+          <div class="mt-6 flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+            <Icon name="tabler:calendar" class="w-4 h-4 text-primary-500" />
+            <span>
+              {locale === "id"
+                ? "Dokumen data guru 2025/2026"
+                : "Teacher data document 2025/2026"}
+            </span>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          {galleryPhotos.map((photo: string, index: number) => (
+            <div
+              class="relative rounded-2xl overflow-hidden shadow-lg border border-gray-100 dark:border-slate-700"
+              data-testid={`staff-photo-${index + 1}`}
+            >
+              <img
+                src={photo}
+                alt={
+                  locale === "id"
+                    ? `Foto guru SMANDA ${index + 1}`
+                    : `SMANDA teacher photo ${index + 1}`
+                }
+                loading="lazy"
+                decoding="async"
+                class="w-full h-64 object-cover"
+              />
+              <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Teaching Council -->
   <section
     class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
@@ -162,6 +217,9 @@ const staffTitle = staffPage?.title ?? {
                 No
               </th>
               <th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                {locale === "id" ? "Foto" : "Photo"}
+              </th>
+              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
                 {locale === "id" ? "Nama" : "Name"}
               </th>
               <th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
@@ -177,6 +235,15 @@ const staffTitle = staffPage?.title ?? {
               <tr class="hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
                 <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                   {index + 1}
+                </td>
+                <td class="px-6 py-4">
+                  <img
+                    src={teacher.photo ?? fallbackPhoto}
+                    alt={`Foto ${teacher.name}`}
+                    loading="lazy"
+                    decoding="async"
+                    class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm"
+                  />
                 </td>
                 <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                   {teacher.name}
@@ -239,9 +306,18 @@ const staffTitle = staffPage?.title ?? {
             data-testid={`admin-staff-${index + 1}`}
           >
             <div class="flex items-center gap-3">
-              <span class="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 flex items-center justify-center font-bold">
-                {index + 1}
-              </span>
+              <div class="relative">
+                <img
+                  src={staff.photo ?? fallbackPhoto}
+                  alt={`Foto ${staff.name}`}
+                  loading="lazy"
+                  decoding="async"
+                  class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-slate-900 shadow-sm"
+                />
+                <span class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">
+                  {index + 1}
+                </span>
+              </div>
               <div>
                 <p class="font-semibold text-gray-900 dark:text-white">
                   {staff.name}

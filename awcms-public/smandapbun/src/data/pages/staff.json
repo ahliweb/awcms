@@ -28,247 +28,296 @@
       {
         "name": "Fitriah, S.Pd.",
         "role": "Kepala Sekolah",
-        "subject": "-"
+        "subject": "-",
+        "photo": "/images/staff/teachers/teacher-01.webp"
       },
       {
         "name": "Yasin Mudhofar, S.Pd.",
         "role": "Waka Kurikulum",
-        "subject": "Bahasa Indonesia"
+        "subject": "Bahasa Indonesia",
+        "photo": "/images/staff/teachers/teacher-02.webp"
       },
       {
         "name": "David Pakili, S.Pd.",
         "role": "Waka Humas",
-        "subject": "Fisika"
+        "subject": "Fisika",
+        "photo": "/images/staff/teachers/teacher-03.webp"
       },
       {
         "name": "Anis Nur Aini, S.Pd.",
         "role": "Waka Kesiswaan",
-        "subject": "Bahasa Indonesia"
+        "subject": "Bahasa Indonesia",
+        "photo": "/images/staff/teachers/teacher-04.webp"
       },
       {
         "name": "Muhamad Fadli, S.Pd.",
         "role": "Waka Sarpras",
-        "subject": "Sosiologi"
+        "subject": "Sosiologi",
+        "photo": "/images/staff/teachers/teacher-05.webp"
       },
       {
         "name": "Muhamad Wahyudi, S.E.",
         "role": "",
-        "subject": "PKn"
+        "subject": "PKn",
+        "photo": "/images/staff/teachers/teacher-06.webp"
       },
       {
         "name": "Titik Handayani, S.Pd.",
         "role": "",
-        "subject": "Kimia"
+        "subject": "Kimia",
+        "photo": "/images/staff/teachers/teacher-07.webp"
       },
       {
         "name": "Jaitun, S.Pd.",
         "role": "",
-        "subject": "Ekonomi"
+        "subject": "Ekonomi",
+        "photo": "/images/staff/teachers/teacher-08.webp"
       },
       {
         "name": "M. Nahrowi, S.Pd.",
         "role": "",
-        "subject": "Biologi"
+        "subject": "Biologi",
+        "photo": "/images/staff/teachers/teacher-09.webp"
       },
       {
         "name": "Siti Ramlah, S.Pd.",
         "role": "",
-        "subject": "Geografi"
+        "subject": "Geografi",
+        "photo": "/images/staff/teachers/teacher-10.webp"
       },
       {
         "name": "Herlina Candra, S.Pd.",
         "role": "Koordinator P5",
-        "subject": "Bahasa Inggris"
+        "subject": "Bahasa Inggris",
+        "photo": "/images/staff/teachers/teacher-11.webp"
       },
       {
         "name": "Suyamni, S.Pd.",
         "role": "",
-        "subject": "Sejarah"
+        "subject": "Sejarah",
+        "photo": "/images/staff/teachers/teacher-12.webp"
       },
       {
         "name": "Evita Waindriyani, M.Pd.",
         "role": "Kepala Lab. Biologi",
-        "subject": "Biologi"
+        "subject": "Biologi",
+        "photo": "/images/staff/teachers/teacher-13.webp"
       },
       {
         "name": "Isnaniah, S.Pd.",
         "role": "",
-        "subject": "Matematika"
+        "subject": "Matematika",
+        "photo": "/images/staff/teachers/teacher-14.webp"
       },
       {
         "name": "Irwan Nur, S.Pd.",
         "role": "",
-        "subject": "Ekonomi"
+        "subject": "Ekonomi",
+        "photo": "/images/staff/teachers/teacher-15.webp"
       },
       {
         "name": "Sugeng Prihantoro, S.Pd.",
         "role": "",
-        "subject": "Fisika"
+        "subject": "Fisika",
+        "photo": "/images/staff/teachers/teacher-16.webp"
       },
       {
         "name": "Elliy Fakhriyah, S.E.",
         "role": "Kepala Perpustakaan",
-        "subject": "Ekonomi"
+        "subject": "Ekonomi",
+        "photo": "/images/staff/teachers/teacher-17.webp"
       },
       {
         "name": "Fitri Friscaloly, S.Pd.",
         "role": "",
-        "subject": "Matematika"
+        "subject": "Matematika",
+        "photo": "/images/staff/teachers/teacher-18.webp"
       },
       {
         "name": "Caecilia Celin, S.Pd.",
         "role": "",
-        "subject": "Seni Budaya"
+        "subject": "Seni Budaya",
+        "photo": "/images/staff/teachers/teacher-19.webp"
       },
       {
         "name": "Six Yulsermiati L, S.Pd.",
         "role": "",
-        "subject": "Fisika"
+        "subject": "Fisika",
+        "photo": "/images/staff/teachers/teacher-20.webp"
       },
       {
         "name": "Yusli Indrabowo, S.Pd.",
         "role": "",
-        "subject": "PJOK"
+        "subject": "PJOK",
+        "photo": "/images/staff/teachers/teacher-21.webp"
       },
       {
         "name": "Arillia Octavia, S.Pd.",
         "role": "",
-        "subject": "Bahasa Indonesia"
+        "subject": "Bahasa Indonesia",
+        "photo": "/images/staff/teachers/teacher-22.webp"
       },
       {
         "name": "Ridhani Noor, S.Pd.",
         "role": "",
-        "subject": "Ekonomi"
+        "subject": "Ekonomi",
+        "photo": "/images/staff/teachers/teacher-23.webp"
       },
       {
         "name": "Ari Sitowati, S.Pd.",
         "role": "",
-        "subject": "Prakarya dan Kewirausahaan (PKWU)"
+        "subject": "Prakarya dan Kewirausahaan (PKWU)",
+        "photo": "/images/staff/teachers/teacher-24.webp"
       },
       {
         "name": "M. Sobirin Oktafia, S.Pd.",
         "role": "",
-        "subject": "PJOK"
+        "subject": "PJOK",
+        "photo": "/images/staff/teachers/teacher-25.webp"
       },
       {
         "name": "Raudatul Jannah, S.Pd.",
         "role": "",
-        "subject": "Bahasa Inggris"
+        "subject": "Bahasa Inggris",
+        "photo": "/images/staff/teachers/teacher-26.webp"
       },
       {
         "name": "Dellyana, S.Pd.",
         "role": "",
-        "subject": "Sejarah"
+        "subject": "Sejarah",
+        "photo": "/images/staff/teachers/teacher-27.webp"
       },
       {
         "name": "Eka Kanty Rahayu, S.Pd.",
         "role": "",
-        "subject": "Biologi dan PKWU"
+        "subject": "Biologi dan PKWU",
+        "photo": "/images/staff/teachers/teacher-28.webp"
       },
       {
         "name": "Sumiatun, S.Pd.H.",
         "role": "",
-        "subject": "Agama Hindu"
+        "subject": "Agama Hindu",
+        "photo": "/images/staff/teachers/teacher-29.webp"
       },
       {
         "name": "Arum Dharmawanti, S.Pd.",
         "role": "",
-        "subject": "Bimbingan Konseling (BK)"
+        "subject": "Bimbingan Konseling (BK)",
+        "photo": "/images/staff/teachers/teacher-30.webp"
       },
       {
         "name": "Nahrawi, S.Pd.I",
         "role": "",
-        "subject": "Agama Islam"
+        "subject": "Agama Islam",
+        "photo": "/images/staff/teachers/teacher-31.webp"
       },
       {
         "name": "Eka Suci Fajariah, M.Pd.",
         "role": "",
-        "subject": "Matematika"
+        "subject": "Matematika",
+        "photo": "/images/staff/teachers/teacher-32.webp"
       },
       {
         "name": "Noor Rachmiyanti, S.T.",
         "role": "",
-        "subject": "Informatika"
+        "subject": "Informatika",
+        "photo": "/images/staff/teachers/teacher-33.webp"
       },
       {
         "name": "Anggi Yulitasari, S.Pd.",
         "role": "",
-        "subject": "Kimia dan PKWU"
+        "subject": "Kimia dan PKWU",
+        "photo": "/images/staff/teachers/teacher-34.webp"
       },
       {
         "name": "Vien Azizah, S.Pd.",
         "role": "",
-        "subject": "Prakarya dan Kewirausahaan (PKWU)"
+        "subject": "Prakarya dan Kewirausahaan (PKWU)",
+        "photo": "/images/staff/teachers/teacher-35.webp"
       },
       {
         "name": "Wilda Muslimah, S.Pd.",
         "role": "",
-        "subject": "Geografi"
+        "subject": "Geografi",
+        "photo": "/images/staff/teachers/teacher-36.webp"
       },
       {
         "name": "Raniah Rahmawati, S.Pd.",
         "role": "Bendahara BOS",
-        "subject": "Geografi"
+        "subject": "Geografi",
+        "photo": "/images/staff/teachers/teacher-37.webp"
       },
       {
         "name": "Steffi Oktariani, S.Pd.",
         "role": "",
-        "subject": "Matematika"
+        "subject": "Matematika",
+        "photo": "/images/staff/teachers/teacher-38.webp"
       },
       {
         "name": "Fajar Adwi Fani, S.Pd.",
         "role": "",
-        "subject": "PKn"
+        "subject": "PKn",
+        "photo": "/images/staff/teachers/teacher-39.webp"
       },
       {
         "name": "Farida Yulinda, S.Pd.",
         "role": "",
-        "subject": "Kimia"
+        "subject": "Kimia",
+        "photo": "/images/staff/teachers/teacher-40.webp"
       },
       {
         "name": "Albedri Marpas Yendo, S.Pd.",
         "role": "",
-        "subject": "Agama Kristen"
+        "subject": "Agama Kristen",
+        "photo": "/images/staff/teachers/teacher-41.webp"
       },
       {
         "name": "Alif Rachmad Taufik, S.Pd.",
         "role": "",
-        "subject": "PJOK"
+        "subject": "PJOK",
+        "photo": "/images/staff/teachers/teacher-42.webp"
       },
       {
         "name": "Laras Sufia RJ, S.Pd.",
         "role": "",
-        "subject": "Bahasa Indonesia"
+        "subject": "Bahasa Indonesia",
+        "photo": "/images/staff/teachers/teacher-43.webp"
       },
       {
         "name": "Novira Ismia Jean, S.Pd.",
         "role": "",
-        "subject": "Sejarah dan Sosiologi"
+        "subject": "Sejarah dan Sosiologi",
+        "photo": "/images/staff/teachers/teacher-44.webp"
       },
       {
         "name": "Achmad Jayadi, S.Pd.",
         "role": "",
-        "subject": "Agama Islam"
+        "subject": "Agama Islam",
+        "photo": "/images/staff/teachers/teacher-45.webp"
       },
       {
         "name": "Mardiana, S.Pd.",
         "role": "",
-        "subject": "Matematika"
+        "subject": "Matematika",
+        "photo": "/images/staff/teachers/teacher-46.webp"
       },
       {
         "name": "Rusydah Marwa Fadhila, S.Pd.I",
         "role": "",
-        "subject": "Agama Islam"
+        "subject": "Agama Islam",
+        "photo": "/images/staff/teachers/teacher-47.webp"
       },
       {
         "name": "Yulisa Widyaningtyas, M.Pd.",
         "role": "",
-        "subject": "Bahasa Inggris"
+        "subject": "Bahasa Inggris",
+        "photo": "/images/staff/teachers/teacher-48.webp"
       },
       {
         "name": "Jemmy Ruserna Putra, A.Md.",
         "role": "Operator Dapodik",
-        "subject": "-"
+        "subject": "-",
+        "photo": "/images/staff/teachers/teacher-49.webp"
       }
     ]
   },
@@ -287,19 +336,23 @@
     "staff": [
       {
         "name": "Suprianty",
-        "role": ""
+        "role": "",
+        "photo": "/images/staff/admin/admin-01.webp"
       },
       {
         "name": "Maysinah",
-        "role": ""
+        "role": "",
+        "photo": "/images/staff/admin/admin-02.webp"
       },
       {
         "name": "Novita Melati Sukma",
-        "role": ""
+        "role": "",
+        "photo": "/images/staff/admin/admin-03.webp"
       },
       {
         "name": "Noerholis Majit, S.H.I",
-        "role": ""
+        "role": "",
+        "photo": "/images/staff/admin/admin-04.webp"
       }
     ]
   }

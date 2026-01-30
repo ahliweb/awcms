@@ -549,6 +549,7 @@ export interface StaffData {
             name: string;
             role?: string;
             subject?: string;
+            photo?: string;
         }[];
     };
     administrativeStaff: {
@@ -560,6 +561,7 @@ export interface StaffData {
         staff: {
             name: string;
             role?: string;
+            photo?: string;
         }[];
     };
 }

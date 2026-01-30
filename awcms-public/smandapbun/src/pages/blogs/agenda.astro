@@ -9,6 +9,7 @@ import {
   type Locale,
 } from "../../utils/i18n";
 import { getAgendaData } from "../../lib/api";
+import kalenderPdf from "../../assets/smandapbun-materi-web/smandapbun-kaldik.pdf";
 
 const locale = getLocale(Astro.url) as Locale;
 const agendaData = await getAgendaData();
@@ -57,6 +58,40 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
   >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 md:p-8 mb-10 border border-gray-100 dark:border-slate-700">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div class="flex items-start gap-4">
+              <div class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center">
+                <Icon
+                  name="tabler:calendar-time"
+                  class="w-6 h-6 text-primary-600 dark:text-primary-300"
+                />
+              </div>
+              <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">
+                  {locale === "id"
+                    ? "Kalender Pendidikan 2025/2026"
+                    : "Academic Calendar 2025/2026"}
+                </h2>
+                <p class="text-sm text-gray-600 dark:text-gray-300">
+                  {locale === "id"
+                    ? "Kalender Pendidikan Lima Hari Sekolah (LHS) SMA Provinsi Kalimantan Tengah."
+                    : "Five-day school academic calendar for Central Kalimantan high schools."}
+                </p>
+              </div>
+            </div>
+            <a
+              href={kalenderPdf}
+              target="_blank"
+              rel="noopener"
+              class="btn-primary inline-flex items-center justify-center"
+              download
+            >
+              <Icon name="tabler:download" class="w-5 h-5 mr-2" />
+              {locale === "id" ? "Unduh PDF" : "Download PDF"}
+            </a>
+          </div>
+        </div>
         <!-- Upcoming Events -->
         {
           upcomingEvents.length > 0 && (

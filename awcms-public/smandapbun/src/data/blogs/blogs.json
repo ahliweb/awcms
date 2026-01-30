@@ -77,8 +77,8 @@
       "en": "School Info"
     },
     "content": {
-      "id": "<p>Halaman ini berisi berbagai informasi terkini seputar SMAN 2 Pangkalan Bun, termasuk pengumuman, jadwal kegiatan, dan informasi penting lainnya.</p><h3>Informasi Terkini</h3><ul><li>Pendaftaran Siswa Baru 2025/2026 dibuka Februari 2025</li><li>Ujian Semester Ganjil: Desember 2024</li><li>Libur Akhir Semester: 23 Des 2024 - 5 Jan 2025</li></ul>",
-      "en": "<p>This page contains various current information about SMAN 2 Pangkalan Bun, including announcements, activity schedules, and other important information.</p><h3>Current Information</h3><ul><li>New Student Registration 2025/2026 opens February 2025</li><li>Odd Semester Exams: December 2024</li><li>End of Semester Holiday: Dec 23, 2024 - Jan 5, 2025</li></ul>"
+      "id": "<p>Ringkasan kalender pendidikan SMA Provinsi Kalimantan Tengah (Lima Hari Sekolah) tahun ajaran 2025/2026 yang diterapkan di SMAN 2 Pangkalan Bun.</p><h3>Agenda Utama</h3><ul><li>1-4 Juli 2025: Penerimaan Murid Baru</li><li>7-8 Juli 2025: Pra MPLS</li><li>9-11 Juli 2025: MPLS</li><li>1-5 dan 8-12 Desember 2025: Penilaian Sumatif Kelas VI, IX, XII, XIII</li><li>19 Desember 2025: Pembagian Raport Semester 1</li><li>22-23 dan 29-31 Desember 2025: Libur Semester I</li><li>20-24 dan 27 April 2026: Penilaian Sumatif Kelas VI, IX, XII, XIII</li><li>26 Juni 2026: Pembagian Raport Semester 2</li><li>29-30 Juni 2026: Libur Semester II</li></ul><h3>Hari Besar dan Program Khusus</h3><ul><li>5 September 2025: Libur Hari Besar Maulid Nabi Muhammad SAW</li><li>25 Desember 2025: Hari Raya Natal</li><li>1 Januari 2026: Tahun Baru Masehi</li><li>16 Januari 2026: Isra Miraj</li><li>16, 18-20 Februari 2026: Libur Khusus Puasa (menyesuaikan)</li><li>17 Februari 2026: Tahun Baru Imlek</li><li>23-25 Februari 2026: Penguatan Pendidikan Karakter</li><li>19 Maret 2026: Hari Raya Nyepi</li><li>20 Maret 2026: Hari Raya Idul Fitri</li><li>3 April 2026: Jumat Agung</li><li>27 Mei 2026: Hari Raya Idul Adha</li><li>31 Mei 2026: Hari Raya Waisak</li><li>1 Juni 2026: Hari Lahir Pancasila</li></ul>",
+      "en": "<p>A summary of the Central Kalimantan five-day school academic calendar for the 2025/2026 year as applied at SMAN 2 Pangkalan Bun.</p><h3>Main Schedule</h3><ul><li>1-4 July 2025: New student admissions</li><li>7-8 July 2025: Pre-MPLS orientation</li><li>9-11 July 2025: MPLS</li><li>1-5 and 8-12 December 2025: Summative assessments for grades VI, IX, XII, XIII</li><li>19 December 2025: Semester 1 report card distribution</li><li>22-23 and 29-31 December 2025: Semester I break</li><li>20-24 and 27 April 2026: Summative assessments for grades VI, IX, XII, XIII</li><li>26 June 2026: Semester 2 report card distribution</li><li>29-30 June 2026: Semester II break</li></ul><h3>Holidays and Special Programs</h3><ul><li>5 September 2025: Maulid Nabi holiday</li><li>25 December 2025: Christmas Day</li><li>1 January 2026: New Year</li><li>16 January 2026: Isra Miraj</li><li>16, 18-20 February 2026: Special fasting break (adjusted)</li><li>17 February 2026: Lunar New Year</li><li>23-25 February 2026: Character education strengthening</li><li>19 March 2026: Nyepi Day</li><li>20 March 2026: Eid al-Fitr</li><li>3 April 2026: Good Friday</li><li>27 May 2026: Eid al-Adha</li><li>31 May 2026: Vesak Day</li><li>1 June 2026: Pancasila Day</li></ul>"
     }
   },
   "agenda": {
@@ -92,47 +92,256 @@
     },
     "events": [
       {
-        "date": "2024-12-16",
+        "date": "2025-07-01",
         "title": {
-          "id": "Ujian Akhir Semester Ganjil",
-          "en": "Odd Semester Final Exam"
+          "id": "Penerimaan Murid Baru",
+          "en": "New Student Admissions"
         },
         "description": {
-          "id": "Ujian akhir semester untuk seluruh siswa",
-          "en": "Final semester exam for all students"
+          "id": "Rentang pelaksanaan 1-4 Juli 2025",
+          "en": "Scheduled for July 1-4, 2025"
         }
       },
       {
-        "date": "2024-12-23",
+        "date": "2025-07-07",
         "title": {
-          "id": "Pembagian Rapor",
-          "en": "Report Card Distribution"
+          "id": "Pra MPLS",
+          "en": "Pre-MPLS Orientation"
         },
         "description": {
-          "id": "Pembagian rapor semester ganjil",
-          "en": "Odd semester report card distribution"
+          "id": "Pra MPLS tanggal 7-8 Juli 2025",
+          "en": "Pre-MPLS held on July 7-8, 2025"
         }
       },
       {
-        "date": "2025-01-06",
+        "date": "2025-07-09",
         "title": {
-          "id": "Masuk Sekolah Semester Genap",
-          "en": "Even Semester Start"
+          "id": "MPLS",
+          "en": "MPLS"
         },
         "description": {
-          "id": "Awal semester genap tahun ajaran 2024/2025",
-          "en": "Start of even semester 2024/2025"
+          "id": "MPLS berlangsung 9-11 Juli 2025",
+          "en": "MPLS runs July 9-11, 2025"
         }
       },
       {
-        "date": "2025-02-01",
+        "date": "2025-09-05",
         "title": {
-          "id": "Pendaftaran PPDB 2025",
-          "en": "PPDB Registration 2025"
+          "id": "Maulid Nabi Muhammad SAW",
+          "en": "Maulid Nabi Holiday"
         },
         "description": {
-          "id": "Pembukaan pendaftaran peserta didik baru",
-          "en": "Opening of new student registration"
+          "id": "Libur hari besar keagamaan",
+          "en": "Religious holiday"
+        }
+      },
+      {
+        "date": "2025-12-01",
+        "title": {
+          "id": "Penilaian Sumatif Semester 1",
+          "en": "Semester 1 Summative Assessment"
+        },
+        "description": {
+          "id": "Pelaksanaan 1-5 Desember 2025",
+          "en": "Held on December 1-5, 2025"
+        }
+      },
+      {
+        "date": "2025-12-08",
+        "title": {
+          "id": "Penilaian Sumatif Semester 1 (Lanjutan)",
+          "en": "Semester 1 Summative Assessment (Cont.)"
+        },
+        "description": {
+          "id": "Pelaksanaan 8-12 Desember 2025",
+          "en": "Held on December 8-12, 2025"
+        }
+      },
+      {
+        "date": "2025-12-19",
+        "title": {
+          "id": "Pembagian Raport Semester 1",
+          "en": "Semester 1 Report Cards"
+        },
+        "description": {
+          "id": "Pembagian raport semester ganjil",
+          "en": "Semester 1 report card distribution"
+        }
+      },
+      {
+        "date": "2025-12-22",
+        "title": {
+          "id": "Libur Semester I",
+          "en": "Semester I Break"
+        },
+        "description": {
+          "id": "Libur 22-23 dan 29-31 Desember 2025",
+          "en": "Break on December 22-23 and 29-31, 2025"
+        }
+      },
+      {
+        "date": "2025-12-25",
+        "title": {
+          "id": "Hari Raya Natal",
+          "en": "Christmas Day"
+        },
+        "description": {
+          "id": "Libur hari besar keagamaan",
+          "en": "Religious holiday"
+        }
+      },
+      {
+        "date": "2026-01-01",
+        "title": {
+          "id": "Tahun Baru Masehi",
+          "en": "New Year"
+        },
+        "description": {
+          "id": "Libur awal tahun",
+          "en": "New year holiday"
+        }
+      },
+      {
+        "date": "2026-01-16",
+        "title": {
+          "id": "Isra Miraj",
+          "en": "Isra Miraj"
+        },
+        "description": {
+          "id": "Libur hari besar keagamaan",
+          "en": "Religious holiday"
+        }
+      },
+      {
+        "date": "2026-02-16",
+        "title": {
+          "id": "Libur Khusus Puasa",
+          "en": "Special Fasting Break"
+        },
+        "description": {
+          "id": "Libur menyesuaikan 16, 18-20 Februari 2026",
+          "en": "Break adjusted on February 16 and 18-20, 2026"
+        }
+      },
+      {
+        "date": "2026-02-17",
+        "title": {
+          "id": "Tahun Baru Imlek",
+          "en": "Lunar New Year"
+        },
+        "description": {
+          "id": "Libur hari besar",
+          "en": "Holiday"
+        }
+      },
+      {
+        "date": "2026-02-23",
+        "title": {
+          "id": "Penguatan Pendidikan Karakter",
+          "en": "Character Education Strengthening"
+        },
+        "description": {
+          "id": "Program 23-25 Februari 2026",
+          "en": "Program runs February 23-25, 2026"
+        }
+      },
+      {
+        "date": "2026-03-19",
+        "title": {
+          "id": "Hari Raya Nyepi",
+          "en": "Nyepi Day"
+        },
+        "description": {
+          "id": "Libur hari besar keagamaan",
+          "en": "Religious holiday"
+        }
+      },
+      {
+        "date": "2026-03-20",
+        "title": {
+          "id": "Hari Raya Idul Fitri",
+          "en": "Eid al-Fitr"
+        },
+        "description": {
+          "id": "Libur hari besar keagamaan",
+          "en": "Religious holiday"
+        }
+      },
+      {
+        "date": "2026-04-03",
+        "title": {
+          "id": "Jumat Agung",
+          "en": "Good Friday"
+        },
+        "description": {
+          "id": "Libur hari besar keagamaan",
+          "en": "Religious holiday"
+        }
+      },
+      {
+        "date": "2026-04-20",
+        "title": {
+          "id": "Penilaian Sumatif Semester 2",
+          "en": "Semester 2 Summative Assessment"
+        },
+        "description": {
+          "id": "Pelaksanaan 20-24 dan 27 April 2026",
+          "en": "Held on April 20-24 and 27, 2026"
+        }
+      },
+      {
+        "date": "2026-05-27",
+        "title": {
+          "id": "Hari Raya Idul Adha",
+          "en": "Eid al-Adha"
+        },
+        "description": {
+          "id": "Libur hari besar keagamaan",
+          "en": "Religious holiday"
+        }
+      },
+      {
+        "date": "2026-05-31",
+        "title": {
+          "id": "Hari Raya Waisak",
+          "en": "Vesak Day"
+        },
+        "description": {
+          "id": "Libur hari besar keagamaan",
+          "en": "Religious holiday"
+        }
+      },
+      {
+        "date": "2026-06-01",
+        "title": {
+          "id": "Hari Lahir Pancasila",
+          "en": "Pancasila Day"
+        },
+        "description": {
+          "id": "Libur nasional",
+          "en": "National holiday"
+        }
+      },
+      {
+        "date": "2026-06-26",
+        "title": {
+          "id": "Pembagian Raport Semester 2",
+          "en": "Semester 2 Report Cards"
+        },
+        "description": {
+          "id": "Pembagian raport semester genap",
+          "en": "Semester 2 report card distribution"
+        }
+      },
+      {
+        "date": "2026-06-29",
+        "title": {
+          "id": "Libur Semester II",
+          "en": "Semester II Break"
+        },
+        "description": {
+          "id": "Libur 29-30 Juni 2026",
+          "en": "Break on June 29-30, 2026"
         }
       }
     ]
