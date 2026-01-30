@@ -57,6 +57,12 @@ const { visionMission, history, facilities } = profileData;
           {t("profile.vision_mission", locale)}
         </a>
         <a
+          href={getLocalizedPath("/profil/keselarasan-standar-kompetensi", locale)}
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        >
+          {t("profile.competency_alignment", locale)}
+        </a>
+        <a
           href={getLocalizedPath("/profil/sarana-prasarana", locale)}
           class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
         >

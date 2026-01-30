@@ -1,71 +1,306 @@
 {
-  "teachingStaff": {
-    "id": "teachers",
-    "slug": "tenaga-pendidik/guru",
+  "staffPage": {
+    "id": "staff",
+    "slug": "tenaga-pendidik",
     "category": "Profile",
     "title": {
-      "id": "Tenaga Pendidik (Guru)",
-      "en": "Teaching Staff"
+      "id": "Tenaga Pendidik & Kependidikan",
+      "en": "Teaching & Administrative Staff"
     },
-    "summary": {
-      "total": 68,
-      "pns": 45,
-      "nonPns": 23,
-      "s1": 52,
-      "s2": 16
+    "description": {
+      "id": "Daftar dewan guru dan staf tata usaha SMA Negeri 2 Pangkalan Bun tahun pelajaran 2025/2026.",
+      "en": "Teacher council and administrative staff list for SMA Negeri 2 Pangkalan Bun, academic year 2025/2026."
+    }
+  },
+  "teachingStaff": {
+    "id": "teachers",
+    "slug": "tenaga-pendidik",
+    "category": "Profile",
+    "title": {
+      "id": "Dewan Guru",
+      "en": "Teaching Council"
+    },
+    "description": {
+      "id": "Susunan guru beserta penugasan jabatan dan mata pelajaran yang diampu.",
+      "en": "Teacher roster with assigned roles and subjects taught."
     },
     "staff": [
-      { "name": "Drs. H. Ahmad Sudirman, M.Pd", "subject": "Matematika", "status": "PNS" },
-      { "name": "Drs. Bambang Sutrisno, M.Pd", "subject": "Fisika", "status": "PNS" },
-      { "name": "Dra. Siti Rahayu, M.Pd", "subject": "Bahasa Indonesia", "status": "PNS" },
-      { "name": "Ir. Hendra Wijaya, M.M", "subject": "Kimia", "status": "PNS" },
-      { "name": "Drs. Agus Purnomo, M.Pd", "subject": "Bahasa Inggris", "status": "PNS" },
-      { "name": "Dra. Wiwik Hartini, M.Pd", "subject": "Biologi", "status": "PNS" },
-      { "name": "Drs. Suryadi, M.Si", "subject": "Sejarah", "status": "PNS" },
-      { "name": "Sri Wahyuni, S.Pd, M.Pd", "subject": "Ekonomi", "status": "PNS" },
-      { "name": "Ahmad Hidayat, S.Pd", "subject": "Geografi", "status": "PNS" },
-      { "name": "Rina Kusumawati, S.Pd", "subject": "Sosiologi", "status": "PNS" },
-      { "name": "Dwi Santoso, S.Pd", "subject": "PKN", "status": "PNS" },
-      { "name": "Endang Lestari, S.Pd", "subject": "Seni Budaya", "status": "PNS" },
-      { "name": "Fajar Kurniawan, S.Pd", "subject": "PJOK", "status": "PNS" },
-      { "name": "Hesti Wulandari, S.Pd", "subject": "Prakarya", "status": "PNS" },
-      { "name": "Imam Syafi'i, S.Pd.I", "subject": "Pendidikan Agama Islam", "status": "PNS" },
-      { "name": "Julia Ratnasari, S.Pd", "subject": "Matematika", "status": "Non-PNS" },
-      { "name": "Krisna Bayu, S.Kom", "subject": "Informatika", "status": "Non-PNS" },
-      { "name": "Linda Permata, S.Pd", "subject": "Bahasa Jepang", "status": "Non-PNS" },
-      { "name": "Muhammad Yusuf, S.Pd", "subject": "Fisika", "status": "Non-PNS" },
-      { "name": "Nina Andriani, S.Pd", "subject": "Kimia", "status": "Non-PNS" }
+      {
+        "name": "Fitriah, S.Pd.",
+        "role": "Kepala Sekolah",
+        "subject": "-"
+      },
+      {
+        "name": "Yasin Mudhofar, S.Pd.",
+        "role": "Waka Kurikulum",
+        "subject": "Bahasa Indonesia"
+      },
+      {
+        "name": "David Pakili, S.Pd.",
+        "role": "Waka Humas",
+        "subject": "Fisika"
+      },
+      {
+        "name": "Anis Nur Aini, S.Pd.",
+        "role": "Waka Kesiswaan",
+        "subject": "Bahasa Indonesia"
+      },
+      {
+        "name": "Muhamad Fadli, S.Pd.",
+        "role": "Waka Sarpras",
+        "subject": "Sosiologi"
+      },
+      {
+        "name": "Muhamad Wahyudi, S.E.",
+        "role": "",
+        "subject": "PKn"
+      },
+      {
+        "name": "Titik Handayani, S.Pd.",
+        "role": "",
+        "subject": "Kimia"
+      },
+      {
+        "name": "Jaitun, S.Pd.",
+        "role": "",
+        "subject": "Ekonomi"
+      },
+      {
+        "name": "M. Nahrowi, S.Pd.",
+        "role": "",
+        "subject": "Biologi"
+      },
+      {
+        "name": "Siti Ramlah, S.Pd.",
+        "role": "",
+        "subject": "Geografi"
+      },
+      {
+        "name": "Herlina Candra, S.Pd.",
+        "role": "Koordinator P5",
+        "subject": "Bahasa Inggris"
+      },
+      {
+        "name": "Suyamni, S.Pd.",
+        "role": "",
+        "subject": "Sejarah"
+      },
+      {
+        "name": "Evita Waindriyani, M.Pd.",
+        "role": "Kepala Lab. Biologi",
+        "subject": "Biologi"
+      },
+      {
+        "name": "Isnaniah, S.Pd.",
+        "role": "",
+        "subject": "Matematika"
+      },
+      {
+        "name": "Irwan Nur, S.Pd.",
+        "role": "",
+        "subject": "Ekonomi"
+      },
+      {
+        "name": "Sugeng Prihantoro, S.Pd.",
+        "role": "",
+        "subject": "Fisika"
+      },
+      {
+        "name": "Elliy Fakhriyah, S.E.",
+        "role": "Kepala Perpustakaan",
+        "subject": "Ekonomi"
+      },
+      {
+        "name": "Fitri Friscaloly, S.Pd.",
+        "role": "",
+        "subject": "Matematika"
+      },
+      {
+        "name": "Caecilia Celin, S.Pd.",
+        "role": "",
+        "subject": "Seni Budaya"
+      },
+      {
+        "name": "Six Yulsermiati L, S.Pd.",
+        "role": "",
+        "subject": "Fisika"
+      },
+      {
+        "name": "Yusli Indrabowo, S.Pd.",
+        "role": "",
+        "subject": "PJOK"
+      },
+      {
+        "name": "Arillia Octavia, S.Pd.",
+        "role": "",
+        "subject": "Bahasa Indonesia"
+      },
+      {
+        "name": "Ridhani Noor, S.Pd.",
+        "role": "",
+        "subject": "Ekonomi"
+      },
+      {
+        "name": "Ari Sitowati, S.Pd.",
+        "role": "",
+        "subject": "Prakarya dan Kewirausahaan (PKWU)"
+      },
+      {
+        "name": "M. Sobirin Oktafia, S.Pd.",
+        "role": "",
+        "subject": "PJOK"
+      },
+      {
+        "name": "Raudatul Jannah, S.Pd.",
+        "role": "",
+        "subject": "Bahasa Inggris"
+      },
+      {
+        "name": "Dellyana, S.Pd.",
+        "role": "",
+        "subject": "Sejarah"
+      },
+      {
+        "name": "Eka Kanty Rahayu, S.Pd.",
+        "role": "",
+        "subject": "Biologi dan PKWU"
+      },
+      {
+        "name": "Sumiatun, S.Pd.H.",
+        "role": "",
+        "subject": "Agama Hindu"
+      },
+      {
+        "name": "Arum Dharmawanti, S.Pd.",
+        "role": "",
+        "subject": "Bimbingan Konseling (BK)"
+      },
+      {
+        "name": "Nahrawi, S.Pd.I",
+        "role": "",
+        "subject": "Agama Islam"
+      },
+      {
+        "name": "Eka Suci Fajariah, M.Pd.",
+        "role": "",
+        "subject": "Matematika"
+      },
+      {
+        "name": "Noor Rachmiyanti, S.T.",
+        "role": "",
+        "subject": "Informatika"
+      },
+      {
+        "name": "Anggi Yulitasari, S.Pd.",
+        "role": "",
+        "subject": "Kimia dan PKWU"
+      },
+      {
+        "name": "Vien Azizah, S.Pd.",
+        "role": "",
+        "subject": "Prakarya dan Kewirausahaan (PKWU)"
+      },
+      {
+        "name": "Wilda Muslimah, S.Pd.",
+        "role": "",
+        "subject": "Geografi"
+      },
+      {
+        "name": "Raniah Rahmawati, S.Pd.",
+        "role": "Bendahara BOS",
+        "subject": "Geografi"
+      },
+      {
+        "name": "Steffi Oktariani, S.Pd.",
+        "role": "",
+        "subject": "Matematika"
+      },
+      {
+        "name": "Fajar Adwi Fani, S.Pd.",
+        "role": "",
+        "subject": "PKn"
+      },
+      {
+        "name": "Farida Yulinda, S.Pd.",
+        "role": "",
+        "subject": "Kimia"
+      },
+      {
+        "name": "Albedri Marpas Yendo, S.Pd.",
+        "role": "",
+        "subject": "Agama Kristen"
+      },
+      {
+        "name": "Alif Rachmad Taufik, S.Pd.",
+        "role": "",
+        "subject": "PJOK"
+      },
+      {
+        "name": "Laras Sufia RJ, S.Pd.",
+        "role": "",
+        "subject": "Bahasa Indonesia"
+      },
+      {
+        "name": "Novira Ismia Jean, S.Pd.",
+        "role": "",
+        "subject": "Sejarah dan Sosiologi"
+      },
+      {
+        "name": "Achmad Jayadi, S.Pd.",
+        "role": "",
+        "subject": "Agama Islam"
+      },
+      {
+        "name": "Mardiana, S.Pd.",
+        "role": "",
+        "subject": "Matematika"
+      },
+      {
+        "name": "Rusydah Marwa Fadhila, S.Pd.I",
+        "role": "",
+        "subject": "Agama Islam"
+      },
+      {
+        "name": "Yulisa Widyaningtyas, M.Pd.",
+        "role": "",
+        "subject": "Bahasa Inggris"
+      },
+      {
+        "name": "Jemmy Ruserna Putra, A.Md.",
+        "role": "Operator Dapodik",
+        "subject": "-"
+      }
     ]
   },
   "administrativeStaff": {
     "id": "admin-staff",
-    "slug": "tenaga-pendidik/tata-usaha",
+    "slug": "tenaga-pendidik",
     "category": "Profile",
     "title": {
-      "id": "Tenaga Kependidikan (Tata Usaha)",
+      "id": "Staf Tata Usaha",
       "en": "Administrative Staff"
     },
-    "summary": {
-      "total": 25,
-      "pns": 8,
-      "nonPns": 17
+    "description": {
+      "id": "Daftar staf tata usaha yang mendukung layanan administrasi sekolah.",
+      "en": "Administrative staff supporting school services."
     },
     "staff": [
-      { "name": "Suparman, S.E", "position": "Kepala Tata Usaha", "status": "PNS" },
-      { "name": "Yanti Kusuma", "position": "Bendahara", "status": "PNS" },
-      { "name": "Andi Firmansyah", "position": "Admin Kesiswaan", "status": "PNS" },
-      { "name": "Ratna Dewi", "position": "Admin Kurikulum", "status": "PNS" },
-      { "name": "Budi Raharjo", "position": "Admin Kepegawaian", "status": "PNS" },
-      { "name": "Siti Aminah", "position": "Pustakawan", "status": "PNS" },
-      { "name": "Agung Prasetyo", "position": "Laboran IPA", "status": "Non-PNS" },
-      { "name": "Desi Kartini", "position": "Laboran Komputer", "status": "Non-PNS" },
-      { "name": "Eko Wahyudi", "position": "Operator Dapodik", "status": "Non-PNS" },
-      { "name": "Fitri Handayani", "position": "Admin Humas", "status": "Non-PNS" },
-      { "name": "Gunawan", "position": "Satpam", "status": "Non-PNS" },
-      { "name": "Haryanto", "position": "Cleaning Service", "status": "Non-PNS" },
-      { "name": "Indriani", "position": "Penjaga Kantin", "status": "Non-PNS" },
-      { "name": "Joko Susilo", "position": "Petugas Kebersihan", "status": "Non-PNS" },
-      { "name": "Karno", "position": "Penjaga Sekolah", "status": "Non-PNS" }
+      {
+        "name": "Suprianty",
+        "role": ""
+      },
+      {
+        "name": "Maysinah",
+        "role": ""
+      },
+      {
+        "name": "Novita Melati Sukma",
+        "role": ""
+      },
+      {
+        "name": "Noerholis Majit, S.H.I",
+        "role": ""
+      }
     ]
   }
 }

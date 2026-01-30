@@ -122,6 +122,44 @@ export interface ServicesData {
     };
 }
 
+export interface CompetencyAlignmentData {
+    id: string;
+    slug: string;
+    category: string;
+    title: LocalizedString;
+    subtitle?: LocalizedString;
+    nationalGoal: {
+        title: LocalizedString;
+        reference: LocalizedString;
+        description: LocalizedString;
+    };
+    graduateStandards: {
+        title: LocalizedString;
+        reference: LocalizedString;
+        items: LocalizedStringArray;
+    };
+    learningFramework: {
+        title: LocalizedString;
+        items: LocalizedStringArray;
+    };
+    implementation: {
+        title: LocalizedString;
+        subtitle?: LocalizedString;
+        progressLabel: LocalizedString;
+        items: Array<{
+            category: LocalizedString;
+            progress: LocalizedString;
+            activities: LocalizedStringArray;
+        }>;
+    };
+    signatory: {
+        placeDate: LocalizedString;
+        title: LocalizedString;
+        name: string;
+        idNumber: string;
+    };
+}
+
 export interface ProfileData {
     principalMessage: {
         id: string;
@@ -205,6 +243,7 @@ export interface ProfileData {
         content: LocalizedString;
         awards: Array<{ year: string; title: LocalizedString }>;
     };
+    competencyAlignment?: CompetencyAlignmentData;
 }
 
 export interface SiteData {
@@ -258,7 +297,7 @@ export async function getSiteData(): Promise<SiteData> {
             favicon: '/favicon.png',
         },
         contact: {
-            address: 'Jl. Pasir Panjang No. 1, Pangkalan Bun',
+            address: 'Jl. Pasanah No. 15, RT 24, Sidorejo, Arut Selatan, Kotawaringin Barat, Kalimantan Tengah, 74111',
             phone: '(0532) 123456',
             email: 'info@sman2pbun.sch.id',
         },
@@ -493,22 +532,23 @@ export async function getFinancePageData(): Promise<FinanceData> {
 }
 
 export interface StaffData {
+    staffPage?: {
+        id: string;
+        slug: string;
+        category: string;
+        title: LocalizedString;
+        description?: LocalizedString;
+    };
     teachingStaff: {
         id: string;
         slug: string;
         category: string;
         title: LocalizedString;
-        summary: {
-            total: number;
-            pns: number;
-            nonPns: number;
-            s1: number;
-            s2: number;
-        };
+        description?: LocalizedString;
         staff: {
             name: string;
-            subject: string;
-            status: string;
+            role?: string;
+            subject?: string;
         }[];
     };
     administrativeStaff: {
@@ -516,15 +556,10 @@ export interface StaffData {
         slug: string;
         category: string;
         title: LocalizedString;
-        summary: {
-            total: number;
-            pns: number;
-            nonPns: number;
-        };
+        description?: LocalizedString;
         staff: {
             name: string;
-            position: string;
-            status: string;
+            role?: string;
         }[];
     };
 }
