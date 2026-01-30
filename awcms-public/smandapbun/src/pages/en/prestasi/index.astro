@@ -1,0 +1,143 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import { getLocale, t, getLocalizedValue, type Locale } from "../../../utils/i18n";
+import { getAchievementsPageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const achievementsData = await getAchievementsPageData();
+const { achievementsPage, achievements } = achievementsData;
+
+// Group student achievements by category
+const groupedAchievements = achievements.reduce((acc: any, item: any) => {
+  if (!acc[item.category]) acc[item.category] = [];
+  acc[item.category].push(item);
+  return acc;
+}, {});
+---
+
+<Layout title={t("achievements.title", locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-24"
+    style="--hero-image: url('/images/backgrounds/hero-activity.webp');"
+    data-testid="achievements-hero"
+  >
+    <div class="container-custom">
+      <p class="text-secondary-300 font-medium mb-2">
+        {t("nav.achievements", locale)}
+      </p>
+      <h1 class="text-4xl md:text-5xl font-bold font-heading">
+        {getLocalizedValue(achievementsPage.title, locale)}
+      </h1>
+      <p class="text-xl text-blue-100 mt-4 max-w-2xl">
+        {getLocalizedValue(achievementsPage.description, locale)}
+      </p>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm relative -mt-8 z-10 rounded-xl max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 transition-colors duration-200"
+    data-testid="achievements-stats"
+  >
+    <div class="container-custom">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div class="text-center">
+          <div
+            class="text-3xl font-bold text-primary-600 dark:text-primary-400"
+          >
+            {achievements.filter((a: any) => a.category === "Akademik").length}
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            {t("achievements.academic", locale)}
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-bold text-green-600 dark:text-green-400">
+            {achievements.filter((a: any) => a.category === "Olahraga").length}
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            {t("achievements.sports", locale)}
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-bold text-purple-600 dark:text-purple-400">
+            {achievements.filter((a: any) => a.category === "Seni").length}
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            {t("achievements.arts", locale)}
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-bold text-orange-600 dark:text-orange-400">
+            {achievements.filter((a: any) => a.category === "Teknologi").length}
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            {t("achievements.technology", locale)}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Achievements List -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-activity.webp');"
+    data-testid="achievements-list"
+  >
+    <div class="container-custom">
+      {
+        Object.entries(groupedAchievements).map(
+          ([category, items]: [string, any]) => (
+            <div class="mb-12">
+              <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
+                <span
+                  class={`w-3 h-3 rounded-full ${
+                    category === "Akademik"
+                      ? "bg-primary-500"
+                      : category === "Olahraga"
+                        ? "bg-green-500"
+                        : category === "Seni"
+                          ? "bg-purple-500"
+                          : category === "Teknologi"
+                            ? "bg-orange-500"
+                            : category === "Kepemimpinan"
+                              ? "bg-blue-500"
+                              : "bg-gray-500"
+                  }`}
+                />
+                {category}
+              </h2>
+              <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {items.map((achievement: any) => (
+                  <div
+                    class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200"
+                    data-testid={`achievement-${achievement.year}-${category}`}
+                  >
+                    <div class="flex items-start justify-between mb-3">
+                      <span class="bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-xs font-bold px-2 py-1 rounded transition-colors">
+                        {achievement.year}
+                      </span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400">
+                        {getLocalizedValue(achievement.level, locale)}
+                      </span>
+                    </div>
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-2">
+                      {getLocalizedValue(achievement.title, locale)}
+                    </h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                      <Icon name="tabler:user" class="w-4 h-4" />
+                      {achievement.participant}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ),
+        )
+      }
+    </div>
+  </section>
+</Layout>

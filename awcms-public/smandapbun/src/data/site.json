@@ -7,8 +7,7 @@
     "logo": "/images/smanda-logo.webp",
     "favicon": "/favicon.png",
     "address": "Jl. Pasanah No. 15, RT 24, Sidorejo, Arut Selatan, Kotawaringin Barat, Kalimantan Tengah, 74111",
-    "phone": "(0532) 21234",
-    "fax": "(0532) 21235",
+    "phone": "082254008080",
     "email": "info@sman2pangkalanbun.sch.id",
     "website": "https://sman2pangkalanbun.sch.id",
     "socialMedia": {
@@ -20,7 +19,7 @@
   },
   "accreditation": "A",
   "npsn": "30203456",
-  "established": "1985",
+  "established": "1984",
   "headmaster": {
     "name": "Drs. H. Ahmad Sudirman, M.Pd",
     "photo": "/images/staff/kepala-sekolah.jpg"
@@ -31,6 +30,8 @@
     "staff": 25,
     "classrooms": 36,
     "labs": 8,
-    "extracurriculars": 18
+    "extracurriculars": 18,
+    "alumni": 8500,
+    "achievements": 100
   }
 }

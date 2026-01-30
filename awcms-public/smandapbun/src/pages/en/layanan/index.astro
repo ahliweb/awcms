@@ -1,0 +1,246 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getServicesPageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const servicesData = await getServicesPageData();
+const { extracurricular, laboratory } = servicesData;
+---
+
+<Layout title={t("services.title", locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-24"
+    style="--hero-image: url('/images/backgrounds/hero-lab.webp');"
+    data-testid="services-hero"
+  >
+    <div class="container-custom">
+      <p class="text-secondary-300 font-medium mb-2">
+        {t("nav.services", locale)}
+      </p>
+      <h1 class="text-4xl md:text-5xl font-bold font-heading">
+        {t("services.title", locale)}
+      </h1>
+    </div>
+  </section>
+
+  <!-- Services Grid -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-lab.webp');"
+    data-testid="services-grid"
+  >
+    <div class="container-custom">
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <a
+          href={getLocalizedPath("/layanan/ekstrakurikuler", locale)}
+          class="group card p-6 hover:shadow-xl transition-all dark:bg-slate-800 dark:border-slate-700"
+          data-testid="service-extracurricular"
+        >
+          <div
+            class="w-14 h-14 bg-primary-100 dark:bg-primary-900 rounded-xl flex items-center justify-center mb-4 group-hover:bg-primary-500 transition-colors"
+          >
+            <Icon
+              name="tabler:ball-football"
+              class="w-7 h-7 text-primary-600 dark:text-primary-400 group-hover:text-white transition-colors"
+            />
+          </div>
+          <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-2">
+            {t("services.extracurricular", locale)}
+          </h3>
+          <p class="text-gray-600 dark:text-gray-400 text-sm">
+            {extracurricular.activities.length} kegiatan ekstrakurikuler
+          </p>
+        </a>
+
+        <a
+          href={getLocalizedPath("/layanan/kelas-layanan", locale)}
+          class="group card p-6 hover:shadow-xl transition-all dark:bg-slate-800 dark:border-slate-700"
+          data-testid="service-classes"
+        >
+          <div
+            class="w-14 h-14 bg-green-100 dark:bg-green-900 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-500 transition-colors"
+          >
+            <Icon
+              name="tabler:school"
+              class="w-7 h-7 text-green-600 dark:text-green-400 group-hover:text-white transition-colors"
+            />
+          </div>
+          <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-2">
+            {t("services.service_classes", locale)}
+          </h3>
+          <p class="text-gray-600 dark:text-gray-400 text-sm">
+            OSN, Penelitian & lebih banyak
+          </p>
+        </a>
+
+        <a
+          href={getLocalizedPath("/layanan/laboratorium", locale)}
+          class="group card p-6 hover:shadow-xl transition-all dark:bg-slate-800 dark:border-slate-700"
+          data-testid="service-lab"
+        >
+          <div
+            class="w-14 h-14 bg-purple-100 dark:bg-purple-900 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-500 transition-colors"
+          >
+            <Icon
+              name="tabler:flask"
+              class="w-7 h-7 text-purple-600 dark:text-purple-400 group-hover:text-white transition-colors"
+            />
+          </div>
+          <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-2">
+            {t("services.laboratory", locale)}
+          </h3>
+          <p class="text-gray-600 dark:text-gray-400 text-sm">
+            {laboratory.labs.length} laboratorium modern
+          </p>
+        </a>
+
+        <a
+          href={getLocalizedPath("/layanan/perpustakaan", locale)}
+          class="group card p-6 hover:shadow-xl transition-all dark:bg-slate-800 dark:border-slate-700"
+          data-testid="service-library"
+        >
+          <div
+            class="w-14 h-14 bg-orange-100 dark:bg-orange-900 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-500 transition-colors"
+          >
+            <Icon
+              name="tabler:books"
+              class="w-7 h-7 text-orange-600 dark:text-orange-400 group-hover:text-white transition-colors"
+            />
+          </div>
+          <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-2">
+            {t("services.library", locale)}
+          </h3>
+          <p class="text-gray-600 dark:text-gray-400 text-sm">
+            12.000+ koleksi buku
+          </p>
+        </a>
+
+        <a
+          href={getLocalizedPath("/layanan/survei-kepuasan", locale)}
+          class="group card p-6 hover:shadow-xl transition-all dark:bg-slate-800 dark:border-slate-700"
+          data-testid="service-survey"
+        >
+          <div
+            class="w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-500 transition-colors"
+          >
+            <Icon
+              name="tabler:clipboard-check"
+              class="w-7 h-7 text-blue-600 dark:text-blue-400 group-hover:text-white transition-colors"
+            />
+          </div>
+          <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-2">
+            {t("services.survey", locale)}
+          </h3>
+          <p class="text-gray-600 dark:text-gray-400 text-sm">
+            Survei kepuasan layanan
+          </p>
+        </a>
+
+        <a
+          href={getLocalizedPath("/layanan/kesiswaan", locale)}
+          class="group card p-6 hover:shadow-xl transition-all dark:bg-slate-800 dark:border-slate-700"
+          data-testid="service-student-affairs"
+        >
+          <div
+            class="w-14 h-14 bg-pink-100 dark:bg-pink-900 rounded-xl flex items-center justify-center mb-4 group-hover:bg-pink-500 transition-colors"
+          >
+            <Icon
+              name="tabler:user-check"
+              class="w-7 h-7 text-pink-600 dark:text-pink-400 group-hover:text-white transition-colors"
+            />
+          </div>
+          <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-2">
+            {t("services.student_affairs", locale)}
+          </h3>
+          <p class="text-gray-600 dark:text-gray-400 text-sm">
+            Layanan administrasi siswa
+          </p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Extracurricular Preview -->
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="extracurricular-preview"
+  >
+    <div class="container-custom">
+      <div class="flex justify-between items-end mb-8">
+        <div>
+          <h2 class="section-title mb-0 dark:text-white">
+            {t("services.extracurricular", locale)}
+          </h2>
+          <p class="text-gray-500 dark:text-gray-400">
+            {getLocalizedValue(extracurricular.description, locale)}
+          </p>
+        </div>
+        <a
+          href={getLocalizedPath("/layanan/ekstrakurikuler", locale)}
+          class="hidden md:flex items-center text-primary-600 dark:text-primary-400 font-medium hover:text-primary-700 dark:hover:text-primary-300"
+        >
+          {t("common.view_all", locale)}
+          <Icon name="tabler:arrow-right" class="w-5 h-5 ml-1" />
+        </a>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {
+          extracurricular.activities.slice(0, 12).map((activity: any) => (
+            <div
+              class="bg-gray-50 dark:bg-slate-700 p-4 rounded-xl text-center hover:bg-primary-50 dark:hover:bg-slate-600 transition-colors"
+              data-testid={`ekskul-${activity.name.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <div class="font-medium text-gray-900 dark:text-white text-sm">
+                {activity.name}
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {activity.category}
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- Laboratory Preview -->
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="laboratory-preview"
+  >
+    <div class="container-custom">
+      <h2 class="section-title dark:text-white">
+        {t("services.laboratory", locale)}
+      </h2>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {
+          laboratory.labs.map((lab: any) => (
+            <div
+              class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm"
+              data-testid={`lab-${String(getLocalizedValue(lab.name, locale)).toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <h3 class="font-bold text-gray-900 dark:text-white mb-2">
+                {getLocalizedValue(lab.name, locale)}
+              </h3>
+              <p class="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                {getLocalizedValue(lab.description, locale)}
+              </p>
+              <div class="text-sm text-primary-600 dark:text-primary-400 font-medium">
+                Kapasitas: {lab.capacity} orang
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</Layout>

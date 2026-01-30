@@ -1,0 +1,204 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getAgendaData } from "../../../lib/api";
+import kalenderPdf from "../../../assets/smandapbun-materi-web/smandapbun-kaldik.pdf";
+
+const locale = getLocale(Astro.url) as Locale;
+const agendaData = await getAgendaData();
+const { agenda } = agendaData;
+
+// Sort events by date
+const sortedEvents = [...agenda.events].sort(
+  (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+);
+const upcomingEvents = sortedEvents.filter(
+  (e) => new Date(e.date) >= new Date(),
+);
+const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
+---
+
+<Layout title={getLocalizedValue(agenda.title, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-ceremony.webp');"
+    data-testid="agenda-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/blogs", locale)} class="hover:text-white"
+          >{t("blogs.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white">{t("blogs.agenda", locale)}</span>
+      </nav>
+      <h1 class="text-3xl md:text-4xl font-bold font-heading">
+        {getLocalizedValue(agenda.title, locale)}
+      </h1>
+    </div>
+  </section>
+
+  <!-- Agenda Content -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-field.webp');"
+    data-testid="agenda-content"
+  >
+    <div class="container-custom">
+      <div class="max-w-4xl mx-auto">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 md:p-8 mb-10 border border-gray-100 dark:border-slate-700">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div class="flex items-start gap-4">
+              <div class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center">
+                <Icon
+                  name="tabler:calendar-time"
+                  class="w-6 h-6 text-primary-600 dark:text-primary-300"
+                />
+              </div>
+              <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">
+                  {locale === "id"
+                    ? "Kalender Pendidikan 2025/2026"
+                    : "Academic Calendar 2025/2026"}
+                </h2>
+                <p class="text-sm text-gray-600 dark:text-gray-300">
+                  {locale === "id"
+                    ? "Kalender Pendidikan Lima Hari Sekolah (LHS) SMA Provinsi Kalimantan Tengah."
+                    : "Five-day school academic calendar for Central Kalimantan high schools."}
+                </p>
+              </div>
+            </div>
+            <a
+              href={kalenderPdf}
+              target="_blank"
+              rel="noopener"
+              class="btn-primary inline-flex items-center justify-center"
+              download
+            >
+              <Icon name="tabler:download" class="w-5 h-5 mr-2" />
+              {locale === "id" ? "Unduh PDF" : "Download PDF"}
+            </a>
+          </div>
+        </div>
+        <!-- Upcoming Events -->
+        {
+          upcomingEvents.length > 0 && (
+            <div class="mb-12">
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center transition-colors">
+                  <Icon
+                    name="tabler:calendar-event"
+                    class="w-5 h-5 text-green-600 dark:text-green-400"
+                  />
+                </div>
+                {locale === "id" ? "Agenda Mendatang" : "Upcoming Events"}
+              </h2>
+              <div class="space-y-4">
+                {upcomingEvents.map((event: any) => (
+                  <div
+                    class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border-l-4 border-green-500 hover:shadow-md transition-all duration-200"
+                    data-testid={`event-${event.date}`}
+                  >
+                    <div class="flex flex-col md:flex-row md:items-center gap-4">
+                      <div class="flex-shrink-0 text-center md:text-left">
+                        <div class="inline-block bg-green-100 dark:bg-green-900/30 px-4 py-2 rounded-lg transition-colors">
+                          <div class="text-2xl font-bold text-green-600 dark:text-green-400">
+                            {new Date(event.date).getDate()}
+                          </div>
+                          <div class="text-sm text-green-700 dark:text-green-300">
+                            {new Date(event.date).toLocaleDateString(
+                              locale === "id" ? "id-ID" : "en-US",
+                              { month: "short", year: "numeric" },
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="flex-grow">
+                        <h3 class="font-bold text-gray-900 dark:text-white text-lg">
+                          {getLocalizedValue(event.title, locale)}
+                        </h3>
+                        <p class="text-gray-600 dark:text-gray-400">
+                          {getLocalizedValue(event.description, locale)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        }
+
+        <!-- Past Events -->
+        {
+          pastEvents.length > 0 && (
+            <div>
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
+                <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center transition-colors">
+                  <Icon
+                    name="tabler:history"
+                    class="w-5 h-5 text-gray-600 dark:text-gray-400"
+                  />
+                </div>
+                {locale === "id" ? "Agenda Sebelumnya" : "Past Events"}
+              </h2>
+              <div class="space-y-4">
+                {pastEvents.map((event: any) => (
+                  <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border-l-4 border-gray-300 dark:border-gray-600 opacity-75 dark:opacity-60 transition-colors">
+                    <div class="flex flex-col md:flex-row md:items-center gap-4">
+                      <div class="flex-shrink-0 text-center md:text-left">
+                        <div class="inline-block bg-gray-100 dark:bg-slate-700 px-4 py-2 rounded-lg transition-colors">
+                          <div class="text-2xl font-bold text-gray-500 dark:text-gray-400">
+                            {new Date(event.date).getDate()}
+                          </div>
+                          <div class="text-sm text-gray-500 dark:text-gray-400">
+                            {new Date(event.date).toLocaleDateString(
+                              locale === "id" ? "id-ID" : "en-US",
+                              { month: "short", year: "numeric" },
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="flex-grow">
+                        <h3 class="font-bold text-gray-700 dark:text-gray-300 text-lg">
+                          {getLocalizedValue(event.title, locale)}
+                        </h3>
+                        <p class="text-gray-500 dark:text-gray-400">
+                          {getLocalizedValue(event.description, locale)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        }
+
+        <!-- Back Button -->
+        <div class="mt-12 text-center">
+          <a
+            href={getLocalizedPath("/blogs", locale)}
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+            data-testid="back-to-blogs"
+          >
+            <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+            {t("common.back", locale)}
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

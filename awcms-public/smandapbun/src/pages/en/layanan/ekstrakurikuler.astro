@@ -1,0 +1,204 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getServicesPageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const servicesData = await getServicesPageData();
+const { extracurricular } = servicesData;
+---
+
+<Layout title={getLocalizedValue(extracurricular.title, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-activity.webp');"
+    data-testid="extracurricular-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/layanan", locale)} class="hover:text-white"
+          >{t("services.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white">{t("services.extracurricular", locale)}</span>
+      </nav>
+      <h1 class="text-3xl md:text-4xl font-bold font-heading">
+        {getLocalizedValue(extracurricular.title, locale)}
+      </h1>
+      <p class="text-xl text-blue-100 mt-4 max-w-2xl">
+        {getLocalizedValue(extracurricular.description, locale)}
+      </p>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm relative -mt-6 z-10 transition-colors duration-200"
+  >
+    <div class="container-custom">
+      <div class="grid grid-cols-3 gap-6">
+        <div class="text-center">
+          <div
+            class="text-3xl font-bold text-primary-600 dark:text-primary-400"
+          >
+            {extracurricular.activities.length}
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            {locale === "id" ? "Kegiatan" : "Activities"}
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-bold text-green-600 dark:text-green-400">
+            {
+              extracurricular.activities.filter(
+                (a: any) => a.category === "Wajib",
+              ).length
+            }
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            {locale === "id" ? "Wajib" : "Mandatory"}
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-bold text-orange-600 dark:text-orange-400">
+            {
+              extracurricular.activities.filter(
+                (a: any) => a.category === "Pilihan",
+              ).length
+            }
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            {locale === "id" ? "Pilihan" : "Optional"}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Activities List -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-activity.webp');"
+    data-testid="activities-list"
+  >
+    <div class="container-custom">
+      <!-- Wajib -->
+      <div class="mb-12">
+        <h2
+          class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3"
+        >
+          <div
+            class="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center"
+          >
+            <Icon
+              name="tabler:star-filled"
+              class="w-5 h-5 text-red-600 dark:text-red-400"
+            />
+          </div>
+          {
+            locale === "id"
+              ? "Ekstrakurikuler Wajib"
+              : "Mandatory Extracurricular"
+          }
+        </h2>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {
+            extracurricular.activities
+              .filter((a: any) => a.category === "Wajib")
+              .map((activity: any) => (
+                <div
+                  class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border-l-4 border-red-500 dark:border-red-600 transition-colors"
+                  data-testid={`ekskul-${activity.name.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  <h3 class="font-bold text-gray-900 dark:text-white text-lg mb-2">
+                    {activity.name}
+                  </h3>
+                  <div class="space-y-2 text-sm">
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <Icon name="tabler:clock" class="w-4 h-4 text-gray-400" />
+                      {activity.schedule}
+                    </div>
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <Icon name="tabler:user" class="w-4 h-4 text-gray-400" />
+                      {activity.coach}
+                    </div>
+                  </div>
+                </div>
+              ))
+          }
+        </div>
+      </div>
+
+      <!-- Pilihan -->
+      <div>
+        <h2
+          class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3"
+        >
+          <div
+            class="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center"
+          >
+            <Icon
+              name="tabler:list-check"
+              class="w-5 h-5 text-primary-600 dark:text-primary-400"
+            />
+          </div>
+          {
+            locale === "id"
+              ? "Ekstrakurikuler Pilihan"
+              : "Optional Extracurricular"
+          }
+        </h2>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {
+            extracurricular.activities
+              .filter((a: any) => a.category === "Pilihan")
+              .map((activity: any) => (
+                <div
+                  class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow transition-colors"
+                  data-testid={`ekskul-${activity.name.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  <h3 class="font-bold text-gray-900 dark:text-white text-lg mb-2">
+                    {activity.name}
+                  </h3>
+                  <div class="space-y-2 text-sm">
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <Icon name="tabler:clock" class="w-4 h-4 text-gray-400" />
+                      {activity.schedule}
+                    </div>
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <Icon name="tabler:user" class="w-4 h-4 text-gray-400" />
+                      {activity.coach}
+                    </div>
+                  </div>
+                </div>
+              ))
+          }
+        </div>
+      </div>
+
+      <!-- Back Button -->
+      <div class="mt-12 text-center">
+        <a
+          href={getLocalizedPath("/layanan", locale)}
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+          data-testid="back-to-services"
+        >
+          <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+          {t("common.back", locale)}
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>

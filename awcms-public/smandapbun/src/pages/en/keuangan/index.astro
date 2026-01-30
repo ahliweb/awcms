@@ -1,0 +1,191 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import { getLocale, t, getLocalizedValue, type Locale } from "../../../utils/i18n";
+import { getFinancePageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const financeData = await getFinancePageData();
+const { financePage, bos, apbd, committee } = financeData;
+---
+
+<Layout title={t("finance.title", locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-24"
+    style="--hero-image: url('/images/backgrounds/hero-campus.webp');"
+    data-testid="finance-hero"
+  >
+    <div class="container-custom">
+      <p class="text-secondary-300 font-medium mb-2">
+        {t("nav.finance", locale)}
+      </p>
+      <h1 class="text-4xl md:text-5xl font-bold font-heading">
+        {getLocalizedValue(financePage.title, locale)}
+      </h1>
+      <p class="text-xl text-blue-100 mt-4 max-w-2xl">
+        {getLocalizedValue(financePage.description, locale)}
+      </p>
+    </div>
+  </section>
+
+  <!-- Finance Navigation -->
+  <section
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm sticky top-20 z-30 transition-colors duration-200"
+  >
+    <div class="container-custom">
+      <div class="flex flex-wrap gap-3">
+        <a
+          href="#bos"
+          class="px-4 py-2 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-sm font-medium hover:bg-primary-200 dark:hover:bg-primary-800/60 transition-colors"
+        >
+          {t("finance.bos", locale)}
+        </a>
+        <a
+          href="#apbd"
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-primary-100 dark:hover:bg-primary-900/40 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        >
+          {t("finance.apbd", locale)}
+        </a>
+        <a
+          href="#committee"
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-primary-100 dark:hover:bg-primary-900/40 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        >
+          {t("finance.committee", locale)}
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOS Section -->
+  <section
+    id="bos"
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-campus.webp');"
+    data-testid="bos-section"
+  >
+    <div class="container-custom">
+      <div class="max-w-4xl mx-auto">
+        <div class="flex items-center gap-4 mb-8">
+          <div
+            class="w-14 h-14 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center transition-colors"
+          >
+            <Icon
+              name="tabler:building-bank"
+              class="w-7 h-7 text-primary-600 dark:text-primary-400"
+            />
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+              {getLocalizedValue(bos.title, locale)}
+            </h2>
+            <p class="text-gray-500 dark:text-gray-400">Tahun Anggaran 2024</p>
+          </div>
+        </div>
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 transition-colors duration-200"
+        >
+          <div
+            class="prose dark:prose-invert max-w-none"
+            set:html={getLocalizedValue(bos.content, locale)}
+          />
+
+          {
+            bos.reports && bos.reports.length > 0 && (
+              <div class="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
+                <h3 class="font-bold text-gray-900 dark:text-white mb-4">
+                  {t("finance.download_report", locale)}
+                </h3>
+                <div class="flex flex-wrap gap-3">
+                  {bos.reports.map((report: any) => (
+                    <a
+                      href={report.file}
+                      class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-slate-700 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                      data-testid={`download-${report.period.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
+                      <Icon name="tabler:download" class="w-4 h-4" />
+                      {report.period}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- APBD Section -->
+  <section
+    id="apbd"
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="apbd-section"
+  >
+    <div class="container-custom">
+      <div class="max-w-4xl mx-auto">
+        <div class="flex items-center gap-4 mb-8">
+          <div
+            class="w-14 h-14 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center transition-colors"
+          >
+            <Icon
+              name="tabler:coins"
+              class="w-7 h-7 text-green-600 dark:text-green-400"
+            />
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+              {getLocalizedValue(apbd.title, locale)}
+            </h2>
+            <p class="text-gray-500 dark:text-gray-400">Tahun Anggaran 2024</p>
+          </div>
+        </div>
+        <div
+          class="bg-gray-50 dark:bg-slate-700 rounded-2xl p-8 transition-colors duration-200"
+        >
+          <div
+            class="prose dark:prose-invert max-w-none"
+            set:html={getLocalizedValue(apbd.content, locale)}
+          />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Committee Section -->
+  <section
+    id="committee"
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-staff.webp');"
+    data-testid="committee-section"
+  >
+    <div class="container-custom">
+      <div class="max-w-4xl mx-auto">
+        <div class="flex items-center gap-4 mb-8">
+          <div
+            class="w-14 h-14 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center transition-colors"
+          >
+            <Icon
+              name="tabler:users"
+              class="w-7 h-7 text-orange-600 dark:text-orange-400"
+            />
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+              {getLocalizedValue(committee.title, locale)}
+            </h2>
+            <p class="text-gray-500 dark:text-gray-400">Tahun Anggaran 2024</p>
+          </div>
+        </div>
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 transition-colors duration-200"
+        >
+          <div
+            class="prose dark:prose-invert max-w-none"
+            set:html={getLocalizedValue(committee.content, locale)}
+          />
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

@@ -1,0 +1,174 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import { getLocale, t, getLocalizedValue, type Locale } from "../../../utils/i18n";
+import { getAlumniPageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const alumniData = await getAlumniPageData();
+const { alumniPage, featuredAlumni, alumniStats, alumniAssociation } =
+  alumniData;
+---
+
+<Layout title={t("alumni.title", locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-24"
+    style="--hero-image: url('/images/backgrounds/hero-students.webp');"
+    data-testid="alumni-hero"
+  >
+    <div class="container-custom">
+      <p class="text-secondary-300 font-medium mb-2">
+        {t("nav.alumni", locale)}
+      </p>
+      <h1 class="text-4xl md:text-5xl font-bold font-heading">
+        {getLocalizedValue(alumniPage.title, locale)}
+      </h1>
+      <p class="text-xl text-blue-100 mt-4 max-w-2xl">
+        {getLocalizedValue(alumniPage.description, locale)}
+      </p>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm relative -mt-8 z-10 rounded-xl max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 transition-colors duration-200"
+    data-testid="alumni-stats"
+  >
+    <div class="container-custom">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div class="text-center">
+          <div
+            class="text-3xl font-bold text-primary-600 dark:text-primary-400"
+          >
+            {alumniStats.totalRegistered.toLocaleString()}+
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Alumni Terdaftar
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-bold text-green-600 dark:text-green-400">
+            {alumniStats.universities}+
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Perguruan Tinggi
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-bold text-orange-600 dark:text-orange-400">
+            {alumniStats.workingSector.private}
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Sektor Swasta
+          </div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-bold text-purple-600 dark:text-purple-400">
+            {alumniStats.workingSector.government}
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Sektor Pemerintah
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Featured Alumni -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-staff.webp');"
+    data-testid="featured-alumni"
+  >
+    <div class="container-custom">
+      <div class="text-center mb-12">
+        <h2 class="section-title dark:text-white">
+          {t("alumni.featured", locale)}
+        </h2>
+      </div>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {
+          featuredAlumni.map((alumni: any) => (
+            <div
+              class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden group transition-colors duration-200"
+              data-testid={`alumni-${alumni.name.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <div class="h-48 bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900/50 dark:to-primary-800/30 flex items-center justify-center">
+                <div class="w-24 h-24 bg-white dark:bg-slate-700 rounded-full flex items-center justify-center text-3xl font-bold text-primary-600 dark:text-primary-400">
+                  {alumni.name
+                    .split(" ")
+                    .map((n: string) => n[0])
+                    .slice(0, 2)
+                    .join("")}
+                </div>
+              </div>
+              <div class="p-6">
+                <div class="text-sm text-primary-600 dark:text-primary-400 font-medium mb-1">
+                  {t("alumni.graduation_year", locale)} {alumni.graduationYear}
+                </div>
+                <h3 class="font-bold text-xl text-gray-900 dark:text-white mb-2">
+                  {alumni.name}
+                </h3>
+                <p class="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                  {getLocalizedValue(alumni.currentPosition, locale)}
+                </p>
+                <p class="text-gray-500 dark:text-gray-500 text-xs">
+                  {getLocalizedValue(alumni.achievement, locale)}
+                </p>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- Alumni Association -->
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="alumni-association"
+  >
+    <div class="container-custom">
+      <div class="max-w-3xl mx-auto text-center">
+        <h2 class="section-title dark:text-white">
+          {getLocalizedValue(alumniAssociation.name, locale)}
+        </h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-8">
+          {
+            locale === "id"
+              ? "Bergabunglah dengan komunitas alumni SMAN 2 Pangkalan Bun untuk tetap terhubung dan berkontribusi."
+              : "Join the SMAN 2 Pangkalan Bun alumni community to stay connected and contribute."
+          }
+        </p>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {
+            alumniAssociation.activities.map((activity: any) => (
+              <div class="bg-gray-50 dark:bg-slate-700 p-4 rounded-xl transition-colors">
+                <Icon
+                  name="tabler:check"
+                  class="w-6 h-6 text-primary-600 dark:text-primary-400 mx-auto mb-2"
+                />
+                <div class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {getLocalizedValue(activity, locale)}
+                </div>
+              </div>
+            ))
+          }
+        </div>
+
+        <div class="flex justify-center gap-4">
+          <a
+            href={`mailto:${alumniAssociation.contact}`}
+            class="btn-primary"
+            data-testid="alumni-contact-btn"
+          >
+            <Icon name="tabler:mail" class="w-5 h-5 mr-2" />
+            {t("common.contact_us", locale)}
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

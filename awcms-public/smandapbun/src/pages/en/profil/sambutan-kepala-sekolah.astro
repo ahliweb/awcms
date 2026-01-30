@@ -1,0 +1,142 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getProfilePageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const profileData = await getProfilePageData();
+const { principalMessage } = profileData;
+---
+
+<Layout title={getLocalizedValue(principalMessage.title, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-staff.webp');"
+    data-testid="principal-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/profil", locale)} class="hover:text-white"
+          >{t("profile.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white"
+          >{getLocalizedValue(principalMessage.title, locale)}</span
+        >
+      </nav>
+      <h1 class="text-3xl md:text-4xl font-bold font-heading">
+        {getLocalizedValue(principalMessage.title, locale)}
+      </h1>
+    </div>
+  </section>
+
+  <!-- Content -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-campus.webp');"
+    data-testid="principal-content"
+  >
+    <div class="container-custom">
+      <div class="max-w-4xl mx-auto">
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden transition-colors"
+        >
+          <!-- Principal Photo & Info -->
+          <div
+            class="bg-gradient-to-r from-primary-600 to-primary-700 p-8 text-white"
+          >
+            <div class="flex flex-col md:flex-row items-center gap-6">
+              {
+                principalMessage.image ? (
+                  <div
+                    class="w-32 h-32 rounded-full overflow-hidden ring-4 ring-white/70 shadow-lg bg-white"
+                  >
+                    <img
+                      src={principalMessage.image}
+                      alt={`Foto ${principalMessage.author}`}
+                      loading="lazy"
+                      decoding="async"
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    class="w-32 h-32 bg-white text-primary-600 rounded-full flex items-center justify-center text-4xl font-bold shadow-lg"
+                  >
+                    {
+                      principalMessage.author
+                        .split(" ")
+                        .map((n: string) => n[0])
+                        .slice(0, 2)
+                        .join("")
+                    }
+                  </div>
+                )
+              }
+              <div class="text-center md:text-left">
+                <h2 class="text-2xl font-bold">{principalMessage.author}</h2>
+                <p class="text-blue-200">{principalMessage.position}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message Content -->
+          <div class="p-8 md:p-12">
+            <div
+              class="prose dark:prose-invert prose-lg max-w-none"
+              set:html={getLocalizedValue(principalMessage.content, locale)}
+            />
+
+            <!-- Signature -->
+            <div
+              class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700 transition-colors"
+            >
+              <div class="flex items-center gap-4">
+                <div
+                  class="w-16 h-16 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center transition-colors"
+                >
+                  <Icon
+                    name="tabler:signature"
+                    class="w-8 h-8 text-primary-600 dark:text-primary-400"
+                  />
+                </div>
+                <div>
+                  <p class="font-bold text-gray-900 dark:text-white">
+                    {principalMessage.author}
+                  </p>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {principalMessage.position} SMAN 2 Pangkalan Bun
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Back Button -->
+        <div class="mt-8 text-center">
+          <a
+            href={getLocalizedPath("/profil", locale)}
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+            data-testid="back-to-profile"
+          >
+            <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+            {t("common.back", locale)}
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

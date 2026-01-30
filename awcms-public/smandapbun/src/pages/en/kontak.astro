@@ -1,8 +1,8 @@
 ---
-import Layout from "../layouts/Layout.astro";
+import Layout from "../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
-import { getLocale, t, getLocalizedValue, type Locale } from "../utils/i18n";
-import { getContactPageData } from "../lib/api";
+import { getLocale, t, getLocalizedValue, type Locale } from "../../utils/i18n";
+import { getContactPageData } from "../../lib/api";
 
 const locale = getLocale(Astro.url) as Locale;
 

@@ -1,0 +1,273 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+
+import { getPosts } from "../../../lib/api";
+
+export async function getStaticPaths() {
+  const posts = await getPosts(100); // Fetch all posts for static generation
+
+  return posts.flatMap((post) => [
+    { params: { slug: post.slug }, props: { post, locale: "id" } },
+    { params: { slug: post.slug }, props: { post, locale: "en" } },
+  ]);
+}
+
+const { post, locale } = Astro.props as { post: any; locale: Locale };
+
+// Get related blogs (same category, exclude current)
+const allPosts = await getPosts(100); // Fetch all posts again for related blogs
+const relatedBlogs = allPosts
+  .filter((a) => a.category === post.category && a.id !== post.id)
+  .slice(0, 3);
+---
+
+<Layout title={getLocalizedValue(post.title, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-students.webp');"
+    data-testid="blog-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/blogs", locale)} class="hover:text-white"
+          >{t("blogs.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white">{getLocalizedValue(post.title, locale)}</span>
+      </nav>
+      <h1
+        class="text-2xl md:text-4xl font-bold font-heading leading-tight max-w-4xl"
+      >
+        {getLocalizedValue(post.title, locale)}
+      </h1>
+      <div class="flex flex-wrap items-center gap-4 mt-6 text-blue-200">
+        <div class="flex items-center gap-2">
+          <Icon name="tabler:calendar" class="w-5 h-5" />
+          {
+            new Date(post.published_at).toLocaleDateString(
+              locale === "id" ? "id-ID" : "en-US",
+              {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              },
+            )
+          }
+        </div>
+        <div class="flex items-center gap-2">
+          <Icon name="tabler:user" class="w-5 h-5" />
+          {post.author}
+        </div>
+        <span class="bg-white/20 px-3 py-1 rounded-full text-sm"
+          >{post.category}</span
+        >
+      </div>
+    </div>
+  </section>
+
+  <!-- Content -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-campus.webp');"
+    data-testid="blog-content"
+  >
+    <div class="container-custom">
+      <div class="grid lg:grid-cols-3 gap-8">
+        <!-- Main Content -->
+        <div class="lg:col-span-2">
+          <article
+            class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden transition-colors duration-200"
+          >
+            <!-- Featured Image -->
+            <div
+              class="aspect-video bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900 dark:to-primary-800"
+            >
+              <img
+                src={post.image ||
+                  `https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&h=450&fit=crop`}
+                alt={getLocalizedValue(post.title, locale)}
+                class="w-full h-full object-cover"
+              />
+            </div>
+
+            <!-- Blog Body -->
+            <div class="p-8 md:p-12">
+              <div
+                class="prose prose-lg dark:prose-invert max-w-none"
+                set:html={getLocalizedValue(post.content, locale)}
+              />
+
+              <!-- Tags -->
+              {
+                post.tag && (
+                  <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center gap-2">
+                      <Icon name="tabler:tag" class="w-5 h-5 text-gray-400" />
+                      <span class="text-gray-500 dark:text-gray-400">
+                        {t("blogs.tags", locale)}:
+                      </span>
+                      <span class="bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-300 px-3 py-1 rounded-full text-sm">
+                        {post.tag}
+                      </span>
+                    </div>
+                  </div>
+                )
+              }
+
+              <!-- Share Buttons -->
+              <div
+                class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700"
+              >
+                <div class="flex items-center gap-4">
+                  <span class="text-gray-500 dark:text-gray-400 font-medium"
+                    >{t("common.share", locale)}:</span
+                  >
+                  <a
+                    href={`https://www.facebook.com/sharer/sharer.php?u=${Astro.url}`}
+                    target="_blank"
+                    class="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center hover:bg-blue-500 hover:text-white transition-colors text-blue-600 dark:text-blue-400"
+                  >
+                    <Icon name="tabler:brand-facebook" class="w-5 h-5" />
+                  </a>
+                  <a
+                    href={`https://twitter.com/intent/tweet?url=${Astro.url}&text=${getLocalizedValue(post.title, locale)}`}
+                    target="_blank"
+                    class="w-10 h-10 bg-sky-100 dark:bg-sky-900/30 rounded-full flex items-center justify-center hover:bg-sky-500 hover:text-white transition-colors text-sky-600 dark:text-sky-400"
+                  >
+                    <Icon name="tabler:brand-twitter" class="w-5 h-5" />
+                  </a>
+                  <a
+                    href={`https://wa.me/?text=${getLocalizedValue(post.title, locale)} ${Astro.url}`}
+                    target="_blank"
+                    class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center hover:bg-green-500 hover:text-white transition-colors text-green-600 dark:text-green-400"
+                  >
+                    <Icon name="tabler:brand-whatsapp" class="w-5 h-5" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Back Button -->
+          <div class="mt-8">
+            <a
+              href={getLocalizedPath("/blogs", locale)}
+              class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+              data-testid="back-to-blogs"
+            >
+              <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+              {t("common.back", locale)}
+            </a>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+          <!-- Related Blogs -->
+          {
+            relatedBlogs.length > 0 && (
+              <div
+                class="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 transition-colors duration-200"
+                data-testid="related-blogs"
+              >
+                <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-4">
+                  {locale === "id" ? "Blog Terkait" : "Related Blogs"}
+                </h3>
+                <div class="space-y-4">
+                  {relatedBlogs.map((related: any) => (
+                    <a
+                      href={getLocalizedPath(`/blogs/${related.slug}`, locale)}
+                      class="block group"
+                    >
+                      <div class="flex gap-3">
+                        <div class="w-20 h-14 bg-gray-200 dark:bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
+                          <img
+                            src={
+                              related.image ||
+                              `https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=100&h=70&fit=crop`
+                            }
+                            alt={getLocalizedValue(related.title, locale)}
+                            class="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div>
+                          <h4 class="font-medium text-gray-900 dark:text-white text-sm line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                            {getLocalizedValue(related.title, locale)}
+                          </h4>
+                          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {new Date(related.published_at).toLocaleDateString(
+                              locale === "id" ? "id-ID" : "en-US",
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+
+          <!-- Quick Links -->
+          <div
+            class="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 transition-colors duration-200"
+          >
+            <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-4">
+              {locale === "id" ? "Kategori" : "Categories"}
+            </h3>
+            <div class="space-y-2">
+              <a
+                href={getLocalizedPath("/blogs", locale)}
+                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                <span class="text-gray-700 dark:text-gray-300"
+                  >{t("blogs.latest", locale)}</span
+                >
+                <Icon
+                  name="tabler:chevron-right"
+                  class="w-5 h-5 text-gray-400"
+                />
+              </a>
+              <a
+                href={getLocalizedPath("/blogs/info-sekolah", locale)}
+                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                <span class="text-gray-700 dark:text-gray-300"
+                  >{t("blogs.school_info", locale)}</span
+                >
+                <Icon
+                  name="tabler:chevron-right"
+                  class="w-5 h-5 text-gray-400"
+                />
+              </a>
+              <a
+                href={getLocalizedPath("/blogs/galeri", locale)}
+                class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                <span class="text-gray-700 dark:text-gray-300"
+                  >{t("blogs.gallery", locale)}</span
+                >
+                <Icon
+                  name="tabler:chevron-right"
+                  class="w-5 h-5 text-gray-400"
+                />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

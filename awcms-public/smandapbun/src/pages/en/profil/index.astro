@@ -1,0 +1,245 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getProfilePageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const profileData = await getProfilePageData();
+const { visionMission, history, facilities } = profileData;
+---
+
+<Layout title={t("profile.title", locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-24"
+    style="--hero-image: url('/images/backgrounds/hero-profile.webp');"
+    data-testid="profile-hero"
+  >
+    <div class="container-custom">
+      <p class="text-secondary-300 font-medium mb-2">
+        {t("nav.profile", locale)}
+      </p>
+      <h1 class="text-4xl md:text-5xl font-bold font-heading">
+        {t("profile.title", locale)}
+      </h1>
+    </div>
+  </section>
+
+  <!-- Quick Navigation -->
+  <section
+    class="py-8 bg-white dark:bg-slate-800 shadow-sm sticky top-20 z-30 transition-colors duration-200"
+  >
+    <div class="container-custom">
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={getLocalizedPath("/profil/sambutan-kepala-sekolah", locale)}
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        >
+          {t("profile.principal_message", locale)}
+        </a>
+        <a
+          href={getLocalizedPath("/profil/sejarah", locale)}
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        >
+          {t("profile.history", locale)}
+        </a>
+        <a
+          href={getLocalizedPath("/profil/visi-misi", locale)}
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        >
+          {t("profile.vision_mission", locale)}
+        </a>
+        <a
+          href={getLocalizedPath("/profil/keselarasan-standar-kompetensi", locale)}
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        >
+          {t("profile.competency_alignment", locale)}
+        </a>
+        <a
+          href={getLocalizedPath("/profil/sarana-prasarana", locale)}
+          class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 hover:bg-primary-100 dark:hover:bg-primary-900/40 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+        >
+          {t("profile.facilities", locale)}
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Vision & Mission -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-campus.webp');"
+    data-testid="vision-mission-section"
+  >
+    <div class="container-custom">
+      <div class="text-center mb-12">
+        <h2 class="section-title dark:text-white">
+          {t("profile.vision_mission", locale)}
+        </h2>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-8">
+        <!-- Vision -->
+        <div
+          class="bg-primary-600 dark:bg-primary-800 text-white p-8 rounded-2xl transition-colors"
+        >
+          <div class="flex items-center gap-3 mb-6">
+            <div
+              class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center"
+            >
+              <Icon name="tabler:eye" class="w-6 h-6" />
+            </div>
+            <h3 class="text-2xl font-bold">{t("profile.vision", locale)}</h3>
+          </div>
+          <p class="text-lg text-blue-100">
+            {getLocalizedValue(visionMission.vision, locale)}
+          </p>
+        </div>
+
+        <!-- Mission -->
+        <div
+          class="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-lg transition-colors"
+        >
+          <div class="flex items-center gap-3 mb-6">
+            <div
+              class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center transition-colors"
+            >
+              <Icon
+                name="tabler:target"
+                class="w-6 h-6 text-primary-600 dark:text-primary-400"
+              />
+            </div>
+            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">
+              {t("profile.mission", locale)}
+            </h3>
+          </div>
+          <ul class="space-y-3">
+            {
+              (
+                getLocalizedValue(visionMission.mission, locale) as string[]
+              )?.map((item: string, index: number) => (
+                <li class="flex items-start gap-3">
+                  <span class="w-6 h-6 bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 transition-colors">
+                    {index + 1}
+                  </span>
+                  <span class="text-gray-600 dark:text-gray-300">{item}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+
+      <!-- Motto -->
+      <div class="mt-8 text-center">
+        <div
+          class="inline-block bg-secondary-100 dark:bg-yellow-900/20 px-8 py-4 rounded-full transition-colors"
+        >
+          <p class="text-secondary-700 dark:text-yellow-400 font-bold text-lg">
+            <Icon name="tabler:quote" class="w-5 h-5 inline mr-2" />
+            {getLocalizedValue(visionMission.motto, locale)}
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Facilities Overview -->
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="facilities-section"
+  >
+    <div class="container-custom">
+      <div class="text-center mb-12">
+        <h2 class="section-title dark:text-white">
+          {t("profile.facilities", locale)}
+        </h2>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {
+          facilities.items.slice(0, 10).map((facility: any) => (
+            <div
+              class="bg-gray-50 dark:bg-slate-700 p-4 rounded-xl text-center hover:bg-primary-50 dark:hover:bg-slate-600 transition-colors"
+              data-testid={`facility-${facility.name.en.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <div class="text-3xl font-bold text-primary-600 dark:text-primary-400 mb-1">
+                {facility.count}
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-300">
+                {getLocalizedValue(facility.name, locale)}
+              </div>
+            </div>
+          ))
+        }
+      </div>
+      <div class="mt-8 text-center">
+        <a
+          href={getLocalizedPath("/profil/sarana-prasarana", locale)}
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-700"
+          data-testid="facilities-detail-btn"
+        >
+          {t("common.view_all", locale)}
+          <Icon name="tabler:arrow-right" class="w-5 h-5 ml-2" />
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- History Timeline -->
+  <section
+    class="py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    data-testid="history-section"
+  >
+    <div class="container-custom">
+      <div class="text-center mb-12">
+        <h2 class="section-title dark:text-white">
+          {t("profile.history", locale)}
+        </h2>
+      </div>
+      <div class="max-w-3xl mx-auto">
+        <div class="relative">
+          <div
+            class="absolute left-4 md:left-1/2 top-0 bottom-0 w-0.5 bg-primary-200 dark:bg-primary-900"
+          >
+          </div>
+          {
+            history.milestones.map((milestone: any, index: number) => (
+              <div
+                class={`relative flex items-center mb-8 ${index % 2 === 0 ? "md:flex-row-reverse" : ""}`}
+              >
+                <div
+                  class={`w-full md:w-1/2 ${index % 2 === 0 ? "md:pl-8" : "md:pr-8 md:text-right"} pl-12 md:pl-0`}
+                >
+                  <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm transition-colors">
+                    <div class="text-primary-600 dark:text-primary-400 font-bold text-lg mb-1">
+                      {milestone.year}
+                    </div>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm">
+                      {getLocalizedValue(milestone.event, locale)}
+                    </p>
+                  </div>
+                </div>
+                <div class="absolute left-4 md:left-1/2 w-4 h-4 bg-primary-600 dark:bg-primary-500 rounded-full transform md:-translate-x-1/2 -translate-x-1/2 border-4 border-white dark:border-slate-900 shadow transition-colors" />
+              </div>
+            ))
+          }
+        </div>
+      </div>
+      <div class="mt-8 text-center">
+        <a
+          href={getLocalizedPath("/profil/sejarah", locale)}
+          class="btn-primary"
+          data-testid="history-detail-btn"
+        >
+          {t("common.read_more", locale)}
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>

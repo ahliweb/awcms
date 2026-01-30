@@ -1,0 +1,350 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getStaffPageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const staffData = await getStaffPageData();
+const { staffPage, teachingStaff, administrativeStaff } = staffData;
+
+const teacherList = teachingStaff?.staff ?? [];
+const adminList = administrativeStaff?.staff ?? [];
+const leadershipCount = teacherList.filter((teacher: any) =>
+  teacher.role && String(teacher.role).trim(),
+).length;
+const staffTitle = staffPage?.title ?? {
+  id: "Tenaga Pendidik & Kependidikan",
+  en: "Teaching & Administrative Staff",
+};
+const fallbackPhoto = teacherList[0]?.photo ?? "/images/staff/teachers/teacher-01.webp";
+const galleryPhotos = teacherList
+  .map((teacher: any) => teacher.photo)
+  .filter(Boolean)
+  .slice(0, 4);
+---
+
+<Layout title={getLocalizedValue(staffTitle, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-staff.webp');"
+    data-testid="staff-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/profil", locale)} class="hover:text-white"
+          >{t("profile.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white">{t("profile.staff", locale)}</span>
+      </nav>
+      <h1 class="text-3xl md:text-4xl font-bold font-heading">
+        {getLocalizedValue(staffTitle, locale)}
+      </h1>
+      <p class="text-lg text-blue-100 mt-4 max-w-3xl">
+        {getLocalizedValue(staffPage?.description, locale)}
+      </p>
+    </div>
+  </section>
+
+  <!-- Summary -->
+  <section
+    class="section-photo py-12 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-staff.webp');"
+    data-testid="staff-summary"
+  >
+    <div class="container-custom">
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-slate-700">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center">
+              <Icon
+                name="tabler:users"
+                class="w-6 h-6 text-primary-600 dark:text-primary-300"
+              />
+            </div>
+            <div>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                {locale === "id" ? "Total Guru" : "Total Teachers"}
+              </p>
+              <p class="text-3xl font-bold text-gray-900 dark:text-white">
+                {teacherList.length}
+              </p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {getLocalizedValue(teachingStaff?.description, locale)}
+          </p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-slate-700">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-12 h-12 bg-secondary-100 dark:bg-secondary-900/30 rounded-full flex items-center justify-center">
+              <Icon
+                name="tabler:badge"
+                class="w-6 h-6 text-secondary-600 dark:text-secondary-300"
+              />
+            </div>
+            <div>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                {locale === "id" ? "Jabatan Struktural" : "Leadership Roles"}
+              </p>
+              <p class="text-3xl font-bold text-gray-900 dark:text-white">
+                {leadershipCount}
+              </p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {locale === "id"
+              ? "Kepala sekolah, wakil kepala, dan koordinator utama." 
+              : "Principal, vice principals, and key coordinators."}
+          </p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-slate-700">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
+              <Icon
+                name="tabler:briefcase"
+                class="w-6 h-6 text-emerald-600 dark:text-emerald-300"
+              />
+            </div>
+            <div>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                {locale === "id" ? "Staf Tata Usaha" : "Administrative Staff"}
+              </p>
+              <p class="text-3xl font-bold text-gray-900 dark:text-white">
+                {adminList.length}
+              </p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {getLocalizedValue(administrativeStaff?.description, locale)}
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Staff Gallery -->
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="staff-gallery"
+  >
+    <div class="container-custom">
+      <div class="grid lg:grid-cols-2 gap-8 items-center">
+        <div>
+          <h2 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-4">
+            {locale === "id" ? "Potret Dewan Guru" : "Teaching Council Portrait"}
+          </h2>
+          <p class="text-gray-600 dark:text-gray-300 leading-relaxed">
+            {locale === "id"
+              ? "Dokumentasi kebersamaan dewan guru SMANDA sebagai fondasi budaya belajar yang hangat, kolaboratif, dan berorientasi pada mutu."
+              : "Snapshots of the SMANDA teaching council that reflect a warm, collaborative, and quality-driven learning culture."}
+          </p>
+          <div class="mt-6 flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+            <Icon name="tabler:calendar" class="w-4 h-4 text-primary-500" />
+            <span>
+              {locale === "id"
+                ? "Dokumen data guru 2025/2026"
+                : "Teacher data document 2025/2026"}
+            </span>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          {galleryPhotos.map((photo: string, index: number) => (
+            <div
+              class="relative rounded-2xl overflow-hidden shadow-lg border border-gray-100 dark:border-slate-700"
+              data-testid={`staff-photo-${index + 1}`}
+            >
+              <img
+                src={photo}
+                alt={
+                  locale === "id"
+                    ? `Foto guru SMANDA ${index + 1}`
+                    : `SMANDA teacher photo ${index + 1}`
+                }
+                loading="lazy"
+                decoding="async"
+                class="w-full h-64 object-cover"
+              />
+              <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Teaching Council -->
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="teaching-staff"
+  >
+    <div class="container-custom">
+      <div class="flex flex-wrap items-center gap-4 mb-8">
+        <div class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center">
+          <Icon
+            name="tabler:chalkboard"
+            class="w-6 h-6 text-primary-600 dark:text-primary-300"
+          />
+        </div>
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+            {getLocalizedValue(teachingStaff?.title, locale)}
+          </h2>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {locale === "id"
+              ? "Daftar guru beserta jabatan dan mata pelajaran yang diampu."
+              : "Teacher list with roles and subjects taught."}
+          </p>
+        </div>
+      </div>
+      <div class="overflow-x-auto rounded-2xl shadow-lg border border-gray-100 dark:border-slate-700">
+        <table class="w-full bg-white dark:bg-slate-900">
+          <thead class="bg-primary-50 dark:bg-primary-900/30">
+            <tr>
+              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                No
+              </th>
+              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                {locale === "id" ? "Foto" : "Photo"}
+              </th>
+              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                {locale === "id" ? "Nama" : "Name"}
+              </th>
+              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                {locale === "id" ? "Jabatan" : "Role"}
+              </th>
+              <th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                {locale === "id" ? "Mata Pelajaran" : "Subject"}
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-slate-700">
+            {teacherList.map((teacher: any, index: number) => (
+              <tr class="hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
+                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                  {index + 1}
+                </td>
+                <td class="px-6 py-4">
+                  <img
+                    src={teacher.photo ?? fallbackPhoto}
+                    alt={`Foto ${teacher.name}`}
+                    loading="lazy"
+                    decoding="async"
+                    class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm"
+                  />
+                </td>
+                <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                  {teacher.name}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                  <span
+                    class={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                      teacher.role && String(teacher.role).trim()
+                        ? "bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-200"
+                        : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
+                    }`}
+                  >
+                    {teacher.role && String(teacher.role).trim()
+                      ? teacher.role
+                      : locale === "id"
+                        ? "Guru"
+                        : "Teacher"}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                  {teacher.subject && String(teacher.subject).trim()
+                    ? teacher.subject
+                    : "-"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Administrative Staff -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-campus.webp');"
+    data-testid="admin-staff"
+  >
+    <div class="container-custom">
+      <div class="flex flex-wrap items-center gap-4 mb-8">
+        <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
+          <Icon
+            name="tabler:briefcase"
+            class="w-6 h-6 text-emerald-600 dark:text-emerald-300"
+          />
+        </div>
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+            {getLocalizedValue(administrativeStaff?.title, locale)}
+          </h2>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {getLocalizedValue(administrativeStaff?.description, locale)}
+          </p>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {adminList.map((staff: any, index: number) => (
+          <div
+            class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-lg border border-gray-100 dark:border-slate-700 transition-colors"
+            data-testid={`admin-staff-${index + 1}`}
+          >
+            <div class="flex items-center gap-3">
+              <div class="relative">
+                <img
+                  src={staff.photo ?? fallbackPhoto}
+                  alt={`Foto ${staff.name}`}
+                  loading="lazy"
+                  decoding="async"
+                  class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-slate-900 shadow-sm"
+                />
+                <span class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">
+                  {index + 1}
+                </span>
+              </div>
+              <div>
+                <p class="font-semibold text-gray-900 dark:text-white">
+                  {staff.name}
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {staff.role && String(staff.role).trim()
+                    ? staff.role
+                    : locale === "id"
+                      ? "Staf Tata Usaha"
+                      : "Administrative Staff"}
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div class="mt-12 text-center">
+        <a
+          href={getLocalizedPath("/profil", locale)}
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+          data-testid="back-to-profile"
+        >
+          <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+          {t("common.back", locale)}
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>

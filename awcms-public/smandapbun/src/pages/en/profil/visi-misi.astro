@@ -1,0 +1,455 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getProfilePageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const profileData = await getProfilePageData();
+const { visionMission } = profileData;
+const missionItems =
+  (getLocalizedValue(visionMission.mission, locale) as string[]) ?? [];
+const goalItems =
+  (getLocalizedValue(visionMission.goals, locale) as string[]) ?? [];
+const visionIndicators = visionMission.visionIndicators ?? [];
+const studentAffairsPrograms =
+  (getLocalizedValue(
+    visionMission.programs?.studentAffairs?.items,
+    locale,
+  ) as string[]) ?? [];
+const curriculumPrograms =
+  (getLocalizedValue(
+    visionMission.programs?.curriculum?.items,
+    locale,
+  ) as string[]) ?? [];
+const academicPrograms =
+  (getLocalizedValue(
+    visionMission.programs?.publicRelations?.academic?.items,
+    locale,
+  ) as string[]) ?? [];
+const nonAcademicPrograms =
+  (getLocalizedValue(
+    visionMission.programs?.publicRelations?.nonAcademic?.items,
+    locale,
+  ) as string[]) ?? [];
+const indicatorStyles = [
+  {
+    icon: "tabler:heart",
+    bgClass: "bg-secondary-100 dark:bg-secondary-900/20",
+    iconClass: "text-secondary-700 dark:text-secondary-200",
+  },
+  {
+    icon: "tabler:book",
+    bgClass: "bg-primary-100 dark:bg-primary-900/40",
+    iconClass: "text-primary-600 dark:text-primary-300",
+  },
+  {
+    icon: "tabler:trophy",
+    bgClass: "bg-emerald-100 dark:bg-emerald-900/30",
+    iconClass: "text-emerald-600 dark:text-emerald-300",
+  },
+];
+---
+
+<Layout title={getLocalizedValue(visionMission.title, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-campus.webp');"
+    data-testid="vision-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/profil", locale)} class="hover:text-white"
+          >{t("profile.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white">{t("profile.vision_mission", locale)}</span>
+      </nav>
+      <h1 class="text-3xl md:text-4xl font-bold font-heading">
+        {getLocalizedValue(visionMission.title, locale)}
+      </h1>
+      {
+        visionMission.subtitle && (
+          <div class="mt-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm text-blue-100">
+            <Icon name="tabler:calendar" class="w-4 h-4" />
+            <span>{getLocalizedValue(visionMission.subtitle, locale)}</span>
+          </div>
+        )
+      }
+    </div>
+  </section>
+
+  <!-- Content -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/hero-students.webp');"
+    data-testid="vision-content"
+  >
+    <div class="container-custom">
+      <div class="max-w-5xl mx-auto space-y-10">
+        <!-- Vision -->
+        <div
+          class="bg-primary-600 dark:bg-primary-800 text-white p-8 md:p-12 rounded-2xl relative overflow-hidden transition-colors"
+          data-testid="vision-card"
+        >
+          <div
+            class="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"
+          >
+          </div>
+          <div class="relative z-10">
+            <div class="flex items-center gap-4 mb-6">
+              <div
+                class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center"
+              >
+                <Icon name="tabler:eye" class="w-8 h-8" />
+              </div>
+              <h2 class="text-3xl font-bold">{t("profile.vision", locale)}</h2>
+            </div>
+            <p class="text-xl md:text-2xl text-blue-100 leading-relaxed">
+              "{getLocalizedValue(visionMission.vision, locale)}"
+            </p>
+          </div>
+        </div>
+
+        <!-- Vision Indicators -->
+        {
+          visionIndicators.length > 0 && (
+            <div data-testid="vision-indicators">
+              <div class="flex flex-wrap items-center gap-4 mb-6">
+                <div
+                  class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center"
+                >
+                  <Icon
+                    name="tabler:chart-bar"
+                    class="w-6 h-6 text-primary-600 dark:text-primary-300"
+                  />
+                </div>
+                <div>
+                  <h2 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+                    {locale === "id" ? "Indikator Visi" : "Vision Indicators"}
+                  </h2>
+                  <p class="text-sm text-gray-600 dark:text-gray-300">
+                    {
+                      locale === "id"
+                        ? "Tiga pilar utama BERDASI sebagai arah pembentukan karakter siswa."
+                        : "The three BERDASI pillars that guide student character development."
+                    }
+                  </p>
+                </div>
+              </div>
+              <div class="grid md:grid-cols-3 gap-6">
+                {visionIndicators.map((indicator, index) => (
+                  <div
+                    class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-slate-700 transition-colors"
+                    data-testid={`vision-indicator-${index + 1}`}
+                  >
+                    <div
+                      class={`w-12 h-12 rounded-full flex items-center justify-center mb-4 transition-colors ${indicatorStyles[index]?.bgClass ?? "bg-primary-100 dark:bg-primary-900/40"}`}
+                    >
+                      <Icon
+                        name={indicatorStyles[index]?.icon ?? "tabler:circle-check"}
+                        class={`w-6 h-6 ${indicatorStyles[index]?.iconClass ?? "text-primary-600 dark:text-primary-300"}`}
+                      />
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                      {getLocalizedValue(indicator.title, locale)}
+                    </h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-300">
+                      {getLocalizedValue(indicator.description, locale)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        }
+
+        <!-- Mission -->
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 md:p-12 transition-colors"
+          data-testid="mission-card"
+        >
+          <div class="flex items-center gap-4 mb-8">
+            <div
+              class="w-16 h-16 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center transition-colors"
+            >
+              <Icon
+                name="tabler:target"
+                class="w-8 h-8 text-primary-600 dark:text-primary-400"
+              />
+            </div>
+            <h2 class="text-3xl font-bold text-gray-900 dark:text-white">
+              {t("profile.mission", locale)}
+            </h2>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
+            {missionItems.map((item: string, index: number) => (
+              <div
+                class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl hover:bg-primary-50 dark:hover:bg-slate-700 transition-colors"
+                data-testid={`mission-${index + 1}`}
+              >
+                <span class="w-10 h-10 bg-primary-600 dark:bg-primary-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0 transition-colors">
+                  {index + 1}
+                </span>
+                <p class="text-gray-700 dark:text-gray-300 pt-2">{item}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <!-- Goals -->
+        {goalItems.length > 0 && (
+          <div
+            class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 md:p-12 transition-colors"
+            data-testid="goals-card"
+          >
+            <div class="flex flex-wrap items-center gap-4 mb-8">
+              <div
+                class="w-16 h-16 bg-secondary-100 dark:bg-secondary-900/20 rounded-full flex items-center justify-center transition-colors"
+              >
+                <Icon
+                  name="tabler:flag"
+                  class="w-8 h-8 text-secondary-700 dark:text-secondary-200"
+                />
+              </div>
+              <div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <h2 class="text-3xl font-bold text-gray-900 dark:text-white">
+                    {locale === "id" ? "Tujuan" : "Goals"}
+                  </h2>
+                  <span class="text-xs uppercase tracking-widest bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-200 px-3 py-1 rounded-full">
+                    {locale === "id" ? "Target 98%" : "98% Target"}
+                  </span>
+                </div>
+                <p class="text-sm text-gray-600 dark:text-gray-300">
+                  {
+                    locale === "id"
+                      ? "Sasaran capaian satu tahun untuk membangun budaya BERDASI secara konsisten."
+                      : "One-year achievement targets to consistently build the BERDASI culture."
+                  }
+                </p>
+              </div>
+            </div>
+            <div class="space-y-4">
+              {goalItems.map((goal: string, index: number) => (
+                <div
+                  class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl border border-gray-100 dark:border-slate-700 transition-colors"
+                  data-testid={`goal-${index + 1}`}
+                >
+                  <span class="w-10 h-10 bg-secondary-600 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+                    {index + 1}
+                  </span>
+                  <p class="text-gray-700 dark:text-gray-300 pt-1">{goal}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <!-- Programs -->
+        {visionMission.programs && (
+          <div data-testid="vision-programs">
+            <div class="flex flex-wrap items-center gap-4 mb-6">
+              <div
+                class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center"
+              >
+                <Icon
+                  name="tabler:clipboard-list"
+                  class="w-6 h-6 text-primary-600 dark:text-primary-300"
+                />
+              </div>
+              <div>
+                <h2 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+                  {locale === "id" ? "Program Kegiatan" : "Program Activities"}
+                </h2>
+                <p class="text-sm text-gray-600 dark:text-gray-300">
+                  {
+                    locale === "id"
+                      ? "Rangkaian program pendukung BERDASI di bidang kesiswaan, kurikulum, dan humas."
+                      : "BERDASI-supporting programs across student affairs, curriculum, and public relations."
+                  }
+                </p>
+              </div>
+            </div>
+            <div class="grid lg:grid-cols-2 gap-6">
+              <div
+                class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 border-t-4 border-secondary-500 transition-colors"
+                data-testid="program-student-affairs"
+              >
+                <div class="flex items-center gap-4 mb-6">
+                  <div
+                    class="w-12 h-12 bg-secondary-100 dark:bg-secondary-900/20 rounded-full flex items-center justify-center"
+                  >
+                    <Icon
+                      name="tabler:heart"
+                      class="w-6 h-6 text-secondary-700 dark:text-secondary-200"
+                    />
+                  </div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+                    {getLocalizedValue(
+                      visionMission.programs?.studentAffairs?.title,
+                      locale,
+                    )}
+                  </h3>
+                </div>
+                <ul class="space-y-3">
+                  {studentAffairsPrograms.map((item: string, index: number) => (
+                    <li
+                      class="flex items-start gap-3 text-gray-700 dark:text-gray-300"
+                      data-testid={`program-student-affairs-${index + 1}`}
+                    >
+                      <Icon
+                        name="tabler:circle-check"
+                        class="w-5 h-5 text-secondary-600 dark:text-secondary-300 mt-0.5"
+                      />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div
+                class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 border-t-4 border-primary-500 transition-colors"
+                data-testid="program-curriculum"
+              >
+                <div class="flex items-center gap-4 mb-6">
+                  <div
+                    class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center"
+                  >
+                    <Icon
+                      name="tabler:bulb"
+                      class="w-6 h-6 text-primary-600 dark:text-primary-300"
+                    />
+                  </div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+                    {getLocalizedValue(
+                      visionMission.programs?.curriculum?.title,
+                      locale,
+                    )}
+                  </h3>
+                </div>
+                <ul class="space-y-3">
+                  {curriculumPrograms.map((item: string, index: number) => (
+                    <li
+                      class="flex items-start gap-3 text-gray-700 dark:text-gray-300"
+                      data-testid={`program-curriculum-${index + 1}`}
+                    >
+                      <Icon
+                        name="tabler:circle-check"
+                        class="w-5 h-5 text-primary-600 dark:text-primary-300 mt-0.5"
+                      />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div
+                class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 border-t-4 border-emerald-500 transition-colors lg:col-span-2"
+                data-testid="program-public-relations"
+              >
+                <div class="flex items-center gap-4 mb-6">
+                  <div
+                    class="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center"
+                  >
+                    <Icon
+                      name="tabler:trophy"
+                      class="w-6 h-6 text-emerald-600 dark:text-emerald-300"
+                    />
+                  </div>
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+                    {getLocalizedValue(
+                      visionMission.programs?.publicRelations?.title,
+                      locale,
+                    )}
+                  </h3>
+                </div>
+                <div class="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <h4 class="text-sm font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-3">
+                      {getLocalizedValue(
+                        visionMission.programs?.publicRelations?.academic?.title,
+                        locale,
+                      )}
+                    </h4>
+                    <ul class="space-y-3">
+                      {academicPrograms.map((item: string, index: number) => (
+                        <li
+                          class="flex items-start gap-3 text-gray-700 dark:text-gray-300"
+                          data-testid={`program-academic-${index + 1}`}
+                        >
+                          <Icon
+                            name="tabler:circle-check"
+                            class="w-5 h-5 text-emerald-600 dark:text-emerald-300 mt-0.5"
+                          />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-3">
+                      {getLocalizedValue(
+                        visionMission.programs?.publicRelations?.nonAcademic?.title,
+                        locale,
+                      )}
+                    </h4>
+                    <ul class="space-y-3">
+                      {nonAcademicPrograms.map((item: string, index: number) => (
+                        <li
+                          class="flex items-start gap-3 text-gray-700 dark:text-gray-300"
+                          data-testid={`program-non-academic-${index + 1}`}
+                        >
+                          <Icon
+                            name="tabler:circle-check"
+                            class="w-5 h-5 text-emerald-600 dark:text-emerald-300 mt-0.5"
+                          />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <!-- Motto -->
+        <div
+          class="bg-gradient-to-r from-secondary-500 to-secondary-600 dark:from-secondary-700 dark:to-secondary-800 text-white p-8 md:p-12 rounded-2xl text-center transition-colors"
+          data-testid="motto-card"
+        >
+          <Icon name="tabler:quote" class="w-12 h-12 mx-auto mb-4 opacity-50" />
+          <h3 class="text-lg font-medium mb-2">{t("profile.motto", locale)}</h3>
+          <p class="text-2xl md:text-3xl font-bold">
+            {getLocalizedValue(visionMission.motto, locale)}
+          </p>
+        </div>
+
+        <!-- Back Button -->
+        <div class="text-center">
+          <a
+            href={getLocalizedPath("/profil", locale)}
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-700"
+            data-testid="back-to-profile"
+          >
+            <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+            {t("common.back", locale)}
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

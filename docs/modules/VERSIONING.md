@@ -11,7 +11,7 @@ Define how AWCMS versions are managed across code and documentation.
 
 ## Prerequisites
 
-- `awcms/CHANGELOG.md`
+- `CHANGELOG.md`
 
 ## Core Concepts
 
@@ -34,7 +34,7 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 | --- | --- |
 | `awcms/src/lib/version.js` | Canonical version object |
 | `awcms/package.json` | npm version (must match) |
-| `awcms/CHANGELOG.md` | Release history |
+| `CHANGELOG.md` | Release history |
 
 ## Implementation Patterns
 

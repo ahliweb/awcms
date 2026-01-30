@@ -1,0 +1,367 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getProfilePageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const profileData = await getProfilePageData();
+const { competencyAlignment, visionMission } = profileData;
+
+const graduateItems =
+  (getLocalizedValue(
+    competencyAlignment?.graduateStandards?.items,
+    locale,
+  ) as string[]) ?? [];
+const frameworkItems =
+  (getLocalizedValue(
+    competencyAlignment?.learningFramework?.items,
+    locale,
+  ) as string[]) ?? [];
+const missionItems =
+  (getLocalizedValue(visionMission?.mission, locale) as string[]) ?? [];
+const goalItems =
+  (getLocalizedValue(visionMission?.goals, locale) as string[]) ?? [];
+const implementationItems = competencyAlignment?.implementation?.items ?? [];
+const progressLabel = getLocalizedValue(
+  competencyAlignment?.implementation?.progressLabel,
+  locale,
+);
+---
+
+<Layout title={getLocalizedValue(competencyAlignment?.title, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-campus.webp');"
+    data-testid="competency-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/profil", locale)} class="hover:text-white"
+          >{t("profile.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white">
+          {t("profile.competency_alignment", locale)}
+        </span>
+      </nav>
+      <h1 class="text-3xl md:text-4xl font-bold font-heading">
+        {getLocalizedValue(competencyAlignment?.title, locale)}
+      </h1>
+      <p class="text-lg text-blue-100 mt-4 max-w-3xl">
+        {getLocalizedValue(competencyAlignment?.subtitle, locale)}
+      </p>
+    </div>
+  </section>
+
+  <!-- Alignment Pillars -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-staff.webp');"
+    data-testid="alignment-pillars"
+  >
+    <div class="container-custom">
+      <div class="text-center mb-10">
+        <h2 class="section-title dark:text-white">
+          {locale === "id" ? "Landasan Keselarasan" : "Alignment Foundations"}
+        </h2>
+        <p class="section-subtitle dark:text-gray-300">
+          {locale === "id"
+            ? "Tiga pilar utama yang memastikan tujuan, standar, dan pembelajaran berada pada arah yang sama."
+            : "Three pillars that align national goals, competency standards, and deep learning."}
+        </p>
+      </div>
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 border border-gray-100 dark:border-slate-700 transition-colors">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center">
+              <Icon
+                name="tabler:scale"
+                class="w-6 h-6 text-primary-600 dark:text-primary-300"
+              />
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                {getLocalizedValue(
+                  competencyAlignment?.nationalGoal?.title,
+                  locale,
+                )}
+              </h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {getLocalizedValue(
+                  competencyAlignment?.nationalGoal?.reference,
+                  locale,
+                )}
+              </p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+            {getLocalizedValue(
+              competencyAlignment?.nationalGoal?.description,
+              locale,
+            )}
+          </p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 border border-gray-100 dark:border-slate-700 transition-colors">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 bg-secondary-100 dark:bg-secondary-900/30 rounded-full flex items-center justify-center">
+              <Icon
+                name="tabler:checklist"
+                class="w-6 h-6 text-secondary-600 dark:text-secondary-300"
+              />
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                {getLocalizedValue(
+                  competencyAlignment?.graduateStandards?.title,
+                  locale,
+                )}
+              </h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {getLocalizedValue(
+                  competencyAlignment?.graduateStandards?.reference,
+                  locale,
+                )}
+              </p>
+            </div>
+          </div>
+          <ul class="grid grid-cols-2 gap-2 text-sm text-gray-600 dark:text-gray-300">
+            {graduateItems.map((item: string, index: number) => (
+              <li class="flex items-start gap-2">
+                <Icon
+                  name="tabler:circle-check"
+                  class="w-4 h-4 text-secondary-600 dark:text-secondary-300 mt-0.5"
+                />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 border border-gray-100 dark:border-slate-700 transition-colors">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center">
+              <Icon
+                name="tabler:infinity"
+                class="w-6 h-6 text-emerald-600 dark:text-emerald-300"
+              />
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                {getLocalizedValue(
+                  competencyAlignment?.learningFramework?.title,
+                  locale,
+                )}
+              </h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {locale === "id" ? "Kerangka Kerja PM" : "PM Framework"}
+              </p>
+            </div>
+          </div>
+          <ul class="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+            {frameworkItems.map((item: string) => (
+              <li class="flex items-start gap-2">
+                <Icon
+                  name="tabler:circle-check"
+                  class="w-4 h-4 text-emerald-600 dark:text-emerald-300 mt-0.5"
+                />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Alignment with School Direction -->
+  <section
+    class="py-16 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="alignment-school"
+  >
+    <div class="container-custom">
+      <div class="text-center mb-10">
+        <h2 class="section-title dark:text-white">
+          {locale === "id"
+            ? "Keselarasan dengan Visi, Misi, dan Tujuan Sekolah"
+            : "Alignment with the School Vision, Mission, and Goals"}
+        </h2>
+      </div>
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="bg-primary-600 dark:bg-primary-800 text-white rounded-2xl p-6 shadow-lg">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+              <Icon name="tabler:eye" class="w-6 h-6" />
+            </div>
+            <h3 class="text-xl font-bold">{t("profile.vision", locale)}</h3>
+          </div>
+          <p class="text-sm text-primary-100 leading-relaxed">
+            {getLocalizedValue(visionMission?.vision, locale)}
+          </p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-slate-700">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center">
+              <Icon
+                name="tabler:target"
+                class="w-6 h-6 text-primary-600 dark:text-primary-300"
+              />
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+              {t("profile.mission", locale)}
+            </h3>
+          </div>
+          <ul class="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+            {missionItems.map((item: string, index: number) => (
+              <li class="flex items-start gap-3">
+                <span class="w-6 h-6 bg-primary-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                  {index + 1}
+                </span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-slate-700">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 bg-secondary-100 dark:bg-secondary-900/30 rounded-full flex items-center justify-center">
+              <Icon
+                name="tabler:flag"
+                class="w-6 h-6 text-secondary-600 dark:text-secondary-300"
+              />
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+              {locale === "id" ? "Tujuan" : "Goals"}
+            </h3>
+          </div>
+          <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+            {goalItems.map((item: string, index: number) => (
+              <li class="flex items-start gap-3">
+                <span class="w-7 h-7 bg-secondary-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                  {index + 1}
+                </span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Implementation -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-field.webp');"
+    data-testid="alignment-implementation"
+  >
+    <div class="container-custom">
+      <div class="flex flex-wrap items-center gap-4 mb-10">
+        <div class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center">
+          <Icon
+            name="tabler:clipboard-text"
+            class="w-6 h-6 text-primary-600 dark:text-primary-300"
+          />
+        </div>
+        <div>
+          <h2 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+            {getLocalizedValue(competencyAlignment?.implementation?.title, locale)}
+          </h2>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {getLocalizedValue(
+              competencyAlignment?.implementation?.subtitle,
+              locale,
+            )}
+          </p>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-2 gap-6">
+        {implementationItems.map((item: any, index: number) => (
+          <div
+            class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 border border-gray-100 dark:border-slate-700 transition-colors"
+            data-testid={`implementation-${index + 1}`}
+          >
+            <div class="flex items-center justify-between gap-4 mb-4">
+              <div class="flex items-center gap-3">
+                <span class="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300 flex items-center justify-center font-bold">
+                  {index + 1}
+                </span>
+                <div>
+                  <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                    {getLocalizedValue(item.category, locale)}
+                  </h3>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {progressLabel}
+                  </p>
+                </div>
+              </div>
+              <span class="inline-flex items-center gap-2 rounded-full bg-primary-100 dark:bg-primary-900/40 px-3 py-1 text-xs font-semibold text-primary-600 dark:text-primary-300">
+                <Icon name="tabler:circle-check" class="w-4 h-4" />
+                {getLocalizedValue(item.progress, locale)}
+              </span>
+            </div>
+            <ul class="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+              {(
+                getLocalizedValue(item.activities, locale) as string[]
+              )?.map((activity: string, activityIndex: number) => (
+                <li class="flex items-start gap-2">
+                  <Icon
+                    name="tabler:circle-check"
+                    class="w-4 h-4 text-primary-500 dark:text-primary-300 mt-0.5"
+                  />
+                  <span>{activity}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      <div
+        class="mt-12 bg-white/90 dark:bg-slate-900/80 rounded-2xl shadow-lg p-6 md:p-8 border border-gray-100 dark:border-slate-700 flex flex-col md:flex-row items-center justify-between gap-6 transition-colors"
+      >
+        <div>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            {getLocalizedValue(competencyAlignment?.signatory?.placeDate, locale)}
+          </p>
+          <p class="text-lg font-semibold text-gray-900 dark:text-white">
+            {getLocalizedValue(competencyAlignment?.signatory?.title, locale)}
+          </p>
+        </div>
+        <div class="text-center md:text-right">
+          <p class="text-xl font-bold text-gray-900 dark:text-white">
+            {competencyAlignment?.signatory?.name}
+          </p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            {competencyAlignment?.signatory?.idNumber}
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-10 text-center">
+        <a
+          href={getLocalizedPath("/profil", locale)}
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+          data-testid="back-to-profile"
+        >
+          <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+          {t("common.back", locale)}
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>

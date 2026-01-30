@@ -14,6 +14,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - Added auto vs linked inheritance mode and tenant role links.
 - **Reporting Permissions**:
   - Added platform reporting permissions for read and bulk actions.
+- **Public Portal (Smandapbun)**:
+  - Added bilingual support (Indonesian/English) for all pages in `src/pages/en`.
+  - Added category filtering for Gallery page.
+  - Added custom Vanilla JS Lightbox for Gallery with slide navigation and captions.
 
 ### Changed
 
@@ -25,6 +29,13 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Documentation**:
   - Synchronized numerous `docs/` guides (setup, CI/CD, deploy, tenancy, architecture, modules, i18n, security) with current paths, `VITE_*` env var usage, `npx supabase` commands, and the `blogs` table naming conventions.
   - Normalized all cross-doc references to the new root `docs/` tree instead of legacy `awcms/docs` paths.
+- **Public Portal (Smandapbun)**:
+  - Updated homepage hero image to `kegiatan-sekolah/IMG_6411.webp`.
+  - Updated site-wide phone number to `082254008080`.
+  - Removed Fax information from contact data and UI.
+  - Updated operational hours to "Senin - Jumat: 07:00 - 15:00 WIB".
+  - Updated default stats for alumni and achievements in `site.json` and `api.ts`.
+  - Refactored `galeri.astro` to flatten album structure and support filtering.
 
 ### Fixed
 

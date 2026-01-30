@@ -14,13 +14,15 @@ const locale = getLocale(Astro.url) as Locale;
 const site = await getSiteData();
 const posts = await getPosts();
 const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
+// Import assets
+import heroImage from "../assets/foto-smandapbun/kegiatan-sekolah/IMG_6411.webp";
 ---
 
 <Layout title={t("home.school_name", locale)}>
   <!-- Hero Section -->
   <section
     class="hero-gradient text-white relative overflow-hidden"
-    style="--hero-image: url('/images/backgrounds/hero-home.webp');"
+    style={`--hero-image: url('${heroImage.src}');`}
     data-testid="hero-section"
   >
     <div class="absolute inset-0 bg-black/30"></div>
@@ -110,23 +112,23 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
         <div class="text-center">
           <div
             class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-blue-400 mb-1"
-            data-testid="stat-staff"
+            data-testid="stat-alumni"
           >
-            {site.stats.staff}+
+            {site.stats.alumni?.toLocaleString()}+
           </div>
           <div class="text-gray-500 dark:text-gray-400 text-sm">
-            {t("home.stats_staff", locale)}
+            {t("home.stats_alumni", locale)}
           </div>
         </div>
         <div class="text-center">
           <div
             class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-blue-400 mb-1"
-            data-testid="stat-extracurriculars"
+            data-testid="stat-achievements"
           >
-            {site.stats.extracurriculars}+
+            {site.stats.achievements}+
           </div>
           <div class="text-gray-500 dark:text-gray-400 text-sm">
-            {t("home.stats_extracurriculars", locale)}
+            {t("home.stats_achievements", locale)}
           </div>
         </div>
       </div>

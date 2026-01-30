@@ -265,6 +265,8 @@ export interface SiteData {
         teachers: number;
         staff: number;
         extracurriculars: number;
+        alumni?: number;
+        achievements?: number;
     };
     accreditation: string;
     established: string;
@@ -304,11 +306,13 @@ export async function getSiteData(): Promise<SiteData> {
         stats: {
             students: 1200,
             teachers: 75,
-            staff: 20,
-            extracurriculars: 15,
+            staff: 25,
+            extracurriculars: 18,
+            alumni: 8500,
+            achievements: 100,
         },
         accreditation: 'A',
-        established: '1995',
+        established: '1984',
     };
 
     if (!tenantId) return defaultData;

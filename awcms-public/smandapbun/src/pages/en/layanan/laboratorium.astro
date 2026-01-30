@@ -1,0 +1,153 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getServicesPageData, getImagesData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const servicesData = await getServicesPageData();
+const imagesData = await getImagesData();
+const { laboratory } = servicesData;
+---
+
+<Layout title={getLocalizedValue(laboratory.title, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-lab.webp');"
+    data-testid="laboratory-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/layanan", locale)} class="hover:text-white"
+          >{t("services.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white">{t("services.laboratory", locale)}</span>
+      </nav>
+      <h1 class="text-3xl md:text-4xl font-bold font-heading">
+        {getLocalizedValue(laboratory.title, locale)}
+      </h1>
+    </div>
+  </section>
+
+  <!-- Labs Grid -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-lab.webp');"
+    data-testid="labs-grid"
+  >
+    <div class="container-custom">
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {
+          laboratory.labs.map((lab: any, index: number) => (
+            <div
+              class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden group transition-colors duration-200"
+              data-testid={`lab-card-${index}`}
+            >
+              <div class="h-48 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900 dark:to-purple-800 overflow-hidden">
+                <img
+                  src={
+                    imagesData.laboratory[index % imagesData.laboratory.length]
+                  }
+                  alt={getLocalizedValue(lab.name, locale)}
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+              </div>
+              <div class="p-6">
+                <h3 class="font-bold text-xl text-gray-900 dark:text-white mb-2">
+                  {getLocalizedValue(lab.name, locale)}
+                </h3>
+                <p class="text-gray-600 dark:text-gray-400 mb-4">
+                  {getLocalizedValue(lab.description, locale)}
+                </p>
+                <div class="flex items-center justify-between">
+                  <span class="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 px-3 py-1 rounded-full text-sm font-medium">
+                    {locale === "id" ? "Kapasitas" : "Capacity"}: {lab.capacity}
+                  </span>
+                  <Icon name="tabler:flask" class="w-6 h-6 text-purple-400" />
+                </div>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+
+      <!-- Lab Rules -->
+      <div
+        class="mt-12 bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 transition-colors duration-200"
+      >
+        <h2
+          class="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3"
+        >
+          <Icon name="tabler:alert-circle" class="w-6 h-6 text-orange-500" />
+          {locale === "id" ? "Tata Tertib Laboratorium" : "Laboratory Rules"}
+        </h2>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="flex items-start gap-3">
+            <Icon name="tabler:check" class="w-5 h-5 text-green-500 mt-0.5" />
+            <span class="text-gray-600 dark:text-gray-400"
+              >{
+                locale === "id"
+                  ? "Wajib memakai jas laboratorium"
+                  : "Must wear lab coat"
+              }</span
+            >
+          </div>
+          <div class="flex items-start gap-3">
+            <Icon name="tabler:check" class="w-5 h-5 text-green-500 mt-0.5" />
+            <span class="text-gray-600 dark:text-gray-400"
+              >{
+                locale === "id"
+                  ? "Dilarang membawa makanan dan minuman"
+                  : "No food and drinks allowed"
+              }</span
+            >
+          </div>
+          <div class="flex items-start gap-3">
+            <Icon name="tabler:check" class="w-5 h-5 text-green-500 mt-0.5" />
+            <span class="text-gray-600 dark:text-gray-400"
+              >{
+                locale === "id"
+                  ? "Gunakan peralatan sesuai prosedur"
+                  : "Use equipment according to procedures"
+              }</span
+            >
+          </div>
+          <div class="flex items-start gap-3">
+            <Icon name="tabler:check" class="w-5 h-5 text-green-500 mt-0.5" />
+            <span class="text-gray-600 dark:text-gray-400"
+              >{
+                locale === "id"
+                  ? "Jaga kebersihan dan kerapihan"
+                  : "Maintain cleanliness and tidiness"
+              }</span
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Back Button -->
+      <div class="mt-8 text-center">
+        <a
+          href={getLocalizedPath("/layanan", locale)}
+          class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+          data-testid="back-to-services"
+        >
+          <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+          {t("common.back", locale)}
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>

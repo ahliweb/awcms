@@ -1,0 +1,225 @@
+---
+import Layout from "../../../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import {
+  getLocale,
+  t,
+  getLocalizedValue,
+  getLocalizedPath,
+  type Locale,
+} from "../../../utils/i18n";
+import { getProfilePageData } from "../../../lib/api";
+
+const locale = getLocale(Astro.url) as Locale;
+const profileData = await getProfilePageData();
+const { adiwiyata } = profileData;
+---
+
+<Layout title={getLocalizedValue(adiwiyata.title, locale)}>
+  <!-- Hero -->
+  <section
+    class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-campus.webp');"
+    data-testid="adiwiyata-hero"
+  >
+    <div class="container-custom">
+      <nav class="text-sm text-blue-200 mb-4">
+        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+          >Beranda</a
+        >
+        <span class="mx-2">/</span>
+        <a href={getLocalizedPath("/profil", locale)} class="hover:text-white"
+          >{t("profile.title", locale)}</a
+        >
+        <span class="mx-2">/</span>
+        <span class="text-white">{t("profile.adiwiyata", locale)}</span>
+      </nav>
+      <h1 class="text-3xl md:text-4xl font-bold font-heading">
+        {getLocalizedValue(adiwiyata.title, locale)}
+      </h1>
+    </div>
+  </section>
+
+  <!-- Content -->
+  <section
+    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-green.webp');"
+    data-testid="adiwiyata-content"
+  >
+    <div class="container-custom">
+      <div class="max-w-4xl mx-auto">
+        <!-- Main Content -->
+        <div
+          class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 md:p-12 mb-8 transition-colors"
+        >
+          <div class="flex items-center gap-4 mb-6">
+            <div
+              class="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center transition-colors"
+            >
+              <Icon
+                name="tabler:leaf"
+                class="w-8 h-8 text-green-600 dark:text-green-400"
+              />
+            </div>
+            <div>
+              <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+                {
+                  locale === "id"
+                    ? "Sekolah Adiwiyata Nasional"
+                    : "National Adiwiyata School"
+                }
+              </h2>
+              <p class="text-green-600 dark:text-green-400 font-medium">
+                {
+                  locale === "id"
+                    ? "Sekolah Peduli & Berbudaya Lingkungan"
+                    : "Environmentally Caring & Cultured School"
+                }
+              </p>
+            </div>
+          </div>
+          <div
+            class="prose dark:prose-invert prose-lg max-w-none"
+            set:html={getLocalizedValue(adiwiyata.content, locale)}
+          />
+        </div>
+
+        <!-- Awards Timeline -->
+        <div
+          class="bg-green-600 dark:bg-green-800 text-white rounded-2xl p-8 md:p-12 mb-8 transition-colors"
+          data-testid="adiwiyata-awards"
+        >
+          <h3 class="text-xl font-bold mb-6 text-center">
+            {locale === "id" ? "Perjalanan Penghargaan" : "Award Journey"}
+          </h3>
+          <div
+            class="flex flex-col md:flex-row justify-center items-center gap-4"
+          >
+            {
+              adiwiyata.awards.map((award: any, index: number) => (
+                <div class="flex items-center">
+                  <div class="bg-white/20 rounded-xl p-4 text-center min-w-[140px]">
+                    <div class="text-2xl font-bold">{award.year}</div>
+                    <div class="text-sm text-green-100">
+                      {getLocalizedValue(award.title, locale)}
+                    </div>
+                  </div>
+                  {index < adiwiyata.awards.length - 1 && (
+                    <Icon
+                      name="tabler:arrow-right"
+                      class="w-6 h-6 mx-2 hidden md:block"
+                    />
+                  )}
+                </div>
+              ))
+            }
+          </div>
+        </div>
+
+        <!-- Environmental Programs -->
+        <div class="grid md:grid-cols-2 gap-6 mb-8">
+          <div
+            class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm transition-colors"
+          >
+            <div
+              class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4 transition-colors"
+            >
+              <Icon
+                name="tabler:recycle"
+                class="w-6 h-6 text-green-600 dark:text-green-400"
+              />
+            </div>
+            <h3 class="font-bold text-gray-900 dark:text-white mb-2">
+              {locale === "id" ? "Bank Sampah" : "Waste Bank"}
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 text-sm">
+              {
+                locale === "id"
+                  ? "Pengelolaan sampah terpadu dengan sistem bank sampah untuk mendaur ulang dan mengurangi limbah."
+                  : "Integrated waste management with waste bank system for recycling and reducing waste."
+              }
+            </p>
+          </div>
+          <div
+            class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm transition-colors"
+          >
+            <div
+              class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4 transition-colors"
+            >
+              <Icon
+                name="tabler:plant"
+                class="w-6 h-6 text-green-600 dark:text-green-400"
+              />
+            </div>
+            <h3 class="font-bold text-gray-900 dark:text-white mb-2">
+              {locale === "id" ? "Taman Toga" : "Medicinal Garden"}
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 text-sm">
+              {
+                locale === "id"
+                  ? "Tanaman obat keluarga yang ditanam dan dirawat oleh siswa sebagai sarana pembelajaran."
+                  : "Family medicinal plants grown and maintained by students as learning facilities."
+              }
+            </p>
+          </div>
+          <div
+            class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm transition-colors"
+          >
+            <div
+              class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4 transition-colors"
+            >
+              <Icon
+                name="tabler:home-eco"
+                class="w-6 h-6 text-green-600 dark:text-green-400"
+              />
+            </div>
+            <h3 class="font-bold text-gray-900 dark:text-white mb-2">
+              {locale === "id" ? "Greenhouse" : "Greenhouse"}
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 text-sm">
+              {
+                locale === "id"
+                  ? "Rumah kaca untuk budidaya tanaman dan penelitian siswa."
+                  : "Greenhouse for plant cultivation and student research."
+              }
+            </p>
+          </div>
+          <div
+            class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm transition-colors"
+          >
+            <div
+              class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4 transition-colors"
+            >
+              <Icon
+                name="tabler:bolt-off"
+                class="w-6 h-6 text-green-600 dark:text-green-400"
+              />
+            </div>
+            <h3 class="font-bold text-gray-900 dark:text-white mb-2">
+              {locale === "id" ? "Hemat Energi" : "Energy Saving"}
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 text-sm">
+              {
+                locale === "id"
+                  ? "Program penghematan energi listrik dan air di seluruh area sekolah."
+                  : "Electricity and water saving program throughout the school area."
+              }
+            </p>
+          </div>
+        </div>
+
+        <!-- Back Button -->
+        <div class="text-center">
+          <a
+            href={getLocalizedPath("/profil", locale)}
+            class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+            data-testid="back-to-profile"
+          >
+            <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+            {t("common.back", locale)}
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

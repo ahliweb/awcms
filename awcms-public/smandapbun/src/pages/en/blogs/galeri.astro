@@ -1,5 +1,5 @@
 ---
-import Layout from "../../layouts/Layout.astro";
+import Layout from "../../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
 import { Image } from "astro:assets";
 import {
@@ -8,8 +8,8 @@ import {
   getLocalizedValue,
   getLocalizedPath,
   type Locale,
-} from "../../utils/i18n";
-import { getGalleryData } from "../../lib/api";
+} from "../../../utils/i18n";
+import { getGalleryData } from "../../../lib/api";
 
 const locale = getLocale(Astro.url) as Locale;
 const galleryData = await getGalleryData();

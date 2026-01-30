@@ -192,7 +192,7 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 
 ## Operational Concerns
 
-- Update `awcms/CHANGELOG.md` for releases and doc updates.
+- Update `CHANGELOG.md` for releases and doc updates.
 - Versioning rules live in `docs/modules/VERSIONING.md`.
 
 ## Troubleshooting
