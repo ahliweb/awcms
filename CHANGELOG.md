@@ -3,7 +3,7 @@
 
 All notable changes to the **AWCMS** project will be documented in this file.
 
-## [Unreleased]
+## [2.26.0] "Spectrum" - 2026-01-30
 
 ### Added
 

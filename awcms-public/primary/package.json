@@ -1,6 +1,6 @@
 {
   "name": "@onwidget/astrowind",
-  "version": "2.25.0",
+  "version": "2.26.0",
   "description": "AstroWind: A free template using Astro 5.0 and Tailwind CSS. Astro starter theme.",
   "type": "module",
   "private": true,
