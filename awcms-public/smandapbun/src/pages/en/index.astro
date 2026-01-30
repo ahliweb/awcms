@@ -7,11 +7,13 @@ import {
   getLocalizedPath,
   type Locale,
 } from "../../utils/i18n";
-import { getSiteData, getPosts } from "../../lib/api";
+import { getSiteData, getPosts, getProfilePageData } from "../../lib/api";
 
 const locale: Locale = "en";
 const site = await getSiteData();
 const posts = await getPosts(3);
+const profileData = await getProfilePageData();
+const { principalMessage } = profileData;
 const featuredBlogs = posts;
 
 // Import assets
@@ -55,7 +57,7 @@ const heroImages = Object.values(images).map((img) => img.default);
           class="text-xl md:text-2xl text-blue-100 mb-8 animate-fade-in"
           style="animation-delay: 0.2s;"
         >
-          {site.site.description}
+          {site.site.tagline}
         </p>
         <div
           class="flex flex-wrap gap-4 animate-fade-in"
@@ -94,7 +96,7 @@ const heroImages = Object.values(images).map((img) => img.default);
           <div
             class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-primary-400 mb-1"
           >
-            {site.stats?.students?.toLocaleString() || "1000+"}
+            {site.stats.students.toLocaleString()}+
           </div>
           <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_students", locale)}
@@ -104,7 +106,7 @@ const heroImages = Object.values(images).map((img) => img.default);
           <div
             class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-primary-400 mb-1"
           >
-            {site.stats?.teachers || "50+"}
+            {site.stats.teachers}+
           </div>
           <div class="text-gray-500 dark:text-gray-400 text-sm">
             {t("home.stats_teachers", locale)}
@@ -114,20 +116,20 @@ const heroImages = Object.values(images).map((img) => img.default);
           <div
             class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-primary-400 mb-1"
           >
-            {site.stats?.staff || "20+"}
+            {site.stats.alumni?.toLocaleString()}+
           </div>
           <div class="text-gray-500 dark:text-gray-400 text-sm">
-            {t("home.stats_staff", locale)}
+            {t("home.stats_alumni", locale)}
           </div>
         </div>
         <div class="text-center">
           <div
             class="text-3xl md:text-4xl font-bold text-primary-600 dark:text-primary-400 mb-1"
           >
-            {site.stats?.extracurriculars || "15+"}
+            {site.stats.achievements}+
           </div>
           <div class="text-gray-500 dark:text-gray-400 text-sm">
-            {t("home.stats_extracurriculars", locale)}
+            {t("home.stats_achievements", locale)}
           </div>
         </div>
       </div>
@@ -158,7 +160,7 @@ const heroImages = Object.values(images).map((img) => img.default);
               <div
                 class="text-2xl font-bold text-primary-600 dark:text-primary-400"
               >
-                A
+                {site.accreditation}
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400">
                 Accreditation
@@ -170,7 +172,7 @@ const heroImages = Object.values(images).map((img) => img.default);
               <div
                 class="text-2xl font-bold text-primary-600 dark:text-primary-400"
               >
-                1985
+                {site.established}
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400">
                 Established
@@ -199,9 +201,78 @@ const heroImages = Object.values(images).map((img) => img.default);
             class="absolute -bottom-6 -left-6 bg-secondary-500 text-white p-6 rounded-xl shadow-lg"
           >
             <div class="text-3xl font-bold">
-              {new Date().getFullYear() - 1985}+
+              {new Date().getFullYear() - parseInt(site.established)}+
             </div>
             <div class="text-sm">Years of Experience</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Principal Welcome Section -->
+  <section
+    class="py-16 md:py-24 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="principal-section"
+  >
+    <div class="container-custom">
+      <div
+        class="bg-primary-50 dark:bg-slate-900 rounded-3xl p-8 md:p-12 shadow-sm border border-primary-100 dark:border-slate-700"
+      >
+        <div class="grid md:grid-cols-2 gap-10 items-center">
+          <div class="order-2 md:order-1">
+            <h2 class="section-title text-gray-900 dark:text-white mb-6">
+              {getLocalizedValue(principalMessage.title, locale)}
+            </h2>
+            <div
+              class="prose dark:prose-invert max-w-none mb-8 line-clamp-4 text-gray-600 dark:text-gray-300"
+            >
+              <div
+                set:html={getLocalizedValue(principalMessage.content, locale)}
+              />
+            </div>
+            <div class="flex items-center gap-4 mb-6">
+              <div class="text-left">
+                <h3 class="font-bold text-gray-900 dark:text-white text-lg">
+                  {principalMessage.author}
+                </h3>
+                <p class="text-primary-600 dark:text-blue-400 text-sm">
+                  {principalMessage.position}
+                </p>
+              </div>
+            </div>
+            <a
+              href={getLocalizedPath("/profil/sambutan-kepala-sekolah", locale)}
+              class="btn-primary"
+            >
+              Read More
+              <Icon name="tabler:arrow-right" class="w-5 h-5 ml-2" />
+            </a>
+          </div>
+          <div
+            class="order-1 md:order-2 flex justify-center md:justify-end relative"
+          >
+            <div class="relative w-64 h-64 md:w-80 md:h-80">
+              <div
+                class="absolute inset-0 bg-primary-200 dark:bg-slate-700 rounded-full blur-2xl opacity-50 transform translate-y-4"
+              >
+              </div>
+              {
+                principalMessage.image ? (
+                  <div class="relative w-full h-full rounded-2xl overflow-hidden shadow-xl border-4 border-white dark:border-slate-800 rotate-3 transition-transform hover:rotate-0 duration-300">
+                    <img
+                      src={principalMessage.image}
+                      alt={principalMessage.author}
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div class="relative w-full h-full bg-gray-200 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-primary-600 dark:text-gray-400 shadow-xl border-4 border-white dark:border-slate-800 rotate-3">
+                    <Icon name="tabler:user" class="w-24 h-24" />
+                  </div>
+                )
+              }
+            </div>
           </div>
         </div>
       </div>

@@ -8,11 +8,13 @@ import {
   getLocalizedPath,
   type Locale,
 } from "../utils/i18n";
-import { getSiteData, getPosts } from "../lib/api";
+import { getSiteData, getPosts, getProfilePageData } from "../lib/api";
 
 const locale = getLocale(Astro.url) as Locale;
 const site = await getSiteData();
 const posts = await getPosts();
+const profileData = await getProfilePageData();
+const { principalMessage } = profileData;
 const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
 // Import assets
 import { HeroSlider } from "../components/HeroSlider";
@@ -299,6 +301,76 @@ const heroImages = Object.values(images).map((img) => img.default);
             {t("home.digital_library", locale)}
           </h3>
         </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Principal Welcome Section -->
+  <section
+    class="py-16 md:py-24 bg-white dark:bg-slate-800 transition-colors duration-200"
+    data-testid="principal-section"
+  >
+    <div class="container-custom">
+      <div
+        class="bg-primary-50 dark:bg-slate-900 rounded-3xl p-8 md:p-12 shadow-sm border border-primary-100 dark:border-slate-700"
+      >
+        <div class="grid md:grid-cols-2 gap-10 items-center">
+          <div class="order-2 md:order-1">
+            <h2 class="section-title text-gray-900 dark:text-white mb-6">
+              {getLocalizedValue(principalMessage.title, locale)}
+            </h2>
+            <div
+              class="prose dark:prose-invert max-w-none mb-8 line-clamp-4 text-gray-600 dark:text-gray-300"
+            >
+              <div
+                set:html={getLocalizedValue(principalMessage.content, locale)}
+              />
+            </div>
+            <div class="flex items-center gap-4 mb-6">
+              <div class="text-left">
+                <h3 class="font-bold text-gray-900 dark:text-white text-lg">
+                  {principalMessage.author}
+                </h3>
+                <p class="text-primary-600 dark:text-blue-400 text-sm">
+                  {principalMessage.position}
+                </p>
+              </div>
+            </div>
+            <a
+              href={getLocalizedPath("/profil/sambutan-kepala-sekolah", locale)}
+              class="btn-primary"
+              data-testid="principal-read-more"
+            >
+              {t("common.read_more", locale)}
+              <Icon name="tabler:arrow-right" class="w-5 h-5 ml-2" />
+            </a>
+          </div>
+          <div
+            class="order-1 md:order-2 flex justify-center md:justify-end relative"
+          >
+            <div class="relative w-64 h-64 md:w-80 md:h-80">
+              <div
+                class="absolute inset-0 bg-primary-200 dark:bg-slate-700 rounded-full blur-2xl opacity-50 transform translate-y-4"
+              >
+              </div>
+              {
+                principalMessage.image ? (
+                  <div class="relative w-full h-full rounded-2xl overflow-hidden shadow-xl border-4 border-white dark:border-slate-800 rotate-3 transition-transform hover:rotate-0 duration-300">
+                    <img
+                      src={principalMessage.image}
+                      alt={principalMessage.author}
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div class="relative w-full h-full bg-gray-200 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-primary-600 dark:text-gray-400 shadow-xl border-4 border-white dark:border-slate-800 rotate-3">
+                    <Icon name="tabler:user" class="w-24 h-24" />
+                  </div>
+                )
+              }
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
