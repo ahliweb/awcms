@@ -26,6 +26,7 @@ const {
   <!-- Hero -->
   <section
     class="hero-gradient text-white py-16 md:py-20"
+    style="--hero-image: url('/images/backgrounds/hero-campus.webp');"
     data-testid="organization-hero"
   >
     <div class="container-custom">
@@ -72,6 +73,83 @@ const {
           class="px-4 py-2 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-primary-100 dark:hover:bg-primary-900/40 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
           >MPK</a
         >
+      </div>
+    </div>
+  </section>
+
+  <!-- Organizational Chart -->
+  <section
+    class="section-photo py-12 bg-white dark:bg-slate-800 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-campus.webp');"
+    data-testid="organization-chart"
+  >
+    <div class="container-custom">
+      <div class="max-w-5xl mx-auto">
+        <div class="flex flex-wrap items-center gap-4 mb-6">
+          <div
+            class="w-12 h-12 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center transition-colors"
+          >
+            <Icon
+              name="tabler:sitemap"
+              class="w-6 h-6 text-primary-600 dark:text-primary-300"
+            />
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+              {locale === "id"
+                ? "Bagan Struktur Organisasi"
+                : "Organizational Structure Chart"}
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-gray-300">
+              {locale === "id"
+                ? "Gambaran visual susunan kepemimpinan dan koordinasi sekolah."
+                : "A visual overview of the school leadership and coordination structure."}
+            </p>
+          </div>
+        </div>
+        <figure
+          class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg p-4 md:p-6 border border-gray-100 dark:border-slate-700 transition-colors"
+        >
+          <a
+            href="/images/smanda-struktur.webp"
+            target="_blank"
+            rel="noopener"
+            aria-label={
+              locale === "id"
+                ? "Buka bagan struktur organisasi ukuran penuh"
+                : "Open full-size organizational structure chart"
+            }
+            class="block"
+          >
+            <img
+              src="/images/smanda-struktur.webp"
+              alt={
+                locale === "id"
+                  ? "Bagan struktur organisasi SMA Negeri 2 Pangkalan Bun"
+                  : "Organizational structure chart of SMA Negeri 2 Pangkalan Bun"
+              }
+              loading="lazy"
+              decoding="async"
+              class="w-full h-auto rounded-xl"
+            />
+          </a>
+          <figcaption class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-500 dark:text-gray-400">
+            <span>
+              {locale === "id"
+                ? "Klik gambar untuk melihat ukuran penuh."
+                : "Click the image to view it in full size."}
+            </span>
+            <a
+              href="/images/smanda-struktur.webp"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-2 text-primary-600 dark:text-primary-300 font-semibold"
+            >
+              {locale === "id" ? "Lihat penuh" : "View full size"}
+              <Icon name="tabler:external-link" class="w-4 h-4" />
+            </a>
+          </figcaption>
+        </figure>
       </div>
     </div>
   </section>

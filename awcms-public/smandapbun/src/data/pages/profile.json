@@ -91,36 +91,174 @@
     "slug": "visi-misi",
     "category": "Profile",
     "title": {
-      "id": "Visi & Misi",
-      "en": "Vision & Mission"
+      "id": "Visi, Misi, dan Tujuan",
+      "en": "Vision, Mission, and Goals"
+    },
+    "subtitle": {
+      "id": "SMA Negeri 2 Pangkalan Bun Tahun 2025",
+      "en": "SMA Negeri 2 Pangkalan Bun 2025"
     },
     "vision": {
-      "id": "Mewujudkan peserta didik yang beriman, bertakwa, berakhlak mulia, berprestasi, berwawasan lingkungan, dan berdaya saing global.",
-      "en": "To create students who are faithful, pious, have noble character, achieve excellence, are environmentally conscious, and globally competitive."
+      "id": "Terwujudnya Generasi Pelajar yang Beriman, Cerdas, Berprestasi (BERDASI).",
+      "en": "To realize a generation of students who are faithful, intelligent, and achieving (BERDASI)."
     },
+    "visionIndicators": [
+      {
+        "title": {
+          "id": "Beriman",
+          "en": "Faithful"
+        },
+        "description": {
+          "id": "Bertakwa kepada Tuhan YME, mampu mengamalkan ajaran agamanya, berbudi pekerti luhur, bertanggung jawab, jujur, dan adil.",
+          "en": "Devout to God Almighty, able to practice their religious teachings, with noble character, responsible, honest, and fair."
+        }
+      },
+      {
+        "title": {
+          "id": "Cerdas",
+          "en": "Intelligent"
+        },
+        "description": {
+          "id": "Tercapai keseimbangan antara cerdas emosional, spiritual, dan intelektual yang unggul di berbagai bidang kehidupan.",
+          "en": "Achieve balance between emotional, spiritual, and intellectual intelligence that excels across fields of life."
+        }
+      },
+      {
+        "title": {
+          "id": "Berprestasi",
+          "en": "Achieving"
+        },
+        "description": {
+          "id": "Tangguh secara fisik dan mental, kompetitif dan tidak mudah menyerah menghadapi tantangan dalam meraih prestasi akademik maupun non akademik.",
+          "en": "Resilient physically and mentally, competitive and not easily discouraged when facing challenges in achieving academic and non-academic accomplishments."
+        }
+      }
+    ],
     "mission": {
       "id": [
-        "Menumbuhkan penghayatan dan pengamalan ajaran agama yang dianut",
-        "Melaksanakan pembelajaran dan bimbingan secara efektif dan efisien",
-        "Mendorong dan membantu siswa untuk mengenali potensi dirinya",
-        "Menumbuhkan semangat keunggulan kepada seluruh warga sekolah",
-        "Menerapkan manajemen partisipatif dengan melibatkan seluruh warga sekolah",
-        "Mewujudkan sekolah peduli dan berbudaya lingkungan",
-        "Membekali siswa dengan keterampilan abad 21"
+        "Membentuk peserta didik yang beriman dan bertaqwa kepada Tuhan Yang Maha Esa, taat menjalankan ibadah sesuai keyakinannya, menciptakan budaya toleransi kebhinekaan global dan berbudi pekerti luhur.",
+        "Membimbing peserta didik untuk selalu berinovasi, menguasai ilmu pengetahuan dan teknologi digital, santun, hormat kepada guru, orang lain dan menjadi teladan.",
+        "Membentuk peserta didik yang tangguh dan unggul dalam prestasi akademik dan non akademik, melalui pembelajaran yang kreatif berpusat pada siswa, berdiferensiasi mengembangkan kokurikuler dan ekstrakurikuler."
       ],
       "en": [
-        "Cultivate appreciation and practice of religious teachings",
-        "Implement effective and efficient learning and guidance",
-        "Encourage and help students recognize their potential",
-        "Foster a spirit of excellence among all school members",
-        "Apply participatory management involving all school members",
-        "Create an environmentally conscious and cultured school",
-        "Equip students with 21st century skills"
+        "Form students who are faithful and devoted to God Almighty, obedient in worship according to their beliefs, fostering a culture of global diversity tolerance and noble character.",
+        "Guide students to continually innovate, master science and digital technology, be polite, respect teachers and others, and become role models.",
+        "Develop resilient students who excel in academic and non-academic achievement through creative, student-centered, differentiated learning that strengthens co-curricular and extracurricular activities."
       ]
     },
+    "goals": {
+      "id": [
+        "Dalam waktu satu tahun, 98% warga sekolah mampu menunjukkan karakter beriman dan bertaqwa kepada Tuhan Yang Maha Esa, taat menjalankan ibadah sesuai keyakinannya, menciptakan budaya toleransi kebhinekaan global dan berbudi pekerti luhur di lingkungan sekolah dan masyarakat.",
+        "Dalam waktu satu tahun, 98% peserta didik mampu menunjukkan capaian pengetahuan, keterampilan, dan sikap untuk menguasai ilmu pengetahuan dan teknologi digital, santun, hormat kepada guru, orang lain dan menjadi teladan.",
+        "Dalam waktu satu tahun, 98% peserta didik mampu menunjukkan potensi yang unggul dalam prestasi akademik dan non akademik, melalui pembelajaran kreatif, kolaboratif, dan komunikatif pada kegiatan intrakurikuler, kokurikuler, dan ekstrakurikuler."
+      ],
+      "en": [
+        "Within one year, 98% of the school community demonstrates faithful and devoted character toward God Almighty, obedient in worship according to their beliefs, fostering a culture of global diversity tolerance and noble character in school and society.",
+        "Within one year, 98% of students demonstrate achievements in knowledge, skills, and attitudes to master science and digital technology, be polite, respect teachers and others, and become role models.",
+        "Within one year, 98% of students demonstrate outstanding potential in academic and non-academic achievement through creative, collaborative, and communicative learning in intra-curricular, co-curricular, and extracurricular activities."
+      ]
+    },
+    "programs": {
+      "studentAffairs": {
+        "title": {
+          "id": "Program Kesiswaan: Beriman",
+          "en": "Student Affairs Programs: Faithful"
+        },
+        "items": {
+          "id": [
+            "Sholat Jumat dan Zuhur berjamaah.",
+            "Literasi kitab suci.",
+            "Peringatan hari besar keagamaan.",
+            "Laporan orang tua siswa berupa rekap hasil jurnal 7 kebiasaan anak Indonesia hebat.",
+            "Latihan Dasar Kepemimpinan Siswa (LDKS) OSIS."
+          ],
+          "en": [
+            "Friday and Dhuhr congregational prayers.",
+            "Scripture literacy.",
+            "Religious holiday commemorations.",
+            "Parent reports summarizing the 7 Habits of Great Indonesian Children journal.",
+            "Student Leadership Basic Training (LDKS) for OSIS."
+          ]
+        }
+      },
+      "curriculum": {
+        "title": {
+          "id": "Program Kurikulum: Cerdas",
+          "en": "Curriculum Programs: Intelligent"
+        },
+        "items": {
+          "id": [
+            "Peningkatan kompetensi guru melalui IHT, Kombel, dan pengelolaan kinerja guru.",
+            "Pembelajaran Kecerdasan Koding dan Artifisial (KKA) melalui ekstrakurikuler.",
+            "Bimbingan Tes Kemampuan Akademik (TKA).",
+            "Bimbingan Olimpiade Sains Nasional (OSN).",
+            "Bimbingan bakat-minat kelas XII melanjutkan pendidikan di Perguruan Tinggi.",
+            "Sosialisasi pemilihan mata pelajaran pilihan kelas X ke kelas XI."
+          ],
+          "en": [
+            "Improve teacher competence through IHT, Kombel, and teacher performance management.",
+            "Coding and Artificial Intelligence (KKA) learning through extracurricular activities.",
+            "Academic Ability Test (TKA) guidance.",
+            "National Science Olympiad (OSN) guidance.",
+            "Guidance on interests and talents for grade XII to continue to higher education.",
+            "Socialization of elective subject selection from grade X to grade XI."
+          ]
+        }
+      },
+      "publicRelations": {
+        "title": {
+          "id": "Program Humas: Berprestasi",
+          "en": "Public Relations Programs: Achieving"
+        },
+        "academic": {
+          "title": {
+            "id": "Bidang Akademik",
+            "en": "Academic"
+          },
+          "items": {
+            "id": [
+              "Publikasi prestasi akademik melalui media sosial.",
+              "Kerja sama dengan Lembaga Pendidikan dan kampus.",
+              "Membuat rilis resmi siswa meraih prestasi akademik.",
+              "Membuat profil inspiratif di media sosial dan web sekolah."
+            ],
+            "en": [
+              "Publish academic achievements through social media.",
+              "Collaboration with educational institutions and universities.",
+              "Publish official releases on students' academic achievements.",
+              "Create inspiring profiles on social media and the school website."
+            ]
+          }
+        },
+        "nonAcademic": {
+          "title": {
+            "id": "Bidang Non-Akademik",
+            "en": "Non-Academic"
+          },
+          "items": {
+            "id": [
+              "Publikasi lomba seni, olahraga dan budaya.",
+              "Mengadakan perlombaan ajang prestasi dalam rangka HUT Sekolah.",
+              "Dokumentasi dan branding digital.",
+              "Program penguatan citra sekolah.",
+              "Kolaborasi dengan alumni sekolah.",
+              "SMANDA News Room."
+            ],
+            "en": [
+              "Publish arts, sports, and cultural competitions.",
+              "Hold achievement competitions in celebration of the school's anniversary.",
+              "Digital documentation and branding.",
+              "School image strengthening program.",
+              "Collaboration with school alumni.",
+              "SMANDA News Room."
+            ]
+          }
+        }
+      }
+    },
     "motto": {
-      "id": "SMANDA JAYA - Beriman, Cerdas, Berprestasi (BERDASI)",
-      "en": "SMANDA JAYA - Excellence in Achievement, Noble Character"
+      "id": "Beriman, Cerdas, Berprestasi (BERDASI)",
+      "en": "Faithful, Intelligent, and Achieving (BERDASI)"
     }
   },
   "schoolCondition": {

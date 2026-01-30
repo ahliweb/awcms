@@ -19,6 +19,7 @@ const featuredBlogs = posts;
   <!-- Hero Section -->
   <section
     class="hero-gradient text-white relative overflow-hidden"
+    style="--hero-image: url('/images/backgrounds/hero-home.webp');"
     data-testid="hero-section"
   >
     <div class="absolute inset-0 bg-black/30"></div>
@@ -128,7 +129,8 @@ const featuredBlogs = posts;
 
   <!-- About Section -->
   <section
-    class="py-16 md:py-24 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    class="section-photo py-16 md:py-24 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-campus.webp');"
   >
     <div class="container-custom">
       <div class="grid lg:grid-cols-2 gap-12 items-center">
@@ -181,9 +183,9 @@ const featuredBlogs = posts;
             class="aspect-video bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900 dark:to-primary-800 rounded-2xl overflow-hidden"
           >
             <img
-              src="https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=800&h=450&fit=crop"
+              src="/images/backgrounds/hero-profile.webp"
               alt="School"
-              class="w-full h-full object-cover mix-blend-overlay dark:mix-blend-normal dark:opacity-70"
+              class="w-full h-full object-cover"
             />
           </div>
           <div
@@ -277,6 +279,7 @@ const featuredBlogs = posts;
   <!-- CTA Section -->
   <section
     class="py-16 md:py-24 hero-gradient text-white relative overflow-hidden"
+    style="--hero-image: url('/images/backgrounds/hero-activity.webp');"
   >
     <div class="absolute inset-0 bg-black/20"></div>
     <div class="container-custom relative z-10 text-center">

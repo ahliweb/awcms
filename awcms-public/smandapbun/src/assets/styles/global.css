@@ -45,7 +45,7 @@
   }
   
   .nav-link {
-    @apply text-gray-700 dark:text-gray-200 hover:text-primary-500 dark:hover:text-blue-400 font-medium transition-colors duration-200;
+    @apply text-gray-700 dark:text-gray-200 hover:text-primary-500 dark:hover:text-primary-300 font-medium transition-colors duration-200;
   }
   
   .nav-link-active {
@@ -73,7 +73,41 @@
 
 /* Hero gradient */
 .hero-gradient {
-  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #1e3a8a 100%);
+  background-image:
+    linear-gradient(
+      135deg,
+      rgba(146, 64, 14, 0.88) 0%,
+      rgba(226, 169, 47, 0.7) 50%,
+      rgba(92, 42, 11, 0.88) 100%
+    ),
+    var(--hero-image, none);
+  background-size: cover;
+  background-position: var(--hero-position, center);
+  background-repeat: no-repeat;
+}
+
+/* Photo section overlays */
+.section-photo {
+  background-image:
+    linear-gradient(
+      120deg,
+      rgba(255, 248, 230, 0.92),
+      rgba(255, 248, 230, 0.96)
+    ),
+    var(--section-image, none);
+  background-size: cover;
+  background-position: var(--section-position, center);
+  background-repeat: no-repeat;
+}
+
+.dark .section-photo {
+  background-image:
+    linear-gradient(
+      120deg,
+      rgba(15, 23, 42, 0.88),
+      rgba(15, 23, 42, 0.96)
+    ),
+    var(--section-image, none);
 }
 
 /* Glass effect */

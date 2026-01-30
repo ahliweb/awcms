@@ -23,9 +23,25 @@ function getLabel(item: any): string {
       <!-- About -->
       <div class="lg:col-span-1">
         <div class="flex items-center gap-3 mb-4">
-          <div class="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center font-bold text-lg">
-            S2
-          </div>
+          {
+            site.site.logo ? (
+              <div class="w-12 h-12 rounded-full bg-white/90 ring-1 ring-primary-200/60 flex items-center justify-center overflow-hidden p-1">
+                <img
+                  src={site.site.logo}
+                  alt={`Logo ${site.site.name}`}
+                  width="48"
+                  height="48"
+                  loading="lazy"
+                  decoding="async"
+                  class="w-full h-full object-contain"
+                />
+              </div>
+            ) : (
+              <div class="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center font-bold text-lg">
+                S2
+              </div>
+            )
+          }
           <div>
             <div class="font-bold text-lg">{site.site.name}</div>
             <div class="text-xs text-gray-400">{site.site.tagline}</div>

@@ -20,6 +20,7 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
   <!-- Hero Section -->
   <section
     class="hero-gradient text-white relative overflow-hidden"
+    style="--hero-image: url('/images/backgrounds/hero-home.webp');"
     data-testid="hero-section"
   >
     <div class="absolute inset-0 bg-black/30"></div>
@@ -134,7 +135,8 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
 
   <!-- About Section -->
   <section
-    class="py-16 md:py-24 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    class="section-photo py-16 md:py-24 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+    style="--section-image: url('/images/backgrounds/section-campus.webp');"
     data-testid="about-section"
   >
     <div class="container-custom">
@@ -185,7 +187,7 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
             class="aspect-video bg-gradient-to-br from-primary-100 to-primary-200 rounded-2xl overflow-hidden"
           >
             <img
-              src="https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=800&h=450&fit=crop"
+              src="/images/backgrounds/hero-profile.webp"
               alt="Sekolah"
               class="w-full h-full object-cover"
             />
@@ -385,6 +387,7 @@ const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
   <!-- CTA Section -->
   <section
     class="py-16 md:py-24 hero-gradient text-white relative overflow-hidden"
+    style="--hero-image: url('/images/backgrounds/hero-activity.webp');"
     data-testid="cta-section"
   >
     <div class="absolute inset-0 bg-black/20"></div>

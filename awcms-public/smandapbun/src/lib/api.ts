@@ -18,6 +18,11 @@ export interface LocalizedString {
     en: string;
 }
 
+export interface LocalizedStringArray {
+    id: string[];
+    en: string[];
+}
+
 export interface ContactData {
     contactPage: {
         id: string;
@@ -141,8 +146,35 @@ export interface ProfileData {
         slug: string;
         category: string;
         title: LocalizedString;
+        subtitle?: LocalizedString;
         vision: LocalizedString;
-        mission: { id: string[]; en: string[] };
+        visionIndicators?: Array<{
+            title: LocalizedString;
+            description: LocalizedString;
+        }>;
+        mission: LocalizedStringArray;
+        goals?: LocalizedStringArray;
+        programs?: {
+            studentAffairs: {
+                title: LocalizedString;
+                items: LocalizedStringArray;
+            };
+            curriculum: {
+                title: LocalizedString;
+                items: LocalizedStringArray;
+            };
+            publicRelations: {
+                title: LocalizedString;
+                academic: {
+                    title: LocalizedString;
+                    items: LocalizedStringArray;
+                };
+                nonAcademic: {
+                    title: LocalizedString;
+                    items: LocalizedStringArray;
+                };
+            };
+        };
         motto: LocalizedString;
     };
     schoolCondition: {
@@ -181,6 +213,7 @@ export interface SiteData {
         tagline: string;
         description: string;
         logo?: string;
+        favicon?: string;
     };
     contact: {
         address?: string;
@@ -222,6 +255,7 @@ export async function getSiteData(): Promise<SiteData> {
             name: 'SMAN 2 Pangkalan Bun',
             tagline: 'Beriman, Cerdas, Berprestasi (BERDASI)',
             description: 'Sekolah Menengah Atas Negeri 2 Pangkalan Bun',
+            favicon: '/favicon.png',
         },
         contact: {
             address: 'Jl. Pasir Panjang No. 1, Pangkalan Bun',

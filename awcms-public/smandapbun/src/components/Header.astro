@@ -88,7 +88,7 @@ function getLabel(item: any): string {
                 }
                 class={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
                   locale === lang
-                    ? "bg-white dark:bg-slate-800 text-primary-600 dark:text-blue-400"
+                    ? "bg-white dark:bg-slate-800 text-primary-600 dark:text-primary-300"
                     : "hover:bg-primary-500"
                 }`}
               >
@@ -108,14 +108,31 @@ function getLabel(item: any): string {
     <div class="flex items-center justify-between">
       <!-- Logo -->
       <a href={getLocalizedPath("/", locale)} class="flex items-center gap-3">
-        <div
-          class="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold text-lg"
-        >
-          S2
-        </div>
+        {
+          site.site.logo ? (
+            <div
+              class="w-12 h-12 rounded-full bg-white/90 dark:bg-slate-800 ring-1 ring-primary-200/70 dark:ring-primary-900/60 shadow-sm flex items-center justify-center overflow-hidden p-1"
+            >
+              <img
+                src={site.site.logo}
+                alt={`Logo ${site.site.name}`}
+                width="48"
+                height="48"
+                decoding="async"
+                class="w-full h-full object-contain"
+              />
+            </div>
+          ) : (
+            <div
+              class="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold text-lg"
+            >
+              S2
+            </div>
+          )
+        }
         <div>
           <div
-            class="font-bold text-lg text-primary-600 dark:text-blue-400 leading-tight"
+            class="font-bold text-lg text-primary-600 dark:text-primary-300 leading-tight"
           >
             {site.site.name}
           </div>
@@ -135,7 +152,7 @@ function getLabel(item: any): string {
                 class={`nav-link px-3 py-2 rounded-lg flex items-center gap-1 ${
                   currentPath === item.href ||
                   currentPath.startsWith(item.href + "/")
-                    ? "nav-link-active bg-primary-50 dark:bg-slate-800 text-primary-600 dark:text-blue-400"
+                    ? "nav-link-active bg-primary-50 dark:bg-slate-800 text-primary-600 dark:text-primary-300"
                     : "hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-200"
                 }`}
                 data-testid={`nav-${item.id}`}
@@ -153,7 +170,7 @@ function getLabel(item: any): string {
                       <div>
                         <a
                           href={getLocalizedPath(child.href, locale)}
-                          class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-blue-400 transition-colors"
+                          class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-300 transition-colors"
                           data-testid={`nav-${child.id}`}
                         >
                           {getLabel(child)}
@@ -163,7 +180,7 @@ function getLabel(item: any): string {
                             {child.children.map((subChild: any) => (
                               <a
                                 href={getLocalizedPath(subChild.href, locale)}
-                                class="block px-4 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-blue-400 transition-colors"
+                                class="block px-4 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-300 transition-colors"
                                 data-testid={`nav-${subChild.id}`}
                               >
                                 {getLabel(subChild)}
@@ -216,7 +233,7 @@ function getLabel(item: any): string {
               class={`block px-4 py-2 rounded-lg font-medium ${
                 currentPath === item.href ||
                 currentPath.startsWith(item.href + "/")
-                  ? "bg-primary-50 dark:bg-slate-800 text-primary-600 dark:text-blue-400"
+                  ? "bg-primary-50 dark:bg-slate-800 text-primary-600 dark:text-primary-300"
                   : "text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800"
               }`}
             >
@@ -227,7 +244,7 @@ function getLabel(item: any): string {
                 {item.children.map((child: any) => (
                   <a
                     href={getLocalizedPath(child.href, locale)}
-                    class="block px-4 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-blue-400"
+                    class="block px-4 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-300"
                   >
                     {getLabel(child)}
                   </a>
