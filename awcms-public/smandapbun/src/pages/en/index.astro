@@ -13,16 +13,23 @@ const locale: Locale = "en";
 const site = await getSiteData();
 const posts = await getPosts(3);
 const featuredBlogs = posts;
+
+// Import assets
+import { HeroSlider } from "../../components/HeroSlider";
+const images = import.meta.glob<{ default: ImageMetadata }>(
+  "../../assets/foto-smandapbun/foto-campur-smanda/*.webp",
+  { eager: true },
+);
+const heroImages = Object.values(images).map((img) => img.default);
 ---
 
 <Layout title={site.site.name}>
   <!-- Hero Section -->
   <section
-    class="hero-gradient text-white relative overflow-hidden"
-    style="--hero-image: url('/images/backgrounds/hero-home.webp');"
+    class="text-white relative overflow-hidden"
     data-testid="hero-section"
   >
-    <div class="absolute inset-0 bg-black/30"></div>
+    <HeroSlider client:load images={heroImages} />
     <div class="absolute inset-0 opacity-10">
       <div
         class="absolute top-20 left-10 w-72 h-72 bg-white rounded-full blur-3xl"
@@ -33,7 +40,7 @@ const featuredBlogs = posts;
       >
       </div>
     </div>
-    <div class="container-custom py-20 md:py-32 relative z-10">
+    <div class="container-custom py-20 md:py-32 relative z-30 drop-shadow-md">
       <div class="max-w-3xl">
         <p class="text-secondary-300 font-medium mb-4 animate-fade-in">
           {t("home.welcome", locale)}

@@ -15,17 +15,21 @@ const site = await getSiteData();
 const posts = await getPosts();
 const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
 // Import assets
-import heroImage from "../assets/foto-smandapbun/kegiatan-sekolah/IMG_6411.webp";
+import { HeroSlider } from "../components/HeroSlider";
+const images = import.meta.glob<{ default: ImageMetadata }>(
+  "../assets/foto-smandapbun/foto-campur-smanda/*.webp",
+  { eager: true },
+);
+const heroImages = Object.values(images).map((img) => img.default);
 ---
 
 <Layout title={t("home.school_name", locale)}>
   <!-- Hero Section -->
   <section
-    class="hero-gradient text-white relative overflow-hidden"
-    style={`--hero-image: url('${heroImage.src}');`}
+    class="text-white relative overflow-hidden"
     data-testid="hero-section"
   >
-    <div class="absolute inset-0 bg-black/30"></div>
+    <HeroSlider client:load images={heroImages} />
     <div class="absolute inset-0 opacity-10">
       <div
         class="absolute top-20 left-10 w-72 h-72 bg-white rounded-full blur-3xl"
@@ -36,7 +40,7 @@ import heroImage from "../assets/foto-smandapbun/kegiatan-sekolah/IMG_6411.webp"
       >
       </div>
     </div>
-    <div class="container-custom py-20 md:py-32 relative z-10">
+    <div class="container-custom py-20 md:py-32 relative z-30 drop-shadow-md">
       <div class="max-w-3xl">
         <p class="text-secondary-300 font-medium mb-4 animate-fade-in">
           {t("home.welcome", locale)}
