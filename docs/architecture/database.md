@@ -312,6 +312,8 @@ CREATE TABLE pages (
   puck_layout_jsonb JSONB DEFAULT '{}', -- Page builder data
   status TEXT DEFAULT 'draft',
   sort_order INTEGER DEFAULT 0,
+  page_type TEXT DEFAULT 'regular', -- 'homepage', 'regular', etc.
+  is_active BOOLEAN DEFAULT FALSE,
   category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   meta_title TEXT,
   meta_description TEXT,
@@ -319,6 +321,7 @@ CREATE TABLE pages (
   og_image TEXT,
   canonical_url TEXT,
   sync_source_id UUID,
+  created_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ
