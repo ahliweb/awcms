@@ -59,7 +59,7 @@ function TestimonyManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="testimonies.read">
+        <AdminPageLayout requiredPermission="tenant.testimonies.read">
             <PageHeader
                 title="Testimonies"
                 description="Manage customer reviews and testimonials."

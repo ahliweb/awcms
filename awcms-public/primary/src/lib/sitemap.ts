@@ -8,13 +8,13 @@ export interface SitemapEntry {
   loc: string;
   lastmod?: string;
   changefreq?:
-  | "always"
-  | "hourly"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "yearly"
-  | "never";
+    | "always"
+    | "hourly"
+    | "daily"
+    | "weekly"
+    | "monthly"
+    | "yearly"
+    | "never";
   priority?: number;
 }
 
@@ -94,19 +94,22 @@ export function generateSitemapXml(entries: SitemapEntry[]): string {
     .map(
       (entry) => `
   <url>
-    <loc>${escapeXml(entry.loc)}</loc>${entry.lastmod
-          ? `
+    <loc>${escapeXml(entry.loc)}</loc>${
+      entry.lastmod
+        ? `
     <lastmod>${new Date(entry.lastmod).toISOString()}</lastmod>`
-          : ""
-        }${entry.changefreq
-          ? `
+        : ""
+    }${
+      entry.changefreq
+        ? `
     <changefreq>${entry.changefreq}</changefreq>`
-          : ""
-        }${entry.priority !== undefined
-          ? `
+        : ""
+    }${
+      entry.priority !== undefined
+        ? `
     <priority>${entry.priority.toFixed(1)}</priority>`
-          : ""
-        }
+        : ""
+    }
   </url>`,
     )
     .join("");
@@ -126,11 +129,12 @@ export function generateSitemapIndexXml(
     .map(
       (sitemap) => `
   <sitemap>
-    <loc>${escapeXml(sitemap.loc)}</loc>${sitemap.lastmod
-          ? `
+    <loc>${escapeXml(sitemap.loc)}</loc>${
+      sitemap.lastmod
+        ? `
     <lastmod>${new Date(sitemap.lastmod).toISOString()}</lastmod>`
-          : ""
-        }
+        : ""
+    }
   </sitemap>`,
     )
     .join("");

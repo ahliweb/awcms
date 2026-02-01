@@ -52,7 +52,7 @@ function PortfolioManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="portfolio.read">
+        <AdminPageLayout requiredPermission="tenant.portfolio.read">
             <PageHeader
                 title="Portfolio"
                 description="Manage your portfolio and project showcase."

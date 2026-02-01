@@ -3,6 +3,20 @@
 
 All notable changes to the **AWCMS** project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **Permission Normalization**:
+  - Migrated proper permissions (ABAC) to `tenant.{module}.{action}` format across the database and codebase.
+  - Updated 18 React components in `src/components/dashboard/` to use the new tenant-scoped permission keys.
+  - Replaced legacy `manage_platform` check in `GenericContentManager` with appropriate context boolean.
+  - Soft-deleted legacy permission keys that conflicted with the new normalized format.
+- **Database Synchronization**:
+  - Updated `audit_logs` migration logging to match schema (using `resource` and `details` columns).
+  - Synced local migrations with remote database, capturing drift in `20260201015918_remote_schema.sql` (Storage triggers).
+  - Repaired migration history for 8 previously missing remote migrations.
+
 ## [2.26.0] "Spectrum" - 2026-01-30
 
 ### Added

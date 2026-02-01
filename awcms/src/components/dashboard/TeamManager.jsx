@@ -53,7 +53,7 @@ function TeamManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="teams.read">
+        <AdminPageLayout requiredPermission="tenant.teams.read">
             <PageHeader
                 title="Team"
                 description="Manage your team members and their profiles."

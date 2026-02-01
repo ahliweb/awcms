@@ -163,7 +163,7 @@ function ProductsManager() {
   ];
 
   return (
-    <AdminPageLayout requiredPermission="products.read">
+    <AdminPageLayout requiredPermission="tenant.products.read">
       <PageHeader
         title={t('products.title')}
         description={t('products.subtitle')}

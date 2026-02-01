@@ -122,7 +122,7 @@ const ThemeLayoutManager = () => {
     }
 
     return (
-        <AdminPageLayout requiredPermission="visual_pages.read">
+        <AdminPageLayout requiredPermission="tenant.visual_pages.read">
             <PageHeader
                 title="Theme Layouts"
                 description="Manage system templates for homepage, header, footer, and more."

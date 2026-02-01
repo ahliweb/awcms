@@ -96,6 +96,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 | SEO              | `tenant.seo.*`              | read, update                                            |
 | SSO              | `tenant.sso.*`              | read, update                                            |
 | Languages        | `tenant.languages.*`        | read, update                                            |
+| School Pages     | `tenant.school_pages.*`     | read, update                                            |
 | Backups          | `tenant.backups.*`          | read, create, delete                                    |
 
 #### Mobile, IoT & Extensions

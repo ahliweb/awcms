@@ -28,7 +28,7 @@ function ContactMessagesManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="contact_messages.read">
+        <AdminPageLayout requiredPermission="tenant.contact_messages.read">
             <PageHeader
                 title="Contact Messages"
                 description="View and manage incoming contact form submissions."

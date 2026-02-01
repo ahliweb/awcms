@@ -53,7 +53,7 @@ function PhotoGalleryManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="photo_gallery.read">
+        <AdminPageLayout requiredPermission="tenant.photo_gallery.read">
             <PageHeader
                 title="Photo Gallery"
                 description="Manage photo albums and galleries."

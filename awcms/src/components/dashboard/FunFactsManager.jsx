@@ -46,7 +46,7 @@ function FunFactsManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="funfacts.read">
+        <AdminPageLayout requiredPermission="tenant.funfacts.read">
             <PageHeader
                 title="Fun Facts"
                 description="Manage statistics and key numbers displayed on your site."

@@ -33,7 +33,7 @@ function CategoriesManager() {
   ];
 
   return (
-    <AdminPageLayout requiredPermission="categories.read">
+    <AdminPageLayout requiredPermission="tenant.categories.read">
       <PageHeader
         title="Categories"
         description="Organize content with categories and taxonomies."

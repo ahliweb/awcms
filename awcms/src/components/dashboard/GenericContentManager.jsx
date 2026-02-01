@@ -43,7 +43,7 @@ const GenericContentManager = ({
     const { t } = useTranslation();
     const { toast } = useToast();
     const { user } = useAuth();
-    const { hasPermission, checkAccess } = usePermissions();
+    const { hasPermission, checkAccess, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant();
 
     const [items, setItems] = useState([]);
@@ -96,7 +96,7 @@ const GenericContentManager = ({
         if (!canView) return;
 
         // Wait for tenant context to resolve, unless we are in a special global mode (future proofing)
-        if (!currentTenant?.id && !hasPermission('manage_platform')) return;
+        if (!currentTenant?.id && !isPlatformAdmin) return;
 
         setLoading(true);
         try {
@@ -110,7 +110,7 @@ const GenericContentManager = ({
             // STRICT TENANT FILTERING
             if (currentTenant?.id) {
                 q = q.eq('tenant_id', currentTenant.id);
-            } else if (hasPermission('manage_platform')) {
+            } else if (isPlatformAdmin) {
                 // Platform admin view (no tenant selected) logic could go here
                 console.log('Platform Admin View: showing all records (careful)');
             } else {
@@ -280,7 +280,7 @@ const GenericContentManager = ({
     ];
 
     // Added Tenant Column for platform admins
-    const isPlatformAdmin = hasPermission('manage_platform');
+
     if (isPlatformAdmin) {
         displayColumns.unshift({
             key: 'tenant_id',

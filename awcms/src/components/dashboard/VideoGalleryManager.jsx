@@ -44,7 +44,7 @@ function VideoGalleryManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="video_gallery.read">
+        <AdminPageLayout requiredPermission="tenant.video_gallery.read">
             <PageHeader
                 title="Video Gallery"
                 description="Manage video content and YouTube integrations."

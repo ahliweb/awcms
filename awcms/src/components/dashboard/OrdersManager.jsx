@@ -134,7 +134,7 @@ function OrdersManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="orders.read">
+        <AdminPageLayout requiredPermission="tenant.orders.read">
             <PageHeader
                 title="Orders"
                 description="Manage customer orders and transactions."

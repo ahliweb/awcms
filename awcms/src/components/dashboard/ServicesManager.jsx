@@ -47,7 +47,7 @@ function ServicesManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="services.read">
+        <AdminPageLayout requiredPermission="tenant.services.read">
             <PageHeader
                 title="Services"
                 description="Manage your company's services showcase."

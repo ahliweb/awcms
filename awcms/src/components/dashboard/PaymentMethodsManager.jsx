@@ -87,7 +87,7 @@ function PaymentMethodsManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="payment_methods.read">
+        <AdminPageLayout requiredPermission="tenant.payment_methods.read">
             <PageHeader
                 title="Payment Methods"
                 description="Configure available payment options for checkout."

@@ -45,7 +45,7 @@ function ContactsManager() {
   ];
 
   return (
-    <AdminPageLayout requiredPermission="contacts.read">
+    <AdminPageLayout requiredPermission="tenant.contacts.read">
       <PageHeader
         title="Locations"
         description="Manage office locations and contact information."

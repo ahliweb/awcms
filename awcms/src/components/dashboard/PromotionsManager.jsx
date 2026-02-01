@@ -57,7 +57,7 @@ function PromotionsManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="promotions.read">
+        <AdminPageLayout requiredPermission="tenant.promotions.read">
             <PageHeader
                 title="Promotions"
                 description="Manage promotional campaigns and discount codes."

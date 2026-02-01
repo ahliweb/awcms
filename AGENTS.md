@@ -341,7 +341,7 @@ import { supabase } from "@/lib/customSupabaseClient";
 
 // Select with relations
 const { data, error } = await supabase
-  .from("articles")
+  .from("blogs")
   .select(
     `
     *,
@@ -359,16 +359,16 @@ const { data, error } = await supabase
 ```javascript
 // AWCMS uses soft delete - never use .delete()
 const { error } = await supabase
-  .from("articles")
+  .from("blogs")
   .update({ deleted_at: new Date().toISOString() })
-  .eq("id", articleId);
+  .eq("id", blogId);
 ```
 
 ### File Upload
 
 ```javascript
 const { data, error } = await supabase.storage
-  .from("articles")
+  .from("blogs")
   .upload(`images/${fileName}`, file, {
     cacheControl: "3600",
     upsert: false,
@@ -484,7 +484,7 @@ _\* Author → hanya konten milik sendiri (tenant_id + owner_id)_
 - **RS**: Restore
 - **DP**: Delete Permanent
 
-Example: `tenant.user.create`, `tenant.article.publish`, `tenant.modules.read`.
+Example: `tenant.user.create`, `tenant.blog.publish`, `tenant.modules.read`.
 
 ### Implementation Pattern
 
@@ -500,7 +500,7 @@ function MyComponent() {
   }
 
   // Permission-based rendering
-  if (hasPermission("tenant.article.update")) {
+  if (hasPermission("tenant.blog.update")) {
     return <EditButton />;
   }
 

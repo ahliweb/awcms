@@ -65,7 +65,7 @@ function ProductTypesManager() {
   ];
 
   return (
-    <AdminPageLayout requiredPermission="product_types.read">
+    <AdminPageLayout requiredPermission="tenant.product_types.read">
       <PageHeader
         title="Product Types"
         description="Define product categories and classification types."

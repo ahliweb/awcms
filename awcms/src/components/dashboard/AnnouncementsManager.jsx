@@ -63,7 +63,7 @@ function AnnouncementsManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="announcements.read">
+        <AdminPageLayout requiredPermission="tenant.announcements.read">
             <PageHeader
                 title="Announcements"
                 description="Create and manage system-wide announcements."

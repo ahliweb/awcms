@@ -46,7 +46,7 @@ function PartnersManager() {
     ];
 
     return (
-        <AdminPageLayout requiredPermission="partners.read">
+        <AdminPageLayout requiredPermission="tenant.partners.read">
             <PageHeader
                 title="Partners"
                 description="Manage partner logos and sponsorships."
