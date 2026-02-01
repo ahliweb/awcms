@@ -22,9 +22,9 @@ const DEFAULT_MENU_CONFIG = [
     { id: 'home', key: 'home', label: 'Dashboard', path: 'home', icon: 'LayoutDashboard', permission: null, group_label: 'CONTENT', group_order: 10, order: 10, is_visible: true },
     { id: 'blogs', key: 'blogs', label: 'Blogs', path: 'blogs', icon: 'FileText', permission: 'tenant.blog.read', group_label: 'CONTENT', group_order: 10, order: 20, is_visible: true },
     { id: 'pages', key: 'pages', label: 'Pages', path: 'pages', icon: 'FileEdit', permission: 'tenant.page.read', group_label: 'CONTENT', group_order: 10, order: 30, is_visible: true },
-    { id: 'visual_builder', key: 'visual_builder', label: 'Visual Builder', path: 'visual-pages', icon: 'Layout', permission: 'tenant.page.read', group_label: 'CONTENT', group_order: 10, order: 35, is_visible: true },
+    { id: 'visual_builder', key: 'visual_builder', label: 'Visual Builder', path: 'visual-pages', icon: 'Layout', permission: 'tenant.visual_pages.read', group_label: 'CONTENT', group_order: 10, order: 35, is_visible: true },
     { id: 'themes', key: 'themes', label: 'Themes', path: 'themes', icon: 'Palette', permission: 'tenant.theme.read', group_label: 'CONTENT', group_order: 10, order: 40, is_visible: true },
-    { id: 'widgets', key: 'widgets', label: 'Widgets', path: 'widgets', icon: 'Layers', permission: 'tenant.theme.read', group_label: 'CONTENT', group_order: 10, order: 45, is_visible: true },
+    { id: 'widgets', key: 'widgets', label: 'Widgets', path: 'widgets', icon: 'Layers', permission: 'tenant.widgets.read', group_label: 'CONTENT', group_order: 10, order: 45, is_visible: true },
     { id: 'portfolio', key: 'portfolio', label: 'Portfolio', path: 'portfolio', icon: 'Briefcase', permission: 'tenant.portfolio.read', group_label: 'CONTENT', group_order: 10, order: 50, is_visible: true },
     { id: 'testimonials', key: 'testimonials', label: 'Testimonials', path: 'testimonies', icon: 'MessageSquareQuote', permission: 'tenant.testimonies.read', group_label: 'CONTENT', group_order: 10, order: 60, is_visible: true },
     { id: 'announcements', key: 'announcements', label: 'Announcements', path: 'announcements', icon: 'Megaphone', permission: 'tenant.announcements.read', group_label: 'CONTENT', group_order: 10, order: 70, is_visible: true },
@@ -33,7 +33,7 @@ const DEFAULT_MENU_CONFIG = [
     { id: 'contacts', key: 'contacts', label: 'Contacts CRM', path: 'contacts', icon: 'Contact', permission: 'tenant.contacts.read', group_label: 'CONTENT', group_order: 10, order: 95, is_visible: true },
 
     // MEDIA Group
-    { id: 'files', key: 'files', label: 'Media Library', path: 'files', icon: 'FolderOpen', permission: 'tenant.media.read', group_label: 'MEDIA', group_order: 20, order: 10, is_visible: true },
+    { id: 'files', key: 'files', label: 'Media Library', path: 'files', icon: 'FolderOpen', permission: 'tenant.files.read', group_label: 'MEDIA', group_order: 20, order: 10, is_visible: true },
     { id: 'photo_gallery', key: 'photo_gallery', label: 'Photo Gallery', path: 'photo-gallery', icon: 'Image', permission: 'tenant.photo_gallery.read', group_label: 'MEDIA', group_order: 20, order: 20, is_visible: true },
     { id: 'video_gallery', key: 'video_gallery', label: 'Video Gallery', path: 'video-gallery', icon: 'Video', permission: 'tenant.video_gallery.read', group_label: 'MEDIA', group_order: 20, order: 30, is_visible: true },
 
@@ -53,9 +53,9 @@ const DEFAULT_MENU_CONFIG = [
     { id: 'policies', key: 'policies', label: 'Policies', path: 'policies', icon: 'ShieldCheck', permission: 'tenant.policy.read', group_label: 'USERS', group_order: 50, order: 30, is_visible: true },
 
     // SYSTEM Group
-    { id: 'seo_manager', key: 'seo_manager', label: 'SEO Manager', path: 'seo', icon: 'Search', permission: 'tenant.setting.read', group_label: 'SYSTEM', group_order: 60, order: 10, is_visible: true },
-    { id: 'languages', key: 'languages', label: 'Languages', path: 'languages', icon: 'Languages', permission: 'tenant.setting.read', group_label: 'SYSTEM', group_order: 60, order: 20, is_visible: true },
-    { id: 'extensions', key: 'extensions', label: 'Extensions', path: 'extensions', icon: 'Puzzle', permission: 'platform.module.read', group_label: 'SYSTEM', group_order: 60, order: 30, is_visible: true },
+    { id: 'seo_manager', key: 'seo_manager', label: 'SEO Manager', path: 'seo', icon: 'Search', permission: 'tenant.seo.read', group_label: 'SYSTEM', group_order: 60, order: 10, is_visible: true },
+    { id: 'languages', key: 'languages', label: 'Languages', path: 'languages', icon: 'Languages', permission: 'tenant.languages.read', group_label: 'SYSTEM', group_order: 60, order: 20, is_visible: true },
+    { id: 'extensions', key: 'extensions', label: 'Extensions', path: 'extensions', icon: 'Puzzle', permission: 'platform.extensions.read', group_label: 'SYSTEM', group_order: 60, order: 30, is_visible: true },
     { id: 'modules', key: 'modules', label: 'Modules', path: 'modules', icon: 'Box', permission: 'platform.module.read', group_label: 'SYSTEM', group_order: 60, order: 35, is_visible: true },
     { id: 'sidebar_manager', key: 'sidebar_manager', label: 'Sidebar Manager', path: 'admin-navigation', icon: 'List', permission: 'platform.sidebar.read', group_label: 'SYSTEM', group_order: 60, order: 40, is_visible: true },
     { id: 'notifications', key: 'notifications', label: 'Notifications', path: 'notifications', icon: 'MessageSquareQuote', permission: 'tenant.notification.read', group_label: 'SYSTEM', group_order: 60, order: 50, is_visible: true },
@@ -64,17 +64,17 @@ const DEFAULT_MENU_CONFIG = [
     // CONFIGURATION Group
     { id: 'settings_general', key: 'settings_general', label: 'General Settings', path: 'settings/general', icon: 'Settings', permission: 'tenant.setting.read', group_label: 'CONFIGURATION', group_order: 70, order: 5, is_visible: true },
     { id: 'settings_branding', key: 'branding', label: 'Branding', path: 'settings/branding', icon: 'Palette', permission: 'tenant.setting.update', group_label: 'CONFIGURATION', group_order: 70, order: 10, is_visible: true },
-    { id: 'sso', key: 'sso', label: 'SSO & Security', path: 'sso', icon: 'Lock', permission: 'platform.setting.read', group_label: 'CONFIGURATION', group_order: 70, order: 20, is_visible: true },
+    { id: 'sso', key: 'sso', label: 'SSO & Security', path: 'sso', icon: 'Lock', permission: 'tenant.sso.read', group_label: 'CONFIGURATION', group_order: 70, order: 20, is_visible: true },
     { id: 'email_settings', key: 'email_settings', label: 'Email Settings', path: 'email-settings', icon: 'Mail', permission: 'tenant.setting.update', group_label: 'CONFIGURATION', group_order: 70, order: 30, is_visible: true },
     { id: 'email_logs', key: 'email_logs', label: 'Email Logs', path: 'email-logs', icon: 'MailOpen', permission: 'tenant.setting.read', group_label: 'CONFIGURATION', group_order: 70, order: 40, is_visible: true },
 
     // IoT Group
-    { id: 'iot_devices', key: 'iot_devices', label: 'IoT Devices', path: 'devices', icon: 'Cpu', permission: 'tenant.setting.read', group_label: 'IoT', group_order: 80, order: 10, is_visible: true },
+    { id: 'iot_devices', key: 'iot_devices', label: 'IoT Devices', path: 'devices', icon: 'Cpu', permission: 'tenant.iot.read', group_label: 'IoT', group_order: 80, order: 10, is_visible: true },
 
     // MOBILE Group
-    { id: 'mobile_users', key: 'mobile_users', label: 'Mobile Users', path: 'mobile/users', icon: 'Smartphone', permission: 'tenant.setting.read', group_label: 'MOBILE', group_order: 85, order: 10, is_visible: true },
-    { id: 'push_notifications', key: 'push_notifications', label: 'Push Notifications', path: 'mobile/push', icon: 'Bell', permission: 'tenant.setting.update', group_label: 'MOBILE', group_order: 85, order: 20, is_visible: true },
-    { id: 'mobile_config', key: 'mobile_config', label: 'App Config', path: 'mobile/config', icon: 'Settings', permission: 'tenant.setting.update', group_label: 'MOBILE', group_order: 85, order: 30, is_visible: true },
+    { id: 'mobile_users', key: 'mobile_users', label: 'Mobile Users', path: 'mobile/users', icon: 'Smartphone', permission: 'tenant.mobile_users.read', group_label: 'MOBILE', group_order: 85, order: 10, is_visible: true },
+    { id: 'push_notifications', key: 'push_notifications', label: 'Push Notifications', path: 'mobile/push', icon: 'Bell', permission: 'tenant.push_notifications.read', group_label: 'MOBILE', group_order: 85, order: 20, is_visible: true },
+    { id: 'mobile_config', key: 'mobile_config', label: 'App Config', path: 'mobile/config', icon: 'Settings', permission: 'tenant.mobile.update', group_label: 'MOBILE', group_order: 85, order: 30, is_visible: true },
 
     // PLATFORM Group
     { id: 'tenants', key: 'tenants', label: 'Tenant Management', path: 'tenants', icon: 'Building', permission: 'platform.tenant.read', group_label: 'PLATFORM', group_order: 100, order: 10, is_visible: true },

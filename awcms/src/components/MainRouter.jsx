@@ -87,6 +87,9 @@ const MobileUsersManager = lazy(() => import('@/pages/cmspanel/MobileUsersManage
 const PushNotificationsManager = lazy(() => import('@/pages/cmspanel/PushNotificationsManager'));
 const MobileAppConfig = lazy(() => import('@/pages/cmspanel/MobileAppConfig'));
 
+// Dynamic Resource Manager
+const DynamicResourceManager = lazy(() => import('@/components/dashboard/dynamic/DynamicResourceManager'));
+
 
 // Loading Screen
 const PageLoader = () => (
@@ -277,6 +280,10 @@ const MainRouter = () => {
           <Route path="mobile/users" element={<MobileUsersManager />} />
           <Route path="mobile/push" element={<PushNotificationsManager />} />
           <Route path="mobile/config" element={<MobileAppConfig />} />
+
+          {/* Dynamic Resources */}
+          <Route path="resources/:resourceKey" element={<DynamicResourceManager />} />
+          <Route path="res/:resourceKey" element={<DynamicResourceManager />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

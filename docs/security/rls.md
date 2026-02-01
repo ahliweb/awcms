@@ -96,6 +96,7 @@ FOR SELECT USING (
 - **Granularity**: Policies should match the permissions defined in `PermissionMatrix.jsx`.
 - **Isolation**: Every tenant-scoped table must include `tenant_id` and `deleted_at`.
 - **Public access**: Public reads must be explicitly scoped to published content (e.g. `is_published = true`).
+- **Plugins**: Extension/Plugin routes must query tenant-scoped tables with `tenant_id = current_tenant_id()` and rely on ABAC permissions (no role-name checks).
 
 ## References
 

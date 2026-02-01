@@ -9,12 +9,23 @@ const AdminPageLayout = ({
     showTenantBadge = true,
     className = '',
 }) => {
-    const { hasPermission, isPlatformAdmin, loading: permLoading } = usePermissions();
+    const { hasPermission, hasAnyPermission, isPlatformAdmin, loading: permLoading } = usePermissions();
     const { currentTenant, loading: tenantLoading } = useTenant();
 
     const isLoading = loading || permLoading || tenantLoading;
 
-    if (requiredPermission && !permLoading && !hasPermission(requiredPermission)) {
+    // Check permissions
+    // If requiredPermission is an array, user needs ANY of them (OR logic)
+    // If string, user needs that specific one
+    const hasAccess = React.useMemo(() => {
+        if (!requiredPermission) return true;
+        if (Array.isArray(requiredPermission)) {
+            return hasAnyPermission(requiredPermission);
+        }
+        return hasPermission(requiredPermission);
+    }, [requiredPermission, hasPermission, hasAnyPermission]);
+
+    if (!permLoading && !hasAccess) {
         return (
             <div className="p-4 mb-4 text-sm text-destructive rounded-lg bg-destructive/10" role="alert">
                 <span className="font-medium">Access Denied!</span> You do not have permission to view this page.

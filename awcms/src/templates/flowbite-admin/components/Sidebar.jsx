@@ -32,7 +32,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     const location = useLocation();
     const { t } = useTranslation();
     const { menuItems, loading } = useAdminMenu();
-    const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
+    const { hasPermission, hasAnyPermission, isPlatformAdmin, isFullAccess } = usePermissions();
     const { currentTenant } = useTenant(); // Added
 
     // Path cleanup logic (same as other Sidebar)
@@ -57,7 +57,19 @@ const Sidebar = ({ isOpen, onClose }) => {
             // Check Subscription Tier
             if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) return false;
 
-            if (item.permission) return hasPermission(item.permission);
+            if (item.permission) {
+                // Special handling for School Modules to allow Platform access
+                // This acts as a shim for existing DB rows that only have the tenant permission
+                let requiredPerms = item.permission;
+                if (requiredPerms === 'tenant.school_pages.read') {
+                    requiredPerms = ['tenant.school_pages.read', 'platform.school_pages.read'];
+                }
+
+                if (Array.isArray(requiredPerms)) {
+                    return hasAnyPermission(requiredPerms);
+                }
+                return hasPermission(requiredPerms);
+            }
             return true;
         });
 
@@ -83,7 +95,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a.order - b.order));
 
         return groups;
-    }, [menuItems, loading, isPlatformAdmin, isFullAccess, hasPermission, searchQuery, t, currentTenant?.subscription_tier]);
+    }, [menuItems, loading, isPlatformAdmin, isFullAccess, hasPermission, hasAnyPermission, searchQuery, t, currentTenant?.subscription_tier]);
 
     const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
         groupedMenus[a].order - groupedMenus[b].order

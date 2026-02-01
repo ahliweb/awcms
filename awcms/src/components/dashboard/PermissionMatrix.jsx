@@ -22,9 +22,9 @@ const RESOURCE_CATEGORIES = {
         'orders', 'products', 'product_types'
     ],
     'System': [
-        'users', 'roles', 'permissions', 'policies', 'settings', 'audit', 'backups',
-        'extensions', 'languages', 'seo', 'sso', 'admin_menu',
-        'sidebar_manager', 'system'
+        'users', 'roles', 'role', 'permissions', 'policies', 'policy', 'settings', 'setting',
+        'audit', 'backups', 'extensions', 'languages', 'seo', 'sso', 'admin_menu',
+        'sidebar_manager', 'sidebar', 'system'
     ],
     'Navigation': [
         'menus', 'categories', 'tags', 'navigation', 'admin_navigation'
@@ -39,7 +39,7 @@ const RESOURCE_CATEGORIES = {
         'regions', 'mailketing', 'analytics'
     ],
     'Mobile & IoT': [
-        'mobile', 'iot'
+        'mobile', 'mobile_users', 'push_notifications', 'iot'
     ]
 };
 

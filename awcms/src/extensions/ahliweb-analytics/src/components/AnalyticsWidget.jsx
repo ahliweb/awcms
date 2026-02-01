@@ -4,10 +4,11 @@
  */
 
 import React from 'react';
+import { cn } from '@/lib/utils';
 
-const AnalyticsWidget = () => {
+const AnalyticsWidget = ({ className = '' }) => {
     return (
-        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg p-4 text-white">
+        <div className={cn('bg-gradient-to-br from-blue-500 to-indigo-600 p-4 text-white', className)}>
             <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold">Quick Stats</h3>
                 <span className="text-xs opacity-75">Today</span>

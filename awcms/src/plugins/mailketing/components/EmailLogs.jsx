@@ -58,7 +58,7 @@ function EmailLogs() {
         recipient: '',
     });
 
-    const canViewLogs = hasPermission('tenant.email.view_logs');
+    const canViewLogs = hasPermission('tenant.setting.read');
     const limit = 20;
 
     const loadLogs = useCallback(async () => {

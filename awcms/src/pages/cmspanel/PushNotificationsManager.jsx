@@ -33,7 +33,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Bell, Plus, Send, Trash2, RefreshCw } from 'lucide-react';
+import { Bell, Plus, Send, Trash2, RefreshCw, ShieldAlert } from 'lucide-react';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -51,7 +51,22 @@ function PushNotificationsManager() {
         target_type: 'all',
     });
 
-    const canManage = hasPermission('mobile.push.manage') || hasPermission('tenant.settings.update');
+    const canManage = hasPermission('tenant.push_notifications.create')
+        || hasPermission('tenant.push_notifications.update')
+        || hasPermission('tenant.push_notifications.delete');
+    const canRead = hasPermission('tenant.push_notifications.read') || canManage;
+
+    if (!canRead) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-xl border border-slate-200 p-12 text-center">
+                <div className="p-4 bg-red-50 rounded-full mb-4">
+                    <ShieldAlert className="w-12 h-12 text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">Access Denied</h3>
+                <p className="text-slate-500 mt-2">You do not have permission to view push notifications.</p>
+            </div>
+        );
+    }
 
     const handleCreate = async (isDraft = true) => {
         if (!newNotification.title) return;

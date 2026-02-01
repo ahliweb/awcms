@@ -39,13 +39,15 @@ These lists correspond directly to the database `permissions` table and `Permiss
 
 ### A. Platform (Global Scope)
 
-| Permission Key     | Actions                      | Channel |
-| :----------------- | :--------------------------- | :------ |
-| `platform.tenant`  | read, create, update, delete | web     |
-| `platform.setting` | read, update                 | web     |
-| `platform.module`  | read, create, update         | web     |
-| `platform.billing` | read, update                 | web     |
-| `platform.user`    | read, create, update, delete | web     |
+| Permission Key        | Actions                      | Channel |
+| :-------------------- | :--------------------------- | :------ |
+| `platform.tenant`     | read, create, update, delete | web     |
+| `platform.setting`    | read, update                 | web     |
+| `platform.module`     | read, create, update         | web     |
+| `platform.extensions` | read, create, update, delete | web     |
+| `platform.sidebar`    | read, update                 | web     |
+| `platform.billing`    | read, update                 | web     |
+| `platform.user`       | read, create, update, delete | web     |
 
 ### B. Tenant (Tenant Scope) - Standardized Pattern
 
@@ -91,9 +93,11 @@ These lists correspond directly to the database `permissions` table and `Permiss
 
 #### User Management
 
-| Module | Permission Prefix | Actions                      |
-| :----- | :---------------- | :--------------------------- |
-| Users  | `tenant.user.*`   | read, create, update, delete |
+| Module   | Permission Prefix | Actions                      |
+| :------- | :---------------- | :--------------------------- |
+| Users    | `tenant.user.*`   | read, create, update, delete |
+| Roles    | `tenant.role.*`   | read, create, update, delete |
+| Policies | `tenant.policy.*` | read, create, update, delete |
 
 #### System
 
@@ -102,7 +106,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 | Settings         | `tenant.setting.*`          | read, update                                            |
 | Themes           | `tenant.theme.*`            | read, create, update, delete                            |
 | Audit Logs       | `tenant.audit.*`            | read                                                    |
-| Notifications    | `tenant.notification.*`     | read                                                    |
+| Notifications    | `tenant.notification.*`     | read, create, update, delete                            |
 | Contacts         | `tenant.contacts.*`         | read, create, update, delete, restore, permanent_delete |
 | Contact Messages | `tenant.contact_messages.*` | read, create, update, delete, restore, permanent_delete |
 | Regions          | `tenant.region.*`           | read, create, update, delete                            |
@@ -114,14 +118,14 @@ These lists correspond directly to the database `permissions` table and `Permiss
 
 #### Mobile, IoT & Extensions
 
-| Module        | Permission Prefix             | Actions                      |
-| :------------ | :---------------------------- | :--------------------------- |
-| Mobile Users  | `tenant.mobile_users.*`       | read, create, update, delete |
-| Mobile Config | `tenant.mobile.*`             | read, update                 |
-| IoT Devices   | `tenant.iot.*`                | read, create, update, delete |
-| Extensions    | `tenant.extensions.*`         | view, create, delete, publish|
-| Mailketing    | `tenant.mailketing.*`         | read, send, template         |
-| Analytics     | `tenant.analytics.*`          | read                         |
+| Module             | Permission Prefix             | Actions                      |
+| :----------------- | :---------------------------- | :--------------------------- |
+| Mobile Users       | `tenant.mobile_users.*`       | read, create, update, delete |
+| Mobile Config      | `tenant.mobile.*`             | read, update                 |
+| Push Notifications | `tenant.push_notifications.*` | read, create, update, delete |
+| IoT Devices        | `tenant.iot.*`                | read, create, update, delete |
+| Extensions         | `tenant.extensions.*`         | view, create, delete, publish|
+| Analytics          | `tenant.analytics.*`          | read                         |
 
 ---
 
@@ -133,6 +137,13 @@ These lists correspond directly to the database `permissions` table and `Permiss
 - **Roles**: Foundational grouping of permissions.
 - **Permissions**: Granular capabilities (e.g. `tenant.blog.create`).
 - **Policies**: Advanced deny-rules (e.g., "No delete on mobile").
+
+### Plugin & Extension Permissions
+
+- Plugin routes must declare explicit ABAC permissions (e.g., `tenant.setting.read`, `tenant.analytics.read`).
+- Use registry keys when referencing plugin UI components (`mailketing:MailketingCreditsWidget`).
+- New plugin permissions must be inserted into the `permissions` table before use.
+- Prefer tenant scope permissions unless the feature is truly platform-wide.
 
 ### Context API (`usePermissions`)
 

@@ -159,7 +159,7 @@ function SchoolPagesManager() {
 
     if (loading) {
         return (
-            <AdminPageLayout requiredPermission="tenant.school_pages.read">
+            <AdminPageLayout requiredPermission={['tenant.school_pages.read', 'platform.school_pages.read']}>
                 <PageHeader
                     title="School Website Pages"
                     description="Manage content for your school's public website"
@@ -175,7 +175,7 @@ function SchoolPagesManager() {
     }
 
     return (
-        <AdminPageLayout requiredPermission="tenant.school_pages.read">
+        <AdminPageLayout requiredPermission={['tenant.school_pages.read', 'platform.school_pages.read']}>
             <PageHeader
                 title="School Website Pages"
                 description="Manage content for your school's public website"

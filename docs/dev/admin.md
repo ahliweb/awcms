@@ -24,9 +24,10 @@ The Admin Panel (`awcms/`) is a React SPA built with Vite. It serves as the cent
 
 ### 4.1 Adding a New Module
 
-1. Create a `Manager` component in `src/components/dashboard/`.
-2. Add a route in `src/components/MainRouter.jsx`.
-3. Add a sidebar item in `src/templates/flowbite-admin/components/Sidebar.jsx`.
+1. Register the module in `resources_registry` (scope, db_table, permission_prefix).
+2. Create a `Manager` component in `src/components/dashboard/`.
+3. Add a route in `src/components/MainRouter.jsx`.
+4. Insert a sidebar item in `admin_menus` (or seed via `awcms/src/scripts/seed-sidebar.js`).
 
 ### 4.2 Handling Permissions
 
@@ -40,7 +41,24 @@ if (hasPermission('tenant.blog.create')) {
 }
 ```
 
-### 4.3 Tenant Awareness
+### 4.3 Plugin Dashboard Widgets
+
+Plugins can inject dashboard widgets via the `dashboard_widgets` filter. Use plugin registry keys for components (for example `mailketing:MailketingCreditsWidget`).
+
+```jsx
+addFilter('dashboard_widgets', 'mailketing_stats', (widgets) => [
+  ...widgets,
+  {
+    id: 'mailketing_credits',
+    component: 'mailketing:MailketingCreditsWidget',
+    position: 'sidebar',
+    priority: 50,
+    frame: false
+  }
+]);
+```
+
+### 4.4 Tenant Awareness
 
 The `useTenant` hook provides the currently selected tenant context. All API calls should include `tenant_id` unless they are super-admin global operations.
 

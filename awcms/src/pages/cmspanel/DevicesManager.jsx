@@ -27,7 +27,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Wifi, WifiOff, Cpu, RefreshCw } from 'lucide-react';
+import { Plus, Search, Wifi, WifiOff, Cpu, RefreshCw, ShieldAlert } from 'lucide-react';
 import { useDevices } from '@/hooks/useDevices';
 import { usePermissions } from '@/contexts/PermissionContext';
 import DeviceCard from '@/components/esp32/DeviceCard';
@@ -44,7 +44,22 @@ function DevicesManager() {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [newDevice, setNewDevice] = useState({ device_id: '', device_name: '' });
 
-    const canManage = hasPermission('iot.device.manage') || hasPermission('tenant.settings.update');
+    const canManage = hasPermission('tenant.iot.create')
+        || hasPermission('tenant.iot.update')
+        || hasPermission('tenant.iot.delete');
+    const canRead = hasPermission('tenant.iot.read') || canManage;
+
+    if (!canRead) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-xl border border-slate-200 p-12 text-center">
+                <div className="p-4 bg-red-50 rounded-full mb-4">
+                    <ShieldAlert className="w-12 h-12 text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">Access Denied</h3>
+                <p className="text-slate-500 mt-2">You do not have permission to view IoT devices.</p>
+            </div>
+        );
+    }
 
     // Filter devices
     const filteredDevices = devices.filter((d) =>

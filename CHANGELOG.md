@@ -5,8 +5,30 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
 ### Changed
 
+### Fixed
+
+## [2.27.0] "Foundation" - 2026-02-01
+
+### Added
+
+- **Database-Driven UI/UX (Foundations)**:
+  - Created `resources_registry`, `ui_configs`, and `component_registry` tables to store all UI/module definitions.
+  - Implemented `DynamicResourceManager` and `SchemaForm` to render flexible, schema-based administration pages.
+  - Added new dynamic routes `/cmspanel/resources/:resourceKey` and `/cmspanel/res/:resourceKey`.
+  - Created a test resource (`test_dynamic`) with a fully functional settings-form schema.
+- **Resource Management**:
+  - Populated the `resources_registry` with over 40 standard system resources.
+  - Established a formal `RESOURCE_MAP.md` doc as the source of truth for all modules.
+
+### Changed
+
+- **Admin Navigation**:
+  - Updated `useAdminMenu` to fetch resource metadata (label, icon, type, permissions) from the database instead of hardcoded config.
+  - Linked `admin_menus` table directly to `resources_registry` via `resource_id`.
 - **Permission Normalization**:
   - Migrated proper permissions (ABAC) to `tenant.{module}.{action}` format across the database and codebase.
   - Updated 18 React components in `src/components/dashboard/` to use the new tenant-scoped permission keys.
@@ -16,6 +38,8 @@ All notable changes to the **AWCMS** project will be documented in this file.
   - Updated `audit_logs` migration logging to match schema (using `resource` and `details` columns).
   - Synced local migrations with remote database, capturing drift in `20260201015918_remote_schema.sql` (Storage triggers).
   - Repaired migration history for 8 previously missing remote migrations.
+- **Security Documentation**:
+  - Updated `abac.md` security documentation with comprehensive module mapping.
 
 ## [2.26.0] "Spectrum" - 2026-01-30
 

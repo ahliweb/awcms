@@ -33,9 +33,13 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
         return [...widgets, {
             id: 'analytics-overview',
             title: 'Analytics Overview',
-            component: AnalyticsWidget,
+            component: 'awcms-ext-ahliweb-analytics:AnalyticsWidget',
             size: 'large',
-            order: 1
+            order: 1,
+            frame: 'flush',
+            props: {
+                className: 'rounded-none'
+            }
         }];
     });
 

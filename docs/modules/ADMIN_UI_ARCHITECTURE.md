@@ -76,7 +76,7 @@ import { Button } from '@/components/ui/button';
 
 function CustomManager() {
   return (
-    <AdminPageLayout requiredPermission="tenant.settings.read">
+    <AdminPageLayout requiredPermission="tenant.setting.read">
       <PageHeader
         title="Custom Settings"
         description="Configure advanced options."
@@ -100,6 +100,39 @@ function CustomManager() {
 | `GenericContentManager` | CRUD operations with table, search, pagination |
 | `ContentTable` | Data table with sorting and actions |
 
+## Dashboard Widgets (Plugins)
+
+Plugins can inject widgets into the admin dashboard using the `dashboard_widgets` filter. The dashboard renders these via `PluginWidgets`, which supports basic layout hints and optional framing.
+
+- `component`: use a plugin registry key (for example `mailketing:MailketingCreditsWidget`)
+- `position`: `main` (default) or `sidebar`
+- `size`: `large` (spans two columns in grid layouts)
+- `order` or `priority`: sort order (lower shows first)
+- `frame`: `default` (card wrapper), `flush` (edge-to-edge), or `false`
+- `props`: passed to the widget component
+
+```jsx
+addFilter('dashboard_widgets', 'mailketing_stats', (widgets) => [
+  ...widgets,
+  {
+    id: 'mailketing_credits',
+    component: 'mailketing:MailketingCreditsWidget',
+    position: 'sidebar',
+    priority: 50,
+    frame: false
+  },
+  {
+    id: 'analytics-overview',
+    component: 'awcms-ext-ahliweb-analytics:AnalyticsWidget',
+    position: 'main',
+    size: 'large',
+    order: 1,
+    frame: 'flush',
+    props: { className: 'rounded-none' }
+  }
+]);
+```
+
 ## Permissions and Access
 
 - Use `requiredPermission` prop for route-level access.
@@ -115,11 +148,11 @@ if (hasPermission('tenant.blog.create')) {
 
 ## Sidebar Configuration
 
-The admin sidebar is configured in `src/templates/flowbite-admin/components/Sidebar.jsx`:
+The admin sidebar is data-driven via `awcms/src/hooks/useAdminMenu.js` and rendered in `awcms/src/templates/flowbite-admin/components/Sidebar.jsx`:
 
-- `MENU_ITEMS` defines all menu entries with icons, routes, and groups
-- Items are grouped by category (Content, Commerce, System, etc.)
-- Search functionality filters items by label
+- Menu items are stored in `admin_menus` and enriched with `resources_registry` metadata
+- Permission checks rely on ABAC prefixes (`resources_registry.permission_prefix`)
+- Items are grouped by `group_label`/`group_order` and filtered by search input
 
 ## Security and Compliance Notes
 

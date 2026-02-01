@@ -25,7 +25,7 @@ BEGIN
         ('permanent_delete_articles', 'tenant.blog.permanent_delete', 'blog', 'blog', 'permanent_delete'),
         ('upload_files', 'tenant.files.upload', 'files', 'files', 'upload'),
         ('permanent_delete_files', 'tenant.files.permanent_delete', 'files', 'files', 'permanent_delete'),
-        ('permanent_delete_settings', 'tenant.settings.permanent_delete', 'settings', 'settings', 'permanent_delete'),
+        ('permanent_delete_settings', 'tenant.setting.permanent_delete', 'setting', 'setting', 'permanent_delete'),
         ('edit_themes', 'tenant.themes.update', 'themes', 'themes', 'update'),
         ('edit_visual_pages', 'tenant.visual_pages.update', 'visual_pages', 'visual_pages', 'update'),
         ('edit_galleries', 'tenant.galleries.update', 'galleries', 'galleries', 'update'),

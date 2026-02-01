@@ -106,7 +106,7 @@ function SiteImagesManager() {
 
     if (loading) {
         return (
-            <AdminPageLayout requiredPermission="tenant.school_pages.read">
+            <AdminPageLayout requiredPermission={['tenant.school_pages.read', 'platform.school_pages.read']}>
                 <PageHeader
                     title="Site Images"
                     description="Manage hero images, section images, and gallery collections"
@@ -122,7 +122,7 @@ function SiteImagesManager() {
     }
 
     return (
-        <AdminPageLayout requiredPermission="tenant.school_pages.read">
+        <AdminPageLayout requiredPermission={['tenant.school_pages.read', 'platform.school_pages.read']}>
             <PageHeader
                 title="Site Images"
                 description="Manage hero images, section images, and gallery collections"

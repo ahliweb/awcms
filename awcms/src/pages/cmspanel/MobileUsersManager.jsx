@@ -27,7 +27,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Smartphone, Apple, Search, Trash2, RefreshCw, Users } from 'lucide-react';
+import { Smartphone, Apple, Search, Trash2, RefreshCw, Users, ShieldAlert } from 'lucide-react';
 import { useMobileUsers } from '@/hooks/useMobileUsers';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,7 +41,21 @@ function MobileUsersManager() {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [platformFilter, setPlatformFilter] = useState('all');
 
-    const canManage = hasPermission('mobile.users.manage') || hasPermission('tenant.settings.update');
+    const canManage = hasPermission('tenant.mobile_users.update')
+        || hasPermission('tenant.mobile_users.delete');
+    const canRead = hasPermission('tenant.mobile_users.read') || canManage;
+
+    if (!canRead) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-xl border border-slate-200 p-12 text-center">
+                <div className="p-4 bg-red-50 rounded-full mb-4">
+                    <ShieldAlert className="w-12 h-12 text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">Access Denied</h3>
+                <p className="text-slate-500 mt-2">You do not have permission to view mobile users.</p>
+            </div>
+        );
+    }
 
     // Filter users
     const filteredUsers = users.filter((u) => {

@@ -13,6 +13,7 @@ import { PlatformOverview } from './widgets/PlatformOverview';
 import { MyApprovals } from './widgets/MyApprovals';
 import { UsageWidget } from './widgets/UsageWidget';
 import { TopBlogsWidget } from './widgets/TopBlogsWidget';
+import PluginWidgets from './widgets/PluginWidgets';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
 function AdminDashboard() {
@@ -91,6 +92,12 @@ function AdminDashboard() {
                 <PluginAction name="dashboard_top" args={[userRole]} />
             </div>
 
+            <PluginWidgets
+                position="main"
+                layout="grid"
+                className={`animate-in fade-in slide-in-from-bottom-4 duration-700 delay-250 grid-cols-1 md:grid-cols-2 ${isTenantAdmin ? 'gap-10' : 'gap-8'}`}
+            />
+
             {/* Content & Activity Grid */}
             <div className={`grid grid-cols-1 xl:grid-cols-3 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 ${isTenantAdmin ? 'gap-10' : 'gap-8'}`}>
                 {/* Left Column (2/3 width on XL) */}
@@ -108,6 +115,7 @@ function AdminDashboard() {
 
                 {/* Right Column (1/3 width on XL) - Activity Feed */}
                 <div className={`min-w-0 ${isTenantAdmin ? 'space-y-10' : 'space-y-8'}`}>
+                    <PluginWidgets position="sidebar" />
                     <UsageWidget />
                     <MyApprovals />
                     <ActivityFeed activities={data.activity} />

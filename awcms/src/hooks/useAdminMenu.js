@@ -16,8 +16,8 @@ const DEFAULT_MENU_CONFIG = [
   { id: 'testimonials', key: 'testimonials', label: 'Testimonials', path: 'testimonies', icon: 'MessageSquareQuote', permission: 'tenant.testimonies.read', group_label: 'CONTENT', group_order: 10, order: 60, is_visible: true },
   { id: 'announcements', key: 'announcements', label: 'Announcements', path: 'announcements', icon: 'Megaphone', permission: 'tenant.announcements.read', group_label: 'CONTENT', group_order: 10, order: 70, is_visible: true },
   { id: 'promotions', key: 'promotions', label: 'Promotions', path: 'promotions', icon: 'Tag', permission: 'tenant.promotions.read', group_label: 'CONTENT', group_order: 10, order: 80, is_visible: true },
-  { id: 'school_pages', key: 'school_pages', label: 'School Website', path: 'school-pages', icon: 'School', permission: 'tenant.school_pages.read', group_label: 'CONTENT', group_order: 10, order: 85, is_visible: true },
-  { id: 'site_images', key: 'site_images', label: 'Site Images', path: 'site-images', icon: 'Image', permission: 'tenant.school_pages.read', group_label: 'CONTENT', group_order: 10, order: 86, is_visible: true },
+  { id: 'school_pages', key: 'school_pages', label: 'School Website', path: 'school-pages', icon: 'School', permission: ['tenant.school_pages.read', 'platform.school_pages.read'], group_label: 'CONTENT', group_order: 10, order: 85, is_visible: true },
+  { id: 'site_images', key: 'site_images', label: 'Site Images', path: 'site-images', icon: 'Image', permission: ['tenant.school_pages.read', 'platform.school_pages.read'], group_label: 'CONTENT', group_order: 10, order: 86, is_visible: true },
 
   { id: 'contact_messages', key: 'contact_messages', label: 'Contact Messages', path: 'messages', icon: 'Inbox', permission: 'tenant.contact_messages.read', group_label: 'CONTENT', group_order: 10, order: 90, is_visible: true },
   { id: 'contacts', key: 'contacts', label: 'Contacts CRM', path: 'contacts', icon: 'Contact', permission: 'tenant.contacts.read', group_label: 'CONTENT', group_order: 10, order: 95, is_visible: true },
@@ -46,10 +46,10 @@ const DEFAULT_MENU_CONFIG = [
   { id: 'seo_manager', key: 'seo_manager', label: 'SEO Manager', path: 'seo', icon: 'Search', permission: 'tenant.seo.read', group_label: 'SYSTEM', group_order: 60, order: 10, is_visible: true },
   { id: 'languages', key: 'languages', label: 'Languages', path: 'languages', icon: 'Languages', permission: 'tenant.languages.read', group_label: 'SYSTEM', group_order: 60, order: 20, is_visible: true },
   { id: 'extensions', key: 'extensions', label: 'Extensions', path: 'extensions', icon: 'Puzzle', permission: 'platform.extensions.read', group_label: 'SYSTEM', group_order: 60, order: 30, is_visible: true },
-  { id: 'modules', key: 'modules', label: 'Modules', path: 'modules', icon: 'Box', permission: 'platform.modules.read', group_label: 'SYSTEM', group_order: 60, order: 35, is_visible: true },
+  { id: 'modules', key: 'modules', label: 'Modules', path: 'modules', icon: 'Box', permission: 'platform.module.read', group_label: 'SYSTEM', group_order: 60, order: 35, is_visible: true },
   { id: 'sidebar_manager', key: 'sidebar_manager', label: 'Sidebar Manager', path: 'admin-navigation', icon: 'List', permission: 'platform.sidebar.read', group_label: 'SYSTEM', group_order: 60, order: 40, is_visible: true },
   { id: 'notifications', key: 'notifications', label: 'Notifications', path: 'notifications', icon: 'MessageSquareQuote', permission: 'tenant.notification.read', group_label: 'SYSTEM', group_order: 60, order: 50, is_visible: true },
-  { id: 'audit_logs', key: 'audit_logs', label: 'Audit Logs', path: 'audit-logs', icon: 'FileClock', permission: 'tenant.audit.view', group_label: 'SYSTEM', group_order: 60, order: 60, is_visible: true },
+  { id: 'audit_logs', key: 'audit_logs', label: 'Audit Logs', path: 'audit-logs', icon: 'FileClock', permission: 'tenant.audit.read', group_label: 'SYSTEM', group_order: 60, order: 60, is_visible: true },
 
   // CONFIGURATION Group
   { id: 'settings_general', key: 'settings_general', label: 'General Settings', path: 'settings/general', icon: 'Settings', permission: 'tenant.setting.read', group_label: 'CONFIGURATION', group_order: 70, order: 5, is_visible: true },
@@ -63,8 +63,8 @@ const DEFAULT_MENU_CONFIG = [
   { id: 'iot_devices', key: 'iot_devices', label: 'IoT Devices', path: 'devices', icon: 'Cpu', permission: 'tenant.iot.read', group_label: 'IoT', group_order: 80, order: 10, is_visible: true },
 
   // MOBILE Group
-  { id: 'mobile_users', key: 'mobile_users', label: 'Mobile Users', path: 'mobile/users', icon: 'Smartphone', permission: 'tenant.mobile.read', group_label: 'MOBILE', group_order: 85, order: 10, is_visible: true },
-  { id: 'push_notifications', key: 'push_notifications', label: 'Push Notifications', path: 'mobile/push', icon: 'Bell', permission: 'tenant.mobile.push_send', group_label: 'MOBILE', group_order: 85, order: 20, is_visible: true },
+  { id: 'mobile_users', key: 'mobile_users', label: 'Mobile Users', path: 'mobile/users', icon: 'Smartphone', permission: 'tenant.mobile_users.read', group_label: 'MOBILE', group_order: 85, order: 10, is_visible: true },
+  { id: 'push_notifications', key: 'push_notifications', label: 'Push Notifications', path: 'mobile/push', icon: 'Bell', permission: 'tenant.push_notifications.read', group_label: 'MOBILE', group_order: 85, order: 20, is_visible: true },
   { id: 'mobile_config', key: 'mobile_config', label: 'App Config', path: 'mobile/config', icon: 'Settings', permission: 'tenant.mobile.update', group_label: 'MOBILE', group_order: 85, order: 30, is_visible: true },
 
   // PLATFORM Group
@@ -89,7 +89,15 @@ export function useAdminMenu() {
 
       if (coreError) throw coreError;
 
-      // 2. Fetch Extension Menus (if any)
+      // 2. Fetch System Resources (New Source of Truth)
+      const { data: resources, error: resError } = await supabase
+        .from('resources_registry')
+        .select('*')
+        .eq('active', true);
+
+      if (resError) console.warn('Error fetching system resources:', resError);
+
+      // 3. Fetch Extension Menus (if any)
       // We join with extensions to get the group label (extension name)
       const { data: extMenus, error: extError } = await supabase
         .from('extension_menu_items')
@@ -101,7 +109,7 @@ export function useAdminMenu() {
         // Don't fail completely if extensions table issue
       }
 
-      // 3. Merge and Normalize
+      // 4. Merge and Normalize
       const normalizedExtMenus = (extMenus || [])
         .filter(item => item.extension?.is_active && !item.extension?.deleted_at) // Double check extension is active
         .map(item => ({
@@ -121,7 +129,31 @@ export function useAdminMenu() {
 
       // Combine
       // If coreMenus is empty, use default config. Extensions still merge.
-      const baseMenus = (coreMenus && coreMenus.length > 0) ? coreMenus : DEFAULT_MENU_CONFIG;
+      let baseMenus = (coreMenus && coreMenus.length > 0) ? coreMenus : DEFAULT_MENU_CONFIG;
+
+      // ENRICH baseMenus with Resource details
+      if (resources && resources.length > 0) {
+        const resourceMap = new Map(resources.map(r => [r.key, r]));
+        baseMenus = baseMenus.map(menu => {
+          // Find matching resource by direct ID link or Key match
+          const matchedRes = resources.find(r => r.id === menu.resource_id) || resourceMap.get(menu.key);
+          if (matchedRes) {
+            const resolvedPermission = menu.permission || (matchedRes.permission_prefix ? `${matchedRes.permission_prefix}.read` : null);
+            return {
+              ...menu,
+              // If menu label/icon is null (strict DB mode), fallback to Resource
+              label: menu.label || matchedRes.label,
+              icon: menu.icon || matchedRes.icon,
+              resource_id: matchedRes.id,
+              resource_type: matchedRes.type, // passed for UI to know if it's a Table or Form
+              permission: resolvedPermission,
+              permission_prefix: matchedRes.permission_prefix
+            };
+          }
+          return menu;
+        });
+      }
+
       let combined = [...baseMenus, ...normalizedExtMenus];
 
       // Sort again by group_order then order to ensure merged list is correct
@@ -132,7 +164,7 @@ export function useAdminMenu() {
         return (a.order || 0) - (b.order || 0);
       });
 
-      // 4. Merge Plugin-registered menu items (via filters)
+      // 5. Merge Plugin-registered menu items (via filters)
       try {
         const pluginMenuItems = hooks.applyFilters('admin_menu_items', []);
         const normalizedPluginMenus = (pluginMenuItems || [])

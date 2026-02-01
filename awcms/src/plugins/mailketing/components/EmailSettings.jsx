@@ -45,7 +45,7 @@ function EmailSettings() {
     const [testing, setTesting] = useState(false);
     const [testEmail, setTestEmail] = useState('');
 
-    const canConfigure = hasPermission('tenant.email.configure');
+    const canConfigure = hasPermission('tenant.setting.update');
 
     const loadConfig = useCallback(async () => {
         setLoading(true);

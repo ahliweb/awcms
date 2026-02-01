@@ -4,7 +4,12 @@
  */
 
 import React from 'react';
+import MailketingCreditsWidget from './components/MailketingCreditsWidget';
 import manifest from './plugin.json';
+
+export const components = {
+    MailketingCreditsWidget,
+};
 
 export { manifest };
 
@@ -23,12 +28,12 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
         {
             path: 'email-settings',
             element: EmailSettings,
-            permission: 'tenant.email.configure',
+            permission: 'tenant.setting.update',
         },
         {
             path: 'email-logs',
             element: EmailLogs,
-            permission: 'tenant.email.view_logs',
+            permission: 'tenant.setting.read',
         },
     ]);
 
@@ -42,7 +47,7 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
             icon: 'Mail',
             group: 'CONFIGURATION',
             order: 75,
-            permission: 'tenant.email.configure',
+            permission: 'tenant.setting.update',
             plugin_type: manifest.type,
         },
     ]);
@@ -63,9 +68,10 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
             ...widgets,
             {
                 id: 'mailketing_credits',
-                component: 'MailketingCreditsWidget',
+                component: 'mailketing:MailketingCreditsWidget',
                 position: 'sidebar',
                 priority: 50,
+                frame: false,
             },
         ];
     });
@@ -132,8 +138,3 @@ export const uninstall = async (supabase, tenantId) => {
 
     return { success: true };
 };
-
-// Export components for routing
-export { default as EmailSettings } from './components/EmailSettings';
-export { default as EmailLogs } from './components/EmailLogs';
-export { default as MailketingCreditsWidget } from './components/MailketingCreditsWidget';
