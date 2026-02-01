@@ -392,6 +392,23 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                         rows={3}
                       />
                     </div>
+
+                    {/* Hierarchy Reference */}
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                      <p className="text-xs font-medium text-slate-500 mb-2">Tenant Staff Hierarchy Reference (Levels 1-10)</p>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 p-2 rounded border border-slate-200 dark:border-slate-700">
+                        <div>10: Super Manager</div>
+                        <div>9: Senior Manager</div>
+                        <div>8: Manager</div>
+                        <div>7: Senior Supervisor</div>
+                        <div>6: Supervisor</div>
+                        <div>5: Senior Specialist</div>
+                        <div>4: Specialist</div>
+                        <div>3: Associate</div>
+                        <div>2: Assistant</div>
+                        <div>1: Internship</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
