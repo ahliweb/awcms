@@ -1,8 +1,8 @@
 ---
-import { Icon } from 'astro-icon/components';
-import { t, getLocalizedPath, type Locale } from '../utils/i18n';
-import navigation from '../data/navigation.json';
-import site from '../data/site.json';
+import { Icon } from "astro-icon/components";
+import { t, getLocalizedPath, type Locale } from "../utils/i18n";
+import navigation from "../data/navigation.json";
+import { getMenuTree, getSiteData } from "../lib/api";
 
 export interface Props {
   locale: Locale;
@@ -10,9 +10,20 @@ export interface Props {
 
 const { locale } = Astro.props;
 const currentYear = new Date().getFullYear();
+const site = await getSiteData();
+const footerMenu = await getMenuTree("footer");
+const menuItems = footerMenu.length > 0 ? footerMenu : navigation.mainMenu;
 
 function getLabel(item: any): string {
-  return item.label[locale] || item.label.id;
+  if (!item?.label) return "";
+  if (typeof item.label === "string") return item.label;
+  return item.label[locale] || item.label.id || "";
+}
+
+function resolveHref(href: string): string {
+  if (!href || href.startsWith("http") || href.startsWith("#"))
+    return href || "#";
+  return getLocalizedPath(href, locale);
 }
 ---
 
@@ -51,75 +62,160 @@ function getLabel(item: any): string {
           {site.site.description}
         </p>
         <div class="flex items-center gap-3">
-          <a href={site.site.socialMedia.facebook} target="_blank" rel="noopener" class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors">
-            <Icon name="tabler:brand-facebook" class="w-5 h-5" />
-          </a>
-          <a href={site.site.socialMedia.instagram} target="_blank" rel="noopener" class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors">
-            <Icon name="tabler:brand-instagram" class="w-5 h-5" />
-          </a>
-          <a href={site.site.socialMedia.youtube} target="_blank" rel="noopener" class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors">
-            <Icon name="tabler:brand-youtube" class="w-5 h-5" />
-          </a>
-          <a href={site.site.socialMedia.twitter} target="_blank" rel="noopener" class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors">
-            <Icon name="tabler:brand-twitter" class="w-5 h-5" />
-          </a>
+          {
+            site.site.socialMedia?.instagram && (
+              <a
+                href={site.site.socialMedia.instagram}
+                target="_blank"
+                rel="noopener"
+                aria-label="Instagram Sekolah"
+                class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors"
+              >
+                <Icon name="tabler:brand-instagram" class="w-5 h-5" />
+              </a>
+            )
+          }
+          {
+            site.site.socialMedia?.instagramOsis && (
+              <a
+                href={site.site.socialMedia.instagramOsis}
+                target="_blank"
+                rel="noopener"
+                aria-label="Instagram OSIS"
+                class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors"
+              >
+                <Icon name="tabler:brand-instagram" class="w-5 h-5" />
+              </a>
+            )
+          }
+          {
+            site.site.socialMedia?.youtube && (
+              <a
+                href={site.site.socialMedia.youtube}
+                target="_blank"
+                rel="noopener"
+                aria-label="YouTube Sekolah"
+                class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors"
+              >
+                <Icon name="tabler:brand-youtube" class="w-5 h-5" />
+              </a>
+            )
+          }
         </div>
       </div>
-      
+
       <!-- Quick Links -->
       <div>
-        <h3 class="font-bold text-lg mb-4">{t('footer.quick_links', locale)}</h3>
+        <h3 class="font-bold text-lg mb-4">
+          {t("footer.quick_links", locale)}
+        </h3>
         <ul class="space-y-2">
-          {navigation.mainMenu.slice(0, 6).map((item) => (
-            <li>
-              <a href={getLocalizedPath(item.href, locale)} class="text-gray-400 hover:text-white transition-colors text-sm">
-                {getLabel(item)}
-              </a>
-            </li>
-          ))}
+          {
+            menuItems.slice(0, 6).map((item) => (
+              <li>
+                <a
+                  href={resolveHref(item.href)}
+                  class="text-gray-400 hover:text-white transition-colors text-sm"
+                >
+                  {getLabel(item)}
+                </a>
+              </li>
+            ))
+          }
         </ul>
       </div>
-      
+
       <!-- Services -->
       <div>
-        <h3 class="font-bold text-lg mb-4">{t('services.title', locale)}</h3>
+        <h3 class="font-bold text-lg mb-4">{t("services.title", locale)}</h3>
         <ul class="space-y-2">
-          <li><a href={getLocalizedPath('/layanan/ekstrakurikuler', locale)} class="text-gray-400 hover:text-white transition-colors text-sm">{t('services.extracurricular', locale)}</a></li>
-          <li><a href={getLocalizedPath('/layanan/laboratorium', locale)} class="text-gray-400 hover:text-white transition-colors text-sm">{t('services.laboratory', locale)}</a></li>
-          <li><a href={getLocalizedPath('/layanan/perpustakaan', locale)} class="text-gray-400 hover:text-white transition-colors text-sm">{t('services.library', locale)}</a></li>
-          <li><a href={getLocalizedPath('/layanan/kesiswaan', locale)} class="text-gray-400 hover:text-white transition-colors text-sm">{t('services.student_affairs', locale)}</a></li>
+          <li>
+            <a
+              href={getLocalizedPath("/layanan/ekstrakurikuler", locale)}
+              class="text-gray-400 hover:text-white transition-colors text-sm"
+              >{t("services.extracurricular", locale)}</a
+            >
+          </li>
+          <li>
+            <a
+              href={getLocalizedPath("/layanan/laboratorium", locale)}
+              class="text-gray-400 hover:text-white transition-colors text-sm"
+              >{t("services.laboratory", locale)}</a
+            >
+          </li>
+          <li>
+            <a
+              href={getLocalizedPath("/layanan/perpustakaan", locale)}
+              class="text-gray-400 hover:text-white transition-colors text-sm"
+              >{t("services.library", locale)}</a
+            >
+          </li>
+          <li>
+            <a
+              href={getLocalizedPath("/layanan/kesiswaan", locale)}
+              class="text-gray-400 hover:text-white transition-colors text-sm"
+              >{t("services.student_affairs", locale)}</a
+            >
+          </li>
         </ul>
       </div>
-      
+
       <!-- Contact Info -->
       <div>
-        <h3 class="font-bold text-lg mb-4">{t('footer.contact_info', locale)}</h3>
+        <h3 class="font-bold text-lg mb-4">
+          {t("footer.contact_info", locale)}
+        </h3>
         <ul class="space-y-3">
           <li class="flex items-start gap-3">
-            <Icon name="tabler:map-pin" class="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+            <Icon
+              name="tabler:map-pin"
+              class="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5"
+            />
             <span class="text-gray-400 text-sm">{site.site.address}</span>
           </li>
           <li class="flex items-center gap-3">
-            <Icon name="tabler:phone" class="w-5 h-5 text-primary-400 flex-shrink-0" />
-            <a href={`tel:${site.site.phone}`} class="text-gray-400 hover:text-white transition-colors text-sm">{site.site.phone}</a>
+            <Icon
+              name="tabler:phone"
+              class="w-5 h-5 text-primary-400 flex-shrink-0"
+            />
+            <a
+              href={`tel:${site.site.phone}`}
+              class="text-gray-400 hover:text-white transition-colors text-sm"
+              >{site.site.phone}</a
+            >
           </li>
           <li class="flex items-center gap-3">
-            <Icon name="tabler:mail" class="w-5 h-5 text-primary-400 flex-shrink-0" />
-            <a href={`mailto:${site.site.email}`} class="text-gray-400 hover:text-white transition-colors text-sm">{site.site.email}</a>
+            <Icon
+              name="tabler:mail"
+              class="w-5 h-5 text-primary-400 flex-shrink-0"
+            />
+            <a
+              href={`mailto:${site.site.email}`}
+              class="text-gray-400 hover:text-white transition-colors text-sm"
+              >{site.site.email}</a
+            >
           </li>
         </ul>
       </div>
     </div>
   </div>
-  
+
   <!-- Bottom Bar -->
   <div class="border-t border-gray-800">
-    <div class="container-custom py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+    <div
+      class="container-custom py-4 flex flex-col sm:flex-row justify-between items-center gap-4"
+    >
       <p class="text-gray-500 text-sm">
-        © {currentYear} {site.site.name}. {t('footer.all_rights', locale)}
+        © {currentYear}
+        {site.site.name}. {t("footer.all_rights", locale)}
       </p>
       <p class="text-gray-500 text-sm">
-        Built with <a href="https://github.com/ahliweb/awcms" target="_blank" rel="noopener" class="text-primary-400 hover:text-primary-300">AWCMS Framework</a>
+        Built with <a
+          href="https://github.com/ahliweb/awcms"
+          target="_blank"
+          rel="noopener"
+          class="text-primary-400 hover:text-primary-300">AWCMS Framework</a
+        >
       </p>
     </div>
   </div>

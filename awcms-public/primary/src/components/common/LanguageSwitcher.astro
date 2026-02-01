@@ -15,7 +15,7 @@ interface Props {
 const { iconClass = "w-5 h-5" } = Astro.props;
 
 // Get current locale from i18n utility (checks URL path, then cookie)
-const currentLang = getLocale(Astro.request);
+const currentLang = Astro.locals.locale || getLocale();
 const isEnglish = currentLang === "en";
 ---
 

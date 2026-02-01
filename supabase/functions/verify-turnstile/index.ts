@@ -36,6 +36,9 @@ serve(async (req: Request) => {
         formData.append("secret", secretKey);
         formData.append("response", token);
 
+        const ip = req.headers.get("cf-connecting-ip");
+        if (ip) formData.append("remoteip", ip);
+
         const verifyResponse = await fetch(
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",
             {
@@ -49,11 +52,12 @@ serve(async (req: Request) => {
         console.log("[Turnstile] Verification result:", {
             success: verifyResult.success,
             errorCodes: verifyResult["error-codes"],
+            ip: ip
         });
 
         if (verifyResult.success) {
             return new Response(
-                JSON.stringify({ success: true }),
+                JSON.stringify({ success: true, ip: ip }),
                 { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         } else {

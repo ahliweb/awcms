@@ -1,15 +1,31 @@
 ---
-import type { Form as Props } from '~/types';
-import Button from '~/components/ui/Button.astro';
+import type { Form as Props } from "~/types";
+import Button from "~/components/ui/Button.astro";
+import Toast from "~/components/ui/Toast.astro";
 
-const { inputs, textarea, disclaimer, button = 'Contact us', description = '' } = Astro.props;
+const {
+  inputs,
+  textarea,
+  disclaimer,
+  button = "Contact us",
+  description = "",
+  tenantId,
+} = Astro.props;
 ---
 
-<form>
+<Toast />
+
+<form data-tenant-id={tenantId}>
   {
     inputs &&
       inputs.map(
-        ({ type = 'text', name, label = '', autocomplete = 'on', placeholder = '' }) =>
+        ({
+          type = "text",
+          name,
+          label = "",
+          autocomplete = "on",
+          placeholder = "",
+        }) =>
           name && (
             <div class="mb-6">
               {label && (
@@ -26,7 +42,7 @@ const { inputs, textarea, disclaimer, button = 'Contact us', description = '' } 
                 class="py-3 px-4 block w-full text-md rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900"
               />
             </div>
-          )
+          ),
       )
   }
 
@@ -38,11 +54,13 @@ const { inputs, textarea, disclaimer, button = 'Contact us', description = '' } 
         </label>
         <textarea
           id="textarea"
-          name={textarea.name ? textarea.name : 'message'}
+          name={textarea.name ? textarea.name : "message"}
           rows={textarea.rows ? textarea.rows : 4}
           placeholder={textarea.placeholder}
           class="py-3 px-4 block w-full text-md rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900"
         />
+        <!-- Turnstile Widget (Explicit Render Container) -->
+        <div id="cf-turnstile-container" class="mt-4 min-h-[65px]"></div>
       </div>
     )
   }
@@ -59,7 +77,10 @@ const { inputs, textarea, disclaimer, button = 'Contact us', description = '' } 
           />
         </div>
         <div class="ml-3">
-          <label for="disclaimer" class="cursor-pointer select-none text-sm text-gray-600 dark:text-gray-400">
+          <label
+            for="disclaimer"
+            class="cursor-pointer select-none text-sm text-gray-600 dark:text-gray-400"
+          >
             {disclaimer.label}
           </label>
         </div>
@@ -85,3 +106,154 @@ const { inputs, textarea, disclaimer, button = 'Contact us', description = '' } 
     )
   }
 </form>
+
+<script>
+  import { createClient } from "@supabase/supabase-js";
+
+  declare global {
+    interface Window {
+      showToast: (message: string, type: "success" | "error") => void;
+      turnstile: {
+        render: (
+          element: string | HTMLElement,
+          options: {
+            sitekey: string;
+            theme?: string;
+            callback?: (token: string) => void;
+          },
+        ) => string;
+        reset: (widgetId?: string) => void;
+      };
+      onloadTurnstileCallback: () => void;
+    }
+  }
+
+  const supabaseUrl =
+    import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey =
+    import.meta.env.PUBLIC_SUPABASE_ANON_KEY ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
+
+  if (supabaseUrl && supabaseAnonKey) {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const form = document.querySelector("form[data-tenant-id]");
+
+    if (form) {
+      const submitBtn = form.querySelector(
+        'button[type="submit"]',
+      ) as HTMLButtonElement;
+      const originalBtnContent = submitBtn?.innerHTML;
+      let turnstileWidgetId: string | null = null;
+
+      // --- Turnstile Setup ---
+      window.onloadTurnstileCallback = function () {
+        console.log("[Turnstile] Callback invoked. Rendering widget...");
+        if (!siteKey) {
+          console.error("[Turnstile] Site Key missing!");
+          if (window.showToast) window.showToast("System Config Error: Turnstile Key Missing", "error");
+          return;
+        }
+
+        const container = document.getElementById("cf-turnstile-container");
+        if (!container) return; // Might be on a page without the form
+
+        if (window.turnstile) {
+            try {
+                turnstileWidgetId = window.turnstile.render("#cf-turnstile-container", {
+                    sitekey: siteKey,
+                    theme: "light",
+                });
+                console.log("[Turnstile] Widget rendered, ID:", turnstileWidgetId);
+            } catch (e) {
+                console.error("[Turnstile] Render error:", e);
+            }
+        }
+      };
+
+      // Explicit Loader
+      if (!document.querySelector('script[src*="turnstile/v0/api.js"]')) {
+        const script = document.createElement("script");
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback&render=explicit";
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      } else {
+        if (window.turnstile) window.onloadTurnstileCallback();
+      }
+      // -----------------------
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const tenantId = (form as HTMLElement).dataset.tenantId;
+        if (!tenantId) return;
+
+        const formData = new FormData(form as HTMLFormElement);
+
+        // Extract values
+        const name = formData.get("name") as string;
+        const email = formData.get("email") as string;
+        const message = formData.get("message") as string;
+        // Optional fields
+        const subject = (formData.get("subject") as string) || "New Message";
+
+        const token = formData.get("cf-turnstile-response") as string;
+        if (!token) {
+          window.showToast?.("Please complete the security check.", "error");
+          return;
+        }
+
+        if (!name || !email || !message) {
+          window.showToast?.("Please fill in all required fields.", "error");
+          return;
+        }
+
+        try {
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = "Sending...";
+          }
+
+          // 1. Verify Turnstile
+          const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-turnstile', {
+            body: { token }
+          });
+
+          if (verifyError || !verifyData?.success) {
+            throw new Error("Security check failed. Please try again.");
+          }
+
+          const ip_address = verifyData.ip;
+
+          const { error } = await supabase.from("contact_messages").insert({
+            tenant_id: tenantId,
+            name,
+            email,
+            subject,
+            message,
+            ip_address,
+            status: "new",
+          });
+
+          if (error) throw error;
+
+          window.showToast?.("Message sent successfully!", "success");
+          (form as HTMLFormElement).reset();
+
+          if (window.turnstile && turnstileWidgetId) window.turnstile.reset(turnstileWidgetId);
+
+        } catch (err) {
+          console.error("Error sending message:", err);
+          const errorMessage = err instanceof Error ? err.message : "Unknown error";
+          window.showToast?.("Failed to send message: " + errorMessage, "error");
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnContent || "Submit";
+          }
+        }
+      });
+    }
+  }
+</script>

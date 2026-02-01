@@ -31,3 +31,8 @@ Public portals require:
 1. Navigate to `awcms-public/primary`.
 2. `npm run dev` to start the local server.
 3. Content changes in the Admin Panel are reflected on refresh (if SSR) or rebuild (if SSG).
+
+## 6. DB-Driven Admin Control
+
+- Use `docs/dev/admin-public-db-driven-checklist.md` to track which content groups are wired to Supabase.
+- Menus, pages, and settings should be sourced from tenant-scoped tables (`menus`, `pages`, `settings`).

@@ -36,13 +36,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
       locale = localeMatch[1];
       localeFromUrl = true;
       logicalPath = logicalPath.replace(/^\/(id|en)/, "") || "/";
-    } else {
-      // No locale in URL - check cookie for persisted preference
-      const cookies = request.headers.get("cookie") || "";
-      const cookieMatch = cookies.match(/lang=(en|id)/);
-      if (cookieMatch) {
-        locale = cookieMatch[1];
-      }
     }
 
     // 1. Extract tenant from path
@@ -99,13 +92,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     // 5. Fallback to host-based resolution
     if (!tenantId) {
-      let host =
-        request.headers.get("x-forwarded-host") ||
-        request.headers.get("host") ||
-        "";
-      if (host.includes(":")) {
-        host = host.split(":")[0];
-      }
+      let host = url.hostname || "";
 
       // Dev override
       if (import.meta.env.DEV && import.meta.env.VITE_DEV_TENANT_HOST) {
@@ -154,11 +141,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       }
 
       // Fallback to 'primary' for known channel domains
-      let host =
-        request.headers.get("x-forwarded-host") ||
-        request.headers.get("host") ||
-        "";
-      if (host.includes(":")) host = host.split(":")[0];
+      let host = url.hostname || "";
 
       if (
         host === "ahliweb.com" ||
@@ -190,31 +173,49 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // 7. Set context for downstream components
     locals.tenant_id = tenantId!;
     locals.tenant_slug = tenantSlug!;
-    locals.host = request.headers.get("host") || "";
+    locals.host = url.host || "";
     // Track how tenant was resolved - 'path' only if actually resolved from path lookup
     locals.tenant_source = resolvedFromPath ? "path" : "host";
 
     locals.ref_code = refCode;
     locals.locale = locale || "en"; // Default to English
 
-    // 8. Fetch SEO Settings (if tenant resolved)
+    // 8. Fetch Tenant Settings (SEO + Site Info)
     if (tenantId) {
-      const { data: seoData } = await SafeSupabase.from("settings")
-        .select("value")
+      const { data: settingsData } = await SafeSupabase.from("settings")
+        .select("key, value")
         .eq("tenant_id", tenantId)
-        .eq("key", "seo_global")
-        .maybeSingle();
+        .in("key", ["seo_global", "site_info", "contact_info"]);
 
-      if (seoData?.value) {
-        try {
-          locals.seo =
-            typeof seoData.value === "string"
-              ? JSON.parse(seoData.value)
-              : seoData.value;
-        } catch (e) {
-          console.warn("[Middleware] Failed to parse SEO JSON:", e);
+      const settingsMap = (settingsData || []).reduce(
+        (acc: Record<string, unknown>, row) => {
+          acc[row.key] = row.value;
+          return acc;
+        },
+        {},
+      );
+
+      const parseSetting = (value: unknown) => {
+        if (!value) return null;
+        if (typeof value === "string") {
+          try {
+            return JSON.parse(value);
+          } catch (e) {
+            console.warn("[Middleware] Failed to parse settings JSON:", e);
+            return null;
+          }
         }
-      }
+        return value;
+      };
+
+      const seoValue = parseSetting(settingsMap.seo_global);
+      if (seoValue) locals.seo = seoValue as Record<string, unknown>;
+
+      const siteInfo = parseSetting(settingsMap.site_info);
+      if (siteInfo) locals.site_info = siteInfo as Record<string, unknown>;
+
+      const contactInfo = parseSetting(settingsMap.contact_info);
+      if (contactInfo) locals.contact_info = contactInfo as Record<string, unknown>;
     }
 
     // 9. Fetch Full Tenant Data

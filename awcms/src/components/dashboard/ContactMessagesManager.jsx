@@ -9,6 +9,7 @@ function ContactMessagesManager() {
         { key: 'name', label: 'Sender' },
         { key: 'subject', label: 'Subject' },
         { key: 'created_at', label: 'Date', type: 'date' },
+        { key: 'ip_address', label: 'IP Address' },
         {
             key: 'status',
             label: 'Status',
@@ -24,6 +25,10 @@ function ContactMessagesManager() {
     ];
 
     const formFields = [
+        { key: 'name', label: 'Name', type: 'text', required: true },
+        { key: 'email', label: 'Email', type: 'email', required: true },
+        { key: 'subject', label: 'Subject', type: 'text', required: true },
+        { key: 'message', label: 'Message', type: 'textarea', required: true, rows: 4 },
         { key: 'status', label: 'Status', type: 'select', options: [{ value: 'new', label: 'New' }, { value: 'read', label: 'Read' }, { value: 'replied', label: 'Replied' }] }
     ];
 

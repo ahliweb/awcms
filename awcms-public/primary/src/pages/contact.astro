@@ -6,6 +6,7 @@ import Features2 from "~/components/widgets/Features2.astro";
 import { getLocale, t } from "~/utils/i18n";
 
 const locale = getLocale(Astro.request);
+const tenant_id = Astro.locals.tenant_id;
 
 const metadata = {
   title: t("contact_page.hero.tagline", locale),
@@ -22,6 +23,7 @@ const metadata = {
 
   <ContactUs
     id="form"
+    tenantId={tenant_id}
     title={t("contact_page.form.title", locale)}
     subtitle={t("contact_page.form.subtitle", locale)}
     inputs={[

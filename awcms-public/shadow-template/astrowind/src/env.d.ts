@@ -3,3 +3,9 @@
 /// <reference types="astro/client" />
 /// <reference types="vite/client" />
 /// <reference types="../vendor/integration/types.d.ts" />
+
+declare namespace App {
+  interface Locals {
+    tenant_id?: string;
+  }
+}

@@ -27,25 +27,20 @@
   },
   "socialMedia": [
     {
-      "platform": "Facebook",
-      "url": "https://facebook.com/sman2pangkalanbun",
-      "icon": "tabler:brand-facebook"
+      "platform": "Instagram (Sekolah)",
+      "url": "https://www.instagram.com/sman2_pangkalanbun",
+      "icon": "tabler:brand-instagram"
     },
     {
-      "platform": "Instagram",
-      "url": "https://instagram.com/sman2pangkalanbun",
+      "platform": "Instagram (OSIS)",
+      "url": "https://www.instagram.com/osis_smandapbun",
       "icon": "tabler:brand-instagram"
     },
     {
       "platform": "YouTube",
-      "url": "https://youtube.com/@sman2pangkalanbun",
+      "url": "https://www.youtube.com/@smandapbun",
       "icon": "tabler:brand-youtube"
-    },
-    {
-      "platform": "Twitter",
-      "url": "https://twitter.com/sman2pbun",
-      "icon": "tabler:brand-twitter"
     }
   ],
-  "mapEmbed": "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3989.123456789!2d111.123456!3d-2.123456!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sSMAN%202%20Pangkalan%20Bun!5e0!3m2!1sen!2sid!4v1234567890"
+  "mapEmbed": "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2542.182637282755!2d111.64716318974263!3d-2.6854176337880564!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x2e08ee30ceed8459%3A0x47c7f285f4b5f9c!2sSMA%20Negeri%202%20Pangkalan%20Bun!5e1!3m2!1sid!2sid!4v1769956242665!5m2!1sid!2sid"
 }

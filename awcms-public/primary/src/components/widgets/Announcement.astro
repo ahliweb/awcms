@@ -1,7 +1,7 @@
 ---
 import { getLocale, t } from "~/utils/i18n";
 
-const locale = getLocale(Astro.request);
+const locale = Astro.locals.locale || getLocale();
 ---
 
 <div

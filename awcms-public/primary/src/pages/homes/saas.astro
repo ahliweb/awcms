@@ -8,12 +8,27 @@ import Steps2 from "~/components/widgets/Steps2.astro";
 import Content from "~/components/widgets/Content.astro";
 import Pricing from "~/components/widgets/Pricing.astro";
 
-import { headerData } from "~/navigation";
+import { headerData as fallbackHeaderData } from "~/navigation";
+import { createClientFromEnv } from "~/lib/supabase";
+import { getHeaderMenu, mapMenuItemsToHeaderLinks } from "~/lib/menu";
 import FAQs from "~/components/widgets/FAQs.astro";
 import BlogLatestPosts from "~/components/widgets/BlogLatestPosts.astro";
 import { getLocale, t } from "~/utils/i18n";
 
 const locale = getLocale(Astro.request);
+const tenantId = Astro.locals.tenant_id || null;
+const supabase = createClientFromEnv(
+  Astro.locals.runtime?.env || import.meta.env,
+);
+
+let headerLinks = fallbackHeaderData.links;
+
+if (supabase && tenantId) {
+  const headerItems = await getHeaderMenu(supabase, tenantId);
+  if (headerItems.length > 0) {
+    headerLinks = mapMenuItemsToHeaderLinks(headerItems);
+  }
+}
 
 const metadata = {
   title: t("homes.saas.metadata.title", locale),
@@ -23,7 +38,7 @@ const metadata = {
 <Layout metadata={metadata}>
   <Fragment slot="header">
     <Header
-      {...headerData}
+      links={headerLinks}
       actions={[
         {
           variant: "secondary",

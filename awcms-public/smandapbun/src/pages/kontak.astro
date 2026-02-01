@@ -2,15 +2,21 @@
 import Layout from "../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
 import { getLocale, t, getLocalizedValue, type Locale } from "../utils/i18n";
-import { getContactPageData } from "../lib/api";
+import { getContactPageData, getTenantId } from "../lib/api";
+import Toast from "../components/ui/Toast.astro";
 
 const locale = getLocale(Astro.url) as Locale;
 
 const contactData = await getContactPageData();
+const tenantId = await getTenantId();
 const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
+
+const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
+console.log("Turnstile Site Key:", siteKey);
 ---
 
 <Layout title={t("contact.title", locale)}>
+  <Toast />
   <!-- Hero -->
   <section
     class="hero-gradient text-white py-16 md:py-24"
@@ -167,7 +173,7 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
           <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
             {t("contact.send_message", locale)}
           </h2>
-          <form class="space-y-5">
+          <form class="space-y-5" data-tenant-id={tenantId}>
             <div>
               <label
                 for="name"
@@ -227,6 +233,10 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
                 required
                 data-testid="contact-input-message"></textarea>
             </div>
+
+            <!-- Turnstile Widget -->
+            <div id="cf-turnstile-container" class="mt-4 min-h-[65px]"></div>
+
             <button
               type="submit"
               class="w-full btn-primary"
@@ -257,3 +267,202 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
     </div>
   </section>
 </Layout>
+
+<script>
+  import { supabase } from "../lib/supabase";
+  console.log("[Kontak] Script initializing...");
+
+  declare global {
+    interface Window {
+      showToast: (message: string, type: "success" | "error") => void;
+      turnstile: {
+        render: (
+          element: string | HTMLElement,
+          options: {
+            sitekey: string;
+            theme?: string;
+            callback?: (token: string) => void;
+          },
+        ) => string;
+        reset: (widgetId?: string) => void;
+      };
+      onloadTurnstileCallback: () => void;
+    }
+  }
+
+  const form = document.querySelector("form");
+  const submitBtn = form?.querySelector(
+    'button[type="submit"]',
+  ) as HTMLButtonElement;
+  const originalBtnContent = submitBtn?.innerHTML;
+
+  // Turnstile Setup
+  const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
+  let turnstileWidgetId: string | null = null;
+
+  // Global callback for Turnstile
+  window.onloadTurnstileCallback = function () {
+    console.log("[Turnstile] Callback invoked. Checking prerequisites...");
+
+    if (!siteKey) {
+      console.error("[Turnstile] Site Key missing!");
+      if (window.showToast)
+        window.showToast("System Config Error: Turnstile Key Missing", "error");
+      return;
+    }
+
+    const container = document.getElementById("cf-turnstile-container");
+    if (!container) {
+      console.error("[Turnstile] Container #cf-turnstile-container missing!");
+      return;
+    }
+
+    // Check if already rendered to avoid duplicates or errors
+    if (container.hasChildNodes()) {
+      console.log(
+        "[Turnstile] Container already has children. Skipping render.",
+      );
+      return;
+    }
+
+    if (window.turnstile) {
+      try {
+        console.log("[Turnstile] Rendering widget with sitekey:", siteKey);
+        turnstileWidgetId = window.turnstile.render("#cf-turnstile-container", {
+          sitekey: siteKey,
+          theme: "light",
+        });
+        console.log(
+          "[Turnstile] Widget rendered successfully, ID:",
+          turnstileWidgetId,
+        );
+      } catch (e) {
+        console.error("[Turnstile] Render error:", e);
+      }
+    } else {
+      console.error(
+        "[Turnstile] window.turnstile is undefined inside callback!",
+      );
+    }
+  };
+
+  // Turnstile Loader Logic
+  const scriptId = "turnstile-api-script";
+  let script = document.getElementById(scriptId) as HTMLScriptElement;
+
+  if (!script) {
+    console.log("[Turnstile] Script not found. Injecting...");
+    script = document.createElement("script");
+    script.id = scriptId;
+    script.src =
+      "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback&render=explicit";
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  } else {
+    console.log("[Turnstile] Script already exists.");
+    // If script exists, turnstile might be ready or loading.
+    if (window.turnstile) {
+      console.log(
+        "[Turnstile] window.turnstile exists. Manually triggering callback.",
+      );
+      window.onloadTurnstileCallback();
+    } else {
+      console.log(
+        "[Turnstile] window.turnstile missing. Adding listener or waiting.",
+      );
+      // If script exists but turnstile obj doesn't, it might be loading.
+      // We can listen for the load event if it hasn't fired, or poll.
+      // Since we can't easily check if 'load' already fired on an existing script tag without a flag,
+      // we'll try a short poll fallback.
+      const checkInterval = setInterval(() => {
+        if (window.turnstile) {
+          console.log(
+            "[Turnstile] window.turnstile appeared. Triggering callback.",
+          );
+          clearInterval(checkInterval);
+          window.onloadTurnstileCallback();
+        }
+      }, 100);
+      // Stop checking after 5 seconds
+      setTimeout(() => clearInterval(checkInterval), 5000);
+    }
+  }
+
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!form || !submitBtn) return;
+
+    const formData = new FormData(form);
+    const tenantId = form.dataset.tenantId;
+    const token = formData.get("cf-turnstile-response") as string;
+
+    if (!tenantId) {
+      window.showToast?.("System Error: Tenant ID missing.", "error");
+      return;
+    }
+
+    if (!token) {
+      window.showToast?.(
+        "Mohon selesaikan verifikasi keamanan (CAPTCHA).",
+        "error",
+      );
+      return;
+    }
+
+    // values
+    const name = formData.get("name") as string;
+    const email = formData.get("email") as string;
+    const subject = formData.get("subject") as string;
+    const message = formData.get("message") as string;
+
+    try {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Sending...`;
+
+      // 1. Verify Turnstile
+      const { data: verifyData, error: verifyError } =
+        await supabase.functions.invoke("verify-turnstile", {
+          body: { token },
+        });
+
+      if (verifyError || !verifyData?.success) {
+        throw new Error("Verifikasi keamanan gagal. Silakan coba lagi.");
+      }
+
+      const ip_address = verifyData.ip;
+
+      // 2. Insert Message
+      const { error } = await supabase.from("contact_messages").insert({
+        tenant_id: tenantId,
+        name,
+        email,
+        subject,
+        message,
+        ip_address,
+        status: "new",
+      });
+
+      if (error) throw error;
+
+      window.showToast?.(
+        "Pesan berhasil dikirim! Kami akan segera menghubungi Anda.",
+        "success",
+      );
+      form.reset();
+
+      // Reset turnstile
+      if (window.turnstile && turnstileWidgetId)
+        window.turnstile.reset(turnstileWidgetId);
+    } catch (err: any) {
+      console.error("Error sending message:", err);
+      window.showToast?.(
+        "Gagal mengirim pesan: " + (err.message || "Terjadi kesalahan sistem."),
+        "error",
+      );
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnContent || "Submit";
+    }
+  });
+</script>

@@ -24,7 +24,7 @@ const currentPage = page.currentPage ?? 1;
 // const allCategories = await findCategories();
 // const allTags = await findTags();
 
-const locale = getLocale(Astro.request);
+const locale = getLocale();
 
 const metadata = {
   title: `${t("blog_page.list.metadata_title", locale)}${currentPage > 1 ? `${t("blog_page.shared.page_prefix", locale)}${currentPage}` : ""}`,

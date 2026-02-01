@@ -4,7 +4,9 @@ import Header from '~/components/widgets/Header.astro';
 import Footer from '~/components/widgets/Footer.astro';
 import Announcement from '~/components/widgets/Announcement.astro';
 
-import { headerData, footerData } from '~/navigation';
+import { headerData as fallbackHeaderData, footerData as fallbackFooterData } from '~/navigation';
+import { createClientFromEnv } from '~/lib/supabase';
+import { getFooterMenu, getHeaderMenu, mapMenuItemsToFooterLinks, mapMenuItemsToHeaderLinks } from '~/lib/menu';
 
 import type { MetaData } from '~/types';
 
@@ -13,6 +15,26 @@ export interface Props {
 }
 
 const { metadata } = Astro.props;
+const tenantId = Astro.locals.tenant_id || null;
+const supabase = createClientFromEnv(
+  Astro.locals.runtime?.env || import.meta.env,
+);
+
+let headerLinks = fallbackHeaderData.links;
+let footerLinks = fallbackFooterData.links;
+
+if (supabase && tenantId) {
+  const headerItems = await getHeaderMenu(supabase, tenantId);
+  const footerItems = await getFooterMenu(supabase, tenantId);
+
+  if (headerItems.length > 0) {
+    headerLinks = mapMenuItemsToHeaderLinks(headerItems);
+  }
+
+  if (footerItems.length > 0) {
+    footerLinks = mapMenuItemsToFooterLinks(footerItems);
+  }
+}
 ---
 
 <Layout metadata={metadata}>
@@ -20,12 +42,23 @@ const { metadata } = Astro.props;
     <Announcement />
   </slot>
   <slot name="header">
-    <Header {...headerData} isSticky showRssFeed showToggleTheme />
+    <Header
+      links={headerLinks}
+      actions={fallbackHeaderData.actions}
+      isSticky
+      showRssFeed
+      showToggleTheme
+    />
   </slot>
   <main>
     <slot />
   </main>
   <slot name="footer">
-    <Footer {...footerData} />
+    <Footer
+      links={footerLinks}
+      secondaryLinks={fallbackFooterData.secondaryLinks}
+      socialLinks={fallbackFooterData.socialLinks}
+      footNote={fallbackFooterData.footNote}
+    />
   </slot>
 </Layout>

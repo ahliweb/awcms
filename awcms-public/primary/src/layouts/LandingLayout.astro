@@ -2,7 +2,9 @@
 import PageLayout from '~/layouts/PageLayout.astro';
 import Header from '~/components/widgets/Header.astro';
 
-import { headerData } from '~/navigation';
+import { headerData as fallbackHeaderData } from '~/navigation';
+import { createClientFromEnv } from '~/lib/supabase';
+import { getHeaderMenu, mapMenuItemsToHeaderLinks } from '~/lib/menu';
 import type { MetaData } from '~/types';
 
 export interface Props {
@@ -10,6 +12,19 @@ export interface Props {
 }
 
 const { metadata } = Astro.props;
+const tenantId = Astro.locals.tenant_id || null;
+const supabase = createClientFromEnv(
+  Astro.locals.runtime?.env || import.meta.env,
+);
+
+let headerLinks = fallbackHeaderData.links;
+
+if (supabase && tenantId) {
+  const headerItems = await getHeaderMenu(supabase, tenantId);
+  if (headerItems.length > 0) {
+    headerLinks = mapMenuItemsToHeaderLinks(headerItems);
+  }
+}
 ---
 
 <PageLayout metadata={metadata}>
@@ -19,7 +34,7 @@ const { metadata } = Astro.props;
   <Fragment slot="header">
     <slot name="header">
       <Header
-        links={headerData?.links[2] ? [headerData.links[2]] : undefined}
+        links={headerLinks?.[2] ? [headerLinks[2]] : headerLinks}
         actions={[
           {
             text: 'Download',

@@ -7,7 +7,7 @@ import {
   defaultLocale,
 } from "../utils/i18n";
 import navigation from "../data/navigation.json";
-import site from "../data/site.json";
+import { getMenuTree, getSiteData } from "../lib/api";
 import ThemeToggle from "./ThemeToggle.astro";
 
 export interface Props {
@@ -16,9 +16,20 @@ export interface Props {
 
 const { locale } = Astro.props;
 const currentPath = Astro.url.pathname;
+const site = await getSiteData();
+const dynamicMenu = await getMenuTree("header");
+const menuItems = dynamicMenu.length > 0 ? dynamicMenu : navigation.mainMenu;
 
 function getLabel(item: any): string {
-  return item.label[locale] || item.label[defaultLocale];
+  if (!item?.label) return "";
+  if (typeof item.label === "string") return item.label;
+  return item.label[locale] || item.label[defaultLocale] || item.label.id || "";
+}
+
+function resolveHref(href: string): string {
+  if (!href || href.startsWith("http") || href.startsWith("#"))
+    return href || "#";
+  return getLocalizedPath(href, locale);
 }
 ---
 
@@ -49,30 +60,45 @@ function getLabel(item: any): string {
       <div class="flex items-center gap-3">
         <!-- Social Media -->
         <div class="hidden md:flex items-center gap-2">
-          <a
-            href={site.site.socialMedia.facebook}
-            target="_blank"
-            rel="noopener"
-            class="hover:text-secondary-300 transition-colors"
-          >
-            <Icon name="tabler:brand-facebook" class="w-4 h-4" />
-          </a>
-          <a
-            href={site.site.socialMedia.instagram}
-            target="_blank"
-            rel="noopener"
-            class="hover:text-secondary-300 transition-colors"
-          >
-            <Icon name="tabler:brand-instagram" class="w-4 h-4" />
-          </a>
-          <a
-            href={site.site.socialMedia.youtube}
-            target="_blank"
-            rel="noopener"
-            class="hover:text-secondary-300 transition-colors"
-          >
-            <Icon name="tabler:brand-youtube" class="w-4 h-4" />
-          </a>
+          {
+            site.site.socialMedia?.instagram && (
+              <a
+                href={site.site.socialMedia.instagram}
+                target="_blank"
+                rel="noopener"
+                aria-label="Instagram Sekolah"
+                class="hover:text-secondary-300 transition-colors"
+              >
+                <Icon name="tabler:brand-instagram" class="w-4 h-4" />
+              </a>
+            )
+          }
+          {
+            site.site.socialMedia?.instagramOsis && (
+              <a
+                href={site.site.socialMedia.instagramOsis}
+                target="_blank"
+                rel="noopener"
+                aria-label="Instagram OSIS"
+                class="hover:text-secondary-300 transition-colors"
+              >
+                <Icon name="tabler:brand-instagram" class="w-4 h-4" />
+              </a>
+            )
+          }
+          {
+            site.site.socialMedia?.youtube && (
+              <a
+                href={site.site.socialMedia.youtube}
+                target="_blank"
+                rel="noopener"
+                aria-label="YouTube Sekolah"
+                class="hover:text-secondary-300 transition-colors"
+              >
+                <Icon name="tabler:brand-youtube" class="w-4 h-4" />
+              </a>
+            )
+          }
         </div>
         <!-- Language Switcher -->
         <div
@@ -110,9 +136,7 @@ function getLabel(item: any): string {
       <a href={getLocalizedPath("/", locale)} class="flex items-center gap-3">
         {
           site.site.logo ? (
-            <div
-              class="w-12 h-12 rounded-full bg-white/90 dark:bg-slate-800 ring-1 ring-primary-200/70 dark:ring-primary-900/60 shadow-sm flex items-center justify-center overflow-hidden p-1"
-            >
+            <div class="w-12 h-12 rounded-full bg-white/90 dark:bg-slate-800 ring-1 ring-primary-200/70 dark:ring-primary-900/60 shadow-sm flex items-center justify-center overflow-hidden p-1">
               <img
                 src={site.site.logo}
                 alt={`Logo ${site.site.name}`}
@@ -123,9 +147,7 @@ function getLabel(item: any): string {
               />
             </div>
           ) : (
-            <div
-              class="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold text-lg"
-            >
+            <div class="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
               S2
             </div>
           )
@@ -145,10 +167,10 @@ function getLabel(item: any): string {
       <!-- Desktop Navigation -->
       <nav class="hidden lg:flex items-center gap-1" id="desktop-nav">
         {
-          navigation.mainMenu.map((item) => (
+          menuItems.map((item) => (
             <div class="relative group">
               <a
-                href={getLocalizedPath(item.href, locale)}
+                href={resolveHref(item.href)}
                 class={`nav-link px-3 py-2 rounded-lg flex items-center gap-1 ${
                   currentPath === item.href ||
                   currentPath.startsWith(item.href + "/")
@@ -169,7 +191,7 @@ function getLabel(item: any): string {
                     {item.children.map((child: any) => (
                       <div>
                         <a
-                          href={getLocalizedPath(child.href, locale)}
+                          href={resolveHref(child.href)}
                           class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-300 transition-colors"
                           data-testid={`nav-${child.id}`}
                         >
@@ -179,7 +201,7 @@ function getLabel(item: any): string {
                           <div class="pl-4">
                             {child.children.map((subChild: any) => (
                               <a
-                                href={getLocalizedPath(subChild.href, locale)}
+                                href={resolveHref(subChild.href)}
                                 class="block px-4 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-300 transition-colors"
                                 data-testid={`nav-${subChild.id}`}
                               >
@@ -226,10 +248,10 @@ function getLabel(item: any): string {
   >
     <nav class="container-custom py-4 space-y-2">
       {
-        navigation.mainMenu.map((item) => (
+        menuItems.map((item) => (
           <div class="space-y-1">
             <a
-              href={getLocalizedPath(item.href, locale)}
+              href={resolveHref(item.href)}
               class={`block px-4 py-2 rounded-lg font-medium ${
                 currentPath === item.href ||
                 currentPath.startsWith(item.href + "/")
@@ -243,7 +265,7 @@ function getLabel(item: any): string {
               <div class="pl-4 space-y-1">
                 {item.children.map((child: any) => (
                   <a
-                    href={getLocalizedPath(child.href, locale)}
+                    href={resolveHref(child.href)}
                     class="block px-4 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-300"
                   >
                     {getLabel(child)}

@@ -47,7 +47,7 @@ const {
 } = Astro.props;
 
 const currentPath = `/${trimSlash(new URL(Astro.url).pathname)}`;
-const locale = getLocale(Astro.request);
+const locale = Astro.locals.locale || getLocale();
 ---
 
 <header

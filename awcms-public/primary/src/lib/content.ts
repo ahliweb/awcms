@@ -112,6 +112,34 @@ export async function getAllPages(
 }
 
 /**
+ * Fetch a single page by its page_type
+ */
+export async function getPageByType(
+  supabase: SupabaseClient,
+  pageType: string,
+  tenantId?: string | null,
+): Promise<PageData | null> {
+  let query = supabase
+    .from("pages")
+    .select("*")
+    .eq("page_type", pageType)
+    .eq("status", "published");
+
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  const { data, error } = await query.order("published_at", { ascending: false }).limit(1).maybeSingle();
+
+  if (error) {
+    console.error("[Content] Error fetching page by type:", error.message);
+    return null;
+  }
+
+  return (data || null) as PageData | null;
+}
+
+/**
  * Fetch a single blog by its slug
  */
 export async function getBlogBySlug(

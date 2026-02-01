@@ -249,10 +249,20 @@ export interface ProfileData {
 export interface SiteData {
     site: {
         name: string;
+        shortName?: string;
         tagline: string;
         description: string;
         logo?: string;
         favicon?: string;
+        address?: string;
+        phone?: string;
+        email?: string;
+        website?: string;
+        socialMedia?: {
+            instagram?: string;
+            instagramOsis?: string;
+            youtube?: string;
+        };
     };
     contact: {
         address?: string;
@@ -287,6 +297,69 @@ export async function getTenantId() {
     return tenant ? tenant.id : null;
 }
 
+export interface NavigationItem {
+    id: string;
+    label: string;
+    href: string;
+    children?: NavigationItem[];
+    order?: number;
+    is_active?: boolean;
+}
+
+const buildMenuTree = (rows: any[]): NavigationItem[] => {
+    const nodes: Record<string, NavigationItem> = {};
+    const roots: NavigationItem[] = [];
+
+    rows.forEach((row) => {
+        nodes[row.id] = {
+            id: row.id,
+            label: row.label,
+            href: row.url || '#',
+            order: row.order || 0,
+            is_active: row.is_active !== false,
+            children: [],
+        };
+    });
+
+    rows.forEach((row) => {
+        const node = nodes[row.id];
+        if (row.parent_id && nodes[row.parent_id]) {
+            nodes[row.parent_id].children?.push(node);
+        } else {
+            roots.push(node);
+        }
+    });
+
+    const sortNodes = (items: NavigationItem[]) => {
+        items.sort((a, b) => (a.order || 0) - (b.order || 0));
+        items.forEach((item) => item.children && sortNodes(item.children));
+    };
+
+    sortNodes(roots);
+    return roots;
+};
+
+export async function getMenuTree(location: string): Promise<NavigationItem[]> {
+    const tenantId = await getTenantId();
+    if (!tenantId) return [];
+
+    const { data, error } = await supabase
+        .from('menus')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .or(`location.eq.${location},group_label.eq.${location}`)
+        .order('order', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching menus:', error);
+        return [];
+    }
+
+    return buildMenuTree(data || []);
+}
+
 export async function getSiteData(): Promise<SiteData> {
     const tenantId = await getTenantId();
 
@@ -296,12 +369,22 @@ export async function getSiteData(): Promise<SiteData> {
             name: 'SMAN 2 Pangkalan Bun',
             tagline: 'Beriman, Cerdas, Berprestasi (BERDASI)',
             description: 'Sekolah Menengah Atas Negeri 2 Pangkalan Bun',
+            logo: '/images/smanda-logo.webp',
             favicon: '/favicon.png',
+            address: 'Jl. Pasanah No. 15, RT 24, Sidorejo, Arut Selatan, Kotawaringin Barat, Kalimantan Tengah, 74111',
+            phone: '082254008080',
+            email: 'info@sman2pangkalanbun.sch.id',
+            website: 'https://sman2pangkalanbun.sch.id',
+            socialMedia: {
+                instagram: 'https://www.instagram.com/sman2_pangkalanbun',
+                instagramOsis: 'https://www.instagram.com/osis_smandapbun',
+                youtube: 'https://www.youtube.com/@smandapbun',
+            },
         },
         contact: {
             address: 'Jl. Pasanah No. 15, RT 24, Sidorejo, Arut Selatan, Kotawaringin Barat, Kalimantan Tengah, 74111',
-            phone: '(0532) 123456',
-            email: 'info@sman2pbun.sch.id',
+            phone: '082254008080',
+            email: 'info@sman2pangkalanbun.sch.id',
         },
         stats: {
             students: 1200,
@@ -326,13 +409,49 @@ export async function getSiteData(): Promise<SiteData> {
 
     if (settings) {
         const seo = settings.find(s => s.key === 'seo_global')?.value;
-        // const siteInfo = settings.find(s => s.key === 'site_info')?.value; // Potential future use
+        const siteInfo = settings.find(s => s.key === 'site_info')?.value;
+        const contactInfo = settings.find(s => s.key === 'contact_info')?.value;
 
-        if (seo) {
-            // Parse if it's a JSON string, or use directly if it's already an object (Supabase client handles JSONB)
-            const parsedSeo = typeof seo === 'string' ? JSON.parse(seo) : seo;
+        const parseSetting = (value: unknown) => {
+            if (!value) return null;
+            if (typeof value === 'string') {
+                try {
+                    return JSON.parse(value);
+                } catch (e) {
+                    console.error('Error parsing settings JSON:', e);
+                    return null;
+                }
+            }
+            return value;
+        };
+
+        const parsedSeo = parseSetting(seo) as Record<string, any> | null;
+        if (parsedSeo) {
             if (parsedSeo.meta_title) defaultData.site.name = parsedSeo.meta_title;
             if (parsedSeo.meta_description) defaultData.site.description = parsedSeo.meta_description;
+        }
+
+        const parsedSiteInfo = parseSetting(siteInfo) as Record<string, any> | null;
+        if (parsedSiteInfo) {
+            if (parsedSiteInfo.site) {
+                defaultData.site = { ...defaultData.site, ...parsedSiteInfo.site };
+            }
+            if (parsedSiteInfo.stats) {
+                defaultData.stats = { ...defaultData.stats, ...parsedSiteInfo.stats };
+            }
+            if (parsedSiteInfo.accreditation) defaultData.accreditation = parsedSiteInfo.accreditation;
+            if (parsedSiteInfo.established) defaultData.established = parsedSiteInfo.established;
+        }
+
+        const parsedContactInfo = parseSetting(contactInfo) as Record<string, any> | null;
+        if (parsedContactInfo) {
+            defaultData.contact = { ...defaultData.contact, ...parsedContactInfo };
+            defaultData.site = {
+                ...defaultData.site,
+                address: defaultData.site.address || parsedContactInfo.address,
+                phone: defaultData.site.phone || parsedContactInfo.phone,
+                email: defaultData.site.email || parsedContactInfo.email,
+            };
         }
     }
 

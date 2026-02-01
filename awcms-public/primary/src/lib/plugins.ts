@@ -47,6 +47,10 @@ export async function getActivePlugins(
   const { data, error } = await query;
 
   if (error) {
+    const message = error.message || "";
+    if (message.includes("schema cache") || message.includes("plugins")) {
+      return [];
+    }
     console.error("[Plugin] Error fetching plugins:", error.message);
     return [];
   }

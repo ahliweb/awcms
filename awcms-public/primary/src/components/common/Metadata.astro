@@ -25,7 +25,12 @@ const {
   twitter = {},
 } = Astro.props;
 
-const { seo } = Astro.locals;
+const { seo, site_info } = Astro.locals;
+const siteName =
+  (site_info?.name as string)
+  || (site_info?.site_name as string)
+  || (seo?.site_title as string)
+  || SITE?.name;
 
 // Map Admin SEO structure to AstroSeo structure
 const tenantSeo = seo
@@ -47,7 +52,7 @@ const seoProps: AstroSeoProps = merge(
     description: undefined,
     openGraph: {
       url: canonical,
-      site_name: SITE?.name,
+      site_name: siteName,
       images: [],
       locale: I18N?.language || "en",
       type: "website",

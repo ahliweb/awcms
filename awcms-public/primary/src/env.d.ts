@@ -13,6 +13,8 @@ declare namespace App {
     ref_code: string | null;
     locale: string;
     seo?: Record<string, unknown>;
+    site_info?: Record<string, unknown>;
+    contact_info?: Record<string, unknown>;
     tenant?: Record<string, unknown>;
     runtime: {
       env: Record<string, string>;

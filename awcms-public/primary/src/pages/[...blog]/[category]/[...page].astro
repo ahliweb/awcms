@@ -21,7 +21,7 @@ type Props = InferGetStaticPropsType<typeof getStaticPaths> & {
 const { page, category } = Astro.props as Props;
 
 const currentPage = page.currentPage ?? 1;
-const locale = getLocale(Astro.request);
+const locale = getLocale();
 
 const metadata = {
   title: `${t("blog_page.category.title_prefix", locale)} '${category.title}' ${currentPage > 1 ? `${t("blog_page.shared.page_prefix", locale)}${currentPage}` : ""}`,

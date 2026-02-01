@@ -44,37 +44,7 @@ export function getLocale(request?: Request): Locale {
     }
   }
 
-  // 2. Check cookie (for SSR only - headers might not be available in SSG)
-  if (request) {
-    try {
-      // Check if headers are available (avoid SSG errors)
-      if (request.headers && typeof request.headers.get === "function") {
-        const cookies = request.headers.get("cookie") || "";
-        const match = cookies.match(/lang=(\w+)/);
-        if (match && supportedLocales.includes(match[1] as Locale)) {
-          return match[1] as Locale;
-        }
-      }
-    } catch {
-      // Ignore header access errors
-    }
-  }
-
-  // 3. Check Accept-Language header
-  if (request) {
-    try {
-      if (request.headers && typeof request.headers.get === "function") {
-        const acceptLang = request.headers.get("accept-language") || "";
-        if (acceptLang.startsWith("id")) {
-          return "id";
-        }
-      }
-    } catch {
-      // Ignore header access errors
-    }
-  }
-
-  // 4. Default to English
+  // 2. Default to English
   return defaultLocale;
 }
 

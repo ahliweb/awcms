@@ -21,14 +21,31 @@ import Brands from "~/components/widgets/Brands.astro";
 import Grid from "~/components/blog/Grid.astro";
 import WidgetWrapper from "~/components/ui/WidgetWrapper.astro";
 import Headline from "~/components/ui/Headline.astro";
+import PuckRenderer from "~/components/common/PuckRenderer.astro";
 import type { Item, Post, Testimonial, Stat, Image } from "~/types";
 
 import { createClientFromEnv } from "~/lib/supabase";
+import { getPageBySlug, getPageByType } from "~/lib/content";
 import { t } from "~/utils/i18n";
 
 const locale = "id" as const;
-const { tenant_id } = Astro.locals;
-const supabase = createClientFromEnv(import.meta.env);
+const tenant_id = Astro.locals.tenant_id || null;
+const supabase = createClientFromEnv(
+    Astro.locals.runtime?.env || import.meta.env,
+);
+
+let homePage = null;
+if (tenant_id && supabase) {
+    homePage = await getPageByType(supabase, "home", tenant_id);
+    if (!homePage) {
+        homePage = await getPageBySlug(supabase, "home", tenant_id);
+    }
+}
+
+const isHomeVisual = homePage?.editor_type === "visual";
+const homeVisualContent =
+    homePage?.content_published || homePage?.puck_layout_jsonb || null;
+const homeHtmlContent = homePage?.content || "";
 
 let services: Item[] = [];
 let projects: Post[] = [];
@@ -37,7 +54,7 @@ let testimonials: Testimonial[] = [];
 let funfacts: Stat[] = [];
 let partners: Image[] = [];
 
-if (tenant_id && supabase) {
+if (!homePage && tenant_id && supabase) {
     try {
         const { data: servicesData } = await supabase
             .from("services")
@@ -139,13 +156,46 @@ if (tenant_id && supabase) {
     }
 }
 
-const metadata = {
-    title: "Primary Tenant - Bahasa Indonesia",
-    ignoreTitleTemplate: true,
-};
+const metadata = homePage
+    ? {
+        title: homePage.meta_title || homePage.title,
+        description: homePage.meta_description || homePage.excerpt || "",
+        keywords: homePage.meta_keywords || undefined,
+        canonical: homePage.canonical_url || undefined,
+        openGraph: {
+            images: homePage.featured_image
+                ? [{ url: homePage.featured_image }]
+                : undefined,
+        },
+    }
+    : {
+        title: "Primary Tenant - Bahasa Indonesia",
+        ignoreTitleTemplate: true,
+    };
 ---
 
 <Layout metadata={metadata}>
+    {
+        homePage ? (
+            <section class="py-12 sm:py-16 lg:py-20">
+                <div class="mx-auto max-w-5xl px-6 sm:px-8">
+                    {isHomeVisual ? (
+                        <div class="visual-content">
+                            <PuckRenderer content={homeVisualContent} />
+                        </div>
+                    ) : (
+                        <article
+                            class="prose prose-lg dark:prose-invert max-w-none
+                                   prose-headings:font-bold prose-headings:tracking-tight
+                                   prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                                   prose-img:rounded-xl prose-img:shadow-lg"
+                            set:html={homeHtmlContent}
+                        />
+                    )}
+                </div>
+            </section>
+        ) : (
+            <>
     <Hero
         actions={[
             {
@@ -377,4 +427,7 @@ const metadata = {
             <span set:html={t("home.cta.subtitle", locale)} />
         </Fragment>
     </CallToAction>
+            </>
+        )
+    }
 </Layout>

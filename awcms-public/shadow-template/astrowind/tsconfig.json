@@ -4,6 +4,7 @@
     "strictNullChecks": true,
     "allowJs": true,
     "baseUrl": ".",
+    "moduleResolution": "bundler",
     "paths": {
       "~/*": ["src/*"]
     }

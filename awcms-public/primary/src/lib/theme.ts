@@ -55,7 +55,7 @@ export async function getActiveTheme(
     .select("*")
     .eq("is_active", true)
     .is("deleted_at", null)
-    .order("is_default", { ascending: false })
+    .order("updated_at", { ascending: false })
     .limit(1);
 
   if (tenantId) {

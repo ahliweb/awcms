@@ -7,23 +7,27 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export interface MenuItem {
   id: string;
   title: string;
-  url: string;
-  target?: string;
-  icon?: string;
-  badge?: string;
-  badge_color?: string;
+  url: string | null;
+  target?: string | null;
+  icon?: string | null;
+  badge?: string | null;
+  badge_color?: string | null;
   children?: MenuItem[];
   is_active: boolean;
   sort_order: number;
 }
 
-export interface MenuData {
+interface MenuRow {
   id: string;
-  name: string;
-  slug: string;
-  location: string;
-  items: MenuItem[];
-  is_active: boolean;
+  label: string;
+  url: string | null;
+  target?: string | null;
+  icon?: string | null;
+  order?: number | null;
+  parent_id?: string | null;
+  is_active?: boolean | null;
+  location?: string | null;
+  group_label?: string | null;
 }
 
 /**
@@ -33,19 +37,20 @@ export async function getMenuByLocation(
   supabase: SupabaseClient,
   location: string,
   tenantId?: string | null,
-): Promise<MenuData | null> {
+): Promise<MenuItem[] | null> {
   let query = supabase
     .from("menus")
     .select("*")
-    .eq("location", location)
     .eq("is_active", true)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .or(`location.eq.${location},group_label.eq.${location}`)
+    .order("order", { ascending: true });
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
   }
 
-  const { data, error } = await query.single();
+  const { data, error } = await query;
 
   if (error) {
     console.error(
@@ -55,33 +60,12 @@ export async function getMenuByLocation(
     return null;
   }
 
-  if (!data) {
+  if (!data || data.length === 0) {
     return null;
   }
 
-  // Parse items from JSON if stored as string
-  let items: MenuItem[] = [];
-  if (data.items) {
-    try {
-      items =
-        typeof data.items === "string" ? JSON.parse(data.items) : data.items;
-    } catch (e) {
-      console.error(`[Menu] Error parsing menu items for "${location}":`, e);
-      items = [];
-    }
-  }
-
-  // Filter and sort active items
-  const activeItems = filterActiveItems(items);
-
-  return {
-    id: data.id,
-    name: data.name,
-    slug: data.slug,
-    location: data.location,
-    items: activeItems,
-    is_active: data.is_active,
-  };
+  const items = buildMenuTree((data || []) as MenuRow[]);
+  return filterActiveItems(items);
 }
 
 /**
@@ -90,13 +74,14 @@ export async function getMenuByLocation(
 export async function getAllMenus(
   supabase: SupabaseClient,
   tenantId?: string | null,
-): Promise<MenuData[]> {
+): Promise<Record<string, MenuItem[]>> {
   let query = supabase
     .from("menus")
     .select("*")
     .eq("is_active", true)
     .is("deleted_at", null)
-    .order("location");
+    .order("location")
+    .order("order", { ascending: true });
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
@@ -106,29 +91,20 @@ export async function getAllMenus(
 
   if (error) {
     console.error("[Menu] Error fetching all menus:", error.message);
-    return [];
+    return {};
   }
 
-  return (data || []).map((menu) => {
-    let items: MenuItem[] = [];
-    if (menu.items) {
-      try {
-        items =
-          typeof menu.items === "string" ? JSON.parse(menu.items) : menu.items;
-      } catch {
-        items = [];
-      }
-    }
-
-    return {
-      id: menu.id,
-      name: menu.name,
-      slug: menu.slug,
-      location: menu.location,
-      items: filterActiveItems(items),
-      is_active: menu.is_active,
-    };
+  const grouped: Record<string, MenuRow[]> = {};
+  (data || []).forEach((row) => {
+    const location = row.location || row.group_label || "header";
+    grouped[location] = grouped[location] || [];
+    grouped[location].push(row as MenuRow);
   });
+
+  return Object.entries(grouped).reduce((acc, [location, rows]) => {
+    acc[location] = filterActiveItems(buildMenuTree(rows));
+    return acc;
+  }, {} as Record<string, MenuItem[]>);
 }
 
 /**
@@ -139,7 +115,7 @@ export async function getHeaderMenu(
   tenantId?: string | null,
 ): Promise<MenuItem[]> {
   const menu = await getMenuByLocation(supabase, "header", tenantId);
-  return menu?.items || [];
+  return menu || [];
 }
 
 /**
@@ -150,7 +126,7 @@ export async function getFooterMenu(
   tenantId?: string | null,
 ): Promise<MenuItem[]> {
   const menu = await getMenuByLocation(supabase, "footer", tenantId);
-  return menu?.items || [];
+  return menu || [];
 }
 
 /**
@@ -164,6 +140,67 @@ function filterActiveItems(items: MenuItem[]): MenuItem[] {
       ...item,
       children: item.children ? filterActiveItems(item.children) : undefined,
     }));
+}
+
+function buildMenuTree(rows: MenuRow[]): MenuItem[] {
+  const nodes: Record<string, MenuItem> = {};
+  const roots: MenuItem[] = [];
+
+  rows.forEach((row) => {
+    nodes[row.id] = {
+      id: row.id,
+      title: row.label,
+      url: row.url ?? null,
+      target: row.target ?? null,
+      icon: row.icon ?? null,
+      is_active: row.is_active !== false,
+      sort_order: row.order ?? 0,
+      children: [],
+    };
+  });
+
+  rows.forEach((row) => {
+    const node = nodes[row.id];
+    if (row.parent_id && nodes[row.parent_id]) {
+      nodes[row.parent_id].children?.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  roots.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  Object.values(nodes).forEach((node) => {
+    if (node.children) {
+      node.children.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    }
+  });
+
+  return roots;
+}
+
+export function mapMenuItemsToHeaderLinks(items: MenuItem[]) {
+  return items.map((item) => ({
+    text: item.title,
+    href: item.url || "#",
+    links: item.children?.map((child) => ({
+      text: child.title,
+      href: child.url || "#",
+      links: child.children?.map((grandchild) => ({
+        text: grandchild.title,
+        href: grandchild.url || "#",
+      })),
+    })),
+  }));
+}
+
+export function mapMenuItemsToFooterLinks(items: MenuItem[]) {
+  return items.map((item) => ({
+    title: item.title,
+    links: (item.children || []).map((child) => ({
+      text: child.title,
+      href: child.url || "#",
+    })),
+  }));
 }
 
 /**
