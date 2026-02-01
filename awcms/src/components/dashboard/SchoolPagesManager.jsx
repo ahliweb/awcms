@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTenant } from '@/contexts/TenantContext';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';

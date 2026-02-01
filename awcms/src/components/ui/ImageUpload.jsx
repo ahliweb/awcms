@@ -106,3 +106,5 @@ export function ImageUpload({ value, onChange, disabled, className }) {
         </div>
     );
 }
+
+export default ImageUpload;
