@@ -187,7 +187,7 @@ export { default as AnalyticsDashboard } from './components/AnalyticsDashboard';
 | `extension_menu_items` | Admin menu items per tenant (`tenant_id`) |
 | `extension_routes_registry` | Dynamic admin routes per tenant (`tenant_id`) |
 | `extension_permissions` | Extension permissions metadata per tenant (`tenant_id`) |
-| `extension_rbac_integration` | Role-permission mapping per tenant (`tenant_id`) |
+| `extension_rbac_integration` | **DEPRECATED**: Role-permission mapping per tenant (Use `role_permissions`) |
 
 ### `extension_logs`
 
@@ -208,9 +208,10 @@ Audit trail with RLS for all extension actions:
 
 | Permission | Description |
 | ---------- | ----------- |
-| `ext.manage` | Install/uninstall extensions |
-| `ext.configure` | Modify extension settings |
-| `ext.view_logs` | View extension audit logs |
+| `tenant.extensions.create` | Install/upload extensions |
+| `tenant.extensions.delete` | Uninstall/remove extensions |
+| `tenant.extensions.view` | View installed extensions and logs |
+| `tenant.extensions.publish` | Activate/Deactivate extensions |
 
 ### Requirements
 

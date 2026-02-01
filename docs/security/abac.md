@@ -106,6 +106,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 | Mobile Users  | `tenant.mobile_users.*`       | read, create, update, delete |
 | Mobile Config | `tenant.mobile.*`             | read, update                 |
 | IoT Devices   | `tenant.iot.*`                | read, create, update, delete |
+| Extensions    | `tenant.extensions.*`         | view, create, delete, publish|
 | Mailketing    | `tenant.mailketing.*`         | read, send, template         |
 | Analytics     | `tenant.analytics.*`          | read                         |
 
