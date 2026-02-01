@@ -14,9 +14,22 @@ Define the permission model and enforcement patterns for AWCMS.
 - `docs/security/overview.md`
 - `docs/tenancy/overview.md`
 
+---
+
 ## Core Concepts
 
 AWCMS implements a comprehensive ABAC system that combines roles with policy enforcement.
+
+### 4. Scopes (Access Boundaries)
+
+The system defines 4 strict scopes for roles and permissions:
+
+| Scope | Access Level | Assignment Rules |
+| :--- | :--- | :--- |
+| **platform** | **System-Wide**. Full access to all resources and tenants. | **Platform Roles Only**. (e.g. Owner, Super Admin). |
+| **tenant** | **Tenant-Bounded**. Access strictly limited to user's `tenant_id`. | **Tenant Roles Only**. (e.g. Admin, Editor). |
+| **content** | **Global Content**. Access to all content resources across tenants. | **Platform Roles Only**. Reserved for Content Moderators. |
+| **module** | **Global Extensions**. Access to all plugins/extensions system-wide. | **Platform Roles Only**. Reserved for System Integrators. |
 
 ---
 

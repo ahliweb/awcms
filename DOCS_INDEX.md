@@ -11,6 +11,12 @@ Provide a single entry point for all AWCMS documentation across the monorepo and
 
 ## Canonical Docs Map
 
+### General
+
+| Topic | Canonical Doc | Notes |
+| --- | --- | --- |
+| **Wiki / Guide** | `docs/README.md` | **Detailed repository guide & concepts** |
+
 ### Architecture
 
 | Topic | Canonical Doc | Notes |

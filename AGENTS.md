@@ -448,7 +448,7 @@ AWCMS provides a "Swiss Army Knife" MCP server in `awcms-mcp/` that grants Agent
 
 Agents must use the standardized permission keys: `scope.resource.action`.
 
-- **Scopes**: `platform`, `tenant`, `content`, `modules`
+- **Scopes**: `platform`, `tenant`, `content`, `module`
 - **Actions**: `create` (C), `read` (R), `update` (U), `publish` (P), `delete` (SD), `restore` (RS), `delete_permanent` (DP).
 - **Special Flags**: `U-own` (Update Own Only) - requires checking `user_id` against resource owner.
 
@@ -460,8 +460,8 @@ Agents must strictly adhere to this matrix when implementing access controls:
 
 | Role                     |  C  |  R  |  U   |  P  | SD  | RS  | DP  | Description                     |
 | :----------------------- | :-: | :-: | :--: | :-: | :-: | :-: | :-: | :------------------------------ |
-| **Owner (Global)**       | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Supreme authority (Global)      |
-| **Super Admin (Global)** | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Platform management (Global)    |
+| **Owner (Platform)**     | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Supreme authority (Platform)    |
+| **Super Admin (Platform)**| ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Platform management (Platform)  |
 | **Admin (Tenant)**       | ✅  | ✅  |  ✅  | ✅  | ✅  | ✅  | ✅  | Tenant management (Tenant)      |
 | **Editor (Tenant)**      | ✅  | ✅  |  ✅  | ✅  | ✅  | ❌  | ❌  | Content review & approval       |
 | **Author (Tenant)**      | ✅  | ✅  | ✅\* | ❌  | ❌  | ❌  | ❌  | Content creation & update own   |
@@ -484,7 +484,7 @@ _\* Author → hanya konten milik sendiri (tenant_id + owner_id)_
 - **RS**: Restore
 - **DP**: Delete Permanent
 
-Example: `tenant.user.create`, `tenant.blog.publish`, `tenant.modules.read`.
+Example: `tenant.user.create`, `tenant.blog.publish`, `tenant.extensions.read`.
 
 ### Implementation Pattern
 

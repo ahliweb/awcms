@@ -20,14 +20,14 @@ These are the standard templates provided in the "Roles" manager.
 
 | Role | Scope | Description |
 | ---- | ----- | ----------- |
-| **Owner** | Global | **Supreme Authority**. Full system access across all tenants. Cannot be restricted. |
-| **Super Admin** | Global | **Platform Admin**. Manages tenants, billing, and global settings (flagged via `is_platform_admin`). |
+| **Owner** | Platform | **Supreme Authority**. Full system access across all tenants. Cannot be restricted. |
+| **Super Admin** | Platform | **Platform Admin**. Manages tenants, billing, and global settings (flagged via `is_platform_admin`). |
 | **Admin** | Tenant | **Tenant Manager**. Full access *within* their tenant. Can manage tenant users and roles. |
 | **Editor** | Tenant | **Content Manager**. Can review, approve, and publish content. Cannot manage users/settings. |
 | **Author** | Tenant | **Creator**. Can create and edit *own* content. Needs approval to publish. |
 | **Member** | Tenant | **User**. Registered end-user with basic profile access. |
 | **Subscriber** | Tenant | **Customer**. Read-only access to premium/gated content. |
-| **Public** | - | **Visitor**. Anonymous read-only access to public content. |
+| **Public** | Tenant | **Visitor**. Anonymous read-only access to public content. |
 
 ---
 
@@ -74,7 +74,7 @@ CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   tenant_id UUID REFERENCES tenants(id),
-  scope TEXT DEFAULT 'tenant',
+  scope TEXT DEFAULT 'tenant', -- platform | tenant | content | module
   is_system BOOLEAN DEFAULT FALSE,
   is_platform_admin BOOLEAN DEFAULT FALSE,
   is_full_access BOOLEAN DEFAULT FALSE,

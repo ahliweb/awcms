@@ -221,7 +221,7 @@ class PermissionService extends Notifier<PermissionState> {
     return state.permissions.contains(permission);
   }
 
-  /// Check module permission (e.g., 'tenant.blogs.read')
+  /// Check module permission (e.g., 'tenant.blog.read')
   bool canAccess(String module, PermissionAction action) {
     final permission = 'tenant.$module.${action.name}';
     return hasPermission(permission);
