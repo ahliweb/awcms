@@ -72,6 +72,8 @@ const SidebarMenuManager = lazy(() => import('@/components/dashboard/SidebarMenu
 const ModulesManager = lazy(() => import('@/pages/cmspanel/ModulesManager'));
 
 const SettingsManager = lazy(() => import('@/components/dashboard/SettingsManager'));
+const SchoolPagesManager = lazy(() => import('@/components/dashboard/SchoolPagesManager'));
+const SiteImagesManager = lazy(() => import('@/components/dashboard/SiteImagesManager'));
 const AuditLogsManager = lazy(() => import('@/components/dashboard/AuditLogsManager'));
 const TenantsManager = lazy(() => import('@/components/dashboard/TenantsManager'));
 const TenantSettings = lazy(() => import('@/components/dashboard/TenantSettings'));
@@ -213,6 +215,9 @@ const MainRouter = () => {
 
           <Route path="seo" element={<SeoManager />} />
           <Route path="seo-manager" element={<SeoManager />} />
+
+          <Route path="school-pages" element={<SchoolPagesManager />} />
+          <Route path="site-images" element={<SiteImagesManager />} />
 
           <Route path="extensions" element={<ExtensionsManager />} />
           <Route path="extensions/marketplace" element={<ExtensionMarketplace />} />
