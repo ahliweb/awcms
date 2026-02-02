@@ -13,6 +13,7 @@ import Analytics from "~/components/common/Analytics.astro";
 import BasicScripts from "~/components/common/BasicScripts.astro";
 import ThemeLoader from "~/components/common/ThemeLoader.astro";
 import PluginLoader from "~/components/common/PluginLoader.astro";
+import ConsentNotice from "~/components/common/ConsentNotice.astro";
 
 // Comment the line below to disable View Transitions
 import { ClientRouter } from "astro:transitions";
@@ -47,6 +48,7 @@ const { language, textDirection } = I18N;
   <body class="antialiased text-default bg-page tracking-tight">
     <PluginLoader position="body_start" />
     <slot />
+    <ConsentNotice />
 
     <BasicScripts />
     <PluginLoader position="body_end" />

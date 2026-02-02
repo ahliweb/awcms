@@ -19,6 +19,7 @@ Explain the Visual Page Builder architecture and integration with public renderi
 - Admin uses `@puckeditor/puck` editor to build layouts.
 - Output is stored in `puck_layout_jsonb`.
 - Public portal renders JSON via `PuckRenderer` with an allow-list registry.
+- `editor_type` controls whether public pages render Puck JSON (`visual`) or HTML (`richtext`).
 
 ## How It Works
 
@@ -30,8 +31,8 @@ Explain the Visual Page Builder architecture and integration with public renderi
 
 ### Public Rendering
 
-- `awcms-public/primary/src/components/PuckRenderer.tsx`
-- `awcms-public/primary/src/components/registry.tsx`
+- `awcms-public/primary/src/components/common/PuckRenderer.astro`
+- `awcms-public/primary/src/components/common/WidgetRenderer.astro`
 
 ## Implementation Patterns
 
@@ -47,6 +48,10 @@ registerTemplateBlock({
   fields: { data: { type: 'object' } }
 });
 ```
+
+### Context7 Guidance (Puck)
+
+Puck components should define explicit fields and render functions in a config object. Avoid rendering unknown blocks on the public portal.
 
 ## Permissions and Access
 

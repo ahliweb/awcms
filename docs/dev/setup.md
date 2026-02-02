@@ -21,6 +21,8 @@ cd <repo-root>
 
 Refer to `.env.example` in each directory.
 
+If using Context7 tools via `awcms-mcp`, set `CONTEXT7_API_KEY` in `awcms/.env`.
+
 ### 2.3 Install Dependencies
 
 We typically use `npm` for web projects and `flutter pub` for mobile.

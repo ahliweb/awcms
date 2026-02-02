@@ -52,6 +52,7 @@ export const PUBLIC_MODULES = [
     { key: 'categories', label: 'Categories', url: '/categories', icon: 'FolderTree', group: 'Discovery', order: 500 },
     { key: 'tags', label: 'Tags', url: '/tags', icon: 'Hash', group: 'Discovery', order: 510 },
     { key: 'search', label: 'Search', url: '/search', icon: 'Search', group: 'Discovery', order: 520 },
+    { key: 'visitor_stats', label: 'Visitor Statistics', url: '/visitor-stats', icon: 'LineChart', group: 'Discovery', order: 530 },
 
     // User
     { key: 'login', label: 'Login', url: '/login', icon: 'LogIn', group: 'User', order: 600 },

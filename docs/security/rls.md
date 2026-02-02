@@ -68,6 +68,28 @@ FOR INSERT WITH CHECK (
 );
 ```
 
+### Public Insert Pattern (Analytics/Event Logging)
+
+Use this for public, write-only telemetry like visitor analytics. Only insert is allowed, and the tenant is resolved from `x-tenant-id`.
+
+```sql
+CREATE POLICY "analytics_events_public_insert" ON public.analytics_events
+FOR INSERT
+TO anon, authenticated
+WITH CHECK (tenant_id = public.current_tenant_id());
+```
+
+### Public Aggregate Read Pattern
+
+Aggregates (e.g., `analytics_daily`) may allow read-only access scoped to a tenant.
+
+```sql
+CREATE POLICY "analytics_daily_public_read" ON public.analytics_daily
+FOR SELECT
+TO anon, authenticated
+USING (tenant_id = public.current_tenant_id());
+```
+
 ### Shared Resource Pattern (Hierarchy-Aware)
 
 ```sql
@@ -97,6 +119,7 @@ FOR SELECT USING (
 - **Isolation**: Every tenant-scoped table must include `tenant_id` and `deleted_at`.
 - **Public access**: Public reads must be explicitly scoped to published content (e.g. `is_published = true`).
 - **Plugins**: Extension/Plugin routes must query tenant-scoped tables with `tenant_id = current_tenant_id()` and rely on ABAC permissions (no role-name checks).
+- **Public portal headers**: Ensure `x-tenant-id` is set by middleware or scoped Supabase clients so `current_tenant_id()` resolves correctly.
 
 ## References
 

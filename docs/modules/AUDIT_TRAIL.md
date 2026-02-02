@@ -128,24 +128,23 @@ const { data: logs } = await supabase
 
 ## RLS Policies
 
-Audit logs are protected by Row Level Security:
+Audit logs are protected by Row Level Security. Current policies are tenant-scoped; admin UI permissions (`tenant.audit.read`) are enforced at the application layer.
 
 ```sql
 -- Insert policy used by log_audit_event()
-CREATE POLICY "audit_logs_insert_unified" ON audit_logs
-  FOR INSERT TO public
+CREATE POLICY "audit_logs_insert" ON audit_logs
+  FOR INSERT TO authenticated
   WITH CHECK (
     tenant_id = current_tenant_id()
     OR (tenant_id IS NULL AND auth.uid() IS NOT NULL)
   );
 
--- Unified select policy (legacy naming)
-CREATE POLICY "audit_logs_select_unified" ON audit_logs
-  FOR SELECT TO public
+-- Select policy (tenant-scoped)
+CREATE POLICY "audit_logs_select" ON audit_logs
+  FOR SELECT TO authenticated
   USING (
-    (tenant_id = current_tenant_id() AND is_admin_or_above())
-    OR (tenant_id IS NULL AND is_platform_admin())
-    OR is_platform_admin()
+    tenant_id = current_tenant_id()
+    OR tenant_id IS NULL
   );
 
 -- No direct modifications (insert only via triggers)

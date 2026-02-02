@@ -38,12 +38,20 @@ Define how tenant isolation is resolved and enforced across AWCMS.
   1. Path slug (`/{tenant}/...`) via `get_tenant_by_slug`.
   2. Host header fallback via `get_tenant_id_by_host`.
 - Host-resolved tenants are served at root paths without redirects.
+- Middleware also sets visitor tracking cookies and logs analytics events (scoped to the resolved tenant).
+
+#### Smandapbun Variant
+
+- `awcms-public/smandapbun` is a single-tenant portal with shared middleware for analytics and consent.
+- Tenant resolution falls back to a fixed slug in `src/lib/api.ts` when host/path lookups fail.
+- See `docs/tenancy/smandapbun.md` for tenant-specific behavior and migration status.
 
 ### Data Layer (Supabase)
 
 - `x-tenant-id` is injected into requests by the admin client and public middleware.
 - SQL functions read `app.current_tenant_id` via `current_tenant_id()`.
 - Hierarchy functions (`is_tenant_descendant`, `tenant_can_access_resource`) enforce shared vs isolated resources.
+- Public aggregates (e.g., `analytics_daily`) are readable only when scoped to the tenant id.
 
 ## Implementation Patterns
 

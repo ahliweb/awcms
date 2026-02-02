@@ -16,8 +16,9 @@ Define how AWCMS versions are managed across code and documentation.
 ## Core Concepts
 
 - AWCMS follows Semantic Versioning.
-- `awcms/src/lib/version.js` is the single source of truth.
-- `awcms/package.json` must match `version.js`.
+- `awcms/src/lib/version.js` is used for UI/version display.
+- `awcms/package.json` provides the build/version metadata for the Admin package.
+- Release process should update both files to keep them aligned.
 - Documentation-only releases should use a patch bump.
 
 ## How It Works
@@ -33,7 +34,7 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 | File | Purpose |
 | --- | --- |
 | `awcms/src/lib/version.js` | Canonical version object |
-| `awcms/package.json` | npm version (must match) |
+| `awcms/package.json` | npm version (keep aligned with `version.js`) |
 | `CHANGELOG.md` | Release history |
 
 ## Implementation Patterns

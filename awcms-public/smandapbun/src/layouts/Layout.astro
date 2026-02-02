@@ -2,6 +2,7 @@
 import "../assets/styles/global.css";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
+import ConsentNotice from "../components/ConsentNotice.astro";
 import { getLocale, type Locale } from "../utils/i18n";
 
 export interface Props {
@@ -10,7 +11,7 @@ export interface Props {
   image?: string;
 }
 
-const locale = getLocale(Astro.request) as Locale;
+const locale = getLocale(Astro.url) as Locale;
 
 // Fetch dynamic site data
 import { getSiteData } from "../lib/api";
@@ -77,5 +78,6 @@ const siteTitle =
       <slot />
     </main>
     <Footer locale={locale} />
+    <ConsentNotice />
   </body>
 </html>

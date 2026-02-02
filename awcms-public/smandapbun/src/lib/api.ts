@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, createScopedClient } from './supabase';
 import contactDefault from '../data/pages/contact.json';
 import profileDefault from '../data/pages/profile.json';
 import organizationDefault from '../data/pages/organization.json';
@@ -12,6 +12,15 @@ import blogsDefault from '../data/blogs/blogs.json';
 
 
 const TENANT_SLUG = 'smandapbun';
+
+const getTenantClient = (tenantId?: string | null) => {
+    if (!tenantId) return supabase;
+    const scopedClient = createScopedClient(
+        { 'x-tenant-id': tenantId },
+        import.meta.env,
+    );
+    return scopedClient || supabase;
+};
 
 export interface LocalizedString {
     id: string;
@@ -343,7 +352,8 @@ export async function getMenuTree(location: string): Promise<NavigationItem[]> {
     const tenantId = await getTenantId();
     if (!tenantId) return [];
 
-    const { data, error } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data, error } = await client
         .from('menus')
         .select('*')
         .eq('tenant_id', tenantId)
@@ -401,7 +411,8 @@ export async function getSiteData(): Promise<SiteData> {
     if (!tenantId) return defaultData;
 
     // Fetch SEO/Global Settings
-    const { data: settings } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data: settings } = await client
         .from('settings')
         .select('key, value')
         .eq('tenant_id', tenantId)
@@ -462,7 +473,8 @@ export async function getContactPageData(): Promise<ContactData> {
     const tenantId = await getTenantId();
     if (!tenantId) return contactDefault as ContactData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -486,7 +498,8 @@ export async function getProfilePageData(): Promise<ProfileData> {
     const tenantId = await getTenantId();
     if (!tenantId) return profileDefault as unknown as ProfileData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -552,7 +565,8 @@ export async function getOrganizationPageData(): Promise<OrganizationData> {
     const tenantId = await getTenantId();
     if (!tenantId) return organizationDefault as OrganizationData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -576,7 +590,8 @@ export async function getServicesPageData(): Promise<ServicesData> {
     const tenantId = await getTenantId();
     if (!tenantId) return servicesDefault as ServicesData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -636,7 +651,8 @@ export async function getFinancePageData(): Promise<FinanceData> {
     const tenantId = await getTenantId();
     if (!tenantId) return financeDefault as unknown as FinanceData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -693,7 +709,8 @@ export async function getStaffPageData(): Promise<StaffData> {
     const tenantId = await getTenantId();
     if (!tenantId) return staffDefault as unknown as StaffData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -735,7 +752,8 @@ export async function getAchievementsPageData(): Promise<AchievementsData> {
     const tenantId = await getTenantId();
     if (!tenantId) return achievementsDefault as unknown as AchievementsData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -790,7 +808,8 @@ export async function getAlumniPageData(): Promise<AlumniData> {
     const tenantId = await getTenantId();
     if (!tenantId) return alumniDefault as AlumniData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -826,7 +845,8 @@ export async function getImagesData(): Promise<SiteImages> {
     const tenantId = await getTenantId();
     if (!tenantId) return (imagesDefault as unknown) as SiteImages;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -866,7 +886,8 @@ export async function getAgendaData(): Promise<AgendaData> {
     const tenantId = await getTenantId();
     if (!tenantId) return blogsDefault as unknown as AgendaData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -901,7 +922,8 @@ export async function getGalleryData(): Promise<GalleryData> {
     const tenantId = await getTenantId();
     if (!tenantId) return blogsDefault as unknown as GalleryData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -933,7 +955,8 @@ export async function getSchoolInfoData(): Promise<SchoolInfoData> {
     const tenantId = await getTenantId();
     if (!tenantId) return blogsDefault as unknown as SchoolInfoData;
 
-    const { data } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data } = await client
         .from('settings')
         .select('value')
         .eq('tenant_id', tenantId)
@@ -970,7 +993,8 @@ export async function getPosts(limit = 6): Promise<Post[]> {
     const tenantId = await getTenantId();
     if (!tenantId) return [];
 
-    const { data, error } = await supabase
+    const client = getTenantClient(tenantId);
+    const { data, error } = await client
         .from('blogs')
         .select('*, categories(name)') // Join categories
         .eq('tenant_id', tenantId)

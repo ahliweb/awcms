@@ -28,7 +28,7 @@ AWCMS interacts with the following key components:
 | --- | --- | --- |
 | Brute Force / Credential Stuffing | Supabase Auth rate limiting & CAPTCHA (Turnstile) | Implemented |
 | Weak Passwords | Minimum length & complexity policies | Implemented |
-| Session Hijacking | Short-lived JWTs, secure cookies | Implemented |
+| Session Hijacking | Supabase session handling with refresh tokens, HTTPS, Turnstile | Implemented |
 
 ### 4.2 Access Control (ASVS V4)
 
@@ -49,11 +49,12 @@ AWCMS interacts with the following key components:
 ## 5. Logging & Monitoring (ASVS V7)
 
 - **Audit Logs**: All write operations in the Admin Panel are logged to the `audit_logs` table.
+- **Visitor Analytics**: Public telemetry is stored in `analytics_events` with tenant scoping and consent notice disclosure.
 - **PII Redaction**: Sensitive fields (passwords, tokens) are never logged.
 
 ## 6. Input Validation (ASVS V5)
 
-- **Client-side**: Zod schemas for form validation.
+- **Client-side**: React Hook Form validation with schema checks where used.
 - **Database**: Postgres constraints (types, foreign keys, check constraints).
 
 ## 7. Compliance Note

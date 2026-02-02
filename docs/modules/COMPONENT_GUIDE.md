@@ -18,6 +18,8 @@ Define UI component patterns for the admin panel and shared components.
 - Use shadcn/ui primitives from `awcms/src/components/ui`.
 - Use TailwindCSS tokens and CSS variables (no hardcoded colors).
 - Use `useToast` for user feedback.
+- Use `cn()` from `awcms/src/lib/utils.js` for conditional class names.
+- Use Framer Motion variants for coordinated animations when needed.
 
 ## How It Works
 
@@ -35,6 +37,14 @@ import { Button } from '@/components/ui/button';
 <Button variant="secondary">Secondary</Button>
 <Button variant="destructive">Delete</Button>
 <Button variant="outline">Cancel</Button>
+```
+
+### Conditional Classes
+
+```jsx
+import { cn } from '@/lib/utils';
+
+<div className={cn('text-sm', isActive && 'text-primary')} />
 ```
 
 ### Dialog

@@ -23,6 +23,7 @@ Describe deployment steps for each AWCMS package in the monorepo.
 - Build command: `npm run build`
 - Output directory: `dist`
 - Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- Runtime env is provided via Cloudflare Pages `runtime.env` (Astro adapter).
 
 ### 2. Admin Panel (Cloudflare Pages)
 

@@ -1,6 +1,6 @@
 # AWCMS Core Standards
 
-> Version: 2.24.0 | Last Updated: 2026-01-23 | React: 19.2.3
+> Version: 2.28.0 | Last Updated: 2026-02-03 | React: 19.2.3
 
 ## Purpose
 
@@ -31,7 +31,6 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 - **Administrative Regions**: Indonesian administrative regions (Propinsi to Desa/Kelurahan) sourced from [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah/blob/master/db/wilayah.sql) (Last Updated: 2026-01-13). Managed via `regions` table with standard hierarchy.
 - **Tenants**: Multi-tenancy support with `tenants` table and RLS policies.
   - Context: `awcms/src/contexts/TenantContext.jsx`
-  - Hooks: `useTenant()`, `usePublicTenant()`, `useTenantTheme()`
   - Hooks: `useTenant()`, `usePublicTenant()`, `useTenantTheme()`
   - Policy: All database queries must be scoped by `tenant_id`
 - **Modules**: Feature toggles managed via `modules` table (e.g., Blog, Shop, Portfolio).
@@ -76,6 +75,7 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 - **Public Portal**:
   - Rendering: `PuckRenderer` only (no editor runtime)
   - Astro Islands architecture
+  - Consent + analytics: `ConsentNotice` and middleware-based logging
 - **Internationalization**:
   - `awcms/src/lib/i18n.js`
   - Template-driven translations in `template_strings`
@@ -158,6 +158,13 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 - Tech Reference: `docs/architecture/database.md`
 
 ### 5. Additional Standards
+
+#### 5.1 Context7 Best Practices
+
+- **Supabase JS**: Use `createClient` with PKCE, global headers, and scoped tenant headers.
+- **React**: Avoid derived state in `useEffect`; keep effects side-effect only.
+- **Astro**: Use `defineMiddleware` and middleware sequencing for request-level logic.
+- **TailwindCSS**: Prefer utility classes and `@utility` for shared patterns.
 
 **Standard**: Modern mobile/IoT integration, DevOps excellence, and high code quality.
 

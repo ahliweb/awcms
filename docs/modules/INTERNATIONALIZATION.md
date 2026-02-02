@@ -27,9 +27,10 @@ Describe how AWCMS handles translations and locale detection for multi-language 
 
 ## Core Concepts
 
-- **i18next** provides runtime translation.
-- Translation files live in `awcms/src/locales/`.
-- Language detection uses browser settings, with localStorage override.
+- **Admin**: i18next provides runtime translation.
+- **Public**: `awcms-public/primary/src/utils/i18n.ts` provides lightweight locale resolution.
+- Translation files live in `awcms/src/locales/` (admin) and `awcms-public/primary/src/locales/` (public).
+- Admin language detection uses browser settings, with localStorage override.
 - User preferences are persisted to the `users.language` database column.
 
 ---
@@ -72,6 +73,8 @@ export default i18n;
 1. **localStorage**: Checks for `i18nextLng` key.
 2. **navigator**: Falls back to browser language settings.
 3. **fallbackLng**: Uses English if no match found.
+
+**Context7 note**: i18next recommends supporting querystring/cookie detection when needed (`querystring`, `cookie`, `localStorage`, `navigator`). AWCMS keeps admin detection minimal to avoid extra state.
 
 ---
 
@@ -221,10 +224,17 @@ When a user changes their language in `LanguageSettings`, it is saved to the dat
 - `awcms/src/lib/i18n.js`
 - `awcms/src/locales/en.json`
 - `awcms/src/locales/id.json`
+- `awcms-public/primary/src/utils/i18n.ts`
 
 ### Public Portal Namespaces (awcms-public)
 
-The public portal uses the following namespaces in `src/locales/`:
+The public portal uses the following namespaces in `src/locales/` and resolves locale via `awcms-public/primary/src/utils/i18n.ts`.
+
+Locale resolution order (public):
+
+1. URL path prefix (`/id` or `/en`).
+2. `lang` query parameter.
+3. Default to `en`.
 
 | Namespace | Usage |
 | :--- | :--- |

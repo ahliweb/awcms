@@ -24,6 +24,7 @@ Describe the admin layout system and the shared template components.
 - `AdminPageLayout` reads `requiredPermission` for access control.
 - `PageHeader` standardizes titles, actions, and breadcrumbs.
 - `GenericContentManager` provides CRUD operations with search, pagination, and bulk actions.
+- Sidebar menus are data-driven from `admin_menus` and `resources_registry` via `useAdminMenu`.
 
 ## Implementation Patterns
 

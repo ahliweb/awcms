@@ -76,6 +76,8 @@ graph TD
 1. Middleware resolves tenant by path slug, then host fallback.
 2. `locals.tenant_id` is passed to request-scoped Supabase clients.
 3. Pages render with `PuckRenderer` and a registry allow-list.
+4. Middleware logs visitor analytics to `analytics_events` and rolls up into `analytics_daily`.
+5. Consent banner is rendered client-side via `ConsentNotice`.
 
 ## Implementation Patterns
 

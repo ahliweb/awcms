@@ -21,7 +21,7 @@ The Blogs module is a full-featured blogging and news management system designed
 1. **Rich Text Editor**: TipTap-based editor (`tiptap_doc_jsonb`) ensuring clean, XSS-safe JSON output.
 2. **Workflow State Machine**: `Draft` -> `Reviewed` -> `Approved` -> `Published`.
 3. **SEO Management**: Custom Meta Title/Description and OpenGraph support.
-4. **Taxonomy**: Categorization and Tagging specialized for Content.
+4. **Taxonomy**: Categorization and tagging for content.
 
 ## How It Works
 
@@ -45,11 +45,11 @@ The Public Portal fetches posts via `published_blogs_view` to ensure:
 
 1. Only `status = 'published'` items are fetched.
 2. Internal fields (like internal notes) are stripped.
-3. `tiptap_doc_jsonb` is rendered using specialized renders.
+3. Rendering uses HTML/markdown content or Puck layouts where configured.
 
-### TipTap Rendering
+### TipTap JSON
 
-The `TipTapRenderer` converts the JSON document into accessible React components (Semantic HTML5: `h1`, `p`, `blockquote`, `img`).
+`tiptap_doc_jsonb` stores structured content. If you enable TipTap JSON rendering, ensure it is converted to safe semantic HTML (no raw HTML injection).
 
 ---
 

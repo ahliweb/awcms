@@ -129,6 +129,52 @@ CREATE TABLE modules (
 );
 ```
 
+### analytics_events (New)
+
+Stores raw visitor events for analytics. Public inserts are allowed with tenant scoping.
+
+```sql
+CREATE TABLE analytics_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  visitor_id TEXT,
+  session_id TEXT,
+  event_type TEXT DEFAULT 'page_view',
+  path TEXT NOT NULL,
+  referrer TEXT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  device_type TEXT,
+  country TEXT,
+  region TEXT,
+  consent_state TEXT DEFAULT 'unknown',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+```
+
+### analytics_daily (New)
+
+Daily rollups for analytics dashboards and public stats.
+
+```sql
+CREATE TABLE analytics_daily (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  path TEXT NOT NULL,
+  page_views INTEGER DEFAULT 0,
+  unique_visitors INTEGER DEFAULT 0,
+  unique_sessions INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, date, path)
+);
+```
+
 ### users
 
 ```sql
@@ -852,6 +898,7 @@ WHERE deleted_at IS NULL;
 
 - All tenant-scoped tables must include `tenant_id` and `deleted_at`.
 - RLS policies and helper functions are defined in `supabase/migrations` and mirrored in `awcms/supabase/migrations` for CI linting.
+- Public analytics inserts and aggregate reads are explicitly scoped by `current_tenant_id()`.
 
 ## References
 

@@ -10,19 +10,22 @@ import {
 
 import { getPosts } from "../../lib/api";
 
-export async function getStaticPaths() {
-  const posts = await getPosts(100); // Fetch all posts for static generation
+export const prerender = false;
 
-  return posts.flatMap((post) => [
-    { params: { slug: post.slug }, props: { post, locale: "id" } },
-    { params: { slug: post.slug }, props: { post, locale: "en" } },
-  ]);
+const { slug } = Astro.params;
+if (!slug) {
+  return Astro.redirect("/blogs");
 }
 
-const { post, locale } = Astro.props as { post: any; locale: Locale };
+const locale = "id" as const;
+const allPosts = await getPosts(100);
+const post = allPosts.find((item) => item.slug === slug);
+
+if (!post) {
+  return Astro.redirect("/blogs");
+}
 
 // Get related blogs (same category, exclude current)
-const allPosts = await getPosts(100); // Fetch all posts again for related blogs
 const relatedBlogs = allPosts
   .filter((a) => a.category === post.category && a.id !== post.id)
   .slice(0, 3);

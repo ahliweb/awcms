@@ -18,6 +18,8 @@ Map AWCMS security controls to common compliance frameworks.
 - Tenant isolation, ABAC, and RLS are core controls.
 - Audit logs provide traceability for critical actions.
 - Soft delete is used for data lifecycle control.
+- Public analytics uses consent notices and tenant-scoped telemetry tables.
+- IP addresses, user agents, and referrers are treated as personal data and should follow retention policies.
 
 ## Mapping
 
@@ -46,11 +48,13 @@ Map AWCMS security controls to common compliance frameworks.
 | Access control | ABAC + RLS | `docs/security/abac.md` |
 | Activity logging | Audit logs | `docs/modules/AUDIT_TRAIL.md` |
 | Data security | HTTPS + RLS | `docs/security/overview.md` |
+| Consent notice | `analytics_consent` settings + banner | `docs/dev/public.md` |
 
 ## Security and Compliance Notes
 
 - Compliance requirements must be validated against your hosting configuration.
 - Supabase region selection affects data residency.
+- Define retention policies for `analytics_events` if IP data is collected.
 
 ## References
 

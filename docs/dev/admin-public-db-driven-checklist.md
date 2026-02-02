@@ -70,9 +70,16 @@ This checklist aligns `docs/security/abac.md`, `docs/RESOURCE_MAP.md`, and `docs
 ## 8) Public Tenant Resolution (multi-tenant)
 
 - [ ] **Public (primary)**: middleware already resolves tenant by path/host.
-- [ ] **Public (smandapbun)**: add tenant resolution (middleware) or keep fixed slug if only single-tenant.
+- [x] **Public (smandapbun)**: middleware resolves tenant and falls back to fixed `TENANT_SLUG` in `src/lib/api.ts`.
 
 ## 9) Documentation Sync
 
-- [ ] Update `docs/RESOURCE_MAP.md` if new resources/settings keys are added.
-- [ ] Update `docs/dev/public.md` with DB-driven menu/page notes.
+- [x] Update `docs/RESOURCE_MAP.md` if new resources/settings keys are added.
+- [x] Update `docs/dev/public.md` with DB-driven menu/page notes.
+
+## 10) Visitor Analytics (tenant.analytics.*)
+
+- [x] **DB**: `analytics_events` and `analytics_daily` tables with RLS policies.
+- [x] **Admin**: `VisitorStatisticsManager` module wired to `admin_menus`.
+- [x] **Public (primary)**: middleware logging + `/visitor-stats` route + consent notice.
+- [x] **Public (smandapbun)**: consent banner + middleware analytics logging.

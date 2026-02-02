@@ -23,7 +23,7 @@ AWCMS uses a dual extension system combining WordPress-style hooks with modern E
 | Type | Location | Loading | Use Case |
 | ---- | -------- | ------- | -------- |
 | **Core Plugin** | `src/plugins/` | Bundled at build | Essential features |
-| **External Extension** | `awcms-ext-{vendor}-{slug}/` | Dynamic at runtime | Third-party modules |
+| **External Extension** | `awcms-ext/{vendor}-{slug}/` (source) | Dynamic at runtime | Third-party modules |
 
 ---
 
@@ -51,6 +51,8 @@ addFilter('admin_sidebar_menu', 'add_menu', (items) => [
 ]);
 const menuItems = applyFilters('admin_sidebar_menu', defaultItems);
 ```
+
+Use `admin_menu_items` to append base menu entries and `admin_sidebar_menu` for last-mile adjustments.
 
 ---
 
@@ -100,17 +102,22 @@ export const deactivate = async (supabase, tenantId) => { /* cleanup */ };
 
 ## External Extensions
 
-Located in `awcms-ext-{vendor}-{slug}/` at project root. Loaded dynamically at runtime.
+Source packages live under `awcms-ext/` and are served from the external extensions path configured by `VITE_EXTERNAL_EXTENSIONS_PATH` (default `/ext`). The loader resolves:
+
+```
+{basePath}/awcms-ext-{vendor}-{slug}/{entry}
+```
 
 ### Directory Structure
 
 ```text
-awcms-ext-ahliweb-analytics/
-├── manifest.json     # Extension manifest (NOT plugin.json)
-├── package.json
-└── src/
-    ├── index.js      # Entry point
-    └── components/
+awcms-ext/
+  awcms-ext-ahliweb-analytics/
+  ├── manifest.json     # Extension manifest (NOT plugin.json)
+  ├── package.json
+  └── src/
+      ├── index.js      # Entry point
+      └── components/
 ```
 
 ### Manifest (`manifest.json`)
@@ -159,6 +166,7 @@ export { default as AnalyticsDashboard } from './components/AnalyticsDashboard';
 | `plugins_loaded` | Action | All plugins/extensions loaded |
 | `dashboard_widgets` | Filter | Dashboard widgets array |
 | `admin_menu_items` | Filter | Sidebar menu items |
+| `admin_sidebar_menu` | Filter | Sidebar menu items (post-processed) |
 | `admin_routes` | Filter | Admin panel routes |
 | `before_extension_load` | Action | Before external extension loads |
 | `after_extension_load` | Action | After external extension loads |
@@ -188,6 +196,11 @@ export { default as AnalyticsDashboard } from './components/AnalyticsDashboard';
 | `extension_routes_registry` | Dynamic admin routes per tenant (`tenant_id`) |
 | `extension_permissions` | Extension permissions metadata per tenant (`tenant_id`) |
 | `extension_rbac_integration` | **DEPRECATED**: Role-permission mapping per tenant (Use `role_permissions`) |
+
+### External Path Overrides
+
+- `manifest.external_path` can override the default loader path.
+- Default path uses `VITE_EXTERNAL_EXTENSIONS_PATH` and the folder name `awcms-ext-{vendor}-{slug}`.
 
 ### `extension_logs`
 

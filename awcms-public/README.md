@@ -18,6 +18,12 @@ npm install
 npm run dev
 ```
 
+## Features
+
+- Tenant resolution via middleware (`awcms-public/primary/src/middleware.ts`).
+- Visitor analytics logging with consent notice (`analytics_events`, `analytics_daily`).
+- Public stats page at `/visitor-stats` and `/[tenant]/visitor-stats`.
+
 ## References
 
 - `primary/README.md`

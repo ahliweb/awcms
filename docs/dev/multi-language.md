@@ -68,6 +68,9 @@ The public portal includes a language switcher dropdown in the header:
 - Displays current language code (EN/ID)
 - Dropdown with flag icons for each language
 - Uses URL parameter `?lang=en` or `?lang=id`
+- Path prefix (`/en` or `/id`) takes priority when present
+
+**Tenant note:** `awcms-public/smandapbun` defaults to `id` and relies on path prefixes only.
 
 ---
 

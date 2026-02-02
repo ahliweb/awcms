@@ -18,15 +18,18 @@ Describe the monitoring tools and logging practices for AWCMS.
 - Audit logs capture critical actions.
 - Edge functions should log failures and context.
 - Cloudflare Pages provides build and runtime logs.
+- Visitor analytics are stored in `analytics_events` with daily rollups in `analytics_daily`.
 
 ## How It Works
 
 - Audit logs are stored in `audit_logs`.
 - Extension logs are stored in `extension_logs`.
+- Visitor telemetry is stored in `analytics_events` (raw) and `analytics_daily` (aggregate).
 
 ## Implementation Patterns
 
 - Use `useAuditLog()` and `useExtensionAudit()` hooks.
+- Prefer aggregated analytics queries for dashboards to avoid full scans of `analytics_events`.
 
 ## Security and Compliance Notes
 

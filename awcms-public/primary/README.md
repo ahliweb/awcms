@@ -1,4 +1,6 @@
-# 🚀 AstroWind
+# 🚀 AstroWind (AWCMS Public Portal)
+
+> **AWCMS Note**: This directory is the public portal template customized for AWCMS. Refer to `../../docs/dev/public.md` and `../../docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md` for the current architecture, analytics logging, and consent notice behavior. Template-specific sections below remain for upstream reference.
 
 <img src="https://raw.githubusercontent.com/arthelokyo/.github/main/resources/astrowind/lighthouse-score.png" align="right"
      alt="AstroWind Lighthouse Score" width="100" height="358">

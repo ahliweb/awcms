@@ -22,6 +22,23 @@ Document how AWCMS uses the Supabase client APIs for data, auth, storage, and ed
 import { supabase } from '@/lib/customSupabaseClient';
 ```
 
+**Context7 note**: Supabase clients should be initialized with PKCE flow and global headers.
+
+```javascript
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+  auth: {
+    flowType: 'pkce',
+    autoRefreshToken: true,
+    persistSession: true,
+  },
+  global: {
+    headers: { 'x-application-name': 'awcms' },
+  },
+});
+```
+
 ### Client Initialization (Public)
 
 ```ts

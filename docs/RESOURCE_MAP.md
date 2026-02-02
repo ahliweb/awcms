@@ -8,20 +8,20 @@ This document serves as the authoritative registry of all resources within AWCMS
 
 | Resource Key | Scope | Permission Prefix | UI Label | Component Type | DB Table |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `blogs` | Tenant | `tenant.blog` | Blogs | Content | `posts` |
+| `blogs` | Tenant | `tenant.blog` | Blogs | Content | `blogs` |
 | `pages` | Tenant | `tenant.page` | Pages | Content | `pages` |
 | `visual_builder` | Tenant | `tenant.visual_pages` | Visual Builder | Settings/Builder | `visual_pages` |
 | `themes` | Tenant | `tenant.theme` | Themes | Config | `themes` |
 | `widgets` | Tenant | `tenant.widgets` | Widgets | Config | `widgets` |
 | `portfolio` | Tenant | `tenant.portfolio` | Portfolio | Content | `portfolio` |
-| `testimonials` | Tenant | `tenant.testimonies` | Testimonials | Content | `testimonials` |
+| `testimonials` | Tenant | `tenant.testimonies` | Testimonials | Content | `testimonies` |
 | `announcements` | Tenant | `tenant.announcements` | Announcements | Content | `announcements` |
 | `promotions` | Tenant | `tenant.promotions` | Promotions | Content | `promotions` |
 | `school_pages` | Tenant | `tenant.school_pages` | School Website | Settings | `settings` |
 | `site_images` | Tenant | `tenant.school_pages` | Site Images | Settings | `settings` |
 | `contact_messages` | Tenant | `tenant.contact_messages` | Contact Messages | Data | `contact_messages` |
 | `contacts` | Tenant | `tenant.contacts` | Contacts CRM | Data | `contacts` |
-| `files` | Tenant | `tenant.files` | Media Library | Media | `storage` (virtual) |
+| `files` | Tenant | `tenant.files` | Media Library | Media | `files` |
 | `photo_gallery` | Tenant | `tenant.photo_gallery` | Photo Gallery | Media | `galleries` |
 | `video_gallery` | Tenant | `tenant.video_gallery` | Video Gallery | Media | `galleries` |
 | `products` | Tenant | `tenant.products` | Products | Commerce | `products` |
@@ -30,7 +30,8 @@ This document serves as the authoritative registry of all resources within AWCMS
 | `menus` | Tenant | `tenant.menu` | Menu Manager | Navigation | `menus` |
 | `categories` | Tenant | `tenant.categories` | Categories | Taxonomy | `categories` |
 | `tags` | Tenant | `tenant.tag` | Tags | Taxonomy | `tags` |
-| `users` | Tenant | `tenant.user` | Users | RBAC | `profiles` |
+| `users` | Tenant | `tenant.user` | Users | RBAC | `users` |
+| `visitor_stats` | Tenant | `tenant.analytics` | Visitor Statistics | Analytics | `analytics_events` |
 | `roles` | Tenant | `tenant.role` | Roles & Permissions | RBAC | `roles` |
 | `policies` | Tenant | `tenant.policy` | Policies | Data | `policies` |
 | `seo_manager` | Tenant | `tenant.seo` | SEO Manager | Settings | `seo_settings` |

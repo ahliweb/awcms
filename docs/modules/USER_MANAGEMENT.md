@@ -124,6 +124,22 @@ The login process (`/login`) includes:
 ## Permissions and Access
 
 - User management requires `tenant.user.*` permissions.
+- User deletion is soft-delete only and validated via the `manage-users` Edge Function.
+
+### Deletion Safety Check
+
+Before deleting a user, the system checks if their role still has active permissions:
+
+```javascript
+const { count } = await supabaseAdmin
+  .from('role_permissions')
+  .select('*', { count: 'exact', head: true })
+  .eq('role_id', targetUser.role_id);
+
+if (count > 0) {
+  throw new Error('User has active permissions. Change role first.');
+}
+```
 
 ## Security and Compliance Notes
 

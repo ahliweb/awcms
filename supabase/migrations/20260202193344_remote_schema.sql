@@ -1,0 +1,2 @@
+-- Remote schema sync (storage trigger functions not available in shadow DB).
+-- Intentionally left blank to keep migration history aligned.

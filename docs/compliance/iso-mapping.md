@@ -16,3 +16,4 @@ This appendix maps AWCMS security controls to ISO 27001/27002 controls.
 | **A.12.4.1 Event Logging** | `audit_logs` table (Write Ops) | `docs/security/threat-model.md` |
 | **A.13.1.1 Network Controls** | Cloudflare WAF, TLS 1.3 | `docs/deploy/cloudflare.md` |
 | **A.14.2.1 Secure Development** | CI/CD Linting, Security Scanning | `docs/dev/ci-cd.md` |
+| **A.5.34 Privacy and PII** | Consent notice + telemetry disclosure | `docs/dev/public.md` |

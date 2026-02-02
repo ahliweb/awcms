@@ -7,7 +7,7 @@ External extension packages for AWCMS.
 
 ```text
 awcms-ext/
-  {extension-name}/
+  awcms-ext-{vendor}-{slug}/
     manifest.json
     package.json
     src/

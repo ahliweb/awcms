@@ -28,10 +28,30 @@ Define how AWCMS integrates with Supabase for auth, data, storage, and edge func
 - `awcms/src/lib/customSupabaseClient.js` injects `x-tenant-id` for every request.
 - `awcms/src/contexts/TenantContext.jsx` resolves tenant by domain and calls `setGlobalTenantId()`.
 
+**Context7 guidance**: initialize clients with PKCE auth flow and global headers.
+
+```javascript
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+  auth: {
+    flowType: "pkce",
+    autoRefreshToken: true,
+    persistSession: true,
+  },
+  global: {
+    headers: {
+      "x-application-name": "awcms",
+    },
+  },
+});
+```
+
 ### Public Portal Client
 
 - `awcms-public/primary/src/middleware.ts` resolves tenant and writes `locals.tenant_id`.
 - `awcms-public/primary/src/lib/supabase.ts` builds a request-scoped client with `x-tenant-id`.
+- Public analytics logging uses `analytics_events` with anon insert policies scoped to `current_tenant_id()`.
 
 ### Edge Functions
 
@@ -96,6 +116,12 @@ Run from repo root:
 
 ```bash
 npx supabase db push
+```
+
+If migration history is mismatched:
+
+```bash
+supabase migration repair --status reverted <missing_version>
 ```
 
 Supabase CLI configuration lives in `supabase/config.toml`.

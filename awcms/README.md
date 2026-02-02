@@ -12,6 +12,7 @@ Manage tenant content, users, templates, configuration, and IoT/Mobile devices.
 * **Security (ABAC)**: Granular permission system with Row Level Security.
 * **Visual Building**: Integrated WYSIWYG editor for pages.
 * **Extended Modules**: IoT, Mobile, Commerce, and Regions support.
+* **Visitor Statistics**: Admin analytics dashboards powered by `analytics_events` and `analytics_daily`.
 
 ## Prerequisites
 

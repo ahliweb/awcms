@@ -22,6 +22,7 @@ awcms-dev/
 ├── awcms/                      # Admin panel (React + Vite)
 ├── awcms-public/               # Public portal (Astro)
 │   └── primary/                # Astro project
+├── awcms-mcp/                   # MCP tools (Context7, Supabase)
 ├── awcms-mobile/               # Flutter app
 │   └── primary/
 ├── awcms-esp32/                # ESP32 firmware
@@ -54,10 +55,12 @@ awcms/
 ```text
 awcms-public/primary/
 ├── src/
-│   ├── components/             # React components
+│   ├── components/             # Astro components
+│   │   ├── common/             # Shared renderers (Puck, widgets, analytics)
+│   │   └── widgets/            # Page widgets
 │   ├── layouts/                # Astro layouts
 │   ├── lib/                    # Supabase and URL helpers
-│   ├── middleware.ts           # Tenant resolution
+│   ├── middleware.ts           # Tenant resolution + analytics logging
 │   ├── pages/                  # Astro routes
 │   └── templates/              # Theme templates
 ├── astro.config.ts
@@ -88,6 +91,7 @@ awcms-esp32/primary/
 
 - Tenant isolation applies across all packages.
 - Supabase is the only backend; no custom servers.
+- `supabase/` and `awcms/supabase/` migrations are kept aligned for CI.
 
 ## References
 

@@ -33,6 +33,7 @@ Provide a single entry point for all AWCMS documentation across the monorepo and
 | --- | --- | --- |
 | Multi-Tenancy | `docs/tenancy/overview.md` | Tenant resolution and isolation |
 | Supabase Integration | `docs/tenancy/supabase.md` | Auth and service integration |
+| Smandapbun Portal | `docs/tenancy/smandapbun.md` | Tenant-specific public portal notes |
 
 ### Security (Updated)
 

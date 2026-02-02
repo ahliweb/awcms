@@ -16,9 +16,10 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ## Core Concepts
 
-- Astro SSR/Islands architecture on Cloudflare Pages.
+- Astro SSR/Islands architecture on Cloudflare Pages (output: `server`).
 - Tenant resolution in middleware with path-first, host-fallback.
-- `PuckRenderer` for rendering Puck JSON with an allow-list registry.
+- `PuckRenderer` for rendering Puck JSON with a server-side allow-list.
+- View transitions are enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
 
 ## How It Works
 
@@ -29,27 +30,39 @@ Describe how the public portal renders tenant content and enforces security cons
   1. Path slug via `get_tenant_by_slug`.
   2. Host fallback via `get_tenant_id_by_host`.
 - Host-resolved tenants are served at root paths without redirects.
+- Locale prefixes (`/en`, `/id`) are stripped for internal routing and stored in `locals.locale`.
+- Referral codes (`/ref/{code}`) are stripped and stored in `locals.ref_code`.
 
 ### Rendering Pipeline
 
-- `PuckRenderer`: `awcms-public/primary/src/components/PuckRenderer.tsx`.
-- Registry allow-list: `awcms-public/primary/src/components/registry.tsx`.
-- Runtime prop validation: Zod schemas per component.
+- `Layout.astro` wires core metadata, plugin loaders, and the consent notice.
+- `PageLayout.astro` fetches header/footer menus from `menus` with a navigation fallback.
+- `PuckRenderer`: `awcms-public/primary/src/components/common/PuckRenderer.astro`.
+- Widget mapping: `awcms-public/primary/src/components/common/WidgetRenderer.astro`.
+- Shared types: `awcms-public/primary/src/types.d.ts`.
+- Plugin scripts: `awcms-public/primary/src/components/common/PluginLoader.astro` (via `plugins` table).
 
 ### Rich Text
 
-- `TipTapRenderer`: `awcms-public/primary/src/components/TipTapRenderer.tsx`.
-- JSON-to-React mapping (no `dangerouslySetInnerHTML`).
+- Public pages render stored content via server-side components or markdown pipelines.
+- TipTap editor runtime is never used on the public portal.
 
 ### Routes
 
-- `src/pages/[tenant]/[...slug].astro` handles path-based tenants.
-- `src/pages/[...slug].astro` handles host-based tenants.
+- `/`: `src/pages/index.astro` (home page from `pages` table or widget fallback).
+- `/en` and `/id`: locale-prefixed home routes.
+- `/p/[slug]`: dynamic pages from `pages` table.
+- `/blogs` and `/blogs/[slug]`: dynamic blog list and posts from Supabase.
+- `src/pages/[...blog]/*`: static AstroWind blog routes (content collections).
+- `src/pages/[tenant]/visitor-stats.astro` handles the public analytics page for path-based tenants.
+- `src/pages/visitor-stats.astro` handles host-based tenants.
 
 ## Implementation Patterns
 
-- Use `createScopedClient` with `x-tenant-id` headers.
+- Use `createClientFromEnv` to construct Supabase clients with `runtime.env` (Cloudflare) fallback to `import.meta.env`.
+- Use `createScopedClient` with `x-tenant-id` headers for tenant-scoped reads.
 - Use `tenantUrl` from `src/lib/url.ts` for internal links.
+- Use middleware-based logging for visitor analytics (`analytics_events` + `analytics_daily`).
 
 ## Permissions and Access
 
@@ -60,11 +73,19 @@ Describe how the public portal renders tenant content and enforces security cons
 
 - Registry allow-list prevents unknown components from rendering.
 - All data access must be RLS-scoped and filtered for `deleted_at`.
+- Consent notices are rendered in `awcms-public/primary/src/components/common/ConsentNotice.astro`.
+- HTML content is rendered via `set:html`; ensure stored content is sanitized at write time.
 
 ## Operational Concerns
 
 - Cloudflare Pages uses runtime env variables via `runtime.env`.
 - Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
+
+## Tenant Variants
+
+- `awcms-public/smandapbun` is a dedicated single-tenant portal with middleware-based analytics and consent.
+- It uses a fixed slug fallback and JSON fallbacks for content.
+- See `docs/tenancy/smandapbun.md` for its data sources and migration path.
 
 ## References
 

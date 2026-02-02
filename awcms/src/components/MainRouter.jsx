@@ -75,6 +75,7 @@ const SettingsManager = lazy(() => import('@/components/dashboard/SettingsManage
 const SchoolPagesManager = lazy(() => import('@/components/dashboard/SchoolPagesManager'));
 const SiteImagesManager = lazy(() => import('@/components/dashboard/SiteImagesManager'));
 const AuditLogsManager = lazy(() => import('@/components/dashboard/AuditLogsManager'));
+const VisitorStatisticsManager = lazy(() => import('@/components/dashboard/VisitorStatisticsManager'));
 const TenantsManager = lazy(() => import('@/components/dashboard/TenantsManager'));
 const TenantSettings = lazy(() => import('@/components/dashboard/TenantSettings'));
 
@@ -231,6 +232,7 @@ const MainRouter = () => {
           <Route path="settings/branding" element={<TenantSettings />} />
           <Route path="logs" element={<AuditLogsManager />} />
           <Route path="audit-logs" element={<AuditLogsManager />} />
+          <Route path="visitor-stats" element={<VisitorStatisticsManager />} />
           <Route path="settings/language" element={<LanguageSettings />} />
           <Route path="settings/sso" element={<SSOManager />} />
           <Route path="languages" element={<LanguageSettings />} />

@@ -1,0 +1,97 @@
+# Smandapbun Public Portal (Tenant)
+
+## Purpose
+
+Document the tenant-specific Astro implementation for **smandapbun**, including its data sources, localization behavior, and current migration status.
+
+## Audience
+
+- Public portal developers
+- Operators deploying the smandapbun site
+
+## Prerequisites
+
+- `docs/dev/public.md`
+- `docs/tenancy/overview.md`
+
+## Architecture Summary
+
+- **Project**: `awcms-public/smandapbun`
+- **Tenant model**: Single-tenant with middleware-based resolution and fixed-slug fallback
+- **Tenant resolution**: `src/middleware.ts` resolves host/path and falls back to `TENANT_SLUG = 'smandapbun'` in `src/lib/api.ts`
+- **Supabase client**: `createClientFromEnv` (runtime env) + `supabase` fallback in `src/lib/supabase.ts`
+- **Middleware**: `src/middleware.ts` logs analytics and sets `locals.tenant_id`, `locals.locale`, `locals.analytics_consent`
+- **Output**: Astro server output via Cloudflare adapter
+- **Sessions**: Cloudflare adapter expects a `SESSION` KV binding for session storage.
+- **Deployment config**: `awcms-public/smandapbun/wrangler.toml` includes the `SESSION` KV binding placeholder.
+- **Layouts**: `src/layouts/Layout.astro` with global CSS, custom header/footer, no plugin loader
+
+## Data Sources
+
+### Settings Keys (Supabase)
+
+The portal reads tenant settings and merges them with JSON defaults:
+
+- `seo_global`
+- `site_info`
+- `contact_info`
+- `page_contact`
+- `page_profile`
+- `page_organization`
+- `page_services`
+- `page_finance`
+- `page_staff`
+- `page_achievements`
+- `page_alumni`
+- `page_agenda`
+- `page_gallery`
+- `page_school_info`
+
+### Menus
+
+- Primary source: `menus` table via `getMenuTree()`.
+- Fallback: `src/data/navigation.json`.
+
+### Content Fallbacks
+
+- Static JSON files under `src/data/pages/` and `src/data/blogs/` are used as defaults.
+- `src/data/images.json` provides gallery fallback data.
+
+### Blogs
+
+- Posts are fetched from the `blogs` table via `getPosts()`.
+- If Supabase is unavailable, the portal falls back to local JSON data.
+
+## Localization
+
+- Default locale: `id`.
+- Locale detection is path-based (e.g., `/en/...`).
+- `getLocalizedPath()` prepends `/en` when the locale is not the default.
+
+## Contact Form
+
+- Page: `src/pages/kontak.astro`.
+- Uses `verify-turnstile` Edge Function before inserting `contact_messages`.
+
+## Analytics + Consent
+
+- `ConsentNotice` is rendered in `src/layouts/Layout.astro`.
+- Middleware logs analytics events to `analytics_events` and sets consent state from cookies.
+- `analytics_consent` settings provide localized banner copy.
+
+## Migration Path (Future)
+
+- Replace JSON fallbacks with fully DB-driven content (`pages`, `settings`, `site_images`).
+- Remove fixed `TENANT_SLUG` fallback once host/path resolution is complete.
+
+## Migration Checklist (Analytics + Middleware)
+
+- [x] **Add middleware**: port `awcms-public/primary/src/middleware.ts` and ensure tenant resolution (path → host) plus locale/ref handling.
+- [ ] **Tenant context**: remove fixed `TENANT_SLUG` usage and rely on middleware `locals.tenant_id` or host fallback.
+- [x] **Scoped Supabase client**: use `createClientFromEnv` with `runtime.env` and `createScopedClient` for `x-tenant-id` headers.
+- [x] **Consent banner**: add `ConsentNotice.astro` to the smandapbun layout and seed `analytics_consent` settings.
+- [x] **Analytics logging**: enable middleware event inserts to `analytics_events` and rollups to `analytics_daily`.
+- [ ] **Public stats route**: add `/visitor-stats` (host) and `/[tenant]/visitor-stats` (path) pages.
+- [ ] **Regression**: consent banner shows and persists choice.
+- [ ] **Regression**: analytics events log IP/path/referrer/device/geo.
+- [ ] **Regression**: Admin “Visitor Statistics” updates with new events.

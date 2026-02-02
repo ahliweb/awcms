@@ -7,7 +7,7 @@ The Admin Panel (`awcms/`) is a React SPA built with Vite. It serves as the cent
 ## 2. Key Technologies
 
 - **Framework**: React 19.2.3
-- **Build Tool**: Vite 7
+- **Build Tool**: Vite 7.2.7
 - **Styling**: Tailwind CSS 4, shadcn/ui
 - **State Management**: React Context (Tenant, Permissions, Auth)
 - **Icons**: Lucide React
@@ -27,7 +27,8 @@ The Admin Panel (`awcms/`) is a React SPA built with Vite. It serves as the cent
 1. Register the module in `resources_registry` (scope, db_table, permission_prefix).
 2. Create a `Manager` component in `src/components/dashboard/`.
 3. Add a route in `src/components/MainRouter.jsx`.
-4. Insert a sidebar item in `admin_menus` (or seed via `awcms/src/scripts/seed-sidebar.js`).
+4. Insert a sidebar item in `admin_menus` (seed via `awcms/src/scripts/seed-sidebar.js`).
+5. Ensure the permission exists in `permissions` and is mapped via `role_permissions`.
 
 ### 4.2 Handling Permissions
 

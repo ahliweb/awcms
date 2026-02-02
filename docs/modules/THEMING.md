@@ -18,6 +18,7 @@ Describe how tenant branding is stored and applied across the admin UI.
 - Branding lives in `tenants.config` (JSONB).
 - `useTenantTheme()` applies CSS variables at runtime.
 - Components use Tailwind tokens that map to CSS variables.
+- Public portal widgets follow the same CSS variable tokens for consistent theming.
 
 ## How It Works
 

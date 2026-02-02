@@ -27,7 +27,7 @@ Summarize performance strategies implemented in AWCMS.
 ## Implementation Patterns
 
 ```javascript
-const ArticlesManager = lazy(() => import('@/components/dashboard/ArticlesManager'));
+const BlogsManager = lazy(() => import('@/components/dashboard/BlogsManager'));
 ```
 
 ## Permissions and Access

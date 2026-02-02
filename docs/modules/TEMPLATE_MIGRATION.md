@@ -43,7 +43,7 @@ WHERE tenant_id IS NULL;
 
 ## Verification
 
-- Public portal renders assigned templates with `PuckRenderer`.
+- Public portal renders assigned templates with `PuckRenderer` (`awcms-public/primary/src/components/common/PuckRenderer.astro`).
 - Template parts load correctly.
 
 ## References

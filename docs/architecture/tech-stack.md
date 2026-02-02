@@ -39,7 +39,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | UI library | React | 19.2.3 | Island rendering |
 | Language | TypeScript | 5.8.3 | Typed components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
-| Supabase JS | @supabase/supabase-js | 2.90.1 | Public API client |
+| Supabase JS | @supabase/supabase-js | 2.93.3 | Public API client |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 

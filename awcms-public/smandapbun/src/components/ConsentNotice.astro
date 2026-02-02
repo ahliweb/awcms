@@ -1,0 +1,156 @@
+---
+const consentConfig =
+  (Astro.locals.analytics_consent as Record<string, unknown> | undefined) ||
+  undefined;
+const locale = (Astro.locals.locale as string) || "id";
+
+const readText = (value: unknown, fallback: string) => {
+  if (!value) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    const record = value as Record<string, string>;
+    return record[locale] || record.en || record.id || fallback;
+  }
+  return fallback;
+};
+
+const isEnabled =
+  typeof consentConfig?.enabled === "boolean" ? consentConfig.enabled : true;
+
+const defaultTitle = "Cookie Notice";
+const defaultBody =
+  "We use cookies to understand site usage and improve the experience. Data collected includes:";
+const defaultDataPoints = [
+  "Visitor IP address",
+  "Pages visited",
+  "Referrer and UTM parameters",
+  "Device and browser information",
+  "Approximate location (country/region)",
+];
+
+const title = readText(consentConfig?.title, defaultTitle);
+const body = readText(consentConfig?.body, defaultBody);
+const dataPoints = Array.isArray(consentConfig?.data_points)
+  ? consentConfig?.data_points
+  : [];
+const resolvedDataPoints = dataPoints.length
+  ? dataPoints.map((item) => readText(item, "")).filter(Boolean)
+  : defaultDataPoints;
+
+const acceptLabel = readText(consentConfig?.accept_label, "Accept");
+const declineLabel = readText(consentConfig?.decline_label, "Decline");
+const version = readText(consentConfig?.version, "2026-02-02");
+---
+
+{
+  isEnabled ? (
+    <div
+      data-consent-banner
+      class="fixed inset-x-4 bottom-4 z-50 hidden"
+      aria-live="polite"
+    >
+      <div class="mx-auto max-w-4xl rounded-2xl border border-gray-200/80 bg-white/95 text-slate-900 shadow-lg shadow-slate-900/10 backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/95 dark:text-slate-100">
+        <div class="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between">
+          <div class="space-y-2">
+            <h2 class="text-base font-semibold text-slate-900 dark:text-slate-100">
+              {title}
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-slate-300">{body}</p>
+            <ul class="grid gap-1 text-xs text-gray-500 dark:text-slate-400 md:grid-cols-2">
+              {resolvedDataPoints.map((point) => (
+                <li class="flex items-start gap-2">
+                  <span class="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-primary-500"></span>
+                  <span>{point}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div class="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
+            <button
+              type="button"
+              data-consent-decline
+              class="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              {declineLabel}
+            </button>
+            <button
+              type="button"
+              data-consent-accept
+              class="rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+            >
+              {acceptLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null
+}
+
+<script is:inline define:vars={{ version }}>
+  const COOKIE_NAME = "awcms_consent";
+  const VERSION_NAME = "awcms_consent_version";
+
+  const getCookie = (name) => {
+    const cookies = document.cookie.split("; ");
+    for (const cookie of cookies) {
+      const [key, ...value] = cookie.split("=");
+      if (decodeURIComponent(key) === name) {
+        return decodeURIComponent(value.join("="));
+      }
+    }
+    return null;
+  };
+
+  const setCookie = (name, value, days) => {
+    const maxAge = days * 24 * 60 * 60;
+    document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;
+  };
+
+  const initConsentBanner = () => {
+    const banner = document.querySelector("[data-consent-banner]");
+    if (!banner) return;
+
+    const existing = getCookie(COOKIE_NAME);
+    const existingVersion = getCookie(VERSION_NAME);
+    if (existing && existingVersion === String(version)) {
+      banner.remove();
+      return;
+    }
+
+    banner.classList.remove("hidden");
+
+    if (banner.dataset.bound === "true") {
+      return;
+    }
+    banner.dataset.bound = "true";
+
+    const acceptBtn = banner.querySelector("[data-consent-accept]");
+    const declineBtn = banner.querySelector("[data-consent-decline]");
+
+    const storeChoice = (choice) => {
+      setCookie(COOKIE_NAME, choice, 365);
+      setCookie(VERSION_NAME, String(version), 365);
+      banner.classList.add("hidden");
+    };
+
+    acceptBtn?.addEventListener("click", () => storeChoice("accepted"));
+    declineBtn?.addEventListener("click", () => storeChoice("declined"));
+  };
+
+  const bootstrapConsentBanner = () => {
+    initConsentBanner();
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootstrapConsentBanner, {
+      once: true,
+    });
+  } else {
+    bootstrapConsentBanner();
+  }
+
+  document.addEventListener("astro:after-swap", () => {
+    initConsentBanner();
+  });
+</script>

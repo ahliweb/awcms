@@ -15,11 +15,13 @@ This document outlines how AWCMS supports compliance with Indonesian regulations
 ### AWCMS Implementation
 
 - **Consent**: Built-in visual page builder can be used to create consent forms.
+- **Analytics Notice**: `analytics_consent` settings provide cookie/telemetry disclosure for public portals.
 - **Rights of Data Subjects**:
   - **Right to Access**: `UserProfile` allows users to view their data.
   - **Right to Delete**: `Soft Delete` mechanism supports "right to be forgotten" workflows (hard delete can be implemented by admin).
   - **Right to Correct**: Edit forms available for all user profiles.
-- **Data Encrytion**: All data is encrypted at rest and in transit via Supabase.
+- **Data Encryption**: All data is encrypted at rest and in transit via Supabase.
+- **Personal Data**: IP addresses and user agent strings are stored in `analytics_events` and should follow retention/notification policies.
 
 ## 3. PP 71/2019 (PSE)
 
@@ -39,3 +41,5 @@ This document outlines how AWCMS supports compliance with Indonesian regulations
 - [ ] Register with Kominfo (PSE Lingkup Privat).
 - [ ] Configure `PRIVACY_POLICY_URL` and `TERMS_URL` in tenant settings.
 - [ ] Ensure consent checkboxes are present on public forms.
+- [ ] Ensure cookie/analytics notices are enabled for public portals.
+- [ ] Configure retention for analytics and audit tables as required.

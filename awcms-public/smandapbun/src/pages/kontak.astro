@@ -269,7 +269,7 @@ console.log("Turnstile Site Key:", siteKey);
 </Layout>
 
 <script>
-  import { supabase } from "../lib/supabase";
+  import { createScopedClient } from "../lib/supabase";
   console.log("[Kontak] Script initializing...");
 
   declare global {
@@ -402,6 +402,12 @@ console.log("Turnstile Site Key:", siteKey);
       return;
     }
 
+    const client = createScopedClient({ "x-tenant-id": tenantId }, import.meta.env);
+    if (!client) {
+      window.showToast?.("System Error: Supabase client missing.", "error");
+      return;
+    }
+
     if (!token) {
       window.showToast?.(
         "Mohon selesaikan verifikasi keamanan (CAPTCHA).",
@@ -422,7 +428,7 @@ console.log("Turnstile Site Key:", siteKey);
 
       // 1. Verify Turnstile
       const { data: verifyData, error: verifyError } =
-        await supabase.functions.invoke("verify-turnstile", {
+        await client.functions.invoke("verify-turnstile", {
           body: { token },
         });
 
@@ -433,7 +439,7 @@ console.log("Turnstile Site Key:", siteKey);
       const ip_address = verifyData.ip;
 
       // 2. Insert Message
-      const { error } = await supabase.from("contact_messages").insert({
+      const { error } = await client.from("contact_messages").insert({
         tenant_id: tenantId,
         name,
         email,

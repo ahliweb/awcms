@@ -49,7 +49,7 @@ Agents must be aware of the exact versions in use:
 | React            | 19.2.3   | Functional components only       |
 | Vite             | 7.2.7    | Build tool & dev server          |
 | TailwindCSS      | 4.1.18   | Admin uses CSS-based config      |
-| Supabase JS      | 2.87.1   | Admin client (respects RLS)      |
+| Supabase JS      | 2.87.1 / 2.93.3 | Admin / Public clients     |
 | React Router DOM | 7.10.1   | Client-side routing              |
 | Puck             | 0.21.0   | Visual Editor (@puckeditor/puck) |
 | TipTap           | 3.13.0   | Rich text editor (XSS-safe)      |
@@ -60,6 +60,7 @@ Agents must be aware of the exact versions in use:
 | Recharts         | 3.5.1    | Charts & Data Visualization      |
 | Leaflet          | 1.9.4    | Maps                             |
 | Vitest           | 4.0.16   | Unit/Integration testing         |
+| Astro            | 5.12.9   | Public portal                    |
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.3. Ensure full compatibility with all dependencies.
@@ -99,6 +100,20 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | **Public Portal** | Astro 5, React 19.2.3, Cloudflare Pages                                   |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase only (NO Node.js servers)                                        |
+
+### Context7 (Primary Reference)
+
+When updating docs or implementing library usage, **Context7 is the primary reference**. Use the following library IDs with `context7_search`:
+
+- `supabase/supabase-js`
+- `vitejs/vite`
+- `withastro/astro`
+- `/websites/tailwindcss`
+- `/remix-run/react-router`
+- `/websites/i18next`
+- `/ueberdosis/tiptap-docs`
+- `/puckeditor/puck`
+- `/grx7/framer-motion`
 
 ### Code Patterns
 
@@ -354,6 +369,25 @@ const { data, error } = await supabase
   .order("created_at", { ascending: false });
 ```
 
+### Client Initialization (Context7)
+
+```javascript
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+  auth: {
+    flowType: "pkce",
+    autoRefreshToken: true,
+    persistSession: true,
+  },
+  global: {
+    headers: {
+      "x-application-name": "awcms",
+    },
+  },
+});
+```
+
 ### Soft Delete Pattern
 
 ```javascript
@@ -449,7 +483,7 @@ AWCMS provides a "Swiss Army Knife" MCP server in `awcms-mcp/` that grants Agent
 Agents must use the standardized permission keys: `scope.resource.action`.
 
 - **Scopes**: `platform`, `tenant`, `content`, `module`
-- **Actions**: `create` (C), `read` (R), `update` (U), `publish` (P), `delete` (SD), `restore` (RS), `delete_permanent` (DP).
+- **Actions**: `create` (C), `read` (R), `update` (U), `publish` (P), `delete` (SD), `restore` (RS), `permanent_delete` (DP).
 - **Special Flags**: `U-own` (Update Own Only) - requires checking `user_id` against resource owner.
 
 ### Standard Permission Matrix

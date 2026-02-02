@@ -42,7 +42,7 @@ Explain how templates, parts, widgets, and assignments drive multi-channel rende
 
 1. Fetch page data and `template_assignments` for `web` channel.
 2. Merge header part, page content, and footer part.
-3. Render with `PuckRenderer` and allow-list registry.
+3. Render with `PuckRenderer` (`components/common/PuckRenderer.astro`) and widget mapping (`components/common/WidgetRenderer.astro`).
 
 ## Implementation Patterns
 

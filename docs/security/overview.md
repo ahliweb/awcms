@@ -73,12 +73,14 @@ if (!hasPermission('tenant.blog.update')) {
 All tenant-scoped tables include `tenant_id` and RLS policies.
 
 ```sql
-CREATE POLICY "table_select_unified" ON public.table_name
-USING (
-  tenant_id = current_tenant_id()
+CREATE POLICY "table_select_abac" ON public.table_name
+FOR SELECT USING (
+  (tenant_id = current_tenant_id() AND has_permission('tenant.module.read'))
   OR auth_is_admin()
 );
 ```
+
+Legacy tables may still use tenant-only select policies and rely on admin UI ABAC checks. New tables should follow the ABAC pattern above.
 
 ### Tenant Isolation
 
@@ -102,6 +104,8 @@ USING (
 - Use `deleted_at` for deletions and filter it on reads.
 - Do not bypass RLS unless explicitly implementing platform admin features.
 - Supabase is the only backend.
+- Public telemetry (analytics events) must remain tenant-scoped and documented via consent notices.
+- Analytics events include IP address, page path, referrer, user agent, and geo headers; treat these as personal data and apply retention policies.
 
 ## Operational Concerns
 

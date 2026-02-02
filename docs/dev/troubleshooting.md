@@ -35,6 +35,17 @@ Provide common fixes for local development and deployment issues.
 - Check `x-tenant-id` header injection.
 - Confirm `tenant_id` matches the current tenant and `deleted_at` is null.
 
+### Analytics Not Showing
+
+- Confirm `analytics_events` and `analytics_daily` migrations are applied.
+- Verify public middleware is running and the request is HTML (not asset).
+- Ensure `x-tenant-id` is set for public requests.
+
+### Migration History Mismatch
+
+- Use `supabase migration repair --status reverted <missing_version>`.
+- Re-run `npx supabase db push` after repairs.
+
 ### Turnstile Errors
 
 - Use the Cloudflare test key for localhost.

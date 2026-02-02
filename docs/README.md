@@ -4,8 +4,6 @@
 
 AWCMS (**AhliWeb Content Management System**) is an **enterprise-grade, multi-tenant CMS** with **ABAC security** and a **Supabase-backed** architecture. The monorepo hosts multiple clients (Admin, Public, Mobile, IoT) plus extensions and backend migrations.
 
-> This wiki is generated from what is visible on the repository landing page (README section) and common, conventional implementation patterns for the listed stack. Where details are not visible (e.g., deeper docs pages), this wiki provides **safe defaults + placeholders** so it can be refined as the repo evolves.
-
 ---
 
 ## Overview
@@ -37,8 +35,8 @@ From the repository README:
 
 | Directory               | Description                   | Stack                                  |
 | ----------------------- | ----------------------------- | -------------------------------------- |
-| `awcms/`                | Admin Panel                   | React **19.2.3**, Vite **7**, Supabase |
-| `awcms-public/primary/` | Public Portal                 | Astro **5**, React **19.2.3**          |
+| `awcms/`                | Admin Panel                   | React **19.2.3**, Vite **7.2.7**, Supabase |
+| `awcms-public/primary/` | Public Portal                 | Astro **5.12.9**, React **19.2.3**         |
 | `awcms-mobile/primary/` | Mobile App                    | Flutter                                |
 | `awcms-esp32/primary/`  | IoT Firmware                  | ESP32, PlatformIO                      |
 | `awcms-ext/`            | External Extensions           | JavaScript modules                     |
@@ -48,7 +46,6 @@ From the repository README:
 
 * `docs/` (documentation folder)
 * `awcms-mcp/` (MCP integration workspace)
-* `schema_dump.sql` (database snapshot / reference)
 
 ---
 
@@ -162,9 +159,7 @@ The README points to a **Developer Setup Guide** and per-client guides. If you�
 4. **Local Supabase** *(if supported by repo)*
 
    * `supabase start`
-   * apply migrations / seed
-
-> Replace the above with the repo’s official docs when the docs pages are available.
+    * apply migrations / seed
 
 ---
 
@@ -174,7 +169,7 @@ The README points to a **Developer Setup Guide** and per-client guides. If you�
 
 **Purpose:** Tenant administration + platform administration.
 
-**Stack:** React 19.2.3 + Vite 7 + Supabase.
+**Stack:** React 19.2.3 + Vite 7.2.7 + Supabase.
 
 Typical capabilities you’d expect in an admin panel for a multi-tenant CMS:
 
@@ -198,7 +193,7 @@ Typical capabilities you’d expect in an admin panel for a multi-tenant CMS:
 
 **Purpose:** Tenant-facing website template(s).
 
-**Stack:** Astro 5 + React 19.2.3.
+**Stack:** Astro 5.12.9 + React 19.2.3.
 
 Typical structure:
 
@@ -380,7 +375,7 @@ The repository includes:
 * Confirm RLS policies always filter `tenant_id`
 * Remove any “service role” usage from the client
 
-### 3) Build fails on React 19 / Vite 7
+### 3) Build fails on React 19 / Vite 7.x
 
 * Verify Node LTS
 * Ensure dependencies support React 19

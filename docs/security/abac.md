@@ -53,6 +53,8 @@ These lists correspond directly to the database `permissions` table and `Permiss
 
 **Format**: `tenant.{module}.{action}`
 
+**Action conventions**: `create`, `read`, `update`, `delete`, `restore`, `permanent_delete`, `publish`.
+
 #### Content Modules
 
 | Module        | Permission Prefix        | Actions                                                          |
@@ -124,7 +126,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 | Mobile Config      | `tenant.mobile.*`             | read, update                 |
 | Push Notifications | `tenant.push_notifications.*` | read, create, update, delete |
 | IoT Devices        | `tenant.iot.*`                | read, create, update, delete |
-| Extensions         | `tenant.extensions.*`         | view, create, delete, publish|
+| Extensions         | `tenant.extensions.*`         | view, create, delete, publish |
 | Analytics          | `tenant.analytics.*`          | read                         |
 
 ---
@@ -137,6 +139,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 - **Roles**: Foundational grouping of permissions.
 - **Permissions**: Granular capabilities (e.g. `tenant.blog.create`).
 - **Policies**: Advanced deny-rules (e.g., "No delete on mobile").
+- **Analytics**: `analytics_events` and `analytics_daily` are protected by `tenant.analytics.read` for admin access.
 
 ### Plugin & Extension Permissions
 

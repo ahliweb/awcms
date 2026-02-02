@@ -50,6 +50,8 @@ Environment variables:
 - `VITE_SUPABASE_ANON_KEY`
 - `NODE_VERSION=20`
 
+**Runtime note**: Astro Cloudflare adapter exposes env vars via `runtime.env`; ensure server routes read from it when available.
+
 ## Verification
 
 - Public portal returns tenant-resolved pages.

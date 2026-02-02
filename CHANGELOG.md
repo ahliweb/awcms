@@ -7,9 +7,19 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Added
 
+- **Visitor Statistics**:
+  - Added analytics event tracking (IP, page paths, referrers, device/geo) with daily rollups.
+  - Introduced an Admin Panel module for visitor insights and a public visitor stats page.
+  - Added a tenant-configurable cookie consent notice for analytics disclosure.
+
 ### Changed
 
+- **Database Synchronization**: Stabilized local-to-remote schema sync by neutralizing conflicting system triggers on the `storage` schema.
+
 ### Fixed
+
+- **Performance**: Resolved Supabase Advisor warnings for unindexed foreign keys and redundant RLS policies on `analytics_daily`.
+- **Database Lint**: Fixed type mismatch warning in `extensions.index_advisor`.
 
 ## [2.28.0] "Aegis" - 2026-02-01
 
