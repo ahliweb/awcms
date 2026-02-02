@@ -26,9 +26,9 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
     resolve: {
-      alias: {
+      alias: process.argv.includes('build') ? {
         'react-dom/server': 'react-dom/server.edge',
-      },
+      } : undefined,
     },
   },
   i18n: {
