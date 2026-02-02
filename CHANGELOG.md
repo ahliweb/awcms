@@ -7,6 +7,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [2.29.0] "Equilibrium" - 2026-02-03
+
+### Added
+
 - **Visitor Statistics**:
   - Added analytics event tracking (IP, page paths, referrers, device/geo) with daily rollups.
   - Introduced an Admin Panel module for visitor insights and a public visitor stats page.
