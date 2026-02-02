@@ -5,6 +5,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Dependencies**: Fixed high severity vulnerability in `wrangler` (and `undici`) by overriding version to `^4.61.1` in `awcms-public/smandapbun`.
+
 ### Added
 
 ### Changed
