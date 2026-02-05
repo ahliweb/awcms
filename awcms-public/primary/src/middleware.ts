@@ -81,10 +81,17 @@ const shouldTrackRequest = (request: Request, pathname: string) => {
 };
 
 const ensureId = () => {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
+  const webCrypto = globalThis.crypto;
+  if (!webCrypto) {
+    throw new Error("Crypto unavailable for ID generation.");
   }
-  return `awcms-${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+  if ("randomUUID" in webCrypto) {
+    return webCrypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  webCrypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `awcms-${hex}`;
 };
 
 /**
