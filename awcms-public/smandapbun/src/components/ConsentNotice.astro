@@ -1,8 +1,16 @@
 ---
-const consentConfig =
-  (Astro.locals.analytics_consent as Record<string, unknown> | undefined) ||
-  undefined;
-const locale = (Astro.locals.locale as string) || "id";
+export interface Props {
+  consentConfig?: Record<string, unknown>;
+  locale?: string;
+}
+
+const { consentConfig: consentOverride, locale: localeOverride } = Astro.props;
+const locals = (Astro.locals ?? {}) as {
+  analytics_consent?: Record<string, unknown>;
+  locale?: string;
+};
+const consentConfig = consentOverride ?? locals.analytics_consent;
+const locale = localeOverride ?? locals.locale ?? "id";
 
 const readText = (value: unknown, fallback: string) => {
   if (!value) return fallback;

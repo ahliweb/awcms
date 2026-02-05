@@ -34,6 +34,18 @@ export const PUBLIC_MODULES = [
     { key: 'announcements', label: 'Announcements', url: '/announcements', icon: 'Megaphone', group: 'Content', order: 140 },
     { key: 'promotions', label: 'Promotions', url: '/promotions', icon: 'Tag', group: 'Content', order: 150 },
 
+    // School (Smandapbun)
+    { key: 'school_profile', label: 'School Profile', url: '/profil', icon: 'Building2', group: 'School', order: 160 },
+    { key: 'school_organization', label: 'Organization', url: '/profil/struktur-organisasi', icon: 'Users', group: 'School', order: 170 },
+    { key: 'school_staff', label: 'Staff', url: '/profil/tenaga-pendidik', icon: 'UserCheck', group: 'School', order: 180 },
+    { key: 'school_services', label: 'Services', url: '/layanan', icon: 'Settings', group: 'School', order: 190 },
+    { key: 'school_finance', label: 'Finance', url: '/keuangan', icon: 'Wallet', group: 'School', order: 200 },
+    { key: 'school_achievements', label: 'Achievements', url: '/prestasi', icon: 'Trophy', group: 'School', order: 210 },
+    { key: 'school_alumni', label: 'Alumni', url: '/alumni', icon: 'GraduationCap', group: 'School', order: 220 },
+    { key: 'school_agenda', label: 'Agenda', url: '/blogs/agenda', icon: 'CalendarDays', group: 'School', order: 230 },
+    { key: 'school_gallery', label: 'Gallery', url: '/blogs/galeri', icon: 'Image', group: 'School', order: 240 },
+    { key: 'school_contact', label: 'School Contact', url: '/kontak', icon: 'Phone', group: 'School', order: 250 },
+
     // Media
     { key: 'gallery', label: 'Gallery', url: '/gallery', icon: 'Image', group: 'Media', order: 200 },
     { key: 'photo_gallery', label: 'Photo Gallery', url: '/gallery/photos', icon: 'Image', group: 'Media', order: 210 },

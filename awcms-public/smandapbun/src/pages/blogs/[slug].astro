@@ -10,7 +10,12 @@ import {
 
 import { getPosts } from "../../lib/api";
 
-export const prerender = false;
+export async function getStaticPaths() {
+  const posts = await getPosts(500);
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+  }));
+}
 
 const { slug } = Astro.params;
 if (!slug) {
@@ -18,7 +23,7 @@ if (!slug) {
 }
 
 const locale = "id" as const;
-const allPosts = await getPosts(100);
+const allPosts = await getPosts(500);
 const post = allPosts.find((item) => item.slug === slug);
 
 if (!post) {

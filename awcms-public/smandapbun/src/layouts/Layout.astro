@@ -14,8 +14,15 @@ export interface Props {
 const locale = getLocale(Astro.url) as Locale;
 
 // Fetch dynamic site data
-import { getSiteData } from "../lib/api";
+import { getAnalyticsConsent, getSiteData } from "../lib/api";
 const siteData = await getSiteData();
+const locals = (Astro.locals ?? {}) as {
+  tenant_id?: string;
+  analytics_consent?: Record<string, unknown>;
+};
+const analyticsConsent =
+  locals.analytics_consent ??
+  (await getAnalyticsConsent(locals.tenant_id ?? null));
 
 const {
   title = siteData.site.name,
@@ -78,6 +85,6 @@ const siteTitle =
       <slot />
     </main>
     <Footer locale={locale} />
-    <ConsentNotice />
+    <ConsentNotice consentConfig={analyticsConsent} locale={locale} />
   </body>
 </html>

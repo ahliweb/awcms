@@ -291,7 +291,9 @@ export interface SiteData {
     established: string;
 }
 
-export async function getTenantId() {
+export async function getTenantId(overrideTenantId?: string | null) {
+    if (overrideTenantId) return overrideTenantId;
+
     const { data, error } = await supabase.rpc('get_tenant_by_slug', {
         lookup_slug: TENANT_SLUG
     }).maybeSingle();
@@ -304,6 +306,28 @@ export async function getTenantId() {
     // Cast data to expected type
     const tenant = data as { id: string; slug: string } | null;
     return tenant ? tenant.id : null;
+}
+
+export async function getAnalyticsConsent(overrideTenantId?: string | null) {
+    const tenantId = await getTenantId(overrideTenantId);
+    if (!tenantId) return null;
+
+    const client = getTenantClient(tenantId);
+    const { data } = await client
+        .from('settings')
+        .select('value')
+        .eq('tenant_id', tenantId)
+        .eq('key', 'analytics_consent')
+        .maybeSingle();
+
+    if (!data?.value) return null;
+
+    try {
+        return typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+    } catch (e) {
+        console.error('Error parsing analytics consent settings:', e);
+        return null;
+    }
 }
 
 export interface NavigationItem {

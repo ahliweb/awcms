@@ -1,19 +1,24 @@
 import { defineConfig } from 'astro/config';
 
-
 import tailwindcss from '@tailwindcss/vite';
 import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
 import cloudflare from '@astrojs/cloudflare';
 import icon from 'astro-icon';
 
-export default defineConfig({
-  site: 'https://sman2pangkalanbun.sch.id',
-  output: 'server',
-  adapter: cloudflare({
+const renderMode = process.env.PUBLIC_PORTAL_RENDER_MODE || 'server';
+const isStaticOutput = renderMode === 'static';
+const adapter = isStaticOutput
+  ? undefined
+  : cloudflare({
     imageService: 'compile',
     sessionKVBindingName: 'SESSION',
-  }),
+  });
+
+export default defineConfig({
+  site: 'https://sman2pangkalanbun.sch.id',
+  output: isStaticOutput ? 'static' : 'server',
+  adapter,
   integrations: [
     react(),
     sitemap(),
