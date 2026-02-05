@@ -9,7 +9,9 @@
 </div>
 
 <script>
-    function showToast(message: string, type: "success" | "error" = "success") {
+    type ToastType = "success" | "error";
+
+    function showToast(message: string, type: ToastType = "success") {
         const container = document.getElementById("toast-container");
         if (!container) return;
 
@@ -66,5 +68,8 @@
     }
 
     // Expose to window
-    (window as any).showToast = showToast;
+    const toastWindow = window as Window & {
+        showToast?: (message: string, type?: ToastType) => void;
+    };
+    toastWindow.showToast = showToast;
 </script>

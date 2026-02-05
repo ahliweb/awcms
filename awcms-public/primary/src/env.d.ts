@@ -11,12 +11,13 @@ declare namespace App {
     host: string;
     tenant_source: "path" | "host";
     ref_code: string | null;
-    locale: string;
+    locale?: import("./utils/i18n").Locale;
+    analytics_consent?: Record<string, unknown>;
     seo?: Record<string, unknown>;
     site_info?: Record<string, unknown>;
     contact_info?: Record<string, unknown>;
     tenant?: Record<string, unknown>;
-    runtime: {
+    runtime?: {
       env: Record<string, string>;
     };
   }

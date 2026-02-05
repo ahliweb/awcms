@@ -129,7 +129,10 @@ export async function getPageByType(
     query = query.eq("tenant_id", tenantId);
   }
 
-  const { data, error } = await query.order("published_at", { ascending: false }).limit(1).maybeSingle();
+  const { data, error } = await query
+    .order("published_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     console.error("[Content] Error fetching page by type:", error.message);

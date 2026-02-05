@@ -10,21 +10,11 @@ import { getHomePermalink } from "~/utils/permalinks";
 import { trimSlash, getAsset } from "~/utils/permalinks";
 import { getLocale, t } from "~/utils/i18n";
 import type { CallToAction } from "~/types";
-
-interface Link {
-  text?: string;
-  href?: string;
-  ariaLabel?: string;
-  icon?: string;
-}
-
-interface MenuLink extends Link {
-  links?: Array<MenuLink>;
-}
+import type { HeaderLink } from "~/lib/menu";
 
 export interface Props {
   id?: string;
-  links?: Array<MenuLink>;
+  links?: Array<HeaderLink>;
   actions?: Array<CallToAction>;
   isSticky?: boolean;
   isDark?: boolean;
@@ -47,7 +37,7 @@ const {
 } = Astro.props;
 
 const currentPath = `/${trimSlash(new URL(Astro.url).pathname)}`;
-const locale = Astro.locals.locale || getLocale();
+const locale = Astro.locals.locale ?? getLocale();
 ---
 
 <header

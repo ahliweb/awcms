@@ -22,7 +22,7 @@ Document the tenant-specific Astro implementation for **smandapbun**, including 
 - **Supabase client**: `createClientFromEnv` (runtime env) + `supabase` fallback in `src/lib/supabase.ts`
 - **Middleware**: `src/middleware.ts` logs analytics and sets `locals.tenant_id`, `locals.locale`, `locals.analytics_consent`
 - **Output**: Astro SSR via Cloudflare adapter
-- **Sessions**: No KV-backed session storage is used.
+- **Sessions**: Uses the in-memory session driver (no KV binding required).
 - **Deployment config**: `awcms-public/smandapbun/wrangler.toml` includes SSR build settings only.
 - **Layouts**: `src/layouts/Layout.astro` with global CSS, custom header/footer, no plugin loader
 
@@ -83,7 +83,7 @@ The portal reads tenant settings and merges them with JSON defaults:
 - Build command: `npm run build`.
 - Output directory: `dist`.
 - Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`.
-- KV bindings: none (no session-backed KV usage).
+- KV bindings: none (in-memory sessions).
 
 ## Contact Form
 

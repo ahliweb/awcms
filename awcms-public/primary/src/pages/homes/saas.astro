@@ -11,6 +11,7 @@ import Pricing from "~/components/widgets/Pricing.astro";
 import { headerData as fallbackHeaderData } from "~/navigation";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getHeaderMenu, mapMenuItemsToHeaderLinks } from "~/lib/menu";
+import type { HeaderLink } from "~/lib/menu";
 import FAQs from "~/components/widgets/FAQs.astro";
 import BlogLatestPosts from "~/components/widgets/BlogLatestPosts.astro";
 import { getLocale, t } from "~/utils/i18n";
@@ -21,7 +22,7 @@ const supabase = createClientFromEnv(
   Astro.locals.runtime?.env || import.meta.env,
 );
 
-let headerLinks = fallbackHeaderData.links;
+let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 
 if (supabase && tenantId) {
   const headerItems = await getHeaderMenu(supabase, tenantId);

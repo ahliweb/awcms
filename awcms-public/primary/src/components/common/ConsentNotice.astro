@@ -1,6 +1,6 @@
 ---
 const consentConfig = Astro.locals.analytics_consent as Record<string, unknown> | undefined;
-const locale = (Astro.locals.locale as string) || "en";
+const locale = Astro.locals.locale ?? "en";
 
 const readText = (value: unknown, fallback: string) => {
   if (!value) return fallback;

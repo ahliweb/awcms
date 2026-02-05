@@ -243,9 +243,10 @@ const {
 
           if (window.turnstile && turnstileWidgetId) window.turnstile.reset(turnstileWidgetId);
 
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("Error sending message:", err);
-          window.showToast?.("Failed to send message: " + (err.message || "Unknown error"), "error");
+          const errorMessage = err instanceof Error ? err.message : "Unknown error";
+          window.showToast?.(`Failed to send message: ${errorMessage}`, "error");
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;

@@ -6,7 +6,7 @@ import Button from "~/components/ui/Button.astro";
 import { getLocale, t } from "~/utils/i18n";
 
 const { textDirection } = I18N;
-const locale = Astro.locals.locale || getLocale();
+const locale = Astro.locals.locale ?? getLocale();
 ---
 
 <div class="mx-auto px-6 sm:px-6 max-w-3xl pt-8 md:pt-4 pb-12 md:pb-20">

@@ -8,6 +8,7 @@ import Announcement from "~/components/widgets/Announcement.astro";
 import { headerData as fallbackHeaderData, footerData as fallbackFooterData } from "~/navigation";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getFooterMenu, getHeaderMenu, mapMenuItemsToFooterLinks, mapMenuItemsToHeaderLinks } from "~/lib/menu";
+import type { HeaderLink } from "~/lib/menu";
 
 import type { MetaData } from "~/types";
 
@@ -21,7 +22,7 @@ const supabase = createClientFromEnv(
     Astro.locals.runtime?.env || import.meta.env,
 );
 
-let headerLinks = fallbackHeaderData.links;
+let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 let footerLinks = fallbackFooterData.links;
 
 if (supabase && tenantId) {

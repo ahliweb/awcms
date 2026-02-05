@@ -9,6 +9,9 @@ import icon from 'astro-icon';
 export default defineConfig({
   site: 'https://sman2pangkalanbun.sch.id',
   output: 'server',
+  session: {
+    driver: 'memory',
+  },
   adapter: cloudflare({
     imageService: 'compile',
   }),

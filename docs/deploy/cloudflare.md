@@ -70,7 +70,7 @@ Environment variables:
 - `PUBLIC_TURNSTILE_SITE_KEY`
 - `NODE_VERSION=20`
 
-KV bindings: none (no session-backed KV usage).
+KV bindings: none (sessions use the in-memory driver).
 
 ## Verification
 

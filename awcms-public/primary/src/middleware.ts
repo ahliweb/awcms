@@ -1,5 +1,9 @@
 import { defineMiddleware } from "astro/middleware";
-import { createClientFromEnv, createScopedClient, getTenant } from "./lib/supabase";
+import {
+  createClientFromEnv,
+  createScopedClient,
+  getTenant,
+} from "./lib/supabase";
 import { extractPathAfterTenant, extractTenantFromPath } from "./lib/url";
 
 const TRACKING_VISITOR_COOKIE = "awcms_visitor_id";
@@ -8,12 +12,15 @@ const CONSENT_COOKIE = "awcms_consent";
 
 const parseCookies = (cookieHeader: string | null) => {
   if (!cookieHeader) return {} as Record<string, string>;
-  return cookieHeader.split(";").reduce((acc, chunk) => {
-    const [rawKey, ...rawValue] = chunk.trim().split("=");
-    if (!rawKey) return acc;
-    acc[decodeURIComponent(rawKey)] = decodeURIComponent(rawValue.join("="));
-    return acc;
-  }, {} as Record<string, string>);
+  return cookieHeader.split(";").reduce(
+    (acc, chunk) => {
+      const [rawKey, ...rawValue] = chunk.trim().split("=");
+      if (!rawKey) return acc;
+      acc[decodeURIComponent(rawKey)] = decodeURIComponent(rawValue.join("="));
+      return acc;
+    },
+    {} as Record<string, string>,
+  );
 };
 
 const buildCookie = (
@@ -59,7 +66,15 @@ const shouldTrackRequest = (request: Request, pathname: string) => {
   const accept = request.headers.get("accept") || "";
   if (!accept.includes("text/html")) return false;
 
-  const skipPrefixes = ["/_astro", "/_image", "/favicon", "/robots", "/sitemap", "/manifest", "/assets"];
+  const skipPrefixes = [
+    "/_astro",
+    "/_image",
+    "/favicon",
+    "/robots",
+    "/sitemap",
+    "/manifest",
+    "/assets",
+  ];
   if (skipPrefixes.some((prefix) => pathname.startsWith(prefix))) return false;
 
   const skipExtensions = [
@@ -81,16 +96,18 @@ const shouldTrackRequest = (request: Request, pathname: string) => {
 };
 
 const ensureId = () => {
-  const webCrypto = globalThis.crypto;
-  if (!webCrypto) {
+  const webCrypto = globalThis.crypto as Crypto | undefined;
+  if (!webCrypto?.getRandomValues) {
     throw new Error("Crypto unavailable for ID generation.");
   }
-  if ("randomUUID" in webCrypto) {
+  if (typeof webCrypto.randomUUID === "function") {
     return webCrypto.randomUUID();
   }
   const bytes = new Uint8Array(16);
   webCrypto.getRandomValues(bytes);
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
   return `awcms-${hex}`;
 };
 
@@ -184,12 +201,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     // 5. Fallback to host-based resolution
     if (!tenantId) {
-      let host = url.hostname || "";
-
-      // Dev override
-      if (import.meta.env.DEV && import.meta.env.VITE_DEV_TENANT_HOST) {
-        host = import.meta.env.VITE_DEV_TENANT_HOST;
-      }
+      const host =
+        import.meta.env.DEV && import.meta.env.VITE_DEV_TENANT_HOST
+          ? import.meta.env.VITE_DEV_TENANT_HOST
+          : url.hostname || "";
 
       console.log("[Middleware] Falling back to host resolution:", host);
 
@@ -233,7 +248,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       }
 
       // Fallback to 'primary' for known channel domains
-      let host = url.hostname || "";
+      const host = url.hostname || "";
 
       if (
         host === "ahliweb.com" ||
@@ -270,7 +285,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     locals.tenant_source = resolvedFromPath ? "path" : "host";
 
     locals.ref_code = refCode;
-    locals.locale = locale || "en"; // Default to English
+    locals.locale = locale === "id" || locale === "en" ? locale : "en";
 
     // 8. Fetch Tenant Settings (SEO + Site Info)
     if (tenantId) {
@@ -312,7 +327,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
       if (siteInfo) locals.site_info = siteInfo as Record<string, unknown>;
 
       const contactInfo = parseSetting(settingsMap.contact_info);
-      if (contactInfo) locals.contact_info = contactInfo as Record<string, unknown>;
+      if (contactInfo)
+        locals.contact_info = contactInfo as Record<string, unknown>;
 
       const analyticsConsent = parseSetting(settingsMap.analytics_consent);
       if (analyticsConsent) {
@@ -340,7 +356,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
       const expires = new Date(
         Date.now() + 365 * 24 * 60 * 60 * 1000,
       ).toUTCString();
-      cookieUpdates.push(`lang=${locale}; Path=/; Expires=${expires}; SameSite=Lax`);
+      cookieUpdates.push(
+        `lang=${locale}; Path=/; Expires=${expires}; SameSite=Lax`,
+      );
     }
 
     const shouldTrack = shouldTrackRequest(request, pathname);
@@ -406,25 +424,27 @@ export const onRequest = defineMiddleware(async (context, next) => {
         const utmContent = url.searchParams.get("utm_content") || "";
 
         try {
-          const { error } = await analyticsClient.from("analytics_events").insert({
-            tenant_id: tenantId,
-            event_type: "page_view",
-            path: normalizedPath,
-            visitor_id: visitorId,
-            session_id: sessionId,
-            referrer: referrer || null,
-            utm_source: utmSource || null,
-            utm_medium: utmMedium || null,
-            utm_campaign: utmCampaign || null,
-            utm_term: utmTerm || null,
-            utm_content: utmContent || null,
-            ip_address: ipAddress || null,
-            user_agent: userAgent || null,
-            device_type: deviceType || null,
-            country: country === "XX" ? null : country,
-            region: region || null,
-            consent_state: consentState || "unknown",
-          });
+          const { error } = await analyticsClient
+            .from("analytics_events")
+            .insert({
+              tenant_id: tenantId,
+              event_type: "page_view",
+              path: normalizedPath,
+              visitor_id: visitorId,
+              session_id: sessionId,
+              referrer: referrer || null,
+              utm_source: utmSource || null,
+              utm_medium: utmMedium || null,
+              utm_campaign: utmCampaign || null,
+              utm_term: utmTerm || null,
+              utm_content: utmContent || null,
+              ip_address: ipAddress || null,
+              user_agent: userAgent || null,
+              device_type: deviceType || null,
+              country: country === "XX" ? null : country,
+              region: region || null,
+              consent_state: consentState || "unknown",
+            });
 
           if (error) {
             console.warn("[Analytics] Failed to log page view:", error.message);

@@ -1,6 +1,13 @@
 import { getPermalink, getBlogPermalink, getAsset } from "./utils/permalinks";
+import type { HeaderLink } from "./lib/menu";
+import type { CallToAction } from "./types";
 
-export const headerData = {
+interface HeaderData {
+  links: HeaderLink[];
+  actions?: CallToAction[];
+}
+
+export const headerData: HeaderData = {
   links: [
     {
       text: "nav.homes",

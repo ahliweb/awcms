@@ -1,6 +1,6 @@
 ---
 import PageLayout from "~/layouts/PageLayout.astro";
-import VisitorStats from "~/components/widgets/VisitorStats.astro";
+import VisitorStatsWidget from "~/components/widgets/VisitorStats.astro";
 import { getLocale } from "~/utils/i18n";
 
 export const prerender = false;
@@ -17,7 +17,7 @@ const metadata = {
 
 <PageLayout metadata={metadata}>
   <section class="py-12 sm:py-16 lg:py-20">
-    <VisitorStats
+    <VisitorStatsWidget
       title={isIndonesian ? "Statistik Pengunjung" : "Visitor Statistics"}
       subtitle={
         isIndonesian

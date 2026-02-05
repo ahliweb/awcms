@@ -14,14 +14,15 @@ const {
   bg = await Astro.slots.render("bg"),
 } = Astro.props;
 
-const locale = (Astro.locals.locale as string) || "en";
+const locale = Astro.locals.locale ?? "en";
 const tenantId = Astro.locals.tenant_id || null;
 const runtimeEnv = Astro.locals.runtime?.env || import.meta.env;
 const supabase = tenantId
   ? createScopedClient({ "x-tenant-id": tenantId }, runtimeEnv)
   : null;
 
-const formatNumber = (value) => new Intl.NumberFormat(locale).format(value || 0);
+const formatNumber = (value: number) =>
+  new Intl.NumberFormat(locale).format(value || 0);
 const daysNumber = Number(days) || 30;
 const startDate = new Date();
 startDate.setDate(startDate.getDate() - daysNumber + 1);

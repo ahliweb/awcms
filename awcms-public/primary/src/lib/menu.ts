@@ -17,6 +17,14 @@ export interface MenuItem {
   sort_order: number;
 }
 
+export interface HeaderLink {
+  text?: string;
+  href?: string;
+  ariaLabel?: string;
+  icon?: string;
+  links?: HeaderLink[];
+}
+
 interface MenuRow {
   id: string;
   label: string;
@@ -101,10 +109,13 @@ export async function getAllMenus(
     grouped[location].push(row as MenuRow);
   });
 
-  return Object.entries(grouped).reduce((acc, [location, rows]) => {
-    acc[location] = filterActiveItems(buildMenuTree(rows));
-    return acc;
-  }, {} as Record<string, MenuItem[]>);
+  return Object.entries(grouped).reduce(
+    (acc, [location, rows]) => {
+      acc[location] = filterActiveItems(buildMenuTree(rows));
+      return acc;
+    },
+    {} as Record<string, MenuItem[]>,
+  );
 }
 
 /**
@@ -178,7 +189,7 @@ function buildMenuTree(rows: MenuRow[]): MenuItem[] {
   return roots;
 }
 
-export function mapMenuItemsToHeaderLinks(items: MenuItem[]) {
+export function mapMenuItemsToHeaderLinks(items: MenuItem[]): HeaderLink[] {
   return items.map((item) => ({
     text: item.title,
     href: item.url || "#",

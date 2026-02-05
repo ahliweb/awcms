@@ -4,7 +4,7 @@ import { SITE } from "astrowind:config";
 import { getHomePermalink } from "~/utils/permalinks";
 import { getLocale, t } from "~/utils/i18n";
 
-const locale = Astro.locals.locale || getLocale();
+const locale = Astro.locals.locale ?? getLocale();
 const { site_info, seo } = Astro.locals;
 const siteName =
   (site_info?.name as string)
