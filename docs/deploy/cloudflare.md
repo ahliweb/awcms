@@ -52,6 +52,32 @@ Environment variables:
 
 **Runtime note**: Astro Cloudflare adapter exposes env vars via `runtime.env`; ensure server routes read from it when available.
 
+### Public Portal (awcms-public/smandapbun)
+
+| Setting | Value |
+| --- | --- |
+| Project name | `awcms-public-smandapbun` (example) |
+| Framework preset | Astro |
+| Root directory | `awcms-public/smandapbun` |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Node version | `20` |
+
+Environment variables:
+
+- `PUBLIC_SUPABASE_URL`
+- `PUBLIC_SUPABASE_ANON_KEY`
+- `PUBLIC_TURNSTILE_SITE_KEY`
+- `PUBLIC_PORTAL_RENDER_MODE=server`
+- `PUBLIC_ENABLE_SESSIONS=true` (optional)
+- `NODE_VERSION=20`
+
+KV bindings:
+
+- `SESSION` (required only when `PUBLIC_ENABLE_SESSIONS=true`)
+
+Note: When `PUBLIC_ENABLE_SESSIONS` is not set, the adapter skips sessions so missing KV bindings won't trigger 500 errors.
+
 ## Verification
 
 - Public portal returns tenant-resolved pages.

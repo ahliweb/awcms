@@ -77,6 +77,15 @@ The portal reads tenant settings and merges them with JSON defaults:
 - Blogs: `blogs` table via Admin -> Blogs.
 - SEO/Branding/Contact: `seo_global`, `site_info`, `contact_info` via Admin settings.
 
+## Cloudflare Pages Setup
+
+- Root directory: `awcms-public/smandapbun`.
+- Build command: `npm run build`.
+- Output directory: `dist`.
+- Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`.
+- Optional env vars: `PUBLIC_ENABLE_SESSIONS=true` (enables KV-backed sessions).
+- KV binding: `SESSION` (required only when `PUBLIC_ENABLE_SESSIONS=true`).
+
 ## Contact Form
 
 - Page: `src/pages/kontak.astro`.

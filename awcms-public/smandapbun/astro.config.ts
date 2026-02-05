@@ -7,13 +7,17 @@ import cloudflare from '@astrojs/cloudflare';
 import icon from 'astro-icon';
 
 const renderMode = process.env.PUBLIC_PORTAL_RENDER_MODE || 'server';
+const enableSessions = process.env.PUBLIC_ENABLE_SESSIONS === 'true';
 const isStaticOutput = renderMode === 'static';
-const adapter = isStaticOutput
-  ? undefined
-  : cloudflare({
+const adapterOptions = enableSessions
+  ? {
     imageService: 'compile',
     sessionKVBindingName: 'SESSION',
-  });
+  }
+  : {
+    imageService: 'compile',
+  };
+const adapter = isStaticOutput ? undefined : cloudflare(adapterOptions);
 
 export default defineConfig({
   site: 'https://sman2pangkalanbun.sch.id',

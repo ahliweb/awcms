@@ -25,6 +25,13 @@ Describe deployment steps for each AWCMS package in the monorepo.
 - Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 - Runtime env is provided via Cloudflare Pages `runtime.env` (Astro adapter).
 
+For `awcms-public/smandapbun`:
+
+- Root directory: `awcms-public/smandapbun`
+- Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`
+- Optional env vars: `PUBLIC_PORTAL_RENDER_MODE=server`, `PUBLIC_ENABLE_SESSIONS=true`
+- KV binding: `SESSION` (only required when `PUBLIC_ENABLE_SESSIONS=true`)
+
 ### 2. Admin Panel (Cloudflare Pages)
 
 - Root directory: `awcms`
