@@ -29,8 +29,7 @@ For `awcms-public/smandapbun`:
 
 - Root directory: `awcms-public/smandapbun`
 - Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`
-- Optional env vars: `PUBLIC_PORTAL_RENDER_MODE=server`, `PUBLIC_ENABLE_SESSIONS=true`
-- KV binding: `SESSION` (only required when `PUBLIC_ENABLE_SESSIONS=true`)
+- KV bindings: none (no session-backed KV usage)
 
 ### 2. Admin Panel (Cloudflare Pages)
 

@@ -10,7 +10,7 @@ AWCMS interacts with the following key components:
 
 - **Supabase**: Authentication, Database, Realtime, Storage, Edge Functions.
 - **Admin Panel**: React SPA for content management.
-- **Public Portal**: Astro SSG/SSR for content delivery.
+- **Public Portal**: Astro SSR for content delivery.
 - **Mobile/IoT**: Specialized clients.
 
 ## 3. Trust Boundaries

@@ -13,10 +13,3 @@ bucket = "./dist"
 
 [vars]
 ENVIRONMENT = "production"
-
-# KV namespace for Astro sessions
-# Create with: npx wrangler kv namespace create SESSION
-[[kv_namespaces]]
-binding = "SESSION"
-id = "78cc94b763664d56b5ac9d34f1244304"
-preview_id = "e8ef4970b795432bafdb048233850182"

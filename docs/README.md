@@ -35,8 +35,8 @@ From the repository README:
 
 | Directory               | Description                   | Stack                                  |
 | ----------------------- | ----------------------------- | -------------------------------------- |
-| `awcms/`                | Admin Panel                   | React **19.2.3**, Vite **7.2.7**, Supabase |
-| `awcms-public/primary/` | Public Portal                 | Astro **5.12.9**, React **19.2.3**         |
+| `awcms/`                | Admin Panel                   | React **19.2.4**, Vite **7.2.7**, Supabase |
+| `awcms-public/primary/` | Public Portal                 | Astro **5.12.9**, React **19.2.4**         |
 | `awcms-mobile/primary/` | Mobile App                    | Flutter                                |
 | `awcms-esp32/primary/`  | IoT Firmware                  | ESP32, PlatformIO                      |
 | `awcms-ext/`            | External Extensions           | JavaScript modules                     |
@@ -169,7 +169,7 @@ The README points to a **Developer Setup Guide** and per-client guides. If you�
 
 **Purpose:** Tenant administration + platform administration.
 
-**Stack:** React 19.2.3 + Vite 7.2.7 + Supabase.
+**Stack:** React 19.2.4 + Vite 7.2.7 + Supabase.
 
 Typical capabilities you’d expect in an admin panel for a multi-tenant CMS:
 
@@ -193,7 +193,7 @@ Typical capabilities you’d expect in an admin panel for a multi-tenant CMS:
 
 **Purpose:** Tenant-facing website template(s).
 
-**Stack:** Astro 5.12.9 + React 19.2.3.
+**Stack:** Astro 5.12.9 + React 19.2.4.
 
 Typical structure:
 

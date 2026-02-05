@@ -10,12 +10,7 @@ import {
 
 import { getPosts } from "../../../lib/api";
 
-export async function getStaticPaths() {
-  const posts = await getPosts(500);
-  return posts.map((post) => ({
-    params: { slug: post.slug },
-  }));
-}
+export const prerender = false;
 
 const { slug } = Astro.params;
 if (!slug) {

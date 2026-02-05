@@ -21,9 +21,9 @@ Document the tenant-specific Astro implementation for **smandapbun**, including 
 - **Tenant resolution**: `src/middleware.ts` resolves host/path and falls back to `TENANT_SLUG = 'smandapbun'` in `src/lib/api.ts`
 - **Supabase client**: `createClientFromEnv` (runtime env) + `supabase` fallback in `src/lib/supabase.ts`
 - **Middleware**: `src/middleware.ts` logs analytics and sets `locals.tenant_id`, `locals.locale`, `locals.analytics_consent`
-- **Output**: SSR by default via Cloudflare adapter; set `PUBLIC_PORTAL_RENDER_MODE=static` for SSG builds
-- **Sessions**: Cloudflare adapter expects a `SESSION` KV binding for session storage.
-- **Deployment config**: `awcms-public/smandapbun/wrangler.toml` includes the `SESSION` KV binding placeholder.
+- **Output**: Astro SSR via Cloudflare adapter
+- **Sessions**: No KV-backed session storage is used.
+- **Deployment config**: `awcms-public/smandapbun/wrangler.toml` includes SSR build settings only.
 - **Layouts**: `src/layouts/Layout.astro` with global CSS, custom header/footer, no plugin loader
 
 ## Data Sources
@@ -83,8 +83,7 @@ The portal reads tenant settings and merges them with JSON defaults:
 - Build command: `npm run build`.
 - Output directory: `dist`.
 - Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`.
-- Optional env vars: `PUBLIC_ENABLE_SESSIONS=true` (enables KV-backed sessions).
-- KV binding: `SESSION` (required only when `PUBLIC_ENABLE_SESSIONS=true`).
+- KV bindings: none (no session-backed KV usage).
 
 ## Contact Form
 
@@ -96,7 +95,7 @@ The portal reads tenant settings and merges them with JSON defaults:
 - `ConsentNotice` is rendered in `src/layouts/Layout.astro`.
 - Middleware logs analytics events to `analytics_events` and sets consent state from cookies.
 - `analytics_consent` settings provide localized banner copy.
-- Static builds resolve `analytics_consent` at build time; middleware logging only runs in SSR.
+- Analytics consent settings are resolved at request time in SSR.
 
 ## Migration Path (Future)
 

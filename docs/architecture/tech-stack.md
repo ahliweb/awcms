@@ -19,7 +19,7 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
-| Framework | React | 19.2.3 | UI framework |
+| Framework | React | 19.2.4 | UI framework |
 | Build tool | Vite | 7.2.7 | SPA build and dev server |
 | Language | JavaScript | ES2022+ | Functional components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
@@ -36,7 +36,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | Meta-framework | Astro | 5.12.9 | SSR/Islands |
-| UI library | React | 19.2.3 | Island rendering |
+| UI library | React | 19.2.4 | Island rendering |
 | Language | TypeScript | 5.8.3 | Typed components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
 | Supabase JS | @supabase/supabase-js | 2.93.3 | Public API client |
@@ -62,7 +62,7 @@ Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
 ## Security and Compliance Notes
 
-- React 19.2.3 is required for consistent behavior.
+- React 19.2.4 is required for consistent behavior.
 - Public portal uses PuckRenderer only; no editor runtime.
 
 ## References

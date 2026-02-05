@@ -16,7 +16,7 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ## Core Concepts
 
-- Astro SSR/Islands architecture on Cloudflare Pages (output: `server`) with optional SSG builds for tenant portals.
+- Astro SSR/Islands architecture on Cloudflare Pages (output: `server`) with React-only islands.
 - Tenant resolution in middleware with path-first, host-fallback.
 - `PuckRenderer` for rendering Puck JSON with a server-side allow-list.
 - View transitions are enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
@@ -85,7 +85,7 @@ Describe how the public portal renders tenant content and enforces security cons
 
 - `awcms-public/smandapbun` is a dedicated single-tenant portal with middleware-based analytics and consent.
 - It uses a fixed slug fallback and JSON fallbacks for content.
-- It can build SSR (`PUBLIC_PORTAL_RENDER_MODE=server`) or SSG (`PUBLIC_PORTAL_RENDER_MODE=static`) depending on deployment.
+- It runs as Astro SSR with React islands and Vite-based tooling.
 - See `docs/tenancy/smandapbun.md` for its data sources and migration path.
 
 ## References

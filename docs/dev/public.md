@@ -2,12 +2,12 @@
 
 ## 1. Overview
 
-The Public Portal (`awcms-public/`) handles the visitor-facing websites for each tenant. It uses Astro for optimal performance (SSG/SSR).
+The Public Portal (`awcms-public/`) handles the visitor-facing websites for each tenant. It uses Astro SSR for optimal performance.
 
 ## 2. Architecture
 
 - **Framework**: Astro 5.12.9
-- **Rendering**: Default SSR via Cloudflare adapter. `awcms-public/smandapbun` can switch to full static output (SSG) with `PUBLIC_PORTAL_RENDER_MODE=static`.
+- **Rendering**: Astro SSR via Cloudflare adapter across all public portals.
 - **Styling**: Tailwind CSS 4.
 - **Data Source**: Supabase (via direct client).
 - **Analytics**: Server-side logging via middleware into `analytics_events` with daily rollups.
@@ -27,7 +27,7 @@ Middleware sets `locals.tenant_id`, `locals.tenant_slug`, `locals.locale`, and `
 - `awcms-public/smandapbun` is a single-tenant Astro site with shared middleware.
 - Uses `src/lib/api.ts` + JSON fallbacks (see `docs/tenancy/smandapbun.md`).
 - Tenant resolution falls back to a fixed slug when host/path lookups fail.
-- Supports SSR (default) and SSG (static build) through `PUBLIC_PORTAL_RENDER_MODE`.
+- All public portals standardize on React islands with Vite-based tooling.
 
 ## 4. Environment Variables
 
@@ -36,7 +36,6 @@ Public portals require:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_DEV_TENANT_HOST` (local development)
-- `PUBLIC_PORTAL_RENDER_MODE` (optional, set to `static` for SSG builds)
 
 `createClientFromEnv` prefers `runtime.env` (Cloudflare) and falls back to `import.meta.env` during local dev.
 
@@ -44,7 +43,7 @@ Public portals require:
 
 1. Navigate to `awcms-public/primary`.
 2. `npm run dev` to start the local server.
-3. Content changes in the Admin Panel are reflected on refresh (SSR) or rebuild (SSG).
+3. Content changes in the Admin Panel are reflected on refresh (SSR).
 
 ## 5.1 Key Routes
 

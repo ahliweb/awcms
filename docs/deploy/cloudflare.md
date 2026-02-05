@@ -68,15 +68,9 @@ Environment variables:
 - `PUBLIC_SUPABASE_URL`
 - `PUBLIC_SUPABASE_ANON_KEY`
 - `PUBLIC_TURNSTILE_SITE_KEY`
-- `PUBLIC_PORTAL_RENDER_MODE=server`
-- `PUBLIC_ENABLE_SESSIONS=true` (optional)
 - `NODE_VERSION=20`
 
-KV bindings:
-
-- `SESSION` (required only when `PUBLIC_ENABLE_SESSIONS=true`)
-
-Note: When `PUBLIC_ENABLE_SESSIONS` is not set, the adapter skips sessions so missing KV bindings won't trigger 500 errors.
+KV bindings: none (no session-backed KV usage).
 
 ## Verification
 

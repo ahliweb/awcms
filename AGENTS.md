@@ -31,7 +31,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 - **Capabilities**:
-  - Working with **Astro 5** and **React 19.2.3** (Islands Architecture).
+  - Working with **Astro 5** and **React 19.2.4** (Islands Architecture).
   - Implementing **Zod** schemas for component prop validation.
   - Optimizing for Cloudflare Pages (Edge Cache, Headers).
 - **Constraints**:
@@ -46,7 +46,7 @@ Agents must be aware of the exact versions in use:
 
 | Technology       | Version  | Notes                            |
 | ---------------- | -------- | -------------------------------- |
-| React            | 19.2.3   | Functional components only       |
+| React            | 19.2.4   | Functional components only       |
 | Vite             | 7.2.7    | Build tool & dev server          |
 | TailwindCSS      | 4.1.18   | Admin uses CSS-based config      |
 | Supabase JS      | 2.87.1 / 2.93.3 | Admin / Public clients     |
@@ -63,7 +63,7 @@ Agents must be aware of the exact versions in use:
 | Astro            | 5.12.9   | Public portal                    |
 
 > [!IMPORTANT]
-> **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.3. Ensure full compatibility with all dependencies.
+> **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
 
 ---
 
@@ -96,8 +96,8 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | Rule              | Requirement                                                               |
 | ----------------- | ------------------------------------------------------------------------- |
 | Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
-| **Admin Panel**   | React 19.2.3, Vite 7                                                      |
-| **Public Portal** | Astro 5, React 19.2.3, Cloudflare Pages                                   |
+| **Admin Panel**   | React 19.2.4, Vite 7                                                      |
+| **Public Portal** | Astro 5, React 19.2.4, Cloudflare Pages                                   |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase only (NO Node.js servers)                                        |
 
@@ -108,6 +108,7 @@ When updating docs or implementing library usage, **Context7 is the primary refe
 - `supabase/supabase-js`
 - `vitejs/vite`
 - `withastro/astro`
+- `/websites/react_dev`
 - `/websites/tailwindcss`
 - `/remix-run/react-router`
 - `/websites/i18next`

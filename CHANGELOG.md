@@ -38,7 +38,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 ### Added
 
 - **Contact Form Security**:
-  - Implemented Cloudflare Turnstile with **explicit rendering** across all tenants (`smandapbun`, `primary`, `shadow-template`) for robust spam protection.
+- Implemented Cloudflare Turnstile with **explicit rendering** across all tenants (`smandapbun`, `primary`) for robust spam protection.
   - Added robust callback polling to ensure Turnstile loads reliably even on slow connections.
 - **User Experience**:
   - Integrated a global **Toast Notification System** (replacing native alerts) for immediate visual feedback on form submission success/failure.
@@ -50,14 +50,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 ### Changed
 
 - **Code Quality**:
-  - Enforced stricter TypeScript checks in `smandapbun` and `shadow-template` forms.
+- Enforced stricter TypeScript checks in `smandapbun` forms.
   - Standardized `turnstile` and `showToast` global type definitions.
 
 ### Fixed
 
 - **Turnstile Stability**: Resolved issues where the Turnstile widget would sometimes fail to render (invisible) by moving to explicit rendering mode.
-- **Dependencies**: Resolved "missing module" build errors for `@supabase/supabase-js` in `shadow-template` by fixing TypeScript module resolution.
-- **Linting**: Fixed various ESLint and Prettier issues in `shadow-template` and `smandapbun`.
+- **Dependencies**: Resolved "missing module" build errors for `@supabase/supabase-js` by fixing TypeScript module resolution.
+- **Linting**: Fixed various ESLint and Prettier issues in `smandapbun`.
 
 ## [2.27.0] "Foundation" - 2026-02-01
 

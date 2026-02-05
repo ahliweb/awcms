@@ -1,6 +1,6 @@
 # AWCMS Admin Panel
 
-The admin panel for AWCMS, built with React 19.2.3 and Vite 7.
+The admin panel for AWCMS, built with React 19.2.4 and Vite 7.
 
 ## Purpose
 
