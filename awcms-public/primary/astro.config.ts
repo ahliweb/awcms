@@ -36,6 +36,9 @@ import react from "@astrojs/react";
 
 export default defineConfig({
   output: "server",
+  session: {
+    driver: "memory",
+  },
   adapter: cloudflare({
     imageService: "compile",
   }),
