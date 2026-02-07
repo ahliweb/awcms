@@ -34,13 +34,14 @@ Agents must respect these exact versions to ensure compatibility across the mono
 *   **Styling:** TailwindCSS 4.1.18 (Vite Plugin)
 *   **Backend Interface:** `@supabase/supabase-js` v2.93.3
 *   **Node.js Requirement:** >= 20.0.0
+*   **Rendering Model:** Static output (`output: "static"`) with React islands
 *   **Constraints:**
     *   **NO** direct database access (Must use Supabase JS Client or Edge Functions).
     *   **NO** Puck Editor Runtime (Use `PuckRenderer` only).
 
 ### 1.3 Backend & Database
 
-* **Platform:** Supabase (PostgreSQL 15+)
+* **Platform:** Supabase (PostgreSQL 17)
 * **Logic Layer:** PostgreSQL Functions (PL/pgSQL) + Edge Functions (Deno/TS).
 * **Node.js Servers:** **FORBIDDEN**. All backend logic must reside in Supabase.
 
@@ -54,7 +55,7 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Mandatory Column:** Every tenant-scoped table **MUST** have a `tenant_id` (UUID) column.
 * **Context:**
   * **Admin:** Resolved via `useTenant()` hook.
-  * **Public:** Resolved via Middleware (Slug/Host) -> `usePublicTenant()`.
+  * **Public:** Static builds resolve tenant via build-time env (`PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID`); middleware resolution is reserved for SSR/runtime deployments.
 * **RLS (Row Level Security):**
   * **Strict Enforcement:** RLS must be enabled on ALL tables.
   * **Bypass Rule:** NEVER bypass RLS in client code. Only `supabaseAdmin` (Service Role) in Edge Functions is permitted to bypass, and only for specific administrative tasks.

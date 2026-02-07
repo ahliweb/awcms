@@ -31,9 +31,9 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 - **Capabilities**:
-- Working with **Astro 5.17.1** and **React 19.2.4** (Islands Architecture).
+- Working with **Astro 5.17.1** and **React 19.2.4** (Static output + Islands).
   - Implementing **Zod** schemas for component prop validation.
-  - Optimizing for Cloudflare Pages (Edge Cache, Headers).
+  - Optimizing for Cloudflare Pages static builds (cache headers, asset optimization).
 - **Constraints**:
   - **NO** direct database access (must use Supabase JS Client or Functions).
   - **NO** Puck editor runtime in the public portal (use `PuckRenderer` only; `@puckeditor/puck` is types-only).
@@ -78,6 +78,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 2. **Multi-Tenancy Awareness**:
    - **RLS is Sacred**: Never bypass RLS unless explicitly creating a Platform Admin feature (using `auth_is_admin()` or Service Role).
    - **Tenant Context**: Always use `useTenant()` or `usePermissions()` to get `tenantId`.
+   - **Public Portal Tenant Context**: Static builds use `PUBLIC_TENANT_ID`/`VITE_PUBLIC_TENANT_ID`; avoid `Astro.locals` in build-time code.
    - **Isolation**: Ensure all new tables have `tenant_id` and RLS policies.
    - **Permission Keys**: Use the strict format `scope.resource.action` (e.g., `tenant.post.publish`).
    - **Channel Restrictions**:
@@ -97,7 +98,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | ----------------- | ------------------------------------------------------------------------- |
 | Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
 | **Admin Panel**   | React 19.2.4, Vite 7                                                      |
-| **Public Portal** | Astro 5.17.1, React 19.2.4, Cloudflare Pages                               |
+| **Public Portal** | Astro 5.17.1 (static output), React 19.2.4                                  |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase only (NO Node.js servers)                                        |
 
@@ -380,11 +381,13 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
     flowType: "pkce",
     autoRefreshToken: true,
     persistSession: true,
+    detectSessionInUrl: true,
   },
   global: {
     headers: {
       "x-application-name": "awcms",
     },
+    // fetch: customFetchImplementation,
   },
 });
 ```

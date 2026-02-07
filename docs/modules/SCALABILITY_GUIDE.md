@@ -25,7 +25,7 @@ Outline scalability considerations for AWCMS deployments.
 
 ## How It Works
 
-- Public portal uses SSR with edge runtime.
+- Public portal uses static output with edge caching for assets.
 - Admin panel remains a SPA and relies on Supabase APIs.
 - Analytics dashboards read from `analytics_daily` to avoid scanning raw events.
 

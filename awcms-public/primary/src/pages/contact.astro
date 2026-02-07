@@ -24,7 +24,7 @@ const metadata = {
 
   <ContactUs
     id="form"
-    tenantId={tenantId}
+    tenantId={tenantId ?? undefined}
     title={t("contact_page.form.title", locale)}
     subtitle={t("contact_page.form.subtitle", locale)}
     inputs={[

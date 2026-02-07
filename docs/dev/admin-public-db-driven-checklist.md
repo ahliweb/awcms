@@ -52,7 +52,7 @@ This checklist aligns `docs/security/abac.md`, `docs/RESOURCE_MAP.md`, and `docs
 
 - [ ] **DB**: Verify `settings` keys for `seo_global`, `site_info`, `contact_info`, `branding`.
 - [ ] **Admin**: create `ui_configs` for SEO + branding + contact.
-- [x] **Public (primary)**: extend middleware to load branding/contact settings.
+- [x] **Public (primary)**: load branding/contact settings at build time via `publicSettings`.
 - [x] **Public (smandapbun)**: replace `src/data/site.json` and `contact.json` with settings data.
 
 ## 6) School Pages (smandapbun-specific)
@@ -69,8 +69,8 @@ This checklist aligns `docs/security/abac.md`, `docs/RESOURCE_MAP.md`, and `docs
 
 ## 8) Public Tenant Resolution (multi-tenant)
 
-- [ ] **Public (primary)**: middleware already resolves tenant by path/host.
-- [x] **Public (smandapbun)**: middleware resolves tenant and falls back to fixed `TENANT_SLUG` in `src/lib/api.ts`.
+- [x] **Public (primary)**: static builds resolve tenant via `PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID`.
+- [x] **Public (smandapbun)**: fixed `TENANT_SLUG` in `src/lib/api.ts`.
 
 ## 9) Documentation Sync
 
@@ -81,5 +81,5 @@ This checklist aligns `docs/security/abac.md`, `docs/RESOURCE_MAP.md`, and `docs
 
 - [x] **DB**: `analytics_events` and `analytics_daily` tables with RLS policies.
 - [x] **Admin**: `VisitorStatisticsManager` module wired to `admin_menus`.
-- [x] **Public (primary)**: middleware logging + `/visitor-stats` route + consent notice.
-- [x] **Public (smandapbun)**: consent banner + middleware analytics logging.
+- [ ] **Public (primary)**: middleware logging if SSR/runtime is enabled; static builds require client-side instrumentation.
+- [ ] **Public (smandapbun)**: middleware logging if SSR/runtime is enabled.

@@ -64,7 +64,7 @@ awcms-public/primary/
 │   │   └── widgets/            # Page widgets
 │   ├── layouts/                # Astro layouts
 │   ├── lib/                    # Supabase and URL helpers
-│   ├── middleware.ts           # Tenant resolution + analytics logging
+│   ├── middleware.ts           # Tenant resolution + analytics logging (SSR/runtime only)
 │   ├── pages/                  # Astro routes
 │   └── templates/              # Theme templates
 ├── astro.config.ts

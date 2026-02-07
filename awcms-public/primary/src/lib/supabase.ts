@@ -11,9 +11,18 @@ export const createClientFromEnv = (
   headers: Record<string, string> = {},
 ) => {
   // Try Runtime Env first, then fallback to Build Env
-  const url = env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || "";
+  const url =
+    env.VITE_SUPABASE_URL ||
+    env.PUBLIC_SUPABASE_URL ||
+    import.meta.env.VITE_SUPABASE_URL ||
+    import.meta.env.PUBLIC_SUPABASE_URL ||
+    "";
   const key =
-    env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+    env.VITE_SUPABASE_ANON_KEY ||
+    env.PUBLIC_SUPABASE_ANON_KEY ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||
+    import.meta.env.PUBLIC_SUPABASE_ANON_KEY ||
+    "";
 
   if (!url || !key) {
     console.error("[Supabase] Missing URL or Key. Check Cloudflare Variables.");

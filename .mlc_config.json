@@ -88,6 +88,12 @@
       "pattern": "^docs/"
     },
     {
+      "pattern": "^\\./"
+    },
+    {
+      "pattern": "^\\.\\./"
+    },
+    {
       "pattern": "^\\.\\./02-reference/"
     },
     {

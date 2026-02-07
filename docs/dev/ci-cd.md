@@ -44,8 +44,9 @@ Describe the GitHub Actions workflows used for AWCMS.
 
 - `VITE_SUPABASE_URL` (admin build)
 - `VITE_SUPABASE_ANON_KEY` (admin build)
-- `PUBLIC_SUPABASE_URL` (public build)
-- `PUBLIC_SUPABASE_ANON_KEY` (public build)
+- `PUBLIC_SUPABASE_URL` (public build fallback)
+- `PUBLIC_SUPABASE_ANON_KEY` (public build fallback)
+- `PUBLIC_TENANT_ID` (public build tenant scope)
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_ENABLED` (repo variable; must be `true` to deploy)
@@ -75,7 +76,7 @@ flutter test
 ## Troubleshooting
 
 - Missing env vars: verify secrets and repo variables.
-- Public build env mismatch: CI injects `PUBLIC_SUPABASE_*`, while runtime code reads `VITE_SUPABASE_*`. Keep values aligned in deployment.
+- Public build env mismatch: CI injects `PUBLIC_SUPABASE_*`, while runtime code prefers `VITE_SUPABASE_*`. Keep values aligned; `createClientFromEnv` accepts both.
 
 ## References
 

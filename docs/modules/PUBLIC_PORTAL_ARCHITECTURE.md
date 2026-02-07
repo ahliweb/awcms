@@ -13,15 +13,15 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ## Prerequisites
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal architecture (Astro 5, React 19.2.4, Cloudflare Pages)
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal architecture (Astro 5.17.1, React 19.2.4, static output)
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/tenancy/overview.md`
 - `docs/tenancy/supabase.md`
 
 ## Core Concepts
 
-- Astro SSR/Islands architecture on Cloudflare Pages (output: `server`) with React-only islands.
-- Tenant resolution in middleware with path-first, host-fallback.
+- Astro static output with React islands on Cloudflare Pages.
+- Tenant resolution at build time via `PUBLIC_TENANT_ID` and `getStaticPaths`.
 - `PuckRenderer` for rendering Puck JSON with a server-side allow-list.
 - View transitions are enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
 
@@ -29,13 +29,9 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ### Tenant Resolution
 
-- Middleware: `awcms-public/primary/src/middleware.ts`.
-- Priority order:
-  1. Path slug via `get_tenant_by_slug`.
-  2. Host fallback via `get_tenant_id_by_host`.
-- Host-resolved tenants are served at root paths without redirects.
-- Locale prefixes (`/en`, `/id`) are stripped for internal routing and stored in `locals.locale`.
-- Referral codes (`/ref/{code}`) are stripped and stored in `locals.ref_code`.
+- Build-time tenant resolution uses `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
+- Tenant-specific routes use `getStaticPaths` to generate output.
+- Middleware-based resolution is only used in SSR/runtime deployments.
 
 ### Rendering Pipeline
 
@@ -63,10 +59,10 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ## Implementation Patterns
 
-- Use `createClientFromEnv` to construct Supabase clients with `runtime.env` (Cloudflare) fallback to `import.meta.env`.
-- Use `createScopedClient` with `x-tenant-id` headers for tenant-scoped reads.
+- Use `createClientFromEnv` with `import.meta.env` for static builds.
+- Use `createScopedClient` with `x-tenant-id` headers for tenant-scoped reads when needed.
 - Use `tenantUrl` from `src/lib/url.ts` for internal links.
-- Use middleware-based logging for visitor analytics (`analytics_events` + `analytics_daily`).
+- Analytics logging is available only when middleware is enabled in SSR/runtime.
 
 ## Permissions and Access
 
@@ -82,14 +78,13 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ## Operational Concerns
 
-- Cloudflare Pages uses runtime env variables via `runtime.env`.
-- Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
+- Cloudflare Pages uses build-time env variables for static output.
+- Ensure `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `PUBLIC_TENANT_ID` are set.
 
 ## Tenant Variants
 
-- `awcms-public/smandapbun` is a dedicated single-tenant portal with middleware-based analytics and consent.
+- `awcms-public/smandapbun` is a dedicated single-tenant static portal.
 - It uses a fixed slug fallback and JSON fallbacks for content.
-- It runs as Astro SSR with React islands and Vite-based tooling.
 - See `docs/tenancy/smandapbun.md` for its data sources and migration path.
 
 ## References

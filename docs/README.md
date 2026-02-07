@@ -45,7 +45,7 @@ From the repository README:
 | Directory               | Description                   | Stack                                  |
 | ----------------------- | ----------------------------- | -------------------------------------- |
 | `awcms/`                | Admin Panel                   | React **19.2.4**, Vite **7.2.7**, Supabase |
-| `awcms-public/primary/` | Public Portal                 | Astro **5.12.9**, React **19.2.4**         |
+| `awcms-public/primary/` | Public Portal                 | Astro **5.17.1** (static), React **19.2.4** |
 | `awcms-mobile/primary/` | Mobile App                    | Flutter                                |
 | `awcms-esp32/primary/`  | IoT Firmware                  | ESP32, PlatformIO                      |
 | `awcms-ext/`            | External Extensions           | JavaScript modules                     |
@@ -202,13 +202,13 @@ Typical capabilities you’d expect in an admin panel for a multi-tenant CMS:
 
 **Purpose:** Tenant-facing website template(s).
 
-**Stack:** Astro 5.12.9 + React 19.2.4.
+**Stack:** Astro 5.17.1 (static output) + React 19.2.4.
 
 Typical structure:
 
-* Tenant slug routing (e.g., `/tenant-slug/...`)
+* Tenant slug routing (build-time generated paths)
 * Content fetched from Supabase (public views)
-* Static generation / hybrid rendering
+* Static generation with React islands
 * SEO primitives (meta, sitemap, OpenGraph)
 
 ### Mobile App (`awcms-mobile/primary/`)
@@ -266,14 +266,14 @@ Likely responsibilities:
 
 The `supabase/` directory is the home for:
 
-* **SQL migrations** (schema, policies, seeds)
+* **SQL migrations** (schema, policies, seed data via `seed_*` migrations)
 * **Edge Functions** (API-like server logic)
 
 **Recommended backend structure (if not already):**
 
 * `supabase/migrations/` — schema changes
 * `supabase/functions/` — edge functions
-* `supabase/seed.sql` or `seed/` — initial data
+* Seed data is currently handled via timestamped `seed_*` migrations in `supabase/migrations/`
 
 ### Database design baseline
 

@@ -55,7 +55,7 @@ registerTemplateBlock({
 
 ### Context7 Guidance (Puck)
 
-Puck components should define explicit fields and render functions in a config object. Avoid rendering unknown blocks on the public portal.
+Puck components should define explicit fields and render functions in a config object. Import `@measured/puck/puck.css` in the editor UI, use `<Puck>` for editing, and use the `Render` component for public rendering. Avoid rendering unknown blocks on the public portal.
 
 ## Permissions and Access
 

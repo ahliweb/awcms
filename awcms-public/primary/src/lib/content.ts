@@ -176,7 +176,10 @@ export async function getBlogBySlug(
   }
 
   const errorMessage = error.message || "";
-  if (!errorMessage.includes("relationship") && !errorMessage.includes("schema cache")) {
+  if (
+    !errorMessage.includes("relationship") &&
+    !errorMessage.includes("schema cache")
+  ) {
     console.error("[Content] Error fetching blog:", errorMessage);
     return null;
   }
@@ -263,7 +266,10 @@ export async function getBlogs(
   }
 
   const errorMessage = error.message || "";
-  if (!errorMessage.includes("relationship") && !errorMessage.includes("schema cache")) {
+  if (
+    !errorMessage.includes("relationship") &&
+    !errorMessage.includes("schema cache")
+  ) {
     console.error("[Content] Error fetching blogs:", errorMessage);
     return { blogs: [], total: 0 };
   }
@@ -277,7 +283,10 @@ export async function getBlogs(
       .maybeSingle();
 
     if (categoryError) {
-      console.error("[Content] Error fetching category:", categoryError.message);
+      console.error(
+        "[Content] Error fetching category:",
+        categoryError.message,
+      );
       return { blogs: [], total: 0 };
     }
 
@@ -303,8 +312,11 @@ export async function getBlogs(
     fallbackQuery = fallbackQuery.eq("category_id", categoryId);
   }
 
-  const { data: fallbackData, error: fallbackError, count: fallbackCount } =
-    await fallbackQuery;
+  const {
+    data: fallbackData,
+    error: fallbackError,
+    count: fallbackCount,
+  } = await fallbackQuery;
 
   if (fallbackError) {
     console.error("[Content] Error fetching blogs:", fallbackError.message);

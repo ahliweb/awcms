@@ -52,6 +52,8 @@ Environment variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
+- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_ANON_KEY` (build fallback)
+- `PUBLIC_TENANT_ID`
 - `NODE_VERSION=20`
 
 **Runtime note**: Public portals are built as static sites; environment variables are resolved at build time via `import.meta.env`.
@@ -84,7 +86,7 @@ KV bindings: none (sessions use the in-memory driver).
 ## Troubleshooting
 
 - Build failures: verify root directory and Node version.
-- Tenant resolution issues: confirm middleware and tenant domains.
+- Tenant resolution issues: confirm `PUBLIC_TENANT_ID` (static) or middleware/host settings (SSR).
 
 ## References
 

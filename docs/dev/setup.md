@@ -23,7 +23,15 @@ cd <repo-root>
 
 ### 2.2 Setup Environment Variables
 
-Refer to `.env.example` in each directory.
+Refer to `.env.example` in each directory. Public portal static builds require `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
+
+When pulling schema changes from Supabase, prefer:
+
+```sh
+npx supabase db pull --schema public,extensions
+```
+
+This avoids storage-managed objects that can churn migrations in local shadow databases.
 
 If using Context7 tools via `awcms-mcp`, set `CONTEXT7_API_KEY` in `awcms/.env`.
 

@@ -21,13 +21,11 @@ Document the tenant-specific Astro implementation for **smandapbun**, including 
 ## Architecture Summary
 
 - **Project**: `awcms-public/smandapbun`
-- **Tenant model**: Single-tenant with middleware-based resolution and fixed-slug fallback
-- **Tenant resolution**: `src/middleware.ts` resolves host/path and falls back to `TENANT_SLUG = 'smandapbun'` in `src/lib/api.ts`
-- **Supabase client**: `createClientFromEnv` (runtime env) + `supabase` fallback in `src/lib/supabase.ts`
-- **Middleware**: `src/middleware.ts` logs analytics and sets `locals.tenant_id`, `locals.locale`, `locals.analytics_consent`
-- **Output**: Astro SSR via Cloudflare adapter
-- **Sessions**: Uses the in-memory session driver (no KV binding required).
-- **Deployment config**: `awcms-public/smandapbun/wrangler.toml` includes SSR build settings only.
+- **Tenant model**: Single-tenant with fixed build-time resolution
+- **Tenant resolution**: `TENANT_SLUG = 'smandapbun'` in `src/lib/api.ts`
+- **Supabase client**: `createClientFromEnv` via `import.meta.env`
+- **Output**: Astro static build
+- **Sessions**: Not used (static output)
 - **Layouts**: `src/layouts/Layout.astro` with global CSS, custom header/footer, no plugin loader
 
 ## Data Sources
@@ -97,23 +95,18 @@ The portal reads tenant settings and merges them with JSON defaults:
 ## Analytics + Consent
 
 - `ConsentNotice` is rendered in `src/layouts/Layout.astro`.
-- Middleware logs analytics events to `analytics_events` and sets consent state from cookies.
+- Analytics logging is only available when running middleware in SSR/runtime mode.
 - `analytics_consent` settings provide localized banner copy.
-- Analytics consent settings are resolved at request time in SSR.
 
 ## Migration Path (Future)
 
 - Replace JSON fallbacks with fully DB-driven content (`pages`, `settings`, `site_images`).
-- Remove fixed `TENANT_SLUG` fallback once host/path resolution is complete.
+- Add optional middleware only if SSR/runtime deployment is required.
 
 ## Migration Checklist (Analytics + Middleware)
 
-- [x] **Add middleware**: port `awcms-public/primary/src/middleware.ts` and ensure tenant resolution (path → host) plus locale/ref handling.
-- [ ] **Tenant context**: remove fixed `TENANT_SLUG` usage and rely on middleware `locals.tenant_id` or host fallback.
-- [x] **Scoped Supabase client**: use `createClientFromEnv` with `runtime.env` and `createScopedClient` for `x-tenant-id` headers.
+- [x] **Fixed tenant slug**: set `TENANT_SLUG = 'smandapbun'` in `src/lib/api.ts`.
+- [x] **Scoped Supabase client**: use `createClientFromEnv` with build-time env for static builds.
 - [x] **Consent banner**: add `ConsentNotice.astro` to the smandapbun layout and seed `analytics_consent` settings.
-- [x] **Analytics logging**: enable middleware event inserts to `analytics_events` and rollups to `analytics_daily`.
-- [ ] **Public stats route**: add `/visitor-stats` (host) and `/[tenant]/visitor-stats` (path) pages.
-- [ ] **Regression**: consent banner shows and persists choice.
-- [ ] **Regression**: analytics events log IP/path/referrer/device/geo.
-- [ ] **Regression**: Admin “Visitor Statistics” updates with new events.
+- [ ] **Optional middleware**: add SSR middleware only if runtime analytics or host-based tenant resolution is required.
+- [ ] **Public stats route**: add `/visitor-stats` page if analytics logging is enabled.

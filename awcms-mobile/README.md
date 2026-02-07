@@ -4,7 +4,7 @@
 Multi-tenant Flutter app for AWCMS.
 
 ## Prerequisites
-- Flutter 3.10+
+- Flutter 3.38.5+
 
 ## Quick Start
 

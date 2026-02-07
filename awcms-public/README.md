@@ -14,14 +14,14 @@ Multi-tenant public portal implemented in Astro.
 ```bash
 cd awcms-public/primary
 npm install
-# Create .env with Supabase variables
+# Create .env with Supabase variables and PUBLIC_TENANT_ID
 npm run dev
 ```
 
 ## Features
 
-- Tenant resolution via middleware (`awcms-public/primary/src/middleware.ts`).
-- Visitor analytics logging with consent notice (`analytics_events`, `analytics_daily`).
+- Tenant resolution via build-time `PUBLIC_TENANT_ID` (`awcms-public/primary/src/lib/publicTenant.ts`).
+- Visitor analytics logging is available when SSR/runtime middleware is enabled.
 - Public stats page at `/visitor-stats` and `/[tenant]/visitor-stats`.
 
 ## References

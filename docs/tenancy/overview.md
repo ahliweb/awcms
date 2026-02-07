@@ -37,22 +37,19 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 
 ### Public Portal (Astro)
 
-- Middleware resolves tenant in `awcms-public/primary/src/middleware.ts`.
-- Priority order:
-  1. Path slug (`/{tenant}/...`) via `get_tenant_by_slug`.
-  2. Host header fallback via `get_tenant_id_by_host`.
-- Host-resolved tenants are served at root paths without redirects.
-- Middleware also sets visitor tracking cookies and logs analytics events (scoped to the resolved tenant).
+- Static builds resolve tenant at build time using `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
+- Tenant-specific routes are generated with `getStaticPaths` when needed.
+- Middleware-based resolution is reserved for SSR/runtime deployments.
 
 #### Smandapbun Variant
 
-- `awcms-public/smandapbun` is a single-tenant portal with shared middleware for analytics and consent.
-- Tenant resolution falls back to a fixed slug in `src/lib/api.ts` when host/path lookups fail.
+- `awcms-public/smandapbun` is a single-tenant static portal.
+- Tenant resolution is fixed at build time in `src/lib/api.ts`.
 - See `docs/tenancy/smandapbun.md` for tenant-specific behavior and migration status.
 
 ### Data Layer (Supabase)
 
-- `x-tenant-id` is injected into requests by the admin client and public middleware.
+- `x-tenant-id` is injected into requests by the admin client and scoped public clients when needed.
 - SQL functions read `app.current_tenant_id` via `current_tenant_id()`.
 - Hierarchy functions (`is_tenant_descendant`, `tenant_can_access_resource`) enforce shared vs isolated resources.
 - Public aggregates (e.g., `analytics_daily`) are readable only when scoped to the tenant id.
@@ -70,7 +67,7 @@ const { currentTenant } = useTenant();
 ### Public Tenant Context
 
 ```ts
-const supabase = createScopedClient({ 'x-tenant-id': tenantId }, runtimeEnv);
+const supabase = createClientFromEnv(import.meta.env, { 'x-tenant-id': tenantId });
 ```
 
 ### Tenant-Scoped Queries
@@ -115,7 +112,7 @@ const { data } = await supabase
 
 ## Troubleshooting
 
-- 404 on public portal: confirm middleware tenant resolution and host config.
+- 404 on public portal: confirm `PUBLIC_TENANT_ID` and build-time `getStaticPaths` output.
 - Missing data in admin: verify `setGlobalTenantId()` and Supabase headers.
 
 ## References

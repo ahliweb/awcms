@@ -4,17 +4,17 @@
 
 ## 1. Overview
 
-The Public Portal (`awcms-public/`) handles the visitor-facing websites for each tenant. It uses Astro SSR for optimal performance.
+The Public Portal (`awcms-public/`) handles the visitor-facing websites for each tenant. The default configuration builds static output with React islands.
 
 ## 2. Architecture
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal tech stack (Astro 5, React 19.2.4, Cloudflare Pages)
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal tech stack (Astro 5.17.1, React 19.2.4, static output)
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- **Framework**: Astro 5.12.9
-- **Rendering**: Astro SSR via Cloudflare adapter across all public portals.
+- **Framework**: Astro 5.17.1
+- **Rendering**: Static output (`output: "static"`) with React islands. SSR is optional if explicitly enabled.
 - **Styling**: Tailwind CSS 4.
 - **Data Source**: Supabase (via direct client).
-- **Analytics**: Server-side logging via middleware into `analytics_events` with daily rollups.
+- **Analytics**: Server-side logging is available only when middleware runs (SSR/runtime). Static builds require client-side instrumentation or edge functions.
 - **View Transitions**: Enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
 
 ## 3. Multi-Tenancy Strategy
@@ -24,13 +24,13 @@ Each tenant has a dedicated directory under `awcms-public/`. We currently use a 
 - `awcms-public/primary/`: The reference implementation.
 - `awcms-public/{tenant_slug}/`: Dedicated implementations (future).
 
-Middleware sets `locals.tenant_id`, `locals.tenant_slug`, `locals.locale`, and `locals.ref_code` for request-scoped rendering.
+Static builds scope content by build-time tenant ID (`PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID`) and use `getStaticPaths` for tenant-specific routes. Middleware-based tenant resolution is reserved for SSR/runtime deployments.
 
 ### Smandapbun Portal
 
-- `awcms-public/smandapbun` is a single-tenant Astro site with shared middleware.
+- `awcms-public/smandapbun` is a single-tenant Astro site.
 - Uses `src/lib/api.ts` + JSON fallbacks (see `docs/tenancy/smandapbun.md`).
-- Tenant resolution falls back to a fixed slug when host/path lookups fail.
+- Tenant resolution is fixed at build time.
 - All public portals standardize on React islands with Vite-based tooling.
 
 ## 4. Environment Variables
@@ -39,15 +39,17 @@ Public portals require:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_DEV_TENANT_HOST` (local development)
+- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_ANON_KEY` (CI/build fallback)
+- `PUBLIC_TENANT_ID` (recommended for static builds)
+- `VITE_PUBLIC_TENANT_ID` or `VITE_TENANT_ID` (fallbacks)
 
-`createClientFromEnv` prefers `runtime.env` (Cloudflare) and falls back to `import.meta.env` during local dev.
+`createClientFromEnv` uses `import.meta.env` for static builds (supports `VITE_*` and `PUBLIC_*` keys); `runtime.env` is only used in SSR/runtime deployments.
 
 ## 5. Development Workflow
 
 1. Navigate to `awcms-public/primary`.
 2. `npm run dev` to start the local server.
-3. Content changes in the Admin Panel are reflected on refresh (SSR).
+3. Content changes require a rebuild for production static output; in dev, refresh reflects latest Supabase data.
 
 ## 5.1 Key Routes
 
@@ -61,7 +63,7 @@ Public portals require:
 ## 6. Visitor Analytics + Consent
 
 - Consent banner: `awcms-public/primary/src/components/common/ConsentNotice.astro`.
-- Logging: `awcms-public/primary/src/middleware.ts` logs page views, IPs, referrers, and device data.
+- Logging: `awcms-public/primary/src/middleware.ts` logs page views only when running with SSR/runtime middleware.
 - Public stats: `/visitor-stats` and `/[tenant]/visitor-stats`.
 
 ## 7. DB-Driven Admin Control

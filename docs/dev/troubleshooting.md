@@ -22,7 +22,7 @@ Provide common fixes for local development and deployment issues.
 ### Missing Environment Variables
 
 - Confirm `awcms/.env.local` exists for the admin panel.
-- Confirm `awcms-public/primary/.env` exists for the public portal.
+- Confirm `awcms-public/primary/.env` exists for the public portal, including `PUBLIC_TENANT_ID`.
 
 ### Tenant Not Found (Admin)
 
@@ -31,8 +31,8 @@ Provide common fixes for local development and deployment issues.
 
 ### Tenant Not Found (Public)
 
-- Verify middleware resolves tenant slug or host.
-- Confirm `VITE_DEV_TENANT_HOST` for local development.
+- Verify `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`) for static builds.
+- Rebuild after updating env values.
 
 ### RLS Errors (PGRST 42501)
 
@@ -42,13 +42,19 @@ Provide common fixes for local development and deployment issues.
 ### Analytics Not Showing
 
 - Confirm `analytics_events` and `analytics_daily` migrations are applied.
-- Verify public middleware is running and the request is HTML (not asset).
-- Ensure `x-tenant-id` is set for public requests.
+- Analytics logging requires SSR/runtime middleware; static builds do not log server-side events.
+- Ensure `x-tenant-id` is set for scoped public requests.
 
 ### Migration History Mismatch
 
 - Use `supabase migration repair --status reverted <missing_version>`.
 - Re-run `npx supabase db push` after repairs.
+
+### Supabase DB Lint Warning (index_advisor)
+
+- `extensions.index_advisor` is owned by `supabase_admin` and requires a privileged patch.
+- After `supabase db reset`, re-apply `supabase/migrations/20260207123000_fix_index_advisor_text_array_init.sql` while connected as `supabase_admin`.
+- Helper script: `awcms/scripts/apply_index_advisor_fix.sh` (requires local Supabase running).
 
 ### Turnstile Errors
 
@@ -57,7 +63,7 @@ Provide common fixes for local development and deployment issues.
 
 ### Cloudflare Runtime Env Missing
 
-- Ensure `createScopedClient` receives `runtime?.env` in Astro pages.
+- Runtime env access applies only when SSR/middleware is enabled.
 
 ## Verification
 

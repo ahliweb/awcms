@@ -101,6 +101,61 @@ CREATE TABLE tenant_resource_rules (
 );
 ```
 
+### resources_registry
+
+Registry of UI-facing resources for the database-driven admin UI.
+
+```sql
+CREATE TABLE resources_registry (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  type TEXT NOT NULL,
+  db_table TEXT,
+  icon TEXT,
+  permission_prefix TEXT,
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### ui_configs
+
+Stores JSON schemas for admin tables/forms per resource.
+
+```sql
+CREATE TABLE ui_configs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  resource_key TEXT REFERENCES resources_registry(key) ON DELETE CASCADE,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  schema JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_default BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(resource_key, type, tenant_id, name)
+);
+```
+
+### component_registry
+
+Stores TipTap/Puck editor configuration per tenant.
+
+```sql
+CREATE TABLE component_registry (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  resource_key TEXT REFERENCES resources_registry(key) ON DELETE CASCADE,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  editor_type TEXT NOT NULL,
+  config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
 ### tenant_role_links
 
 Explicit role inheritance mapping when `role_inheritance_mode = 'linked'`.

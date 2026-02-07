@@ -101,7 +101,7 @@ Legacy tables may still use tenant-only select policies and rely on admin UI ABA
 
 - Admin enforcement: `awcms/src/contexts/PermissionContext.jsx`
 - Tenant context: `awcms/src/contexts/TenantContext.jsx`
-- Public tenant resolution: `awcms-public/primary/src/middleware.ts`
+- Public tenant resolution: `awcms-public/primary/src/lib/publicTenant.ts` (middleware is SSR-only)
 
 ## Security and Compliance Notes
 

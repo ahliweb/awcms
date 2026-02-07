@@ -43,20 +43,22 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
     flowType: "pkce",
     autoRefreshToken: true,
     persistSession: true,
+    detectSessionInUrl: true,
   },
   global: {
     headers: {
       "x-application-name": "awcms",
     },
+    // fetch: customFetchImplementation,
   },
 });
 ```
 
 ### Public Portal Client
 
-- `awcms-public/primary/src/middleware.ts` resolves tenant and writes `locals.tenant_id`.
-- `awcms-public/primary/src/lib/supabase.ts` builds a request-scoped client with `x-tenant-id`.
-- Public analytics logging uses `analytics_events` with anon insert policies scoped to `current_tenant_id()`.
+- Static builds resolve tenant via `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
+- `awcms-public/primary/src/lib/supabase.ts` builds clients from `import.meta.env`; headers are set when scoped access is required.
+- Analytics logging uses `analytics_events` only when middleware is enabled in SSR/runtime deployments.
 
 ### Edge Functions
 
@@ -81,9 +83,9 @@ const { data, error } = await supabase
 ### Public Portal Client Usage
 
 ```ts
-import { createScopedClient } from '../lib/supabase';
+import { createClientFromEnv } from "../lib/supabase";
 
-const supabase = createScopedClient({ 'x-tenant-id': tenantId }, runtimeEnv);
+const supabase = createClientFromEnv(import.meta.env, { "x-tenant-id": tenantId });
 ```
 
 ### Edge Function Invocation
@@ -113,7 +115,9 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_DEV_TENANT_HOST` (local development)
+- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_ANON_KEY` (CI/build fallback)
+- `PUBLIC_TENANT_ID` (static builds)
+- `VITE_PUBLIC_TENANT_ID` or `VITE_TENANT_ID` (fallbacks)
 
 ### Migrations
 

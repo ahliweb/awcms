@@ -33,9 +33,8 @@ const buildSettings = (
   siteInfo: (parseSetting(settingsMap.site_info) || undefined) as
     | Record<string, unknown>
     | undefined,
-  analyticsConsent: (parseSetting(settingsMap.analytics_consent) || undefined) as
-    | Record<string, unknown>
-    | undefined,
+  analyticsConsent: (parseSetting(settingsMap.analytics_consent) ||
+    undefined) as Record<string, unknown> | undefined,
 });
 
 export const getPublicSettings = async (): Promise<PublicSettings> => {

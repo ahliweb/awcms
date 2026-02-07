@@ -68,8 +68,8 @@ const metadata = {
     openGraph: {
         type: "article",
         article: {
-            publishedTime: blog.published_at,
-            modifiedTime: blog.updated_at,
+            publishedTime: blog?.published_at,
+            modifiedTime: blog?.updated_at,
         },
         images: blog?.featured_image
             ? [{ url: blog.featured_image }]

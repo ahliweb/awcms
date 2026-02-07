@@ -18,7 +18,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 | Directory | Description | Tech Stack |
 | --- | --- | --- |
 | `awcms/` | Admin Panel | React 19.2.4, Vite 7.2.7, Supabase |
-| `awcms-public/primary/` | Public Portal | Astro 5.12.9, React 19.2.4 |
+| `awcms-public/primary/` | Public Portal | Astro 5.17.1 (static), React 19.2.4 |
 | `awcms-mobile/primary/` | Mobile App | Flutter 3.38.5 |
 | `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
 | `awcms-ext/` | External Extensions | JavaScript modules |

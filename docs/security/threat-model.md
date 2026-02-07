@@ -17,7 +17,7 @@ AWCMS interacts with the following key components:
 
 - **Supabase**: Authentication, Database, Realtime, Storage, Edge Functions.
 - **Admin Panel**: React SPA for content management.
-- **Public Portal**: Astro SSR for content delivery.
+- **Public Portal**: Astro static output with React islands.
 - **Mobile/IoT**: Specialized clients.
 
 ## 3. Trust Boundaries
@@ -56,7 +56,7 @@ AWCMS interacts with the following key components:
 ## 5. Logging & Monitoring (ASVS V7)
 
 - **Audit Logs**: All write operations in the Admin Panel are logged to the `audit_logs` table.
-- **Visitor Analytics**: Public telemetry is stored in `analytics_events` with tenant scoping and consent notice disclosure.
+- **Visitor Analytics**: Public telemetry is stored in `analytics_events` when middleware-based logging is enabled.
 - **PII Redaction**: Sensitive fields (passwords, tokens) are never logged.
 
 ## 6. Input Validation (ASVS V5)

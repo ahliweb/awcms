@@ -38,7 +38,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
-| Meta-framework | Astro | 5.17.1 | SSR/Islands |
+| Meta-framework | Astro | 5.17.1 | Static output + islands |
 | UI library | React | 19.2.4 | Island rendering |
 | Language | TypeScript | 5.8.3 | Typed components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
@@ -46,6 +46,15 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | Node.js | Node.js | >=20.0.0 | Runtime requirement |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
+
+Tenant-specific public portals may pin different Supabase JS versions (e.g., `awcms-public/smandapbun` uses 2.91.0).
+
+### Backend (Supabase)
+
+| Category | Technology | Version | Purpose |
+| --- | --- | --- | --- |
+| Database | PostgreSQL | 17 | Primary data store |
+| Edge runtime | Deno | 2 | Supabase Edge Functions |
 
 ### Mobile (awcms-mobile/primary)
 

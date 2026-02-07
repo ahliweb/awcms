@@ -26,7 +26,7 @@ Describe deployment steps for each AWCMS package in the monorepo.
 - Framework preset: Astro
 - Build command: `npm run build`
 - Output directory: `dist`
-- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PUBLIC_TENANT_ID` (supports `PUBLIC_SUPABASE_*` as a build fallback)
 - Static build; environment variables resolved via `import.meta.env` at build time.
 
 For `awcms-public/smandapbun`:
@@ -81,7 +81,7 @@ source .env && pio run -t uploadfs && pio run -t upload
 ## Verification
 
 - Admin panel loads and resolves tenant by domain.
-- Public portal resolves tenant via middleware and renders pages.
+- Public portal resolves tenant at build time via `PUBLIC_TENANT_ID` and renders static pages.
 - Mobile app authenticates via Supabase.
 - ESP32 reports telemetry to Supabase.
 

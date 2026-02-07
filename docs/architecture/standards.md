@@ -76,8 +76,8 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
   - Components: `Sidebar.jsx`, `Header.jsx`, `Footer.jsx`
 - **Public Portal**:
   - Rendering: `PuckRenderer` only (no editor runtime)
-  - Astro Islands architecture
-  - Consent + analytics: `ConsentNotice` and middleware-based logging
+  - Astro static output with React islands
+  - Consent + analytics: `ConsentNotice`; middleware logging only in SSR/runtime deployments
 - **Internationalization**:
   - `awcms/src/lib/i18n.js`
   - Template-driven translations in `template_strings`
@@ -163,10 +163,15 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 
 #### 5.1 Context7 Best Practices
 
-- **Supabase JS**: Use `createClient` with PKCE, global headers, and scoped tenant headers.
-- **React**: Avoid derived state in `useEffect`; keep effects side-effect only.
-- **Astro**: Use `defineMiddleware` and middleware sequencing for request-level logic.
-- **TailwindCSS**: Prefer utility classes and `@utility` for shared patterns.
+- **Supabase JS**: Use `createClient` with PKCE, `autoRefreshToken`, `persistSession`, `detectSessionInUrl`, and global headers; use a custom `fetch` in edge runtimes when required.
+- **React**: Use cleanup/ignore guards in async `useEffect` to prevent stale updates; keep effects side-effect only.
+- **React Router**: Prefer `createBrowserRouter` + `RouterProvider`; use `Link/NavLink` for navigation and `useNavigate` for programmatic redirects.
+- **Astro**: Prefer `getStaticPaths` for dynamic routes in static builds; use middleware only for SSR/runtime request logic.
+- **TailwindCSS**: Use the `@tailwindcss/vite` plugin and CSS variables (`@theme`, `var(--color-*)`) instead of `theme()` when possible.
+- **i18next**: Initialize with `LanguageDetector`, set `fallbackLng`, and define detection order (`querystring`, `cookie`, `localStorage`, `navigator`) as needed.
+- **TipTap**: Start with `StarterKit` and configure extensions via `.configure()` (e.g., Image, TextAlign).
+- **Puck**: Use `<Puck>` with a `config` + `data` model for editing, import `@measured/puck/puck.css`, and use `Render` for public rendering.
+- **Framer Motion**: Use explicit `initial/animate/transition` props and define layout transitions to avoid hydration conflicts.
 
 **Standard**: Modern mobile/IoT integration, DevOps excellence, and high code quality.
 

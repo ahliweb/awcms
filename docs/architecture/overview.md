@@ -23,7 +23,7 @@ Describe the runtime architecture and data flow across the AWCMS monorepo.
 AWCMS is a headless system with multiple clients sharing a Supabase backend:
 
 - Admin Panel: React 19 SPA (Vite)
-- Public Portal: Astro SSR/Islands (Cloudflare Pages)
+- Public Portal: Astro static output + islands (Cloudflare Pages)
 - Mobile: Flutter app
 - IoT: ESP32 firmware
 
@@ -37,11 +37,11 @@ graph TD
     Admin[Tenant Admin] -->|HTTPS| AdminPanel
     Owner[Platform Owner] -->|HTTPS| AdminPanel
 
-    subgraph "Public Portal (Cloudflare Pages)"
+    subgraph "Public Portal (Static Build)"
         PublicPortal[Astro App]
-        Middleware[Tenant Middleware]
-        PublicPortal --> Middleware
-        Middleware -->|Resolve Tenant| RPC[Supabase RPC]
+        Resolver[Build-Time Tenant Resolver]
+        PublicPortal --> Resolver
+        Resolver -->|Resolve Tenant| RPC[Supabase RPC]
         registry[Component Registry]
         PublicPortal -.-> registry
     end
@@ -64,7 +64,7 @@ graph TD
     end
 
     AdminContext -->|Authenticated API| RLS
-    Middleware -->|Public API Key| RLS
+    Resolver -->|Public API Key| RLS
     Puck -->|JSONB Save| DB
 ```
 
@@ -77,17 +77,17 @@ graph TD
 
 ### Public Portal Flow
 
-1. Middleware resolves tenant by path slug, then host fallback.
-2. `locals.tenant_id` is passed to request-scoped Supabase clients.
+1. Build-time tenant resolution uses `PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID` and `getStaticPaths` for tenant routes.
+2. Supabase clients are created via `createClientFromEnv(import.meta.env)` (static builds).
 3. Pages render with `PuckRenderer` and a registry allow-list.
-4. Middleware logs visitor analytics to `analytics_events` and rolls up into `analytics_daily`.
+4. Analytics logging runs only when SSR/runtime middleware is enabled.
 5. Consent banner is rendered client-side via `ConsentNotice`.
 
 ## Implementation Patterns
 
 - Admin client: `awcms/src/lib/customSupabaseClient.js`
 - Public client: `awcms-public/primary/src/lib/supabase.ts`
-- Tenant resolution: `awcms/src/contexts/TenantContext.jsx` and `awcms-public/primary/src/middleware.ts`
+- Tenant resolution: `awcms/src/contexts/TenantContext.jsx` and `awcms-public/primary/src/lib/publicTenant.ts` (middleware is SSR-only)
 
 ## Security and Compliance Notes
 
