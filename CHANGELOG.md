@@ -7,6 +7,16 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Security
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [2.30.0] "Waypoint" - 2026-02-07
+
+### Security
+
 - **Dependencies**: Fixed high severity vulnerability in `wrangler` (and `undici`) by overriding version to `^4.61.1` in `awcms-public/smandapbun`.
 
 ### Added
@@ -26,6 +36,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - **Supabase Content Fetching**: Added fallback queries for blog/page content when schema cache relationships are missing.
 - **Public Portal Build Stability**: Fixed nullability issues in contact/blog pages and removed noisy Turnstile logging.
+
 ## [2.29.0] "Equilibrium" - 2026-02-03
 
 ### Added
