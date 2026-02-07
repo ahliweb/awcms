@@ -91,17 +91,17 @@ function TwoFactorSettings() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${isEnabled ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-600'}`}>
+    <div className="dashboard-surface dashboard-surface-hover overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-slate-200/60 bg-slate-50/70 px-6 py-5 dark:border-slate-800/70 dark:bg-slate-900/60">
+        <div className={`p-2 rounded-lg ${isEnabled ? 'bg-green-100/70 text-green-600 dark:bg-green-900/30 dark:text-green-300' : 'bg-slate-100/70 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
           <Shield className="w-5 h-5" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-800">Two-Factor Authentication</h3>
-          <p className="text-xs text-slate-500">Add an extra layer of security to your account</p>
+          <h3 className="font-semibold text-slate-900 dark:text-white">Two-Factor Authentication</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Add an extra layer of security to your account</p>
         </div>
         {isEnabled && (
-          <div className="ml-auto px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full flex items-center gap-1">
+          <div className="ml-auto px-2 py-1 bg-green-100/70 text-green-700 text-xs font-medium rounded-full flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" /> Enabled
           </div>
         )}
@@ -112,7 +112,7 @@ function TwoFactorSettings() {
         {!isEnabled && setupStep === 0 && (
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-2">
-              <p className="text-slate-600 text-sm">
+              <p className="text-slate-600 text-sm dark:text-slate-300">
                 Protect your account by requiring a code from your mobile device when logging in.
               </p>
               <div className="flex flex-col gap-2">
@@ -124,9 +124,9 @@ function TwoFactorSettings() {
                 </div>
               </div>
             </div>
-            <Button onClick={handleStartSetup} className="shrink-0 bg-slate-900 hover:bg-slate-800 text-white">
-              Enable 2FA
-            </Button>
+              <Button onClick={handleStartSetup} className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white">
+                Enable 2FA
+              </Button>
           </div>
         )}
 
@@ -142,12 +142,12 @@ function TwoFactorSettings() {
                 <p className="text-sm text-slate-600">
                   Open your authenticator app (e.g. Google Authenticator) and scan this code.
                 </p>
-                <div className="bg-white p-4 border rounded-lg inline-block shadow-sm">
+                <div className="bg-white p-4 border border-slate-200/70 rounded-xl inline-block shadow-sm">
                   <img src={setupData.qrCodeUrl} alt="2FA QR Code" className="w-40 h-40" />
                 </div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-slate-500 dark:text-slate-400">
                   <p className="mb-1">Can't scan?</p>
-                  <code className="bg-slate-100 px-2 py-1 rounded text-slate-700 select-all block w-full break-all">
+                  <code className="bg-slate-100/70 px-2 py-1 rounded text-slate-700 select-all block w-full break-all">
                     {setupData.secret}
                   </code>
                 </div>
@@ -158,7 +158,7 @@ function TwoFactorSettings() {
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 text-xs border border-slate-200">2</span>
                   Verify Code
                 </h4>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
                   Enter the 6-digit code from your app to verify setup.
                 </p>
                 <div className="space-y-3">
@@ -168,13 +168,13 @@ function TwoFactorSettings() {
                     placeholder="000000"
                     value={verificationCode}
                     onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="text-center text-lg tracking-widest font-mono"
+                    className="text-center text-lg tracking-widest font-mono h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30"
                     autoComplete="off"
                   />
                   <Button
                     onClick={handleVerify}
                     disabled={verificationCode.length !== 6 || isVerifying}
-                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700"
                   >
                     {isVerifying ? 'Verifying...' : 'Verify & Enable'}
                   </Button>
@@ -182,7 +182,7 @@ function TwoFactorSettings() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100">
+            <div className="pt-4 border-t border-slate-200/60">
               <Button variant="ghost" onClick={() => setSetupStep(0)} className="text-slate-500 hover:text-slate-900">
                 Cancel Setup
               </Button>
@@ -193,7 +193,7 @@ function TwoFactorSettings() {
         {/* State: Setup - Step 2: Backup Codes */}
         {isEnabled && setupStep === 2 && setupData && (
           <div className="space-y-6">
-            <div className="bg-green-50 border border-green-100 rounded-lg p-4 flex items-start gap-3">
+            <div className="bg-green-50 border border-green-200/70 rounded-xl p-4 flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5" />
               <div>
                 <h4 className="text-green-800 font-medium">2FA Successfully Enabled!</h4>
@@ -203,7 +203,7 @@ function TwoFactorSettings() {
               </div>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6">
+            <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-semibold text-slate-800 flex items-center gap-2">
                   <Lock className="w-4 h-4 text-slate-500" />
@@ -216,7 +216,7 @@ function TwoFactorSettings() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {setupData.backupCodes.map((code, idx) => (
-                  <div key={idx} className="font-mono text-sm bg-white border border-slate-200 px-3 py-2 rounded text-center text-slate-600">
+                  <div key={idx} className="font-mono text-sm bg-white border border-slate-200/70 px-3 py-2 rounded text-center text-slate-600">
                     {code}
                   </div>
                 ))}
@@ -236,9 +236,9 @@ function TwoFactorSettings() {
         {/* State: Enabled (Idle) */}
         {isEnabled && setupStep === 0 && (
           <div className="flex flex-col gap-4">
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/70">
               <div className="flex items-start gap-4">
-                <div className="p-3 bg-white rounded-full border border-slate-100 shadow-sm">
+                <div className="p-3 bg-white rounded-full border border-slate-200/70 shadow-sm">
                   <Smartphone className="w-6 h-6 text-slate-400" />
                 </div>
                 <div className="flex-1">

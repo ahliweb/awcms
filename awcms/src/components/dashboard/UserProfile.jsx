@@ -191,9 +191,9 @@ function UserProfile() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+    <div className="max-w-5xl mx-auto space-y-8 pb-12">
       <div className="flex flex-col gap-1">
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">My Profile</h2>
+        <h2 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">My Profile</h2>
         <p className="text-slate-500 dark:text-slate-400">Manage your account settings and security preferences</p>
       </div>
 
@@ -205,91 +205,97 @@ function UserProfile() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"
+            className="dashboard-surface dashboard-surface-hover overflow-hidden"
           >
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+            <div className="flex items-center gap-3 border-b border-slate-200/60 bg-slate-50/70 px-6 py-5 dark:border-slate-800/70 dark:bg-slate-900/60">
+              <div className="rounded-xl bg-blue-100/70 p-2 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
                 <User className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Personal Information</h3>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Personal Information</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Update your personal details</p>
               </div>
             </div>
 
             <div className="p-6">
               <form onSubmit={handleProfileUpdate} className="space-y-6">
-                {/* Avatar Upload Section */}
-                <div className="flex flex-col items-center pb-6 border-b border-slate-100">
-                  <div className="relative group">
-                    <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-slate-200 shadow-md bg-slate-100">
-                      {profileData.avatar_url ? (
-                        <img
-                          src={profileData.avatar_url}
-                          alt="Profile"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-blue-100">
-                          <User className="w-12 h-12 text-blue-400" />
-                        </div>
-                      )}
+                <div className="grid gap-6 md:grid-cols-[160px,1fr]">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative group">
+                      <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-slate-200/70 bg-slate-100 shadow-md dark:border-slate-800 dark:bg-slate-900">
+                        {profileData.avatar_url ? (
+                          <img
+                            src={profileData.avatar_url}
+                            alt="Profile"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-blue-100/70 dark:bg-blue-900/30">
+                            <User className="w-10 h-10 text-blue-400" />
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => document.getElementById('avatar-upload-trigger').click()}
+                        className="absolute bottom-1 right-1 p-2 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Camera className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => document.getElementById('avatar-upload-trigger').click()}
-                      className="absolute bottom-1 right-1 p-2 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <Camera className="w-4 h-4" />
-                    </button>
+                    <div className="text-center text-xs text-slate-500 dark:text-slate-400">
+                      JPG/PNG up to 2MB
+                    </div>
                   </div>
-                  <div className="mt-4 w-full max-w-xs">
+                  <div className="space-y-4">
                     <ImageUpload
                       id="avatar-upload-trigger"
                       value={profileData.avatar_url}
                       onChange={(url) => setProfileData({ ...profileData, avatar_url: url })}
                       className="h-auto"
-                      compact={true}
+                      hidePreview
                     />
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Click camera icon or use Media Library</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="full_name" className="text-slate-700 dark:text-slate-300">Full Name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="full_name"
-                      value={profileData.full_name}
-                      onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
-                      className="pl-9"
-                      placeholder="Your full name"
-                    />
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Use Media Library or paste an external URL.</p>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-700 dark:text-slate-300">Email Address</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="email"
-                      type="email"
-                      value={profileData.email}
-                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                      className="pl-9"
-                      placeholder="your.email@example.com"
-                    />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="full_name" className="text-sm font-medium text-slate-600 dark:text-slate-300">Full Name</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <Input
+                        id="full_name"
+                        value={profileData.full_name}
+                        onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
+                        className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                        placeholder="Your full name"
+                      />
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    Changing email will require re-verification.
-                  </p>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-sm font-medium text-slate-600 dark:text-slate-300">Email Address</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={profileData.email}
+                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                        className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                        placeholder="your.email@example.com"
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      Changing email will require re-verification.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="pt-2 flex justify-end">
-                  <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+                  <Button type="submit" disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white">
                     {loading ? (
                       <span className="flex items-center gap-2">Saving...</span>
                     ) : (
@@ -315,14 +321,14 @@ function UserProfile() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"
+            className="dashboard-surface dashboard-surface-hover overflow-hidden"
           >
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 flex items-center gap-3">
-              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-lg">
+            <div className="flex items-center gap-3 border-b border-slate-200/60 bg-slate-50/70 px-6 py-5 dark:border-slate-800/70 dark:bg-slate-900/60">
+              <div className="p-2 bg-orange-100/70 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-lg">
                 <Lock className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Password</h3>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Password</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Manage your password</p>
               </div>
             </div>
@@ -334,28 +340,28 @@ function UserProfile() {
                     <Label htmlFor="password" className="text-slate-700 dark:text-slate-300">New Password</Label>
                     <div className="relative">
                       <Key className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                      <Input
-                        id="password"
-                        type="password"
-                        value={passwordData.password}
-                        onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
-                        className="pl-9"
-                        placeholder="••••••••"
-                      />
+                        <Input
+                          id="password"
+                          type="password"
+                          value={passwordData.password}
+                          onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
+                          className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                          placeholder="••••••••"
+                        />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword" className="text-slate-700 dark:text-slate-300">Confirm Password</Label>
                     <div className="relative">
                       <Key className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                      <Input
-                        id="confirmPassword"
-                        type="password"
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                        className="pl-9"
-                        placeholder="••••••••"
-                      />
+                        <Input
+                          id="confirmPassword"
+                          type="password"
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                          className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                          placeholder="••••••••"
+                        />
                     </div>
                   </div>
                 </div>
@@ -376,14 +382,14 @@ function UserProfile() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden h-full flex flex-col"
+            className="dashboard-surface dashboard-surface-hover overflow-hidden h-full flex flex-col"
           >
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50 flex items-center gap-3">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
+            <div className="flex items-center gap-3 border-b border-slate-200/60 bg-slate-50/70 px-6 py-5 dark:border-slate-800/70 dark:bg-slate-900/60">
+              <div className="p-2 bg-purple-100/70 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
                 <Shield className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Access Control</h3>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Access Control</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Your assigned role and permissions</p>
               </div>
             </div>
@@ -392,8 +398,8 @@ function UserProfile() {
               <div>
                 <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-wider">Current Role</h4>
                 <div className={`inline-flex items-center px-3 py-1.5 rounded-full font-semibold text-sm border ${(profileData.role_is_platform_admin || profileData.role_is_full_access || isPlatformAdmin || isFullAccess)
-                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  ? 'bg-purple-100/70 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 border-purple-200/70 dark:border-purple-800'
+                  : 'bg-slate-100/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200/70 dark:border-slate-700'
                   }`}>
                   {(profileData.role_is_platform_admin || profileData.role_is_full_access || isPlatformAdmin || isFullAccess)
                     ? <Crown className="w-3.5 h-3.5 mr-2 text-purple-600 dark:text-purple-400" />
@@ -416,9 +422,9 @@ function UserProfile() {
                 </h4>
 
                 {permissions && permissions.length > 0 ? (
-                  <div className="overflow-y-auto pr-2 custom-scrollbar space-y-1 flex-1 max-h-[400px]">
+                  <div className="overflow-y-auto pr-2 custom-scrollbar space-y-2 flex-1 max-h-[420px]">
                     {permissions.map((perm, index) => (
-                      <div key={index} className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50 text-sm text-slate-600 dark:text-slate-400 transition-colors group border border-transparent hover:border-slate-100 dark:hover:border-slate-700">
+                      <div key={index} className="flex items-center gap-2 rounded-xl border border-transparent p-2 text-sm text-slate-600 transition-colors group hover:bg-slate-50/70 hover:border-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:border-slate-700">
                         <CheckCircle2 className="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" />
                         <span className="group-hover:text-slate-900 dark:group-hover:text-slate-200">{perm.replace(/_/g, ' ')}</span>
                       </div>

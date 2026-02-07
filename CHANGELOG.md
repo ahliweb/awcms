@@ -23,6 +23,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Admin UX**: Refined dashboard layout, page header hierarchy, sidebar styling, and card surfaces for a more polished UI.
 - **Auth UI**: Redesigned login, reset-password, and register screens with new layout, typography, and CTA styling.
 - **Toast Styling**: Updated toast colors, borders, and accent bars for clearer status feedback.
+- **Profile UX**: Refined the profile page layout, avatar upload flow, and 2FA surface styling.
 ### Fixed
 
 ## [2.30.0] "Waypoint" - 2026-02-07
