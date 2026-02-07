@@ -60,6 +60,8 @@ Provide common fixes for local development and deployment issues.
 
 - Use the Cloudflare test key for localhost.
 - Set `VITE_TURNSTILE_SITE_KEY` in the admin environment.
+- Optionally set `VITE_TURNSTILE_TEST_SITE_KEY` to force the test key in local dev.
+- For multi-domain setups, use `VITE_TURNSTILE_SITE_KEY_MAP` to map hostnames to keys.
 
 ### Cloudflare Runtime Env Missing
 

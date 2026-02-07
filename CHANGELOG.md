@@ -9,8 +9,13 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Added
 
+- **Turnstile Host Mapping**: Added `VITE_TURNSTILE_SITE_KEY_MAP` support for per-domain Turnstile keys and a localhost test-key fallback.
+- **Repo Hygiene**: Ignored `temp_debug_images/` from git tracking.
+
 ### Changed
 
+- **Docs**: Recommended `supabase db pull --schema public,extensions` to avoid storage churn in shadow DBs.
+- **Turnstile Logging**: Key-selection logs are now dev-only.
 ### Fixed
 
 ## [2.30.0] "Waypoint" - 2026-02-07

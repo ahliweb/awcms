@@ -1,5 +1,20 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
+
+const DEFAULT_TEST_SITE_KEY = '1x00000000000000000000AA';
+const parseSiteKeyMap = (value) => {
+    if (!value) return null;
+    try {
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return null;
+        }
+        return parsed;
+    } catch (error) {
+        console.warn('[Turnstile] Invalid VITE_TURNSTILE_SITE_KEY_MAP JSON', error);
+        return null;
+    }
+};
 
 /**
  * Cloudflare Turnstile CAPTCHA Component
@@ -26,6 +41,43 @@ const Turnstile = ({
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
     const [scriptLoaded, setScriptLoaded] = useState(false);
+    const resolvedSiteKey = useMemo(() => {
+        if (typeof window === 'undefined') return siteKey;
+        const host = window.location.hostname;
+        const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+        const testKey = import.meta.env.VITE_TURNSTILE_TEST_SITE_KEY || DEFAULT_TEST_SITE_KEY;
+        const siteKeyMap = parseSiteKeyMap(import.meta.env.VITE_TURNSTILE_SITE_KEY_MAP);
+        let hostKey = siteKeyMap?.[host];
+
+        if (!hostKey && siteKeyMap) {
+            const wildcardEntry = Object.entries(siteKeyMap).find(([pattern, value]) => {
+                if (!value || typeof pattern !== 'string') return false;
+                if (!pattern.startsWith('*.')) return false;
+                const suffix = pattern.slice(1);
+                return suffix && host.endsWith(suffix);
+            });
+            hostKey = wildcardEntry?.[1];
+        }
+
+        if (hostKey) {
+            if (import.meta.env.DEV) {
+                console.log(`[Turnstile] Using host-mapped key for ${host}.`);
+            }
+            return hostKey;
+        }
+
+        if (import.meta.env.DEV && isLocalhost && testKey) {
+            if (siteKey && siteKey !== testKey) {
+                console.warn(`[Turnstile] Using test site key for localhost (${host}).`);
+            }
+            return testKey;
+        }
+
+        if (import.meta.env.DEV) {
+            console.log(`[Turnstile] Using default site key for ${host}.`);
+        }
+        return siteKey;
+    }, [siteKey]);
 
     // Load Turnstile script
     useEffect(() => {
@@ -97,8 +149,15 @@ const Turnstile = ({
         // Ensure we don't double render
         if (widgetIdRef.current) return;
 
+        if (!resolvedSiteKey) {
+            console.error('[Turnstile] Missing site key');
+            setHasError(true);
+            onError?.();
+            return;
+        }
+
         console.log('[Turnstile] Rendering widget...');
-        console.log('[Turnstile] USING SITE KEY:', siteKey);
+        console.log('[Turnstile] USING SITE KEY:', resolvedSiteKey);
 
         // Render new widget
         // Render new widget
@@ -107,7 +166,7 @@ const Turnstile = ({
             // If localhost needs test key, it must be manually supplied or env configured.
 
             const renderOptions = {
-                sitekey: siteKey, // Directly use the provided key (Production)
+                sitekey: resolvedSiteKey,
                 callback: (token) => {
                     console.log('[Turnstile] Verification successful', token ? '(Token received)' : '(No token)');
                     onVerify?.(token);
@@ -162,7 +221,7 @@ const Turnstile = ({
             onError?.();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [scriptLoaded, hasError, siteKey, theme, size, appearance]);
+    }, [scriptLoaded, hasError, resolvedSiteKey, theme, size, appearance]);
 
     // Reset function
     const reset = useCallback(() => {
