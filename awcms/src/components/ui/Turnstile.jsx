@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 const DEFAULT_TEST_SITE_KEY = '1x00000000000000000000AA';
+const normalizeSiteKey = (value) => {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+};
 const parseSiteKeyMap = (value) => {
     if (!value) return null;
     try {
@@ -59,24 +64,26 @@ const Turnstile = ({
             hostKey = wildcardEntry?.[1];
         }
 
-        if (hostKey) {
-            if (import.meta.env.DEV) {
+        const normalizedHostKey = normalizeSiteKey(hostKey);
+        if (normalizedHostKey) {
+            if (import.meta.env.DEV || import.meta.env.VITE_TURNSTILE_DEBUG === 'true') {
                 console.log(`[Turnstile] Using host-mapped key for ${host}.`);
             }
-            return hostKey;
+            return normalizedHostKey;
         }
 
-        if (import.meta.env.DEV && isLocalhost && testKey) {
-            if (siteKey && siteKey !== testKey) {
+        const normalizedTestKey = normalizeSiteKey(testKey);
+        if (import.meta.env.DEV && isLocalhost && normalizedTestKey) {
+            if (siteKey && siteKey !== normalizedTestKey) {
                 console.warn(`[Turnstile] Using test site key for localhost (${host}).`);
             }
-            return testKey;
+            return normalizedTestKey;
         }
 
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV || import.meta.env.VITE_TURNSTILE_DEBUG === 'true') {
             console.log(`[Turnstile] Using default site key for ${host}.`);
         }
-        return siteKey;
+        return normalizeSiteKey(siteKey);
     }, [siteKey]);
 
     // Load Turnstile script
