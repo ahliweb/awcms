@@ -33,9 +33,10 @@ const LoginPage = () => {
   const [pendingUserId, setPendingUserId] = useState(null);
   const [verificationError, setVerificationError] = useState('');
 
-  const { user, signOut } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [sessionCheck, setSessionCheck] = useState(false);
 
   const sideItems = [
     {
@@ -68,6 +69,7 @@ const LoginPage = () => {
 
     const checkUserStatus = async () => {
       if (user && !requires2FA && !isLoading) {
+        if (mounted) setSessionCheck(true);
         try {
           const { data: twoFactorData } = await supabase
             .from('two_factor_auth')
@@ -113,7 +115,11 @@ const LoginPage = () => {
           }
         } catch (e) {
           console.error("Status check failed", e);
+        } finally {
+          if (mounted) setSessionCheck(false);
         }
+      } else if (mounted) {
+        setSessionCheck(false);
       }
     };
 
@@ -121,6 +127,34 @@ const LoginPage = () => {
 
     return () => { mounted = false; };
   }, [user, requires2FA, isLoading, navigate, signOut, toast, t]);
+
+  if (authLoading || sessionCheck) {
+    return (
+      <AuthShell
+        title={t('login_page.restoring_title', 'Restoring your session')}
+        subtitle={t('login_page.restoring_subtitle', 'Checking your secure access credentials…')}
+        badge={t('login_page.restoring_badge', 'Authenticating')}
+        {...shellProps}
+      >
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <Loader2 className="h-6 w-6 animate-spin text-white" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              {t('login_page.restoring_status', 'Validating access token')}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('login_page.restoring_hint', 'We’ll redirect you automatically once ready.')}
+            </p>
+          </div>
+          <div className="h-2 w-full max-w-[240px] overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-800/70">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-400" />
+          </div>
+        </div>
+      </AuthShell>
+    );
+  }
 
 
   const handleLogin = async (e) => {

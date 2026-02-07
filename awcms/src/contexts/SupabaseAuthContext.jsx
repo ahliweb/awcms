@@ -118,17 +118,51 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let mounted = true;
+    let initialResolved = false;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
+
+        if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          clearLocalAuth();
+          return;
+        }
+
+        if (!initialResolved || event === 'INITIAL_SESSION') {
+          initialResolved = true;
+          await handleSession(session);
+          if (event === 'SIGNED_IN') {
+            logSsoLoginEvent(session);
+          }
+          return;
+        }
+
+        if (event === 'SIGNED_IN') {
+          await handleSession(session);
+          logSsoLoginEvent(session);
+          return;
+        }
+
+        if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED' || event === 'PASSWORD_RECOVERY' || event === 'MFA_CHALLENGE_VERIFIED') {
+          await handleSession(session);
+          return;
+        }
+
+        await handleSession(session);
+      },
+    );
 
     const getSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
-
-        if (error) {
-          throw error;
-        }
-
+        if (error) throw error;
         if (mounted) {
-          handleSession(session);
+          initialResolved = true;
+          await handleSession(session);
         }
       } catch (error) {
         console.error("Auth initialization error:", error.message);
@@ -157,28 +191,6 @@ export const AuthProvider = ({ children }) => {
     };
 
     getSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_OUT') {
-          setSession(null);
-          setUser(null);
-          setLoading(false);
-          clearLocalAuth();
-        } else if (event === 'TOKEN_REFRESHED') {
-          // Good state
-          if (mounted) handleSession(session);
-        } else if (event === 'USER_UPDATED') {
-          if (mounted) handleSession(session);
-        } else if (event === 'SIGNED_IN') {
-          if (mounted) handleSession(session);
-          logSsoLoginEvent(session);
-        } else {
-          // Catch-all for other events
-          if (mounted) handleSession(session);
-        }
-      }
-    );
 
     return () => {
       mounted = false;

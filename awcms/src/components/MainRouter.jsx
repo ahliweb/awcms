@@ -3,6 +3,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import TenantGuard from '@/components/auth/TenantGuard';
+import AuthShell from '@/components/auth/AuthShell';
 import LoginPage from '@/pages/cmspanel/LoginPage';
 import ForgotPasswordPage from '@/pages/cmspanel/ForgotPasswordPage';
 import UpdatePasswordPage from '@/pages/cmspanel/UpdatePasswordPage';
@@ -104,9 +105,34 @@ const ProtectedRoute = ({ children }) => {
   // We need to check sessionStorage strictly here inside the component body
   // because hooks/utils might cache values, but reading directly is safe in render for this.
   const is2FAVerified = sessionStorage.getItem('awcms_2fa_verified') === 'true';
+  const hasCachedSession = React.useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return Object.keys(localStorage).some(
+      (key) => key.startsWith('sb-') && key.endsWith('-auth-token'),
+    );
+  }, []);
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading || (!session && hasCachedSession)) {
+    return (
+      <AuthShell
+        title="Restoring your session"
+        subtitle="Checking your secure access credentials…"
+        badge="Authenticating"
+      >
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/80 border-t-transparent" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Validating access token</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">We’ll redirect you automatically once ready.</p>
+          </div>
+          <div className="h-2 w-full max-w-[240px] overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-800/70">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-400" />
+          </div>
+        </div>
+      </AuthShell>
+    );
   }
 
   if (!session) {
