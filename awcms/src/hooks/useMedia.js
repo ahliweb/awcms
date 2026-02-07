@@ -5,15 +5,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { useTenant } from '@/contexts/TenantContext'; // Import TenantContext
+import { useTenant } from '@/contexts/TenantContext'; 
+import { usePermissions } from '@/contexts/PermissionContext';
 
 export function useMedia() {
     const { toast } = useToast();
-    const { currentTenant } = useTenant(); // Get Current Tenant
+    const { currentTenant } = useTenant(); 
     const tenantId = currentTenant?.id;
+    const { isPlatformAdmin } = usePermissions();
 
     const [uploading, setUploading] = useState(false);
     const [syncing, setSyncing] = useState(false);
+    const [loading, setLoading] = useState(false);
+    
+    // Stats state
     const [stats, setStats] = useState({
         total_files: 0,
         total_size: 0,
@@ -23,6 +28,132 @@ export function useMedia() {
         other_count: 0
     });
     const [statsLoading, setStatsLoading] = useState(true);
+
+    // Fetch Files (Search/List)
+    const fetchFiles = useCallback(async ({ 
+        page = 1, 
+        limit = 12, 
+        query = '', 
+        isTrash = false, 
+        typeFilter = null 
+    } = {}) => {
+        if (!tenantId && !isPlatformAdmin) return { data: [], count: 0 };
+
+        setLoading(true);
+        try {
+            let dbQuery = supabase
+                .from('files')
+                .select('*, users:uploaded_by(email, full_name), tenant:tenants(name)', { count: 'exact' })
+                .order('created_at', { ascending: false });
+
+            // Platform admins see all files, others are tenant-scoped
+            if (!isPlatformAdmin && tenantId) {
+                dbQuery = dbQuery.eq('tenant_id', tenantId);
+            }
+
+            // Trash View Logic
+            if (isTrash) {
+                dbQuery = dbQuery.not('deleted_at', 'is', null);
+            } else {
+                dbQuery = dbQuery.is('deleted_at', null);
+            }
+
+            // Search Logic
+            if (query) {
+                dbQuery = dbQuery.ilike('name', `%${query}%`);
+            }
+
+            // Type Filter
+            if (typeFilter) {
+                dbQuery = dbQuery.ilike('file_type', `${typeFilter}%`);
+            }
+
+            // Pagination
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
+            dbQuery = dbQuery.range(from, to);
+
+            const { data, count, error } = await dbQuery;
+            if (error) throw error;
+
+            return { data: data || [], count: count || 0 };
+        } catch (err) {
+            console.error('Error fetching files:', err);
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load files.' });
+            return { data: [], count: 0 };
+        } finally {
+            setLoading(false);
+        }
+    }, [tenantId, isPlatformAdmin, toast]);
+
+    // Soft Delete File
+    const softDeleteFile = useCallback(async (id) => {
+        try {
+            const { error } = await supabase
+                .from('files')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', id);
+
+            if (error) throw error;
+            
+            toast({ title: 'File Moved to Trash', description: 'File moved to trash bin.' });
+            return true;
+        } catch (err) {
+            console.error('Delete failed:', err);
+            toast({ variant: 'destructive', title: 'Delete Failed', description: err.message });
+            return false;
+        }
+    }, [toast]);
+
+    // Bulk Soft Delete
+    const bulkSoftDelete = useCallback(async (ids) => {
+        if (!ids || ids.length === 0) return { success: 0, error: 0 };
+        try {
+            const { error, count } = await supabase
+                .from('files')
+                .update({ deleted_at: new Date().toISOString() })
+                .in('id', ids)
+                .select('id', { count: 'exact' });
+
+            if (error) throw error;
+
+            toast({ title: 'Files Moved to Trash', description: `${ids.length} files moved to trash bin.` });
+            return { success: ids.length, error: 0 };
+        } catch (err) {
+            console.error('Bulk delete failed:', err);
+            toast({ variant: 'destructive', title: 'Bulk Delete Failed', description: err.message });
+            return { success: 0, error: ids.length };
+        }
+    }, [toast]);
+
+    // Restore File
+    const restoreFile = useCallback(async (id) => {
+        try {
+            const { error } = await supabase
+                .from('files')
+                .update({ deleted_at: null })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            toast({ title: 'File Restored', description: 'File restored to library.' });
+            return true;
+        } catch (err) {
+            console.error('Restore failed:', err);
+            toast({ variant: 'destructive', title: 'Restore Failed', description: err.message });
+            return false;
+        }
+    }, [toast]);
+
+    // Helper: Get Public URL
+    const getFileUrl = useCallback((file) => {
+        if (!file) return '';
+        if (file.file_path?.startsWith('http')) return file.file_path;
+        
+        const bucketName = file.bucket_name || 'cms-uploads';
+        const { data } = supabase.storage.from(bucketName).getPublicUrl(file.file_path);
+        return data?.publicUrl || file.file_path;
+    }, []);
 
     // Fetch file stats
     const fetchStats = useCallback(async () => {
@@ -207,7 +338,13 @@ export function useMedia() {
         syncing,
         stats,
         statsLoading,
-        refreshStats: fetchStats
+        refreshStats: fetchStats,
+        fetchFiles,
+        softDeleteFile,
+        bulkSoftDelete,
+        restoreFile,
+        getFileUrl,
+        loading
     };
 }
 

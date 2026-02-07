@@ -170,7 +170,10 @@ const TagInput = ({
                 className="px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer flex items-center gap-2 border-b border-slate-50 last:border-0"
                 onClick={() => addTag(suggestion.name)}
               >
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: suggestion.color || '#cbd5e1' }} />
+                <div 
+                  className={cn("w-2 h-2 rounded-full", !suggestion.color && "bg-slate-300")} 
+                  style={suggestion.color ? { backgroundColor: suggestion.color } : undefined} 
+                />
                 {suggestion.name}
               </div>
             ))

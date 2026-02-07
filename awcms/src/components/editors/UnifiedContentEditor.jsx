@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
+import { useContent } from '@/hooks/useContent'; // Import new hook
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -79,7 +79,10 @@ function UnifiedContentEditor({
     const { user } = useAuth();
     const { currentTenant } = useTenant();
     const { hasPermission } = usePermissions();
-    const [loading, setLoading] = useState(false);
+    
+    // Use the new content hook
+    const { fetchCategories, saveContent, loading: contentLoading } = useContent(contentType);
+    
     const [categories, setCategories] = useState([]);
 
     // Determine initial editor mode
@@ -124,29 +127,13 @@ function UnifiedContentEditor({
 
     // Fetch categories on mount
     useEffect(() => {
-        fetchCategories();
+        const loadCategories = async () => {
+            const cats = await fetchCategories();
+            setCategories(cats);
+        };
+        loadCategories();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const fetchCategories = async () => {
-        try {
-            const categoryType = contentType === 'blog' ? 'blog' : 'page';
-            let q = supabase
-                .from('categories')
-                .select('id, name')
-                .or(`type.eq.${categoryType},type.eq.content`);
-
-            if (currentTenant?.id) {
-                q = q.eq('tenant_id', currentTenant.id);
-            }
-
-            const { data, error } = await q;
-            if (error) throw error;
-            setCategories(data || []);
-        } catch (error) {
-            console.error('Error fetching categories:', error);
-        }
-    };
+    }, [fetchCategories]); // Added dependency
 
     const generateSlug = useCallback((text) => {
         return text
@@ -169,13 +156,9 @@ function UnifiedContentEditor({
     };
 
     const handleSave = async (publish = false) => {
+        // Permission checks are also handled in useContent, but we keep UI checks here for immediate feedback
         if (!canEdit) {
             toast({ variant: 'destructive', title: 'Permission Denied' });
-            return;
-        }
-
-        if (!currentTenant?.id) {
-            toast({ variant: 'destructive', title: 'No tenant context' });
             return;
         }
 
@@ -186,89 +169,32 @@ function UnifiedContentEditor({
             return;
         }
 
-        setLoading(true);
+        const dataToSave = {
+            title: formData.title,
+            slug: formData.slug || generateSlug(formData.title),
+            content: formData.content,
+            excerpt: formData.excerpt,
+            featured_image: formData.featured_image,
+            status: finalStatus,
+            workflow_state: publish ? 'published' : formData.workflow_state,
+            is_active: formData.is_active,
+            is_public: formData.is_public,
+            editor_type: editorMode,
+            category_id: formData.category_id || null,
+            // SEO
+            meta_title: formData.meta_title,
+            meta_description: formData.meta_description,
+            meta_keywords: formData.meta_keywords,
+            og_image: formData.og_image,
+            canonical_url: formData.canonical_url,
+            tags: formData.tags
+        };
 
-        try {
-            const dataToSave = {
-                tenant_id: currentTenant.id,
-                title: formData.title,
-                slug: formData.slug || generateSlug(formData.title),
-                content: formData.content,
-                excerpt: formData.excerpt,
-                featured_image: formData.featured_image,
-                status: finalStatus,
-                workflow_state: publish ? 'published' : formData.workflow_state,
-                is_active: formData.is_active,
-                is_public: formData.is_public,
-                editor_type: editorMode,
-                category_id: formData.category_id || null,
-                // SEO
-                meta_title: formData.meta_title,
-                meta_description: formData.meta_description,
-                meta_keywords: formData.meta_keywords,
-                og_image: formData.og_image,
-                canonical_url: formData.canonical_url,
-                updated_at: new Date().toISOString()
-            };
+        const savedId = await saveContent(dataToSave, isEditMode, content?.id);
 
-            if (!isEditMode) {
-                dataToSave.created_by = user.id;
-            }
-
-            let savedId = content?.id;
-
-            if (isEditMode) {
-                delete dataToSave.tenant_id;
-                const { error } = await supabase
-                    .from(tableName)
-                    .update(dataToSave)
-                    .eq('id', content.id);
-
-                if (error) throw error;
-            } else {
-                const { data, error } = await supabase
-                    .from(tableName)
-                    .insert([dataToSave])
-                    .select('id')
-                    .single();
-
-                if (error) throw error;
-                savedId = data.id;
-            }
-
-            // Sync tags for pages (blogs use sync_resource_tags RPC handled by the backend or a separate hook)
-            if (tableName === 'pages' && savedId && formData.tags.length > 0) {
-                // Clear existing tags
-                await supabase
-                    .from('page_tags')
-                    .delete()
-                    .eq('page_id', savedId);
-
-                // Insert new tags
-                const tagInserts = formData.tags.map(tagId => ({
-                    page_id: savedId,
-                    tag_id: tagId,
-                    tenant_id: currentTenant.id,
-                    created_by: user.id
-                }));
-
-                await supabase.from('page_tags').insert(tagInserts);
-            }
-
-            toast({ title: "Success", description: `${contentType} saved successfully` });
-
+        if (savedId) {
             if (onSuccess) onSuccess();
             if (!isEditMode) onClose();
-
-        } catch (error) {
-            console.error(error);
-            toast({
-                variant: "destructive",
-                title: "Error",
-                description: error.message || "Failed to save"
-            });
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -377,9 +303,9 @@ function UnifiedContentEditor({
                     <Button
                         onClick={() => handleSave(formData.status !== 'published')}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
-                        disabled={loading}
+                        disabled={contentLoading}
                     >
-                        {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                        {contentLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
                         {formData.status === 'published' ? 'Save' : 'Publish'}
                     </Button>
                 </div>

@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
@@ -13,6 +12,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
+import { useMedia } from '@/hooks/useMedia'; // Import useMedia
+import { supabase } from '@/lib/customSupabaseClient'; // Keep for usage analysis only if needed, or move to hook
 
 const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -22,30 +23,29 @@ const formatFileSize = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// Helper to get full public URL for a file
-const getFileUrl = (file) => {
-    // If file_path is already a full URL, return it
-    if (file.file_path?.startsWith('http')) {
-        return file.file_path;
-    }
-    // Otherwise, construct URL from bucket and path
-    const bucketName = file.bucket_name || 'cms-uploads';
-    const { data } = supabase.storage.from(bucketName).getPublicUrl(file.file_path);
-    return data?.publicUrl || file.file_path;
-};
-
 const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isTrashView = false }) => {
     const { toast } = useToast();
     const { checkAccess, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant();
     const tenantId = currentTenant?.id;
+    
+    // Use the hook
+    const { 
+        fetchFiles: hookFetchFiles, 
+        uploadFile, 
+        softDeleteFile, 
+        bulkSoftDelete, 
+        restoreFile, 
+        getFileUrl,
+        uploading: hookUploading,
+        loading: hookLoading
+    } = useMedia();
 
     const canUpload = checkAccess('create', 'files');
     const canDelete = checkAccess('delete', 'files');
 
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [uploading, setUploading] = useState(false);
     const [query, setQuery] = useState('');
     const [viewMode, setViewMode] = useState('grid');
     const [usageData, setUsageData] = useState({});
@@ -59,51 +59,28 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
     const totalPages = Math.ceil(totalItems / itemsPerPage);
 
     const fetchFiles = useCallback(async () => {
-        if (!tenantId) return; // Wait for tenant context
-
         setLoading(true);
         try {
-            let dbQuery = supabase
-                .from('files')
-                .select('*, users:uploaded_by(email, full_name), tenant:tenants(name)', { count: 'exact' })
-                .order('created_at', { ascending: false });
+            const { data, count } = await hookFetchFiles({
+                page: currentPage,
+                limit: itemsPerPage,
+                query,
+                isTrash: isTrashView
+            });
+            
+            setFiles(data);
+            setTotalItems(count);
 
-            // Platform admins see all files, others are tenant-scoped
-            if (!isPlatformAdmin && tenantId) {
-                dbQuery = dbQuery.eq('tenant_id', tenantId);
-            }
-
-            if (isTrashView) {
-                dbQuery = dbQuery.not('deleted_at', 'is', null);
-            } else {
-                dbQuery = dbQuery.is('deleted_at', null);
-            }
-
-            if (query) {
-                dbQuery = dbQuery.ilike('name', `%${query}%`);
-            }
-
-            // Apply pagination
-            const from = (currentPage - 1) * itemsPerPage;
-            const to = from + itemsPerPage - 1;
-            dbQuery = dbQuery.range(from, to);
-
-            const { data, count, error } = await dbQuery;
-            if (error) throw error;
-            setFiles(data || []);
-            setTotalItems(count || 0);
-
-            // Fetch usage data for files
+            // Fetch usage data for files (keep existing logic or move to hook later)
             if (!isTrashView && data?.length > 0) {
                 fetchUsageData();
             }
         } catch (err) {
             console.error('Error fetching files:', err);
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load media library.' });
         } finally {
             setLoading(false);
         }
-    }, [query, toast, isTrashView, currentPage, itemsPerPage, tenantId, isPlatformAdmin]);
+    }, [hookFetchFiles, query, isTrashView, currentPage, itemsPerPage]);
 
     const fetchUsageData = async () => {
         try {
@@ -146,45 +123,15 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
 
         if (acceptedFiles.length === 0) return;
 
-        setUploading(true);
         let successCount = 0;
 
         for (const file of acceptedFiles) {
             try {
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-                const tenantPrefix = tenantId ? `${tenantId}/` : '';
-                const filePath = `${tenantPrefix}${fileName}`;
-
-                // 0. Permission Check
                 if (!canUpload) {
                     throw new Error('Permission denied: Cannot upload files.');
                 }
-
-                // 1. Upload to Storage
-                const { error: uploadError } = await supabase.storage
-                    .from('cms-uploads')
-                    .upload(filePath, file);
-
-                if (uploadError) throw uploadError;
-
-                // 2. Get Public URL
-                const { data: { publicUrl } } = supabase.storage
-                    .from('cms-uploads')
-                    .getPublicUrl(filePath);
-
-                // 3. Save to DB
-                const { error: dbError } = await supabase.from('files').insert({
-                    name: file.name,
-                    file_path: publicUrl, // Store full URL for easier access
-                    file_size: file.size,
-                    file_type: file.type,
-                    bucket_name: 'cms-uploads',
-                    uploaded_by: (await supabase.auth.getUser()).data.user?.id,
-                    tenant_id: tenantId
-                });
-
-                if (dbError) throw dbError;
+                
+                await uploadFile(file);
                 successCount++;
             } catch (err) {
                 console.error(`Failed to upload ${file.name}: `, err);
@@ -192,13 +139,13 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
             }
         }
 
-        setUploading(false);
         if (successCount > 0) {
             toast({ title: 'Upload Complete', description: `${successCount} files uploaded successfully.` });
             fetchFiles();
         }
-    }, [fetchFiles, toast, canUpload, tenantId]);
+    }, [fetchFiles, toast, canUpload, uploadFile]);
 
+    // ... dropzone ...
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
         noClick: selectionMode,
@@ -212,7 +159,6 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
 
     // Open delete confirmation dialog
     const handleDelete = (id, fileName = 'this file') => {
-        console.log('handleDelete called with id:', id);
         setDeleteConfirm({ open: true, fileId: id, fileName });
     };
 
@@ -231,29 +177,14 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
 
         setDeleteConfirm({ open: false, fileId: null, fileName: '' });
 
-        try {
-            const { data, error } = await supabase
-                .from('files')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id)
-                .select();
-
-            console.log('Soft delete result:', { data, error });
-
-            if (error) {
-                console.error('Soft delete error:', error);
-                throw error;
-            }
-            toast({ title: 'File Moved to Trash', description: 'File moved to trash bin.' });
+        const success = await softDeleteFile(id);
+        if (success) {
             fetchFiles();
-            setSelectedFiles(new Set()); // Clear selection after delete
-        } catch (err) {
-            console.error('Delete failed:', err);
-            toast({ variant: 'destructive', title: 'Delete Failed', description: err.message || 'Unknown error' });
+            setSelectedFiles(new Set()); 
         }
     };
 
-    // Selection helpers
+    // ... selection helpers ...
     const toggleSelect = (fileId) => {
         setSelectedFiles(prev => {
             const newSet = new Set(prev);
@@ -298,67 +229,30 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
             toast({ variant: 'destructive', title: 'Permission Denied', description: 'You do not have permission to delete files.' });
             return;
         }
-        if (isTrashView) {
-            toast({ variant: 'destructive', title: 'Action Disabled', description: 'Permanent delete is disabled. Restore files instead.' });
-            return;
-        }
-
+        
         const ids = Array.from(selectedFiles);
         setDeleteConfirm({ open: false, fileId: null, fileName: '', isBulk: false });
 
-        let successCount = 0;
-        let errorCount = 0;
-
-        for (const id of ids) {
-            try {
-                const { error } = await supabase
-                    .from('files')
-                    .update({ deleted_at: new Date().toISOString() })
-                    .eq('id', id);
-                if (!error) successCount++;
-                else errorCount++;
-            } catch (err) {
-                console.error(`Delete failed for ${id}:`, err);
-                errorCount++;
-            }
+        const { success } = await bulkSoftDelete(ids);
+        
+        if (success > 0) {
+            setSelectedFiles(new Set());
+            fetchFiles();
         }
-
-        if (successCount > 0) {
-            toast({
-                title: 'Files Moved to Trash',
-                description: `${successCount} file(s) moved to trash.`
-            });
-        }
-        if (errorCount > 0) {
-            toast({
-                variant: 'destructive',
-                title: 'Some Deletions Failed',
-                description: `${errorCount} file(s) could not be deleted.`
-            });
-        }
-
-        setSelectedFiles(new Set());
-        fetchFiles();
     };
 
     const handleRestore = async (id) => {
-        try {
-            const { error } = await supabase
-                .from('files')
-                .update({ deleted_at: null })
-                .eq('id', id);
-            if (error) throw error;
-            toast({ title: 'File Restored', description: 'File restored to library.' });
-            fetchFiles();
-        } catch (err) {
-            toast({ variant: 'destructive', title: 'Restore Failed', description: err.message });
-        }
+        const success = await restoreFile(id);
+        if (success) fetchFiles();
     };
 
     const copyToClipboard = (url) => {
         navigator.clipboard.writeText(url);
         toast({ title: 'Copied', description: 'URL copied to clipboard' });
     };
+    
+    // Pass uploading state from hook
+    const uploading = hookUploading;
 
     return (
         <div className="space-y-6 p-4">

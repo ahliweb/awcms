@@ -81,18 +81,30 @@ const { data } = await supabase
 
 ### Hierarchy & Sharing Defaults
 
-- **Shared by default**: `settings` and `branding` (descendants). Tenant admins and full-access roles have read/write access across levels.
-- **Isolated by default**: `content`, `media`, and `users` resources.
-- Rules are stored in `tenant_resource_registry` and `tenant_resource_rules`.
+- **Shared by default**: `settings`, `branding`, `modules` (descendants). Tenant admins and full-access roles have read/write access across levels based on `tenant_resource_rules`.
+- **Isolated by default**: `content` (blogs, pages), `media` (storage objects), `users`, and `orders`. These resources are strictly scoped to a single `tenant_id`.
+- **Rules Storage**: Configured in `tenant_resource_registry` and enforced via `tenant_resource_rules`.
 
 ## Security and Compliance Notes
 
-- Every tenant-scoped table must include `tenant_id` and `deleted_at`.
-- All queries must include tenant filters even when RLS is enabled.
-- Cross-tenant access is allowed only for resources marked as shared.
-- Platform admin and full-access roles can access all tenants, including cross-tenant reporting.
+### Row Level Security (RLS)
+- **Strict Enforcement**: RLS is mandatory for all tables.
+- **Bypass Prohibition**: Client-side code must NEVER bypass RLS. Elevation to Service Role is restricted to specific Edge Functions.
+
+### Data Lifecycle (Soft Delete)
+- **Mechanism**: All tenant-scoped tables must use the "Soft Delete" pattern.
+- **Schema Requirement**: Tables must include a `deleted_at` (TIMESTAMPTZ, nullable) column.
+- **Operations**:
+  - **Delete**: Implemented as `UPDATE table SET deleted_at = NOW() ...`.
+  - **Read**: Queries must explicitly filter `.is('deleted_at', null)`.
+- **Foreign Keys**: Must use `ON DELETE RESTRICT` or `SET NULL`. `ON DELETE CASCADE` is forbidden for business data to preserve audit trails.
+
+### Query Requirements
+- **Tenant Filter**: All queries must include `.eq('tenant_id', tenantId)` even if RLS is enabled, to ensure query planner optimization and leak prevention.
+- **Cross-Tenant Access**: Allowed only for resources marked as shared in the registry.
 
 ## Operational Concerns
+
 
 - Tenant domains are configured in the `tenants` table (host/subdomain fields).
 - New tenant creation seeds default roles, staff hierarchy, and resource rules via SQL/RPC.
