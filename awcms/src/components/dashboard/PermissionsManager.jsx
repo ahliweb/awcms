@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, Plus } from 'lucide-react';
+import { Shield, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
@@ -156,9 +156,9 @@ function PermissionsManager() {
   };
 
   const columns = [
-    { key: 'name', label: 'Permission Name' },
-    { key: 'resource', label: 'Resource' },
-    { key: 'action', label: 'Action' },
+    { key: 'name', label: 'Permission Name', className: 'font-semibold' },
+    { key: 'resource', label: 'Resource', className: 'text-slate-500' },
+    { key: 'action', label: 'Action', className: 'text-slate-500' },
     { key: 'description', label: 'Description' }
   ];
 
@@ -180,17 +180,28 @@ function PermissionsManager() {
         icon={Shield}
         breadcrumbs={[{ label: 'Permissions', icon: Shield }]}
         actions={(
-          <Button onClick={() => {
-            setEditingPermission(null);
-            setFormData({ name: '', description: '', resource: '', action: '' });
-            setIsEditorOpen(true);
-          }} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            <Plus className="w-4 h-4 mr-2" /> New Permission
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={fetchPermissions}
+              title="Refresh"
+              className="h-10 w-10 border-slate-200/70 bg-white/70 hover:bg-white shadow-sm"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button onClick={() => {
+              setEditingPermission(null);
+              setFormData({ name: '', description: '', resource: '', action: '' });
+              setIsEditorOpen(true);
+            }} className="bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">
+              <Plus className="w-4 h-4 mr-2" /> New Permission
+            </Button>
+          </div>
         )}
       />
 
-      <div className="bg-card p-4 rounded-xl border border-border shadow-sm">
+      <div className="dashboard-surface dashboard-surface-hover p-4">
         <MinCharSearchInput
           value={query}
           onChange={e => setQuery(e.target.value)}
@@ -227,31 +238,31 @@ function PermissionsManager() {
       />
 
       <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editingPermission ? 'Edit Permission' : 'New Permission'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div>
               <Label>Name (e.g. view_blogs)</Label>
-              <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+              <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Resource</Label>
-                <Input value={formData.resource} onChange={e => setFormData({ ...formData, resource: e.target.value })} required />
+                <Input value={formData.resource} onChange={e => setFormData({ ...formData, resource: e.target.value })} required className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30" />
               </div>
               <div>
                 <Label>Action</Label>
-                <Input value={formData.action} onChange={e => setFormData({ ...formData, action: e.target.value })} required />
+                <Input value={formData.action} onChange={e => setFormData({ ...formData, action: e.target.value })} required className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30" />
               </div>
             </div>
             <div>
               <Label>Description</Label>
-              <Input value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+              <Input value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30" />
             </div>
             <DialogFooter>
-              <Button type="submit">Save</Button>
+              <Button type="submit" className="bg-indigo-600 text-white hover:bg-indigo-700">Save</Button>
             </DialogFooter>
           </form>
         </DialogContent>

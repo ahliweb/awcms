@@ -287,10 +287,10 @@ const RoleEditor = ({ role, onClose, onSave }) => {
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-[95vw] xl:max-w-[1600px] h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700"
+        className="bg-white/95 dark:bg-slate-950/90 rounded-2xl shadow-2xl w-full max-w-[95vw] xl:max-w-[1600px] h-[92vh] flex flex-col overflow-hidden border border-slate-200/70 dark:border-slate-800/70"
       >
         {/* Header */}
-        <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800 shrink-0">
+        <div className="px-6 py-4 border-b border-slate-200/70 dark:border-slate-800/70 flex justify-between items-center bg-slate-50/70 dark:bg-slate-900/60 shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <Shield className={`w-5 h-5 ${isFullAccessRole ? 'text-purple-600' : 'text-blue-600'}`} />
@@ -303,7 +303,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           <div className="flex gap-2">
             {/* Bulk Actions for non-system roles */}
             {!isSystemRole && (
-              <div className="hidden md:flex bg-white rounded-lg border border-slate-200 p-1 mr-2">
+              <div className="hidden md:flex bg-white/80 rounded-lg border border-slate-200/70 p-1 mr-2">
                 <button
                   type="button"
                   onClick={selectAllPermissions}
@@ -321,7 +321,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
               </div>
             )}
             {!isFullAccessRole && (
-              <div className="hidden md:flex bg-white rounded-lg border border-slate-200 p-1 mr-4">
+              <div className="hidden md:flex bg-white/80 rounded-lg border border-slate-200/70 p-1 mr-4">
                 {['Viewer', 'Editor', 'Manager'].map(t => (
                   <button
                     key={t}
@@ -340,7 +340,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                 type="button"
                 onClick={syncFullAccess}
                 disabled={syncingFullAccess}
-                className="bg-purple-600 hover:bg-purple-700 text-white mr-2"
+                className="bg-purple-600 hover:bg-purple-700 text-white mr-2 shadow-sm"
               >
                 {syncingFullAccess ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Syncing...</>
@@ -349,7 +349,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                 )}
               </Button>
             )}
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-slate-200">
+            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-800">
               <X className="w-5 h-5 text-slate-500" />
             </Button>
           </div>
@@ -357,12 +357,12 @@ const RoleEditor = ({ role, onClose, onSave }) => {
 
         {/* Content */}
         <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar bg-white dark:bg-slate-900">
+          <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar bg-white/95 dark:bg-slate-950/80">
 
             {/* Role Details */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="space-y-4 lg:col-span-1">
-                <div className="bg-slate-50 dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
+                <div className="bg-slate-50/80 dark:bg-slate-900/70 p-5 rounded-2xl border border-slate-200/70 dark:border-slate-800/70 space-y-4">
                   <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                     <Info className="w-4 h-4 text-blue-500" /> Role Details
                   </h3>
@@ -370,15 +370,15 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                   <div className="space-y-3">
                     <div className="space-y-1">
                       <Label htmlFor="name">Role Name <span className="text-red-500">*</span></Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={e => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="e.g. Content Editor"
-                        required
-                        disabled={isSystemRole}
-                        className={isSystemRole ? "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-mono" : "dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"}
-                      />
+                        <Input
+                          id="name"
+                          value={formData.name}
+                          onChange={e => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="e.g. Content Editor"
+                          required
+                          disabled={isSystemRole}
+                          className={isSystemRole ? "h-11 rounded-xl bg-slate-100 text-slate-500 font-mono dark:bg-slate-800 dark:text-slate-400" : "h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus-visible:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-slate-200"}
+                        />
                       {isSystemRole && <p className="text-[10px] text-amber-600 flex items-center gap-1 mt-1"><Lock className="w-3 h-3" /> System role name cannot be changed.</p>}
                     </div>
 
@@ -390,13 +390,14 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                         onChange={e => setFormData({ ...formData, description: e.target.value })}
                         placeholder="Describe the purpose and access level of this role..."
                         rows={3}
+                        className="rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus-visible:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
                       />
                     </div>
 
                     {/* Hierarchy Reference */}
                     <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
                       <p className="text-xs font-medium text-slate-500 mb-2">Tenant Staff Hierarchy Reference (Levels 1-10)</p>
-                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 p-2 rounded border border-slate-200 dark:border-slate-700">
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100/70 dark:bg-slate-800/60 p-2 rounded border border-slate-200/70 dark:border-slate-700">
                         <div>10: Super Manager</div>
                         <div>9: Senior Manager</div>
                         <div>8: Manager</div>
@@ -412,7 +413,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                   </div>
                 </div>
 
-                <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900 text-blue-800 dark:text-blue-200">
+                <Alert className="bg-blue-50/80 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900 text-blue-800 dark:text-blue-200">
                   <Info className="w-4 h-4 text-blue-600" />
                   <AlertTitle>Permission Stats</AlertTitle>
                   <AlertDescription className="text-xs mt-1">
@@ -424,8 +425,8 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                       <span>Total Available:</span>
                       <span className="font-mono">{permissions.length}</span>
                     </div>
-                    <div className="w-full bg-blue-200 dark:bg-blue-900 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div
+                   <div className="w-full bg-blue-200/80 dark:bg-blue-900 h-1.5 rounded-full mt-2 overflow-hidden">
+                     <div
                         className="bg-blue-600 h-full transition-all duration-500"
                         style={{ width: `${isFullAccessRole ? 100 : (permissions.length ? (selectedPermissions.size / permissions.length) * 100 : 0)}%` }}
                       />
@@ -447,8 +448,8 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                 </div>
 
                 {loading ? (
-                  <div className="h-64 flex flex-col items-center justify-center border rounded-xl border-dashed bg-slate-50">
-                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-2" />
+                  <div className="h-64 flex flex-col items-center justify-center border rounded-2xl border-dashed border-slate-200/70 bg-slate-50/70">
+                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
                     <span className="text-slate-500 text-sm">Loading permissions matrix...</span>
                   </div>
                 ) : (
@@ -465,14 +466,14 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           </div>
 
           {/* Footer Actions */}
-          <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex justify-between items-center shrink-0">
+          <div className="p-4 border-t border-slate-200/70 dark:border-slate-800/70 bg-slate-50/70 dark:bg-slate-900/60 flex justify-between items-center shrink-0">
             <div className="text-xs text-slate-400 hidden sm:block">
               Last updated: {new Date().toLocaleDateString()}
             </div>
             <div className="flex gap-3 w-full sm:w-auto justify-end">
               <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
               {!isFullAccessRole && (
-                <Button type="submit" disabled={saving || loading} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[120px]">
+                <Button type="submit" disabled={saving || loading} className="bg-indigo-600 hover:bg-indigo-700 text-white min-w-[120px]">
                   {saving ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
                   ) : (

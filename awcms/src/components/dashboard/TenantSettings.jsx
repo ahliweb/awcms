@@ -71,8 +71,6 @@ export default function TenantSettings() {
 
             if (error) throw error;
 
-            if (error) throw error;
-
             toast({ title: t('tenant_settings.toasts.saved_title'), description: t('tenant_settings.toasts.saved_desc') });
 
             // Note: refreshTenant not available in current TenantContext
@@ -99,34 +97,38 @@ export default function TenantSettings() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6 pb-12">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900">{t('tenant_settings.title')}</h1>
-                <p className="text-slate-500">{t('tenant_settings.description')}</p>
+        <div className="max-w-5xl mx-auto space-y-8 pb-12">
+            <div className="space-y-1">
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">{t('tenant_settings.title')}</h1>
+                <p className="text-slate-500 dark:text-slate-400">{t('tenant_settings.description')}</p>
             </div>
 
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
                     {/* Branding Section */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>{t('tenant_settings.branding.title')}</CardTitle>
+                    <Card className="dashboard-surface dashboard-surface-hover overflow-hidden">
+                        <CardHeader className="border-b border-slate-200/60 bg-slate-50/70 dark:border-slate-800/70 dark:bg-slate-900/60">
+                            <CardTitle className="text-lg text-slate-900 dark:text-white">{t('tenant_settings.branding.title')}</CardTitle>
                             <CardDescription>{t('tenant_settings.branding.description')}</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="space-y-6 pt-6">
 
                             <FormField
                                 control={form.control}
                                 name="siteName"
                                 render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>{t('tenant_settings.branding.site_name')}</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder={t('tenant_settings.branding.site_name_placeholder')} {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
+                                        <FormItem>
+                                            <FormLabel className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('tenant_settings.branding.site_name')}</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder={t('tenant_settings.branding.site_name_placeholder')}
+                                                    className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                                                    {...field}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
                                 )}
                             />
 
@@ -136,11 +138,11 @@ export default function TenantSettings() {
                                     name="brandColor"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>{t('tenant_settings.branding.brand_color')}</FormLabel>
+                                            <FormLabel className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('tenant_settings.branding.brand_color')}</FormLabel>
                                             <div className="flex gap-3 items-center">
                                                 <div className="relative">
                                                     <div
-                                                        className="w-12 h-12 rounded-lg border-2 border-slate-200 shadow-sm cursor-pointer transition-transform hover:scale-105"
+                                                        className="w-12 h-12 rounded-xl border border-slate-200/70 shadow-sm cursor-pointer transition-transform hover:scale-105"
                                                         style={{ backgroundColor: field.value }}
                                                         onClick={() => document.getElementById('color-picker').click()}
                                                     />
@@ -157,10 +159,9 @@ export default function TenantSettings() {
                                                         <Input
                                                             placeholder={t('tenant_settings.branding.brand_color_desc')}
                                                             {...field}
-                                                            className="font-mono uppercase"
+                                                            className="h-11 rounded-xl border-slate-200/70 bg-white/90 font-mono uppercase shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
                                                             onChange={(e) => {
                                                                 const val = e.target.value;
-                                                                // Allow manual typing if valid hex (or partial)
                                                                 field.onChange(val);
                                                             }}
                                                         />
@@ -180,10 +181,10 @@ export default function TenantSettings() {
                                     name="fontFamily"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>{t('tenant_settings.branding.font_family')}</FormLabel>
+                                            <FormLabel className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('tenant_settings.branding.font_family')}</FormLabel>
                                             <Select onValueChange={field.onChange} defaultValue={field.value}>
                                                 <FormControl>
-                                                    <SelectTrigger>
+                                                    <SelectTrigger className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60">
                                                         <SelectValue placeholder={t('tenant_settings.branding.font_select_placeholder')} />
                                                     </SelectTrigger>
                                                 </FormControl>
@@ -202,7 +203,7 @@ export default function TenantSettings() {
                                             <FormDescription>
                                                 {t('tenant_settings.branding.font_family_desc')}
                                                 <span
-                                                    className="block mt-2 text-lg text-slate-800 border p-2 rounded bg-slate-50"
+                                                    className="block mt-2 text-lg text-slate-800 border border-slate-200/70 p-2 rounded-xl bg-slate-50/70"
                                                     style={{ fontFamily: field.value === 'system-ui' ? 'system-ui' : `${field.value}, sans-serif` }}
                                                 >
                                                     {t('tenant_settings.branding.font_preview')}
@@ -218,18 +219,18 @@ export default function TenantSettings() {
                                 control={form.control}
                                 name="logoUrl"
                                 render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>{t('tenant_settings.branding.logo')}</FormLabel>
-                                        <FormControl>
-                                            <ImageUpload
-                                                value={field.value}
-                                                onChange={field.onChange}
-                                                className="w-full max-w-sm"
-                                            />
-                                        </FormControl>
-                                        <FormDescription>{t('tenant_settings.branding.logo_desc')}</FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
+                                        <FormItem>
+                                            <FormLabel className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('tenant_settings.branding.logo')}</FormLabel>
+                                            <FormControl>
+                                                <ImageUpload
+                                                    value={field.value}
+                                                    onChange={field.onChange}
+                                                    className="w-full"
+                                                />
+                                            </FormControl>
+                                            <FormDescription>{t('tenant_settings.branding.logo_desc')}</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
                                 )}
                             />
 
@@ -237,7 +238,7 @@ export default function TenantSettings() {
                     </Card>
 
                     <div className="flex justify-end">
-                        <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700">
+                        <Button type="submit" disabled={saving} className="bg-indigo-600 hover:bg-indigo-700">
                             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                             <Save className="w-4 h-4 mr-2" />
                             {saving ? t('tenant_settings.buttons.saving') : t('tenant_settings.buttons.save_changes')}

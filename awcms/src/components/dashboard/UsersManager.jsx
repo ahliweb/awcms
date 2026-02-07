@@ -79,16 +79,6 @@ function UsersManager() {
     ...(activeTab === 'approvals' ? [{ label: t('users.breadcrumbs.approvals') }] : []),
   ];
 
-  // Actions for header
-  const headerActions = canCreate ? (
-    <Button
-      onClick={() => { setSelectedUser(null); setShowEditor(true); }}
-    >
-      <Plus className="mr-2 h-4 w-4" />
-      {t('users.create_user')}
-    </Button>
-  ) : null;
-
   const fetchUsers = useCallback(async () => {
     if (!canView) return;
     setLoading(true);
@@ -123,6 +113,30 @@ function UsersManager() {
       setLoading(false);
     }
   }, [canView, isPlatformAdmin, currentTenant, debouncedQuery, currentPage, itemsPerPage, toast, t]);
+
+  // Actions for header
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={fetchUsers}
+        title={t('common.refresh')}
+        className="h-10 w-10 border-slate-200/70 bg-white/70 hover:bg-white shadow-sm"
+      >
+        <RefreshCw className="h-4 w-4" />
+      </Button>
+      {canCreate ? (
+        <Button
+          onClick={() => { setSelectedUser(null); setShowEditor(true); }}
+          className="bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          {t('users.create_user')}
+        </Button>
+      ) : null}
+    </div>
+  );
 
   useEffect(() => {
     if (activeTab === 'users') {
@@ -271,7 +285,7 @@ function UsersManager() {
       <PageTabs value={activeTab} onValueChange={setActiveTab} tabs={tabs}>
         <TabsContent value="users" className="space-y-6 mt-0">
           {/* Search Bar */}
-          <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center gap-2">
+          <div className="dashboard-surface dashboard-surface-hover p-4 flex flex-col gap-3 md:flex-row md:items-center">
             <div className="flex-1 max-w-sm">
               <MinCharSearchInput
                 value={query}
@@ -285,9 +299,6 @@ function UsersManager() {
               />
             </div>
             <div className="flex-1"></div>
-            <Button variant="ghost" size="icon" onClick={fetchUsers} title={t('common.refresh')} className="text-muted-foreground hover:text-foreground">
-              <RefreshCw className="w-4 h-4" />
-            </Button>
           </div>
 
           {/* Users Table */}

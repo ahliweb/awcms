@@ -219,9 +219,9 @@ function UserEditor({ user, onClose, onSave }) {
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col dark:bg-slate-900 dark:border dark:border-slate-800"
+        className="bg-white/95 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border border-slate-200/70 dark:bg-slate-950/90 dark:border-slate-800/70"
       >
-        <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800">
+        <div className="px-6 py-5 border-b border-slate-200/70 flex justify-between items-center bg-slate-50/70 dark:bg-slate-900/60 dark:border-slate-800/70">
           <div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white">
               {isEditing ? 'Edit User' : 'Create New User'}
@@ -230,7 +230,7 @@ function UserEditor({ user, onClose, onSave }) {
               {isEditing ? 'Update user details and access level' : 'Add a new user to the system'}
             </p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-slate-200 dark:hover:bg-slate-800">
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-800">
             <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
           </Button>
         </div>
@@ -247,7 +247,7 @@ function UserEditor({ user, onClose, onSave }) {
               onChange={handleChange}
               placeholder="e.g. John Doe"
               required
-              className="bg-white focus-visible:ring-blue-500 dark:bg-slate-950 dark:border-slate-800 dark:text-white dark:placeholder-slate-500"
+              className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus-visible:ring-indigo-500/40 dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-white dark:placeholder-slate-500"
             />
           </div>
 
@@ -264,7 +264,7 @@ function UserEditor({ user, onClose, onSave }) {
               placeholder="john@example.com"
               required
               disabled={isEditing}
-              className={`bg-white focus-visible:ring-blue-500 dark:bg-slate-950 dark:border-slate-800 dark:text-white dark:placeholder-slate-500 ${isEditing ? 'bg-slate-100 text-slate-500 cursor-not-allowed dark:bg-slate-900 dark:text-slate-500' : ''}`}
+              className={`h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus-visible:ring-indigo-500/40 dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-white dark:placeholder-slate-500 ${isEditing ? 'bg-slate-100 text-slate-500 cursor-not-allowed dark:bg-slate-900 dark:text-slate-500' : ''}`}
             />
             {isEditing && <p className="text-xs text-slate-400">Email cannot be changed after creation.</p>}
           </div>
@@ -277,7 +277,7 @@ function UserEditor({ user, onClose, onSave }) {
                   id="inviteUser"
                   checked={inviteUser}
                   onChange={(e) => setInviteUser(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                 />
                 <Label htmlFor="inviteUser" className="text-sm font-medium text-slate-700 cursor-pointer dark:text-slate-300">
                   Send email invitation (skip password)
@@ -298,7 +298,7 @@ function UserEditor({ user, onClose, onSave }) {
                     placeholder="••••••••"
                     required={!inviteUser}
                     minLength={6}
-                    className="bg-white focus-visible:ring-blue-500 dark:bg-slate-950 dark:border-slate-800 dark:text-white dark:placeholder-slate-500"
+                    className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus-visible:ring-indigo-500/40 dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-white dark:placeholder-slate-500"
                   />
                   <p className="text-xs text-slate-500 dark:text-slate-400">Must be at least 6 characters long.</p>
                 </div>
@@ -316,7 +316,7 @@ function UserEditor({ user, onClose, onSave }) {
               value={formData.role_id}
               onChange={handleChange}
               required
-              className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
+              className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200/70 bg-white/90 px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-950/60 dark:text-slate-200 dark:border-slate-700/70"
             >
               <option value="" disabled>Select a role...</option>
               {roles
@@ -358,7 +358,7 @@ function UserEditor({ user, onClose, onSave }) {
                   value={formData.tenant_id}
                   onChange={handleChange}
                   required
-                  className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600"
+                  className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200/70 bg-white/90 px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-950/60 dark:text-slate-200 dark:border-slate-700/70"
                 >
                   <option value="" disabled>Select a tenant...</option>
                   {tenants.map(tenant => (
@@ -374,7 +374,7 @@ function UserEditor({ user, onClose, onSave }) {
             <Button type="button" variant="ghost" onClick={onClose} disabled={loading} className="dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+            <Button type="submit" disabled={loading} className="bg-indigo-600 hover:bg-indigo-700">
               <Save className="w-4 h-4 mr-2" />
               {loading ? 'Saving...' : (isEditing ? 'Update User' : 'Create User')}
             </Button>

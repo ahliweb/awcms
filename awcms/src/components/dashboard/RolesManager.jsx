@@ -196,11 +196,17 @@ function RolesManager() {
   // Header actions for PageHeader
   const headerActions = (
     <div className="flex gap-2">
-      <Button variant="ghost" onClick={fetchRoles} title={t('common.refresh')} className="text-muted-foreground hover:text-foreground">
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={fetchRoles}
+        title={t('common.refresh')}
+        className="h-10 w-10 border-slate-200/70 bg-white/70 hover:bg-white shadow-sm"
+      >
         <RefreshCw className="w-4 h-4" />
       </Button>
       {canCreate && (
-        <Button onClick={() => { setSelectedRole(null); setShowEditor(true); }} className="bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button onClick={() => { setSelectedRole(null); setShowEditor(true); }} className="bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">
           <Plus className="w-4 h-4 mr-2" /> {t('roles.create_role')}
         </Button>
       )}
@@ -264,8 +270,8 @@ function RolesManager() {
             actions={headerActions}
           />
 
-          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-border bg-muted/20">
+          <div className="dashboard-surface dashboard-surface-hover overflow-hidden">
+            <div className="p-4 border-b border-slate-200/60 bg-slate-50/70">
               <div className="max-w-sm">
                 <MinCharSearchInput
                   value={query}

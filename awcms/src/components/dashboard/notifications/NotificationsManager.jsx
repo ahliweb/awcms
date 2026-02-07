@@ -3,6 +3,17 @@ import React, { useState, useEffect } from 'react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,6 +46,7 @@ function NotificationsManager() {
 
     // State
     const [isOpen, setIsOpen] = useState(false);
+    const [markAllOpen, setMarkAllOpen] = useState(false);
     const [users, setUsers] = useState([]);
     const [sending, setSending] = useState(false);
 
@@ -124,10 +136,9 @@ function NotificationsManager() {
         }
     };
 
-    const handleMarkAllRead = () => {
-        if (window.confirm('Are you sure you want to mark all notifications as read?')) {
-            markAllAsRead();
-        }
+    const handleMarkAllRead = async () => {
+        await markAllAsRead();
+        setMarkAllOpen(false);
     };
 
     // Client-side filtering for status ONLY (since we assume we fetched mixed status)
@@ -205,20 +216,38 @@ function NotificationsManager() {
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Notifications</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Notifications</h1>
                     <p className="text-slate-500">View and manage system notifications.</p>
                 </div>
 
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleMarkAllRead}>
-                        <CheckCheck className="w-4 h-4 mr-2" />
-                        Mark All Read
-                    </Button>
+                    <AlertDialog open={markAllOpen} onOpenChange={setMarkAllOpen}>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="outline" className="border-slate-200/70 bg-white/70 hover:bg-white">
+                                <CheckCheck className="w-4 h-4 mr-2" />
+                                Mark All Read
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Mark all notifications as read?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will mark all notifications in your inbox as read. You can still filter for unread notifications later.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleMarkAllRead} className="bg-indigo-600 hover:bg-indigo-700">
+                                    Mark All Read
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
                     {canCreate && (
                         <Dialog open={isOpen} onOpenChange={setIsOpen}>
                             <DialogTrigger asChild>
-                                <Button className="bg-blue-600 hover:bg-blue-700">
+                                <Button className="bg-indigo-600 hover:bg-indigo-700">
                                     <Send className="w-4 h-4 mr-2" />
                                     Send Notification
                                 </Button>
@@ -235,7 +264,7 @@ function NotificationsManager() {
                                             value={formData.target}
                                             onValueChange={(val) => setFormData({ ...formData, target: val })}
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30">
                                                 <SelectValue placeholder="Select target" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -266,7 +295,7 @@ function NotificationsManager() {
                                                 value={formData.type}
                                                 onValueChange={(val) => setFormData({ ...formData, type: val })}
                                             >
-                                                <SelectTrigger>
+                                                <SelectTrigger className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -283,7 +312,7 @@ function NotificationsManager() {
                                                 value={formData.priority}
                                                 onValueChange={(val) => setFormData({ ...formData, priority: val })}
                                             >
-                                                <SelectTrigger>
+                                                <SelectTrigger className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -302,6 +331,7 @@ function NotificationsManager() {
                                             placeholder="Notification Title"
                                             value={formData.title}
                                             onChange={e => setFormData({ ...formData, title: e.target.value })}
+                                            className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30"
                                         />
                                     </div>
 
@@ -313,6 +343,7 @@ function NotificationsManager() {
                                             rows={3}
                                             value={formData.message}
                                             onChange={e => setFormData({ ...formData, message: e.target.value })}
+                                            className="rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30"
                                         />
                                     </div>
 
@@ -322,12 +353,13 @@ function NotificationsManager() {
                                             placeholder="/cmspanel/blogs/123"
                                             value={formData.link}
                                             onChange={e => setFormData({ ...formData, link: e.target.value })}
+                                            className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30"
                                         />
                                     </div>
 
                                     <div className="flex justify-end gap-3 mt-4">
                                         <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-                                        <Button type="submit" disabled={sending}>
+                                        <Button type="submit" disabled={sending} className="bg-indigo-600 hover:bg-indigo-700">
                                             {sending ? 'Sending...' : 'Send Notification'}
                                         </Button>
                                     </div>
@@ -338,19 +370,19 @@ function NotificationsManager() {
                 </div>
             </div>
 
-            <div className="flex flex-wrap gap-4 items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div className="dashboard-surface dashboard-surface-hover flex flex-wrap gap-4 items-center p-4">
                 <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                     <Input
                         placeholder="Search notifications..."
-                        className="pl-9"
+                        className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30"
                         value={filterQuery}
                         onChange={e => setFilterQuery(e.target.value)}
                     />
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     <Select value={filterType} onValueChange={setFilterType}>
-                        <SelectTrigger className="w-[130px]">
+                        <SelectTrigger className="w-[150px] h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm">
                             <div className="flex items-center gap-2 text-slate-600">
                                 <Filter className="w-4 h-4" />
                                 <SelectValue placeholder="Type" />
@@ -366,7 +398,7 @@ function NotificationsManager() {
                     </Select>
 
                     <Select value={filterStatus} onValueChange={setFilterStatus}>
-                        <SelectTrigger className="w-[130px]">
+                        <SelectTrigger className="w-[150px] h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm">
                             <SelectValue placeholder="Status" />
                         </SelectTrigger>
                         <SelectContent>
@@ -378,8 +410,8 @@ function NotificationsManager() {
                 </div>
             </div>
 
-            <Card>
-                <CardHeader>
+            <Card className="dashboard-surface dashboard-surface-hover overflow-hidden">
+                <CardHeader className="border-b border-slate-200/60 bg-slate-50/70">
                     <CardTitle>Inbox</CardTitle>
                     <CardDescription>Your notifications history.</CardDescription>
                 </CardHeader>

@@ -24,6 +24,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Auth UI**: Redesigned login, reset-password, and register screens with new layout, typography, and CTA styling.
 - **Toast Styling**: Updated toast colors, borders, and accent bars for clearer status feedback.
 - **Profile UX**: Refined the profile page layout, avatar upload flow, and 2FA surface styling.
+- **Tenant Settings UX**: Polished branding settings layout and controls for a more consistent admin feel.
+- **Users/Roles UX**: Improved table surfaces, search bars, and edit dialogs for user and role management.
+- **Permissions UX**: Updated permission list surfaces, dialogs, and controls to match the refreshed admin style.
+- **Notifications UX**: Replaced native confirm prompts with AlertDialog confirmations for mark-all-read and notification deletion.
 ### Fixed
 
 ## [2.30.0] "Waypoint" - 2026-02-07

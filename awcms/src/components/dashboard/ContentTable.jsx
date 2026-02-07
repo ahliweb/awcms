@@ -26,7 +26,7 @@ const ContentTable = ({
 }) => {
 
   const TableSkeleton = () => (
-    <div className="rounded-md border bg-card overflow-hidden">
+    <div className="dashboard-surface overflow-hidden">
       <Table>
         <TableHeader className="bg-muted/50">
           <TableRow>
@@ -65,16 +65,16 @@ const ContentTable = ({
 
   if (!data || data.length === 0) {
     return (
-      <div className="w-full bg-card rounded-md border p-12 flex flex-col items-center justify-center text-muted-foreground">
-        <p className="text-lg font-medium">No items found</p>
-        <p className="text-sm">Try adjusting your search or filters.</p>
+      <div className="dashboard-surface p-12 flex flex-col items-center justify-center text-slate-500">
+        <p className="text-lg font-semibold text-slate-700">No items found</p>
+        <p className="text-sm text-slate-500">Try adjusting your search or filters.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-border bg-card overflow-hidden">
+      <div className="dashboard-surface overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow className="hover:bg-transparent">
@@ -134,12 +134,12 @@ const ContentTable = ({
 
       {pagination && (
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-2">
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-slate-500">
             Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of {pagination.totalItems} entries
           </div>
           <div className="flex items-center gap-4">
             <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
+              className="h-9 rounded-xl border border-slate-200/70 bg-white/90 px-2 text-xs font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-slate-200"
               value={pagination.itemsPerPage}
               onChange={(e) => pagination.onLimitChange(Number(e.target.value))}
             >

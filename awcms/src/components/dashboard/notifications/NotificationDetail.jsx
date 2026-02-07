@@ -12,6 +12,17 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { format } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 
 function NotificationDetail({ id: propId }) {
     const { id: paramId } = useParams();
@@ -21,6 +32,7 @@ function NotificationDetail({ id: propId }) {
     const [notification, setNotification] = useState(null);
     const [readers, setReaders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const { toast } = useToast();
 
     // Prioritize propId (passed from Dashboard) over paramId (from Router)
@@ -103,27 +115,43 @@ function NotificationDetail({ id: propId }) {
     };
 
     const handleDelete = async () => {
-        if (window.confirm('Are you sure you want to delete this notification?')) {
-            await deleteNotification(id);
-            navigate('/cmspanel/notifications');
-        }
+        await deleteNotification(id);
+        navigate('/cmspanel/notifications');
     };
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-12">
             <div className="flex items-center gap-4 mb-6">
-                <Button variant="ghost" onClick={() => navigate(-1)}>
+                <Button variant="outline" onClick={() => navigate(-1)} className="border-slate-200/70 bg-white/70 hover:bg-white">
                     <ArrowLeft className="w-4 h-4 mr-2" /> Back
                 </Button>
                 <div className="flex-1"></div>
                 {canDelete && (
-                    <Button variant="destructive" size="sm" onClick={handleDelete}>
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete
-                    </Button>
+                    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm">
+                                <Trash2 className="w-4 h-4 mr-2" /> Delete
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete this notification?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This action will remove the notification from the inbox. This cannot be undone.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                                    Delete Notification
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                 )}
             </div>
 
-            <Card className="border-t-4 border-t-blue-500 shadow-md">
+            <Card className="dashboard-surface dashboard-surface-hover border-t-4 border-t-blue-500">
                 <CardHeader className="pb-4">
                     <div className="flex items-start justify-between">
                         <div className="space-y-1">
@@ -143,11 +171,11 @@ function NotificationDetail({ id: propId }) {
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    <div className="prose prose-slate max-w-none bg-slate-50 p-6 rounded-lg border border-slate-100">
+                    <div className="prose prose-slate max-w-none bg-slate-50/70 p-6 rounded-xl border border-slate-200/70">
                         <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{notification.message}</p>
                         {notification.link && (
                             <div className="mt-4 pt-4 border-t border-slate-200">
-                                <Button onClick={() => navigate(notification.link)} variant="outline" className="text-blue-600">
+                                <Button onClick={() => navigate(notification.link)} variant="outline" className="text-indigo-600 border-slate-200/70 bg-white/70 hover:bg-white">
                                     Open Related Link
                                 </Button>
                             </div>
@@ -174,7 +202,7 @@ function NotificationDetail({ id: propId }) {
                                 <h4 className="font-semibold text-slate-900 flex items-center gap-2">
                                     <Users className="w-4 h-4 text-slate-500" /> Read Statistics
                                 </h4>
-                                <div className="bg-white border border-slate-200 rounded-md p-3">
+                                <div className="bg-white border border-slate-200/70 rounded-xl p-3">
                                     <div className="flex justify-between items-center mb-2">
                                         <span className="text-slate-500">Read Count</span>
                                         <Badge variant="secondary">{readers.length}</Badge>
@@ -194,7 +222,7 @@ function NotificationDetail({ id: propId }) {
                             </h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                 {readers.map((reader, idx) => (
-                                    <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                                    <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-200/70 shadow-sm hover:shadow-md transition-all">
                                         <Avatar className="h-8 w-8">
                                             <AvatarImage src={reader.user?.avatar_url} />
                                             <AvatarFallback className="bg-blue-100 text-blue-600 text-xs font-bold">

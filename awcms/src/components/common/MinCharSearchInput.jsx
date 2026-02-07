@@ -29,21 +29,21 @@ const MinCharSearchInput = ({
 }) => {
     return (
         <div className={cn("relative w-full", className)}>
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <Input
                 placeholder={`${placeholder} (${minLength}+ chars)`}
                 value={value}
                 onChange={onChange}
                 className={cn(
-                    "pl-9 pr-24 transition-colors",
+                    "h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 pr-24 text-sm shadow-sm transition-colors focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60",
                     !isValid && value.length > 0
                         ? "border-destructive/50 focus-visible:ring-destructive/30 bg-destructive/5"
-                        : "bg-background"
+                        : ""
                 )}
             />
 
-            <div className="absolute right-3 top-2.5 flex items-center gap-2">
-                {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            <div className="absolute right-3 top-3 flex items-center gap-2">
+                {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
 
                 {value && (
                     <button

@@ -191,13 +191,13 @@ function UserProfile() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-12">
+    <div className="w-full space-y-8 pb-12">
       <div className="flex flex-col gap-1">
         <h2 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">My Profile</h2>
         <p className="text-slate-500 dark:text-slate-400">Manage your account settings and security preferences</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
         {/* Left Column: Profile, Password, 2FA */}
         <div className="lg:col-span-2 space-y-6">
 
@@ -219,8 +219,8 @@ function UserProfile() {
 
             <div className="p-6">
               <form onSubmit={handleProfileUpdate} className="space-y-6">
-                <div className="grid gap-6 md:grid-cols-[160px,1fr]">
-                  <div className="flex flex-col items-center gap-3">
+                <div className="grid gap-6 md:grid-cols-[200px,1fr]">
+                  <div className="flex flex-col items-center gap-3 md:items-start md:text-left">
                     <div className="relative group">
                       <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-slate-200/70 bg-slate-100 shadow-md dark:border-slate-800 dark:bg-slate-900">
                         {profileData.avatar_url ? (
@@ -231,23 +231,23 @@ function UserProfile() {
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center bg-blue-100/70 dark:bg-blue-900/30">
-                            <User className="w-10 h-10 text-blue-400" />
+                            <User className="w-10 h-10 text-blue-400 dark:text-blue-300" />
                           </div>
                         )}
                       </div>
                       <button
                         type="button"
                         onClick={() => document.getElementById('avatar-upload-trigger').click()}
-                        className="absolute bottom-1 right-1 p-2 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-700 transition-colors"
+                        className="absolute bottom-1 right-1 p-2 bg-blue-600 rounded-full text-white shadow-lg ring-2 ring-white transition-colors hover:bg-blue-700 dark:ring-slate-900"
                       >
                         <Camera className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="text-center text-xs text-slate-500 dark:text-slate-400">
+                    <div className="text-center text-xs text-slate-500 dark:text-slate-400 md:text-left">
                       JPG/PNG up to 2MB
                     </div>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-4 rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/50">
                     <ImageUpload
                       id="avatar-upload-trigger"
                       value={profileData.avatar_url}
@@ -377,12 +377,12 @@ function UserProfile() {
         </div>
 
         {/* Right Column: Roles & Permissions */}
-        <div className="lg:col-span-1 space-y-6">
+        <div className="lg:col-span-1 flex flex-col space-y-6">
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
-            className="dashboard-surface dashboard-surface-hover overflow-hidden h-full flex flex-col"
+            className="dashboard-surface dashboard-surface-hover overflow-hidden flex flex-col flex-1 min-h-0"
           >
             <div className="flex items-center gap-3 border-b border-slate-200/60 bg-slate-50/70 px-6 py-5 dark:border-slate-800/70 dark:bg-slate-900/60">
               <div className="p-2 bg-purple-100/70 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
@@ -394,7 +394,7 @@ function UserProfile() {
               </div>
             </div>
 
-            <div className="p-6 space-y-6 flex-1 flex flex-col">
+            <div className="p-6 space-y-6 flex-1 flex flex-col min-h-0">
               <div>
                 <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-wider">Current Role</h4>
                 <div className={`inline-flex items-center px-3 py-1.5 rounded-full font-semibold text-sm border ${(profileData.role_is_platform_admin || profileData.role_is_full_access || isPlatformAdmin || isFullAccess)
@@ -422,17 +422,19 @@ function UserProfile() {
                 </h4>
 
                 {permissions && permissions.length > 0 ? (
-                  <div className="overflow-y-auto pr-2 custom-scrollbar space-y-2 flex-1 max-h-[420px]">
-                    {permissions.map((perm, index) => (
-                      <div key={index} className="flex items-center gap-2 rounded-xl border border-transparent p-2 text-sm text-slate-600 transition-colors group hover:bg-slate-50/70 hover:border-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:border-slate-700">
-                        <CheckCircle2 className="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" />
-                        <span className="group-hover:text-slate-900 dark:group-hover:text-slate-200">{perm.replace(/_/g, ' ')}</span>
-                      </div>
-                    ))}
+                  <div className="flex-1 min-h-0 rounded-2xl border border-slate-200/70 bg-white/80 p-3 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/50">
+                    <div className="h-full overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                      {permissions.map((perm, index) => (
+                        <div key={index} className="flex items-center gap-2 rounded-xl border border-transparent p-2 text-sm text-slate-600 transition-colors group hover:bg-slate-50/70 hover:border-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:border-slate-700">
+                          <CheckCircle2 className="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" />
+                          <span className="group-hover:text-slate-900 dark:group-hover:text-slate-200">{perm.replace(/_/g, ' ')}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-400 italic p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-center border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-2">
-                    <Shield className="w-8 h-8 text-slate-200 dark:text-slate-700" />
+                  <div className="flex-1 text-sm text-slate-400 italic p-6 bg-slate-50 dark:bg-slate-900/50 rounded-lg text-center border border-slate-100 dark:border-slate-800/70 flex flex-col items-center justify-center gap-2">
+                    <Shield className="w-8 h-8 text-slate-200 dark:text-slate-600" />
                     No specific permissions assigned.
                   </div>
                 )}
