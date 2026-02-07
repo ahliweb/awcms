@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import Turnstile from '@/components/ui/Turnstile';
-import { Eye, EyeOff, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
+import AuthShell from '@/components/auth/AuthShell';
+import { Eye, EyeOff, Loader2, ShieldCheck, AlertCircle, LayoutGrid, Sparkles, Mail, Lock } from 'lucide-react';
 import * as OTPAuth from 'otpauth';
 
 
@@ -35,6 +36,30 @@ const LoginPage = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const sideItems = [
+    {
+      icon: ShieldCheck,
+      title: t('login_page.security_title', 'Secure sign-in'),
+      description: t('login_page.security_desc', 'Turnstile validation and optional 2FA keep access protected.'),
+    },
+    {
+      icon: LayoutGrid,
+      title: t('login_page.control_title', 'Centralized control'),
+      description: t('login_page.control_desc', 'Manage tenants, content, and users from one workspace.'),
+    },
+    {
+      icon: Sparkles,
+      title: t('login_page.insight_title', 'Operational insights'),
+      description: t('login_page.insight_desc', 'Track performance, audits, and approvals in real time.'),
+    },
+  ];
+
+  const shellProps = {
+    sideItems,
+    sideTitle: t('login_page.shell_title', 'Admin Control Center'),
+    sideSubtitle: t('login_page.shell_subtitle', 'Securely manage tenants, content, and operations with audit-ready oversight.'),
+  };
 
 
   // Guard: If user is already logged in on mount
@@ -375,145 +400,147 @@ const LoginPage = () => {
 
   if (requires2FA) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200"
-        >
-          <div className="p-8 space-y-6">
-            <div className="text-center space-y-2">
-              <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-blue-100">
-                <ShieldCheck className="w-8 h-8 text-blue-600" />
-              </div>
-              <h1 className="text-2xl font-bold text-slate-900">{t('two_factor.title')}</h1>
-              <p className="text-slate-500">{t('two_factor.subtitle')}</p>
-            </div>
-            <form onSubmit={verify2FA} className="space-y-6">
-              <div className="space-y-4">
-                <Label htmlFor="2fa-code" className="sr-only">Code</Label>
-                <Input
-                  id="2fa-code"
-                  autoComplete="one-time-code"
-                  placeholder="000000"
-                  className={`text-center text-3xl tracking-[0.5em] h-16 font-mono font-bold transition-all ${verificationError ? 'border-red-300 bg-red-50 text-red-600' : ''}`}
-                  maxLength={11}
-                  value={twoFactorCode}
-                  onChange={(e) => { setTwoFactorCode(e.target.value.toUpperCase()); setVerificationError(''); }}
-                  autoFocus
-                />
-                {verificationError && (
-                  <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center gap-2 text-red-500 text-sm font-medium bg-red-50 p-2 rounded-md">
-                    <AlertCircle className="w-4 h-4" /> {verificationError}
-                  </motion.div>
-                )}
-              </div>
-              <div className="flex flex-col gap-3">
-                <Button type="submit" className="w-full h-11 bg-blue-600 hover:bg-blue-700" disabled={isLoading || twoFactorCode.length < 3}>
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('two_factor.verify_identity')}
-                </Button>
-                <Button type="button" variant="ghost" className="text-slate-500 text-xs" onClick={handleCancelVerification} disabled={isLoading}>
-                  {t('two_factor.cancel')}
-                </Button>
-              </div>
-            </form>
+      <AuthShell
+        title={t('two_factor.title')}
+        subtitle={t('two_factor.subtitle')}
+        badge={t('two_factor.badge', 'Two-Factor Verification')}
+        {...shellProps}
+      >
+        <form onSubmit={verify2FA} className="space-y-6">
+          <div className="space-y-4">
+            <Label htmlFor="2fa-code" className="sr-only">Code</Label>
+            <Input
+              id="2fa-code"
+              autoComplete="one-time-code"
+              placeholder="000000"
+              className={`h-16 rounded-2xl border-slate-200/70 bg-slate-50/80 text-center text-3xl font-bold tracking-[0.4em] text-slate-900 shadow-sm transition-all focus:border-indigo-500/60 focus:ring-indigo-500/30 ${verificationError ? 'border-rose-300 bg-rose-50 text-rose-600' : ''}`}
+              maxLength={11}
+              value={twoFactorCode}
+              onChange={(e) => { setTwoFactorCode(e.target.value.toUpperCase()); setVerificationError(''); }}
+              autoFocus
+            />
+            {verificationError && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-600"
+              >
+                <AlertCircle className="w-4 h-4" /> {verificationError}
+              </motion.div>
+            )}
           </div>
-        </motion.div >
-      </div >
+          <div className="flex flex-col gap-3">
+            <Button type="submit" className="h-11 w-full bg-indigo-600 text-white hover:bg-indigo-700" disabled={isLoading || twoFactorCode.length < 3}>
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('two_factor.verify_identity')}
+            </Button>
+            <Button type="button" variant="ghost" className="text-xs text-slate-500 hover:text-slate-700" onClick={handleCancelVerification} disabled={isLoading}>
+              {t('two_factor.cancel')}
+            </Button>
+          </div>
+        </form>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 flex items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white/80 backdrop-blur-xl w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-white/20"
-      >
-        <div className="p-8 md:p-10 space-y-8">
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('login_page.welcome_back')}</h1>
-            <p className="text-slate-500">{t('login_page.sign_in_subtitle')}</p>
+    <AuthShell
+      title={t('login_page.welcome_back')}
+      subtitle={t('login_page.sign_in_subtitle')}
+      badge={t('login_page.badge', 'Administrator Sign-In')}
+      footer={(
+        <div className="space-y-2">
+          <div>
+            <span>{t('login_page.no_account')} </span>
+            <Link to="/register" className="font-semibold text-slate-900 hover:text-indigo-600 dark:text-white">
+              {t('login_page.apply_access')}
+            </Link>
           </div>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">{t('login_page.email_address_label')}</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@example.com"
-                  className="h-11 bg-white/50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">{t('login_page.password_label')}</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    className="h-11 pr-10 bg-white/50 border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Turnstile CAPTCHA - Invisible Mode (configured in Cloudflare) */}
-              <div className="min-h-[20px]">
-                <Turnstile
-                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
-                  onVerify={(token) => {
-                    console.log('[Login] Turnstile token received');
-                    setTurnstileToken(token);
-                    setTurnstileError(false);
-                    setTurnstileReady(true);
-                  }}
-                  onError={() => {
-                    console.error('[Login] Turnstile error');
-                    setTurnstileError(true);
-                    setTurnstileReady(true); // Allow login attempt even on error
-                  }}
-                  onExpire={() => {
-                    console.log('[Login] Turnstile token expired');
-                    setTurnstileToken('');
-                    setTurnstileReady(false);
-                  }}
-                  theme="light"
-                />
-                {!turnstileReady && !turnstileError && (
-                  <p className="text-xs text-slate-400 text-center mt-1">{t('login_page.verifying_security')}</p>
-                )}
-              </div>
-            </div>
-            <Button type="submit" className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all" disabled={isLoading || (!turnstileReady && !turnstileError)}>
-              {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (!turnstileReady && !turnstileError) ? t('login_page.waiting_security') : t('login_page.sign_in_button')}
-            </Button>
-            <div className="text-center mt-4 space-y-2">
-              <div>
-                <span className="text-slate-500 text-sm">{t('login_page.no_account')} </span>
-                <Link to="/register" className="text-slate-900 font-medium text-sm hover:underline">
-                  {t('login_page.apply_access')}
-                </Link>
-              </div>
-              <div>
-                <Link to="/forgot-password" className="text-slate-500 text-sm hover:text-slate-900 hover:underline">
-                  {t('login_page.forgot_password_link')}
-                </Link>
-              </div>
-            </div>
-          </form>
+          <div>
+            <Link to="/forgot-password" className="font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
+              {t('login_page.forgot_password_link')}
+            </Link>
+          </div>
         </div>
-      </motion.div>
-    </div>
+      )}
+      {...shellProps}
+    >
+      <form onSubmit={handleLogin} className="space-y-6">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('login_page.email_address_label')}</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+              <Input
+                id="email"
+                type="email"
+                placeholder="admin@example.com"
+                className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-10 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password" className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('login_page.password_label')}</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-10 pr-10 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+
+          {turnstileError && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+              <AlertCircle className="h-4 w-4" /> {t('login_page.security_check_failed', 'Security check failed. Please refresh the page.')}
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-dashed border-slate-200/70 bg-slate-50/70 px-4 py-3">
+            <Turnstile
+              siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+              onVerify={(token) => {
+                console.log('[Login] Turnstile token received');
+                setTurnstileToken(token);
+                setTurnstileError(false);
+                setTurnstileReady(true);
+              }}
+              onError={() => {
+                console.error('[Login] Turnstile error');
+                setTurnstileError(true);
+                setTurnstileReady(true);
+              }}
+              onExpire={() => {
+                console.log('[Login] Turnstile token expired');
+                setTurnstileToken('');
+                setTurnstileReady(false);
+              }}
+              theme="light"
+            />
+            {!turnstileReady && !turnstileError && (
+              <p className="mt-2 text-center text-xs text-slate-400">{t('login_page.verifying_security')}</p>
+            )}
+          </div>
+        </div>
+        <Button
+          type="submit"
+          className="h-11 w-full bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-50"
+          disabled={isLoading || (!turnstileReady && !turnstileError)}
+        >
+          {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (!turnstileReady && !turnstileError) ? t('login_page.waiting_security') : t('login_page.sign_in_button')}
+        </Button>
+      </form>
+    </AuthShell>
   );
 };
 

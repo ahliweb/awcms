@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Input } from '@/components/ui/input';
@@ -10,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import Turnstile from '@/components/ui/Turnstile';
-import { Loader2, ArrowLeft, Mail, CheckCircle2 } from 'lucide-react';
+import AuthShell from '@/components/auth/AuthShell';
+import { Loader2, ArrowLeft, Mail, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
 
 const ForgotPasswordPage = () => {
   const { t } = useTranslation();
@@ -24,6 +24,30 @@ const ForgotPasswordPage = () => {
 
   const { resetPassword } = useAuth();
   const { toast } = useToast();
+
+  const sideItems = [
+    {
+      icon: ShieldCheck,
+      title: t('forgot_password.security_title', 'Secure recovery'),
+      description: t('forgot_password.security_desc', 'Turnstile verification keeps reset requests protected.'),
+    },
+    {
+      icon: Mail,
+      title: t('forgot_password.mail_title', 'Instant email links'),
+      description: t('forgot_password.mail_desc', 'Receive a secure reset link directly in your inbox.'),
+    },
+    {
+      icon: Sparkles,
+      title: t('forgot_password.support_title', 'Admin support'),
+      description: t('forgot_password.support_desc', 'Contact support if you need additional help.'),
+    },
+  ];
+
+  const shellProps = {
+    sideItems,
+    sideTitle: t('forgot_password.shell_title', 'Account Recovery'),
+    sideSubtitle: t('forgot_password.shell_subtitle', 'Keep your admin access secure with verified reset requests.'),
+  };
 
   const handleReset = async (e) => {
     e.preventDefault();
@@ -77,95 +101,79 @@ const ForgotPasswordPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200"
-      >
-        <div className="p-8 md:p-10 space-y-8">
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('forgot_password.title')}</h1>
-            <p className="text-slate-500">
-              {isSuccess
-                ? t('forgot_password.check_email')
-                : t('forgot_password.enter_email')
-              }
+    <AuthShell
+      title={t('forgot_password.title')}
+      subtitle={isSuccess ? t('forgot_password.check_email') : t('forgot_password.enter_email')}
+      badge={t('forgot_password.badge', 'Password Recovery')}
+      footer={!isSuccess ? (
+        <Link to="/login" className="inline-flex items-center gap-2 font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
+          <ArrowLeft className="h-4 w-4" /> {t('forgot_password.back_to_login')}
+        </Link>
+      ) : null}
+      {...shellProps}
+    >
+      {isSuccess ? (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-6 text-center text-emerald-700">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <p className="text-sm">
+              {t('forgot_password.sent_message')} <span className="font-semibold text-emerald-900">{email}</span>.
             </p>
           </div>
-
-          {isSuccess ? (
-            <div className="space-y-6">
-              <div className="flex flex-col items-center justify-center py-6 space-y-4">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckCircle2 className="w-8 h-8 text-green-600" />
-                </div>
-                <p className="text-center text-slate-600">
-                  {t('forgot_password.sent_message')} <span className="font-semibold text-slate-900">{email}</span>.
-                </p>
-              </div>
-
-              <Button asChild className="w-full h-11 bg-slate-900 hover:bg-slate-800">
-                <Link to="/login">{t('forgot_password.back_to_login')}</Link>
-              </Button>
-            </div>
-          ) : (
-            <form onSubmit={handleReset} className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">{t('login_page.email_address_label')}</Label>
-                  <div className="relative">
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="admin@example.com"
-                      className="h-11 pl-10"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                    <Mail className="absolute left-3 top-3.5 w-4 h-4 text-slate-400" />
-                  </div>
-                </div>
-
-                {/* Turnstile CAPTCHA - Invisible Mode (configured in Cloudflare) */}
-                <div>
-                  <Turnstile
-                    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
-                    onVerify={(token) => {
-                      setTurnstileToken(token);
-                      setTurnstileError(false);
-                    }}
-                    onError={() => setTurnstileError(true)}
-                    onExpire={() => setTurnstileToken('')}
-                    theme="light"
-                    appearance="always"
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium"
-                disabled={isLoading || (!turnstileToken && !turnstileError)}
-              >
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                ) : (
-                  t('forgot_password.send_link')
-                )}
-              </Button>
-
-              <div className="text-center">
-                <Link to="/login" className="text-sm text-slate-500 hover:text-slate-900 flex items-center justify-center gap-2">
-                  <ArrowLeft className="w-4 h-4" /> {t('forgot_password.back_to_login')}
-                </Link>
-              </div>
-            </form>
-          )}
+          <Button asChild className="h-11 w-full bg-indigo-600 text-white hover:bg-indigo-700">
+            <Link to="/login">{t('forgot_password.back_to_login')}</Link>
+          </Button>
         </div>
-      </motion.div>
-    </div>
+      ) : (
+        <form onSubmit={handleReset} className="space-y-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('login_page.email_address_label')}</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@example.com"
+                  className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-10 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-dashed border-slate-200/70 bg-slate-50/70 px-4 py-3">
+              <Turnstile
+                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                onVerify={(token) => {
+                  setTurnstileToken(token);
+                  setTurnstileError(false);
+                }}
+                onError={() => setTurnstileError(true)}
+                onExpire={() => setTurnstileToken('')}
+                theme="light"
+                appearance="always"
+              />
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            className="h-11 w-full bg-indigo-600 text-white hover:bg-indigo-700"
+            disabled={isLoading || (!turnstileToken && !turnstileError)}
+          >
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+            ) : (
+              t('forgot_password.send_link')
+            )}
+          </Button>
+        </form>
+      )}
+    </AuthShell>
   );
 };
 

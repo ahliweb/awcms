@@ -1,14 +1,14 @@
 
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import Turnstile from '@/components/ui/Turnstile';
-import { Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import AuthShell from '@/components/auth/AuthShell';
+import { Loader2, ArrowLeft, CheckCircle2, ShieldCheck, Sparkles, Mail } from 'lucide-react';
 
 const PublicRegisterPage = () => {
     const [formData, setFormData] = useState({
@@ -20,6 +20,30 @@ const PublicRegisterPage = () => {
     const [turnstileToken, setTurnstileToken] = useState('');
 
     const { toast } = useToast();
+
+    const sideItems = [
+        {
+            icon: ShieldCheck,
+            title: 'Verified onboarding',
+            description: 'Applications are reviewed to keep the platform secure.',
+        },
+        {
+            icon: Sparkles,
+            title: 'Guided setup',
+            description: 'We help you configure branding, content, and roles.',
+        },
+        {
+            icon: Mail,
+            title: 'Fast turnaround',
+            description: 'Approved requests receive a secure invitation by email.',
+        },
+    ];
+
+    const shellProps = {
+        sideItems,
+        sideTitle: 'Access Request',
+        sideSubtitle: 'Apply for an admin account and receive a secure invitation once approved.',
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -60,96 +84,85 @@ const PublicRegisterPage = () => {
         }
     };
 
-    if (isSuccess) {
-        return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200 p-8 text-center space-y-6"
-                >
-                    <div className="bg-green-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto border-4 border-green-100">
-                        <CheckCircle2 className="w-8 h-8 text-green-600" />
-                    </div>
-                    <div className="space-y-2">
-                        <h2 className="text-2xl font-bold text-slate-900">Application Received</h2>
-                        <p className="text-slate-500">
+    return (
+        <AuthShell
+            title={isSuccess ? 'Application Received' : 'Apply for Account'}
+            subtitle={isSuccess
+                ? 'We have received your request. You will get an invitation email once approved.'
+                : 'Join our platform to access the CMS and public portal tools.'}
+            badge={isSuccess ? 'Request Submitted' : 'Access Request'}
+            footer={!isSuccess ? (
+                <div>
+                    By submitting, you agree to our <Link to="/terms" className="font-medium text-slate-700 hover:text-slate-900 dark:text-slate-200">Terms of Service</Link>.
+                </div>
+            ) : null}
+            {...shellProps}
+        >
+            {isSuccess ? (
+                <div className="space-y-6">
+                    <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-6 text-center text-emerald-700">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                            <CheckCircle2 className="h-6 w-6" />
+                        </div>
+                        <p className="text-sm">
                             Thank you for applying. Your account request is under review.
-                            Once approved, you will receive an invitation email to set your password and sign in.
+                            Once approved, you will receive an invitation email to set your password.
                         </p>
                     </div>
                     <Link to="/login">
                         <Button variant="outline" className="w-full">Return to Login</Button>
                     </Link>
-                </motion.div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200"
-            >
-                <div className="p-8 md:p-10 space-y-8">
-                    <div className="space-y-2">
-                        <Link to="/login" className="inline-flex items-center text-sm text-slate-500 hover:text-slate-900 mb-4 transition-colors">
-                            <ArrowLeft className="w-4 h-4 mr-1" /> Back to Login
-                        </Link>
-                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Apply for Account</h1>
-                        <p className="text-slate-500">Join our platform to access exclusive content.</p>
-                    </div>
-
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="full_name">Full Name</Label>
-                                <Input
-                                    id="full_name"
-                                    placeholder="John Doe"
-                                    value={formData.full_name}
-                                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="email">Email Address</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="john@example.com"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    required
-                                />
-                            </div>
-
-                            <div className="pt-2">
-                                <Turnstile
-                                    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
-                                    onVerify={(token) => setTurnstileToken(token)}
-                                    onError={() => setTurnstileToken('')}
-                                />
-                            </div>
+                </div>
+            ) : (
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="full_name" className="text-sm font-medium text-slate-600 dark:text-slate-300">Full Name</Label>
+                            <Input
+                                id="full_name"
+                                placeholder="John Doe"
+                                value={formData.full_name}
+                                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                                className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="email" className="text-sm font-medium text-slate-600 dark:text-slate-300">Email Address</Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                placeholder="john@example.com"
+                                value={formData.email}
+                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                className="h-11 rounded-xl border-slate-200/70 bg-white/90 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                                required
+                            />
                         </div>
 
-                        <Button
-                            type="submit"
-                            className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium"
-                            disabled={isLoading}
-                        >
-                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Submit Application'}
-                        </Button>
-                    </form>
-
-                    <div className="text-center text-sm text-slate-500">
-                        By submitting, you agree to our <Link to="/terms" className="underline hover:text-slate-900">Terms of Service</Link>.
+                        <div className="rounded-2xl border border-dashed border-slate-200/70 bg-slate-50/70 px-4 py-3">
+                            <Turnstile
+                                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                                onVerify={(token) => setTurnstileToken(token)}
+                                onError={() => setTurnstileToken('')}
+                            />
+                        </div>
                     </div>
-                </div>
-            </motion.div>
-        </div>
+
+                    <Button
+                        type="submit"
+                        className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+                        disabled={isLoading}
+                    >
+                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Submit Application'}
+                    </Button>
+
+                    <Link to="/login" className="inline-flex items-center justify-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700">
+                        <ArrowLeft className="w-4 h-4" /> Back to Login
+                    </Link>
+                </form>
+            )}
+        </AuthShell>
     );
 };
 

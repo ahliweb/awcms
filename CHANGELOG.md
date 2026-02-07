@@ -13,12 +13,16 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Repo Hygiene**: Ignored `temp_debug_images/` from git tracking.
 - **Turnstile Secrets**: Added `TURNSTILE_SECRET_KEY_MAP` support for host-specific Turnstile secrets in Edge Functions.
 - **Dashboard UI**: Added shared `dashboard-surface` and `dashboard-surface-hover` utilities for consistent card styling.
+- **Auth Shell**: Introduced a shared authentication layout for login, reset, and registration flows.
+- **Turnstile Debugging**: Added `VITE_TURNSTILE_DEBUG` to enable host/key resolution logging when needed.
 
 ### Changed
 
 - **Docs**: Recommended `supabase db pull --schema public,extensions` to avoid storage churn in shadow DBs.
 - **Turnstile Logging**: Key-selection logs are now dev-only.
 - **Admin UX**: Refined dashboard layout, page header hierarchy, sidebar styling, and card surfaces for a more polished UI.
+- **Auth UI**: Redesigned login, reset-password, and register screens with new layout, typography, and CTA styling.
+- **Toast Styling**: Updated toast colors, borders, and accent bars for clearer status feedback.
 ### Fixed
 
 ## [2.30.0] "Waypoint" - 2026-02-07
