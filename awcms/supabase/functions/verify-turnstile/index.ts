@@ -6,6 +6,7 @@
 /// <reference path="../_shared/types.d.ts" />
 
 import { corsHeaders } from '../_shared/cors.ts'
+import { resolveSecretKey } from '../_shared/turnstile.ts'
 
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 
@@ -28,12 +29,15 @@ Deno.serve(async (req: Request) => {
 
     try {
         // Get secret key from environment
-        const secretKey = Deno.env.get('TURNSTILE_SECRET_KEY')
+        const secretKeyResolution = resolveSecretKey(req)
+        const secretKey = secretKeyResolution.key
 
         if (!secretKey) {
             console.error('TURNSTILE_SECRET_KEY not configured')
             throw new Error('Turnstile verification is not configured')
         }
+
+        console.log('Turnstile secret key source:', secretKeyResolution.source, 'Host:', secretKeyResolution.host)
 
         // Parse request body
         let body

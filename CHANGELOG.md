@@ -11,6 +11,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - **Turnstile Host Mapping**: Added `VITE_TURNSTILE_SITE_KEY_MAP` support for per-domain Turnstile keys and a localhost test-key fallback.
 - **Repo Hygiene**: Ignored `temp_debug_images/` from git tracking.
+- **Turnstile Secrets**: Added `TURNSTILE_SECRET_KEY_MAP` support for host-specific Turnstile secrets in Edge Functions.
 
 ### Changed
 

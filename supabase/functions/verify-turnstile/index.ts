@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+import { resolveSecretKey } from "../_shared/turnstile.ts";
+
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-application-name, x-tenant-id",
@@ -21,7 +23,8 @@ serve(async (req: Request) => {
             );
         }
 
-        const secretKey = Deno.env.get("TURNSTILE_SECRET_KEY");
+        const secretKeyResolution = resolveSecretKey(req);
+        const secretKey = secretKeyResolution.key;
 
         if (!secretKey) {
             console.error("TURNSTILE_SECRET_KEY not configured");
@@ -30,6 +33,8 @@ serve(async (req: Request) => {
                 { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
+
+        console.log("[Turnstile] Secret key source:", secretKeyResolution.source, "Host:", secretKeyResolution.host);
 
         // Verify with Cloudflare
         const formData = new FormData();

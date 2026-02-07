@@ -6,6 +6,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+import { resolveSecretKey } from '../_shared/turnstile.ts'
 
 Deno.serve(async (req: Request) => {
     // Handle CORS preflight
@@ -66,12 +67,15 @@ Deno.serve(async (req: Request) => {
 
             // Helper to verify Turnstile
             const verifyTurnstile = async (token: string) => {
-                const secretKey = Deno.env.get('TURNSTILE_SECRET_KEY')
+                const secretKeyResolution = resolveSecretKey(req)
+                const secretKey = secretKeyResolution.key
                 if (!secretKey) {
                     console.error('TURNSTILE_SECRET_KEY missing in environment')
                     // Fail closed for security
                     return { success: false, error: 'Server configuration error' }
                 }
+
+                console.log('Turnstile secret key source:', secretKeyResolution.source, 'Host:', secretKeyResolution.host)
 
                 const formData = new FormData()
                 formData.append('secret', secretKey)
