@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Cloudflare Pages Deployment
 
 ## Purpose
@@ -10,6 +12,8 @@ Provide Cloudflare Pages settings for the Admin Panel and Public Portal.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Cloudflare deployment configuration
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - Cloudflare account
 - Supabase project configured
 

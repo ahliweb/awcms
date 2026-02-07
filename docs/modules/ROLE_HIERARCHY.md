@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 (Permissions)
+
 # Role Hierarchy (ABAC Framework)
 
 ## Purpose
@@ -12,6 +14,8 @@ Define the *default* role definitions and hierarchy used by AWCMS.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for role hierarchy and permission system
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/security/abac.md`
 
 ## Default Role Definitions (Baselines)

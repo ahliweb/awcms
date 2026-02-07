@@ -1,5 +1,8 @@
 # Supabase Integration
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1.3 - Backend & Database  
+> **Context7 Reference**: `supabase/supabase-js` - See [AGENTS.md](../../AGENTS.md) for detailed patterns
+
 ## Purpose
 
 Define how AWCMS integrates with Supabase for auth, data, storage, and edge functions.
@@ -11,6 +14,8 @@ Define how AWCMS integrates with Supabase for auth, data, storage, and edge func
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - Backend architecture and constraints
+- [AGENTS.md](../../AGENTS.md) - Supabase JS patterns and Context7 references
 - Supabase project with RLS enabled
 - Supabase CLI v2.70+ (install globally or use `npx supabase`)
 

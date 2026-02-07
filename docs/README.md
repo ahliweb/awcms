@@ -2,7 +2,16 @@
 
 **Repository:** `github.com/ahliweb/awcms`
 
+> **Documentation Authority**: This wiki follows the hierarchy: [SYSTEM_MODEL.md](../SYSTEM_MODEL.md) → [AGENTS.md](../AGENTS.md) → Implementation Guides
+
 AWCMS (**AhliWeb Content Management System**) is an **enterprise-grade, multi-tenant CMS** with **ABAC security** and a **Supabase-backed** architecture. The monorepo hosts multiple clients (Admin, Public, Mobile, IoT) plus extensions and backend migrations.
+
+## Quick Navigation
+
+- **[SYSTEM_MODEL.md](../SYSTEM_MODEL.md)** - Authoritative tech stack and architecture
+- **[AGENTS.md](../AGENTS.md)** - AI coding guidelines and Context7 references  
+- **[DOCS_INDEX.md](../DOCS_INDEX.md)** - Documentation navigation
+- **[RESOURCE_MAP.md](./RESOURCE_MAP.md)** - Resource and permission registry
 
 ---
 

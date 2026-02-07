@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 2 (Data Integrity)
+
 # Scalability Guide
 
 ## Purpose
@@ -11,6 +13,8 @@ Outline scalability considerations for AWCMS deployments.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for scalability patterns
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/modules/PERFORMANCE.md`
 
 ## Core Concepts

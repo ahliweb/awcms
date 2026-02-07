@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 2.3 (Permissions)
+
 # Admin Panel Development
 
 ## 1. Overview
@@ -6,6 +8,8 @@ The Admin Panel (`awcms/`) is a React SPA built with Vite. It serves as the cent
 
 ## 2. Key Technologies
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Admin Panel tech stack (React 19.2.4, Vite 7.2.7, TailwindCSS 4)
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns, Context7 references, and multi-tenancy guidelines
 - **Framework**: React 19.2.4
 - **Build Tool**: Vite 7.2.7
 - **Styling**: Tailwind CSS 4, shadcn/ui

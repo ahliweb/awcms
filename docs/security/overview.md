@@ -1,5 +1,7 @@
 # Security Guide
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 - Architectural Pillars (Security)
+
 ## Purpose
 
 Describe AWCMS security posture, enforcement points, and operational expectations.
@@ -11,8 +13,10 @@ Describe AWCMS security posture, enforcement points, and operational expectation
 
 ## Prerequisites
 
-- `docs/architecture/standards.md`
-- `docs/tenancy/overview.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for security mandates
+- [AGENTS.md](../../AGENTS.md) - Permission patterns and Context7 security references
+- [docs/architecture/standards.md](../architecture/standards.md) - Core standards
+- [docs/tenancy/overview.md](../tenancy/overview.md) - Tenant isolation
 
 ## Core Concepts
 

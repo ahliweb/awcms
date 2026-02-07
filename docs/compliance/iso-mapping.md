@@ -1,8 +1,15 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 (Data Integrity) and Section 2.3 (Permissions)
+
 # ISO 27001 Mapping
 
 ## 1. Introduction
 
 This appendix maps AWCMS security controls to ISO 27001/27002 controls.
+
+## Prerequisites
+
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for ISO 27001 control implementation
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 
 ## 2. Control Mapping
 

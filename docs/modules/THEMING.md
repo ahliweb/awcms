@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.4 (Styling)
+
 # Multi-Tenant Theming
 
 ## Purpose
@@ -11,6 +13,8 @@ Describe how tenant branding is stored and applied across the admin UI.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for theming and styling system
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/tenancy/overview.md`
 
 ## Core Concepts

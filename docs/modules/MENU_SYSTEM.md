@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 (Permissions) and Section 3 (Modules)
+
 # Admin Menu System
 
 ## Purpose
@@ -11,6 +13,8 @@ Describe how admin menus are stored, loaded, and extended.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for menu system and permissions
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/security/abac.md`
 
 ## Core Concepts

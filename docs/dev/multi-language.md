@@ -1,8 +1,13 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 2.4 (Internationalization)
+
 # Multi-Language Development Guide
 
 This guide covers internationalization (i18n) across all AWCMS channels.
 
 ## Supported Languages
+
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for i18n implementation patterns
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 
 | Code | Language | Status |
 | :--- | :------- | :----- |

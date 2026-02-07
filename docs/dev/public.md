@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Public Portal Development
 
 ## 1. Overview
@@ -6,6 +8,8 @@ The Public Portal (`awcms-public/`) handles the visitor-facing websites for each
 
 ## 2. Architecture
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal tech stack (Astro 5, React 19.2.4, Cloudflare Pages)
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - **Framework**: Astro 5.12.9
 - **Rendering**: Astro SSR via Cloudflare adapter across all public portals.
 - **Styling**: Tailwind CSS 4.

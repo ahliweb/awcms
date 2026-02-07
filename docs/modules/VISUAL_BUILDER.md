@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 3 (Modules)
+
 # Visual Builder
 
 ## Purpose
@@ -11,6 +13,8 @@ Explain the Visual Page Builder architecture and integration with public renderi
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Visual Builder architecture
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/modules/TEMPLATE_SYSTEM.md`
 - `docs/security/abac.md`
 

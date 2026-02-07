@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Public Portal Architecture
 
 ## Purpose
@@ -11,6 +13,8 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal architecture (Astro 5, React 19.2.4, Cloudflare Pages)
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/tenancy/overview.md`
 - `docs/tenancy/supabase.md`
 

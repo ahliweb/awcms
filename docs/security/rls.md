@@ -1,5 +1,7 @@
 # Row Level Security (RLS) Policies
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.1 - Multi-Tenancy & Isolation (RLS)
+
 ## Purpose
 
 Document the RLS helpers and standard policy patterns used in AWCMS.
@@ -11,9 +13,11 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 
 ## Prerequisites
 
-- `docs/security/abac.md`
-- `docs/tenancy/overview.md`
-- `docs/architecture/database.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for RLS mandates
+- [AGENTS.md](../../AGENTS.md) - RLS implementation patterns
+- [docs/security/abac.md](./abac.md) - ABAC permission system
+- [docs/tenancy/overview.md](../tenancy/overview.md) - Tenant context
+- [docs/architecture/database.md](../architecture/database.md) - Database schema
 
 ## Reference
 

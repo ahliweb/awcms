@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 3 (Modules)
+
 # Template System
 
 ## Purpose
@@ -11,6 +13,8 @@ Explain how templates, parts, widgets, and assignments drive multi-channel rende
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for template system architecture
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/modules/VISUAL_BUILDER.md`
 - `docs/tenancy/overview.md`
 

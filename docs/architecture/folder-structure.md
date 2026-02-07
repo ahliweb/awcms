@@ -1,5 +1,7 @@
 # Folder Structure
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 3 - Directory Structure Standards
+
 ## Purpose
 
 Describe the monorepo layout and the key directories for each package.
@@ -11,7 +13,9 @@ Describe the monorepo layout and the key directories for each package.
 
 ## Prerequisites
 
-- `docs/architecture/standards.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for directory structure
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns
+- [docs/architecture/standards.md](./standards.md) - Core standards
 
 ## Reference
 

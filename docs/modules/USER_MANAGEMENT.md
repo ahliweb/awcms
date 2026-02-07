@@ -1,3 +1,4 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 (Permissions)
 
 # User Management Documentation
 
@@ -12,6 +13,8 @@ Describe user identity, profile sync, and role assignment patterns.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for user management and role system
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/security/abac.md`
 - `docs/security/overview.md`
 

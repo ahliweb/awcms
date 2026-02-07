@@ -1,5 +1,7 @@
 # System Architecture
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - Complete architecture, tech stack, and security mandates
+
 ## Purpose
 
 Describe the runtime architecture and data flow across the AWCMS monorepo.
@@ -11,8 +13,10 @@ Describe the runtime architecture and data flow across the AWCMS monorepo.
 
 ## Prerequisites
 
-- `docs/architecture/standards.md`
-- `docs/tenancy/overview.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for system architecture
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
+- [docs/architecture/standards.md](./standards.md) - Core standards
+- [docs/tenancy/overview.md](../tenancy/overview.md) - Multi-tenancy details
 
 ## Core Concepts
 

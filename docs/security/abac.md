@@ -1,5 +1,8 @@
 # ABAC System (Attribute-Based Access Control)
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 - Permission System (ABAC/RBAC)  
+> **Permission Format**: `scope.resource.action` (e.g., `tenant.blog.publish`)
+
 ## Purpose
 
 Define the permission model and enforcement patterns for AWCMS.
@@ -11,8 +14,10 @@ Define the permission model and enforcement patterns for AWCMS.
 
 ## Prerequisites
 
-- `docs/security/overview.md`
-- `docs/tenancy/overview.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for permission system
+- [AGENTS.md](../../AGENTS.md) - Permission implementation patterns and Context7 references
+- [docs/security/overview.md](./overview.md) - Security overview
+- [docs/tenancy/overview.md](../tenancy/overview.md) - Tenant context
 
 ---
 

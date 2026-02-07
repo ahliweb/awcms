@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Mobile App Development
 
 ## 1. Overview
@@ -6,6 +8,8 @@ The AWCMS mobile app (`awcms-mobile/`) is a cross-platform Flutter application.
 
 ## 2. Architecture
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Mobile tech stack
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - **Framework**: Flutter
 - **State Management**: Riverpod.
 - **Backend**: Supabase (via `supabase_flutter`).

@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePermissions } from '@/contexts/PermissionContext';
-import { useTenant } from '@/contexts/TenantContext';
 import { useMedia } from '@/hooks/useMedia'; // Import useMedia
 import { supabase } from '@/lib/customSupabaseClient'; // Keep for usage analysis only if needed, or move to hook
 
@@ -26,8 +25,6 @@ const formatFileSize = (bytes) => {
 const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isTrashView = false }) => {
     const { toast } = useToast();
     const { checkAccess, isPlatformAdmin } = usePermissions();
-    const { currentTenant } = useTenant();
-    const tenantId = currentTenant?.id;
     
     // Use the hook
     const { 
@@ -37,8 +34,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
         bulkSoftDelete, 
         restoreFile, 
         getFileUrl,
-        uploading: hookUploading,
-        loading: hookLoading
+        uploading: hookUploading
     } = useMedia();
 
     const canUpload = checkAccess('create', 'files');

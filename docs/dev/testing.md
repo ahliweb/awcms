@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Testing Guide
 
 ## Purpose
@@ -11,6 +13,8 @@ Describe how to validate AWCMS packages locally and in CI.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for testing framework versions
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - Node.js 20+ (admin/public)
 - Flutter SDK (mobile)
 

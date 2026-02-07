@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 (Data Integrity)
+
 # Audit Trail System
 
 ## Purpose
@@ -11,6 +13,8 @@ Document audit logging behavior and schema usage.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for audit logging and compliance
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/security/overview.md`
 
 AWCMS implements comprehensive audit logging for compliance and security monitoring.

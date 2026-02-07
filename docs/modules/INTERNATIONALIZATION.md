@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.4 (Internationalization)
+
 # Internationalization (i18n)
 
 ## Purpose
@@ -12,6 +14,8 @@ Describe how AWCMS handles translations and locale detection for multi-language 
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for i18n implementation patterns
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/architecture/folder-structure.md`
 
 ---

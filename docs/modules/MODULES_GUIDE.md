@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 (Permissions) and Section 3 (Modules)
+
 # Modules Guide
 
 ## Purpose
@@ -8,6 +10,11 @@ Describe how admin modules are organized, where to find them, and how they map t
 
 - Admin panel developers
 - Extension authors
+
+## Prerequisites
+
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for module architecture and permissions
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 
 ## Module Structure
 

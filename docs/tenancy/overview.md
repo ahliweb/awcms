@@ -1,5 +1,7 @@
 # Multi-Tenancy Architecture
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.1 - Multi-Tenancy & Isolation
+
 ## Purpose
 
 Define how tenant isolation is resolved and enforced across AWCMS.
@@ -11,8 +13,10 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 
 ## Prerequisites
 
-- `docs/architecture/standards.md`
-- `docs/security/rls.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for multi-tenancy architecture
+- [AGENTS.md](../../AGENTS.md) - Tenant context patterns and RLS guidelines
+- [docs/architecture/standards.md](../architecture/standards.md) - Core implementation standards
+- [docs/security/rls.md](../security/rls.md) - Row Level Security policies
 
 ## Core Concepts
 

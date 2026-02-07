@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 2 (Data Integrity)
+
 # API Documentation
 
 ## Purpose
@@ -11,6 +13,8 @@ Document how AWCMS uses the Supabase client APIs for data, auth, storage, and ed
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for API patterns and Supabase integration
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/tenancy/supabase.md`
 - `docs/architecture/database.md`
 

@@ -1,7 +1,11 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Developer Setup Guide
 
 ## 1. Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for technology stack and version requirements
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - **Node.js**: v20.0.0 or higher (LTS recommended)
 - **npm**: v10+
 - **Flutter**: v3.38.5+ (if working on mobile)

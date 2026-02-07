@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # ESP32 Firmware Development
 
 ## 1. Overview
@@ -6,6 +8,8 @@ The IoT component (`awcms-esp32/`) provides firmware for ESP32 devices interacti
 
 ## 2. Toolchain
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for IoT/ESP32 tech stack
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - **Platform**: PlatformIO (VS Code Extension).
 - **Framework**: Arduino / ESP-IDF.
 

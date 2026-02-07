@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Versioning System
 
 ## Purpose
@@ -11,6 +13,8 @@ Define how AWCMS versions are managed across code and documentation.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for versioning standards
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `CHANGELOG.md`
 
 ## Core Concepts

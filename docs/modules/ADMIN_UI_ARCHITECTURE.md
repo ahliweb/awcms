@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 2.3 (Permissions)
+
 # Admin UI Architecture
 
 ## Purpose
@@ -10,6 +12,8 @@ Describe the admin layout system and the shared template components.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Admin Panel architecture (React 19.2.4, Vite 7, TailwindCSS 4)
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/modules/COMPONENT_GUIDE.md`
 - `docs/security/abac.md`
 

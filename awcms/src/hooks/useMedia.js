@@ -109,7 +109,7 @@ export function useMedia() {
     const bulkSoftDelete = useCallback(async (ids) => {
         if (!ids || ids.length === 0) return { success: 0, error: 0 };
         try {
-            const { error, count } = await supabase
+            const { error } = await supabase
                 .from('files')
                 .update({ deleted_at: new Date().toISOString() })
                 .in('id', ids)

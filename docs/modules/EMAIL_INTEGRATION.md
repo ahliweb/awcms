@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 3 (Modules)
+
 # Email Integration (Mailketing)
 
 ## Purpose
@@ -11,6 +13,8 @@ Document the Mailketing integration used for transactional email.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for email integration patterns
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - Supabase Edge Functions enabled
 - `docs/tenancy/supabase.md`
 

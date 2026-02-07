@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 (Data Integrity)
+
 # Monitoring and Observability
 
 ## Purpose
@@ -11,6 +13,8 @@ Describe the monitoring tools and logging practices for AWCMS.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for monitoring and observability
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/modules/AUDIT_TRAIL.md`
 
 ## Core Concepts

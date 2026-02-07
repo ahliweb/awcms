@@ -1,8 +1,15 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 (Data Integrity) and Section 2.3 (Permissions)
+
 # Security Threat Model (OWASP ASVS Aligned)
 
 ## 1. Introduction
 
 This document outlines the security threat model for the AWCMS platform, aligned with the OWASP Application Security Verification Standard (ASVS). It identifies potential threats, assets, and the controls in place to mitigate risks.
+
+## Prerequisites
+
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for security architecture and threat model
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 
 ## 2. Architecture Overview
 

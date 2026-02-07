@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Performance Guide
 
 ## Purpose
@@ -11,6 +13,8 @@ Summarize performance strategies implemented in AWCMS.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for performance optimization patterns
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/architecture/overview.md`
 
 ## Core Concepts

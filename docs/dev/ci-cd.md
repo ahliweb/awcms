@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # CI/CD Pipeline
 
 ## Purpose
@@ -11,6 +13,8 @@ Describe the GitHub Actions workflows used for AWCMS.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for CI/CD workflow requirements
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - GitHub Actions enabled
 - Secrets configured (Supabase and Cloudflare)
 

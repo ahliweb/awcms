@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Deployment Guide
 
 ## Purpose
@@ -11,6 +13,8 @@ Describe deployment steps for each AWCMS package in the monorepo.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for deployment requirements and tech stack
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/dev/setup.md`
 - Cloudflare Pages account (admin/public)
 

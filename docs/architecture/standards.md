@@ -1,6 +1,7 @@
 # AWCMS Core Standards
 
-> Version: 2.28.0 | Last Updated: 2026-02-03 | React: 19.2.4
+> Version: 2.28.0 | Last Updated: 2026-02-03 | React: 19.2.4  
+> **Documentation Hierarchy**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) → [AGENTS.md](../../AGENTS.md) → This Document
 
 ## Purpose
 
@@ -13,8 +14,9 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 
 ## Prerequisites
 
-- `../../AGENTS.md` must be followed over all other instructions
-- `../../DOCS_INDEX.md` for documentation structure
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for tech stack and architecture
+- [AGENTS.md](../../AGENTS.md) - AI coding guidelines and Context7 references
+- [DOCS_INDEX.md](../../DOCS_INDEX.md) - Documentation navigation
 
 ## Core Concepts
 

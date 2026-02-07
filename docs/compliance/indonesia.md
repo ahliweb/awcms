@@ -1,8 +1,15 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 (Data Integrity) and Section 2.3 (Permissions)
+
 # Indonesia Compliance Guide
 
 ## 1. Overview
 
 This document outlines how AWCMS supports compliance with Indonesian regulations, specifically **UU PDP (Personal Data Protection Law)** and **PP 71/2019 (Penyelenggaraan Sistem dan Transaksi Elektronik)**.
+
+## Prerequisites
+
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Indonesian compliance (UU PDP, PP 71/2019)
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 
 ## 2. UU No. 27 Tahun 2022 (UU PDP)
 

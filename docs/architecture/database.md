@@ -1,3 +1,4 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 (Data Integrity)
 
 # Database Schema
 
@@ -12,6 +13,8 @@ Describe the tenant-scoped PostgreSQL schema used by AWCMS.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for database schema and data integrity
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/tenancy/overview.md`
 - `docs/security/rls.md`
 

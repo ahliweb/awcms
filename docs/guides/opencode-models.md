@@ -1,6 +1,13 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # How to Choose and Use AI Models in OpenCode Zen
 
 OpenCode Zen allows you to switch between various AI models (like Gemini, Claude, and OpenAI) directly within your development environment. This guide explains how to select and configure these models.
+
+## Prerequisites
+
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for AI/Agent integration patterns
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 
 ## 1. Quick Switch via UI
 

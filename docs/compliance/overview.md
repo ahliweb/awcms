@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 (Data Integrity) and Section 2.3 (Permissions)
+
 # Compliance Mapping
 
 ## Purpose
@@ -11,6 +13,8 @@ Map AWCMS security controls to common compliance frameworks.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for compliance controls and data integrity
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/security/overview.md`
 
 ## Core Concepts

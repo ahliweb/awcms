@@ -17,8 +17,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { useContent } from '@/hooks/useContent'; // Import new hook
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import RichTextEditor from '@/components/ui/RichTextEditor';
@@ -76,8 +74,6 @@ function UnifiedContentEditor({
     permissionPrefix = 'pages'
 }) {
     const { toast } = useToast();
-    const { user } = useAuth();
-    const { currentTenant } = useTenant();
     const { hasPermission } = usePermissions();
     
     // Use the new content hook
@@ -132,8 +128,7 @@ function UnifiedContentEditor({
             setCategories(cats);
         };
         loadCategories();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fetchCategories]); // Added dependency
+    }, [fetchCategories]);
 
     const generateSlug = useCallback((text) => {
         return text

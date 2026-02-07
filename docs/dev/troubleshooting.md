@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 2 (Data Integrity)
+
 # Troubleshooting Guide
 
 ## Purpose
@@ -11,6 +13,8 @@ Provide common fixes for local development and deployment issues.
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for system architecture and troubleshooting context
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/dev/setup.md`
 
 ## Steps

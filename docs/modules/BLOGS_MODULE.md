@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 3 (Modules)
+
 # Blogs Module Documentation
 
 ## Purpose
@@ -11,6 +13,8 @@ Describe the blog workflows and data model used by the CMS (legacy index/constra
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for content module architecture
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/architecture/database.md`
 - `docs/security/abac.md`
 

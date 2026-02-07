@@ -1,5 +1,8 @@
 # Component Guide
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.4 - Styling & Theming  
+> **Context7 Reference**: `/websites/tailwindcss`, `/websites/react_dev` - See [AGENTS.md](../../AGENTS.md)
+
 ## Purpose
 
 Define UI component patterns for the admin panel and shared components.
@@ -10,8 +13,10 @@ Define UI component patterns for the admin panel and shared components.
 
 ## Prerequisites
 
-- `docs/architecture/standards.md`
-- `docs/architecture/tech-stack.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - Styling and theming standards
+- [AGENTS.md](../../AGENTS.md) - UI patterns and Context7 references
+- [docs/architecture/standards.md](../architecture/standards.md) - Core implementation standards
+- [docs/architecture/tech-stack.md](../architecture/tech-stack.md) - Technology versions
 
 ## Core Concepts
 

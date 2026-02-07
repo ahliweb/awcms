@@ -1,5 +1,7 @@
 # Tech Stack and Dependencies
 
+> **Source of Truth**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 - Technology Stack Mandates
+
 ## Purpose
 
 Provide authoritative versions and technology choices for all AWCMS packages.
@@ -11,7 +13,8 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 
 ## Prerequisites
 
-- `docs/architecture/standards.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - Primary authority for tech stack
+- [docs/architecture/standards.md](./standards.md) - Coding standards
 
 ## Reference
 

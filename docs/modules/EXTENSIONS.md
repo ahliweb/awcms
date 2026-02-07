@@ -1,5 +1,8 @@
 # AWCMS Extension System
 
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - Architecture and Extension Guidelines  
+> **Related**: [AGENTS.md](../../AGENTS.md) Section 3 - Extension System Patterns
+
 ## Purpose
 
 Describe the plugin and extension architecture for AWCMS.
@@ -11,7 +14,9 @@ Describe the plugin and extension architecture for AWCMS.
 
 ## Prerequisites
 
-- `docs/architecture/standards.md`
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for architecture
+- [AGENTS.md](../../AGENTS.md) - Extension implementation patterns
+- [docs/architecture/standards.md](../architecture/standards.md) - Core standards
 
 AWCMS uses a dual extension system combining WordPress-style hooks with modern ES module architecture.
 

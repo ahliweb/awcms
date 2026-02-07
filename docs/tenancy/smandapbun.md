@@ -1,3 +1,5 @@
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+
 # Smandapbun Public Portal (Tenant)
 
 ## Purpose
@@ -11,6 +13,8 @@ Document the tenant-specific Astro implementation for **smandapbun**, including 
 
 ## Prerequisites
 
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for tenant-specific public portal architecture
+- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/dev/public.md`
 - `docs/tenancy/overview.md`
 
