@@ -11,10 +11,21 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Added
 
+- **Public Portal Static Helpers**: Added build-time tenant and settings helpers (`publicTenant`, `publicSettings`) for static Astro builds.
+- **DB Tooling**: Added `20260207123000_fix_index_advisor_text_array_init.sql` and `awcms/scripts/apply_index_advisor_fix.sh` to resolve index_advisor lint warnings after resets.
+- **Storage Config**: Added Supabase S3 endpoint/region/bucket env entries for server and public metadata.
+
 ### Changed
+
+- **Public Portal Rendering**: Standardized on static output with build-time tenant resolution (`PUBLIC_TENANT_ID`) and removed `Astro.locals` reliance across pages/layouts.
+- **Supabase Client**: Added `PUBLIC_SUPABASE_*` env fallbacks for public builds.
+- **Dependencies**: Updated extension peer dependencies to React 19.
+- **Documentation**: Synchronized public portal, tenancy, and architecture docs to the static build model and Context7 best practices.
 
 ### Fixed
 
+- **Supabase Content Fetching**: Added fallback queries for blog/page content when schema cache relationships are missing.
+- **Public Portal Build Stability**: Fixed nullability issues in contact/blog pages and removed noisy Turnstile logging.
 ## [2.29.0] "Equilibrium" - 2026-02-03
 
 ### Added
