@@ -6,6 +6,7 @@ import {
 } from "~/lib/sidebar";
 import { createClientFromEnv } from "~/lib/supabase";
 import { Icon } from "astro-icon/components";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
 export interface Props {
     className?: string;
@@ -14,20 +15,17 @@ export interface Props {
 
 const { className = "", defaultConfig } = Astro.props;
 
-// Get tenant context from locals
-const tenant_id = Astro.locals.tenant_id || null;
+const tenantId = getPublicTenantId();
 const currentPath = Astro.url.pathname;
 
 // Create Supabase client
-const supabase = createClientFromEnv(
-    Astro.locals.runtime?.env || import.meta.env,
-);
+const supabase = createClientFromEnv(import.meta.env);
 
 let config: SidebarConfig | null | undefined = defaultConfig;
 
 // Fetch config if not provided
 if (!config && supabase) {
-    config = await getSidebarConfig(supabase, "public_sidebar", tenant_id);
+    config = await getSidebarConfig(supabase, "public_sidebar", tenantId);
 }
 
 // Fallback config if nothing found

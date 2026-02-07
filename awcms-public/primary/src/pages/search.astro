@@ -4,12 +4,13 @@ import Headline from "~/components/ui/Headline.astro";
 import { searchContent, type SearchResult } from "~/lib/search";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getLocale, t } from "~/utils/i18n";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
-export const prerender = false;
+export const prerender = true;
 
-const { tenant_id } = Astro.locals;
+const tenantId = getPublicTenantId();
 const supabase = createClientFromEnv(import.meta.env);
-const locale = getLocale(Astro.request);
+const locale = getLocale(Astro.url);
 
 const q = Astro.url.searchParams.get("q") || "";
 let results: SearchResult[] = [];
@@ -18,7 +19,7 @@ let loading = !!q;
 if (q) {
     if (supabase) {
         try {
-            results = await searchContent(supabase, q, tenant_id, {
+            results = await searchContent(supabase, q, tenantId, {
                 types: ["page", "blog"],
                 limit: 20,
             });

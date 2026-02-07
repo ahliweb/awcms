@@ -9,6 +9,7 @@ import { headerData as fallbackHeaderData, footerData as fallbackFooterData } fr
 import { createClientFromEnv } from "~/lib/supabase";
 import { getFooterMenu, getHeaderMenu, mapMenuItemsToFooterLinks, mapMenuItemsToHeaderLinks } from "~/lib/menu";
 import type { HeaderLink } from "~/lib/menu";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
 import type { MetaData } from "~/types";
 
@@ -17,10 +18,8 @@ export interface Props {
 }
 
 const { metadata } = Astro.props;
-const tenantId = Astro.locals.tenant_id || null;
-const supabase = createClientFromEnv(
-    Astro.locals.runtime?.env || import.meta.env,
-);
+const tenantId = getPublicTenantId();
+const supabase = createClientFromEnv(import.meta.env);
 
 let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 let footerLinks = fallbackFooterData.links;

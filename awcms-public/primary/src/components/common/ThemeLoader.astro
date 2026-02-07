@@ -6,20 +6,18 @@
  */
 import { createClientFromEnv } from "~/lib/supabase";
 import { getActiveTheme, generateCssVariables } from "~/lib/theme";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
-// Get tenant from locals (set by middleware)
-const tenant_id = Astro.locals.tenant_id || null;
+const tenantId = getPublicTenantId();
 
 // Create Supabase client
-const supabase = createClientFromEnv(
-    Astro.locals.runtime?.env || import.meta.env,
-);
+const supabase = createClientFromEnv(import.meta.env);
 
 let themeCss = "";
 
 if (supabase) {
     try {
-        const theme = await getActiveTheme(supabase, tenant_id);
+        const theme = await getActiveTheme(supabase, tenantId);
         if (theme) {
             themeCss = generateCssVariables(theme);
         }

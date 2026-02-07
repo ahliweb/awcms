@@ -119,6 +119,10 @@ const ensureId = () => {
  * 2. Host/subdomain (FALLBACK - for legacy compatibility)
  */
 export const onRequest = defineMiddleware(async (context, next) => {
+  if (context.isPrerendered) {
+    return next();
+  }
+
   const { request, locals, url } = context;
   const pathname = url.pathname;
 

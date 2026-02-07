@@ -121,6 +121,10 @@ const extractPathAfterTenant = (pathname: string): string => {
 };
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  if (context.isPrerendered) {
+    return next();
+  }
+
   const { request, locals, url } = context;
   const pathname = url.pathname;
 

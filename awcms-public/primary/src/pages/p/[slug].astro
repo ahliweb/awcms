@@ -3,47 +3,59 @@
  * Dynamic Page Route - Renders pages from Supabase 'pages' table
  * Path: /p/{slug}
  */
+import type { GetStaticPaths } from "astro";
 import Layout from '~/layouts/PageLayout.astro';
 import PuckRenderer from '~/components/common/PuckRenderer.astro';
 import { createClientFromEnv } from '~/lib/supabase';
+import { getPublicTenantId } from "~/lib/publicTenant";
 import { getPageBySlug } from '~/lib/content';
 
-// SSR mode for dynamic content
-export const prerender = false;
+export const prerender = true;
+
+export const getStaticPaths = (async () => {
+  const supabase = createClientFromEnv(import.meta.env);
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("pages")
+    .select("slug")
+    .eq("status", "published")
+    .eq("page_type", "regular")
+    .is("deleted_at", null);
+
+  if (error) {
+    console.error("[Page] Error fetching page slugs:", error.message);
+    return [];
+  }
+
+  return (data || []).map((page) => ({
+    params: { slug: page.slug },
+  }));
+}) satisfies GetStaticPaths;
 
 // Get slug from URL
 const { slug } = Astro.params;
 
-if (!slug) {
-  return Astro.redirect('/404');
-}
-
-// Get tenant from locals (set by middleware)
-const tenant_id = Astro.locals.tenant_id || null;
+const tenantId = getPublicTenantId();
 
 // Create Supabase client
-const supabase = createClientFromEnv(Astro.locals.runtime?.env || import.meta.env);
-
-if (!supabase) {
-  console.error('[Page] Supabase client not available');
-  return Astro.redirect('/404');
-}
+const supabase = createClientFromEnv(import.meta.env);
 
 // Fetch page data
-const page = await getPageBySlug(supabase, slug, tenant_id);
+const page = slug && supabase ? await getPageBySlug(supabase, slug, tenantId) : null;
 
 if (!page) {
-  console.log(`[Page] Page not found: ${slug}`);
-  return Astro.redirect('/404');
+  console.log(`[Page] Page not found: ${slug || "unknown"}`);
+  Astro.response.status = 404;
 }
 
 // Metadata for SEO with new fields
-const ogImageUrl = page.og_image || page.featured_image;
+const ogImageUrl = page?.og_image || page?.featured_image;
 const metadata = {
-  title: page.meta_title || page.title,
-  description: page.meta_description || page.excerpt || '',
-  keywords: page.meta_keywords || undefined,
-  canonical: page.canonical_url || undefined,
+  title: page?.meta_title || page?.title || "Page not found",
+  description: page?.meta_description || page?.excerpt || '',
+  keywords: page?.meta_keywords || undefined,
+  canonical: page?.canonical_url || undefined,
   openGraph: {
     type: 'website' as const,
     images: ogImageUrl ? [{ url: ogImageUrl }] : undefined,
@@ -51,71 +63,82 @@ const metadata = {
 };
 
 // Determine content to render
-const isVisual = page.editor_type === 'visual';
-const visualContent = page.content_published || page.puck_layout_jsonb || null;
-const htmlContent = page.content || '';
+const isVisual = page?.editor_type === 'visual';
+const visualContent = page?.content_published || page?.puck_layout_jsonb || null;
+const htmlContent = page?.content || '';
 ---
 
 <Layout metadata={metadata}>
-  <section class="py-12 sm:py-16 lg:py-20">
-    <div class="mx-auto max-w-4xl px-6 sm:px-8">
-      <!-- Page Header -->
-      <header class="mb-8">
-        <h1 class="text-4xl md:text-5xl font-bold leading-tight tracking-tight dark:text-slate-200">
-          {page.title}
-        </h1>
-        {page.excerpt && (
-          <p class="mt-4 text-xl text-muted-foreground dark:text-slate-400">
-            {page.excerpt}
-          </p>
+  {page ? (
+    <section class="py-12 sm:py-16 lg:py-20">
+      <div class="mx-auto max-w-4xl px-6 sm:px-8">
+        <!-- Page Header -->
+        <header class="mb-8">
+          <h1 class="text-4xl md:text-5xl font-bold leading-tight tracking-tight dark:text-slate-200">
+            {page.title}
+          </h1>
+          {page.excerpt && (
+            <p class="mt-4 text-xl text-muted-foreground dark:text-slate-400">
+              {page.excerpt}
+            </p>
+          )}
+        </header>
+
+        <!-- Featured Image (only for non-visual pages) -->
+        {!isVisual && page.featured_image && (
+          <figure class="mb-8">
+            <img
+              src={page.featured_image}
+              alt={page.title}
+              class="w-full rounded-xl shadow-lg"
+              loading="lazy"
+            />
+          </figure>
         )}
-      </header>
 
-      <!-- Featured Image (only for non-visual pages) -->
-      {!isVisual && page.featured_image && (
-        <figure class="mb-8">
-          <img
-            src={page.featured_image}
-            alt={page.title}
-            class="w-full rounded-xl shadow-lg"
-            loading="lazy"
+        <!-- Page Content -->
+        {isVisual ? (
+          <>
+          <!-- Visual Builder Content (Puck JSON blocks) -->
+          <div class="visual-content">
+            <PuckRenderer content={visualContent} />
+          </div>
+          </>
+        ) : (
+          <>
+          <!-- Rich Text Content (HTML) -->
+          <article 
+            class="prose prose-lg dark:prose-invert max-w-none
+                   prose-headings:font-bold prose-headings:tracking-tight
+                   prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                   prose-img:rounded-xl prose-img:shadow-lg"
+            set:html={htmlContent}
           />
-        </figure>
-      )}
+          </>
+        )}
 
-      <!-- Page Content -->
-      {isVisual ? (
-        <>
-        <!-- Visual Builder Content (Puck JSON blocks) -->
-        <div class="visual-content">
-          <PuckRenderer content={visualContent} />
-        </div>
-        </>
-      ) : (
-        <>
-        <!-- Rich Text Content (HTML) -->
-        <article 
-          class="prose prose-lg dark:prose-invert max-w-none
-                 prose-headings:font-bold prose-headings:tracking-tight
-                 prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-                 prose-img:rounded-xl prose-img:shadow-lg"
-          set:html={htmlContent}
-        />
-        </>
-      )}
-
-      <!-- Page Footer -->
-      {page.updated_at && (
-        <footer class="mt-12 pt-8 border-t border-border">
-          <p class="text-sm text-muted-foreground">
-            Last updated: {new Date(page.updated_at).toLocaleDateString('id-ID', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })}
-          </p>
-        </footer>
-      )}
-    </div>
-  </section>
+        <!-- Page Footer -->
+        {page.updated_at && (
+          <footer class="mt-12 pt-8 border-t border-border">
+            <p class="text-sm text-muted-foreground">
+              Last updated: {new Date(page.updated_at).toLocaleDateString('id-ID', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}
+            </p>
+          </footer>
+        )}
+      </div>
+    </section>
+  ) : (
+    <section class="py-12 sm:py-16 lg:py-20">
+      <div class="mx-auto max-w-4xl px-6 sm:px-8">
+        <h1 class="text-3xl font-semibold">Page not found</h1>
+        <p class="mt-4 text-muted-foreground">
+          The requested page could not be found.
+        </p>
+      </div>
+    </section>
+  )}
 </Layout>

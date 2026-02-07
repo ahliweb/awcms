@@ -2,6 +2,8 @@
 import WidgetWrapper from "~/components/ui/WidgetWrapper.astro";
 import Headline from "~/components/ui/Headline.astro";
 import { createScopedClient } from "~/lib/supabase";
+import { getLocale } from "~/utils/i18n";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
 const {
   title = "Visitor Statistics",
@@ -14,11 +16,10 @@ const {
   bg = await Astro.slots.render("bg"),
 } = Astro.props;
 
-const locale = Astro.locals.locale ?? "en";
-const tenantId = Astro.locals.tenant_id || null;
-const runtimeEnv = Astro.locals.runtime?.env || import.meta.env;
+const locale = getLocale(Astro.url);
+const tenantId = getPublicTenantId();
 const supabase = tenantId
-  ? createScopedClient({ "x-tenant-id": tenantId }, runtimeEnv)
+  ? createScopedClient({ "x-tenant-id": tenantId }, import.meta.env)
   : null;
 
 const formatNumber = (value: number) =>

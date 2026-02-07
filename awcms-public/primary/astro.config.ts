@@ -31,17 +31,10 @@ const whenExternalScripts = (
       : [items()]
     : [];
 
-import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
 
 export default defineConfig({
-  output: "server",
-  session: {
-    driver: "memory",
-  },
-  adapter: cloudflare({
-    imageService: "compile",
-  }),
+  output: "static",
 
   integrations: [
     react(),

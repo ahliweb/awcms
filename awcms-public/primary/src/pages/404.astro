@@ -3,7 +3,7 @@ import Layout from "~/layouts/Layout.astro";
 import { getHomePermalink } from "~/utils/permalinks";
 import { getLocale, t } from "~/utils/i18n";
 
-const locale = getLocale(Astro.request);
+const locale = getLocale(Astro.url);
 const title = t("error_page.404.title", locale);
 ---
 

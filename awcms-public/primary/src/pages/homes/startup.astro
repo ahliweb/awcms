@@ -14,7 +14,7 @@ import { getLocale, t } from "~/utils/i18n";
 
 import { YouTube } from "astro-embed";
 
-const locale = getLocale(Astro.request);
+const locale = getLocale(Astro.url);
 
 const metadata = {
   title: t("homes.startup.metadata.title", locale),

@@ -1,4 +1,5 @@
 ---
+import type { GetStaticPaths } from "astro";
 import Layout from "../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
 import {
@@ -10,19 +11,23 @@ import {
 
 import { getPosts } from "../../lib/api";
 
-export const prerender = false;
+export const prerender = true;
+
+export const getStaticPaths = (async () => {
+  const posts = await getPosts(500);
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+  }));
+}) satisfies GetStaticPaths;
 
 const { slug } = Astro.params;
-if (!slug) {
-  return Astro.redirect("/blogs");
-}
 
 const locale = "id" as const;
 const allPosts = await getPosts(500);
 const post = allPosts.find((item) => item.slug === slug);
 
 if (!post) {
-  return Astro.redirect("/blogs");
+  Astro.response.status = 404;
 }
 
 // Get related blogs (same category, exclude current)

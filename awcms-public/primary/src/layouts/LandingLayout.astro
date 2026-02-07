@@ -7,16 +7,15 @@ import { createClientFromEnv } from '~/lib/supabase';
 import { getHeaderMenu, mapMenuItemsToHeaderLinks } from '~/lib/menu';
 import type { HeaderLink } from "~/lib/menu";
 import type { MetaData } from '~/types';
+import { getPublicTenantId } from "~/lib/publicTenant";
 
 export interface Props {
   metadata?: MetaData;
 }
 
 const { metadata } = Astro.props;
-const tenantId = Astro.locals.tenant_id || null;
-const supabase = createClientFromEnv(
-  Astro.locals.runtime?.env || import.meta.env,
-);
+const tenantId = getPublicTenantId();
+const supabase = createClientFromEnv(import.meta.env);
 
 let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 

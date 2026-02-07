@@ -3,9 +3,9 @@ import PageLayout from "~/layouts/PageLayout.astro";
 import VisitorStatsWidget from "~/components/widgets/VisitorStats.astro";
 import { getLocale } from "~/utils/i18n";
 
-export const prerender = false;
+export const prerender = true;
 
-const locale = getLocale(Astro.request);
+const locale = getLocale(Astro.url);
 const isIndonesian = locale === "id";
 const metadata = {
   title: isIndonesian ? "Statistik Pengunjung" : "Visitor Statistics",

@@ -135,7 +135,9 @@ const {
     import.meta.env.VITE_SUPABASE_ANON_KEY;
   const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 
-  if (supabaseUrl && supabaseAnonKey) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("[Form] Supabase env missing; contact form disabled.");
+  } else {
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const form = document.querySelector("form[data-tenant-id]");
 

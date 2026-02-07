@@ -1,6 +1,10 @@
 ---
-const consentConfig = Astro.locals.analytics_consent as Record<string, unknown> | undefined;
-const locale = Astro.locals.locale ?? "en";
+import { getLocale } from "~/utils/i18n";
+import { getPublicSettings } from "~/lib/publicSettings";
+
+const locale = getLocale(Astro.url);
+const { analyticsConsent } = await getPublicSettings();
+const consentConfig = analyticsConsent;
 
 const readText = (value: unknown, fallback: string) => {
   if (!value) return fallback;

@@ -54,7 +54,7 @@ Environment variables:
 - `VITE_SUPABASE_ANON_KEY`
 - `NODE_VERSION=20`
 
-**Runtime note**: Astro Cloudflare adapter exposes env vars via `runtime.env`; ensure server routes read from it when available.
+**Runtime note**: Public portals are built as static sites; environment variables are resolved at build time via `import.meta.env`.
 
 ### Public Portal (awcms-public/smandapbun)
 

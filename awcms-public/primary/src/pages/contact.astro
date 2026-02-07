@@ -4,9 +4,10 @@ import HeroText from "~/components/widgets/HeroText.astro";
 import ContactUs from "~/components/widgets/Contact.astro";
 import Features2 from "~/components/widgets/Features2.astro";
 import { getLocale, t } from "~/utils/i18n";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
-const locale = getLocale(Astro.request);
-const tenant_id = Astro.locals.tenant_id;
+const locale = getLocale(Astro.url);
+const tenantId = getPublicTenantId();
 
 const metadata = {
   title: t("contact_page.hero.tagline", locale),
@@ -23,7 +24,7 @@ const metadata = {
 
   <ContactUs
     id="form"
-    tenantId={tenant_id}
+    tenantId={tenantId}
     title={t("contact_page.form.title", locale)}
     subtitle={t("contact_page.form.subtitle", locale)}
     inputs={[

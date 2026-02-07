@@ -5,7 +5,7 @@
  * Serves the homepage with English locale.
  * Re-exports the main index page with locale context.
  */
-export const prerender = false;
+export const prerender = true;
 
 import Layout from "~/layouts/PageLayout.astro";
 import Hero from "~/components/widgets/Hero.astro";
@@ -25,20 +25,19 @@ import PuckRenderer from "~/components/common/PuckRenderer.astro";
 import type { Item, Post, Testimonial, Stat, Image } from "~/types";
 
 import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
 import { getPageBySlug, getPageByType } from "~/lib/content";
 import { t } from "~/utils/i18n";
 
 const locale = "en" as const;
-const tenant_id = Astro.locals.tenant_id || null;
-const supabase = createClientFromEnv(
-    Astro.locals.runtime?.env || import.meta.env,
-);
+const tenantId = getPublicTenantId();
+const supabase = createClientFromEnv(import.meta.env);
 
 let homePage = null;
-if (tenant_id && supabase) {
-    homePage = await getPageByType(supabase, "home", tenant_id);
+if (tenantId && supabase) {
+    homePage = await getPageByType(supabase, "home", tenantId);
     if (!homePage) {
-        homePage = await getPageBySlug(supabase, "home", tenant_id);
+        homePage = await getPageBySlug(supabase, "home", tenantId);
     }
 }
 
@@ -54,12 +53,12 @@ let testimonials: Testimonial[] = [];
 let funfacts: Stat[] = [];
 let partners: Image[] = [];
 
-if (!homePage && tenant_id && supabase) {
+if (!homePage && tenantId && supabase) {
     try {
         const { data: servicesData } = await supabase
             .from("services")
             .select("*")
-            .eq("tenant_id", tenant_id)
+            .eq("tenant_id", tenantId)
             .eq("status", "published")
             .order("display_order", { ascending: true })
             .limit(6);
@@ -75,7 +74,7 @@ if (!homePage && tenant_id && supabase) {
         const { data: projectsData } = await supabase
             .from("projects")
             .select("*")
-            .eq("tenant_id", tenant_id)
+            .eq("tenant_id", tenantId)
             .eq("status", "published")
             .limit(6);
 
@@ -94,7 +93,7 @@ if (!homePage && tenant_id && supabase) {
         const { data: teamData } = await supabase
             .from("teams")
             .select("*")
-            .eq("tenant_id", tenant_id)
+            .eq("tenant_id", tenantId)
             .eq("status", "published")
             .order("display_order", { ascending: true });
 
@@ -110,7 +109,7 @@ if (!homePage && tenant_id && supabase) {
         const { data: testData } = await supabase
             .from("testimonials")
             .select("*")
-            .eq("tenant_id", tenant_id)
+            .eq("tenant_id", tenantId)
             .eq("status", "published")
             .order("display_order", { ascending: true });
 
@@ -126,7 +125,7 @@ if (!homePage && tenant_id && supabase) {
         const { data: statsData } = await supabase
             .from("funfacts")
             .select("*")
-            .eq("tenant_id", tenant_id)
+            .eq("tenant_id", tenantId)
             .eq("status", "published")
             .order("display_order", { ascending: true });
 
@@ -141,7 +140,7 @@ if (!homePage && tenant_id && supabase) {
         const { data: partnerData } = await supabase
             .from("partners")
             .select("*")
-            .eq("tenant_id", tenant_id)
+            .eq("tenant_id", tenantId)
             .eq("status", "published")
             .order("display_order", { ascending: true });
 

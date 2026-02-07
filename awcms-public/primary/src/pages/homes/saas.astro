@@ -15,12 +15,11 @@ import type { HeaderLink } from "~/lib/menu";
 import FAQs from "~/components/widgets/FAQs.astro";
 import BlogLatestPosts from "~/components/widgets/BlogLatestPosts.astro";
 import { getLocale, t } from "~/utils/i18n";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
-const locale = getLocale(Astro.request);
-const tenantId = Astro.locals.tenant_id || null;
-const supabase = createClientFromEnv(
-  Astro.locals.runtime?.env || import.meta.env,
-);
+const locale = getLocale(Astro.url);
+const tenantId = getPublicTenantId();
+const supabase = createClientFromEnv(import.meta.env);
 
 let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 

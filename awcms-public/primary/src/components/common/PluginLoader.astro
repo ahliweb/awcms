@@ -10,6 +10,7 @@ import {
     getPluginScripts,
     renderPluginScripts,
 } from "~/lib/plugins";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
 export interface Props {
     /** Script position: 'head', 'body_start', or 'body_end' */
@@ -18,19 +19,16 @@ export interface Props {
 
 const { position } = Astro.props;
 
-// Get tenant from locals (set by middleware)
-const tenant_id = Astro.locals.tenant_id || null;
+const tenantId = getPublicTenantId();
 
 // Create Supabase client
-const supabase = createClientFromEnv(
-    Astro.locals.runtime?.env || import.meta.env,
-);
+const supabase = createClientFromEnv(import.meta.env);
 
 let scriptsHtml = "";
 
 if (supabase) {
     try {
-        const plugins = await getActivePlugins(supabase, tenant_id);
+        const plugins = await getActivePlugins(supabase, tenantId);
         const scripts = getPluginScripts(plugins, position);
         scriptsHtml = renderPluginScripts(scripts);
     } catch (error) {

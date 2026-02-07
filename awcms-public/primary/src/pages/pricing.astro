@@ -8,7 +8,7 @@ import Features3 from "~/components/widgets/Features3.astro";
 import CallToAction from "~/components/widgets/CallToAction.astro";
 import { getLocale, t } from "~/utils/i18n";
 
-const locale = getLocale(Astro.request);
+const locale = getLocale(Astro.url);
 
 const metadata = {
   title: t("pricing_page.hero.tagline", locale),

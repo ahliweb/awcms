@@ -12,7 +12,7 @@ import BlogLatestPosts from "~/components/widgets/BlogLatestPosts.astro";
 import { getLocale, t } from "~/utils/i18n";
 import { getPermalink } from "~/utils/permalinks";
 
-const locale = getLocale(Astro.request);
+const locale = getLocale(Astro.url);
 
 const metadata = {
   title: t("homes.personal.metadata.title", locale),

@@ -9,31 +9,30 @@ import { createClientFromEnv } from '~/lib/supabase';
 import { getBlogs } from '~/lib/content';
 import { Icon } from 'astro-icon/components';
 import { getLocale, t } from "~/utils/i18n";
+import { getPublicTenantId } from "~/lib/publicTenant";
 
-// SSR mode for dynamic content
-export const prerender = false;
+export const prerender = true;
 
 // Get query params
-const url = new URL(Astro.request.url);
+const url = Astro.url;
 const currentPage = parseInt(url.searchParams.get('page') || '1');
 const categorySlug = url.searchParams.get('category') || undefined;
 const tagSlug = url.searchParams.get('tag') || undefined;
 const perPage = 12;
 
-// Get tenant from locals
-const tenant_id = Astro.locals.tenant_id || null;
+const tenantId = getPublicTenantId();
 
 // Create Supabase client
-const supabase = createClientFromEnv(Astro.locals.runtime?.env || import.meta.env);
+const supabase = createClientFromEnv(import.meta.env);
 
-const locale = getLocale(Astro.request);
+const locale = getLocale(Astro.url);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let blogs: any[] = [];
 let total = 0;
 
 if (supabase) {
-  const result = await getBlogs(supabase, tenant_id, {
+  const result = await getBlogs(supabase, tenantId, {
     limit: perPage,
     offset: (currentPage - 1) * perPage,
     categorySlug

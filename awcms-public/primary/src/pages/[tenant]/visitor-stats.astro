@@ -1,11 +1,33 @@
 ---
+import type { GetStaticPaths } from "astro";
 import PageLayout from "~/layouts/PageLayout.astro";
 import VisitorStatsWidget from "~/components/widgets/VisitorStats.astro";
+import { createClientFromEnv } from "~/lib/supabase";
 import { getLocale } from "~/utils/i18n";
 
-export const prerender = false;
+export const prerender = true;
 
-const locale = getLocale(Astro.request);
+export const getStaticPaths = (async () => {
+  const supabase = createClientFromEnv(import.meta.env);
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("tenants")
+    .select("slug")
+    .eq("status", "active")
+    .is("deleted_at", null);
+
+  if (error) {
+    console.error("[Tenant] Error fetching tenant slugs:", error.message);
+    return [];
+  }
+
+  return (data || []).map((tenant) => ({
+    params: { tenant: tenant.slug },
+  }));
+}) satisfies GetStaticPaths;
+
+const locale = getLocale(Astro.url);
 const isIndonesian = locale === "id";
 const metadata = {
   title: isIndonesian ? "Statistik Pengunjung" : "Visitor Statistics",

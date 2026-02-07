@@ -45,6 +45,7 @@ export interface BlogData {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  category_id?: string | null;
   category?: {
     id: string;
     name: string;
@@ -71,7 +72,10 @@ export async function getPageBySlug(
     query = query.eq("tenant_id", tenantId);
   }
 
-  const { data, error } = await query.single();
+  const { data, error } = await query
+    .order("published_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     console.error("[Content] Error fetching page:", error.message);
@@ -165,14 +169,56 @@ export async function getBlogBySlug(
     query = query.eq("tenant_id", tenantId);
   }
 
-  const { data, error } = await query.single();
+  const { data, error } = await query.maybeSingle();
 
-  if (error) {
-    console.error("[Content] Error fetching blog:", error.message);
+  if (!error) {
+    return (data || null) as BlogData | null;
+  }
+
+  const errorMessage = error.message || "";
+  if (!errorMessage.includes("relationship") && !errorMessage.includes("schema cache")) {
+    console.error("[Content] Error fetching blog:", errorMessage);
     return null;
   }
 
-  return data as BlogData;
+  let fallbackQuery = supabase
+    .from("blogs")
+    .select("*")
+    .eq("slug", slug)
+    .eq("status", "published");
+
+  if (tenantId) {
+    fallbackQuery = fallbackQuery.eq("tenant_id", tenantId);
+  }
+
+  const { data: fallbackData, error: fallbackError } = await fallbackQuery
+    .order("published_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (fallbackError) {
+    console.error("[Content] Error fetching blog:", fallbackError.message);
+    return null;
+  }
+
+  if (!fallbackData) {
+    return null;
+  }
+
+  let category = null;
+  if (fallbackData.category_id) {
+    const { data: categoryData } = await supabase
+      .from("categories")
+      .select("id, name, slug")
+      .eq("id", fallbackData.category_id)
+      .maybeSingle();
+    category = categoryData || null;
+  }
+
+  return {
+    ...(fallbackData as BlogData),
+    category,
+  };
 }
 
 /**
@@ -209,14 +255,87 @@ export async function getBlogs(
 
   const { data, error, count } = await query;
 
-  if (error) {
-    console.error("[Content] Error fetching blogs:", error.message);
+  if (!error) {
+    return {
+      blogs: (data || []) as BlogData[],
+      total: count || 0,
+    };
+  }
+
+  const errorMessage = error.message || "";
+  if (!errorMessage.includes("relationship") && !errorMessage.includes("schema cache")) {
+    console.error("[Content] Error fetching blogs:", errorMessage);
     return { blogs: [], total: 0 };
   }
 
+  let categoryId: string | null = null;
+  if (categorySlug) {
+    const { data: categoryData, error: categoryError } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("slug", categorySlug)
+      .maybeSingle();
+
+    if (categoryError) {
+      console.error("[Content] Error fetching category:", categoryError.message);
+      return { blogs: [], total: 0 };
+    }
+
+    if (!categoryData) {
+      return { blogs: [], total: 0 };
+    }
+
+    categoryId = categoryData.id as string;
+  }
+
+  let fallbackQuery = supabase
+    .from("blogs")
+    .select("*", { count: "exact" })
+    .eq("status", "published")
+    .order("published_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (tenantId) {
+    fallbackQuery = fallbackQuery.eq("tenant_id", tenantId);
+  }
+
+  if (categoryId) {
+    fallbackQuery = fallbackQuery.eq("category_id", categoryId);
+  }
+
+  const { data: fallbackData, error: fallbackError, count: fallbackCount } =
+    await fallbackQuery;
+
+  if (fallbackError) {
+    console.error("[Content] Error fetching blogs:", fallbackError.message);
+    return { blogs: [], total: 0 };
+  }
+
+  const blogs = (fallbackData || []) as BlogData[];
+  const categoryIds = Array.from(
+    new Set(blogs.map((blog) => blog.category_id).filter(Boolean)),
+  ) as string[];
+
+  if (categoryIds.length > 0) {
+    const { data: categoriesData } = await supabase
+      .from("categories")
+      .select("id, name, slug")
+      .in("id", categoryIds);
+
+    const categoryMap = new Map(
+      (categoriesData || []).map((category) => [category.id, category]),
+    );
+
+    for (const blog of blogs) {
+      if (blog.category_id) {
+        blog.category = categoryMap.get(blog.category_id) || null;
+      }
+    }
+  }
+
   return {
-    blogs: (data || []) as BlogData[],
-    total: count || 0,
+    blogs,
+    total: fallbackCount || 0,
   };
 }
 

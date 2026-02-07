@@ -3,48 +3,57 @@
  * Dynamic Blog Route - Renders blogs from Supabase 'blogs' table
  * Path: /blogs/[slug]
  */
+import type { GetStaticPaths } from "astro";
 import Layout from "~/layouts/PageLayout.astro";
 import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
 import { getBlogBySlug } from "~/lib/content";
 import { Icon } from "astro-icon/components";
 import { getLocale, t } from "~/utils/i18n";
 
-// SSR mode for dynamic content
-export const prerender = false;
+export const prerender = true;
+
+export const getStaticPaths = (async () => {
+    const supabase = createClientFromEnv(import.meta.env);
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+        .from("blogs")
+        .select("slug")
+        .eq("status", "published")
+        .is("deleted_at", null);
+
+    if (error) {
+        console.error("[Blog] Error fetching blog slugs:", error.message);
+        return [];
+    }
+
+    return (data || []).map((blog) => ({
+        params: { slug: blog.slug },
+    }));
+}) satisfies GetStaticPaths;
 
 // Get slug from URL
 const { slug } = Astro.params;
 
-if (!slug) {
-    return Astro.redirect("/404");
-}
-
-// Get tenant from locals
-const tenant_id = Astro.locals.tenant_id || null;
-const locale = getLocale(Astro.request);
+const tenantId = getPublicTenantId();
+const locale = getLocale(Astro.url);
 
 // Create Supabase client
-const supabase = createClientFromEnv(
-    Astro.locals.runtime?.env || import.meta.env,
-);
-
-if (!supabase) {
-    console.error("[Blog] Supabase client not available");
-    return Astro.redirect("/404");
-}
+const supabase = createClientFromEnv(import.meta.env);
 
 // Fetch blog data
-const blog = await getBlogBySlug(supabase, slug, tenant_id);
+const blog = slug && supabase ? await getBlogBySlug(supabase, slug, tenantId) : null;
 
 if (!blog) {
-    console.log(`[Blog] Blog not found: ${slug}`);
-    return Astro.redirect("/404");
+    console.log(`[Blog] Blog not found: ${slug || "unknown"}`);
+    Astro.response.status = 404;
 }
 
 // Format dates
-const publishedDate = blog.published_at
+const publishedDate = blog?.published_at
     ? new Date(blog.published_at)
-    : new Date(blog.created_at);
+    : new Date(blog?.created_at || Date.now());
 
 const formattedDate = publishedDate.toLocaleDateString(locale, {
     year: "numeric",
@@ -54,28 +63,29 @@ const formattedDate = publishedDate.toLocaleDateString(locale, {
 
 // Metadata for SEO
 const metadata = {
-    title: blog.title,
-    description: blog.excerpt || "",
+    title: blog?.title || "Blog not found",
+    description: blog?.excerpt || "",
     openGraph: {
         type: "article",
         article: {
             publishedTime: blog.published_at,
             modifiedTime: blog.updated_at,
         },
-        images: blog.featured_image
+        images: blog?.featured_image
             ? [{ url: blog.featured_image }]
             : undefined,
     },
 };
 
 // Content
-const isVisual = blog.editor_type === "visual";
-const htmlContent = blog.content || "";
+const isVisual = blog?.editor_type === "visual";
+const htmlContent = blog?.content || "";
 ---
 
 <Layout metadata={metadata}>
-    <article class="py-12 sm:py-16 lg:py-20">
-        <div class="mx-auto max-w-4xl px-6 sm:px-8">
+    {blog ? (
+        <article class="py-12 sm:py-16 lg:py-20">
+            <div class="mx-auto max-w-4xl px-6 sm:px-8">
             <!-- Blog Header -->
             <header class="mb-8">
                 <!-- Category Badge -->
@@ -196,6 +206,23 @@ const htmlContent = blog.content || "";
                     {t("blogs_page.blog.back_to_blogs", locale)}
                 </a>
             </footer>
-        </div>
-    </article>
+            </div>
+        </article>
+    ) : (
+        <section class="py-12 sm:py-16 lg:py-20">
+            <div class="mx-auto max-w-4xl px-6 sm:px-8">
+                <h1 class="text-3xl font-semibold">Blog not found</h1>
+                <p class="mt-4 text-muted-foreground">
+                    The requested blog post could not be found.
+                </p>
+                <a
+                    href="/blogs"
+                    class="mt-6 inline-flex items-center gap-2 text-primary hover:underline"
+                >
+                    <Icon name="tabler:arrow-left" class="w-4 h-4" />
+                    {t("blogs_page.blog.back_to_blogs", locale)}
+                </a>
+            </div>
+        </section>
+    )}
 </Layout>

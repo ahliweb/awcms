@@ -22,25 +22,33 @@ export const supportedLocales: Locale[] = ["en", "id"];
 /**
  * Get the current locale from various sources
  */
-export function getLocale(request?: Request): Locale {
-  // 1. Check URL Path (First priority for static/rewritten paths)
-  if (request) {
+export function getLocale(input?: Request | URL | string): Locale {
+  let url: URL | undefined;
+
+  if (input instanceof Request) {
+    url = new URL(input.url);
+  } else if (input instanceof URL) {
+    url = input;
+  } else if (typeof input === "string") {
     try {
-      const url = new URL(request.url);
-
-      // Check specific path prefix
-      const match = url.pathname.match(/^\/(id|en)(\/|$)/);
-      if (match && supportedLocales.includes(match[1] as Locale)) {
-        return match[1] as Locale;
-      }
-
-      // Check URL parameter
-      const langParam = url.searchParams.get("lang");
-      if (langParam && supportedLocales.includes(langParam as Locale)) {
-        return langParam as Locale;
-      }
+      url = new URL(input, "http://localhost");
     } catch {
-      // Ignore URL parsing errors
+      url = undefined;
+    }
+  }
+
+  // 1. Check URL Path (First priority for static/rewritten paths)
+  if (url) {
+    // Check specific path prefix
+    const match = url.pathname.match(/^\/(id|en)(\/|$)/);
+    if (match && supportedLocales.includes(match[1] as Locale)) {
+      return match[1] as Locale;
+    }
+
+    // Check URL parameter
+    const langParam = url.searchParams.get("lang");
+    if (langParam && supportedLocales.includes(langParam as Locale)) {
+      return langParam as Locale;
     }
   }
 

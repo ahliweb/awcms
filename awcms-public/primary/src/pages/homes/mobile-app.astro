@@ -3,7 +3,7 @@ import Layout from "~/layouts/PageLayout.astro";
 
 import { getLocale, t } from "~/utils/i18n";
 
-const locale = getLocale(Astro.request);
+const locale = getLocale(Astro.url);
 
 import Header from "~/components/widgets/Header.astro";
 

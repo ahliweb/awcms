@@ -1,58 +1,35 @@
 ---
+import type { InferGetStaticPropsType, GetStaticPaths } from "astro";
+
 import Layout from "~/layouts/PageLayout.astro";
 import BlogList from "~/components/blog/List.astro";
 import Headline from "~/components/blog/Headline.astro";
 import Pagination from "~/components/blog/Pagination.astro";
 // import PostTags from "~/components/blog/Tags.astro";
 
-import { blogListRobots, blogPostsPerPage, fetchPosts } from "~/utils/blog";
-import { BLOG_BASE, trimSlash } from "~/utils/permalinks";
+import { blogListRobots, getStaticPathsBlogList } from "~/utils/blog";
 import { getLocale, t } from "~/utils/i18n";
 
-export const prerender = false;
+export const prerender = true;
 
-const getPageNumber = (value: string | string[] | undefined) => {
-  if (!value) return 1;
-  const raw = Array.isArray(value) ? value.join("/") : value;
-  const lastSegment = raw
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .at(-1);
-  const parsed = Number.parseInt(lastSegment ?? "", 10);
-  return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
-};
+export const getStaticPaths = (async ({ paginate }) => {
+  return await getStaticPathsBlogList({ paginate });
+}) satisfies GetStaticPaths;
 
-const basePath = trimSlash(BLOG_BASE || "blog");
-const pathname = trimSlash(Astro.url.pathname);
-const remainder = basePath && pathname.startsWith(basePath)
-  ? pathname.slice(basePath.length)
-  : pathname;
-const pageSegment = trimSlash(remainder).split("/").filter(Boolean)[0];
-const currentPage = getPageNumber(pageSegment);
-const locale = getLocale(Astro.request);
+type Props = InferGetStaticPropsType<typeof getStaticPaths>;
 
-const posts = await fetchPosts();
-const pageSize = blogPostsPerPage || 6;
-const totalPages = Math.max(1, Math.ceil(posts.length / pageSize));
-const safePage = Math.min(Math.max(currentPage, 1), totalPages);
-const startIndex = (safePage - 1) * pageSize;
-const pagePosts = posts.slice(startIndex, startIndex + pageSize);
+const { page } = Astro.props as Props;
+const currentPage = page.currentPage ?? 1;
 
-const buildPageUrl = (pageNumber: number) =>
-  pageNumber <= 1 ? basePath : `${basePath}/${pageNumber}`;
+// const allCategories = await findCategories();
+// const allTags = await findTags();
 
-const prevUrl = safePage > 1 ? buildPageUrl(safePage - 1) : undefined;
-const nextUrl = safePage < totalPages ? buildPageUrl(safePage + 1) : undefined;
-
-if (BLOG_BASE && !pathname.startsWith(basePath)) {
-  Astro.response.status = 404;
-}
+const locale = getLocale(Astro.url);
 
 const metadata = {
-  title: `${t("blog_page.list.metadata_title", locale)}${safePage > 1 ? `${t("blog_page.shared.page_prefix", locale)}${safePage}` : ""}`,
+  title: `${t("blog_page.list.metadata_title", locale)}${currentPage > 1 ? `${t("blog_page.shared.page_prefix", locale)}${currentPage}` : ""}`,
   robots: {
-    index: blogListRobots?.index && safePage === 1,
+    index: blogListRobots?.index && currentPage === 1,
     follow: blogListRobots?.follow,
   },
   openGraph: {
@@ -66,8 +43,8 @@ const metadata = {
     <Headline subtitle={t("blog_page.list.subtitle", locale)}>
       {t("blog_page.list.title", locale)}
     </Headline>
-    <BlogList posts={pagePosts} />
-    <Pagination prevUrl={prevUrl} nextUrl={nextUrl} />
+    <BlogList posts={page.data} />
+    <Pagination prevUrl={page.url.prev} nextUrl={page.url.next} />
     <!--
       <PostTags tags={allCategories} class="mb-2" title="Search by Categories:" isCategory />
       <PostTags tags={allTags}  title="Search by Tags:" />

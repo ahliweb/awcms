@@ -9,6 +9,7 @@ import type { MetaData } from "~/types";
 import { getCanonical } from "~/utils/permalinks";
 
 import { adaptOpenGraphImages } from "~/utils/images";
+import { getPublicSettings } from "~/lib/publicSettings";
 
 export interface Props extends MetaData {
   dontUseTitleTemplate?: boolean;
@@ -25,10 +26,10 @@ const {
   twitter = {},
 } = Astro.props;
 
-const { seo, site_info } = Astro.locals;
+const { seo, siteInfo } = await getPublicSettings();
 const siteName =
-  (site_info?.name as string)
-  || (site_info?.site_name as string)
+  (siteInfo?.name as string)
+  || (siteInfo?.site_name as string)
   || (seo?.site_title as string)
   || SITE?.name;
 
