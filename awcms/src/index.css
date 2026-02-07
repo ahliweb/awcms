@@ -201,6 +201,16 @@
   }
 }
 
+@layer utilities {
+  .dashboard-surface {
+    @apply rounded-2xl border border-slate-200/60 bg-white/80 shadow-sm backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/60;
+  }
+
+  .dashboard-surface-hover {
+    @apply transition-shadow transition-transform hover:-translate-y-0.5 hover:shadow-md;
+  }
+}
+
 /* Scrollbar Styles */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

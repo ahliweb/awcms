@@ -15,13 +15,14 @@ import { UsageWidget } from './widgets/UsageWidget';
 import { TopBlogsWidget } from './widgets/TopBlogsWidget';
 import PluginWidgets from './widgets/PluginWidgets';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { cn } from '@/lib/utils';
 
 function AdminDashboard() {
-    console.log('AdminDashboard rendering...');
     const perms = usePermissions() || {};
     const { isTenantAdmin, isPlatformAdmin, userRole } = perms;
     const { data, loading, error, lastUpdated, refresh } = useDashboardData();
     const spacingClass = isTenantAdmin ? 'space-y-10' : 'space-y-8';
+    const layoutClass = cn('mx-auto w-full max-w-7xl', spacingClass);
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -35,7 +36,7 @@ function AdminDashboard() {
         <Button
             onClick={refresh}
             variant="outline"
-            className={loading ? 'opacity-70' : 'bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500 transition-all'}
+            className={loading ? 'opacity-70' : 'bg-white/70 dark:bg-slate-900/60 backdrop-blur-sm border-slate-200/70 dark:border-slate-700/60 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300/80 dark:hover:border-indigo-500/60 transition-all shadow-sm'}
         >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh Data
@@ -57,7 +58,7 @@ function AdminDashboard() {
     }
 
     return (
-        <AdminPageLayout className={spacingClass}>
+        <AdminPageLayout className={layoutClass}>
             <PageHeader
                 title={`${getGreeting()}, ${userRole?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'User'}`}
                 description={`Here's your performance overview for ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}.`}

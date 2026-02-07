@@ -137,7 +137,7 @@ function Dashboard() {
         <meta http-equiv="X-Content-Type-Options" content="nosniff" />
         <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
       </Helmet>
-      <div className="flex h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white overflow-hidden font-sans">
+      <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden font-sans">
         <Sidebar
           isOpen={sidebarOpen}
           setIsOpen={setSidebarOpen}
@@ -149,13 +149,17 @@ function Dashboard() {
             onNavigate={(page) => navigate(`/cmspanel/${page}`)}
           />
 
-          <main className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900">
+          <main className="relative flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-950">
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute -top-40 right-0 h-80 w-80 rounded-full bg-indigo-500/10 dark:bg-indigo-500/15 blur-3xl" />
+              <div className="absolute -bottom-32 left-0 h-72 w-72 rounded-full bg-sky-500/10 dark:bg-sky-500/15 blur-3xl" />
+            </div>
             <motion.div
               key={location.pathname} // Changed key to full pathname to trigger animation on sub-route changes
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
-              className="h-full flex flex-col"
+              className="relative z-10 h-full flex flex-col"
             >
               {renderContent()}
             </motion.div>

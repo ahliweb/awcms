@@ -42,10 +42,10 @@ export function MyApprovals() {
 
     if (!canApprove) return null;
 
-    if (loading) return <div className="h-[200px] bg-slate-100 dark:bg-slate-800 animate-pulse rounded-xl" />;
+    if (loading) return <div className="h-[200px] bg-slate-100/80 dark:bg-slate-800/70 animate-pulse rounded-2xl" />;
 
     return (
-        <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+        <Card className="dashboard-surface dashboard-surface-hover flex flex-col">
             <CardContent className="p-6 flex-1 flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">

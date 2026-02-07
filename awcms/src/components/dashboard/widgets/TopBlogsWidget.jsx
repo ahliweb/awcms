@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export function TopBlogsWidget({ data, loading }) {
     return (
-        <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-2xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-lg transition-shadow duration-300">
+        <Card className="dashboard-surface dashboard-surface-hover hover:shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
                     <span className="w-1 h-6 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full"></span>
@@ -19,7 +19,7 @@ export function TopBlogsWidget({ data, loading }) {
             <CardContent className="space-y-3 pt-4">
                 {loading ? (
                     [...Array(3)].map((_, i) => (
-                        <div key={i} className="flex items-center justify-between p-4 bg-white/50 dark:bg-slate-700/50 rounded-xl border border-white/50 dark:border-slate-600/50">
+                        <div key={i} className="flex items-center justify-between p-4 bg-white/60 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
                             <div className="space-y-3 w-full">
                                 <Skeleton className="h-4 w-3/4 bg-slate-200/60 dark:bg-slate-600/60" />
                                 <Skeleton className="h-3 w-1/3 bg-slate-200/60 dark:bg-slate-600/60" />

@@ -8,7 +8,7 @@ import { formatDistanceToNow } from 'date-fns';
 export function ActivityFeed({ activities }) {
   const { t } = useTranslation();
   return (
-    <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-shadow">
+    <Card className="dashboard-surface dashboard-surface-hover">
       <CardHeader>
         <CardTitle>{t('dashboard.recent_activity')}</CardTitle>
       </CardHeader>

@@ -30,22 +30,16 @@ function Sidebar({ isOpen, setIsOpen }) {
   const currentPath = location.pathname.split('/cmspanel/')[1] || 'home';
 
   const handleNavigation = (path) => {
-    // Debug logging - remove after fixing
-    console.log('[Sidebar] handleNavigation called with path:', path);
-
     // Handle empty, null, undefined, or root path
     if (!path || path === '' || path === '/' || path === 'home') {
-      console.log('[Sidebar] Navigating to dashboard home');
       navigate('/cmspanel');
     }
     // Prevent external URLs (http, https, mailto, etc.)
     else if (path.includes('://') || path.startsWith('mailto:') || path.startsWith('tel:')) {
-      console.warn('[Sidebar] External URL detected, ignoring:', path);
       return; // Don't navigate to external URLs
     }
     // Handle path that's just a slash followed by nothing useful
     else if (path.trim() === '/' || path.trim() === '') {
-      console.log('[Sidebar] Empty/root path, navigating to dashboard home');
       navigate('/cmspanel');
     }
     else {
@@ -57,11 +51,9 @@ function Sidebar({ isOpen, setIsOpen }) {
 
       // If cleanPath is empty after stripping, go to dashboard
       if (!cleanPath || cleanPath.trim() === '') {
-        console.log('[Sidebar] Path became empty after cleanup, navigating to dashboard home');
         navigate('/cmspanel');
       } else {
         const targetPath = `/cmspanel/${cleanPath}`;
-        console.log('[Sidebar] Navigating to:', targetPath);
         navigate(targetPath);
       }
     }
@@ -85,14 +77,9 @@ function Sidebar({ isOpen, setIsOpen }) {
 
   const groupedMenus = useMemo(() => {
     if (loading) return {};
-    // DEBUG: Log initial count
-    console.log('[Sidebar] Menu Items Count:', menuItems.length);
-    console.log('[Sidebar] User Role:', userRole);
-    console.log('[Sidebar] Current Tenant Tier:', currentTenant?.subscription_tier);
 
     const authorizedItems = menuItems.filter(item => {
       if (!item.is_visible) {
-        if (item.key === 'sidebar_manager') console.log('[Sidebar] Hidden: is_visible false');
         return false;
       }
       if (item.permission === 'super_admin_only') return isFullAccess || isPlatformAdmin;
@@ -100,13 +87,11 @@ function Sidebar({ isOpen, setIsOpen }) {
 
       // Check Subscription Tier
       if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) {
-        if (item.key === 'sidebar_manager') console.log('[Sidebar] Hidden: Tier Restriction', currentTenant?.subscription_tier, item.key);
         return false;
       }
 
       if (item.permission) {
         const hasPerm = hasPermission(item.permission);
-        if (item.key === 'sidebar_manager') console.log('[Sidebar] Permission Check:', item.permission, hasPerm);
         return hasPerm;
       }
       return true;
@@ -176,53 +161,40 @@ function Sidebar({ isOpen, setIsOpen }) {
         animate={isMobile ? sidebarVariants.mobile : sidebarVariants.desktop}
         transition={{ duration: 0.3, ease: "easeInOut" }}
         className={cn(
-          "inset-y-0 left-0 z-50 bg-slate-900 shadow-xl overflow-hidden",
-          "flex flex-col border-r border-slate-800 text-white"
+          "inset-y-0 left-0 z-50 overflow-hidden border-r shadow-xl",
+          "bg-white/95 dark:bg-slate-950/95 backdrop-blur text-slate-900 dark:text-white",
+          "border-slate-200/80 dark:border-slate-800"
         )}
         style={{ whiteSpace: 'nowrap' }}
       >
         <div className="w-[280px] flex flex-col h-full">
           {/* Header */}
-          <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950/50 h-20 shrink-0">
+          <div className="p-6 border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between bg-white/80 dark:bg-slate-950/70 h-20 shrink-0">
             <div className="flex items-center gap-3">
-              <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900/20">
+              <div className="h-8 w-8 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/25">
                 <LayoutGrid className="w-5 h-5 text-white" />
               </div>
               <span className="font-bold text-lg tracking-tight">{t('sidebar.title')}</span>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="lg:hidden p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+              className="lg:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Search */}
-          <div className="px-4 py-4 border-b border-slate-800/50">
+          <div className="px-4 py-4 border-b border-slate-200/70 dark:border-slate-800/50">
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 dark:text-slate-500" />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('sidebar.search_placeholder')}
-                className="w-full rounded-md py-2 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-                style={{
-                  backgroundColor: 'rgba(2, 6, 23, 0.5)',
-                  borderColor: '#1e293b',
-                  color: '#e2e8f0'
-                }}
+                className="w-full rounded-md border border-slate-200/70 bg-slate-100/80 py-2 pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all dark:border-slate-700/70 dark:bg-slate-900/70 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
             </div>
-          </div>
-
-          {/* DEBUG INFO - REMOVE AFTER FIXING */}
-          <div className="p-2 bg-red-900/50 text-[10px] text-white break-all">
-            <p>Role: {userRole}</p>
-            <p>Tier: {currentTenant?.subscription_tier || 'undefined'}</p>
-            <p>Perm: {hasPermission('platform.sidebar.read') ? 'YES' : 'NO'}</p>
-            <p>Menu Items: {menuItems?.length}</p>
-            <p>SidebarMgr: {menuItems?.find(i => i.key === 'sidebar_manager') ? 'FOUND' : 'MISSING'}</p>
           </div>
 
           {/* Menu Items */}
@@ -252,7 +224,7 @@ function Sidebar({ isOpen, setIsOpen }) {
                     {groupLabel !== 'General' && (
                       <button
                         onClick={() => toggleGroup(groupLabel)}
-                        className="w-full flex items-center justify-between px-3 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors group"
+                        className="w-full flex items-center justify-between px-3 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors group"
                       >
                         <span>{groupLabel}</span>
                         {isCollapsed ? (
@@ -286,8 +258,8 @@ function Sidebar({ isOpen, setIsOpen }) {
                                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
                                   "group font-medium text-sm relative",
                                   isActive
-                                    ? "bg-blue-600/10 text-blue-400"
-                                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                                    ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                                    : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-white"
                                 )}
                               >
                                 {isActive && (
@@ -298,7 +270,7 @@ function Sidebar({ isOpen, setIsOpen }) {
                                 )}
                                 <Icon className={cn(
                                   "w-4 h-4 transition-colors shrink-0",
-                                  isActive ? "text-blue-400" : "text-slate-500 group-hover:text-white"
+                                  isActive ? "text-blue-600 dark:text-blue-300" : "text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-white"
                                 )} />
                                 <span className="truncate">{t(`menu.${item.key}`, item.label)}</span>
                               </button>
@@ -316,10 +288,10 @@ function Sidebar({ isOpen, setIsOpen }) {
           {/* Footer Actions */}
           <div className="mt-auto">
             <TenantUsage />
-            <div className="p-4 border-t border-slate-800 bg-slate-950/50 shrink-0">
+            <div className="p-4 border-t border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-950/70 shrink-0">
               <button
                 onClick={signOut}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-red-950/30 hover:text-red-400 transition-colors text-sm font-medium border border-transparent hover:border-red-900/30"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-950/30 dark:hover:text-red-400 transition-colors text-sm font-medium border border-transparent hover:border-red-200/70 dark:hover:border-red-900/30"
               >
                 <LogOut className="w-4 h-4" />
                 {t('auth.logout')}

@@ -72,7 +72,7 @@ export function UsageWidget() {
 
     if (loading) {
         return (
-            <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-shadow">
+            <Card className="dashboard-surface dashboard-surface-hover">
                 <CardContent className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </CardContent>
@@ -87,7 +87,7 @@ export function UsageWidget() {
     const usersPercent = limits.max_users === -1 ? 0 : Math.min((usage.users / limits.max_users) * 100, 100);
 
     return (
-        <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="dashboard-surface dashboard-surface-hover">
             <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />

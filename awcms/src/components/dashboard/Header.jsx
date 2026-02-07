@@ -31,7 +31,7 @@ function Header({ toggleSidebar, onNavigate }) {
   };
 
   return (
-    <header className="bg-background border-b border-border shadow-sm z-[60]">
+    <header className="sticky top-0 z-[60] bg-background/80 backdrop-blur border-b border-border/70 shadow-sm">
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-4">
           <Button

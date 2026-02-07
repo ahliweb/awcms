@@ -12,7 +12,7 @@ export function ContentDistribution({ data }) {
   ].filter(item => item.value > 0);
 
   return (
-    <Card className="col-span-1 min-w-0 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-shadow">
+    <Card className="dashboard-surface dashboard-surface-hover col-span-1 min-w-0">
       <CardHeader>
         <CardTitle>Content Overview</CardTitle>
       </CardHeader>

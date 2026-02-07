@@ -12,7 +12,7 @@ export function PlatformOverview() {
     const { stats, loading } = usePlatformStats();
 
     if (loading) {
-        return <Skeleton className="h-48 w-full rounded-2xl bg-slate-100/50 backdrop-blur-sm mb-8" />;
+        return <Skeleton className="h-48 w-full rounded-2xl bg-slate-100/70 dark:bg-slate-800/70 backdrop-blur-sm mb-8" />;
     }
 
     const formatBytes = (bytes) => {
@@ -36,7 +36,7 @@ export function PlatformOverview() {
 
             {/* Top Stats - Neo Glass */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
+                <Card className="dashboard-surface dashboard-surface-hover">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.total_tenants')}</CardTitle>
                         <Building2 className="h-4 w-4 text-indigo-500" />
@@ -54,7 +54,7 @@ export function PlatformOverview() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
+                <Card className="dashboard-surface dashboard-surface-hover">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.system_users')}</CardTitle>
                         <Users className="h-4 w-4 text-emerald-500" />
@@ -65,7 +65,7 @@ export function PlatformOverview() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm hover:shadow-md transition-all duration-300">
+                <Card className="dashboard-surface dashboard-surface-hover">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.system_storage')}</CardTitle>
                         <Database className="h-4 w-4 text-orange-500" />
@@ -94,7 +94,7 @@ export function PlatformOverview() {
             </div>
 
             {/* Recent Tenants Table - Glass Pane */}
-            <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-white/40 dark:border-slate-700/40 shadow-sm">
+            <Card className="dashboard-surface dashboard-surface-hover">
                 <CardHeader>
                     <CardTitle className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-slate-400" />

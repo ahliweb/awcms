@@ -50,15 +50,18 @@ const AdminPageLayout = ({
     }
 
     return (
-        <div className={`p-4 bg-card border border-border rounded-lg shadow-sm sm:p-6 ${className}`}>
-            {showTenantBadge && isPlatformAdmin && currentTenant && (
-                <div className="mb-4">
-                    <span className="bg-primary/10 text-primary text-xs font-medium mr-2 px-2.5 py-0.5 rounded">
-                        Tenant: {currentTenant.name}
-                    </span>
-                </div>
-            )}
-            {children}
+        <div className={`relative overflow-hidden dashboard-surface dashboard-surface-hover backdrop-blur-sm p-6 sm:p-8 ${className}`}>
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.12),_transparent_60%)] dark:bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.18),_transparent_55%)]" />
+            <div className="relative z-10">
+                {showTenantBadge && isPlatformAdmin && currentTenant && (
+                    <div className="mb-4">
+                        <span className="bg-primary/10 text-primary text-xs font-medium mr-2 px-2.5 py-0.5 rounded">
+                            Tenant: {currentTenant.name}
+                        </span>
+                    </div>
+                )}
+                {children}
+            </div>
         </div>
     );
 };
