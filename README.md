@@ -27,11 +27,9 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 ## Current Stack Versions (Core)
 
-> **Source of Truth**: [SYSTEM_MODEL.md](SYSTEM_MODEL.md) Section 1
-
 - **React**: 19.2.4 (Admin + Public)
 - **Vite**: 7.2.7 (Admin)
-- **Astro**: 5.12.9 (Public)
+- **Astro**: 5.17.1 (Public) - *Requires Node.js >=20.0.0*
 - **TailwindCSS**: 4.1.18
 - **Supabase JS**: 2.87.1 (Admin), 2.93.3 (Public)
 - **React Router DOM**: 7.10.1

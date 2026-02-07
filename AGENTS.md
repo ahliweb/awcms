@@ -31,7 +31,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 - **Capabilities**:
-  - Working with **Astro 5** and **React 19.2.4** (Islands Architecture).
+- Working with **Astro 5.17.1** and **React 19.2.4** (Islands Architecture).
   - Implementing **Zod** schemas for component prop validation.
   - Optimizing for Cloudflare Pages (Edge Cache, Headers).
 - **Constraints**:
@@ -60,7 +60,7 @@ Agents must be aware of the exact versions in use:
 | Recharts         | 3.5.1    | Charts & Data Visualization      |
 | Leaflet          | 1.9.4    | Maps                             |
 | Vitest           | 4.0.16   | Unit/Integration testing         |
-| Astro            | 5.12.9   | Public portal                    |
+| Astro            | 5.17.1   | Public portal                    |
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
@@ -97,7 +97,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | ----------------- | ------------------------------------------------------------------------- |
 | Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
 | **Admin Panel**   | React 19.2.4, Vite 7                                                      |
-| **Public Portal** | Astro 5, React 19.2.4, Cloudflare Pages                                   |
+| **Public Portal** | Astro 5.17.1, React 19.2.4, Cloudflare Pages                               |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase only (NO Node.js servers)                                        |
 

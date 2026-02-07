@@ -38,11 +38,12 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
-| Meta-framework | Astro | 5.12.9 | SSR/Islands |
+| Meta-framework | Astro | 5.17.1 | SSR/Islands |
 | UI library | React | 19.2.4 | Island rendering |
 | Language | TypeScript | 5.8.3 | Typed components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
 | Supabase JS | @supabase/supabase-js | 2.93.3 | Public API client |
+| Node.js | Node.js | >=20.0.0 | Runtime requirement |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 

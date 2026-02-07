@@ -28,14 +28,15 @@ Agents must respect these exact versions to ensure compatibility across the mono
 
 ### 1.2 Public Portal (`awcms-public`)
 
-* **Meta-Framework:** Astro 5.12.9
-* **Interactive Islands:** React 19.2.4
-* **Language:** TypeScript 5.x / TSX
-* **Styling:** TailwindCSS 4.1.18 (Vite Plugin)
-* **Backend Interface:** `@supabase/supabase-js` v2.93.3
-* **Constraints:**
-  * **NO** direct database access (Must use Supabase JS Client or Edge Functions).
-  * **NO** Puck Editor Runtime (Use `PuckRenderer` only).
+*   **Meta-Framework:** Astro 5.17.1
+*   **Interactive Islands:** React 19.2.4
+*   **Language:** TypeScript 5.x / TSX
+*   **Styling:** TailwindCSS 4.1.18 (Vite Plugin)
+*   **Backend Interface:** `@supabase/supabase-js` v2.93.3
+*   **Node.js Requirement:** >= 20.0.0
+*   **Constraints:**
+    *   **NO** direct database access (Must use Supabase JS Client or Edge Functions).
+    *   **NO** Puck Editor Runtime (Use `PuckRenderer` only).
 
 ### 1.3 Backend & Database
 

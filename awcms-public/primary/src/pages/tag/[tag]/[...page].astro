@@ -1,0 +1,82 @@
+---
+import type { Taxonomy } from "~/types";
+import { blogTagRobots, blogPostsPerPage, fetchPosts } from "~/utils/blog";
+import { TAG_BASE, trimSlash } from "~/utils/permalinks";
+import { getLocale, t } from "~/utils/i18n";
+
+import Layout from "~/layouts/PageLayout.astro";
+import BlogList from "~/components/blog/List.astro";
+import Headline from "~/components/blog/Headline.astro";
+import Pagination from "~/components/blog/Pagination.astro";
+
+export const prerender = false;
+
+const getPageNumber = (value: string | string[] | undefined) => {
+  if (!value) return 1;
+  const raw = Array.isArray(value) ? value.join("/") : value;
+  const lastSegment = raw
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .at(-1);
+  const parsed = Number.parseInt(lastSegment ?? "", 10);
+  return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+};
+
+const tagSlug = Astro.params.tag;
+const currentPage = getPageNumber(Astro.params.page);
+const locale = getLocale(Astro.request);
+
+const posts = await fetchPosts();
+const tags: Record<string, Taxonomy> = {};
+posts.forEach((post) => {
+  if (Array.isArray(post.tags)) {
+    post.tags.forEach((tag) => {
+      tags[tag.slug] = tag;
+    });
+  }
+});
+
+const tag = tagSlug ? tags[tagSlug] : undefined;
+const tagTitle = tag?.title || tagSlug || "";
+
+const filteredPosts = posts.filter(
+  (post) => Array.isArray(post.tags) && post.tags.some((t) => t.slug === tagSlug),
+);
+const pageSize = blogPostsPerPage || 6;
+const totalPages = Math.max(1, Math.ceil(filteredPosts.length / pageSize));
+const safePage = Math.min(Math.max(currentPage, 1), totalPages);
+const startIndex = (safePage - 1) * pageSize;
+const pagePosts = filteredPosts.slice(startIndex, startIndex + pageSize);
+
+const basePath = [TAG_BASE || "tag", tagSlug]
+  .map((segment) => trimSlash(segment || ""))
+  .filter(Boolean)
+  .join("/");
+
+const buildPageUrl = (pageNumber: number) =>
+  pageNumber <= 1 ? basePath : `${basePath}/${pageNumber}`;
+
+const prevUrl = safePage > 1 ? buildPageUrl(safePage - 1) : undefined;
+const nextUrl = safePage < totalPages ? buildPageUrl(safePage + 1) : undefined;
+
+if (!tag) {
+  Astro.response.status = 404;
+}
+
+const metadata = {
+  title: `${t("blog_page.tag.metadata_title_prefix", locale)}${tagTitle}${t("blog_page.tag.metadata_title_suffix", locale) || "'"}${safePage > 1 ? `${t("blog_page.shared.page_prefix", locale)}${safePage}` : ""}`,
+  robots: {
+    index: blogTagRobots?.index,
+    follow: blogTagRobots?.follow,
+  },
+};
+---
+
+<Layout metadata={metadata}>
+  <section class="px-4 md:px-6 py-12 sm:py-16 lg:py-20 mx-auto max-w-4xl">
+    <Headline>{t("blog_page.tag.headline_prefix", locale)}{tagTitle}</Headline>
+    <BlogList posts={pagePosts} />
+    <Pagination prevUrl={prevUrl} nextUrl={nextUrl} />
+  </section>
+</Layout>

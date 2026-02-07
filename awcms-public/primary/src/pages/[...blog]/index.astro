@@ -1,35 +1,40 @@
 ---
-import type { InferGetStaticPropsType, GetStaticPaths } from 'astro';
-
 import merge from 'lodash.merge';
 import type { ImageMetadata } from 'astro';
 import Layout from '~/layouts/PageLayout.astro';
 import SinglePost from '~/components/blog/SinglePost.astro';
 import ToBlogLink from '~/components/blog/ToBlogLink.astro';
 
-import { getCanonical, getPermalink } from '~/utils/permalinks';
-import { getStaticPathsBlogPost, blogPostRobots } from '~/utils/blog';
+import { getCanonical, getPermalink, trimSlash } from '~/utils/permalinks';
+import { blogPostRobots, fetchPosts } from '~/utils/blog';
 import { findImage } from '~/utils/images';
 import type { MetaData } from '~/types';
 import RelatedPosts from '~/components/blog/RelatedPosts.astro';
 
-export const prerender = true;
+export const prerender = false;
 
-export const getStaticPaths = (async () => {
-  return await getStaticPathsBlogPost();
-}) satisfies GetStaticPaths;
+const normalizedSlug = trimSlash(Astro.url.pathname);
 
-type Props = InferGetStaticPropsType<typeof getStaticPaths>;
+const posts = await fetchPosts();
+const post = posts.find(
+  (entry) => trimSlash(entry.permalink) === normalizedSlug,
+);
 
-const { post } = Astro.props as Props;
+if (!post) {
+  Astro.response.status = 404;
+}
 
-const url = getCanonical(getPermalink(post.permalink, 'post'));
-const image = (await findImage(post.image)) as ImageMetadata | string | undefined;
+const url = post
+  ? getCanonical(getPermalink(post.permalink, 'post'))
+  : getCanonical('/');
+const image = post
+  ? ((await findImage(post.image)) as ImageMetadata | string | undefined)
+  : undefined;
 
 const metadata = merge(
   {
-    title: post.title,
-    description: post.excerpt,
+    title: post?.title || 'Post not found',
+    description: post?.excerpt,
     robots: {
       index: blogPostRobots?.index,
       follow: blogPostRobots?.follow,
@@ -46,9 +51,17 @@ const metadata = merge(
 ---
 
 <Layout metadata={metadata}>
-  <SinglePost post={{ ...post, image: image }} url={url}>
-    {post.Content ? <post.Content /> : <Fragment set:html={post.content || ''} />}
-  </SinglePost>
-  <ToBlogLink />
-  <RelatedPosts post={post} />
+  {post ? (
+    <>
+      <SinglePost post={{ ...post, image: image }} url={url}>
+        {post.Content ? <post.Content /> : <Fragment set:html={post.content || ''} />}
+      </SinglePost>
+      <ToBlogLink />
+      <RelatedPosts post={post} />
+    </>
+  ) : (
+    <section class="px-6 sm:px-6 py-12 sm:py-16 lg:py-20 mx-auto max-w-4xl">
+      <h1 class="text-3xl font-semibold">Post not found</h1>
+    </section>
+  )}
 </Layout>
