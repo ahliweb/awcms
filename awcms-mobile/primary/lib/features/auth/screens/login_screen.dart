@@ -41,9 +41,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _passwordController.text,
         );
 
-    final authState = ref.read(authProvider);
-
     if (!mounted) return;
+
+    final authState = ref.read(authProvider);
 
     if (authState.isAuthenticated) {
       context.go(AppRoutes.home);
