@@ -340,28 +340,28 @@ function UserProfile() {
                     <Label htmlFor="password" className="text-slate-700 dark:text-slate-300">New Password</Label>
                     <div className="relative">
                       <Key className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                        <Input
-                          id="password"
-                          type="password"
-                          value={passwordData.password}
-                          onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
-                          className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
-                          placeholder="••••••••"
-                        />
+                      <Input
+                        id="password"
+                        type="password"
+                        value={passwordData.password}
+                        onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
+                        className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                        placeholder="••••••••"
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword" className="text-slate-700 dark:text-slate-300">Confirm Password</Label>
                     <div className="relative">
                       <Key className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                        <Input
-                          id="confirmPassword"
-                          type="password"
-                          value={passwordData.confirmPassword}
-                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                          className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
-                          placeholder="••••••••"
-                        />
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                        className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-9 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                        placeholder="••••••••"
+                      />
                     </div>
                   </div>
                 </div>
@@ -423,7 +423,7 @@ function UserProfile() {
 
                 {permissions && permissions.length > 0 ? (
                   <div className="flex-1 min-h-0 rounded-2xl border border-slate-200/70 bg-white/80 p-3 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/50">
-                    <div className="h-full overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                    <div className="max-h-[400px] overflow-y-auto pr-2 custom-scrollbar space-y-2">
                       {permissions.map((perm, index) => (
                         <div key={index} className="flex items-center gap-2 rounded-xl border border-transparent p-2 text-sm text-slate-600 transition-colors group hover:bg-slate-50/70 hover:border-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:border-slate-700">
                           <CheckCircle2 className="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" />

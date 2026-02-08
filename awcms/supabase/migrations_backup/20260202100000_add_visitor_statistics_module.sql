@@ -2,6 +2,26 @@ SET client_min_messages TO warning;
 
 -- Description: Adds visitor statistics tracking (events + daily rollups) and admin module wiring.
 
+CREATE TABLE IF NOT EXISTS public.resources_registry (
+    key text PRIMARY KEY,
+    label text NOT NULL,
+    scope text,
+    type text,
+    db_table text,
+    icon text,
+    permission_prefix text,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.resources_registry ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS "resources_registry_read" ON public.resources_registry;
+    CREATE POLICY "resources_registry_read" ON public.resources_registry FOR SELECT TO authenticated USING (true);
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.analytics_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,

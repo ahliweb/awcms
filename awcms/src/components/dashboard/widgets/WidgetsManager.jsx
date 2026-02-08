@@ -43,7 +43,7 @@ const WidgetsManager = () => {
     }
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-8">
+        <div className="p-6 space-y-8">
             <div>
                 <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
                     <Layers className="w-8 h-8 text-indigo-600" /> {t('widgets_manager.title')}

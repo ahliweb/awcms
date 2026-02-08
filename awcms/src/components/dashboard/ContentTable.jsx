@@ -8,6 +8,13 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from '@/components/ui/button';
 import { Edit, Trash2, Eye } from 'lucide-react';
@@ -138,15 +145,20 @@ const ContentTable = ({
             Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of {pagination.totalItems} entries
           </div>
           <div className="flex items-center gap-4">
-            <select
-              className="h-9 rounded-xl border border-slate-200/70 bg-white/90 px-2 text-xs font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-slate-200"
-              value={pagination.itemsPerPage}
-              onChange={(e) => pagination.onLimitChange(Number(e.target.value))}
+            <Select
+              value={String(pagination.itemsPerPage)}
+              onValueChange={(value) => pagination.onLimitChange(Number(value))}
             >
-              <option value={10}>10 / page</option>
-              <option value={20}>20 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
+              <SelectTrigger className="h-9 w-[110px] rounded-xl border gap-2 border-slate-200/70 bg-white/90 px-3 text-xs font-medium text-slate-700 shadow-sm focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-slate-200">
+                <span className="truncate">Page Size</span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 / page</SelectItem>
+                <SelectItem value="20">20 / page</SelectItem>
+                <SelectItem value="50">50 / page</SelectItem>
+              </SelectContent>
+            </Select>
             <Pagination
               currentPage={pagination.currentPage}
               totalPages={pagination.totalPages}

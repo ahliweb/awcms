@@ -22,7 +22,7 @@ function AdminDashboard() {
     const { isTenantAdmin, isPlatformAdmin, userRole } = perms;
     const { data, loading, error, lastUpdated, refresh } = useDashboardData();
     const spacingClass = isTenantAdmin ? 'space-y-10' : 'space-y-8';
-    const layoutClass = cn('mx-auto w-full max-w-7xl', spacingClass);
+    const layoutClass = cn('w-full', spacingClass);
 
     const getGreeting = () => {
         const hour = new Date().getHours();

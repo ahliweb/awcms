@@ -285,7 +285,7 @@ function UsersManager() {
       <PageTabs value={activeTab} onValueChange={setActiveTab} tabs={tabs}>
         <TabsContent value="users" className="space-y-6 mt-0">
           {/* Search Bar */}
-          <div className="dashboard-surface dashboard-surface-hover p-4 flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex flex-col gap-3 md:flex-row md:items-center">
             <div className="flex-1 max-w-sm">
               <MinCharSearchInput
                 value={query}
@@ -299,6 +299,16 @@ function UsersManager() {
               />
             </div>
             <div className="flex-1"></div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={fetchUsers}
+              title={t('common.refresh')}
+              disabled={loading}
+              className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
           </div>
 
           {/* Users Table */}

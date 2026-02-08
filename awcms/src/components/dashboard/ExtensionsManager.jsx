@@ -255,7 +255,7 @@ function ExtensionsManager() {
 
         {canCreate && (
           <TabsContent value="install">
-            <div className="max-w-2xl mx-auto mt-8">
+            <div className="mt-8">
               <ExtensionInstaller onInstallComplete={() => { setActiveTab('installed'); fetchExtensions(); }} />
             </div>
           </TabsContent>

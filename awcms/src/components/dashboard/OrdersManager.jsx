@@ -104,7 +104,7 @@ function OrdersManager() {
     ];
 
     const formFields = [
-        { key: 'user_id', label: 'Customer', type: 'relation', table: 'users', relationLabel: 'email', description: 'Customer who placed the order', readOnly: true },
+        { key: 'user_id', label: 'Customer', type: 'relation', table: 'users', relationLabel: 'email', description: 'Customer who placed the order', required: true },
         {
             key: 'status', label: 'Order Status', type: 'select', options: [
                 { value: 'pending', label: '⏳ Pending' },
@@ -125,9 +125,19 @@ function OrdersManager() {
             ]
         },
         { key: 'payment_method', label: 'Payment Method', description: 'Bank Transfer, Credit Card, etc.' },
-        { key: 'subtotal', label: 'Subtotal', type: 'number', readOnly: true },
+        { key: 'subtotal', label: 'Subtotal', type: 'number', readOnly: false },
         { key: 'shipping_cost', label: 'Shipping Cost', type: 'number' },
-        { key: 'total_amount', label: 'Total Amount', type: 'number', readOnly: true },
+        {
+            key: 'total_amount',
+            label: 'Total Amount',
+            type: 'number',
+            readOnly: true,
+            calculate: (data) => {
+                const sub = Number(data.subtotal) || 0;
+                const ship = Number(data.shipping_cost) || 0;
+                return sub + ship;
+            }
+        },
         { key: 'shipping_address', label: 'Shipping Address', type: 'textarea' },
         { key: 'tracking_number', label: 'Tracking Number', description: 'Courier tracking number' },
         { key: 'notes', label: 'Order Notes', type: 'textarea', description: 'Internal notes about this order' }
@@ -149,8 +159,9 @@ function OrdersManager() {
                 formFields={formFields}
                 permissionPrefix="orders"
                 canCreate={false}
-                customSelect="*, user:users(id, email, full_name), owner:users!created_by(email, full_name), tenant:tenants(name)"
+                customSelect="*"
                 showBreadcrumbs={false}
+                omitCreatedBy={true}
             />
         </AdminPageLayout>
     );

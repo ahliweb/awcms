@@ -35,7 +35,8 @@ const GenericResourceEditor = ({
     onClose,
     onSuccess,
     permissionPrefix,
-    createPermission
+    createPermission,
+    omitCreatedBy = false
 }) => {
     const { user } = useAuth();
     const { toast } = useToast();
@@ -75,7 +76,9 @@ const GenericResourceEditor = ({
             // Auto fields
             payload.updated_at = new Date().toISOString();
             if (!initialData) {
-                payload.created_by = user.id;
+                if (!omitCreatedBy) {
+                    payload.created_by = user.id;
+                }
 
                 // CRITICAL: Inject Tenant ID for new records
                 if (currentTenant?.id) {
@@ -204,6 +207,18 @@ const GenericResourceEditor = ({
                 }
             }
 
+            // Handle calculated fields
+            fields.forEach(field => {
+                if (field.calculate && typeof field.calculate === 'function') {
+                    // Pass the updated data to the calculation function
+                    const calculatedValue = field.calculate(updated);
+                    // Only update if the value actually changed to avoid unnecessary renders
+                    if (calculatedValue !== updated[field.key]) {
+                        updated[field.key] = calculatedValue;
+                    }
+                }
+            });
+
             return updated;
         });
     };
@@ -293,9 +308,11 @@ const GenericResourceEditor = ({
                                 ) : field.type === 'resource_select' || field.type === 'relation' ? (
                                     <ResourceSelect
                                         table={field.resourceTable || field.table}
-                                        label={field.label}
+                                        labelKey={field.relationLabel || 'name'}
+                                        valueKey={field.relationValue || 'id'}
                                         value={formData[field.key]}
                                         onChange={val => handleChange(field.key, val)}
+                                        placeholder={`Select ${field.label}...`}
                                         filter={field.filter}
                                     />
                                 ) : field.type === 'boolean' || field.type === 'checkbox' ? (

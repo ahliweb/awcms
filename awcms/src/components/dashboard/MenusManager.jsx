@@ -435,7 +435,7 @@ function MenusManager() {
         )}
       />
 
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="space-y-6">
 
         {/* Location Selector */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col md:flex-row md:items-center gap-4">
@@ -449,8 +449,8 @@ function MenusManager() {
                 key={loc.id}
                 onClick={() => setCurrentLocation(loc.id)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentLocation === loc.id
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
                   }`}
               >
                 {loc.label}

@@ -61,11 +61,11 @@ function PortfolioManager() {
             />
 
             <GenericContentManager
-                tableName="projects"
+                tableName="portfolio"
                 resourceName="Portfolio Project"
                 columns={columns}
                 formFields={formFields}
-                permissionPrefix="projects"
+                permissionPrefix="portfolio"
                 showBreadcrumbs={false}
             />
         </AdminPageLayout>

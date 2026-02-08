@@ -320,7 +320,7 @@ function SidebarMenuManager() {
                 )}
             />
 
-            <div className="max-w-5xl mx-auto">
+            <div>
 
                 {/* Main Content */}
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

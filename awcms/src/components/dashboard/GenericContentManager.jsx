@@ -38,7 +38,8 @@ const GenericContentManager = ({
     showBreadcrumbs = true,
     defaultSortColumn = 'created_at',
     EditorComponent, // Optional custom editor component
-    customToolbarActions // ({ openEditor }) => ReactNode
+    customToolbarActions, // ({ openEditor }) => ReactNode
+    omitCreatedBy = false
 }) => {
     const { t } = useTranslation();
     const { toast } = useToast();
@@ -317,6 +318,7 @@ const GenericContentManager = ({
                         onClose={() => { setShowEditor(false); setSelectedItem(null); }}
                         onSuccess={fetchItems}
                         createPermission={createPermission}
+                        omitCreatedBy={omitCreatedBy}
                     />
                 )
             ) : (
