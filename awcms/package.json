@@ -13,7 +13,8 @@
     "deploy:manage-users": "npx supabase functions deploy manage-users",
     "deploy:functions": "npx supabase functions deploy",
     "test": "vitest",
-    "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md README.md ../DOCS_INDEX.md"
+    "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md README.md ../DOCS_INDEX.md",
+    "db:pull": "npx supabase db pull --schema public"
   },
   "dependencies": {
     "@puckeditor/core": "^0.21.0",

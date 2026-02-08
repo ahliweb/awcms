@@ -124,8 +124,10 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 Run from repo root:
 
 ```bash
-npx supabase db push
+npx supabase db pull --schema public
 ```
+
+> **Note**: We explicitly pull only the `public` schema to avoid permission errors with the managed `storage` and `auth` schemas.
 
 If migration history is mismatched:
 
