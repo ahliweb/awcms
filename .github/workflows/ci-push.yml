@@ -144,9 +144,49 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets['VITE_SUPABASE_ANON_KEY'] }}
 
+      - name: Resolve Cloudflare Account
+        id: cloudflare-account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          token = os.environ.get("CLOUDFLARE_API_TOKEN")
+          if not token:
+              raise SystemExit("CLOUDFLARE_API_TOKEN is not set")
+
+          request = urllib.request.Request(
+              "https://api.cloudflare.com/client/v4/accounts",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Content-Type": "application/json",
+              },
+          )
+
+          with urllib.request.urlopen(request) as response:
+              payload = json.load(response)
+
+          if not payload.get("success"):
+              raise SystemExit(f"Failed to list Cloudflare accounts: {payload.get('errors')}")
+
+          accounts = payload.get("result") or []
+          if not accounts:
+              raise SystemExit("No Cloudflare accounts available for token")
+
+          account_id = accounts[0].get("id")
+          if not account_id:
+              raise SystemExit("Cloudflare account ID missing from response")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"account_id={account_id}\n")
+          PY
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
-          accountId: ${{ secrets['CLOUDFLARE_ACCOUNT_ID'] }}
+          accountId: ${{ steps.cloudflare-account.outputs.account_id }}
           command: pages deploy awcms/dist --project-name=awcms-admin

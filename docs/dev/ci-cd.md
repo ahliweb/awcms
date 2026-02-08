@@ -48,7 +48,6 @@ Describe the GitHub Actions workflows used for AWCMS.
 - `PUBLIC_SUPABASE_ANON_KEY` (public build fallback)
 - `PUBLIC_TENANT_ID` (public build tenant scope)
 - `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_ENABLED` (repo variable; must be `true` to deploy)
 
 ## Verification
@@ -76,6 +75,7 @@ flutter test
 ## Troubleshooting
 
 - Missing env vars: verify secrets and repo variables.
+- Cloudflare deploys: `CLOUDFLARE_API_TOKEN` is required and must be scoped to a single account with access to the Accounts API. The workflow resolves the account ID automatically via the Cloudflare Accounts API.
 - Public build env mismatch: CI injects `PUBLIC_SUPABASE_*`, while runtime code prefers `VITE_SUPABASE_*`. Keep values aligned; `createClientFromEnv` accepts both.
 
 ## References
