@@ -22,17 +22,17 @@ const formatFileSize = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isTrashView = false }) => {
+const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isTrashView = false, categoryId = null }) => {
     const { toast } = useToast();
     const { checkAccess, isPlatformAdmin } = usePermissions();
-    
+
     // Use the hook
-    const { 
-        fetchFiles: hookFetchFiles, 
-        uploadFile, 
-        softDeleteFile, 
-        bulkSoftDelete, 
-        restoreFile, 
+    const {
+        fetchFiles: hookFetchFiles,
+        uploadFile,
+        softDeleteFile,
+        bulkSoftDelete,
+        restoreFile,
         getFileUrl,
         uploading: hookUploading
     } = useMedia();
@@ -61,9 +61,10 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                 page: currentPage,
                 limit: itemsPerPage,
                 query,
-                isTrash: isTrashView
+                isTrash: isTrashView,
+                categoryId // Pass categoryId to hook
             });
-            
+
             setFiles(data);
             setTotalItems(count);
 
@@ -76,7 +77,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
         } finally {
             setLoading(false);
         }
-    }, [hookFetchFiles, query, isTrashView, currentPage, itemsPerPage]);
+    }, [hookFetchFiles, query, isTrashView, currentPage, itemsPerPage, categoryId]);
 
     const fetchUsageData = async () => {
         try {
@@ -126,7 +127,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                 if (!canUpload) {
                     throw new Error('Permission denied: Cannot upload files.');
                 }
-                
+
                 await uploadFile(file);
                 successCount++;
             } catch (err) {
@@ -176,7 +177,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
         const success = await softDeleteFile(id);
         if (success) {
             fetchFiles();
-            setSelectedFiles(new Set()); 
+            setSelectedFiles(new Set());
         }
     };
 
@@ -225,12 +226,12 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
             toast({ variant: 'destructive', title: 'Permission Denied', description: 'You do not have permission to delete files.' });
             return;
         }
-        
+
         const ids = Array.from(selectedFiles);
         setDeleteConfirm({ open: false, fileId: null, fileName: '', isBulk: false });
 
         const { success } = await bulkSoftDelete(ids);
-        
+
         if (success > 0) {
             setSelectedFiles(new Set());
             fetchFiles();
@@ -246,7 +247,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
         navigator.clipboard.writeText(url);
         toast({ title: 'Copied', description: 'URL copied to clipboard' });
     };
-    
+
     // Pass uploading state from hook
     const uploading = hookUploading;
 

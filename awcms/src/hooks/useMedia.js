@@ -5,19 +5,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { useTenant } from '@/contexts/TenantContext'; 
+import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 
 export function useMedia() {
     const { toast } = useToast();
-    const { currentTenant } = useTenant(); 
+    const { currentTenant } = useTenant();
     const tenantId = currentTenant?.id;
     const { isPlatformAdmin } = usePermissions();
 
     const [uploading, setUploading] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [loading, setLoading] = useState(false);
-    
+
     // Stats state
     const [stats, setStats] = useState({
         total_files: 0,
@@ -30,12 +30,13 @@ export function useMedia() {
     const [statsLoading, setStatsLoading] = useState(true);
 
     // Fetch Files (Search/List)
-    const fetchFiles = useCallback(async ({ 
-        page = 1, 
-        limit = 12, 
-        query = '', 
-        isTrash = false, 
-        typeFilter = null 
+    const fetchFiles = useCallback(async ({
+        page = 1,
+        limit = 12,
+        query = '',
+        isTrash = false,
+        typeFilter = null,
+        categoryId = null
     } = {}) => {
         if (!tenantId && !isPlatformAdmin) return { data: [], count: 0 };
 
@@ -68,6 +69,11 @@ export function useMedia() {
                 dbQuery = dbQuery.ilike('file_type', `${typeFilter}%`);
             }
 
+            // Category Filter
+            if (categoryId) {
+                dbQuery = dbQuery.eq('category_id', categoryId);
+            }
+
             // Pagination
             const from = (page - 1) * limit;
             const to = from + limit - 1;
@@ -95,7 +101,7 @@ export function useMedia() {
                 .eq('id', id);
 
             if (error) throw error;
-            
+
             toast({ title: 'File Moved to Trash', description: 'File moved to trash bin.' });
             return true;
         } catch (err) {
@@ -145,11 +151,63 @@ export function useMedia() {
         }
     }, [toast]);
 
+    // Fetch Categories
+    const fetchCategories = useCallback(async () => {
+        if (!tenantId && !isPlatformAdmin) return [];
+
+        try {
+            let query = supabase
+                .from('categories')
+                .select('*')
+                .eq('type', 'media')
+                .order('name');
+
+            if (!isPlatformAdmin && tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return data || [];
+        } catch (err) {
+            console.error('Error fetching categories:', err);
+            return [];
+        }
+    }, [tenantId, isPlatformAdmin]);
+
+    // Create Category
+    const createCategory = useCallback(async (name) => {
+        if (!name) return null;
+        try {
+            const { data: userData } = await supabase.auth.getUser();
+            const { data, error } = await supabase
+                .from('categories')
+                .insert({
+                    name,
+                    slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+                    type: 'media',
+                    tenant_id: tenantId,
+                    created_by: userData.user?.id
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            toast({ title: 'Category Created', description: `Category "${name}" created.` });
+            return data;
+        } catch (err) {
+            console.error('Error creating category:', err);
+            toast({ variant: 'destructive', title: 'Error', description: err.message });
+            return null;
+        }
+    }, [tenantId, toast]);
+
     // Helper: Get Public URL
     const getFileUrl = useCallback((file) => {
         if (!file) return '';
         if (file.file_path?.startsWith('http')) return file.file_path;
-        
+
         const bucketName = file.bucket_name || 'cms-uploads';
         const { data } = supabase.storage.from(bucketName).getPublicUrl(file.file_path);
         return data?.publicUrl || file.file_path;
@@ -195,7 +253,7 @@ export function useMedia() {
     }, [fetchStats]);
 
     // Upload a single file
-    const uploadFile = useCallback(async (file, folder = '') => {
+    const uploadFile = useCallback(async (file, folder = '', categoryId = null) => {
         setUploading(true);
         try {
             const fileExt = file.name.split('.').pop();
@@ -227,7 +285,8 @@ export function useMedia() {
                 file_type: file.type,
                 bucket_name: 'cms-uploads',
                 uploaded_by: userData.user?.id,
-                tenant_id: tenantId // Explicitly add tenant_id
+                tenant_id: tenantId,
+                category_id: categoryId
             });
 
             if (dbError) throw dbError;
@@ -344,7 +403,9 @@ export function useMedia() {
         bulkSoftDelete,
         restoreFile,
         getFileUrl,
-        loading
+        loading,
+        fetchCategories,
+        createCategory
     };
 }
 

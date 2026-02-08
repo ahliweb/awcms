@@ -41,7 +41,7 @@ function ContactsManager() {
     { key: 'longitude', label: 'Longitude', type: 'number', description: 'e.g. 106.8456' },
     { key: 'website', label: 'Website URL' },
     { key: 'description', label: 'Description/Notes', type: 'textarea' },
-    { key: 'tags', label: 'Tags', type: 'tags' }
+    { key: 'category_id', label: 'Category', type: 'relation', table: 'categories', filter: { type: 'contact' } }
   ];
 
   return (

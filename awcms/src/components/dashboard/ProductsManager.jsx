@@ -96,7 +96,7 @@ function ProductsManager() {
     { key: 'description', label: t('common.description'), type: 'richtext' },
     { key: 'category_id', label: t('common.category'), type: 'relation', table: 'categories', filter: { type: 'product' } },
     { key: 'product_type_id', label: t('menu.product_types'), type: 'relation', table: 'product_types', description: 'Specific type/brand/collection' },
-    { key: 'tags', label: t('common.tags'), type: 'tags' },
+    // { key: 'tags', label: t('common.tags'), type: 'tags' }, // Removed
     { key: 'published_at', label: t('products.launch_date'), type: 'datetime' },
     {
       key: 'status', label: t('common.status'), type: 'select', options: [

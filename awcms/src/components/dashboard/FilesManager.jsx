@@ -11,20 +11,47 @@ import { useToast } from '@/components/ui/use-toast';
 import { useMedia } from '@/hooks/useMedia';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
-function FilesManager() {
+const FilesManager = () => {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showTrash, setShowTrash] = useState(false);
 
+  // Category State
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
   // Use new statsLoading prop
-  const { uploadFile, uploading, syncFiles, syncing, stats, statsLoading } = useMedia();
+  const { uploadFile, uploading, syncFiles, syncing, stats, statsLoading, fetchCategories, createCategory } = useMedia();
   const { toast } = useToast();
+
+  // Load categories on mount
+  React.useEffect(() => {
+    loadCategories();
+  }, [fetchCategories]);
+
+  const loadCategories = async () => {
+    const data = await fetchCategories();
+    setCategories(data);
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    const newCat = await createCategory(newCategoryName);
+    if (newCat) {
+      setNewCategoryName('');
+      setIsCreateCategoryOpen(false);
+      loadCategories();
+    }
+  };
 
   const handleUpload = async (acceptedFiles) => {
     let successCount = 0;
     for (const file of acceptedFiles) {
       try {
-        await uploadFile(file);
+        // Pass selectedCategory to uploadFile
+        await uploadFile(file, '', selectedCategory);
         successCount++;
       } catch (err) {
         toast({ variant: 'destructive', title: `Failed to upload ${file.name}`, description: err.message });
@@ -63,7 +90,10 @@ function FilesManager() {
 
       <Button
         variant={showTrash ? "outline" : "outline"}
-        onClick={() => setShowTrash(!showTrash)}
+        onClick={() => {
+          setShowTrash(!showTrash);
+          if (!showTrash) setSelectedCategory(null); // Reset category when going to trash
+        }}
         className={`transition-colors border-border ${showTrash ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
       >
         {showTrash ? (
@@ -92,6 +122,11 @@ function FilesManager() {
               <DialogTitle>Upload Files</DialogTitle>
               <DialogDescription>
                 Drag and drop files here to upload directly to your media library. Supported formats: JPG, PNG, WEBP, PDF.
+                {selectedCategory && categories.find(c => c.id === selectedCategory) && (
+                  <span className="block mt-2 text-blue-600 font-medium">
+                    Uploading to category: {categories.find(c => c.id === selectedCategory)?.name}
+                  </span>
+                )}
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4">
@@ -126,12 +161,74 @@ function FilesManager() {
           </div>
         )}
 
-        {/* Main Content Area */}
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-          <MediaLibrary
-            refreshTrigger={refreshTrigger}
-            isTrashView={showTrash}
-          />
+        <div className="flex flex-col md:flex-row gap-6 items-start">
+          {/* Sidebar for Categories */}
+          {!showTrash && (
+            <div className="w-full md:w-64 flex-shrink-0 space-y-4">
+              <div className="bg-card rounded-xl border border-border shadow-sm p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-sm text-foreground">Categories</h3>
+                  <Dialog open={isCreateCategoryOpen} onOpenChange={setIsCreateCategoryOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                        <div className="h-4 w-4" >+</div>
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Create Category</DialogTitle>
+                        <DialogDescription>Add a new category to organize your files.</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Category Name</label>
+                          <input
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            placeholder="e.g. Marketing, Products"
+                          />
+                        </div>
+                        <Button onClick={handleCreateCategory} disabled={!newCategoryName.trim()}>Create</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                <div className="space-y-1">
+                  <Button
+                    variant={selectedCategory === null ? "secondary" : "ghost"}
+                    className="w-full justify-start font-normal"
+                    onClick={() => setSelectedCategory(null)}
+                  >
+                    <FolderClosed className="w-4 h-4 mr-2" />
+                    All Files
+                  </Button>
+                  {categories.map(cat => (
+                    <Button
+                      key={cat.id}
+                      variant={selectedCategory === cat.id ? "secondary" : "ghost"}
+                      className="w-full justify-start font-normal truncate"
+                      onClick={() => setSelectedCategory(cat.id)}
+                      title={cat.name}
+                    >
+                      <div className="w-4 h-4 mr-2 flex items-center justify-center">#</div>
+                      <span className="truncate">{cat.name}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Main Content Area */}
+          <div className="flex-1 w-full bg-card rounded-xl border border-border shadow-sm overflow-hidden min-h-[500px]">
+            <MediaLibrary
+              refreshTrigger={refreshTrigger}
+              isTrashView={showTrash}
+              categoryId={selectedCategory}
+            />
+          </div>
         </div>
       </div>
     </AdminPageLayout>

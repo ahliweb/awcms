@@ -192,15 +192,7 @@ function PageEditor({ page, onClose, onSuccess }) {
                 savedId = data.id;
             }
 
-            // Sync Tags
-            if (savedId) {
-                await supabase.rpc('sync_resource_tags', {
-                    p_resource_id: savedId,
-                    p_resource_type: 'pages',
-                    p_tags: formData.tags,
-                    p_tenant_id: currentTenant.id // Explicit Tenant ID for tags
-                });
-            }
+            // Sync Tags - REMOVED
 
             toast({ title: "Success", description: "Page saved successfully" });
             onSuccess?.();
@@ -542,14 +534,7 @@ function PageEditor({ page, onClose, onSuccess }) {
                                             </select>
                                         </div>
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="tags">Tags</Label>
-                                            <TagInput
-                                                value={formData.tags}
-                                                onChange={(val) => setFormData({ ...formData, tags: val })}
-                                                placeholder="Add tags..."
-                                            />
-                                        </div>
+                                        {/* Tags Removed */}
                                     </div>
                                 </div>
                             </div>
