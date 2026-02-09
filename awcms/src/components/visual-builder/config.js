@@ -22,7 +22,7 @@ import { YouTubeBlock, YouTubeBlockFields } from './blocks/YouTubeBlock';
 import { StatsBlock, StatsBlockFields } from './blocks/StatsBlock';
 import { PricingBlock, PricingBlockFields } from './blocks/PricingBlock';
 import { AccordionBlock, AccordionBlockFields } from './blocks/AccordionBlock';
-import { LatestBlogsBlock, LatestBlogsBlockFields } from './blocks/LatestBlogsBlock';
+import { LatestBlogsBlock, LatestBlogsBlockFields, resolveLatestBlogsData } from './blocks/LatestBlogsBlock';
 import { ImageField, MultiImageField } from './fields/ImageField';
 
 import { WidgetAreaBlock, WidgetAreaBlockFields } from './blocks/WidgetAreaBlock';
@@ -353,7 +353,8 @@ export const puckConfig = {
                 showImage: true,
                 showDate: true
             },
-            render: LatestBlogsBlock
+            render: LatestBlogsBlock,
+            resolveData: resolveLatestBlogsData
         },
         Promotion: {
             label: 'Promotion / Ad',

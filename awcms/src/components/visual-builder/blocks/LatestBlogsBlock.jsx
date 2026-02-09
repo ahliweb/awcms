@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, Calendar, ArrowRight, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import React from 'react';
+import { supabase } from '../../../lib/supabase';
+import { Calendar, ArrowRight, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
@@ -14,70 +14,13 @@ export const LatestBlogsBlock = ({
     showDate = true,
     categoryFilter,
     titleColor,
-    descriptionColor
+    descriptionColor,
+    blogs = [] // blogs are now passed as a prop
 }) => {
-    const [blogs, setBlogs] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    // No internal state for blogs, loading, or error as data is resolved externally
 
-    useEffect(() => {
-        const fetchBlogs = async () => {
-            setLoading(true);
-            try {
-                let query = supabase
-                    .from('blogs')
-                    // Foreign key is category_id. We fetch the related category data.
-                    // We remove the explicit alias 'main_category' to avoid 'categories_1' auto-alias errors,
-                    // or we check if 'main_category' is needed by the UI. 
-                    // Looking at the block UI code (not shown but inferred), it likely needs 'main_category' or checks specific props.
-                    // Let's try the standard relationship syntax without custom alias first to be safe, 
-                    // OR adhere to exact Supabase syntax: select('*, categories!category_id(title, slug)')
-                    .select('*, categories!category_id(title, slug)')
-                    .eq('status', 'published')
-                    .order('published_at', { ascending: false })
-                    .limit(count);
-
-                if (categoryFilter) {
-                    query = query.eq('category_id', categoryFilter);
-                }
-
-                const { data, error } = await query;
-
-                // Map data if necessary to match expected props (if UI expects main_category)
-                const mappedData = data ? data.map(blog => ({
-                    ...blog,
-                    main_category: blog.categories // Map default 'categories' response to 'main_category'
-                })) : [];
-
-                if (error) throw error;
-                setBlogs(mappedData || []);
-            } catch (err) {
-                console.error('Error fetching blogs:', err);
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchBlogs();
-    }, [count, categoryFilter]);
-
-    if (loading) {
-        return (
-            <div className="flex justify-center p-12 bg-slate-50 rounded-lg">
-                <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="flex items-center gap-2 p-4 text-red-600 bg-red-50 rounded-lg border border-red-200">
-                <AlertCircle className="w-4 h-4" />
-                <span>Error loading blogs: {error}</span>
-            </div>
-        );
-    }
+    // The loading and error states are now handled by the system that calls resolveLatestBlogsData
+    // and passes the 'blogs' prop. If 'blogs' is empty, it means no blogs were found or an error occurred.
 
     if (blogs.length === 0) {
         return (
@@ -188,6 +131,41 @@ export const LatestBlogsBlock = ({
             ))}
         </div>
     );
+};
+
+export const resolveLatestBlogsData = async ({ props }) => {
+    const { count = 3, categoryFilter } = props;
+    try {
+        let query = supabase
+            .from('blogs')
+            .select('*, categories!category_id(title, slug)')
+            .eq('status', 'published')
+            .order('published_at', { ascending: false })
+            .limit(count);
+
+        if (categoryFilter) {
+            query = query.eq('category_id', categoryFilter);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        const blogs = data ? data.map(blog => ({
+            ...blog,
+            main_category: blog.categories
+        })) : [];
+
+        return {
+            props: {
+                ...props,
+                blogs
+            }
+        };
+    } catch (err) {
+        console.error('Error resolving blogs data:', err);
+        return { props: { ...props, blogs: [] } };
+    }
 };
 
 export const LatestBlogsBlockFields = {
