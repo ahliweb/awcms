@@ -14,7 +14,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import RichTextEditor from '@/components/ui/RichTextEditor';
-import TagInput from '@/components/ui/TagInput';
+
 
 function PageEditor({ page, onClose, onSuccess }) {
     const { toast } = useToast();
@@ -179,17 +179,14 @@ function PageEditor({ page, onClose, onSuccess }) {
                 payload.created_by = user.id;
             }
 
-            let savedId = page?.id;
-
             if (page) {
                 // Keep existing tenant_id safe
                 delete payload.tenant_id;
                 const { error } = await supabase.from('pages').update(payload).eq('id', page.id);
                 if (error) throw error;
             } else {
-                const { data, error } = await supabase.from('pages').insert([payload]).select('id').single();
+                const { error } = await supabase.from('pages').insert([payload]);
                 if (error) throw error;
-                savedId = data.id;
             }
 
             // Sync Tags - REMOVED

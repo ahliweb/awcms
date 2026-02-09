@@ -26,15 +26,15 @@ const FilesManager = () => {
   const { uploadFile, uploading, syncFiles, syncing, stats, statsLoading, fetchCategories, createCategory } = useMedia();
   const { toast } = useToast();
 
+  const loadCategories = React.useCallback(async () => {
+    const data = await fetchCategories();
+    setCategories(data);
+  }, [fetchCategories]);
+
   // Load categories on mount
   React.useEffect(() => {
     loadCategories();
-  }, [fetchCategories]);
-
-  const loadCategories = async () => {
-    const data = await fetchCategories();
-    setCategories(data);
-  };
+  }, [loadCategories]);
 
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) return;
