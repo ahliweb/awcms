@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRegions } from '../../hooks/useRegions';
-import { REGION_LEVELS, getNextLevel } from '../../lib/regionUtils';
+// import { REGION_LEVELS, getNextLevel } from '../../lib/regionUtils'; // types only or remove
+import { REGION_LEVELS } from '../../lib/regionUtils'; // Keep REGION_LEVELS as fallback for now
+
 
 /**
  * Region Picker Component
@@ -15,46 +17,65 @@ const RegionPicker = ({
     // value is the leaf region ID selected
     const [selections, setSelections] = useState({});
     const [levelsData, setLevelsData] = useState({});
-    const { getRegions } = useRegions();
+    const { getRegions, getLevels } = useRegions();
+    const [allLevels, setAllLevels] = useState([]);
     const [activeLevels, setActiveLevels] = useState([]);
+    const [loadingLevels, setLoadingLevels] = useState(true);
 
-    // Initial load of levels structure
+    // Initial load of levels structure from DB
     useEffect(() => {
-        // In a real app we might fetch dynamic levels from DB, for now using static constant
-        // filtered by maxLevel
-        const levels = REGION_LEVELS.filter(l => l.order <= maxLevel);
-        setActiveLevels(levels);
-    }, [maxLevel]);
+        const fetchLevels = async () => {
+            setLoadingLevels(true);
+            const levels = await getLevels();
+            if (levels && levels.length > 0) {
+                // Map DB level_order to standard order property if needed, or just use level_order
+                // Assuming DB has 'key', 'name', 'level_order', 'id'
+                const normalizedLevels = levels.map(l => ({
+                    ...l,
+                    order: l.level_order || l.order // Handle both cases
+                }));
+                setAllLevels(normalizedLevels);
+            } else {
+                // Fallback to static if fetch fails/empty (optional, but good for safety)
+                setAllLevels(REGION_LEVELS);
+            }
+            setLoadingLevels(false);
+        };
+        fetchLevels();
+    }, [getLevels]);
+
+    // Filter levels by maxLevel whenever allLevels changes or maxLevel changes
+    useEffect(() => {
+        if (allLevels.length > 0) {
+            const filtered = allLevels.filter(l => l.order <= maxLevel);
+            setActiveLevels(filtered);
+        }
+    }, [allLevels, maxLevel]);
 
     const loadRegionsForLevel = useCallback(async (levelKey, parentId) => {
-        const levelObj = REGION_LEVELS.find(l => l.key === levelKey);
+        // Find level object in our dynamic state
+        const levelObj = allLevels.find(l => l.key === levelKey);
         if (!levelObj) return;
 
-        // TODO: Need actual level IDs from DB in a real dynamic implementation
-        // For now assuming we query by level_key if we updated the hook, but the hook uses level_id UUID.
-        // We strictly need fetching the level ID first or modifying useRegions to support key.
-        // Let's modify logic to fetch levels mapping first or just fallback to generic filter in hook if possible.
-        // BUT since we can't easily change hook contract blindly, let's assume we fetch level UUIDs first.
-
-        // Actually, simpler approach for this MVP:
-        // Just fetch regions by parent_id. For root, parent_id is null.
-        // Filter by level on client or trust the hierarchy.
-
         const regions = await getRegions({
-            // levelId: ... we'd need to lookup ID
+            levelId: levelObj.id, // Use the UUID from the DB
             parentId: parentId
         });
 
         setLevelsData(prev => ({
             ...prev,
-            [levelKey]: regions
+            [levelKey]: regions.data || regions // Handle {data, count} or plain array return from hook
         }));
-    }, [getRegions]);
+    }, [getRegions, allLevels]);
 
-    // Load root level (Negara usually, or level 1)
+    // Load root level once levels are loaded
     useEffect(() => {
-        loadRegionsForLevel(REGION_LEVELS[0].key, null);
-    }, [loadRegionsForLevel]);
+        if (allLevels.length > 0 && activeLevels.length > 0) {
+            // Root level is the one with the lowest order
+            const rootLevel = activeLevels.reduce((prev, curr) => (prev.order < curr.order ? prev : curr));
+            loadRegionsForLevel(rootLevel.key, null);
+        }
+    }, [allLevels, activeLevels, loadRegionsForLevel]);
 
     const handleSelection = async (levelKey, regionId) => {
         const region = levelsData[levelKey]?.find(r => r.id === regionId);
@@ -62,32 +83,44 @@ const RegionPicker = ({
         const newSelections = { ...selections, [levelKey]: region };
 
         // Clear lower levels
+        // We need to find the index in activeLevels
         const levelIndex = activeLevels.findIndex(l => l.key === levelKey);
+
+        // Clear subsequent selections in state
         for (let i = levelIndex + 1; i < activeLevels.length; i++) {
             delete newSelections[activeLevels[i].key];
+            // Also optionally clear the data for lower levels to force re-fetch? 
+            // Or just keep it but it won't be shown/valid. 
+            // Resetting UI is handled by rendering logic based on isVisible.
         }
 
         setSelections(newSelections);
 
         // Notify parent
         if (onChange) {
+            // Pass the most specific selected region
             onChange(regionId ? region : (selections[activeLevels[levelIndex - 1]?.key] || null));
         }
 
         if (regionId) {
             // Load next level
-            const nextLevel = getNextLevel(levelKey);
-            if (nextLevel && nextLevel.order <= maxLevel) {
+            const nextLevelIndex = levelIndex + 1;
+            if (nextLevelIndex < activeLevels.length) {
+                const nextLevel = activeLevels[nextLevelIndex];
                 await loadRegionsForLevel(nextLevel.key, regionId);
             }
         }
     };
 
+    if (loadingLevels) {
+        return <div className="text-sm text-gray-500 animate-pulse">Loading region levels...</div>;
+    }
+
     return (
         <div className={`space-y-3 ${className}`}>
-            {activeLevels.map((level) => {
+            {activeLevels.map((level, index) => {
                 // Show level if it's the first one OR if the previous level has a selection
-                const prevLevel = activeLevels[activeLevels.findIndex(l => l.key === level.key) - 1];
+                const prevLevel = index > 0 ? activeLevels[index - 1] : null;
                 const isVisible = !prevLevel || selections[prevLevel.key];
 
                 if (!isVisible) return null;

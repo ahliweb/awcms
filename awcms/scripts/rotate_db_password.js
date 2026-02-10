@@ -123,7 +123,7 @@ async function rotatePassword() {
 
     } catch (e) {
         console.error("Failed to construct new DATABASE_URL.", e);
-        console.error(`CRITICAL: Database password changed to: ${newPassword}, but .env update failed.`);
+        console.error(`CRITICAL: Database password changed, but .env update failed. Please check your database dashboard for the new password or reset it manually.`);
         process.exit(1);
     }
 
