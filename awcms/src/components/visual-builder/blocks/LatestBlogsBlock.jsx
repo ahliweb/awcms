@@ -138,7 +138,7 @@ export const resolveLatestBlogsData = async ({ props }) => {
     try {
         let query = supabase
             .from('blogs')
-            .select('*, categories!category_id(title, slug)')
+            .select('*, categories(title, slug)')
             .eq('status', 'published')
             .order('published_at', { ascending: false })
             .limit(count);

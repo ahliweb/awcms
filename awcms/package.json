@@ -5,13 +5,9 @@
   "version": "2.30.0",
   "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "eslint src --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "lint:fix": "eslint src --ext js,jsx --fix",
-    "deploy:manage-users": "npx supabase functions deploy manage-users",
     "deploy:functions": "npx supabase functions deploy",
+    "secrets:rotate": "node scripts/rotate_db_password.js",
+    "dev": "node scripts/check_secrets.js && vite",
     "test": "vitest",
     "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md README.md ../DOCS_INDEX.md",
     "db:pull": "npx supabase db pull --schema public"
@@ -82,6 +78,7 @@
     "eslint": "^8.57.1",
     "eslint-config-react-app": "^7.0.1",
     "jsdom": "^27.4.0",
+    "pg": "^8.18.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "vite": "^7.2.7",
