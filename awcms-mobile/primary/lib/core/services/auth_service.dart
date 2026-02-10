@@ -11,6 +11,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'secure_storage_service.dart';
 import 'security_service.dart';
 
+import 'dart:developer' as developer;
+
 /// Authentication state
 enum AuthStatus { initial, authenticated, unauthenticated, loading, blocked }
 
@@ -128,15 +130,23 @@ class AuthService extends Notifier<AuthState> {
 
   /// Sign in with email and password
   Future<void> signInWithEmail(String email, String password) async {
+    developer.log('[AuthService] signInWithEmail called for $email');
     // Check device security first
-    if (!await _checkDeviceSecurity()) return;
+    if (!await _checkDeviceSecurity()) {
+      developer.log('[AuthService] Device security check failed');
+      return;
+    }
 
     state = state.copyWith(status: AuthStatus.loading, errorMessage: null);
 
     try {
+      developer.log('[AuthService] Calling Supabase signInWithPassword...');
       final response = await Supabase.instance.client.auth.signInWithPassword(
         email: email,
         password: password,
+      );
+      developer.log(
+        '[AuthService] Supabase response received. User: ${response.user?.id}',
       );
 
       if (response.user != null) {
@@ -151,11 +161,13 @@ class AuthService extends Notifier<AuthState> {
         );
       }
     } on AuthException catch (e) {
+      developer.log('[AuthService] AuthException: ${e.message}');
       state = AuthState(
         status: AuthStatus.unauthenticated,
         errorMessage: e.message,
       );
     } catch (e) {
+      developer.log('[AuthService] Unexpected error: $e');
       state = const AuthState(
         status: AuthStatus.unauthenticated,
         errorMessage: 'An unexpected error occurred',

@@ -15,6 +15,8 @@ import 'core/services/connectivity_service.dart';
 import 'routes/app_router.dart';
 import 'shared/themes/app_theme.dart';
 import 'shared/widgets/security_gate.dart';
+import 'core/providers/locale_provider.dart';
+import 'core/providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +57,8 @@ class AWCMSMobileApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final locale = ref.watch(localeProvider);
+    final themeMode = ref.watch(themeProvider);
 
     return MaterialApp.router(
       title: 'AWCMS Mobile',
@@ -67,12 +71,13 @@ class AWCMSMobileApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
 
       // Theme
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
 
       // Routing with security gate
       routerConfig: router,

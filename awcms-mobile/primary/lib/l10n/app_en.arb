@@ -59,6 +59,8 @@
   "selectLanguage": "Select Language",
   "english": "English",
   "indonesian": "Bahasa Indonesia",
+  "theme": "Theme",
+  "selectTheme": "Select Theme",
   
   "darkMode": "Dark Mode",
   "lightMode": "Light Mode",
@@ -226,5 +228,12 @@
 
   "checkConnection": "Check your connection and try again",
   "serverError": "Server error occurred",
-  "tryAgainLater": "Please try again later"
+  "tryAgainLater": "Please try again later",
+
+  "cameraPermissionRequired": "Camera Permission Required",
+  "cameraPermissionRationale": "App needs camera access to take profile picture.",
+  "galleryPermissionRequired": "Gallery Permission Required",
+  "galleryPermissionRationale": "App needs gallery access to select profile picture.",
+  "permissionDenied": "Permission Denied",
+  "openSettings": "Open Settings"
 }

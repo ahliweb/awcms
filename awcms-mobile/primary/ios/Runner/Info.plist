@@ -50,5 +50,11 @@
 	<string>Untuk verifikasi lokasi Anda saat menggunakan aplikasi</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Untuk verifikasi lokasi Anda</string>
+	
+	<!-- Camera & Gallery permissions -->
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikasi memerlukan akses kamera untuk mengambil foto profil.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aplikasi memerlukan akses galeri untuk memilih foto profil.</string>
 </dict>
 </plist>

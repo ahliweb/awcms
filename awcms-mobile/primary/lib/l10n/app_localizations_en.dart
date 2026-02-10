@@ -147,6 +147,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get indonesian => 'Bahasa Indonesia';
 
   @override
+  String get theme => 'Theme';
+
+  @override
+  String get selectTheme => 'Select Theme';
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override
@@ -469,4 +475,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tryAgainLater => 'Please try again later';
+
+  @override
+  String get cameraPermissionRequired => 'Camera Permission Required';
+
+  @override
+  String get cameraPermissionRationale =>
+      'App needs camera access to take profile picture.';
+
+  @override
+  String get galleryPermissionRequired => 'Gallery Permission Required';
+
+  @override
+  String get galleryPermissionRationale =>
+      'App needs gallery access to select profile picture.';
+
+  @override
+  String get permissionDenied => 'Permission Denied';
 }

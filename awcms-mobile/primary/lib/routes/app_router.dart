@@ -13,6 +13,7 @@ import '../features/auth/screens/login_screen.dart';
 import '../features/blogs/screens/blogs_screen.dart';
 import '../features/blogs/screens/blog_detail_screen.dart';
 import '../features/notifications/screens/notifications_screen.dart';
+import '../features/profile/screens/profile_screen.dart';
 
 /// Route names
 class AppRoutes {
@@ -21,6 +22,7 @@ class AppRoutes {
   static const String blogs = '/blogs';
   static const String blogDetail = '/blogs/:id';
   static const String notifications = '/notifications';
+  static const String profile = '/profile';
 }
 
 /// Router provider
@@ -76,6 +78,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.notifications,
         name: 'notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.profile,
+        name: 'profile',
+        builder: (context, state) => const ProfileScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
