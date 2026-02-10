@@ -17,49 +17,38 @@ export function registerSupabaseTools(server: McpServer) {
         output: stdout || stderr,
         isError: false,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
-        output: error.message,
+        output: errorMessage,
         isError: true,
       };
     }
   }
 
-  server.tool(
-    "supabase_status",
-    {},
-    async () => {
-      const result = await runSupabaseCommand(["status"]);
-      return {
-        content: [{ type: "text", text: result.output }],
-        isError: result.isError,
-      };
-    }
-  );
+  server.tool("supabase_status", {}, async () => {
+    const result = await runSupabaseCommand(["status"]);
+    return {
+      content: [{ type: "text", text: result.output }],
+      isError: result.isError,
+    };
+  });
 
-  server.tool(
-    "supabase_db_pull",
-    {},
-    async () => {
-      const result = await runSupabaseCommand(["db", "pull"]);
-      return {
-        content: [{ type: "text", text: result.output }],
-        isError: result.isError,
-      };
-    }
-  );
+  server.tool("supabase_db_pull", {}, async () => {
+    const result = await runSupabaseCommand(["db", "pull"]);
+    return {
+      content: [{ type: "text", text: result.output }],
+      isError: result.isError,
+    };
+  });
 
-  server.tool(
-    "supabase_db_push",
-    {},
-    async () => {
-      const result = await runSupabaseCommand(["db", "push"]);
-      return {
-        content: [{ type: "text", text: result.output }],
-        isError: result.isError,
-      };
-    }
-  );
+  server.tool("supabase_db_push", {}, async () => {
+    const result = await runSupabaseCommand(["db", "push"]);
+    return {
+      content: [{ type: "text", text: result.output }],
+      isError: result.isError,
+    };
+  });
 
   server.tool(
     "supabase_migration_new",
@@ -72,18 +61,14 @@ export function registerSupabaseTools(server: McpServer) {
         content: [{ type: "text", text: result.output }],
         isError: result.isError,
       };
-    }
+    },
   );
 
-  server.tool(
-    "supabase_gen_types",
-    {},
-    async () => {
-      const result = await runSupabaseCommand(["gen", "types", "typescript", "--local"]);
-      return {
-        content: [{ type: "text", text: result.output }],
-        isError: result.isError,
-      };
-    }
-  );
+  server.tool("supabase_gen_types", {}, async () => {
+    const result = await runSupabaseCommand(["gen", "types", "typescript", "--local"]);
+    return {
+      content: [{ type: "text", text: result.output }],
+      isError: result.isError,
+    };
+  });
 }
