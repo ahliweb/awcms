@@ -1,0 +1,1210 @@
+
+> awcms@2.30.0 lint
+> eslint .
+
+
+/home/data/dev_react/awcms-dev/awcms/scripts/check_secrets.js
+  30:12  warning  'e' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/scripts/fix_email_sidebar.js
+  3:8  warning  'path' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/scripts/rotate_db_password.js
+  58:18  warning  'e' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/scripts/verify_rls_and_puck.js
+  21:7  warning  'supabaseAdmin' is assigned a value but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/App.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/CMSRouter.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/CallToAction.jsx
+   1:8   warning  'React' is defined but never used                                no-unused-vars
+  12:10  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/HeroImage.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/WelcomeMessage.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/auth/TenantGuard.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/common/MinCharSearchInput.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/AdminDashboard.jsx
+   2:8   warning  'React' is defined but never used                                                           no-unused-vars
+  67:17  error    Do not pass children as props. Instead, nest children between the opening and closing tags  react/no-children-prop
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/AdminLayout.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/AnnouncementsManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/AuditLogsManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/BlogEditor.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/BlogsManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/CategoriesManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ContactMessagesManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ContactsManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ContentTable.jsx
+   2:8   warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           no-unused-vars
+  70:13  error    Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+  68 |
+  69 |   if (loading) {
+> 70 |     return <TableSkeleton />;
+     |             ^^^^^^^^^^^^^ This component is created during render
+  71 |   }
+  72 |
+  73 |   if (!data || data.length === 0) {
+
+  33 | }) => {
+  34 |
+> 35 |   const TableSkeleton = () => (
+     |                         ^^^^^^^
+> 36 |     <div className="dashboard-surface overflow-hidden">
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 37 |       <Table>
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 66 |     </div>
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 67 |   );
+     | ^^^^ The component is created during render here
+  68 |
+  69 |   if (loading) {
+  70 |     return <TableSkeleton />;  react-hooks/static-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionABACIntegration.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionEditor.jsx
+   2:8   warning  'React' is defined but never used  no-unused-vars
+  54:16  warning  'err' is defined but never used    no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionGuide.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionHealthCheck.jsx
+   2:8   warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+  25:37  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `currentTenant`, but the source dependencies were [currentTenant?.id, isPlatformAdmin]. Inferred less specific property than source.
+
+  23 |    const [checks, setChecks] = useState(() => initialChecks.map(check => ({ ...check })));
+  24 |
+> 25 |    const runDiagnosis = useCallback(async () => {
+     |                                     ^^^^^^^^^^^^^
+> 26 |       setChecking(true);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+> 27 |       setHealthScore(100);
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+> 67 |       setChecking(false);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+> 68 |    }, [currentTenant?.id, isPlatformAdmin]);
+     | ^^^^^ Could not preserve existing manual memoization
+  69 |
+  70 |    useEffect(() => {
+  71 |       runDiagnosis();  react-hooks/preserve-manual-memoization
+  71:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  69 |
+  70 |    useEffect(() => {
+> 71 |       runDiagnosis();
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  72 |    }, [runDiagnosis]);
+  73 |
+  74 |    return (                                                                                                                                                                                                                  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionInstaller.jsx
+   2:8   warning  'React' is defined but never used  no-unused-vars
+  61:16  warning  'err' is defined but never used    no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionLogs.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionMarketplace.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionSettings.jsx
+    2:8   warning  'React' is defined but never used  no-unused-vars
+  125:30  warning  'err' is defined but never used    no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ExtensionsManager.jsx
+    2:8   warning  'React' is defined but never used                                no-unused-vars
+  282:66  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  282:76  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/FunFactsManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/GenericContentManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/GenericResourceEditor.jsx
+   2:8   warning  'React' is defined but never used              no-unused-vars
+  37:5   warning  'permissionPrefix' is defined but never used   no-unused-vars
+  38:5   warning  'createPermission' is defined but never used   no-unused-vars
+  71:21  warning  'owner' is assigned a value but never used     no-unused-vars
+  71:28  warning  'tenant' is assigned a value but never used    no-unused-vars
+  71:36  warning  'category' is assigned a value but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/Header.jsx
+   2:8   warning  'React' is defined but never used       no-unused-vars
+  23:34  warning  'onNavigate' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/LanguageSettings.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/MenusManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ModuleTabs.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/OrdersManager.jsx
+   2:8   warning  'React' is defined but never used  no-unused-vars
+  22:27  warning  'row' is defined but never used    no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PageEditor.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PagesManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PartnersManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PaymentMethodsManager.jsx
+    4:8   warning  'React' is defined but never used                                no-unused-vars
+  112:71  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  112:78  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PermissionsManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PhotoGalleryManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PolicyManager.jsx
+   1:8   warning  'React' is defined but never used  no-unused-vars
+  90:22  warning  'e' is defined but never used      no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PortfolioManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ProductTypesManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ProductsManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/PromotionsManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ResourceSelect.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/RoleEditor.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/RolesManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/SSOManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/SchoolPagesManager.jsx
+    1:8   warning  'React' is defined but never used                                no-unused-vars
+  375:42  warning  'updateField' is defined but never used                          no-unused-vars
+  450:35  warning  'updateField' is defined but never used                          no-unused-vars
+  597:37  warning  'updateField' is defined but never used                          no-unused-vars
+  641:54  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  641:64  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  689:36  warning  'updateField' is defined but never used                          no-unused-vars
+  735:52  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  735:62  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/SeoManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ServicesManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/SettingsManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/Sidebar.jsx
+    2:8   warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               no-unused-vars
+  126:22  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  124 |
+  125 |   useEffect(() => {
+> 126 |     if (searchQuery) setCollapsedGroups(new Set());
+      |                      ^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  127 |   }, [searchQuery]);
+  128 |
+  129 |   const sidebarVariants = {  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/SidebarMenuManager.jsx
+    2:8   warning  'React' is defined but never used    no-unused-vars
+  133:18  warning  'err' is defined but never used      no-unused-vars
+  155:18  warning  'err' is defined but never used      no-unused-vars
+  211:18  warning  'err' is defined but never used      no-unused-vars
+  228:18  warning  'err' is defined but never used      no-unused-vars
+  265:18  warning  'err' is defined but never used      no-unused-vars
+  444:87  warning  'checked' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/SiteImagesManager.jsx
+    1:8   warning  'React' is defined but never used                                no-unused-vars
+  345:59  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  345:74  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/TagsManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/TeamManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/TemplatesManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/TenantSettings.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/TenantUsage.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/TenantsManager.jsx
+  507:28  warning  'row' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/TestimonyManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ThemeLayoutManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/ThemesManager.jsx
+    2:8   warning  'React' is defined but never used                no-unused-vars
+  137:17  warning  'id' is assigned a value but never used          no-unused-vars
+  137:21  warning  'created_at' is assigned a value but never used  no-unused-vars
+  137:33  warning  'updated_at' is assigned a value but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/TwoFactorSettings.jsx
+    2:8   warning  'React' is defined but never used                                no-unused-vars
+  149:42  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/UserApprovalManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/UserEditor.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/UserProfile.jsx
+    2:8   warning  'React' is defined but never used                                no-unused-vars
+  411:21  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  411:52  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/UsersManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/VideoGalleryManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/VisitorStatisticsManager.jsx
+   1:8   warning  'React' is defined but never used  no-unused-vars
+  33:12  warning  'error' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/VisualPagesManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/__tests__/AccessControl.test.jsx
+   78:33  warning  'perm' is defined but never used  no-unused-vars
+  116:33  warning  'perm' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/dynamic/DynamicResourceManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/dynamic/SchemaForm.jsx
+  28:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  26 |     useEffect(() => {
+  27 |         if (initialData) {
+> 28 |             setFormData(initialData);
+     |             ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  29 |         }
+  30 |     }, [initialData]);
+  31 |  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/media/FileStats.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/media/FileUploader.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/media/MediaLibrary.jsx
+    2:8    warning  'React' is defined but never used                                no-unused-vars
+  495:116  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/notifications/NotificationDetail.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/notifications/NotificationDropdown.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/notifications/NotificationsManager.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/templates/TemplateAssignments.jsx
+   1:8   warning  'React' is defined but never used                                no-unused-vars
+  59:51  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  59:63  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/templates/TemplateEditor.jsx
+   1:8   warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       no-unused-vars
+  40:17  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  38 |             const template = templates.find(t => t.id === id);
+  39 |             if (template) {
+> 40 |                 setFormData({
+     |                 ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  41 |                     name: template.name || '',
+  42 |                     slug: template.slug || '',
+  43 |                     description: template.description || '',  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/templates/TemplateLanguageManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/templates/TemplatePartEditor.jsx
+   1:8   warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+  38:17  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  36 |             const part = templateParts.find(p => p.id === id);
+  37 |             if (part) {
+> 38 |                 setFormData({
+     |                 ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  39 |                     name: part.name || '',
+  40 |                     type: part.type || 'header',
+  41 |                 });  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/templates/TemplatePartsList.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/templates/TemplatesList.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/ActivityFeed.jsx
+   2:8   warning  'React' is defined but never used                                no-unused-vars
+  28:21  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  28:38  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/ContentDistribution.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/MyApprovals.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/PlatformOverview.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/StatCards.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/SystemHealth.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/TopBlogsWidget.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/UsageWidget.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/WidgetEditor.jsx
+    1:8   warning  'React' is defined but never used  no-unused-vars
+  115:46  warning  'err' is defined but never used    no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/dashboard/widgets/WidgetsManager.jsx
+  152:42  warning  'index' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/editors/SeoMetadataPanel.jsx
+  7:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/editors/UnifiedContentEditor.jsx
+   7:8  warning  'React' is defined but never used               no-unused-vars
+  73:5  warning  'tableName' is assigned a value but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/AnnouncementCard.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/CategoryFilter.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/PublicFooter.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/PublicHeader.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/PublicLayout.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/PublicPageResolver.jsx
+    1:8    warning  'React' is defined but never used                                no-unused-vars
+  146:38   error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  146:115  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/SeoHelmet.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/ShareButtons.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/ShoppingCart.jsx
+  4:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/TableOfContents.jsx
+   2:8  warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+  26:5  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  24 |     });
+  25 |
+> 26 |     setHeadings(items);
+     |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  27 |   }, [content]);
+  28 |
+  29 |   if (headings.length === 0) return null;  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/TagList.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/WidgetAreaRenderer.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/public/__tests__/PublicLayout.test.jsx
+  31:17  warning  'type' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/routing/PluginRoutes.jsx
+   8:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  22:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/DarkModeToggle.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/ImageUpload.jsx
+   2:8  warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+  28:9  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  26 |
+  27 |     useEffect(() => {
+> 28 |         setUrlInput(normalizedValue);
+     |         ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  29 |         setPreviewError(false);
+  30 |     }, [normalizedValue]);
+  31 |  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/LanguageSelector.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/LocalizedArrayEditor.jsx
+  113:57  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  113:68  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/LocalizedInput.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/LocationPicker.jsx
+   2:8  warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  44:7  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  42 |   useEffect(() => {
+  43 |     if (lat && lng) {
+> 44 |       setPosition({ lat, lng });
+     |       ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  45 |     }
+  46 |   }, [lat, lng]);
+  47 |  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/MultiImageUpload.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/PositionArrayEditor.jsx
+   1:8   warning  'React' is defined but never used                                no-unused-vars
+  80:55  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  80:68  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/RegionBreadcrumb.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/RegionPicker.jsx
+   1:8   warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+  11:5   warning  'value' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+  50:13  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  48 |         if (allLevels.length > 0) {
+  49 |             const filtered = allLevels.filter(l => l.order <= maxLevel);
+> 50 |             setActiveLevels(filtered);
+     |             ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  51 |         }
+  52 |     }, [allLevels, maxLevel]);
+  53 |                                                                                                        react-hooks/set-state-in-effect
+  75:13  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  73 |             // Root level is the one with the lowest order
+  74 |             const rootLevel = activeLevels.reduce((prev, curr) => (prev.order < curr.order ? prev : curr));
+> 75 |             loadRegionsForLevel(rootLevel.key, null);
+     |             ^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  76 |         }
+  77 |     }, [allLevels, activeLevels, loadRegionsForLevel]);
+  78 |  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/TagInput.jsx
+  186:30  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  186:95  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/VersionBadge.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/alert-dialog.jsx
+  19:59  warning  'children' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/badge.jsx
+   2:13  warning  'React' is defined but never used                                                                                               no-unused-vars
+  36:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/button.jsx
+  47:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/form.jsx
+  125:5  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/ui/toaster.jsx
+  10:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/Renderer.jsx
+  6:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/TemplateSelector.jsx
+  6:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/VisualPageBuilder.jsx
+  32:77  warning  'onSuccess' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/AccordionBlock.jsx
+   1:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  24:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/ButtonBlock.jsx
+  6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  9:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/CardBlock.jsx
+  6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  9:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/ContactFormBlock.jsx
+   6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  63:5   warning  'recipientEmail' is defined but never used                                                                                      no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/DividerBlock.jsx
+   1:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  35:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/FeatureBlock.jsx
+   6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  23:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/GalleryBlock.jsx
+  6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  9:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/GridBlock.jsx
+  6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  9:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/HeroBlock.jsx
+  6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  9:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/ImageBlock.jsx
+  6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  8:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/LatestBlogsBlock.jsx
+    1:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+   11:5   warning  'count' is assigned a value but never used                                                                                      no-unused-vars
+   15:5   warning  'categoryFilter' is defined but never used                                                                                      no-unused-vars
+   16:5   warning  'titleColor' is defined but never used                                                                                          no-unused-vars
+   17:5   warning  'descriptionColor' is defined but never used                                                                                    no-unused-vars
+  136:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  171:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/NavigationBlock.jsx
+   6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  13:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  67:5   warning  'linkColor' is defined but never used                                                                                           no-unused-vars
+  68:5   warning  'hoverColor' is defined but never used                                                                                          no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/PricingBlock.jsx
+   1:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  50:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/PromotionBlock.jsx
+   6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  15:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/SectionBlock.jsx
+   1:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+   7:5   warning  'children' is defined but never used                                                                                            no-unused-vars
+   8:5   warning  'id' is defined but never used                                                                                                  no-unused-vars
+  56:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/SpacerBlock.jsx
+  6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  8:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/StatsBlock.jsx
+   1:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  31:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/TestimonialBlock.jsx
+    6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+   10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   40:43  warning  'quoteColor' is defined but never used                                                                                          no-unused-vars
+   40:61  warning  'nameColor' is defined but never used                                                                                           no-unused-vars
+   40:78  warning  'roleColor' is defined but never used                                                                                           no-unused-vars
+   63:21  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                 react/no-unescaped-entities
+   63:29  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                 react/no-unescaped-entities
+   83:21  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                 react/no-unescaped-entities
+   83:29  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                 react/no-unescaped-entities
+  117:59  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                 react/no-unescaped-entities
+  117:67  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                 react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/TextBlock.jsx
+   6:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  12:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/WidgetAreaBlock.jsx
+  2:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  6:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/blocks/YouTubeBlock.jsx
+   1:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  40:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/fields/ColorPickerField.jsx
+  6:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/fields/ImageField.jsx
+  6:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/fields/RichTextField.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/components/visual-builder/fields/SelectField.jsx
+  6:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/contexts/CartContext.jsx
+    5:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  290:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/contexts/DarkModeContext.jsx
+  17:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/contexts/PermissionContext.jsx
+  366:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/contexts/PluginContext.jsx
+  11:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/contexts/SupabaseAuthContext.jsx
+    2:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  296:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/contexts/TenantContext.jsx
+  92:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/contexts/ThemeContext.jsx
+   2:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  12:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/extensions/ahliweb-analytics/src/components/AnalyticsDashboard.jsx
+  6:8   warning  'React' is defined but never used     no-unused-vars
+  8:31  warning  'supabase' is defined but never used  no-unused-vars
+  8:41  warning  'tenantId' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/extensions/ahliweb-analytics/src/components/AnalyticsReports.jsx
+  5:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/extensions/ahliweb-analytics/src/components/AnalyticsWidget.jsx
+  6:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/extensions/ahliweb-analytics/src/index.js
+   90:32  warning  'supabase' is defined but never used  no-unused-vars
+   90:42  warning  'tenantId' is defined but never used  no-unused-vars
+  102:34  warning  'supabase' is defined but never used  no-unused-vars
+  102:44  warning  'tenantId' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/hooks/useMobileUsers.js
+  47:18  warning  'err' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/hooks/usePushNotifications.js
+  37:18  warning  'err' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/hooks/useSearch.js
+  14:5  warning  'context' is assigned a value but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/hooks/useTemplates.js
+  120:21  warning  'id' is assigned a value but never used          no-unused-vars
+  120:25  warning  'created_at' is assigned a value but never used  no-unused-vars
+  120:37  warning  'updated_at' is assigned a value but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/hooks/useWorkflow.js
+  58:42  warning  'comment' is assigned a value but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/lib/pluginRegistry.js
+  69:12  error  Component definition is missing display name  react/display-name
+
+/home/data/dev_react/awcms-dev/awcms/src/main.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/Dashboard.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/LoginPage.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/cmspanel/Dashboard.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/cmspanel/DevicesManager.jsx
+  78:18  warning  'err' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/cmspanel/ForgotPasswordPage.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/cmspanel/LoginPage.jsx
+    2:8   warning  'React' is defined but never used  no-unused-vars
+  425:51  warning  'e' is defined but never used      no-unused-vars
+  425:54  error    Empty block statement              no-empty
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/cmspanel/ModulesManager.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/cmspanel/PushNotificationsManager.jsx
+  78:18  warning  'err' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/cmspanel/SeoPage.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/cmspanel/UpdatePasswordPage.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/Home.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicAnnouncementDetail.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicAnnouncements.jsx
+   2:8  warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             no-unused-vars
+  17:9  error    Error: Cannot access variable before it is declared
+
+`fetchAnnouncements` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  15 |
+  16 |     useEffect(() => {
+> 17 |         fetchAnnouncements();
+     |         ^^^^^^^^^^^^^^^^^^ `fetchAnnouncements` accessed before it is declared
+  18 |     }, []);
+  19 |
+  20 |     const fetchAnnouncements = async () => {
+
+  18 |     }, []);
+  19 |
+> 20 |     const fetchAnnouncements = async () => {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 21 |         setLoading(true);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 22 |         const { data } = await supabase
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 29 |         setLoading(false);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 30 |     };
+     | ^^^^^^^ `fetchAnnouncements` is declared here
+  31 |
+  32 |     return (
+  33 |         <div className="min-h-screen bg-background py-16">  react-hooks/immutability
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicBlogDetail.jsx
+   2:8   warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+  32:17  error    Error: Cannot access variable before it is declared
+
+`incrementViews` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  30 |             if (!error && data) {
+  31 |                 setBlog(data);
+> 32 |                 incrementViews(data.id);
+     |                 ^^^^^^^^^^^^^^ `incrementViews` accessed before it is declared
+  33 |                 fetchRelated(data.category_id, data.id);
+  34 |             } else {
+  35 |                 // Fallback without author if FK issue
+
+  53 |     }, [slug]);
+  54 |
+> 55 |     const incrementViews = async (id) => {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 56 |         // Optimistic update without waiting
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 57 |         await supabase.rpc('increment_blog_view', { blog_id: id }).catch(() => { });
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 58 |         // Alternative simple update if RPC not exists: 
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 59 |         // await supabase.from('blogs').update({ views: (blog.views || 0) + 1 }).eq('id', id);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |     };
+     | ^^^^^^^ `incrementViews` is declared here
+  61 |
+  62 |     const fetchRelated = async (categoryId, currentId) => {
+  63 |         if (!categoryId) return;  react-hooks/immutability
+  33:17  error    Error: Cannot access variable before it is declared
+
+`fetchRelated` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  31 |                 setBlog(data);
+  32 |                 incrementViews(data.id);
+> 33 |                 fetchRelated(data.category_id, data.id);
+     |                 ^^^^^^^^^^^^ `fetchRelated` accessed before it is declared
+  34 |             } else {
+  35 |                 // Fallback without author if FK issue
+  36 |                 if (error && error.code === 'PGRST201') {
+
+  60 |     };
+  61 |
+> 62 |     const fetchRelated = async (categoryId, currentId) => {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 63 |         if (!categoryId) return;
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 64 |         const { data } = await supabase
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 71 |         if (data) setRelatedBlogs(data);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 72 |     };
+     | ^^^^^^^ `fetchRelated` is declared here
+  73 |
+  74 |     if (loading) {
+  75 |         return (                                                                                                                                                                                                                                                                                  react-hooks/immutability
+  95:69  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicBlogs.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicContact.jsx
+   2:8   warning  'React' is defined but never used                                no-unused-vars
+  46:14  warning  'error' is defined but never used                                no-unused-vars
+  72:66  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicPageDetail.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicPages.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicPhotoGallery.jsx
+   2:8  warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    no-unused-vars
+  13:5  error    Error: Cannot access variable before it is declared
+
+`fetchGalleries` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  11 |
+  12 |   useEffect(() => {
+> 13 |     fetchGalleries();
+     |     ^^^^^^^^^^^^^^ `fetchGalleries` accessed before it is declared
+  14 |   }, []);
+  15 |
+  16 |   const fetchGalleries = async () => {
+
+  14 |   }, []);
+  15 |
+> 16 |   const fetchGalleries = async () => {
+     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 17 |
+     | ^
+> 18 |     const { data } = await supabase
+     | ^
+> 19 |       .from('photo_gallery')
+     | ^
+> 20 |       .select('*')
+     | ^
+> 21 |       .eq('status', 'published')
+     | ^
+> 22 |       .order('created_at', { ascending: false });
+     | ^
+> 23 |     setItems(data || []);
+     | ^
+> 24 |
+     | ^
+> 25 |   };
+     | ^^^^^ `fetchGalleries` is declared here
+  26 |
+  27 |   return (
+  28 |     <div className="min-h-screen bg-background py-16">  react-hooks/immutability
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicPhotoGalleryDetail.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicPortfolio.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicPortfolioDetail.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicProductDetail.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicProducts.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicPromotionDetail.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicPromotions.jsx
+   2:8  warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                no-unused-vars
+  16:5  error    Error: Cannot access variable before it is declared
+
+`fetchPromotions` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  14 |
+  15 |   useEffect(() => {
+> 16 |     fetchPromotions();
+     |     ^^^^^^^^^^^^^^^ `fetchPromotions` accessed before it is declared
+  17 |   }, []);
+  18 |
+  19 |   const fetchPromotions = async () => {
+
+  17 |   }, []);
+  18 |
+> 19 |   const fetchPromotions = async () => {
+     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 20 |
+     | ^
+> 21 |     const { data } = await supabase
+     …
+     | ^
+> 28 |
+     | ^
+> 29 |   };
+     | ^^^^^ `fetchPromotions` is declared here
+  30 |
+  31 |   const copyCode = (code, id) => {
+  32 |     navigator.clipboard.writeText(code);  react-hooks/immutability
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicRegisterPage.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicTestimonies.jsx
+   2:8   warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               no-unused-vars
+  14:5   error    Error: Cannot access variable before it is declared
+
+`fetchTestimonies` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  12 |
+  13 |   useEffect(() => {
+> 14 |     fetchTestimonies();
+     |     ^^^^^^^^^^^^^^^^ `fetchTestimonies` accessed before it is declared
+  15 |   }, []);
+  16 |
+  17 |   const fetchTestimonies = async () => {
+
+  15 |   }, []);
+  16 |
+> 17 |   const fetchTestimonies = async () => {
+     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 18 |     setLoading(true);
+     | ^^^^^^^^^^^^^^^^^^^^^
+> 19 |     const { data } = await supabase
+     | ^^^^^^^^^^^^^^^^^^^^^
+> 20 |       .from('testimonies')
+     | ^^^^^^^^^^^^^^^^^^^^^
+> 21 |       .select('*')
+     | ^^^^^^^^^^^^^^^^^^^^^
+> 22 |       .eq('status', 'published')
+     | ^^^^^^^^^^^^^^^^^^^^^
+> 23 |       .order('created_at', { ascending: false });
+     | ^^^^^^^^^^^^^^^^^^^^^
+> 24 |     setItems(data || []);
+     | ^^^^^^^^^^^^^^^^^^^^^
+> 25 |     setLoading(false);
+     | ^^^^^^^^^^^^^^^^^^^^^
+> 26 |   };
+     | ^^^^^ `fetchTestimonies` is declared here
+  27 |
+  28 |   return (
+  29 |     <div className="min-h-screen bg-background py-16">  react-hooks/immutability
+  41:51  error    `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react/no-unescaped-entities
+  71:19  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react/no-unescaped-entities
+  71:34  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react/no-unescaped-entities
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicVideoGallery.jsx
+   2:8  warning  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   no-unused-vars
+  25:5  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  23 |
+  24 |   useEffect(() => {
+> 25 |     fetchVideos();
+     |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  26 |   }, []);
+  27 |
+  28 |   return (  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/pages/public/PublicVideoGalleryDetail.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/backup/BackupManager.jsx
+   2:8   warning  'React' is defined but never used  no-unused-vars
+  30:14  warning  'error' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/backup/BackupRestore.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/backup/BackupScheduler.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/backup/BackupSettings.jsx
+  2:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/backup/index.js
+  26:50  warning  'supabase' is defined but never used  no-unused-vars
+  86:34  warning  'supabase' is defined but never used  no-unused-vars
+  86:44  warning  'tenantId' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/helloworld/HelloWorld.jsx
+   1:8   warning  'React' is defined but never used                                                                                               no-unused-vars
+  15:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/mailketing/components/EmailLogs.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/mailketing/components/EmailSettings.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/mailketing/components/MailketingCreditsWidget.jsx
+  1:8  warning  'React' is defined but never used  no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/mailketing/index.js
+  20:28  warning  'addAction' is defined but never used  no-unused-vars
+  20:50  warning  'supabase' is defined but never used   no-unused-vars
+  56:56  warning  'context' is defined but never used    no-unused-vars
+
+/home/data/dev_react/awcms-dev/awcms/src/plugins/regions/RegionsManager.jsx
+  81:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  79 |     useEffect(() => {
+  80 |         if (canRead) {
+> 81 |             loadRegions();
+     |             ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  82 |         }
+  83 |     }, [canRead, loadRegions]); // loadRegions depends on page/search/parent
+  84 |  react-hooks/set-state-in-effect
+
+/home/data/dev_react/awcms-dev/awcms/src/scripts/seed-sidebar.js
+  96:17  warning  'id' is assigned a value but never used  no-unused-vars
+
+✖ 362 problems (61 errors, 301 warnings)
+

@@ -1,5 +1,5 @@
 import React from 'react';
-import { supabase } from '../../../lib/supabase';
+import { supabase } from '@/lib/customSupabaseClient';
 import { Calendar, ArrowRight, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';

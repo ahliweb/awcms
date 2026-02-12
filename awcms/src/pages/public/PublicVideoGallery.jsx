@@ -10,10 +10,6 @@ function PublicVideoGallery() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchVideos();
-  }, []);
-
   const fetchVideos = async () => {
     setLoading(true);
     const { data } = await supabase
@@ -24,6 +20,10 @@ function PublicVideoGallery() {
     setItems(data || []);
     setLoading(false);
   };
+
+  useEffect(() => {
+    fetchVideos();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background py-16">

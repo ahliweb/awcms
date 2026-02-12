@@ -47,14 +47,8 @@ const RegionsManager = () => {
     const [formData, setFormData] = useState({ name: '', code: '' });
 
     // Reset form when modal opens or editingRegion changes
-    useEffect(() => {
-        if (isModalOpen) {
-            setFormData({
-                name: editingRegion?.name || '',
-                code: editingRegion?.code || ''
-            });
-        }
-    }, [isModalOpen, editingRegion]);
+    // useEffect removed to avoid set-state-in-effect error. 
+    // State is now updated in the handlers that open the modal.
 
     const canRead = hasPermission('tenant.region.read');
     const canCreate = hasPermission('tenant.region.create');
@@ -165,7 +159,11 @@ const RegionsManager = () => {
                     <p className="text-slate-500">Manage hierarchical regions</p>
                 </div>
                 {canCreate && (
-                    <Button onClick={() => { setEditingRegion(null); setIsModalOpen(true); }}>
+                    <Button onClick={() => {
+                        setEditingRegion(null);
+                        setFormData({ name: '', code: '' });
+                        setIsModalOpen(true);
+                    }}>
                         <Plus className="w-4 h-4 mr-2" /> Add Region
                     </Button>
                 )}
@@ -246,7 +244,11 @@ const RegionsManager = () => {
                                     </TableCell>
                                     <TableCell className="text-right space-x-2">
                                         {canUpdate && (
-                                            <Button variant="ghost" size="sm" onClick={() => { setEditingRegion(region); setIsModalOpen(true); }}>
+                                            <Button variant="ghost" size="sm" onClick={() => {
+                                                setEditingRegion(region);
+                                                setFormData({ name: region.name, code: region.code });
+                                                setIsModalOpen(true);
+                                            }}>
                                                 <Edit className="w-4 h-4" />
                                             </Button>
                                         )}

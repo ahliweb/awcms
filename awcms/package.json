@@ -10,7 +10,8 @@
     "dev": "node scripts/check_secrets.js && vite",
     "test": "vitest",
     "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md README.md ../DOCS_INDEX.md",
-    "db:pull": "npx supabase db pull --schema public"
+    "db:pull": "npx supabase db pull --schema public",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@puckeditor/core": "^0.21.0",
@@ -66,6 +67,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@tailwindcss/typography": "^0.5.19",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -75,8 +77,11 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.22",
-    "eslint": "^8.57.1",
-    "eslint-config-react-app": "^7.0.1",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.0",
+    "globals": "^17.3.0",
     "jsdom": "^27.4.0",
     "pg": "^8.18.0",
     "postcss": "^8.5.6",

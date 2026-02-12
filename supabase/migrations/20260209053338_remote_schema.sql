@@ -173,22 +173,48 @@ DROP POLICY IF EXISTS "Enable insert for authenticated users with permission" ON
 with check (((user_id = auth.uid()) OR public.is_platform_admin() OR ((tenant_id = public.current_tenant_id()) AND (public.has_permission('create_orders'::text) OR public.has_permission('tenant.orders.create'::text)))));
 
 
-DROP TRIGGER IF EXISTS objects_delete_delete_prefix ON storage.objects;
-CREATE TRIGGER objects_delete_delete_prefix AFTER DELETE ON storage.objects FOR EACH ROW EXECUTE FUNCTION storage.delete_prefix_hierarchy_trigger();
+-- Storage triggers: only create if the internal storage functions exist (they exist on remote but not local)
+DO $$
+BEGIN
+  -- objects_delete_delete_prefix
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'storage' AND p.proname = 'delete_prefix_hierarchy_trigger') THEN
+    DROP TRIGGER IF EXISTS objects_delete_delete_prefix ON storage.objects;
+    CREATE TRIGGER objects_delete_delete_prefix AFTER DELETE ON storage.objects FOR EACH ROW EXECUTE FUNCTION storage.delete_prefix_hierarchy_trigger();
+  END IF;
 
-DROP TRIGGER IF EXISTS objects_insert_create_prefix ON storage.objects;
-CREATE TRIGGER objects_insert_create_prefix BEFORE INSERT ON storage.objects FOR EACH ROW EXECUTE FUNCTION storage.objects_insert_prefix_trigger();
+  -- objects_insert_create_prefix
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'storage' AND p.proname = 'objects_insert_prefix_trigger') THEN
+    DROP TRIGGER IF EXISTS objects_insert_create_prefix ON storage.objects;
+    CREATE TRIGGER objects_insert_create_prefix BEFORE INSERT ON storage.objects FOR EACH ROW EXECUTE FUNCTION storage.objects_insert_prefix_trigger();
+  END IF;
 
-DROP TRIGGER IF EXISTS objects_update_create_prefix ON storage.objects;
-CREATE TRIGGER objects_update_create_prefix BEFORE UPDATE ON storage.objects FOR EACH ROW WHEN (((new.name <> old.name) OR (new.bucket_id <> old.bucket_id))) EXECUTE FUNCTION storage.objects_update_prefix_trigger();
+  -- objects_update_create_prefix
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'storage' AND p.proname = 'objects_update_prefix_trigger') THEN
+    DROP TRIGGER IF EXISTS objects_update_create_prefix ON storage.objects;
+    CREATE TRIGGER objects_update_create_prefix BEFORE UPDATE ON storage.objects FOR EACH ROW WHEN (((new.name <> old.name) OR (new.bucket_id <> old.bucket_id))) EXECUTE FUNCTION storage.objects_update_prefix_trigger();
+  END IF;
 
-DROP TRIGGER IF EXISTS tr_sync_storage_to_files ON storage.objects;
-CREATE TRIGGER tr_sync_storage_to_files AFTER INSERT OR DELETE OR UPDATE ON storage.objects FOR EACH ROW EXECUTE FUNCTION public.handle_storage_sync();
+  -- tr_sync_storage_to_files (public function, always available)
+  DROP TRIGGER IF EXISTS tr_sync_storage_to_files ON storage.objects;
+  CREATE TRIGGER tr_sync_storage_to_files AFTER INSERT OR DELETE OR UPDATE ON storage.objects FOR EACH ROW EXECUTE FUNCTION public.handle_storage_sync();
 
-DROP TRIGGER IF EXISTS prefixes_create_hierarchy ON storage.prefixes;
-CREATE TRIGGER prefixes_create_hierarchy BEFORE INSERT ON storage.prefixes FOR EACH ROW WHEN ((pg_trigger_depth() < 1)) EXECUTE FUNCTION storage.prefixes_insert_trigger();
+  -- prefixes_create_hierarchy
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'storage' AND p.proname = 'prefixes_insert_trigger') THEN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'storage' AND table_name = 'prefixes') THEN
+      DROP TRIGGER IF EXISTS prefixes_create_hierarchy ON storage.prefixes;
+      CREATE TRIGGER prefixes_create_hierarchy BEFORE INSERT ON storage.prefixes FOR EACH ROW WHEN ((pg_trigger_depth() < 1)) EXECUTE FUNCTION storage.prefixes_insert_trigger();
+    END IF;
+  END IF;
 
-DROP TRIGGER IF EXISTS prefixes_delete_hierarchy ON storage.prefixes;
-CREATE TRIGGER prefixes_delete_hierarchy AFTER DELETE ON storage.prefixes FOR EACH ROW EXECUTE FUNCTION storage.delete_prefix_hierarchy_trigger();
+  -- prefixes_delete_hierarchy
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'storage' AND p.proname = 'delete_prefix_hierarchy_trigger') THEN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'storage' AND table_name = 'prefixes') THEN
+      DROP TRIGGER IF EXISTS prefixes_delete_hierarchy ON storage.prefixes;
+      CREATE TRIGGER prefixes_delete_hierarchy AFTER DELETE ON storage.prefixes FOR EACH ROW EXECUTE FUNCTION storage.delete_prefix_hierarchy_trigger();
+    END IF;
+  END IF;
+END $$;
+
+
 
 

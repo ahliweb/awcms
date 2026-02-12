@@ -134,8 +134,8 @@ function Dashboard() {
       <Helmet>
         <title>{t('dashboard_page.title')}</title>
         <meta name="description" content={t('dashboard_page.meta_description')} />
-        <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-        <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
+        <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
+        <meta httpEquiv="X-Frame-Options" content="SAMEORIGIN" />
       </Helmet>
       <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden font-sans">
         <Sidebar

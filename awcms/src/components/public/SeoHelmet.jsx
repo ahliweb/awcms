@@ -36,10 +36,10 @@ function SeoHelmet({
       {image && <meta name="twitter:image" content={image} />}
 
       {/* Security Headers (Simulated via Meta tags where possible, real enforcement needs Server/Edge config) */}
-      <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-      <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
-      <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
-      <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+      <meta httpEquiv="X-Content-Type-Options" content="nosniff" />
+      <meta httpEquiv="X-Frame-Options" content="SAMEORIGIN" />
+      <meta httpEquiv="X-XSS-Protection" content="1; mode=block" />
+      <meta httpEquiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
       
       {/* Content Security Policy - Basic strict policy */}
       {/* Note: This is a strict policy, might need adjustment for external images/scripts */}
