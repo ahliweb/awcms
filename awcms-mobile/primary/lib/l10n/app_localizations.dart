@@ -374,6 +374,18 @@ abstract class AppLocalizations {
   /// **'Bahasa Indonesia'**
   String get indonesian;
 
+  /// No description provided for @theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get theme;
+
+  /// No description provided for @selectTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Theme'**
+  String get selectTheme;
+
   /// No description provided for @darkMode.
   ///
   /// In en, this message translates to:
@@ -943,6 +955,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please try again later'**
   String get tryAgainLater;
+
+  /// No description provided for @cameraPermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera Permission Required'**
+  String get cameraPermissionRequired;
+
+  /// No description provided for @cameraPermissionRationale.
+  ///
+  /// In en, this message translates to:
+  /// **'App needs camera access to take profile picture.'**
+  String get cameraPermissionRationale;
+
+  /// No description provided for @galleryPermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Gallery Permission Required'**
+  String get galleryPermissionRequired;
+
+  /// No description provided for @galleryPermissionRationale.
+  ///
+  /// In en, this message translates to:
+  /// **'App needs gallery access to select profile picture.'**
+  String get galleryPermissionRationale;
+
+  /// No description provided for @permissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission Denied'**
+  String get permissionDenied;
 }
 
 class _AppLocalizationsDelegate

@@ -147,6 +147,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get indonesian => 'Bahasa Indonesia';
 
   @override
+  String get theme => 'Tema';
+
+  @override
+  String get selectTheme => 'Pilih Tema';
+
+  @override
   String get darkMode => 'Mode Gelap';
 
   @override
@@ -452,4 +458,21 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tryAgainLater => 'Silakan coba beberapa saat lagi';
+
+  @override
+  String get cameraPermissionRequired => 'Izin Kamera Diperlukan';
+
+  @override
+  String get cameraPermissionRationale =>
+      'Aplikasi membutuhkan akses kamera untuk mengambil foto profil.';
+
+  @override
+  String get galleryPermissionRequired => 'Izin Galeri Diperlukan';
+
+  @override
+  String get galleryPermissionRationale =>
+      'Aplikasi membutuhkan akses galeri untuk memilih foto profil.';
+
+  @override
+  String get permissionDenied => 'Izin Ditolak';
 }

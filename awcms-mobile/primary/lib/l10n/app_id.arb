@@ -55,6 +55,8 @@
   "selectLanguage": "Pilih Bahasa",
   "english": "English",
   "indonesian": "Bahasa Indonesia",
+  "theme": "Tema",
+  "selectTheme": "Pilih Tema",
   
   "darkMode": "Mode Gelap",
   "lightMode": "Mode Terang",
@@ -162,5 +164,12 @@
 
   "checkConnection": "Periksa koneksi Anda dan coba lagi",
   "serverError": "Terjadi kesalahan server",
-  "tryAgainLater": "Silakan coba beberapa saat lagi"
+  "tryAgainLater": "Silakan coba beberapa saat lagi",
+
+  "cameraPermissionRequired": "Izin Kamera Diperlukan",
+  "cameraPermissionRationale": "Aplikasi membutuhkan akses kamera untuk mengambil foto profil.",
+  "galleryPermissionRequired": "Izin Galeri Diperlukan",
+  "galleryPermissionRationale": "Aplikasi membutuhkan akses galeri untuk memilih foto profil.",
+  "permissionDenied": "Izin Ditolak",
+  "openSettings": "Buka Pengaturan"
 }
