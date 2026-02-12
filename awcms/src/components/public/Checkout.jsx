@@ -120,18 +120,25 @@ function CheckoutPage() {
         setLoading(true);
         try {
             // 1. Create order
-            const shippingAddress = `${formData.shipping_address}, ${formData.shipping_city}, ${formData.shipping_province} ${formData.shipping_postal_code}`;
+            const calculatedShippingCost = items.reduce((acc, item) => {
+                return acc + ((item.product.shipping_cost || 0) * item.quantity);
+            }, 0);
 
             const orderData = {
                 user_id: user?.id,
                 tenant_id: currentTenant.id,
                 subtotal: subtotal,
-                shipping_cost: 0, // TODO: Calculate shipping
-                total_amount: subtotal,
+                shipping_cost: calculatedShippingCost,
+                total_amount: subtotal + calculatedShippingCost,
                 status: 'pending',
                 payment_status: 'unpaid',
                 payment_method: paymentMethods.find(pm => pm.id === formData.payment_method_id)?.name,
-                shipping_address: shippingAddress,
+                shipping_address: {
+                    street: formData.shipping_address,
+                    city: formData.shipping_city,
+                    province: formData.shipping_province,
+                    postal_code: formData.shipping_postal_code,
+                },
                 notes: formData.notes,
                 order_number: `ORD-${Date.now()}`
             };
@@ -162,7 +169,7 @@ function CheckoutPage() {
             const paymentData = {
                 order_id: order.id,
                 payment_method_id: formData.payment_method_id,
-                amount: subtotal,
+                amount: subtotal + calculatedShippingCost, // Payment amount should include shipping
                 status: 'pending',
                 tenant_id: currentTenant.id
             };
@@ -183,7 +190,7 @@ function CheckoutPage() {
                     body: {
                         order_id: order.id,
                         payment_id: payment.id,
-                        amount: subtotal,
+                        amount: subtotal + calculatedShippingCost, // Xendit amount should include shipping
                         customer_name: formData.customer_name,
                         customer_email: formData.customer_email,
                         customer_phone: formData.customer_phone,
@@ -235,6 +242,9 @@ function CheckoutPage() {
         { num: 2, title: 'Shipping', icon: Truck },
         { num: 3, title: 'Payment', icon: CreditCard }
     ];
+
+    const totalShippingCost = items.reduce((acc, item) => acc + ((item.product?.shipping_cost || 0) * item.quantity), 0);
+    const totalAmount = subtotal + totalShippingCost;
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -465,11 +475,13 @@ function CheckoutPage() {
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-600">Shipping</span>
-                                <span className="text-slate-500 italic">Free</span>
+                                <span className="font-medium">
+                                    {totalShippingCost > 0 ? formatPrice(totalShippingCost) : 'Free'}
+                                </span>
                             </div>
                             <div className="border-t pt-2 flex justify-between text-lg font-bold">
                                 <span>Total</span>
-                                <span className="text-green-600">{formatPrice(subtotal)}</span>
+                                <span className="text-green-600">{formatPrice(totalAmount)}</span>
                             </div>
                         </div>
                     </div>

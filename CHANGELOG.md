@@ -14,6 +14,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Turnstile Secrets**: Added `TURNSTILE_SECRET_KEY_MAP` support for host-specific Turnstile secrets in Edge Functions.
 - **Dashboard UI**: Added shared `dashboard-surface` and `dashboard-surface-hover` utilities for consistent card styling.
 - **Auth Shell**: Introduced a shared authentication layout for login, reset, and registration flows.
+- **Shipping Calculation**: Implemented dynamic shipping cost calculation in Checkout with support for multiple couriers (JNE, J&T, POS, TIKI).
 - **Turnstile Debugging**: Added `VITE_TURNSTILE_DEBUG` to enable host/key resolution logging when needed.
 
 ### Changed
@@ -27,8 +28,15 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Tenant Settings UX**: Polished branding settings layout and controls for a more consistent admin feel.
 - **Users/Roles UX**: Improved table surfaces, search bars, and edit dialogs for user and role management.
 - **Permissions UX**: Updated permission list surfaces, dialogs, and controls to match the refreshed admin style.
+- **Region Picker**: Refactored `RegionPicker` to fetch levels dynamically from the database and resolved `region_levels` hierarchy conflicts.
+- **Taxonomy**: Restricted Tags to Blog module only; ensured Categories are globally accessible across modules.
 - **Notifications UX**: Replaced native confirm prompts with AlertDialog confirmations for mark-all-read and notification deletion.
+
 ### Fixed
+
+- **Tenant Creation**: Resolved unique constraint collisions causing 409 Conflict errors during new tenant creation.
+- **Database Synchronization**: Reset local migration history to match remote schema and resolved `region_levels` data duplicates.
+- **RLS Policy**: Fixed RLS policies and queries for improved security and stability.
 
 ## [2.30.0] "Waypoint" - 2026-02-07
 

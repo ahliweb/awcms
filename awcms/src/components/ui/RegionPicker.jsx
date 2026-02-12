@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRegions } from '../../hooks/useRegions';
-// import { REGION_LEVELS, getNextLevel } from '../../lib/regionUtils'; // types only or remove
-import { REGION_LEVELS } from '../../lib/regionUtils'; // Keep REGION_LEVELS as fallback for now
+import { REGION_LEVELS } from '../../lib/regionUtils'; // Fallback levels
 
 
 /**

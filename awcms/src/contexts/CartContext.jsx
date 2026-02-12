@@ -41,7 +41,7 @@ export function CartProvider({ children }) {
           *,
           cart_items (
             *,
-            product:products (id, name, slug, price, discount_price, featured_image, stock, is_available)
+            product:products (id, name, slug, price, discount_price, featured_image, stock, is_available, shipping_cost, weight)
           )
         `)
                 .eq('tenant_id', currentTenant.id)
@@ -125,7 +125,7 @@ export function CartProvider({ children }) {
                     .eq('id', existingRow.id)
                     .select(`
             *,
-            product:products (id, name, slug, price, discount_price, featured_image, stock, is_available)
+            product:products (id, name, slug, price, discount_price, featured_image, stock, is_available, shipping_cost, weight)
           `)
                     .single();
 
@@ -148,7 +148,7 @@ export function CartProvider({ children }) {
                     })
                     .select(`
             *,
-            product:products (id, name, slug, price, discount_price, featured_image, stock, is_available)
+            product:products (id, name, slug, price, discount_price, featured_image, stock, is_available, shipping_cost, weight)
           `)
                     .single();
 
@@ -175,7 +175,7 @@ export function CartProvider({ children }) {
                 .eq('id', itemId)
                 .select(`
           *,
-          product:products (id, name, slug, price, discount_price, featured_image, stock, is_available)
+          product:products (id, name, slug, price, discount_price, featured_image, stock, is_available, shipping_cost, weight)
         `)
                 .single();
 
