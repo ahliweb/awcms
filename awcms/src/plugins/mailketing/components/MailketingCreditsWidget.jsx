@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { CreditCard, RefreshCw } from 'lucide-react';
 import { checkCredits } from '../services/emailService';
 

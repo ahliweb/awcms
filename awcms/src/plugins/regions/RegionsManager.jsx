@@ -78,6 +78,7 @@ const RegionsManager = () => {
     // Data Fetching
     useEffect(() => {
         if (canRead) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             loadRegions();
         }
     }, [canRead, loadRegions]); // loadRegions depends on page/search/parent

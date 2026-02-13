@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Menu, LogOut, User, Building2 } from 'lucide-react';
@@ -20,7 +19,7 @@ import LanguageSelector from '@/components/ui/LanguageSelector';
 import { NotificationDropdown } from '@/components/dashboard/notifications/NotificationDropdown';
 import { DarkModeToggle } from '@/components/ui/DarkModeToggle';
 
-function Header({ toggleSidebar, onNavigate }) {
+function Header({ toggleSidebar, _onNavigate }) {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
   const { isPlatformAdmin } = usePermissions();

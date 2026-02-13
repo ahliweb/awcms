@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { WidgetAreaRenderer } from '@/components/public/WidgetAreaRenderer';
 
 // Fields definition for the sidebar editor

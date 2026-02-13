@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Upload, FileJson } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -58,7 +58,7 @@ function ExtensionInstaller({ onInstallComplete }) {
       try {
         const json = JSON.parse(e.target.result);
         setPreview(json);
-      } catch (err) {
+      } catch {
         toast({ variant: "destructive", title: "Parse Error", description: "Could not parse JSON." });
         setPreview(null);
       }

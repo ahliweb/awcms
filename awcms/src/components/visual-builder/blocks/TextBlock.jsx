@@ -3,7 +3,6 @@
  * Rich text content block with alignment options
  */
 
-import React from 'react';
 import { RichTextField } from '../fields/RichTextField';
 import { ColorPickerField } from '../fields/ColorPickerField';
 

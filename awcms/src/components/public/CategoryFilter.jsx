@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { cn } from '@/lib/utils';
 
 const CategoryFilter = ({ categories, activeCategory, onSelect, vertical = false }) => {

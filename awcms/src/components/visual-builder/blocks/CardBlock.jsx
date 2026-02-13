@@ -3,7 +3,6 @@
  * Content card with image, title, and description
  */
 
-import React from 'react';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
 export const CardBlockFields = {

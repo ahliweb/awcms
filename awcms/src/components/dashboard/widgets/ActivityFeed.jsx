@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileEdit } from 'lucide-react';
@@ -25,7 +24,7 @@ export function ActivityFeed({ activities }) {
                     <span className="font-bold">{activity.user}</span> {activity.action} a {activity.type}
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-300 truncate">
-                    "{activity.title}"
+                    &quot;{activity.title}&quot;
                   </p>
                   <p className="text-xs text-slate-400 font-medium">
                     {formatDistanceToNow(new Date(activity.time), { addSuffix: true })}

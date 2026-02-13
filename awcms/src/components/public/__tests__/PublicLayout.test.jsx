@@ -28,7 +28,7 @@ vi.mock('../PublicFooter', () => ({
 }));
 
 vi.mock('../DynamicTemplate', () => ({
-    default: ({ type, fallback: Fallback, context }) => {
+    default: ({ type: _type, fallback: Fallback, context }) => {
         return <Fallback {...context} />;
     },
 }));

@@ -1,4 +1,3 @@
-import React from 'react';
 
 export const YouTubeBlock = ({ url, aspectRatio = '16/9', autoplay = false }) => {
     // Helper to extract Video ID

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePlatformStats } from '@/hooks/usePlatformStats';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

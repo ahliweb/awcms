@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -122,7 +122,7 @@ function ExtensionSettings() {
                   onChange={(e) => {
                     try {
                       setSettings(JSON.parse(e.target.value));
-                    } catch (err) {
+                    } catch {
                       // Allow typing, validate on save/blur or show error
                     }
                   }}

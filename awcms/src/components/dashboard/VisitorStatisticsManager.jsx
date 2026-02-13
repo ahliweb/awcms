@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { LineChart, RefreshCw, Search } from 'lucide-react';
 
@@ -30,7 +30,7 @@ const getReferrerLabel = (referrer) => {
   if (!referrer) return 'Direct';
   try {
     return new URL(referrer).hostname || referrer;
-  } catch (error) {
+  } catch {
     return referrer;
   }
 };

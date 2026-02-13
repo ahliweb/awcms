@@ -1,7 +1,6 @@
 /**
  * Payment Methods Manager - Configure available payment options
  */
-import React from 'react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { CreditCard } from 'lucide-react';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
@@ -109,7 +108,7 @@ function PaymentMethodsManager() {
                             <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
                                 <li>Get your API key from <a href="https://dashboard.xendit.co" target="_blank" rel="noopener noreferrer" className="underline font-medium text-primary hover:text-primary/80">Xendit Dashboard</a></li>
                                 <li>Add <code className="bg-muted px-1 rounded text-xs font-mono text-foreground">XENDIT_API_KEY</code> to Supabase Edge Function secrets</li>
-                                <li>Create a payment method with type "Xendit"</li>
+                                <li>Create a payment method with type &quot;Xendit&quot;</li>
                             </ol>
                         </div>
                     </div>

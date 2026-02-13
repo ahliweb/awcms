@@ -55,7 +55,7 @@ async function rotatePassword() {
     if (fs.existsSync(SECRETS_META_PATH)) {
         try {
             meta = JSON.parse(fs.readFileSync(SECRETS_META_PATH, 'utf8'));
-        } catch (e) {
+        } catch {
             console.warn('Could not parse .secrets_meta.json, starting fresh.');
         }
     }

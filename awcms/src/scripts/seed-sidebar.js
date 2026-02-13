@@ -93,7 +93,7 @@ async function seedSidebar() {
 
     // Seed Menu
     for (const item of DEFAULT_MENU_CONFIG) {
-        const { id, ...data } = item;
+        const { id: _id, ...data } = item;
         const { error } = await supabase
             .from('admin_menus')
             .upsert({

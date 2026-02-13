@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -13,10 +13,6 @@ function PublicAnnouncements() {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        fetchAnnouncements();
-    }, []);
-
     const fetchAnnouncements = async () => {
         setLoading(true);
         const { data } = await supabase
@@ -28,6 +24,11 @@ function PublicAnnouncements() {
         setItems(data || []);
         setLoading(false);
     };
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchAnnouncements();
+    }, []);
 
     return (
         <div className="min-h-screen bg-background py-16">

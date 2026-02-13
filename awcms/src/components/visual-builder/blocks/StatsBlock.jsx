@@ -1,4 +1,3 @@
-import React from 'react';
 import { Users, TrendingUp, Award, Zap } from 'lucide-react';
 import { ColorPickerField } from '../fields/ColorPickerField';
 

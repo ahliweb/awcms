@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTemplates } from '@/hooks/useTemplates';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,7 @@ const TemplatePartEditor = () => {
         if (templateParts.length > 0 && id) {
             const part = templateParts.find(p => p.id === id);
             if (part) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setFormData({
                     name: part.name || '',
                     type: part.type || 'header',

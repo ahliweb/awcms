@@ -3,7 +3,6 @@
  * Multi-column layout container
  */
 
-import React from 'react';
 import { DropZone } from '@puckeditor/core';
 
 export const GridBlockFields = {

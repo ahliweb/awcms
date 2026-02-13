@@ -504,7 +504,7 @@ function TenantsManager() {
         {
             key: 'subscription_expires_at',
             label: 'Expires',
-            render: (date, row) => {
+            render: (date, _row) => {
                 if (!date) return <span className="text-xs text-muted-foreground">-</span>;
                 const expDate = new Date(date);
                 const isExpired = expDate < new Date();

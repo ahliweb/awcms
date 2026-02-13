@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from 'react';
  */
 export function useSearch({ 
     minLength = 5, 
-    context = 'public', 
+    _context = 'public', 
     initialQuery = '',
     debounceTime = 500 
 } = {}) {

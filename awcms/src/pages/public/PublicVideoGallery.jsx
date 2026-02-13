@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -10,7 +10,7 @@ function PublicVideoGallery() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchVideos = async () => {
+  const fetchVideos = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from('video_gallery')
@@ -19,11 +19,12 @@ function PublicVideoGallery() {
       .order('created_at', { ascending: false });
     setItems(data || []);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchVideos();
-  }, []);
+  }, [fetchVideos]);
 
   return (
     <div className="min-h-screen bg-background py-16">

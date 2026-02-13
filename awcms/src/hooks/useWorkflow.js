@@ -55,7 +55,7 @@ export function useWorkflow(initialState = 'draft', resourceType = 'posts', reso
      * @param {string} newState 
      * @param {string} comment - Optional comment for the log (future)
      */
-    const updateState = async (newState, comment = '') => {
+    const updateState = async (newState, _comment = '') => {
         if (!resourceId) {
             console.error('Cannot update workflow: No Resource ID');
             return false;

@@ -17,7 +17,7 @@ export { manifest };
  * Register plugin hooks and filters
  * Called once when the plugin system initializes
  */
-export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
+export const register = ({ addFilter, pluginConfig }) => {
     // Import components dynamically for routing
     const EmailSettings = React.lazy(() => import('./components/EmailSettings'));
     const EmailLogs = React.lazy(() => import('./components/EmailLogs'));
@@ -53,7 +53,7 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
     ]);
 
     // Register email content filter for template injection
-    addFilter('email_content', 'mailketing', (content, context) => {
+    addFilter('email_content', 'mailketing', (content, _context) => {
         // Add tracking pixel if enabled
         if (pluginConfig?.tracking_enabled) {
             const trackingPixel = `<img src="${pluginConfig.tracking_url}" width="1" height="1" />`;

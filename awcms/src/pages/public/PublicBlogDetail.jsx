@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { motion } from 'framer-motion';
@@ -15,6 +15,25 @@ function PublicBlogDetail() {
     const [blog, setBlog] = useState(null);
     const [loading, setLoading] = useState(true);
     const [relatedBlogs, setRelatedBlogs] = useState([]);
+
+    const incrementViews = async (id) => {
+        // Optimistic update without waiting
+        await supabase.rpc('increment_blog_view', { blog_id: id }).catch(() => { });
+        // Alternative simple update if RPC not exists: 
+        // await supabase.from('blogs').update({ views: (blog.views || 0) + 1 }).eq('id', id);
+    };
+
+    const fetchRelated = async (categoryId, currentId) => {
+        if (!categoryId) return;
+        const { data } = await supabase
+            .from('blogs')
+            .select('id, title, slug, featured_image, published_at')
+            .eq('category_id', categoryId)
+            .eq('status', 'published')
+            .neq('id', currentId)
+            .limit(3);
+        if (data) setRelatedBlogs(data);
+    };
 
     useEffect(() => {
         const fetchDetail = async () => {
@@ -52,25 +71,6 @@ function PublicBlogDetail() {
         fetchDetail();
     }, [slug]);
 
-    const incrementViews = async (id) => {
-        // Optimistic update without waiting
-        await supabase.rpc('increment_blog_view', { blog_id: id }).catch(() => { });
-        // Alternative simple update if RPC not exists: 
-        // await supabase.from('blogs').update({ views: (blog.views || 0) + 1 }).eq('id', id);
-    };
-
-    const fetchRelated = async (categoryId, currentId) => {
-        if (!categoryId) return;
-        const { data } = await supabase
-            .from('blogs')
-            .select('id, title, slug, featured_image, published_at')
-            .eq('category_id', categoryId)
-            .eq('status', 'published')
-            .neq('id', currentId)
-            .limit(3);
-        if (data) setRelatedBlogs(data);
-    };
-
     if (loading) {
         return (
             <div className="min-h-screen bg-white animate-pulse">
@@ -92,7 +92,7 @@ function PublicBlogDetail() {
         <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4">
             <div className="text-center">
                 <h2 className="text-3xl font-bold text-slate-800 mb-4">Blog Post Not Found</h2>
-                <p className="text-slate-500 mb-8">The blog post you're looking for might have been removed or is temporarily unavailable.</p>
+                <p className="text-slate-500 mb-8">The blog post you&apos;re looking for might have been removed or is temporarily unavailable.</p>
                 <Link to="/blogs">
                     <Button className="bg-blue-600">Back to Blogs</Button>
                 </Link>

@@ -3,7 +3,6 @@
  * Renders published visual builder content on public pages
  */
 
-import React from 'react';
 import { Render } from '@puckeditor/core';
 import puckConfig from './config';
 

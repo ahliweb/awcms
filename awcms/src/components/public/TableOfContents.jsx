@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 const TableOfContents = ({ content }) => {
@@ -11,7 +11,7 @@ const TableOfContents = ({ content }) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(content, 'text/html');
     const elements = doc.querySelectorAll('h2, h3');
-    
+
     const items = Array.from(elements).map((element, index) => {
       const id = element.id || `heading-${index}`;
       // Note: In a real implementation, we'd need to inject these IDs back into the rendered content 
@@ -22,7 +22,7 @@ const TableOfContents = ({ content }) => {
         level: Number(element.tagName.substring(1))
       };
     });
-
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHeadings(items);
   }, [content]);
 
@@ -39,12 +39,12 @@ const TableOfContents = ({ content }) => {
       element.scrollIntoView({ behavior: 'smooth' });
       setActiveId(id);
     } else {
-        // Fallback: finding element containing text
-        const found = Array.from(document.querySelectorAll('h2, h3'))
-            .find(el => el.textContent === headings.find(h => h.id === id)?.text);
-        if (found) {
-            found.scrollIntoView({ behavior: 'smooth' });
-        }
+      // Fallback: finding element containing text
+      const found = Array.from(document.querySelectorAll('h2, h3'))
+        .find(el => el.textContent === headings.find(h => h.id === id)?.text);
+      if (found) {
+        found.scrollIntoView({ behavior: 'smooth' });
+      }
     }
   };
 

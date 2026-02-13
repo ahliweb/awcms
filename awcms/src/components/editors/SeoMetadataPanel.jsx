@@ -4,7 +4,7 @@
  * Provides fields for meta title, description, keywords, OG image, and canonical URL.
  * Used by both UnifiedContentEditor, PagesManager, and BlogEditor.
  */
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, ChevronUp, Globe, Share2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

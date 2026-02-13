@@ -110,7 +110,7 @@ export function LocalizedArrayEditor({
                         {itemCount === 0 && (
                             <Card className="border-dashed">
                                 <CardContent className="py-6 text-center text-muted-foreground text-sm">
-                                    No items yet. Click "{addLabel}" to add one.
+                                    No items yet. Click &quot;{addLabel}&quot; to add one.
                                 </CardContent>
                             </Card>
                         )}

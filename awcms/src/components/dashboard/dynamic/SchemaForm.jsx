@@ -25,6 +25,7 @@ const SchemaForm = ({ schema, initialData = {}, onSubmit, loading = false }) => 
 
     useEffect(() => {
         if (initialData) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setFormData(initialData);
         }
     }, [initialData]);

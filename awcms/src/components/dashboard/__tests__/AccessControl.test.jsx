@@ -75,7 +75,7 @@ describe('Access Control', () => {
         it('renders Access Denied when "tenant.seo.read" is missing', async () => {
             // Setup: User has NO permissions
             usePermissions.mockReturnValue({
-                hasPermission: (perm) => false,
+                hasPermission: (_perm) => false,
                 userRole: 'editor',
                 loading: false
             });
@@ -113,7 +113,7 @@ describe('Access Control', () => {
     describe('WidgetsManager', () => {
         it('renders Access Denied when "tenant.widgets.read" is missing', async () => {
             usePermissions.mockReturnValue({
-                hasPermission: (perm) => false,
+                hasPermission: (_perm) => false,
                 userRole: 'editor',
                 loading: false
             });

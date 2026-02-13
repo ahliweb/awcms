@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -41,6 +41,7 @@ const LocationPicker = ({ lat, lng, onChange }) => {
 
   useEffect(() => {
     if (lat && lng) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPosition({ lat, lng });
     }
   }, [lat, lng]);

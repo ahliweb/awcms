@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { Helmet } from 'react-helmet-async';
 
 // Component to handle secure headers and SEO metadata for public pages

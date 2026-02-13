@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { Facebook, Twitter, Linkedin, Link as LinkIcon, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';

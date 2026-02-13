@@ -1,7 +1,6 @@
 /**
  * Shopping Cart - Display and manage cart items
  */
-import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Trash2, Plus, Minus, ArrowLeft, CreditCard, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';

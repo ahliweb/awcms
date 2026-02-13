@@ -44,7 +44,7 @@ export function useMobileUsers() {
             const active = data?.filter((u) => new Date(u.last_active) > weekAgo).length || 0;
 
             setStats({ total, ios, android, active });
-        } catch (err) {
+        } catch {
             toast({
                 variant: 'destructive',
                 title: 'Error',

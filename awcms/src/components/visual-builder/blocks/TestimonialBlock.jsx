@@ -3,7 +3,6 @@
  * Customer testimonial with quote, name, and avatar
  */
 
-import React from 'react';
 import { Quote } from 'lucide-react';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
@@ -37,7 +36,7 @@ export const TestimonialBlockFields = {
     }
 };
 
-export const TestimonialBlock = ({ quote, quoteColor, name, nameColor, role, roleColor, avatar, rating, variant }) => {
+export const TestimonialBlock = ({ quote, quoteColor: _quoteColor, name, nameColor: _nameColor, role, roleColor: _roleColor, avatar, rating, variant }) => {
     const renderStars = () => {
         return (
             <div className="flex gap-1">
@@ -60,7 +59,7 @@ export const TestimonialBlock = ({ quote, quoteColor, name, nameColor, role, rol
             <div className="text-center py-12 px-6">
                 <Quote className="w-12 h-12 text-blue-200 mx-auto mb-6" />
                 <blockquote className="text-2xl text-slate-700 italic mb-6 max-w-3xl mx-auto">
-                    "{quote}"
+                    &quot;{quote}&quot;
                 </blockquote>
                 <div className="flex items-center justify-center gap-4">
                     {avatar && (
@@ -80,7 +79,7 @@ export const TestimonialBlock = ({ quote, quoteColor, name, nameColor, role, rol
         return (
             <div className="py-6 border-l-4 border-blue-500 pl-6">
                 <blockquote className="text-lg text-slate-700 italic mb-4">
-                    "{quote}"
+                    &quot;{quote}&quot;
                 </blockquote>
                 <div className="flex items-center gap-3">
                     {avatar && (
@@ -114,7 +113,7 @@ export const TestimonialBlock = ({ quote, quoteColor, name, nameColor, role, rol
                 </div>
                 <Quote className="w-8 h-8 text-blue-100 flex-shrink-0" />
             </div>
-            <blockquote className="text-slate-600 italic">"{quote}"</blockquote>
+            <blockquote className="text-slate-600 italic">&quot;{quote}&quot;</blockquote>
         </div>
     );
 };

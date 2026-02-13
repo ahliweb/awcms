@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,8 +34,8 @@ const GenericResourceEditor = ({
     initialData,
     onClose,
     onSuccess,
-    permissionPrefix,
-    createPermission,
+    _permissionPrefix,
+    _createPermission,
     omitCreatedBy = false
 }) => {
     const { user } = useAuth();
@@ -68,7 +68,7 @@ const GenericResourceEditor = ({
         setLoading(true);
         try {
             // Remove joined relationship objects that shouldn't be sent to the DB using destructuring
-            const { owner, tenant, category, ...cleanPayload } = formData;
+            const { owner: _owner, tenant: _tenant, category: _category, ...cleanPayload } = formData;
             const payload = { ...cleanPayload };
 
             // ... slug logic

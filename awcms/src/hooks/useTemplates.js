@@ -117,7 +117,7 @@ export const useTemplates = () => {
 
     const duplicateTemplate = async (template) => {
         try {
-            const { id, created_at, updated_at, ...rest } = template;
+            const { id: _id, created_at: _created_at, updated_at: _updated_at, ...rest } = template;
             const newTemplate = {
                 ...rest,
                 name: `${template.name} (Copy)`,

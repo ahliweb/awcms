@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileText, Layers, ShoppingBag, Users, HardDrive } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';

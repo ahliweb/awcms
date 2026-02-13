@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -10,11 +10,7 @@ function PublicTestimonies() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchTestimonies();
-  }, []);
-
-  const fetchTestimonies = async () => {
+  const fetchTestimonies = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from('testimonies')
@@ -23,7 +19,12 @@ function PublicTestimonies() {
       .order('created_at', { ascending: false });
     setItems(data || []);
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchTestimonies();
+  }, [fetchTestimonies]);
 
   return (
     <div className="min-h-screen bg-background py-16">
@@ -38,7 +39,7 @@ function PublicTestimonies() {
           className="text-center mb-16"
         >
           <h1 className="text-4xl font-bold text-foreground mb-4">Client Testimonials</h1>
-          <p className="text-muted-foreground">Don't just take our word for it.</p>
+          <p className="text-muted-foreground">Don&apos;t just take our word for it.</p>
         </motion.div>
 
         {loading ? (
@@ -68,7 +69,7 @@ function PublicTestimonies() {
                 </div>
 
                 <p className="text-muted-foreground italic mb-6 leading-relaxed">
-                  "{item.content}"
+                  &quot;{item.content}&quot;
                 </p>
 
                 <div className="flex items-center gap-4">

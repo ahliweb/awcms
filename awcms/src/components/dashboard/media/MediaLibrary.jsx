@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -492,7 +492,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                                                 <DialogContent className="max-w-md">
                                                     <DialogHeader>
                                                         <DialogTitle>File Details</DialogTitle>
-                                                        <DialogDescription>Information about this file and where it's used.</DialogDescription>
+                                                        <DialogDescription>Information about this file and where it&apos;s used.</DialogDescription>
                                                     </DialogHeader>
                                                     <div className="space-y-4 mt-4">
                                                         {/* Preview */}

@@ -1,4 +1,3 @@
-import React from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Calendar, ArrowRight, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,13 +7,13 @@ import { SelectField } from '../fields/SelectField';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
 export const LatestBlogsBlock = ({
-    count = 3,
+    _count = 3,
     layout = 'grid',
     showImage = true,
     showDate = true,
-    categoryFilter,
-    titleColor,
-    descriptionColor,
+    _categoryFilter,
+    _titleColor,
+    _descriptionColor,
     blogs = [] // blogs are now passed as a prop
 }) => {
     // No internal state for blogs, loading, or error as data is resolved externally

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -372,7 +372,7 @@ function ProfileEditor({ data = {}, updateField }) {
     );
 }
 
-function OrganizationEditor({ data = {}, updateField, updateTopLevel }) {
+function OrganizationEditor({ data = {}, updateField: _updateField, updateTopLevel }) {
     const [activeOrg, setActiveOrg] = useState('school');
 
     const orgTypes = [
@@ -447,7 +447,7 @@ function OrganizationEditor({ data = {}, updateField, updateTopLevel }) {
     );
 }
 
-function StaffEditor({ data = {}, updateField, updateTopLevel }) {
+function StaffEditor({ data = {}, updateField: _updateField, updateTopLevel }) {
     const [activeStaff, setActiveStaff] = useState('teachers');
 
     return (
@@ -594,7 +594,7 @@ function FinanceEditor({ data = {}, updateField }) {
     );
 }
 
-function GalleryEditor({ data = {}, updateField, updateTopLevel }) {
+function GalleryEditor({ data = {}, updateField: _updateField, updateTopLevel }) {
     const [albums, setAlbums] = useState(data?.albums || []);
 
     const handleAlbumsChange = (newAlbums) => {
@@ -638,7 +638,7 @@ function GalleryEditor({ data = {}, updateField, updateTopLevel }) {
             {albums.length === 0 ? (
                 <Card className="border-dashed">
                     <CardContent className="py-8 text-center text-muted-foreground">
-                        No albums created yet. Click "Add Album" to create one.
+                        No albums created yet. Click &quot;Add Album&quot; to create one.
                     </CardContent>
                 </Card>
             ) : (
@@ -686,7 +686,7 @@ function GalleryEditor({ data = {}, updateField, updateTopLevel }) {
     );
 }
 
-function AgendaEditor({ data = {}, updateField, updateTopLevel }) {
+function AgendaEditor({ data = {}, updateField: _updateField, updateTopLevel }) {
     const [events, setEvents] = useState(data?.events || []);
 
     const handleEventsChange = (newEvents) => {
@@ -732,7 +732,7 @@ function AgendaEditor({ data = {}, updateField, updateTopLevel }) {
             {events.length === 0 ? (
                 <Card className="border-dashed">
                     <CardContent className="py-8 text-center text-muted-foreground">
-                        No events scheduled. Click "Add Event" to create one.
+                        No events scheduled. Click &quot;Add Event&quot; to create one.
                     </CardContent>
                 </Card>
             ) : (

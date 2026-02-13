@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Image as ImageIcon, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ export function ImageUpload({ value, onChange, disabled, className, hidePreview 
     const hasPreview = Boolean(normalizedValue) && !previewError;
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setUrlInput(normalizedValue);
         setPreviewError(false);
     }, [normalizedValue]);

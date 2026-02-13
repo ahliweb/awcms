@@ -5,7 +5,7 @@
  * Used inside AdminLayout to inject plugin-defined routes.
  */
 
-import React, { Suspense, useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
 import { Route } from 'react-router-dom';
 import { usePlugins } from '@/contexts/PluginContext';
 

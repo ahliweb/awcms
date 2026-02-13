@@ -1,4 +1,3 @@
-import React from 'react';
 import { getVersionInfo } from '@/lib/version';
 import { Info } from 'lucide-react';
 import {

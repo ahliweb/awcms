@@ -2,7 +2,7 @@
  * Cart Context - Global shopping cart state management
  * Supports both authenticated users (database) and guests (localStorage)
  */
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';

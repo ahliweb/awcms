@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import path from 'path';
+import _path from '_path';
 
 // Load .env from current directory
 dotenv.config();

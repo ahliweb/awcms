@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { RefreshCw, LayoutGrid, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardData } from '@/hooks/useDashboardData';
@@ -64,13 +63,12 @@ function AdminDashboard() {
                 description={`Here's your performance overview for ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}.`}
                 icon={LayoutGrid}
                 actions={headerActions}
-                children={
-                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 bg-white/40 dark:bg-slate-800/40 px-3 py-1.5 rounded-full border border-white/40 dark:border-slate-700/40 w-fit backdrop-blur-sm">
-                        <Calendar className="w-3 h-3" />
-                        <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
-                    </div>
-                }
-            />
+            >
+                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 bg-white/40 dark:bg-slate-800/40 px-3 py-1.5 rounded-full border border-white/40 dark:border-slate-700/40 w-fit backdrop-blur-sm">
+                    <Calendar className="w-3 h-3" />
+                    <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
+                </div>
+            </PageHeader>
 
             {/* Platform Overview for platform admins */}
             {isPlatformAdmin && (

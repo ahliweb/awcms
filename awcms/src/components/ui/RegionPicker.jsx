@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRegions } from '../../hooks/useRegions';
 import { REGION_LEVELS } from '../../lib/regionUtils'; // Fallback levels
 
@@ -8,7 +8,7 @@ import { REGION_LEVELS } from '../../lib/regionUtils'; // Fallback levels
  * Cascading dropdowns for selecting regions down to a specific level
  */
 const RegionPicker = ({
-    value,
+    _value,
     onChange,
     maxLevel = 10,
     className = ''
@@ -47,6 +47,7 @@ const RegionPicker = ({
     useEffect(() => {
         if (allLevels.length > 0) {
             const filtered = allLevels.filter(l => l.order <= maxLevel);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setActiveLevels(filtered);
         }
     }, [allLevels, maxLevel]);
@@ -72,6 +73,7 @@ const RegionPicker = ({
         if (allLevels.length > 0 && activeLevels.length > 0) {
             // Root level is the one with the lowest order
             const rootLevel = activeLevels.reduce((prev, curr) => (prev.order < curr.order ? prev : curr));
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             loadRegionsForLevel(rootLevel.key, null);
         }
     }, [allLevels, activeLevels, loadRegionsForLevel]);

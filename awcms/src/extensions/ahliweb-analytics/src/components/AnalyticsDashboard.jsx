@@ -3,9 +3,9 @@
  * Main dashboard view for the Analytics extension
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
-const AnalyticsDashboard = ({ supabase, tenantId }) => {
+const AnalyticsDashboard = ({ supabase: _supabase, tenantId: _tenantId}) => {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         pageViews: 0,

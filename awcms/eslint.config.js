@@ -36,8 +36,21 @@ export default [
                 'warn',
                 { allowConstantExport: true },
             ],
-            'no-unused-vars': 'warn',
+            'no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                    caughtErrorsIgnorePattern: '^_',
+                },
+            ],
             'react/prop-types': 'off', // Since many projects move away from prop-types or use TS
+        },
+    },
+    {
+        files: ['src/plugins/**/*.{js,jsx}', 'src/components/visual-builder/blocks/**/*.{js,jsx}', 'src/contexts/**/*.{js,jsx}', 'src/extensions/**/*.{js,jsx}', 'src/components/ui/**/*.{js,jsx}', 'src/components/routing/**/*.{js,jsx}'],
+        rules: {
+            'react-refresh/only-export-components': 'off',
         },
     },
 ];

@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Tag, AlertTriangle, Info, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

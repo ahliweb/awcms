@@ -1,4 +1,3 @@
-import React from 'react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { Settings } from 'lucide-react';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';

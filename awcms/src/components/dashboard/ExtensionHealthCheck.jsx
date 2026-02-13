@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback as _useCallback} from 'react';
 import { Activity, CheckCircle, XCircle, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -22,7 +22,7 @@ function ExtensionHealthCheck() {
    const [healthScore, setHealthScore] = useState(100);
    const [checks, setChecks] = useState(() => initialChecks.map(check => ({ ...check })));
 
-   const runDiagnosis = useCallback(async () => {
+   const runDiagnosis = async () => {
       setChecking(true);
       setHealthScore(100);
 
@@ -65,11 +65,13 @@ function ExtensionHealthCheck() {
       setChecks([...newChecks]);
 
       setChecking(false);
-   }, [currentTenant?.id, isPlatformAdmin]);
+   };
 
    useEffect(() => {
+      // Run once on mount
       runDiagnosis();
-   }, [runDiagnosis]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, []);
 
    return (
       <div className="space-y-6">

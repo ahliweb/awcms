@@ -1,3 +1,7 @@
+-- Add tenant_id to admin_menus if it doesn't exist (required for policy below)
+ALTER TABLE IF EXISTS "public"."admin_menus" ADD COLUMN IF NOT EXISTS "tenant_id" uuid REFERENCES "public"."tenants"("id");
+CREATE INDEX IF NOT EXISTS idx_admin_menus_tenant_id ON public.admin_menus (tenant_id);
+
 -- Performance: Add indices for foreign keys on tenant_id
 CREATE INDEX IF NOT EXISTS idx_analytics_daily_tenant_id ON public.analytics_daily (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_tenant_id ON public.analytics_events (tenant_id);

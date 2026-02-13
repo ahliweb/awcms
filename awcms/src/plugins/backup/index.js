@@ -23,7 +23,7 @@ export { manifest };
  * Register plugin hooks and filters
  * Called when plugin is loaded
  */
-export const register = ({ addAction, addFilter, supabase }) => {
+export const register = ({ addAction, addFilter, supabase: _supabase }) => {
     // Register admin menu item
     addFilter('admin_menu_items', 'backup_plugin', (items) => {
         return [
@@ -83,7 +83,7 @@ export const activate = async (supabase, tenantId) => {
  * Deactivate plugin
  * Called when plugin is disabled
  */
-export const deactivate = async (supabase, tenantId) => {
+export const deactivate = async (_supabase, _tenantId) => {
     console.log(`[Plugin] ${manifest.name} deactivated`);
     // Cleanup logic if needed (but preserve data)
 };

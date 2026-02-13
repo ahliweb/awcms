@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Reorder } from 'framer-motion';
 import { GripVertical, Plus, Save, Trash2, Lock, Edit, ChevronRight, ChevronDown, RefreshCw, Menu, LayoutTemplate } from 'lucide-react';
 import { Button } from '@/components/ui/button';

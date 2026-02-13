@@ -1,5 +1,4 @@
 
-import React from 'react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { User, ShoppingCart } from 'lucide-react';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
@@ -19,7 +18,7 @@ function OrdersManager() {
         {
             key: 'user',
             label: 'Customer',
-            render: (val, row) => (
+            render: (val, _row) => (
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                         <User className="w-4 h-4 text-primary" />

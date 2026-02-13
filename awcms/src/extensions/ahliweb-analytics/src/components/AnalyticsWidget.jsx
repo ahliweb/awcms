@@ -3,7 +3,6 @@
  * Compact widget for dashboard integration
  */
 
-import React from 'react';
 import { cn } from '@/lib/utils';
 
 const AnalyticsWidget = ({ className = '' }) => {

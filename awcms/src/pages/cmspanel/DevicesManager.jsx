@@ -75,7 +75,7 @@ function DevicesManager() {
             await registerDevice(newDevice);
             setShowAddDialog(false);
             setNewDevice({ device_id: '', device_name: '' });
-        } catch (err) {
+        } catch {
             // Error handled in hook
         }
     };

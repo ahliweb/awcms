@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';

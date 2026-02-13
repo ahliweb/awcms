@@ -3,7 +3,7 @@
  * Basic contact form with configurable fields
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Send, Loader2, CheckCircle } from 'lucide-react';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
@@ -60,7 +60,7 @@ export const ContactFormBlock = ({
     showSubject,
     buttonText,
     successMessage,
-    recipientEmail,
+    _recipientEmail,
     variant
 }) => {
     const [formData, setFormData] = useState({

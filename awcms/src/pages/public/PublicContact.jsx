@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { MapPin, Phone, Mail, Send, Loader2 } from 'lucide-react';
@@ -31,9 +31,9 @@ function PublicContact() {
       const { error } = await supabase
         .from('contact_messages')
         .insert([{
-            ...formData,
-            status: 'new', 
-            created_at: new Date()
+          ...formData,
+          status: 'new',
+          created_at: new Date()
         }]);
 
       if (error) throw error;
@@ -43,7 +43,7 @@ function PublicContact() {
         description: t('contact.success_desc', 'We will get back to you shortly.'),
       });
       setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",
@@ -62,14 +62,14 @@ function PublicContact() {
       </Helmet>
 
       <div className="container mx-auto px-4">
-        <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-16"
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-16"
         >
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">Get in Touch</h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Have questions about our services or need support? We're here to help.
+            Have questions about our services or need support? We&apos;re here to help.
           </p>
         </motion.div>
 
@@ -77,114 +77,114 @@ function PublicContact() {
           {/* Contact Info */}
           <div className="space-y-6">
             <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
-                <h3 className="text-xl font-bold text-foreground mb-6">Contact Information</h3>
-                <div className="space-y-6">
-                    <div className="flex items-start gap-4">
-                        <div className="bg-primary/10 p-3 rounded-lg text-primary">
-                            <MapPin className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-foreground">Our Location</h4>
-                            <p className="text-muted-foreground text-sm mt-1">123 Digital Avenue, Tech City, Jakarta 10220</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                        <div className="bg-primary/10 p-3 rounded-lg text-primary">
-                            <Phone className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-foreground">Phone Number</h4>
-                            <p className="text-muted-foreground text-sm mt-1">+62 895 1338 0400</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-start gap-4">
-                        <div className="bg-primary/10 p-3 rounded-lg text-primary">
-                            <Mail className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-foreground">Email Address</h4>
-                            <p className="text-muted-foreground text-sm mt-1">hello@ahliweb.com</p>
-                        </div>
-                    </div>
+              <h3 className="text-xl font-bold text-foreground mb-6">Contact Information</h3>
+              <div className="space-y-6">
+                <div className="flex items-start gap-4">
+                  <div className="bg-primary/10 p-3 rounded-lg text-primary">
+                    <MapPin className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-foreground">Our Location</h4>
+                    <p className="text-muted-foreground text-sm mt-1">123 Digital Avenue, Tech City, Jakarta 10220</p>
+                  </div>
                 </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="bg-primary/10 p-3 rounded-lg text-primary">
+                    <Phone className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-foreground">Phone Number</h4>
+                    <p className="text-muted-foreground text-sm mt-1">+62 895 1338 0400</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="bg-primary/10 p-3 rounded-lg text-primary">
+                    <Mail className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-foreground">Email Address</h4>
+                    <p className="text-muted-foreground text-sm mt-1">hello@ahliweb.com</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Contact Form */}
           <div className="lg:col-span-2">
-            <motion.div 
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-card border border-border rounded-2xl p-8 shadow-sm"
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-card border border-border rounded-2xl p-8 shadow-sm"
             >
-                <h3 className="text-xl font-bold text-foreground mb-6">Send us a Message</h3>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                            <Label htmlFor="name">Full Name</Label>
-                            <Input 
-                                id="name" 
-                                placeholder="John Doe" 
-                                value={formData.name}
-                                onChange={e => setFormData({...formData, name: e.target.value})}
-                                required
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email Address</Label>
-                            <Input 
-                                id="email" 
-                                type="email" 
-                                placeholder="john@example.com" 
-                                value={formData.email}
-                                onChange={e => setFormData({...formData, email: e.target.value})}
-                                required
-                            />
-                        </div>
-                    </div>
+              <h3 className="text-xl font-bold text-foreground mb-6">Send us a Message</h3>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input
+                      id="name"
+                      placeholder="John Doe"
+                      value={formData.name}
+                      onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="john@example.com"
+                      value={formData.email}
+                      onChange={e => setFormData({ ...formData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
 
-                    <div className="grid md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                            <Label htmlFor="phone">Phone (Optional)</Label>
-                            <Input 
-                                id="phone" 
-                                placeholder="+62..." 
-                                value={formData.phone}
-                                onChange={e => setFormData({...formData, phone: e.target.value})}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="subject">Subject</Label>
-                            <Input 
-                                id="subject" 
-                                placeholder="How can we help?" 
-                                value={formData.subject}
-                                onChange={e => setFormData({...formData, subject: e.target.value})}
-                                required
-                            />
-                        </div>
-                    </div>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone (Optional)</Label>
+                    <Input
+                      id="phone"
+                      placeholder="+62..."
+                      value={formData.phone}
+                      onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="subject">Subject</Label>
+                    <Input
+                      id="subject"
+                      placeholder="How can we help?"
+                      value={formData.subject}
+                      onChange={e => setFormData({ ...formData, subject: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="message">Message</Label>
-                        <Textarea 
-                            id="message" 
-                            placeholder="Type your message here..." 
-                            className="min-h-[150px]"
-                            value={formData.message}
-                            onChange={e => setFormData({...formData, message: e.target.value})}
-                            required
-                        />
-                    </div>
+                <div className="space-y-2">
+                  <Label htmlFor="message">Message</Label>
+                  <Textarea
+                    id="message"
+                    placeholder="Type your message here..."
+                    className="min-h-[150px]"
+                    value={formData.message}
+                    onChange={e => setFormData({ ...formData, message: e.target.value })}
+                    required
+                  />
+                </div>
 
-                    <Button type="submit" size="lg" className="w-full md:w-auto" disabled={loading}>
-                        {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                        Send Message
-                    </Button>
-                </form>
+                <Button type="submit" size="lg" className="w-full md:w-auto" disabled={loading}>
+                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                  Send Message
+                </Button>
+              </form>
             </motion.div>
           </div>
         </div>

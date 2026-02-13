@@ -2,7 +2,6 @@
  * Analytics Reports Component
  */
 
-import React from 'react';
 
 const AnalyticsReports = () => {
     return (

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import ContentTable from '@/components/dashboard/ContentTable';
 import UserEditor from '@/components/dashboard/UserEditor';
 import UserApprovalManager from '@/components/dashboard/UserApprovalManager';

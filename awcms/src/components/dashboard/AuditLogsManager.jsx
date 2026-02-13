@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { format } from 'date-fns';

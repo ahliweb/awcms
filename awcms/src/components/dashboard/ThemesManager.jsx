@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { Palette, Plus, Edit, Check, Trash2, Power, Copy, Download, Upload, Search, MoreVertical, LayoutTemplate } from 'lucide-react';
@@ -134,7 +134,7 @@ const ThemesManager = () => {
 
     const handleDuplicate = async (theme) => {
         // Let DB handle ID generation by not including 'id'
-        const { id, created_at, updated_at, ...rest } = theme;
+        const { id: _id, created_at: _created_at, updated_at: _updated_at, ...rest } = theme;
         const newTheme = {
             ...rest,
             is_active: false,

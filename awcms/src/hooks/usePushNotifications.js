@@ -34,7 +34,7 @@ export function usePushNotifications() {
 
             if (error) throw error;
             setNotifications(data || []);
-        } catch (err) {
+        } catch {
             toast({
                 variant: 'destructive',
                 title: 'Error',

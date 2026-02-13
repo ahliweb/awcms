@@ -3,7 +3,6 @@
  * Full-width hero section with background image, title, and CTA
  */
 
-import React from 'react';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
 export const HeroBlockFields = {

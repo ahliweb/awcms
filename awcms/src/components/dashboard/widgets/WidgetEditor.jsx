@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -112,7 +112,7 @@ const WidgetEditor = ({ type, config, onChange, onSave, onCancel }) => {
                                 onChange={e => {
                                     try {
                                         setLocalConfig(JSON.parse(e.target.value));
-                                    } catch (err) {
+                                    } catch {
                                         // ignore parse error while typing
                                     }
                                 }}

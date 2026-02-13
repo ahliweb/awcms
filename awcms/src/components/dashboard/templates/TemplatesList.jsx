@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutTemplate, Plus, Edit, Trash2, Copy, Search, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';

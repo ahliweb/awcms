@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Puzzle, Power, Trash2, Settings,
   Upload, BookOpen, AlertCircle,
@@ -279,7 +279,7 @@ function ExtensionsManager() {
                 <div className="text-center py-12 border border-dashed border-border rounded-xl">
                   <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
                   <h3 className="text-lg font-medium text-foreground">{t('extensions.select_extension')}</h3>
-                  <p className="text-muted-foreground">Go to the "Installed" tab and click the Shield icon on an extension card.</p>
+                  <p className="text-muted-foreground">Go to the &quot;Installed&quot; tab and click the Shield icon on an extension card.</p>
                 </div>
               )}
             </TabsContent>

@@ -75,7 +75,7 @@ function PushNotificationsManager() {
             await createNotification(newNotification, isDraft);
             setCreateDialog(false);
             setNewNotification({ title: '', message: '', target_type: 'all' });
-        } catch (err) {
+        } catch {
             // Error handled in hook
         }
     };

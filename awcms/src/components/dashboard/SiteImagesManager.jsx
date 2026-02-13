@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -342,7 +342,7 @@ function GalleryCollectionsEditor({ data = [], onChange }) {
             {data.length === 0 ? (
                 <Card className="border-dashed">
                     <CardContent className="py-8 text-center text-muted-foreground">
-                        No collections created yet. Click "Add Collection" to create one.
+                        No collections created yet. Click &quot;Add Collection&quot; to create one.
                     </CardContent>
                 </Card>
             ) : (

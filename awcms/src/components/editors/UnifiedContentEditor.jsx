@@ -4,7 +4,7 @@
  * This component serves as the core editor for both pages and blogs,
  * providing a consistent editing experience with mode switching capabilities.
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
@@ -70,7 +70,7 @@ function UnifiedContentEditor({
     contentType = 'page',
     onClose,
     onSuccess,
-    tableName = 'pages',
+    _tableName = 'pages',
     permissionPrefix = 'pages'
 }) {
     const { toast } = useToast();

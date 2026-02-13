@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, Save, Code, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,7 +51,7 @@ function ExtensionEditor({ extension = {}, onClose, onSave }) {
       let parsedConfig;
       try {
         parsedConfig = JSON.parse(formData.config);
-      } catch (err) {
+      } catch {
         throw new Error("Invalid JSON configuration. Please check format.");
       }
 

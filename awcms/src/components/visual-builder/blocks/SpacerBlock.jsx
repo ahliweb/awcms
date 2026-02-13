@@ -3,7 +3,6 @@
  * Adds vertical space between components
  */
 
-import React from 'react';
 
 export const SpacerBlockFields = {
     height: {

@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -8,10 +8,6 @@ import { Link } from 'react-router-dom';
 
 function PublicPhotoGallery() {
   const [items, setItems] = useState([]);
-
-  useEffect(() => {
-    fetchGalleries();
-  }, []);
 
   const fetchGalleries = async () => {
 
@@ -23,6 +19,11 @@ function PublicPhotoGallery() {
     setItems(data || []);
 
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchGalleries();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background py-16">

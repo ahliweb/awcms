@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { supabase } from '@/lib/customSupabaseClient';
 import { MapPin } from 'lucide-react';

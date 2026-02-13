@@ -87,7 +87,7 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
 /**
  * Activate extension (first-time setup)
  */
-export const activate = async (supabase, tenantId) => {
+export const activate = async (_supabase, _tenantId) => {
     console.log(`[External Extension] Activating ${manifest.name}...`);
 
     // Create analytics table if not exists (via RPC or migration)
@@ -99,7 +99,7 @@ export const activate = async (supabase, tenantId) => {
 /**
  * Deactivate extension
  */
-export const deactivate = async (supabase, tenantId) => {
+export const deactivate = async (_supabase, _tenantId) => {
     console.log(`[External Extension] Deactivating ${manifest.name}...`);
     // Cleanup if needed
 };

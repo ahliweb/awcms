@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Reorder, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -130,7 +130,7 @@ function SidebarMenuManager() {
             toast({ title: t('common.success'), description: t('sidebar_manager.toast.group_order_updated') });
             setHasChanges(false);
             fetchMenu(); // Refresh to get consistent state
-        } catch (err) {
+        } catch {
             toast({ variant: 'destructive', title: t('common.error'), description: t('sidebar_manager.toast.error_save_group') });
         } finally {
             setIsSaving(false);
@@ -152,7 +152,7 @@ function SidebarMenuManager() {
             setEditingGroup(null);
             toast({ title: t('common.success'), description: t('sidebar_manager.toast.group_updated') });
             fetchMenu();
-        } catch (err) {
+        } catch {
             toast({ variant: 'destructive', title: t('common.error'), description: t('sidebar_manager.toast.error_update_group') });
         }
     };
@@ -208,7 +208,7 @@ function SidebarMenuManager() {
             await updateMenuOrder(items);
             setHasChanges(false);
             toast({ title: t('common.success'), description: t('sidebar_manager.toast.menu_order_updated') });
-        } catch (err) {
+        } catch {
             toast({ variant: 'destructive', title: t('common.error'), description: t('sidebar_manager.toast.error_save_order') });
         } finally {
             setIsSaving(false);
@@ -225,7 +225,7 @@ function SidebarMenuManager() {
             await toggleVisibility(item.id, item.is_visible);
             setItems(prev => prev.map(i => i.id === item.id ? { ...i, is_visible: !i.is_visible } : i));
             toast({ title: item.is_visible ? t('sidebar_manager.hidden') : t('sidebar_manager.visible'), description: t('sidebar_manager.toast.visibility_updated', { status: item.is_visible ? t('sidebar_manager.hidden') : t('sidebar_manager.visible') }) });
-        } catch (err) {
+        } catch {
             toast({ variant: 'destructive', title: t('common.error'), description: t('sidebar_manager.toast.error_visibility') });
         }
     };
@@ -262,7 +262,7 @@ function SidebarMenuManager() {
 
             setEditingItem(null);
             toast({ title: t('common.success'), description: t('sidebar_manager.toast.item_updated') });
-        } catch (err) {
+        } catch {
             toast({ variant: 'destructive', title: t('common.error'), description: t('sidebar_manager.toast.error_update_item') });
         }
     };
@@ -441,7 +441,7 @@ bg - card shadow - sm transition - all
                                                                     id={`visible - ${item.id} `}
                                                                     checked={item.is_visible}
                                                                     disabled={!canEdit && !isSuperAdmin}
-                                                                    onCheckedChange={(checked) => handleToggleVisibility({ stopPropagation: () => { } }, item)}
+                                                                    onCheckedChange={() => handleToggleVisibility({ stopPropagation: () => { } }, item)}
                                                                 />
                                                                 {item.is_visible ? (
                                                                     <Eye className="w-4 h-4 text-muted-foreground" />

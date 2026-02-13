@@ -1,4 +1,3 @@
-import React from 'react';
 import PagesManager from './PagesManager';
 import ThemeLayoutManager from './ThemeLayoutManager';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

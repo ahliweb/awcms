@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTemplates } from '@/hooks/useTemplates';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,7 @@ const TemplateEditor = () => {
         if (templates.length > 0 && id) {
             const template = templates.find(t => t.id === id);
             if (template) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setFormData({
                     name: template.name || '',
                     slug: template.slug || '',

@@ -149,7 +149,7 @@ const AreaEditor = ({ areaId, areaName, isPlatformAdmin }) => {
                         {t('widgets_manager.empty_area')}
                     </div>
                 ) : (
-                    widgets.map((widget, index) => {
+                    widgets.map((widget, _index) => {
                         const def = availableWidgets.find(w => w.type === widget.type);
                         const Icon = def?.icon || Settings;
 

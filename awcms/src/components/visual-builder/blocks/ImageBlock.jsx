@@ -3,7 +3,6 @@
  * Image with caption and styling options
  */
 
-import React from 'react';
 
 export const ImageBlockFields = {
     src: { type: 'text', label: 'Image URL' },

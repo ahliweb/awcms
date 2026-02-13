@@ -66,7 +66,9 @@ export const getPluginComponent = (key) => {
     }
 
     // Fallback
-    return () => React.createElement('div', { className: "p-4 text-red-500" }, `Plugin component "${key}" not found.`);
+    const FallbackComponent = () => React.createElement('div', { className: "p-4 text-red-500" }, `Plugin component "${key}" not found.`);
+    FallbackComponent.displayName = `Fallback(${key})`;
+    return FallbackComponent;
 };
 
 /**

@@ -27,7 +27,7 @@ function checkSecrets() {
         console.warn('\x1b[31m%s\x1b[0m', 'Please run "npm run secrets:rotate" immediately to secure your environment.');
       }
     }
-  } catch (e) {
+  } catch {
     console.warn('Could not read secrets metadata.');
   }
 }

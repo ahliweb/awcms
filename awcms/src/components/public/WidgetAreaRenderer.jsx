@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { sanitizeHTML } from '@/utils/sanitize';
 import { useWidgets } from '@/hooks/useWidgets';

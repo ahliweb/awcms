@@ -3,7 +3,6 @@
  * Provides visual hex color selection with live preview
  */
 
-import React from 'react';
 
 export const ColorPickerField = ({ field, name, value, onChange }) => {
     const handleChange = (e) => {

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Tag, Trash2, Filter, RefreshCw, Edit, Plus, RotateCcw, CheckCircle, AlertCircle, SortAsc, SortDesc } from 'lucide-react';
 import { Button } from '@/components/ui/button';

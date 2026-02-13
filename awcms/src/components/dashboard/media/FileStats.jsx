@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { motion } from 'framer-motion';
 import { FileText, Image, Film, HardDrive } from 'lucide-react';
 import { formatBytes } from '@/lib/utils';

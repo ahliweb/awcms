@@ -1,5 +1,4 @@
 
-import React from 'react';
 import {
   Table,
   TableBody,
@@ -32,42 +31,40 @@ const ContentTable = ({
   pagination
 }) => {
 
-  const TableSkeleton = () => (
-    <div className="dashboard-surface overflow-hidden">
-      <Table>
-        <TableHeader className="bg-muted/50">
-          <TableRow>
-            {columns.map((col, i) => (
-              <TableHead key={i} className={col.className}>
-                <Skeleton className="h-4 w-24 bg-muted" />
-              </TableHead>
-            ))}
-            <TableHead className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {[...Array(5)].map((_, i) => (
-            <TableRow key={i}>
-              {columns.map((col, j) => (
-                <TableCell key={j} className={col.className}>
-                  <Skeleton className="h-4 w-full bg-muted/50" />
-                </TableCell>
-              ))}
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
-                  <Skeleton className="h-8 w-8 rounded-md bg-muted/50" />
-                  <Skeleton className="h-8 w-8 rounded-md bg-muted/50" />
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-
   if (loading) {
-    return <TableSkeleton />;
+    return (
+      <div className="dashboard-surface overflow-hidden">
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              {columns.map((col, i) => (
+                <TableHead key={i} className={col.className}>
+                  <Skeleton className="h-4 w-24 bg-muted" />
+                </TableHead>
+              ))}
+              <TableHead className="text-right"><Skeleton className="h-4 w-16 ml-auto bg-muted" /></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[...Array(5)].map((_, i) => (
+              <TableRow key={i}>
+                {columns.map((col, j) => (
+                  <TableCell key={j} className={col.className}>
+                    <Skeleton className="h-4 w-full bg-muted/50" />
+                  </TableCell>
+                ))}
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Skeleton className="h-8 w-8 rounded-md bg-muted/50" />
+                    <Skeleton className="h-8 w-8 rounded-md bg-muted/50" />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
   }
 
   if (!data || data.length === 0) {

@@ -3,7 +3,7 @@
  * Image gallery with grid layout options
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export const GalleryBlockFields = {

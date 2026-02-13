@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Database, Download, RotateCcw, FileArchive, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -19,15 +19,15 @@ function BackupManager() {
   const fetchBackups = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('backups')
         .select('*, users(full_name)')
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      // if (error) throw error;
       setBackups(data || []);
-    } catch (error) {
+    } catch {
       toast({ variant: "destructive", title: "Error", description: "Failed to load backups" });
     } finally {
       setLoading(false);

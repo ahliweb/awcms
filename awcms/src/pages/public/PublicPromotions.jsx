@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
@@ -12,11 +12,7 @@ function PublicPromotions() {
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState(null);
 
-  useEffect(() => {
-    fetchPromotions();
-  }, []);
-
-  const fetchPromotions = async () => {
+  const fetchPromotions = useCallback(async () => {
 
     const { data } = await supabase
       .from('promotions')
@@ -26,7 +22,12 @@ function PublicPromotions() {
       .order('end_date', { ascending: true });
     setItems(data || []);
 
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchPromotions();
+  }, [fetchPromotions]);
 
   const copyCode = (code, id) => {
     navigator.clipboard.writeText(code);

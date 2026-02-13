@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import PublicPageDetail from '@/pages/public/PublicPageDetail';
@@ -143,7 +143,7 @@ const PublicPageResolver = () => {
                         </div>
                         <h2 className="text-3xl font-bold text-slate-900 mb-3">Page Not Found</h2>
                         <p className="text-slate-600 mb-8 text-lg">
-                            We couldn't find any content matching this URL.<br />It might have been moved or doesn't exist.
+                            We couldn&apos;t find any content matching this URL.<br />It might have been moved or doesn&apos;t exist.
                         </p>
                         <div className="flex justify-center">
                             <Button asChild className="bg-blue-600 hover:bg-blue-700">

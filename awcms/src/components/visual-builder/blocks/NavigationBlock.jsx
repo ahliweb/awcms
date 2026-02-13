@@ -3,7 +3,7 @@
  * Fetches and displays public menus from the database
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Menu as MenuIcon } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -64,8 +64,8 @@ export const NavigationBlock = ({
     showDropdowns = true,
     fontSize = 'base',
     gap = 8,
-    linkColor,
-    hoverColor
+    _linkColor,
+    _hoverColor
 }) => {
     const [menus, setMenus] = useState([]);
     const [loading, setLoading] = useState(true);

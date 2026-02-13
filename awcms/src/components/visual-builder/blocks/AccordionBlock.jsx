@@ -1,4 +1,3 @@
-import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { ColorPickerField } from '../fields/ColorPickerField';
 import { sanitizeHTML } from '@/utils/sanitize';

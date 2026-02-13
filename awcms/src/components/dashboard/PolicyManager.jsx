@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -87,7 +87,7 @@ export default function PolicyManager() {
             let conditions = {};
             try {
                 conditions = JSON.parse(formData.conditions);
-            } catch (e) {
+            } catch {
                 toast({ variant: "destructive", title: t('policies.toasts.save_failed'), description: t('policies.toasts.invalid_json') });
                 return;
             }

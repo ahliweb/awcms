@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useTemplates } from '@/hooks/useTemplates';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { hooks } from '@/lib/hooks';
@@ -56,7 +56,7 @@ const TemplateAssignments = () => {
         <div className="space-y-6 max-w-3xl">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
                 Define default templates for system routes per channel.
-                Individual pages can override the 'Single Post' assignment via their own settings.
+                Individual pages can override the &apos;Single Post&apos; assignment via their own settings.
             </div>
 
             {/* Channel Selector */}

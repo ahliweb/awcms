@@ -29,7 +29,7 @@ import { Settings } from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext'; // Added TenantContext
 
-const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess }) => {
+const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess: _onSuccess}) => {
     // Permission Hook
     const { hasPermission, checkAccess, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant(); // Get current tenant

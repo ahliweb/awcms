@@ -1,5 +1,5 @@
 
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { Upload, Loader2 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { Progress } from '@/components/ui/progress';

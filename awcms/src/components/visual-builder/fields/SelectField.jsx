@@ -3,7 +3,7 @@
  * Supports static options or async fetching from Supabase
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import {
     Select,

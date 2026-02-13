@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -80,7 +80,7 @@ const LoginPage = () => {
           // Check if user is active (soft deletion check)
           const { data: userData } = await supabase
             .from('users')
-              .select('deleted_at, roles(name, is_public, is_guest)')
+            .select('deleted_at, roles(name, is_public, is_guest)')
             .eq('id', user.id)
             .maybeSingle();
 
@@ -422,7 +422,7 @@ const LoginPage = () => {
   const handleCancelVerification = async () => {
     setIsLoading(true);
     setVerificationError('');
-    try { await supabase.auth.signOut(); } catch (e) { }
+    try { await supabase.auth.signOut(); } catch { /* Ignore signout errors */ }
     finally {
       setRequires2FA(false);
       setTwoFactorCode('');

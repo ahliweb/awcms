@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -77,7 +77,7 @@ export function PositionArrayEditor({
             {value.length === 0 ? (
                 <Card className="border-dashed">
                     <CardContent className="py-8 text-center text-muted-foreground">
-                        No positions added yet. Click "Add Position" to add one.
+                        No positions added yet. Click &quot;Add Position&quot; to add one.
                     </CardContent>
                 </Card>
             ) : (

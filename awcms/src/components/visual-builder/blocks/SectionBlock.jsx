@@ -1,11 +1,10 @@
-import React from 'react';
 import { DropZone } from '@puckeditor/core';
 import { ImageField } from '../fields/ImageField';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
 export const SectionBlock = ({
-    children,
-    id, // Add id prop
+    _children,
+    _id, // Add _id prop
     backgroundColor = '#ffffff',
     backgroundImage,
     paddingTop = '64px',

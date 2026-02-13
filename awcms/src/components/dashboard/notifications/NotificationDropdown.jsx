@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { Bell, Check, Info, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {

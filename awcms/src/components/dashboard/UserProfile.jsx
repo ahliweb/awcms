@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Lock, Shield, Save, Key, AlertCircle, CheckCircle2, Crown, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -408,7 +408,7 @@ function UserProfile() {
                 </div>
                 {profileData.role_description && (
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 italic">
-                    "{profileData.role_description}"
+                    &quot;{profileData.role_description}&quot;
                   </p>
                 )}
               </div>

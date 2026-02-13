@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import ContentTable from '@/components/dashboard/ContentTable';
 import RoleEditor from '@/components/dashboard/RoleEditor';
 import { usePermissions } from '@/contexts/PermissionContext';

@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { AuthProvider } from '@/contexts/SupabaseAuthContext';
 import { PermissionProvider } from '@/contexts/PermissionContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';

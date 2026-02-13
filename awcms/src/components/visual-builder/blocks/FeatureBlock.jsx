@@ -3,7 +3,6 @@
  * Feature item with icon, title, and description
  */
 
-import React from 'react';
 import { Star, Zap, Shield, Heart, Award, Target, Users, Globe, Rocket, Check } from 'lucide-react';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
