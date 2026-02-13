@@ -48,8 +48,8 @@ bucket = "./dist"
 
 # Secrets (set via wrangler secret put)
 # - SUPABASE_URL
-# - SUPABASE_ANON_KEY
-# - SUPABASE_SERVICE_ROLE_KEY
+# - SUPABASE_PUBLISHABLE_KEY
+# - SUPABASE_SECRET_KEY
 
 # D1 Database bindings (if using Cloudflare D1)
 # [[d1_databases]]

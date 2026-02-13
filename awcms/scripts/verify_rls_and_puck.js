@@ -9,8 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAnonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const supabaseServiceRoleKey = process.env.SUPABASE_SECRET_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
     console.error('Missing Supabase credentials');

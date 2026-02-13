@@ -6,10 +6,10 @@ import _path from '_path';
 dotenv.config();
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseKey = process.env.SUPABASE_SECRET_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-    console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    console.error('Missing SUPABASE_URL or SUPABASE_SECRET_KEY');
     console.error('URL:', supabaseUrl);
     console.error('KEY:', supabaseKey ? 'Found' : 'Missing');
     process.exit(1);

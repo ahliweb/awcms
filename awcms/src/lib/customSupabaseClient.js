@@ -10,13 +10,13 @@ import { createClient } from '@supabase/supabase-js';
 
 // Load from environment variables (Vite uses import.meta.env)
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 // Validate environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
     console.error(
         '❌ Missing Supabase environment variables!\n' +
-        'Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in your .env.local file.\n' +
+        'Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are set in your .env.local file.\n' +
         'See .env.example for reference.'
     );
 }

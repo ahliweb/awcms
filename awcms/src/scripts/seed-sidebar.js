@@ -7,15 +7,15 @@ dotenv.config({ path: '.env.local', override: true });
 
 // Load env vars
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
-// Use Service Role for seeding (support both env var names)
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+// Use Secret Key for seeding
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.');
+if (!supabaseUrl || !supabaseSecretKey) {
+    console.error('Missing VITE_SUPABASE_URL or SUPABASE_SECRET_KEY environment variables.');
     process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabase = createClient(supabaseUrl, supabaseSecretKey);
 
 const DEFAULT_MENU_CONFIG = [
     // CONTENT Group

@@ -16,19 +16,20 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+// Support both Vite (import.meta.env) and Node (process.env) for the secret key
+const supabaseSecretKey = import.meta.env.SUPABASE_SECRET_KEY || (typeof process !== 'undefined' ? process.env.SUPABASE_SECRET_KEY : undefined);
 
-if (!supabaseUrl || !supabaseServiceRoleKey) {
-    console.warn('[supabaseAdmin] Missing VITE_SUPABASE_URL or VITE_SUPABASE_SERVICE_ROLE_KEY. Admin client will not function.');
+if (!supabaseUrl || !supabaseSecretKey) {
+    console.warn('[supabaseAdmin] Missing VITE_SUPABASE_URL or SUPABASE_SECRET_KEY. Admin client will not function.');
 }
 
 /**
  * Supabase Admin Client
  * 
- * Uses the service role key to bypass Row Level Security (RLS).
+ * Uses the secret key to bypass Row Level Security (RLS).
  * Use with caution - this client has full database access.
  */
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+export const supabaseAdmin = createClient(supabaseUrl, supabaseSecretKey, {
     auth: {
         autoRefreshToken: false,
         persistSession: false
@@ -39,7 +40,7 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
  * Helper to check if admin client is properly configured
  */
 export function isAdminConfigured() {
-    return Boolean(supabaseUrl && supabaseServiceRoleKey);
+    return Boolean(supabaseUrl && supabaseSecretKey);
 }
 
 export default supabaseAdmin;
