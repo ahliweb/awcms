@@ -102,6 +102,10 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase only (NO Node.js servers)                                        |
 
+1. **Environment Security**:
+   - **Ignored Files**: Ensure `.env`, `.env.local`, `.env.production`, and `.env.remote` are always ignored by Git.
+   - **Template Updates**: `.env.example` must contain ALL keys found in any `.env` file, but populated ONLY with dummy secrets.
+
 ### Context7 (Primary Reference)
 
 When updating docs or implementing library usage, **Context7 is the primary reference**. Use the following library IDs with `context7_search`:

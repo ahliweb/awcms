@@ -13,6 +13,10 @@
 
 # SECURITY - Secrets and credentials
 .env
+.env.local
+.env.production
+.env.remote
+
 include/config.h
 
 # OS

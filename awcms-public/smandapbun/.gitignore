@@ -1,6 +1,5 @@
 # build output
 dist/
-# generated types
 .astro/
 
 # dependencies
@@ -12,13 +11,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-
 # environment variables
 .env
 .env.local
 .env.production
 .env.remote
-
 
 # macOS-specific files
 .DS_Store
