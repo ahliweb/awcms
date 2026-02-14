@@ -111,7 +111,7 @@ import { actions } from './_actions.js';
 	import type { CrudEntities } from '../../modules/CrudEntities.client.js';
 	import type { PlaygroundAction } from '../../types.js';
 
-	const playgroundActions: Record<PlaygroundAction, (...args: any) => void> = {
+	const playgroundActions: Record<PlaygroundAction, (...args: unknown[]) => void> = {
 		refetchCrudData: (crud: CrudEntities) => crud.update(),
 		hardReloadPage: () => location.reload(),
 	};

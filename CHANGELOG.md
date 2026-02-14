@@ -17,6 +17,12 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Shipping Calculation**: Implemented dynamic shipping cost calculation in Checkout with support for multiple couriers (JNE, J&T, POS, TIKI).
 - **Turnstile Debugging**: Added `VITE_TURNSTILE_DEBUG` to enable host/key resolution logging when needed.
 
+- **Mobile App**: Added profile customization, theme switcher, and permission handling.
+- **Admin Configuration**: Added Context7 server configuration in `.bashrc` and codebase.
+- **Media Management**: Introduced media categories for better asset organization.
+- **Sidebar Navigation**: Implemented dynamic navigation structure with `navigation.ts` and `SideBarIcon.astro`.
+- **Code Quality**: Configured ESLint and Prettier for improved code consistency.
+
 ### Changed
 
 - **Docs**: Recommended `supabase db pull --schema public,extensions` to avoid storage churn in shadow DBs.
@@ -33,6 +39,8 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **Notifications UX**: Replaced native confirm prompts with AlertDialog confirmations for mark-all-read and notification deletion.
 
 ### Fixed
+
+- **Mobile Auth**: Fixed a logging issue by checking mounted state before using ref after async operation.
 
 - **Tenant Creation**: Resolved unique constraint collisions causing 409 Conflict errors during new tenant creation.
 - **Database Synchronization**: Reset local migration history to match remote schema and resolved `region_levels` data duplicates.

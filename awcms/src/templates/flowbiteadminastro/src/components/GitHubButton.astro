@@ -2,7 +2,7 @@
 interface Props {
 	repository: string;
 }
-const { repository } = Astro.props;
+const { repository } = Astro.props as Props;
 ---
 
 <div class="hidden mr-3 -mb-1 sm:block">

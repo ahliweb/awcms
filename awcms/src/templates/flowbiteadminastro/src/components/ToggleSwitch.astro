@@ -4,7 +4,7 @@ interface Props {
 	checked?: boolean;
 	class?: string;
 }
-const { id, checked = false, class: clazz, ...attrs } = Astro.props;
+const { id, checked = false, class: clazz, ...attrs } = Astro.props as Props;
 ---
 
 <label

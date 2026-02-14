@@ -30,6 +30,7 @@
 	"type": "module",
 	"scripts": {
 		"astro": "astro",
+		"lint": "ESLINT_USE_FLAT_CONFIG=false eslint . --ext .js,.ts,.astro",
 		"build": "astro build",
 		"dev": "astro dev",
 		"preview": "astro preview",

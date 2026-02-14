@@ -11,12 +11,12 @@ export function getProducts(randomize = RANDOMIZE) {
 	console.log('getProducts');
 
 	const result = randomize
-		? productsStaticData.map((p) => {
-				p.price = faker.commerce.price();
-				p.technology = faker.commerce.productName();
-				p.description = faker.commerce.productDescription();
-				return p;
-		  })
+		? productsStaticData.map((product) => {
+			product.price = faker.commerce.price();
+			product.technology = faker.commerce.productName();
+			product.description = faker.commerce.productDescription();
+			return product;
+		})
 		: productsStaticData;
 
 	return result;

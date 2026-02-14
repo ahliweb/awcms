@@ -11,13 +11,13 @@ export function getUsers(randomize = RANDOMIZE) {
 	console.log('getUsers');
 
 	const result = randomize
-		? usersStaticData.map((p) => {
-				p.name = faker.name.fullName();
-				p.email = faker.internet.email();
-				p.position = faker.name.jobTitle();
-				p.country = faker.address.country();
-				return p;
-		  })
+		? usersStaticData.map((user) => {
+			user.name = faker.name.fullName();
+			user.email = faker.internet.email();
+			user.position = faker.name.jobTitle();
+			user.country = faker.address.country();
+			return user;
+		})
 		: usersStaticData;
 
 	return result;

@@ -5,16 +5,17 @@ import { fetchData } from '../lib/data.js';
 import { endpointsToOperations } from '../pages/api/[...entity].js';
 
 export class CrudEntities extends HTMLElement {
-	#body = this.querySelector('tbody')!;
+	#rows: HTMLTableRowElement[] = [];
 
-	#rows = this.#body.querySelectorAll('tr')!;
-
-	#refreshButton = this.querySelector('[data-refresh]');
+	#refreshButton: HTMLElement | null = null;
 
 	type: Endpoint | undefined;
 
 	constructor() {
 		super();
+		const body = this.querySelector('tbody');
+		this.#rows = body ? Array.from(body.querySelectorAll('tr')) : [];
+		this.#refreshButton = this.querySelector('[data-refresh]');
 		const type = this.getAttribute('type');
 
 		if (

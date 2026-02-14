@@ -22,11 +22,19 @@
 </style>
 
 <script>
-	// @ts-ignore
 	const confettiElement = document.querySelector('#confettis');
 	const triggerConfettis = document.querySelector('[data-trigger-confettis]');
+	const ConfettiGenerator = window.ConfettiGenerator;
 
-	triggerConfettis.addEventListener('click', popIt);
+	if (
+		!(confettiElement instanceof HTMLCanvasElement) ||
+		!(triggerConfettis instanceof HTMLElement) ||
+		!ConfettiGenerator
+	) {
+		console.log('Confetti disabled.');
+	} else {
+		triggerConfettis.addEventListener('click', popIt);
+	}
 
 	function popIt() {
 		const confettiSettings = {
@@ -36,6 +44,4 @@
 		const confetti = new ConfettiGenerator(confettiSettings);
 		confetti.render();
 	}
-
-	console.log('Pop 🎉!');
 </script>
