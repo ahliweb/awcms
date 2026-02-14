@@ -105,6 +105,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 1. **Environment Security**:
    - **Ignored Files**: Ensure `.env`, `.env.local`, `.env.production`, and `.env.remote` are always ignored by Git.
    - **Template Updates**: `.env.example` must contain ALL keys found in any `.env` file, but populated ONLY with dummy secrets.
+   - **Key Naming**: Use `VITE_SUPABASE_PUBLISHABLE_KEY` (public) and `SUPABASE_SECRET_KEY` (private/service role). Avoid `ANON` or `SERVICE_ROLE` terminology.
 
 ### Context7 (Primary Reference)
 
@@ -380,7 +381,7 @@ const { data, error } = await supabase
 ```javascript
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     flowType: "pkce",
     autoRefreshToken: true,
@@ -465,6 +466,9 @@ AWCMS provides a "Swiss Army Knife" MCP server in `awcms-mcp/` that grants Agent
 - `supabase_db_push`: Push local migrations to remote.
 - `supabase_migration_new`: Create new migration files.
 - `supabase_gen_types`: Generate TypeScript types.
+
+> [!NOTE]
+> Ensure your `.env` uses `SUPABASE_SECRET_KEY` instead of `SUPABASE_SERVICE_ROLE_KEY` for these tools if applicable.
 
 ### 2. Context7 Tools (AI Documentation)
 

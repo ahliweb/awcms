@@ -33,7 +33,7 @@ Provide Cloudflare Pages settings for the Admin Panel and Public Portal.
 Environment variables:
 
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_TURNSTILE_SITE_KEY`
 - `NODE_VERSION=20`
 
@@ -51,8 +51,8 @@ Environment variables:
 Environment variables:
 
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_ANON_KEY` (build fallback)
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (build fallback)
 - `PUBLIC_TENANT_ID`
 - `NODE_VERSION=20`
 
@@ -72,7 +72,7 @@ Environment variables:
 Environment variables:
 
 - `PUBLIC_SUPABASE_URL`
-- `PUBLIC_SUPABASE_ANON_KEY`
+- `PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `PUBLIC_TURNSTILE_SITE_KEY`
 - `NODE_VERSION=20`
 

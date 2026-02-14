@@ -130,15 +130,15 @@ const {
 
   const supabaseUrl =
     import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey =
-    import.meta.env.PUBLIC_SUPABASE_ANON_KEY ||
-    import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabasePublishableKey =
+    import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !supabasePublishableKey) {
     console.warn("[Form] Supabase env missing; contact form disabled.");
   } else {
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const supabase = createClient(supabaseUrl, supabasePublishableKey);
     const form = document.querySelector("form[data-tenant-id]");
 
     if (form) {

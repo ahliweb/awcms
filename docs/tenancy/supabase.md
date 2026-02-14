@@ -38,7 +38,7 @@ Define how AWCMS integrates with Supabase for auth, data, storage, and edge func
 ```javascript
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     flowType: "pkce",
     autoRefreshToken: true,
@@ -107,15 +107,15 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 ### Environment Variables (Admin)
 
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_TURNSTILE_SITE_KEY` (if Turnstile enabled)
 - `VITE_DEV_TENANT_SLUG` (local development)
 
 ### Environment Variables (Public)
 
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_ANON_KEY` (CI/build fallback)
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (CI/build fallback)
 - `PUBLIC_TENANT_ID` (static builds)
 - `VITE_PUBLIC_TENANT_ID` or `VITE_TENANT_ID` (fallbacks)
 
@@ -144,7 +144,7 @@ This repository currently contains both `supabase/` (root) and `awcms/supabase/`
 ## Troubleshooting
 
 - Missing tenant data: verify `x-tenant-id` header and `current_tenant_id()`.
-- Auth errors: confirm Supabase URL and anon key are set.
+- Auth errors: confirm Supabase URL and publishable key are set.
 
 ## References
 

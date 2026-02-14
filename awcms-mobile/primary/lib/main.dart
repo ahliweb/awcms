@@ -34,7 +34,7 @@ void main() async {
   // Initialize Supabase
   await Supabase.initialize(
     url: SupabaseConfig.url,
-    anonKey: SupabaseConfig.anonKey,
+    anonKey: SupabaseConfig.publishableKey,
   );
 
   // Initialize connectivity service

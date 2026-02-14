@@ -43,9 +43,9 @@ Describe the GitHub Actions workflows used for AWCMS.
 ### Required Secrets
 
 - `VITE_SUPABASE_URL` (admin build)
-- `VITE_SUPABASE_ANON_KEY` (admin build)
+- `VITE_SUPABASE_PUBLISHABLE_KEY` (admin build)
 - `PUBLIC_SUPABASE_URL` (public build fallback)
-- `PUBLIC_SUPABASE_ANON_KEY` (public build fallback)
+- `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (public build fallback)
 - `PUBLIC_TENANT_ID` (public build tenant scope)
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ENABLED` (repo variable; must be `true` to deploy)

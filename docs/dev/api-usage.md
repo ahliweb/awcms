@@ -31,7 +31,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 ```javascript
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     flowType: 'pkce',
     autoRefreshToken: true,
@@ -100,7 +100,7 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 
 - Always filter `deleted_at IS NULL` for reads.
 - Tenant-scoped tables must be filtered by tenant and RLS enforced.
-- Service role keys may be used only in Edge Functions and migrations.
+- Secret keys may be used only in Edge Functions and migrations.
 - Admin client injects `x-tenant-id` automatically via `customSupabaseClient`.
 
 ## References

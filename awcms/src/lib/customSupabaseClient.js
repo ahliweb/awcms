@@ -10,10 +10,10 @@ import { createClient } from '@supabase/supabase-js';
 
 // Load from environment variables (Vite uses import.meta.env)
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 // Validate environment variables
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!supabaseUrl || !supabasePublishableKey) {
     console.error(
         '❌ Missing Supabase environment variables!\n' +
         'Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are set in your .env.local file.\n' +
@@ -51,7 +51,7 @@ const customFetch = (url, options = {}) => {
 };
 
 // Create Supabase client with enhanced configuration
-const customSupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+const customSupabaseClient = createClient(supabaseUrl, supabasePublishableKey, {
     auth: {
         // Automatically refresh the token before expiry
         autoRefreshToken: true,

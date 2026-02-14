@@ -18,10 +18,10 @@ export const createClientFromEnv = (
     import.meta.env.PUBLIC_SUPABASE_URL ||
     "";
   const key =
-    env.VITE_SUPABASE_ANON_KEY ||
-    env.PUBLIC_SUPABASE_ANON_KEY ||
-    import.meta.env.VITE_SUPABASE_ANON_KEY ||
-    import.meta.env.PUBLIC_SUPABASE_ANON_KEY ||
+    env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     "";
 
   if (!url || !key) {

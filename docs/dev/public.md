@@ -38,8 +38,8 @@ Static builds scope content by build-time tenant ID (`PUBLIC_TENANT_ID` or `VITE
 Public portals require:
 
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_ANON_KEY` (CI/build fallback)
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (CI/build fallback)
 - `PUBLIC_TENANT_ID` (recommended for static builds)
 - `VITE_PUBLIC_TENANT_ID` or `VITE_TENANT_ID` (fallbacks)
 

@@ -15,7 +15,7 @@
 
 // Supabase
 #define SUPABASE_URL "https://your-project.supabase.co"
-#define SUPABASE_ANON_KEY "your-anon-key"
+#define SUPABASE_PUBLISHABLE_KEY "your-publishable-key"
 
 // Device
 #define DEVICE_ID "esp32-001"

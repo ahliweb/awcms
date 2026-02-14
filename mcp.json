@@ -6,7 +6,7 @@
     "context7": {
       "url": "https://mcp.context7.com/mcp",
       "headers": {
-        "CONTEXT7_API_KEY": "ctx7sk-e036f6fd-1d12-4c08-81a5-5e14d0de0f14"
+        "CONTEXT7_API_KEY": "your-context7-api-key"
       }
     }
   }

@@ -25,7 +25,7 @@ Supabase supabase;
  * Initialize Supabase connection
  */
 bool initSupabase() {
-  supabase.begin(SUPABASE_URL, SUPABASE_ANON_KEY);
+  supabase.begin(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   DEBUG_PRINTLN("Supabase initialized");
   return true;
 }

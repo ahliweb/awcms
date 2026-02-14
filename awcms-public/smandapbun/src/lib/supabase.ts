@@ -3,15 +3,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl =
     import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey =
-    import.meta.env.PUBLIC_SUPABASE_ANON_KEY ||
-    import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabasePublishableKey =
+    import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Missing Supabase URL or Anon Key. Please check your .env file.');
+if (!supabaseUrl || !supabasePublishableKey) {
+    console.error('Missing Supabase URL or Publishable Key. Please check your .env file.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabasePublishableKey);
 
 export const createClientFromEnv = (
     env: Record<string, string> = {},
@@ -24,10 +24,10 @@ export const createClientFromEnv = (
         import.meta.env.VITE_SUPABASE_URL ||
         '';
     const key =
-        env.PUBLIC_SUPABASE_ANON_KEY ||
-        env.VITE_SUPABASE_ANON_KEY ||
-        import.meta.env.PUBLIC_SUPABASE_ANON_KEY ||
-        import.meta.env.VITE_SUPABASE_ANON_KEY ||
+        env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+        env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+        import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
         '';
 
     if (!url || !key) {

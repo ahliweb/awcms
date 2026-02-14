@@ -13,3 +13,8 @@ bucket = "./dist"
 
 [vars]
 ENVIRONMENT = "production"
+
+# Secrets (manage via Cloudflare Dashboard or wrangler pages secret put)
+# - PUBLIC_SUPABASE_URL
+# - PUBLIC_SUPABASE_PUBLISHABLE_KEY
+# - SUPABASE_SECRET_KEY (if using server-side functions)

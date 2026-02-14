@@ -12,16 +12,18 @@ class SupabaseConfig {
   /// Supabase Project URL
   static String get url => dotenv.env['SUPABASE_URL'] ?? '';
 
-  /// Supabase Anonymous Key
-  static String get anonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+  /// Supabase Publishable Key
+  static String get publishableKey =>
+      dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '';
 
   /// Validate configuration
-  static bool get isValid => url.isNotEmpty && anonKey.isNotEmpty;
+  static bool get isValid => url.isNotEmpty && publishableKey.isNotEmpty;
 
   /// Get validation error message
   static String? get validationError {
     if (url.isEmpty) return 'SUPABASE_URL is not configured';
-    if (anonKey.isEmpty) return 'SUPABASE_ANON_KEY is not configured';
+    if (publishableKey.isEmpty)
+      return 'SUPABASE_PUBLISHABLE_KEY is not configured';
     return null;
   }
 }

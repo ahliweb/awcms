@@ -22,6 +22,8 @@ temp_debug_images/
 .env.production
 .env.production.local
 .env.remote
+awcms/.agent/mcp.json
+awcms/.agent/mcp.antigravity.json
 
 npm-debug.log*
 yarn-debug.log*

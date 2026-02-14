@@ -26,13 +26,13 @@ Describe deployment steps for each AWCMS package in the monorepo.
 - Framework preset: Astro
 - Build command: `npm run build`
 - Output directory: `dist`
-- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PUBLIC_TENANT_ID` (supports `PUBLIC_SUPABASE_*` as a build fallback)
+- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TENANT_ID` (supports `PUBLIC_SUPABASE_*` as a build fallback)
 - Static build; environment variables resolved via `import.meta.env` at build time.
 
 For `awcms-public/smandapbun`:
 
 - Root directory: `awcms-public/smandapbun`
-- Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`
+- Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`
 - KV bindings: none (sessions use the in-memory driver)
 
 ### 2. Admin Panel (Cloudflare Pages)
@@ -41,7 +41,7 @@ For `awcms-public/smandapbun`:
 - Framework preset: None or Vite
 - Build command: `npm run build`
 - Output directory: `dist`
-- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_TURNSTILE_SITE_KEY`
+- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_TURNSTILE_SITE_KEY`
 - Set `NODE_VERSION=20`
 
 ### 3. Supabase

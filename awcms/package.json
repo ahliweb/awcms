@@ -11,6 +11,7 @@
     "test": "vitest",
     "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md README.md ../DOCS_INDEX.md",
     "db:pull": "npx supabase db pull --schema public",
+    "build": "vite build",
     "lint": "eslint ."
   },
   "dependencies": {
