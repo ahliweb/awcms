@@ -21,9 +21,12 @@ class SupabaseConfig {
 
   /// Get validation error message
   static String? get validationError {
-    if (url.isEmpty) return 'SUPABASE_URL is not configured';
-    if (publishableKey.isEmpty)
+    if (url.isEmpty) {
+      return 'SUPABASE_URL is not configured';
+    }
+    if (publishableKey.isEmpty) {
       return 'SUPABASE_PUBLISHABLE_KEY is not configured';
+    }
     return null;
   }
 }
