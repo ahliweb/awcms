@@ -13,63 +13,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 
-CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
+CREATE SCHEMA IF NOT EXISTS "public";
 
 
-
-
+ALTER SCHEMA "public" OWNER TO "pg_database_owner";
 
 
 COMMENT ON SCHEMA "public" IS 'standard public schema';
-
-
-
-CREATE EXTENSION IF NOT EXISTS "hypopg" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "index_advisor" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pg_graphql" WITH SCHEMA "graphql";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pg_stat_statements" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
-
-
-
 
 
 
@@ -2103,38 +2053,41 @@ CREATE OR REPLACE FUNCTION "public"."sync_resource_tags"("p_resource_id" "uuid",
     SET "search_path" TO 'public'
     AS $$
 DECLARE
-  v_tag_id UUID;
-  v_tag_name TEXT;
-  v_slug TEXT;
+  v_tag_id uuid;
+  v_tag_name text;
+  v_slug text;
   target_table regclass;
 BEGIN
-  -- Restrict tag usage to articles only
-  IF p_resource_type != 'articles' THEN
+  IF p_tenant_id IS NULL THEN
+    RAISE EXCEPTION 'Tenant ID is required for tag synchronization';
+  END IF;
+
+  IF p_resource_type NOT IN ('blogs', 'articles') THEN
     RETURN;
   END IF;
 
-  target_table := to_regclass('public.article_tags');
-  
+  target_table := to_regclass('public.blog_tags');
   IF target_table IS NULL THEN
     RETURN;
   END IF;
 
-  -- Delete existing tags for this resource
-  DELETE FROM "public"."article_tags" WHERE article_id = p_resource_id;
+  DELETE FROM public.blog_tags
+  WHERE blog_id = p_resource_id
+    AND tenant_id = p_tenant_id;
 
   IF p_tags IS NOT NULL THEN
     FOREACH v_tag_name IN ARRAY p_tags
     LOOP
       v_slug := trim(both '-' from lower(regexp_replace(v_tag_name, '[^a-zA-Z0-9]+', '-', 'g')));
 
-      -- Ensure tag exists in public.tags (tenant-isolated)
       INSERT INTO public.tags (name, slug, tenant_id)
       VALUES (v_tag_name, v_slug, p_tenant_id)
       ON CONFLICT (tenant_id, slug) DO UPDATE SET name = v_tag_name
       RETURNING id INTO v_tag_id;
 
-      -- Link tag to article
-      INSERT INTO "public"."article_tags" (article_id, tag_id) VALUES (p_resource_id, v_tag_id);
+      INSERT INTO public.blog_tags (blog_id, tag_id, tenant_id)
+      VALUES (p_resource_id, v_tag_id, p_tenant_id)
+      ON CONFLICT (blog_id, tag_id) DO NOTHING;
     END LOOP;
   END IF;
 END;
@@ -2929,10 +2882,6 @@ CREATE TABLE IF NOT EXISTS "public"."blogs" (
 ALTER TABLE "public"."blogs" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."blogs"."workflow_state" IS 'Workflow state: draft, reviewed, approved, published, archived';
-
-
-
 CREATE TABLE IF NOT EXISTS "public"."cart_items" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "cart_id" "uuid" NOT NULL,
@@ -3361,10 +3310,6 @@ CREATE TABLE IF NOT EXISTS "public"."menus" (
 
 
 ALTER TABLE "public"."menus" OWNER TO "postgres";
-
-
-COMMENT ON COLUMN "public"."menus"."location" IS 'Location of the menu (e.g., header, footer, sidebar)';
-
 
 
 CREATE TABLE IF NOT EXISTS "public"."mobile_app_config" (
@@ -3918,10 +3863,10 @@ CREATE TABLE IF NOT EXISTS "public"."resources_registry" (
     "type" "text" DEFAULT 'entity'::"text" NOT NULL,
     "db_table" "text",
     "icon" "text",
+    "permission_prefix" "text",
     "active" boolean DEFAULT true,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    "permission_prefix" "text",
     CONSTRAINT "resources_registry_scope_check" CHECK (("scope" = ANY (ARRAY['platform'::"text", 'tenant'::"text", 'content'::"text", 'module'::"text"])))
 );
 
@@ -4679,6 +4624,11 @@ ALTER TABLE ONLY "public"."extension_routes_registry"
 
 ALTER TABLE ONLY "public"."extensions"
     ADD CONSTRAINT "extensions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."extensions"
+    ADD CONSTRAINT "extensions_tenant_slug_unique" UNIQUE ("tenant_id", "slug");
 
 
 
@@ -6230,10 +6180,6 @@ CREATE UNIQUE INDEX "products_tenant_slug_key" ON "public"."products" USING "btr
 
 
 
-CREATE INDEX "roles_created_at_idx" ON "public"."roles" USING "btree" ("created_at");
-
-
-
 CREATE UNIQUE INDEX "roles_name_global_unique" ON "public"."roles" USING "btree" ("name") WHERE ("tenant_id" IS NULL);
 
 
@@ -7780,19 +7726,7 @@ CREATE POLICY "Authenticated Insert" ON "public"."extension_logs" FOR INSERT WIT
 
 
 
-CREATE POLICY "Enable insert for anonymous users" ON "public"."orders" FOR INSERT TO "anon" WITH CHECK (true);
-
-
-
-CREATE POLICY "Enable insert for authenticated users with permission" ON "public"."orders" FOR INSERT TO "authenticated" WITH CHECK ((("user_id" = "auth"."uid"()) OR "public"."is_platform_admin"() OR (("tenant_id" = "public"."current_tenant_id"()) AND ("public"."has_permission"('create_orders'::"text") OR "public"."has_permission"('tenant.orders.create'::"text")))));
-
-
-
-CREATE POLICY "Enable read access for all users" ON "public"."blogs" FOR SELECT USING (("status" = 'published'::"text"));
-
-
-
-CREATE POLICY "Enable read access for all users" ON "public"."categories" FOR SELECT USING (true);
+CREATE POLICY "Enable insert for anonymous users" ON "public"."orders" FOR INSERT TO "anon" WITH CHECK (("tenant_id" = "public"."current_tenant_id"()));
 
 
 
@@ -7914,22 +7848,6 @@ CREATE POLICY "Platform admins update schemas" ON "public"."ui_configs" FOR UPDA
 
 
 
-CREATE POLICY "Public Read Published Funfacts" ON "public"."funfacts" FOR SELECT TO "anon" USING (("status" = 'published'::"text"));
-
-
-
-CREATE POLICY "Public Read Published Partners" ON "public"."partners" FOR SELECT TO "anon" USING (("status" = 'published'::"text"));
-
-
-
-CREATE POLICY "Public Read Published Services" ON "public"."services" FOR SELECT TO "anon" USING (("status" = 'published'::"text"));
-
-
-
-CREATE POLICY "Public Read Published Teams" ON "public"."teams" FOR SELECT TO "anon" USING (("status" = 'published'::"text"));
-
-
-
 CREATE POLICY "Region levels viewable by authenticated" ON "public"."region_levels" FOR SELECT TO "authenticated" USING (true);
 
 
@@ -7963,18 +7881,6 @@ CREATE POLICY "Tenant Insert Teams" ON "public"."teams" FOR INSERT TO "authentic
 
 
 CREATE POLICY "Tenant Read Own Logs" ON "public"."extension_logs" FOR SELECT USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."is_platform_admin"()));
-
-
-
-CREATE POLICY "Tenant Select Funfacts" ON "public"."funfacts" FOR SELECT TO "authenticated" USING (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")));
-
-
-
-CREATE POLICY "Tenant Select Partners" ON "public"."partners" FOR SELECT TO "authenticated" USING (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")));
-
-
-
-CREATE POLICY "Tenant Select Teams" ON "public"."teams" FOR SELECT TO "authenticated" USING (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")));
 
 
 
@@ -8150,7 +8056,7 @@ CREATE POLICY "analytics_events_admin_read" ON "public"."analytics_events" FOR S
 
 
 
-CREATE POLICY "analytics_events_public_insert" ON "public"."analytics_events" FOR INSERT TO "anon", "authenticated" WITH CHECK (("tenant_id" = "public"."current_tenant_id"()));
+CREATE POLICY "analytics_events_public_insert" ON "public"."analytics_events" FOR INSERT TO "authenticated", "anon" WITH CHECK (("tenant_id" = "public"."current_tenant_id"()));
 
 
 
@@ -8270,7 +8176,7 @@ CREATE POLICY "blogs_insert_hierarchy" ON "public"."blogs" FOR INSERT WITH CHECK
 
 
 
-CREATE POLICY "blogs_select_hierarchy" ON "public"."blogs" FOR SELECT USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."tenant_can_access_resource"("tenant_id", 'content'::"text", 'read'::"text") OR "public"."is_platform_admin"()));
+CREATE POLICY "blogs_select_unified" ON "public"."blogs" FOR SELECT USING ((("status" = 'published'::"text") OR (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."tenant_can_access_resource"("tenant_id", 'content'::"text", 'read'::"text") OR "public"."is_platform_admin"())));
 
 
 
@@ -8319,7 +8225,7 @@ CREATE POLICY "categories_insert_unified" ON "public"."categories" FOR INSERT WI
 
 
 
-CREATE POLICY "categories_select_unified" ON "public"."categories" FOR SELECT USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."is_platform_admin"()));
+CREATE POLICY "categories_select_unified" ON "public"."categories" FOR SELECT USING (true);
 
 
 
@@ -8523,6 +8429,10 @@ CREATE POLICY "files_update_hierarchy" ON "public"."files" FOR UPDATE USING ((("
 ALTER TABLE "public"."funfacts" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "funfacts_select_unified" ON "public"."funfacts" FOR SELECT USING ((("status" = 'published'::"text") OR ("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."is_platform_admin"()));
+
+
+
 ALTER TABLE "public"."menu_permissions" ENABLE ROW LEVEL SECURITY;
 
 
@@ -8626,15 +8536,13 @@ CREATE POLICY "order_items_update_unified" ON "public"."order_items" FOR UPDATE 
 ALTER TABLE "public"."orders" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "orders_insert_own" ON "public"."orders" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = ( SELECT "auth"."uid"() AS "uid")));
+CREATE POLICY "orders_insert_auth" ON "public"."orders" FOR INSERT TO "authenticated" WITH CHECK ((( SELECT "auth"."uid"() AS "uid") = "user_id"));
 
 
 
-CREATE POLICY "orders_select_own" ON "public"."orders" FOR SELECT TO "authenticated" USING (("user_id" = ( SELECT "auth"."uid"() AS "uid")));
-
-
-
-CREATE POLICY "orders_select_tenant_staff" ON "public"."orders" FOR SELECT TO "authenticated" USING (((("tenant_id" = "public"."current_tenant_id"()) AND (( SELECT "public"."get_my_role_name"() AS "get_my_role_name") = ANY (ARRAY['admin'::"text", 'editor'::"text"]))) OR "public"."is_platform_admin"()));
+CREATE POLICY "orders_select_auth" ON "public"."orders" FOR SELECT TO "authenticated" USING (((( SELECT "auth"."uid"() AS "uid") = "user_id") OR (("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = ( SELECT "auth"."uid"() AS "uid")))) AND (( SELECT "public"."get_my_role_name"() AS "get_my_role_name") = ANY (ARRAY['admin'::"text", 'editor'::"text"]))) OR (( SELECT "public"."get_my_role_name"() AS "get_my_role_name") = 'super_admin'::"text")));
 
 
 
@@ -8696,6 +8604,10 @@ CREATE POLICY "pages_update_hierarchy" ON "public"."pages" FOR UPDATE USING ((("
 
 
 ALTER TABLE "public"."partners" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "partners_select_unified" ON "public"."partners" FOR SELECT USING ((("status" = 'published'::"text") OR ("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."is_platform_admin"()));
+
 
 
 ALTER TABLE "public"."payment_methods" ENABLE ROW LEVEL SECURITY;
@@ -8926,7 +8838,7 @@ CREATE POLICY "services_insert_hierarchy" ON "public"."services" FOR INSERT WITH
 
 
 
-CREATE POLICY "services_select_hierarchy" ON "public"."services" FOR SELECT TO "authenticated" USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."tenant_can_access_resource"("tenant_id", 'content'::"text", 'read'::"text") OR "public"."is_platform_admin"()));
+CREATE POLICY "services_select_unified" ON "public"."services" FOR SELECT USING ((("status" = 'published'::"text") OR (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."tenant_can_access_resource"("tenant_id", 'content'::"text", 'read'::"text") OR "public"."is_platform_admin"())));
 
 
 
@@ -9010,6 +8922,10 @@ CREATE POLICY "tags_update_unified" ON "public"."tags" FOR UPDATE USING (((("ten
 
 
 ALTER TABLE "public"."teams" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "teams_select_unified" ON "public"."teams" FOR SELECT USING ((("status" = 'published'::"text") OR ("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."is_platform_admin"()));
+
 
 
 ALTER TABLE "public"."template_assignments" ENABLE ROW LEVEL SECURITY;
@@ -9267,230 +9183,10 @@ CREATE POLICY "widgets_update_hierarchy" ON "public"."widgets" FOR UPDATE USING 
 
 
 
-
-
-ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
-
-
-
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."devices";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."mobile_users";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."push_notifications";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."sensor_readings";
-
-
-
-
-
-
 GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
 GRANT USAGE ON SCHEMA "public" TO "service_role";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -9931,27 +9627,6 @@ GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."verify_isolation_debug"() TO "anon";
 GRANT ALL ON FUNCTION "public"."verify_isolation_debug"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."verify_isolation_debug"() TO "service_role";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -10495,12 +10170,6 @@ GRANT ALL ON TABLE "public"."widgets" TO "service_role";
 
 
 
-
-
-
-
-
-
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "postgres";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "authenticated";
@@ -10530,91 +10199,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-revoke insert on table "public"."sso_audit_logs" from "anon";
-
-revoke insert on table "public"."sso_audit_logs" from "authenticated";
-
-revoke insert on table "public"."two_factor_audit_logs" from "anon";
-
-revoke insert on table "public"."two_factor_audit_logs" from "authenticated";
-
-CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
-
-  create policy "public_read_files"
-  on "storage"."objects"
-  as permissive
-  for select
-  to public
-using ((bucket_id = 'cms-uploads'::text));
-
-
-
-  create policy "tenant_delete_isolation"
-  on "storage"."objects"
-  as permissive
-  for delete
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
-
-
-
-  create policy "tenant_select_isolation"
-  on "storage"."objects"
-  as permissive
-  for select
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
-
-
-
-  create policy "tenant_update_isolation"
-  on "storage"."objects"
-  as permissive
-  for update
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
-
-
-
-  create policy "tenant_upload_isolation"
-  on "storage"."objects"
-  as permissive
-  for insert
-  to authenticated
-with check (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
-
-
--- CREATE TRIGGER protect_buckets_delete BEFORE DELETE ON storage.buckets FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete();
-
--- CREATE TRIGGER protect_objects_delete BEFORE DELETE ON storage.objects FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete();
-
-CREATE TRIGGER tr_sync_storage_to_files AFTER INSERT OR DELETE OR UPDATE ON storage.objects FOR EACH ROW EXECUTE FUNCTION public.handle_storage_sync();
 
 
