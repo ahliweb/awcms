@@ -94,5 +94,15 @@ export const filterMenuItemsForSidebar = ({
     filtered = applyFilters('admin_sidebar_menu', filtered, { userRole, hasPermission });
   }
 
-  return filtered;
+  return filtered.map((item) => {
+    const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
+      item.group_label,
+      item.group_order
+    );
+    return {
+      ...item,
+      group_label: groupLabel,
+      group_order: groupOrder
+    };
+  });
 };

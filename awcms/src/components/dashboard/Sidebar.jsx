@@ -19,7 +19,7 @@ function Sidebar({ isOpen, setIsOpen }) {
   const { hasPermission, userRole, isPlatformAdmin, isFullAccess } = usePermissions();
   const { currentTenant } = useTenant();
   const { signOut } = useAuth();
-  const { applyFilters } = usePlugins(); // Moved to top level
+  const { applyFilters, registeredPlugins, externalPlugins } = usePlugins(); // Moved to top level
   const navigate = useNavigate();
   const location = useLocation();
   const { menuItems, loading } = useAdminMenu();
@@ -104,7 +104,20 @@ function Sidebar({ isOpen, setIsOpen }) {
     });
     Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a.order - b.order));
     return groups;
-  }, [menuItems, loading, userRole, hasPermission, isPlatformAdmin, isFullAccess, searchQuery, t, applyFilters, currentTenant?.subscription_tier]);
+  }, [
+    menuItems,
+    loading,
+    userRole,
+    hasPermission,
+    isPlatformAdmin,
+    isFullAccess,
+    searchQuery,
+    t,
+    applyFilters,
+    currentTenant?.subscription_tier,
+    registeredPlugins,
+    externalPlugins
+  ]);
 
   const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
     groupedMenus[a].order - groupedMenus[b].order

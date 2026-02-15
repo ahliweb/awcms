@@ -23,7 +23,8 @@
         "label": "Analytics",
         "icon": "BarChart3",
         "path": "/admin/analytics",
-        "parent": "dashboard",
+        "group": "PLATFORM",
+        "parent": "platform",
         "order": 5
     },
     "permissions": [

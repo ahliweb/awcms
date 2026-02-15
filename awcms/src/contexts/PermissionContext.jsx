@@ -210,12 +210,14 @@ export const PermissionProvider = ({ children }) => {
   const hasPermission = useCallback((permission) => {
     if (!permission) return true;
     if (role?.is_full_access || role?.is_platform_admin) return true;
+    if (permissions.includes('*')) return true;
 
     return permissions.includes(permission);
   }, [permissions, role]);
 
   const hasAnyPermission = useCallback((permissionList) => {
     if (role?.is_full_access || role?.is_platform_admin) return true;
+    if (permissions.includes('*')) return true;
 
     if (!permissionList || permissionList.length === 0) return true;
     return permissionList.some(p => permissions.includes(p));

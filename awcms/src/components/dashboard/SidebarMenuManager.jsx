@@ -38,7 +38,7 @@ function SidebarMenuManager() {
     const { menuItems, loading, updateMenuOrder, toggleVisibility, updateMenuItem, updateGroup, fetchMenu } = useAdminMenu();
     const { hasPermission, isPlatformAdmin, isFullAccess, userRole, loading: permsLoading } = usePermissions();
     const { currentTenant } = useTenant();
-    const { applyFilters } = usePlugins();
+    const { applyFilters, registeredPlugins, externalPlugins } = usePlugins();
     const { toast } = useToast();
 
     const {
@@ -93,7 +93,9 @@ function SidebarMenuManager() {
         isFullAccess,
         currentTenant?.subscription_tier,
         applyFilters,
-        userRole
+        userRole,
+        registeredPlugins,
+        externalPlugins
     ]);
 
     useEffect(() => {
@@ -293,11 +295,12 @@ function SidebarMenuManager() {
         }
     };
 
+    const effectiveQuery = isSearchValid ? debouncedQuery : '';
     const filteredItems = items.filter(item =>
-        !debouncedQuery ||
-        item.label.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
-        item.key.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
-        (item.group_label || '').toLowerCase().includes(debouncedQuery.toLowerCase())
+        !effectiveQuery ||
+        item.label.toLowerCase().includes(effectiveQuery.toLowerCase()) ||
+        item.key.toLowerCase().includes(effectiveQuery.toLowerCase()) ||
+        (item.group_label || '').toLowerCase().includes(effectiveQuery.toLowerCase())
     );
 
     // Derive unique groups for autocomplete suggestion (optional)
