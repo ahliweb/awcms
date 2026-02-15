@@ -359,6 +359,10 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
+# Edge Functions that don't require JWT verification (public endpoints)
+[functions.verify-turnstile]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

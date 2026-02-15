@@ -12,7 +12,7 @@ import { getIconComponent } from '@/lib/adminIcons';
 import { usePlugins } from '@/contexts/PluginContext';
 import { TenantUsage } from './TenantUsage';
 import { useTenant } from '@/contexts/TenantContext';
-import { checkTierAccess } from '@/lib/tierFeatures';
+import { filterMenuItemsForSidebar } from '@/lib/adminMenuUtils';
 
 function Sidebar({ isOpen, setIsOpen }) {
   const { t } = useTranslation();
@@ -78,34 +78,22 @@ function Sidebar({ isOpen, setIsOpen }) {
   const groupedMenus = useMemo(() => {
     if (loading) return {};
 
-    const authorizedItems = menuItems.filter(item => {
-      if (!item.is_visible) {
-        return false;
-      }
-      if (item.permission === 'super_admin_only') return isFullAccess || isPlatformAdmin;
-      if (item.permission === 'platform_admin_only') return isPlatformAdmin;
-
-      // Check Subscription Tier
-      if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) {
-        return false;
-      }
-
-      if (item.permission) {
-        const hasPerm = hasPermission(item.permission);
-        return hasPerm;
-      }
-      return true;
+    const authorizedItems = filterMenuItemsForSidebar({
+      items: menuItems,
+      hasPermission,
+      isPlatformAdmin,
+      isFullAccess,
+      subscriptionTier: currentTenant?.subscription_tier,
+      applyFilters,
+      userRole
     });
 
-    // HOOK: Allow plugins to modify the menu items dynamically (applyFilters from top-level hook)
-    const filteredByPlugins = applyFilters('admin_sidebar_menu', authorizedItems, { userRole, hasPermission });
-
     const filteredItems = searchQuery
-      ? filteredByPlugins.filter(item =>
+      ? authorizedItems.filter(item =>
         item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t(`menu.${item.key}`, item.label).toLowerCase().includes(searchQuery.toLowerCase())
       )
-      : filteredByPlugins;
+      : authorizedItems;
     const groups = {};
     filteredItems.forEach(item => {
       const groupLabel = item.group_label || 'General';

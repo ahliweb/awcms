@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Reorder, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -9,8 +9,11 @@ import {
 import { useAdminMenu } from '@/hooks/useAdminMenu';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
+import { usePlugins } from '@/contexts/PluginContext';
 import { useSearch } from '@/hooks/useSearch';
 import { getIconComponent } from '@/lib/adminIcons';
+import { filterMenuItemsForSidebar } from '@/lib/adminMenuUtils';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
@@ -33,7 +36,9 @@ import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 function SidebarMenuManager() {
     const { t } = useTranslation();
     const { menuItems, loading, updateMenuOrder, toggleVisibility, updateMenuItem, updateGroup, fetchMenu } = useAdminMenu();
-    const { hasPermission, isPlatformAdmin, isFullAccess, loading: permsLoading } = usePermissions();
+    const { hasPermission, isPlatformAdmin, isFullAccess, userRole, loading: permsLoading } = usePermissions();
+    const { currentTenant } = useTenant();
+    const { applyFilters } = usePlugins();
     const { toast } = useToast();
 
     const {
@@ -73,42 +78,63 @@ function SidebarMenuManager() {
     const canEdit = hasPermission('platform.sidebar.update');
     const isSuperAdmin = isPlatformAdmin || isFullAccess;
 
+    const visibleItems = useMemo(() => filterMenuItemsForSidebar({
+        items: menuItems,
+        hasPermission,
+        isPlatformAdmin,
+        isFullAccess,
+        subscriptionTier: currentTenant?.subscription_tier,
+        applyFilters,
+        userRole
+    }), [
+        menuItems,
+        hasPermission,
+        isPlatformAdmin,
+        isFullAccess,
+        currentTenant?.subscription_tier,
+        applyFilters,
+        userRole
+    ]);
+
     useEffect(() => {
-        if (!menuItems.length) return;
+        const sourceItems = visibleItems;
 
         const uniqueGroups = [];
         const seen = new Set();
-        const groupSources = new Map(); // Track source of each group
+        const groupSources = new Map();
 
-        // First pass: identify sources
-        menuItems.forEach(item => {
+        sourceItems.forEach(item => {
+            const sources = groupSources.get(item.group_label) || new Set();
             if (item.source === 'extension') {
-                groupSources.set(item.group_label, 'extension');
+                sources.add('extension');
             } else if (item.source === 'plugin') {
-                groupSources.set(item.group_label, 'plugin');
+                sources.add('plugin');
+            } else {
+                sources.add('core');
             }
+            groupSources.set(item.group_label, sources);
         });
 
-        menuItems.forEach(item => {
+        sourceItems.forEach(item => {
             if (!seen.has(item.group_label)) {
                 seen.add(item.group_label);
+                const sources = groupSources.get(item.group_label) || new Set();
+                const isExtension = sources.size === 1 && sources.has('extension');
+                const isPlugin = sources.size === 1 && sources.has('plugin');
                 uniqueGroups.push({
-                    id: item.group_label, // Use label as ID for reorder
+                    id: item.group_label,
                     label: item.group_label,
                     order: item.group_order || 999,
-                    isExtension: groupSources.get(item.group_label) === 'extension',
-                    isPlugin: groupSources.get(item.group_label) === 'plugin'
+                    isExtension,
+                    isPlugin
                 });
             }
         });
 
-        // Sort by group_order
         uniqueGroups.sort((a, b) => a.order - b.order);
         setGroups(uniqueGroups);
-
-        // IMPORTANT: Also sync items state with menuItems
-        setItems(menuItems);
-    }, [menuItems]);
+        setItems(sourceItems);
+    }, [visibleItems]);
 
 
     const handleGroupReorder = (newOrder) => {
@@ -493,14 +519,14 @@ bg - card shadow - sm transition - all
                                 <Reorder.Group axis="y" values={groups} onReorder={handleGroupReorder} className="space-y-2">
                                     <AnimatePresence>
                                         {groups.map(group => (
-                                            <Reorder.Item
-                                                key={group.id}
-                                                value={group}
-                                                drag={!group.isExtension && (canEdit || isSuperAdmin) ? "y" : false}
-                                                className={`flex items-center gap-3 p-3 bg-card border rounded-lg shadow-sm ${group.isExtension ? 'bg-muted/30 border-dashed border-indigo-200 dark:border-indigo-900/30' : 'border-border'} ${(!group.isExtension && (canEdit || isSuperAdmin)) ? 'cursor-grab active:cursor-grabbing hover:border-primary/50' : ''
-                                                    }`}
-                                            >
-                                                {(!group.isExtension && (canEdit || isSuperAdmin)) ? (
+                                                <Reorder.Item
+                                                    key={group.id}
+                                                    value={group}
+                                                    drag={!group.isExtension && !group.isPlugin && (canEdit || isSuperAdmin) ? "y" : false}
+                                                    className={`flex items-center gap-3 p-3 bg-card border rounded-lg shadow-sm ${group.isExtension ? 'bg-muted/30 border-dashed border-indigo-200 dark:border-indigo-900/30' : 'border-border'} ${(!group.isExtension && !group.isPlugin && (canEdit || isSuperAdmin)) ? 'cursor-grab active:cursor-grabbing hover:border-primary/50' : ''
+                                                        }`}
+                                                >
+                                                {(!group.isExtension && !group.isPlugin && (canEdit || isSuperAdmin)) ? (
                                                     <div className="text-muted-foreground hover:text-foreground p-1">
                                                         <GripVertical className="w-5 h-5" />
                                                     </div>
@@ -525,10 +551,10 @@ bg - card shadow - sm transition - all
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        disabled={group.isExtension}
+                                                        disabled={group.isExtension || group.isPlugin}
                                                         onClick={() => handleEditGroup(group)}
                                                         className="text-muted-foreground hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground"
-                                                        title={group.isExtension ? t('sidebar_manager.managed_by_ext') : t('sidebar_manager.edit_group')}
+                                                        title={group.isExtension || group.isPlugin ? t('sidebar_manager.managed_by_ext') : t('sidebar_manager.edit_group')}
                                                     >
                                                         <Edit2 className="w-4 h-4" />
                                                     </Button>

@@ -14,6 +14,8 @@ dotenv.config({ path: path.join(rootDir, '.env') });
 
 const SECRETS_META_PATH = path.join(rootDir, '.secrets_meta.json');
 const ROTATION_INTERVAL_DAYS = 7;
+const DEFAULT_ROTATION_ROLE = 'postgres';
+const ROLE_NAME_REGEX = /^[a-zA-Z0-9_]+$/;
 
 // Function to generate a strong password
 function generatePassword(length = 32) {
@@ -82,14 +84,20 @@ async function rotatePassword() {
         dotenv.config({ path: localEnvPath, override: true });
     }
 
-    const currentDbUrl = process.env.DATABASE_URL;
-    if (!currentDbUrl) {
-        console.error('Error: DATABASE_URL not found in environment variables. Cannot connect to database.');
+    const adminDbUrl = process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL;
+    if (!adminDbUrl) {
+        console.error('Error: DATABASE_ADMIN_URL or DATABASE_URL not found in environment variables. Cannot connect to database.');
+        process.exit(1);
+    }
+
+    const rotationRole = process.env.DATABASE_ROTATION_ROLE || DEFAULT_ROTATION_ROLE;
+    if (!ROLE_NAME_REGEX.test(rotationRole)) {
+        console.error('Error: DATABASE_ROTATION_ROLE contains invalid characters. Use letters, numbers, and underscores only.');
         process.exit(1);
     }
 
     const client = new pg.Client({
-        connectionString: currentDbUrl,
+        connectionString: adminDbUrl,
     });
 
     try {
@@ -97,12 +105,12 @@ async function rotatePassword() {
         console.log('Connected to database.');
 
         // Update the postgres user password
-        await client.query(`ALTER USER postgres WITH PASSWORD '${newPassword}'`);
-        console.log('Successfully updated database password for user postgres.');
+        await client.query(`ALTER ROLE ${rotationRole} WITH PASSWORD '${newPassword}'`);
+        console.log(`Successfully updated database password for role ${rotationRole}.`);
 
     } catch (err) {
         console.error('Failed to update database password:', err);
-        console.error('Ensure your current DATABASE_URL in .env/.env.local is correct and the database is running.');
+        console.error('Ensure your current DATABASE_ADMIN_URL or DATABASE_URL in .env/.env.local is correct and the database is running.');
         process.exit(1);
     } finally {
         await client.end();
@@ -110,19 +118,27 @@ async function rotatePassword() {
 
     // Update local .env files
     try {
-        // Robustly replace password in connection string
-        // URL format: postgres://user:password@host:port/db
-        const url = new URL(currentDbUrl);
-        url.password = newPassword;
-        const newDbUrl = url.toString();
-
-        updateEnvFile(path.join(rootDir, '.env'), 'DATABASE_URL', newDbUrl);
+        const envFiles = [path.join(rootDir, '.env')];
         if (fs.existsSync(localEnvPath)) {
-            updateEnvFile(localEnvPath, 'DATABASE_URL', newDbUrl);
+            envFiles.push(localEnvPath);
         }
 
+        const urlKeys = [
+            { key: 'DATABASE_URL', value: process.env.DATABASE_URL },
+            { key: 'DATABASE_ADMIN_URL', value: process.env.DATABASE_ADMIN_URL },
+        ];
+
+        urlKeys.forEach(({ key, value }) => {
+            if (!value) return;
+            const url = new URL(value);
+            if (url.username !== rotationRole) return;
+            url.password = newPassword;
+            const newDbUrl = url.toString();
+            envFiles.forEach((envFile) => updateEnvFile(envFile, key, newDbUrl));
+        });
+
     } catch (e) {
-        console.error("Failed to construct new DATABASE_URL.", e);
+        console.error('Failed to construct updated database URL.', e);
         console.error(`CRITICAL: Database password changed, but .env update failed. Please check your database dashboard for the new password or reset it manually.`);
         process.exit(1);
     }

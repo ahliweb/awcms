@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { hooks } from '@/lib/hooks';
+import { normalizeMenuPath, resolveGroupMeta } from '@/lib/adminMenuUtils';
 
 // Default menu configuration - used as fallback when admin_menus table is empty
 // Default menu configuration - used as fallback when admin_menus table is empty
@@ -102,7 +103,7 @@ export function useAdminMenu() {
       // We join with extensions to get the group label (extension name)
       const { data: extMenus, error: extError } = await supabase
         .from('extension_menu_items')
-        .select('*, extension:extensions(name, is_active, deleted_at)')
+        .select('*, extension:extensions(name, slug, is_active, deleted_at)')
         .is('deleted_at', null);
 
       if (extError) {
@@ -113,20 +114,28 @@ export function useAdminMenu() {
       // 4. Merge and Normalize
       const normalizedExtMenus = (extMenus || [])
         .filter(item => item.extension?.is_active && !item.extension?.deleted_at) // Double check extension is active
-        .map(item => ({
-          id: `ext-${item.id}`, // specific ID format
-          original_id: item.id,
-          label: item.label,
-          key: `ext-${item.id}`,
-          icon: item.icon,
-          path: item.path,
-          group_label: item.extension?.name || 'Extensions', // Group by Extension Name
-          group_order: 900, // Put extensions at the bottom by default
-          order: item.order,
-          is_visible: item.is_active,
-          permission: null, // Extensions handle their own route perms usually, or we can add map
-          source: 'extension'
-        }));
+        .map(item => {
+          const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
+            item.extension?.name || 'Extensions',
+            900
+          );
+          const extensionKey = item.extension?.slug || `ext-${item.id}`;
+          return {
+            id: `ext-${item.id}`, // specific ID format
+            original_id: item.id,
+            label: item.label,
+            key: extensionKey,
+            feature_key: 'extensions',
+            icon: item.icon,
+            path: normalizeMenuPath(item.path),
+            group_label: groupLabel,
+            group_order: groupOrder,
+            order: item.order,
+            is_visible: item.is_active,
+            permission: null, // Extensions handle their own route perms usually, or we can add map
+            source: 'extension'
+          };
+        });
 
       // Combine
       // If coreMenus is empty, use default config. Extensions still merge.
@@ -140,6 +149,10 @@ export function useAdminMenu() {
           const matchedRes = resources.find(r => r.id === menu.resource_id) || resourceMap.get(menu.key);
           if (matchedRes) {
             const resolvedPermission = menu.permission || (matchedRes.permission_prefix ? `${matchedRes.permission_prefix}.read` : null);
+            const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
+              menu.group_label,
+              menu.group_order
+            );
             return {
               ...menu,
               // If menu label/icon is null (strict DB mode), fallback to Resource
@@ -148,10 +161,20 @@ export function useAdminMenu() {
               resource_id: matchedRes.id,
               resource_type: matchedRes.type, // passed for UI to know if it's a Table or Form
               permission: resolvedPermission,
-              permission_prefix: matchedRes.permission_prefix
+              permission_prefix: matchedRes.permission_prefix,
+              group_label: groupLabel,
+              group_order: groupOrder
             };
           }
-          return menu;
+          const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
+            menu.group_label,
+            menu.group_order
+          );
+          return {
+            ...menu,
+            group_label: groupLabel,
+            group_order: groupOrder
+          };
         });
       }
 
@@ -168,22 +191,45 @@ export function useAdminMenu() {
       // 5. Merge Plugin-registered menu items (via filters)
       try {
         const pluginMenuItems = hooks.applyFilters('admin_menu_items', []);
+        const existingMenuKeys = new Set(
+          combined.map(item => item.key || item.id).filter(Boolean)
+        );
+        const existingMenuPaths = new Set(
+          combined.map(item => normalizeMenuPath(item.path)).filter(Boolean)
+        );
         const normalizedPluginMenus = (pluginMenuItems || [])
-          .map(item => ({
-            id: `plugin-${item.id}`,
-            original_id: item.id,
-            label: item.label,
-            key: `plugin-${item.id}`,
-            icon: item.icon || 'Puzzle',
-            path: item.path?.replace('/admin/', '') || item.path,
-            group_label: item.group || item.parent || 'PLUGINS',
-            group_order: item.groupOrder || 75,
-            order: item.order || 10,
-            is_visible: true,
-            permission: item.permission || null,
-            source: 'plugin',
-            plugin_type: item.plugin_type || 'extension' // Default to extension if not specified
-          }));
+          .map(item => {
+            const normalizedKey = item.key || item.id;
+            const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
+              item.group || item.parent || 'PLUGINS',
+              item.groupOrder
+            );
+            return {
+              id: `plugin-${normalizedKey}`,
+              original_id: item.id,
+              label: item.label,
+              key: normalizedKey,
+              feature_key: item.feature_key || normalizedKey,
+              icon: item.icon || 'Puzzle',
+              path: normalizeMenuPath(item.path),
+              group_label: groupLabel,
+              group_order: groupOrder,
+              order: item.order || 10,
+              is_visible: true,
+              permission: item.permission || null,
+              source: 'plugin',
+              plugin_type: item.plugin_type || 'extension' // Default to extension if not specified
+            };
+          })
+          .filter(item => {
+            const key = item.key || item.id;
+            const pathKey = item.path;
+            if (key && existingMenuKeys.has(key)) return false;
+            if (pathKey && existingMenuPaths.has(pathKey)) return false;
+            if (key) existingMenuKeys.add(key);
+            if (pathKey) existingMenuPaths.add(pathKey);
+            return true;
+          });
         combined = [...combined, ...normalizedPluginMenus];
       } catch (pluginErr) {
         console.warn('Error loading plugin menu items:', pluginErr);

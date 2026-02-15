@@ -1,4 +1,6 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 
 // Load .env then .env.local (override)
@@ -16,6 +18,123 @@ if (!supabaseUrl || !supabaseSecretKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseSecretKey);
+
+const rootDir = process.cwd();
+const EXTENSION_MANIFEST_DIRS = [
+    path.join(rootDir, 'src', 'extensions'),
+    path.join(rootDir, '..', 'awcms-ext')
+];
+const PLUGIN_MANIFEST_DIR = path.join(rootDir, 'src', 'plugins');
+
+const GROUP_LABEL_MAP = {
+    content: 'CONTENT',
+    media: 'MEDIA',
+    commerce: 'COMMERCE',
+    navigation: 'NAVIGATION',
+    users: 'USERS',
+    system: 'SYSTEM',
+    configuration: 'CONFIGURATION',
+    settings: 'CONFIGURATION',
+    config: 'CONFIGURATION',
+    platform: 'PLATFORM',
+    mobile: 'MOBILE',
+    iot: 'IoT',
+    dashboard: 'CONTENT'
+};
+
+const GROUP_ORDER_MAP = {
+    CONTENT: 10,
+    MEDIA: 20,
+    COMMERCE: 30,
+    NAVIGATION: 40,
+    USERS: 50,
+    SYSTEM: 60,
+    CONFIGURATION: 70,
+    IoT: 80,
+    MOBILE: 85,
+    PLATFORM: 100
+};
+
+const normalizeMenuPath = (value) => {
+    if (!value) return '';
+    return value.replace(/^\/?admin\/?/, '').replace(/^\//, '');
+};
+
+const loadExtensionManifests = () => {
+    const manifests = new Map();
+
+    EXTENSION_MANIFEST_DIRS.forEach((baseDir) => {
+        if (!fs.existsSync(baseDir)) return;
+        const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+        entries.forEach((entry) => {
+            if (!entry.isDirectory()) return;
+            const manifestPath = path.join(baseDir, entry.name, 'manifest.json');
+            if (!fs.existsSync(manifestPath)) return;
+            try {
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                if (!manifest?.vendor || !manifest?.slug) return;
+                const key = `${manifest.vendor}:${manifest.slug}`;
+                if (!manifests.has(key)) {
+                    manifests.set(key, { ...manifest, __source: manifestPath });
+                }
+            } catch (error) {
+                console.warn(`Failed to parse manifest at ${manifestPath}:`, error.message);
+            }
+        });
+    });
+
+    return Array.from(manifests.values());
+};
+
+const loadPluginManifests = () => {
+    if (!fs.existsSync(PLUGIN_MANIFEST_DIR)) return [];
+
+    const manifests = [];
+    const entries = fs.readdirSync(PLUGIN_MANIFEST_DIR, { withFileTypes: true });
+    entries.forEach((entry) => {
+        if (!entry.isDirectory()) return;
+        const manifestPath = path.join(PLUGIN_MANIFEST_DIR, entry.name, 'plugin.json');
+        if (!fs.existsSync(manifestPath)) return;
+        try {
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            if (!manifest?.slug) return;
+            manifests.push({ ...manifest, __source: manifestPath });
+        } catch (error) {
+            console.warn(`Failed to parse plugin manifest at ${manifestPath}:`, error.message);
+        }
+    });
+
+    return manifests;
+};
+
+const slugify = (value) => {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+};
+
+const normalizeGroupLabel = (value) => {
+    if (!value) return 'SYSTEM';
+    const trimmed = String(value).trim();
+    if (!trimmed) return 'SYSTEM';
+    const mapped = GROUP_LABEL_MAP[trimmed.toLowerCase()];
+    return mapped || trimmed;
+};
+
+const resolveGroupMeta = (value, fallbackOrder) => {
+    const label = normalizeGroupLabel(value);
+    const order = GROUP_ORDER_MAP[label] ?? fallbackOrder ?? 999;
+    return { label, order };
+};
+
+const buildExtensionSlug = (manifest) => {
+    if (manifest?.vendor && manifest?.slug) {
+        return `awcms-ext-${manifest.vendor}-${manifest.slug}`;
+    }
+    if (manifest?.slug) return manifest.slug;
+    return null;
+};
 
 const DEFAULT_MENU_CONFIG = [
     // CONTENT Group
@@ -88,6 +207,298 @@ const PLUGINS_TO_SEED = [
     { name: 'Ahliweb Analytics', slug: 'awcms-ext-ahliweb-analytics', extension_type: 'core', is_active: true }
 ];
 
+async function seedExtensionMenus(infoTenantId) {
+    const manifests = loadExtensionManifests();
+    if (!manifests.length) {
+        console.log('No extension manifests found to seed menus.');
+        return;
+    }
+
+    for (const manifest of manifests) {
+        if (!manifest.menu) continue;
+
+        const extensionSlug = buildExtensionSlug(manifest);
+        if (!extensionSlug) {
+            console.warn(`Skipping manifest with missing slug/vendor: ${manifest.name || 'Unknown'}`);
+            continue;
+        }
+
+        const menuPath = normalizeMenuPath(manifest.menu.path);
+        if (!menuPath) {
+            console.warn(`Skipping menu with empty path for ${manifest.name || extensionSlug}`);
+            continue;
+        }
+
+        const { data: existingExtension, error: extensionFetchError } = await supabase
+            .from('extensions')
+            .select('id, tenant_id, extension_type')
+            .eq('tenant_id', infoTenantId)
+            .eq('slug', extensionSlug)
+            .maybeSingle();
+
+        if (extensionFetchError) {
+            console.error(`Failed to fetch extension ${extensionSlug}:`, extensionFetchError);
+            continue;
+        }
+
+        const now = new Date().toISOString();
+        let extensionId = existingExtension?.id;
+        let tenantId = existingExtension?.tenant_id || infoTenantId;
+
+        const extensionPayload = {
+            tenant_id: tenantId,
+            name: manifest.name || extensionSlug,
+            slug: extensionSlug,
+            description: manifest.description || null,
+            version: manifest.version || '1.0.0',
+            author: manifest.author || null,
+            manifest,
+            is_active: true,
+            updated_at: now
+        };
+
+        if (extensionId) {
+            const { error: updateError } = await supabase
+                .from('extensions')
+                .update(extensionPayload)
+                .eq('id', extensionId);
+            if (updateError) {
+                console.error(`Failed to update extension ${extensionSlug}:`, updateError);
+                continue;
+            }
+        } else {
+            const { data: inserted, error: insertError } = await supabase
+                .from('extensions')
+                .insert({
+                    ...extensionPayload,
+                    extension_type: manifest.type || 'external',
+                    is_system: false,
+                    created_at: now
+                })
+                .select('id, tenant_id')
+                .single();
+            if (insertError) {
+                console.error(`Failed to insert extension ${extensionSlug}:`, insertError);
+                continue;
+            }
+            extensionId = inserted?.id;
+            tenantId = inserted?.tenant_id;
+        }
+
+        if (!extensionId) {
+            console.warn(`Extension ${extensionSlug} missing id; skipping menu seed.`);
+            continue;
+        }
+
+        const { data: existingMenu, error: menuFetchError } = await supabase
+            .from('extension_menu_items')
+            .select('id')
+            .eq('extension_id', extensionId)
+            .eq('path', menuPath)
+            .maybeSingle();
+
+        if (menuFetchError) {
+            console.error(`Failed to fetch menu for ${extensionSlug}:`, menuFetchError);
+            continue;
+        }
+
+        const menuPayload = {
+            extension_id: extensionId,
+            label: manifest.menu.label,
+            path: menuPath,
+            icon: manifest.menu.icon || 'Puzzle',
+            order: manifest.menu.order || 90,
+            is_active: true,
+            tenant_id: tenantId,
+            updated_at: now
+        };
+
+        if (existingMenu?.id) {
+            const { error: menuUpdateError } = await supabase
+                .from('extension_menu_items')
+                .update(menuPayload)
+                .eq('id', existingMenu.id);
+            if (menuUpdateError) {
+                console.error(`Failed to update menu for ${extensionSlug}:`, menuUpdateError);
+            } else {
+                console.log(`Updated Extension Menu: ${manifest.menu.label}`);
+            }
+        } else {
+            const { error: menuInsertError } = await supabase
+                .from('extension_menu_items')
+                .insert({
+                    ...menuPayload,
+                    created_at: now
+                });
+            if (menuInsertError) {
+                console.error(`Failed to insert menu for ${extensionSlug}:`, menuInsertError);
+            } else {
+                console.log(`Seeded Extension Menu: ${manifest.menu.label}`);
+            }
+        }
+    }
+}
+
+async function seedPluginMenus() {
+    const manifests = loadPluginManifests();
+    if (!manifests.length) return;
+
+    const { data: existingMenus, error: existingError } = await supabase
+        .from('admin_menus')
+        .select('id, key, path');
+
+    if (existingError) {
+        console.error('Failed to fetch admin menus for plugin seeding:', existingError);
+        return;
+    }
+
+    const existingKeys = new Set((existingMenus || []).map(item => item.key));
+    const existingPaths = new Set((existingMenus || []).map(item => normalizeMenuPath(item.path)));
+
+    for (const manifest of manifests) {
+        if (!manifest.menu || !manifest.slug) continue;
+
+        const menu = manifest.menu;
+        const label = menu.label || menu.title || manifest.name || manifest.slug;
+        const path = normalizeMenuPath(menu.path || '');
+        if (!path) continue;
+
+        if (existingKeys.has(manifest.slug) || existingPaths.has(path)) {
+            continue;
+        }
+
+        const rawGroup = menu.group || menu.parent || menu.section || 'SYSTEM';
+        const { label: groupLabel, order: groupOrder } = resolveGroupMeta(rawGroup, menu.group_order);
+
+        const now = new Date().toISOString();
+        const payload = {
+            key: manifest.slug,
+            label,
+            path,
+            icon: menu.icon || 'Puzzle',
+            permission: menu.permission || null,
+            group_label: groupLabel,
+            group_order: groupOrder,
+            order: menu.order || 90,
+            is_visible: true,
+            created_at: now,
+            updated_at: now
+        };
+
+        const { error } = await supabase
+            .from('admin_menus')
+            .insert(payload);
+
+        if (error) {
+            console.error(`Failed to seed plugin menu ${manifest.slug}:`, error);
+        } else {
+            console.log(`Seeded Plugin Menu: ${label}`);
+            existingKeys.add(manifest.slug);
+            existingPaths.add(path);
+        }
+    }
+}
+
+async function seedModulesForTenants(tenantIds) {
+    if (!tenantIds?.length) return;
+
+    const { data: coreMenus, error: coreMenuError } = await supabase
+        .from('admin_menus')
+        .select('key, label, path, is_visible');
+
+    if (coreMenuError) {
+        console.error('Failed to fetch admin menus for module seeding:', coreMenuError);
+        return;
+    }
+
+    const { data: extMenus, error: extMenuError } = await supabase
+        .from('extension_menu_items')
+        .select('label, path, is_active, extension:extensions(slug, name, is_active, deleted_at)')
+        .is('deleted_at', null);
+
+    if (extMenuError) {
+        console.error('Failed to fetch extension menus for module seeding:', extMenuError);
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const menuItems = (coreMenus || [])
+        .filter(item => item?.key && !item.key.startsWith('group_placeholder_'))
+        .map(item => ({
+            name: item.label || item.key,
+            slug: item.key,
+            description: null,
+            status: item.is_visible === false ? 'inactive' : 'active'
+        }));
+
+    const extensionItems = (extMenus || [])
+        .filter(item => item.extension?.is_active && !item.extension?.deleted_at)
+        .map(item => {
+            const menuPath = normalizeMenuPath(item.path);
+            const slugSuffix = slugify(menuPath || item.label || 'menu');
+            const extensionSlug = item.extension?.slug || 'extension';
+            return {
+                name: item.label || `${item.extension?.name || 'Extension'} Menu`,
+                slug: `ext-${extensionSlug}-${slugSuffix}`,
+                description: item.extension?.name ? `Extension: ${item.extension.name}` : null,
+                status: item.is_active === false ? 'inactive' : 'active'
+            };
+        });
+
+    const moduleEntries = [...menuItems, ...extensionItems];
+    const moduleSlugs = new Set(moduleEntries.map(entry => entry.slug));
+
+    for (const tenantId of tenantIds) {
+        if (!tenantId) continue;
+
+        const upserts = moduleEntries.map(entry => ({
+            tenant_id: tenantId,
+            name: entry.name,
+            slug: entry.slug,
+            description: entry.description,
+            status: entry.status,
+            updated_at: now
+        }));
+
+        if (upserts.length > 0) {
+            const { error } = await supabase
+                .from('modules')
+                .upsert(upserts, { onConflict: 'tenant_id,slug' });
+
+            if (error) {
+                console.error(`Failed to seed modules for tenant ${tenantId}:`, error);
+            } else {
+                console.log(`Seeded Modules (${upserts.length}) for tenant ${tenantId}`);
+            }
+        }
+
+        const { data: existingModules, error: existingError } = await supabase
+            .from('modules')
+            .select('id, slug')
+            .eq('tenant_id', tenantId);
+
+        if (existingError) {
+            console.error(`Failed to fetch modules for tenant ${tenantId}:`, existingError);
+            continue;
+        }
+
+        const staleIds = (existingModules || [])
+            .filter(module => !moduleSlugs.has(module.slug))
+            .map(module => module.id);
+
+        if (staleIds.length > 0) {
+            const { error: updateError } = await supabase
+                .from('modules')
+                .update({ status: 'inactive', updated_at: now })
+                .in('id', staleIds);
+
+            if (updateError) {
+                console.error(`Failed to mark stale modules inactive for tenant ${tenantId}:`, updateError);
+            }
+        }
+    }
+}
+
 async function seedSidebar() {
     console.log('Seeding Sidebar...');
 
@@ -113,8 +524,11 @@ async function seedSidebar() {
     console.log('Seeding Extensions...');
     // Fetch a valid tenant ID to seed extensions for. 
     // In dev env, we grab the first tenant we find.
-    const { data: tenants } = await supabase.from('tenants').select('id').limit(1);
-    const infoTenantId = tenants?.[0]?.id;
+    const { data: tenants } = await supabase.from('tenants').select('id');
+    const tenantIds = (tenants || []).map(t => t.id).filter(Boolean);
+    const infoTenantId = tenantIds[0];
+
+    await seedPluginMenus();
 
     if (infoTenantId) {
         for (const plugin of PLUGINS_TO_SEED) {
@@ -127,7 +541,7 @@ async function seedSidebar() {
                     extension_type: plugin.extension_type,
                     is_active: plugin.is_active,
                     updated_at: new Date().toISOString()
-                }, { onConflict: 'slug' });
+                }, { onConflict: 'tenant_id,slug' });
 
             if (error) {
                 console.error(`Failed to seed extension ${plugin.name}:`, error);
@@ -135,6 +549,8 @@ async function seedSidebar() {
                 console.log(`Seeded Extension: ${plugin.name}`);
             }
         }
+        await seedExtensionMenus(infoTenantId);
+        await seedModulesForTenants(tenantIds);
     } else {
         console.warn('No tenant found to seed extensions. Skipping extension seeding.');
     }
