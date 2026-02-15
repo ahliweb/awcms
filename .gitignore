@@ -14,7 +14,7 @@ dist
 
 # Misc
 .DS_Store
-temp_debug_images/
+temp_debug_files/
 **/.env
 **/.env.local
 **/.env.development.local

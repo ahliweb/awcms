@@ -1,7 +1,13 @@
 {
   "mcpServers": {
     "supabase": {
-      "url": "https://mcp.supabase.com/mcp?project_ref=imveukxxtdwjgwsafwfl&features=database%2Cdocs%2Caccount%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching%2Cstorage"
+      "command": "node",
+      "args": [
+        "/home/data/dev_react/awcms-dev/awcms-mcp/dist/index.js"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "sbp_6b43e0e40f95b5fc173f83ba04b11d9a6e50e329"
+      }
     },
     "context7": {
       "url": "https://mcp.context7.com/mcp",
