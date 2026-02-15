@@ -10,6 +10,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { checkTierAccess } from '@/lib/tierFeatures';
 import { getIconComponent } from '@/lib/adminIcons';
+import { filterMenuItemsForSidebar } from '@/lib/adminMenuUtils';
 
 const SidebarItem = ({ href, icon: Icon, label, active }) => (
     <li>
@@ -32,7 +33,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     const location = useLocation();
     const { t } = useTranslation();
     const { menuItems, loading } = useAdminMenu();
-    const { hasPermission, hasAnyPermission, isPlatformAdmin, isFullAccess } = usePermissions();
+    const { hasPermission, hasAnyPermission, isPlatformAdmin, isFullAccess, userRole } = usePermissions();
     const { currentTenant } = useTenant(); // Added
 
     // Path cleanup logic (same as other Sidebar)
@@ -49,31 +50,17 @@ const Sidebar = ({ isOpen, onClose }) => {
     const groupedMenus = React.useMemo(() => {
         if (loading) return {};
 
-        const authorizedItems = menuItems.filter(item => {
-            if (!item.is_visible) return false;
-            if (item.permission === 'super_admin_only') return isFullAccess || isPlatformAdmin;
-            if (item.permission === 'platform_admin_only') return isPlatformAdmin;
-
-            // Check Subscription Tier
-            if (!checkTierAccess(currentTenant?.subscription_tier, item.key)) return false;
-
-            if (item.permission) {
-                // Special handling for School Modules to allow Platform access
-                // This acts as a shim for existing DB rows that only have the tenant permission
-                let requiredPerms = item.permission;
-                if (requiredPerms === 'tenant.school_pages.read') {
-                    requiredPerms = ['tenant.school_pages.read', 'platform.school_pages.read'];
-                }
-
-                if (Array.isArray(requiredPerms)) {
-                    return hasAnyPermission(requiredPerms);
-                }
-                return hasPermission(requiredPerms);
-            }
-            return true;
+        const authorizedItems = filterMenuItemsForSidebar({
+            items: menuItems,
+            hasPermission,
+            hasAnyPermission,
+            isPlatformAdmin,
+            isFullAccess,
+            subscriptionTier: currentTenant?.subscription_tier,
+            userRole, // explicit pass
+            loading
         });
 
-        // Filter by Search Query
         const filteredItems = searchQuery
             ? authorizedItems.filter(item =>
                 item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||

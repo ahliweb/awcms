@@ -71,7 +71,8 @@ export const filterMenuItemsForSidebar = ({
   isFullAccess,
   subscriptionTier,
   applyFilters,
-  userRole
+  userRole,
+  hasAnyPermission
 }) => {
   const baseItems = Array.isArray(items) ? items : [];
   let filtered = baseItems.filter((item) => {
@@ -85,7 +86,22 @@ export const filterMenuItemsForSidebar = ({
     }
 
     if (item.permission) {
-      return hasPermission(item.permission);
+      // Special handling for School Modules to allow Platform access
+      // This acts as a shim for existing DB rows that only have the tenant permission
+      let requiredPerms = item.permission;
+      if (requiredPerms === 'tenant.school_pages.read') {
+        requiredPerms = ['tenant.school_pages.read', 'platform.school_pages.read'];
+      }
+
+      if (Array.isArray(requiredPerms)) {
+        // If hasAnyPermission is provided, use it. Otherwise fallback to checking if SOME permission is held.
+        if (hasAnyPermission) {
+          return hasAnyPermission(requiredPerms);
+        }
+        // Fallback if hasAnyPermission is not passed (though it should be)
+        return requiredPerms.some(p => hasPermission(p));
+      }
+      return hasPermission(requiredPerms);
     }
     return true;
   });
