@@ -84,7 +84,12 @@ function UsersManager() {
     setLoading(true);
     try {
       let q = udm.from('users')
-        .select('*, roles!users_role_id_fkey(name, is_platform_admin, is_full_access), tenant:tenants(name)', { count: 'exact' })
+        .select(`
+          *, 
+          roles:roles!users_role_id_fkey(name, is_platform_admin, is_full_access), 
+          tenant:tenants(name),
+          profile:user_profiles(job_title, department)
+        `, { count: 'exact' })
         .is('deleted_at', null);
 
       // Strict Multi-Tenancy
@@ -197,6 +202,16 @@ function UsersManager() {
   const columns = [
     { key: 'email', label: t('users.columns.email') },
     { key: 'full_name', label: t('users.columns.full_name') },
+    {
+      key: 'profile',
+      label: 'Job / Dept',
+      render: (_, item) => (
+        <div className="flex flex-col">
+          <span className="text-xs font-medium">{item.profile?.job_title || '-'}</span>
+          <span className="text-[10px] text-muted-foreground">{item.profile?.department || ''}</span>
+        </div>
+      )
+    },
     {
       key: 'roles',
       label: t('users.columns.role'),
