@@ -5,6 +5,8 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.31.0] "Persona" - 2026-02-16
+
 ### Security
 
 - **Admin Profile Encryption**: Added encrypted admin-only profile fields keyed by salted profile descriptions.
