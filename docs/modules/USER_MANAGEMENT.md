@@ -36,6 +36,29 @@ Supabase separates Auth Users (`auth.users`) from Application Data. AWCMS bridge
 
 - A Database Trigger `on_auth_user_created` automatically inserts a row into `public.users` when a new user signs up via Supabase Auth.
 
+### Region Assignment (Hierarchy)
+
+To support administrative boundaries, users can be assigned to a specific **Region** (Level 1-10) or **Administrative Region** (Indonesia specifics) via the `users` table.
+
+- **Field**: `users.region_id` (Standard 10-level)
+- **Field**: `users.administrative_region_id` (Indonesian specific)
+- **Validation**:
+  - Users can only be assigned to *one* region at a time.
+  - Assignment is controlled by the `tenant.user.update` permission.
+
+### ABAC Enforcement
+
+User management actions are strictly controlled by Attribute-Based Access Control (ABAC) permissions.
+
+| Action | Permission Required | RLS Policy |
+| :--- | :--- | :--- |
+| **View Users** | `tenant.user.read` | `users_select_hierarchy` |
+| **Update User (Profile)** | `tenant.user.update` | `users_update_hierarchy` |
+| **Assign Region** | `tenant.user.update` | `users_update_hierarchy` |
+| **Delete User** | `tenant.user.delete` | *TBD / Soft Delete* |
+
+> **Security Note**: The RLS policy `users_update_hierarchy` explicitly checks for the `tenant.user.update` permission for any intra-tenant user modification.
+
 ## Role Assignment
 
 Roles are assigned via the `role_id` Foreign Key in `public.users`.

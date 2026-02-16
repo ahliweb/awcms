@@ -64,6 +64,7 @@ Agents must be aware of the exact versions in use:
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
+> **Vite 7**: This project uses Vite 7.2.7. Be aware of deprecation warnings for `ViteDevServer` APIs in `future` config.
 
 ---
 
@@ -79,7 +80,9 @@ To ensure successful code generation and integration, Agents must adhere to the 
    - **RLS is Sacred**: Never bypass RLS unless explicitly creating a Platform Admin feature (using `auth_is_admin()` or Service Role).
    - **Tenant Context**: Always use `useTenant()` or `usePermissions()` to get `tenantId`.
    - **Public Portal Tenant Context**: Static builds use `PUBLIC_TENANT_ID`/`VITE_PUBLIC_TENANT_ID`; avoid `Astro.locals` in build-time code.
-   - **Isolation**: Ensure all new tables have `tenant_id` and RLS policies.
+   - **Tenancy**: Use `tenant_id` for all isolation. Respect the **5-level** hierarchy limit.
+   - **Roles**: Use the **10-level** Staff Hierarchy (`public.roles.staff_level`) for workflow logic. See [HIERARCHY.md](docs/tenancy/HIERARCHY.md).
+   - **Soft Delete**: `deleted_at` IS NULL check is mandatory.
    - **Permission Keys**: Use the strict format `scope.resource.action` (e.g., `tenant.post.publish`).
    - **Channel Restrictions**:
      - Governance/Publishing = `web` only.
@@ -110,18 +113,17 @@ To ensure successful code generation and integration, Agents must adhere to the 
 
 ### Context7 (Primary Reference)
 
-When updating docs or implementing library usage, **Context7 is the primary reference**. Use the following library IDs with `context7_search`:
+When updating docs or implementing library usage, **Context7 is the primary reference**. Use the following verified library IDs with `context7_search`:
 
-- `supabase/supabase-js`
-- `vitejs/vite`
-- `withastro/astro`
-- `/websites/react_dev`
-- `/websites/tailwindcss`
-- `/remix-run/react-router`
-- `/websites/i18next`
-- `/ueberdosis/tiptap-docs`
-- `/puckeditor/puck`
-- `/grx7/framer-motion`
+- `supabase/supabase-js` (Auth, Database)
+- `vitejs/vite` (Build Tooling)
+- `withastro/astro` (Public Portal)
+- `remix-run/react-router` (Routing v7)
+- `websites/react_dev` (React 19)
+- `websites/tailwindcss` (v4 CSS-first)
+- `ueberdosis/tiptap-docs` (Rich Text)
+- `puckeditor/puck` (Visual Editor)
+- `grx7/framer-motion` (Animations)
 
 ### Code Patterns
 
@@ -406,6 +408,27 @@ const { error } = await supabase
   .from("blogs")
   .update({ deleted_at: new Date().toISOString() })
   .eq("id", blogId);
+```
+
+### React Router 7 Data Loading
+
+Prefetch data using loaders rather than `useEffect` where possible (Admin Panel):
+
+```javascript
+// src/routes/dashboard.tsx
+import { useLoaderData } from "react-router-dom";
+import { supabase } from "@/lib/customSupabaseClient";
+
+export async function loader({ request }) {
+  const { data, error } = await supabase.from("stats").select("*");
+  if (error) throw new Response("Error loading stats", { status: 500 });
+  return data;
+}
+
+export default function Dashboard() {
+  const stats = useLoaderData();
+  return <div>{/* render stats */}</div>;
+}
 ```
 
 ### File Upload

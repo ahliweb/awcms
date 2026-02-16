@@ -1,7 +1,7 @@
 # AWCMS System Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-02-07
+> **Last Updated:** 2026-02-16 (Audited against `package.json`)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -28,16 +28,20 @@ Agents must respect these exact versions to ensure compatibility across the mono
 
 ### 1.2 Public Portal (`awcms-public`)
 
-*   **Meta-Framework:** Astro 5.17.1
-*   **Interactive Islands:** React 19.2.4
-*   **Language:** TypeScript 5.x / TSX
-*   **Styling:** TailwindCSS 4.1.18 (Vite Plugin)
-*   **Backend Interface:** `@supabase/supabase-js` v2.93.3
-*   **Node.js Requirement:** >= 20.0.0
-*   **Rendering Model:** Static output (`output: "static"`) with React islands
-*   **Constraints:**
-    *   **NO** direct database access (Must use Supabase JS Client or Edge Functions).
-    *   **NO** Puck Editor Runtime (Use `PuckRenderer` only).
+* **Meta-Framework:** Astro 5.17.1
+* **Interactive Islands:** React 19.2.4
+* **Language:** TypeScript 5.x / TSX
+* **Styling:** TailwindCSS 4.1.18 (Vite Plugin)
+* **Backend Interface:** `@supabase/supabase-js` v2.93.3
+* **Node.js Requirement:** >= 20.0.0
+* **Rendering Model:** Static output (`output: "static"`) with React islands
+* **Sovereign Instances (Level 0):** For multi-national scale, distinct Supabase projects are used per region/country to ensure data sovereignty.
+* **Logical Regions (Global):** 10-level operational hierarchy (`regions`) for business segmentation.
+* **Administrative Regions (Indonesia):** Standard government hierarchy (`administrative_regions`, `cahyadsn/wilayah`) for legal/compliance.
+* **Extensions:** Custom PostgreSQL extensions (`pga_...`) handle complex logic.
+* **Constraints:**
+  * **NO** direct database access (Must use Supabase JS Client or Edge Functions).
+  * **NO** Puck Editor Runtime (Use `PuckRenderer` only).
 
 ### 1.3 Backend & Database
 
@@ -68,20 +72,27 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Soft Delete:**
   * **Mechanism:** Tables must have a `deleted_at` (TIMESTAMPTZ) column.
   * **Operation:** `DELETE` SQL commands are forbidden for business data. Use `UPDATE table SET deleted_at = NOW()`.
+* **Soft Delete:**
+  * **Mechanism:** Tables must have a `deleted_at` (TIMESTAMPTZ) column.
+  * **Operation:** `DELETE` SQL commands are forbidden for business data. Use `UPDATE table SET deleted_at = NOW()`.
   * **Filtering:** All read queries must filter `.is('deleted_at', null)`.
 * **Foreign Keys:**
   * Must use `ON DELETE RESTRICT` or `ON DELETE SET NULL` to prevent accidental cascades, supporting the Soft Delete pattern.
 
-### 2.3 Permission System (ABAC/RBAC)
+### 2.3 Permissions (ABAC)
 
-* **Standard Format:** `scope.resource.action`
-  * *Examples:* `tenant.blog.publish`, `platform.module.install`.
-* **Matrix Enforcement:**
+* **Model**: Attribute-Based Access Control (ABAC) via `permissions` table.
+* **Roles**: 10-level Staff Hierarchy (See [HIERARCHY.md](docs/tenancy/HIERARCHY.md)).
+* **Format**: `scope.resource.action` (e.g., `tenant.blog.create`).
+* **Assignment**: `role_permissions` join table.
+* **Reference**: See [AGENTS.md](AGENTS.md) for enforcement patterns.
+
   * Frontend: `usePermissions().hasPermission('...')`
   * Database: `auth.has_permission('...')` in RLS policies.
-* **Roles:**
+
+* **Standard Roles:**
   * **Platform:** Owner, Super Admin.
-  * **Tenant:** Admin, Editor, Author, Member.
+  * **Tenant:** Admin, Auditor (read-only), Editor, Author, Member, Subscriber, Public, No Access.
 
 ### 2.4 Styling & Theming
 

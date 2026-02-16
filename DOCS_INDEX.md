@@ -106,12 +106,12 @@ When implementing features, reference these Context7 library IDs:
 - `supabase/supabase-js` - Database operations
 - `vitejs/vite` - Build tooling
 - `withastro/astro` - Public portal framework
-- `/websites/react_dev` - React patterns
-- `/websites/tailwindcss` - Styling
-- `/remix-run/react-router` - Routing
-- `/ueberdosis/tiptap-docs` - Rich text editor
-- `/puckeditor/puck` - Visual builder
-- `/grx7/framer-motion` - Animations
+- `remix-run/react-router` - Routing
+- `websites/react_dev` - React patterns
+- `websites/tailwindcss` - Styling
+- `ueberdosis/tiptap-docs` - Rich text editor
+- `puckeditor/puck` - Visual builder
+- `grx7/framer-motion` - Animations
 
 See [AGENTS.md](../AGENTS.md) for detailed Context7 usage patterns.
 
@@ -120,6 +120,7 @@ See [AGENTS.md](../AGENTS.md) for detailed Context7 usage patterns.
 ## Documentation Standards
 
 All documentation must:
+
 1. **Align with SYSTEM_MODEL.md** for tech stack and architecture
 2. **Reference AGENTS.md** for coding standards and AI guidelines
 3. **Use tables** for structured data
@@ -133,16 +134,19 @@ All documentation must:
 ## Quick Reference
 
 ### For New Developers
+
 1. Read [SYSTEM_MODEL.md](../SYSTEM_MODEL.md) (5 min)
 2. Read [docs/dev/setup.md](./dev/setup.md) (10 min)
 3. Start coding with [AGENTS.md](../AGENTS.md) as your reference
 
 ### For AI Agents
+
 1. **Primary**: [SYSTEM_MODEL.md](../SYSTEM_MODEL.md) - Architecture & constraints
 2. **Secondary**: [AGENTS.md](../AGENTS.md) - Implementation patterns
 3. **Navigation**: This index for topic location
 
 ### For DevOps/Operations
+
 1. [docs/deploy/overview.md](./deploy/overview.md) - Deployment strategies
 2. [docs/security/overview.md](./security/overview.md) - Security requirements
 3. [SYSTEM_MODEL.md](../SYSTEM_MODEL.md) - Tech stack specifications
