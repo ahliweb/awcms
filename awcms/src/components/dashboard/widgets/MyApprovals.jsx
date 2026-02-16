@@ -4,7 +4,8 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { encodeRouteParam } from '@/lib/routeSecurity';
@@ -50,41 +51,41 @@ export function MyApprovals() {
 
     return (
         <Card className="dashboard-surface dashboard-surface-hover flex flex-col">
-            <CardContent className="p-6 flex-1 flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                        Pending Approvals
-                        {approvals.length > 0 && (
-                            <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs px-2 py-0.5 rounded-full">
-                                {approvals.length}
-                            </span>
-                        )}
-                    </h3>
-                </div>
-
-                <div className="flex-1 overflow-y-auto space-y-3">
-                    {approvals.length > 0 ? (
-                        approvals.map(item => (
-                            <div key={item.id} className="p-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600 rounded-lg group hover:border-blue-200 dark:hover:border-blue-800 transition-colors">
-                                <div className="flex justify-between items-start mb-1">
-                                    <h4 className="font-medium text-slate-900 dark:text-white line-clamp-1">{item.title}</h4>
-                                    <span className="text-xs text-slate-400 whitespace-nowrap">
-                                        {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true })}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between mt-2">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100/70 text-blue-600 dark:bg-blue-500/20 dark:text-blue-200">
+                        <CheckCircle className="w-4 h-4" />
+                    </span>
+                    Pending Approvals
+                </CardTitle>
+                {approvals.length > 0 && (
+                    <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-200">
+                        {approvals.length}
+                    </Badge>
+                )}
+            </CardHeader>
+            <CardContent className="flex-1 space-y-3 pt-4">
+                {approvals.length > 0 ? (
+                    approvals.map(item => (
+                        <div key={item.id} className="rounded-xl border border-slate-200/70 bg-white/70 p-3.5 shadow-sm transition-colors hover:border-blue-200/80 hover:bg-white dark:border-slate-700/60 dark:bg-slate-800/40 dark:hover:border-blue-800/70">
+                            <div className="flex justify-between items-start gap-2">
+                                <h4 className="font-semibold text-slate-900 dark:text-white line-clamp-1">{item.title}</h4>
+                                <span className="text-xs text-slate-400 whitespace-nowrap">
+                                    {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true })}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between mt-2">
                                     <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                                         <FileText className="w-3 h-3" />
                                         by {item.author?.email || 'Unknown'}
                                     </span>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-6 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
-                                        onClick={async () => {
-                                            const routeId = await encodeRouteParam({ value: item.id, scope: 'blogs.edit' });
-                                            if (!routeId) {
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 rounded-md px-2 text-xs font-semibold text-blue-600 dark:text-blue-300 hover:text-blue-700 dark:hover:text-blue-200 hover:bg-blue-50/80 dark:hover:bg-blue-900/30"
+                                    onClick={async () => {
+                                        const routeId = await encodeRouteParam({ value: item.id, scope: 'blogs.edit' });
+                                        if (!routeId) {
                                                 toast({ variant: 'destructive', title: 'Error', description: 'Unable to open the review editor.' });
                                                 return;
                                             }
@@ -96,20 +97,19 @@ export function MyApprovals() {
                                 </div>
                             </div>
                         ))
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-40 text-slate-400">
-                            <CheckCircle className="w-8 h-8 mb-2 opacity-20" />
-                            <p className="text-sm">No items waiting for review</p>
-                        </div>
-                    )}
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
-                    <Link to="/cmspanel/blogs/queue" className="text-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center w-full">
-                        View All Queue <ArrowRight className="w-4 h-4 ml-1" />
-                    </Link>
-                </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200/70 bg-slate-50/60 px-6 py-10 text-slate-400 dark:border-slate-700/60 dark:bg-slate-800/40">
+                        <CheckCircle className="w-8 h-8 mb-2 opacity-20" />
+                        <p className="text-sm font-medium">No items waiting for review</p>
+                    </div>
+                )}
             </CardContent>
+
+            <div className="border-t border-slate-100/80 px-6 py-3 dark:border-slate-700/60">
+                <Link to="/cmspanel/blogs/queue" className="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center w-full">
+                    View All Queue <ArrowRight className="w-4 h-4 ml-1" />
+                </Link>
+            </div>
         </Card>
     );
 }

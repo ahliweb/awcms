@@ -1,28 +1,43 @@
 import React from 'react';
 
 const Footer = () => {
+    const year = new Date().getFullYear();
+
     return (
-        <footer className="p-4 my-6 bg-card rounded-lg shadow md:flex md:items-center md:justify-between md:p-6">
-            <ul className="flex flex-wrap items-center mb-6 space-y-1 md:mb-0">
-                <li>
-                    <a href="/" className="mr-4 text-sm font-normal text-muted-foreground hover:underline md:mr-6">Terms and conditions</a>
-                </li>
-                <li>
-                    <a href="/" className="mr-4 text-sm font-normal text-muted-foreground hover:underline md:mr-6">Privacy Policy</a>
-                </li>
-                <li>
-                    <a href="/" className="mr-4 text-sm font-normal text-muted-foreground hover:underline md:mr-6">Licensing</a>
-                </li>
-                <li>
-                    <a href="/" className="mr-4 text-sm font-normal text-muted-foreground hover:underline md:mr-6">Cookie Policy</a>
-                </li>
-                <li>
-                    <a href="/" className="text-sm font-normal text-muted-foreground hover:underline">Contact</a>
-                </li>
-            </ul>
-            <p className="text-sm text-center text-muted-foreground">
-                &copy; 2024-2025 <a href="https://ahliweb.com" className="hover:underline" target="_blank" rel="noreferrer">AhliWeb.com</a> & AWCMS. All rights reserved.
-            </p>
+        <footer className="my-6 rounded-xl border border-border/60 bg-card/90 px-5 py-4 shadow-sm backdrop-blur md:px-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Legal
+                    </span>
+                    <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                        <a href="/" className="text-muted-foreground transition-colors hover:text-foreground">
+                            Terms & Conditions
+                        </a>
+                        <span className="hidden h-3 w-px bg-border/60 sm:inline-block" />
+                        <a href="/" className="text-muted-foreground transition-colors hover:text-foreground">
+                            Privacy Policy
+                        </a>
+                        <span className="hidden h-3 w-px bg-border/60 sm:inline-block" />
+                        <a href="/" className="text-muted-foreground transition-colors hover:text-foreground">
+                            Licensing
+                        </a>
+                        <span className="hidden h-3 w-px bg-border/60 sm:inline-block" />
+                        <a href="/" className="text-muted-foreground transition-colors hover:text-foreground">
+                            Cookie Policy
+                        </a>
+                        <span className="hidden h-3 w-px bg-border/60 sm:inline-block" />
+                        <a href="/" className="text-muted-foreground transition-colors hover:text-foreground">
+                            Contact
+                        </a>
+                    </nav>
+                </div>
+                <p className="text-xs text-muted-foreground md:text-sm">
+                    &copy; 2024-{year} <a href="https://ahliweb.com" className="font-medium text-foreground transition-colors hover:text-primary" target="_blank" rel="noreferrer">AhliWeb.com</a>
+                    <span className="mx-2 text-border">•</span>
+                    AWCMS. All rights reserved.
+                </p>
+            </div>
         </footer>
     )
 }

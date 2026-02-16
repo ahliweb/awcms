@@ -43,6 +43,10 @@ Admin routes use path-based sub-slugs so tab and trash views survive refreshes. 
 
 Edit/detail routes use signed IDs (`{id}.{signature}`) to prevent guessable links. Use `encodeRouteParam` when generating links and `useSecureRouteParam` to decode inside route screens.
 
+### Dashboard Widget Headers
+
+Dashboard widgets can provide `title`, `icon`, `badge`, or a `header` object. The dashboard frame renders a consistent header bar and applies padding automatically (see `docs/modules/EXTENSIONS.md`).
+
 | Area | Base Route | Sub-Slug Patterns | Notes |
 | --- | --- | --- | --- |
 | Blogs | `/cmspanel/blogs` | `/categories`, `/tags`, `/queue`, `/edit/:id` | Review queue lives at `/queue`. |

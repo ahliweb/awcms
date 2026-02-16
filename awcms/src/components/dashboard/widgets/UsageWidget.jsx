@@ -88,16 +88,18 @@ export function UsageWidget() {
 
     return (
         <Card className="dashboard-surface dashboard-surface-hover">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    Resource Usage
-                    <span className="ml-auto text-xs font-normal text-muted-foreground bg-primary/10 px-2 py-0.5 rounded">
-                        {limits.label}
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100/70 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200">
+                        <TrendingUp className="h-4 w-4" />
                     </span>
+                    Resource Usage
                 </CardTitle>
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-300">
+                    {limits.label}
+                </span>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
                 {/* Users Usage */}
                 <div className="space-y-2">
                     <div className="flex justify-between text-sm">

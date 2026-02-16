@@ -21,11 +21,11 @@ const StatusItem = ({ label, status }) => {
   }
 
   return (
-    <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-slate-700/50 rounded-xl border border-slate-100 dark:border-slate-600 hover:bg-white/80 dark:hover:bg-slate-700/80 transition-colors group">
-      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{label}</span>
+    <div className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-white/70 p-3.5 transition-colors hover:bg-white/90 dark:border-slate-700/60 dark:bg-slate-800/60 dark:hover:bg-slate-800/80">
+      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</span>
       <div className="flex items-center gap-3">
-        <span className={`text-[10px] uppercase tracking-wider font-bold ${color} opacity-80`}>{status}</span>
-        <div className={`p-1.5 rounded-full ${bg} relative`}>
+        <span className={`text-[10px] uppercase tracking-[0.2em] font-bold ${color}`}>{status}</span>
+        <div className={`p-1.5 rounded-full ${bg} relative`}> 
           {pulse && <div className={`absolute inset-0 rounded-full ${bg} animate-ping opacity-50`}></div>}
           <Icon className={`w-4 h-4 ${color} relative z-10`} />
         </div>
@@ -37,13 +37,16 @@ const StatusItem = ({ label, status }) => {
 export function SystemHealth({ health }) {
   return (
     <Card className="dashboard-surface dashboard-surface-hover col-span-1 min-w-0">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
-          <Activity className="w-5 h-5 text-indigo-500" />
+      <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+        <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100/70 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-200">
+            <Activity className="w-4 h-4" />
+          </span>
           System Health
         </CardTitle>
+        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-300">Live</span>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 pt-4">
         <StatusItem label="Database Connection" status={health?.database || 'unknown'} />
         <StatusItem label="Storage Service" status={health?.storage || 'unknown'} />
         <StatusItem label="API Status" status={health?.api || 'unknown'} />

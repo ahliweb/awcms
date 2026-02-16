@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { usePlugins } from '@/contexts/PluginContext';
 import ExtensionErrorBoundary from '@/components/ui/ExtensionErrorBoundary';
 import { cn } from '@/lib/utils';
+import DashboardWidgetHeader from '@/components/dashboard/widgets/DashboardWidgetHeader';
 
 const getSortValue = (widget) => {
     if (typeof widget?.priority === 'number') return widget.priority;
@@ -72,13 +73,26 @@ const PluginWidgets = ({ position = 'main', layout = 'stack', className = '' }) 
             const sizeClass = widget.size === 'large' ? 'md:col-span-2' : '';
             const frameVariant = widget.frame ?? 'default';
             const frameEnabled = frameVariant !== false && frameVariant !== 'none';
+            const headerDisabled = widget.header === false || widget.header?.enabled === false;
+            const headerTitle = widget.header?.title ?? widget.title;
+            const headerSubtitle = widget.header?.subtitle ?? widget.subtitle;
+            const headerBadge = widget.header?.badge ?? widget.badge;
+            const headerActions = widget.header?.actions ?? widget.actions;
+            const headerIcon = widget.header?.icon ?? widget.icon;
+            const headerEnabled = frameEnabled && frameVariant !== 'flush' && !headerDisabled && (headerTitle || headerSubtitle || headerBadge || headerActions || headerIcon);
             const frameClassName = frameEnabled
                 ? cn(
-                    'rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/60',
-                    frameVariant === 'flush' ? 'overflow-hidden p-0' : 'p-4'
+                    'overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/60'
                 )
                 : '';
             const wrapperClassName = cn(sizeClass, frameClassName, widget.className);
+            const contentWrapperClassName = frameEnabled
+                ? frameVariant === 'flush'
+                    ? ''
+                    : headerEnabled
+                        ? 'px-4 pb-4'
+                        : 'p-4'
+                : '';
 
             const content = widget.element
                 ? widget.element
@@ -91,7 +105,23 @@ const PluginWidgets = ({ position = 'main', layout = 'stack', className = '' }) 
             return (
                 <div key={widget.id} className={wrapperClassName}>
                     <ExtensionErrorBoundary extensionName={`Widget: ${widget.id}`}>
-                        {content}
+                        {headerEnabled && (
+                            <DashboardWidgetHeader
+                                title={headerTitle}
+                                subtitle={headerSubtitle}
+                                badge={headerBadge}
+                                icon={headerIcon}
+                                actions={headerActions}
+                                iconWrapperClassName={widget.header?.iconWrapperClassName}
+                                iconClassName={widget.header?.iconClassName}
+                                className={widget.header?.className}
+                            />
+                        )}
+                        {frameEnabled ? (
+                            <div className={contentWrapperClassName}>{content}</div>
+                        ) : (
+                            content
+                        )}
                     </ExtensionErrorBoundary>
                 </div>
             );

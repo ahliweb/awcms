@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { CreditCard } from 'lucide-react';
 import MailketingCreditsWidget from './components/MailketingCreditsWidget';
 import manifest from './plugin.json';
 
@@ -68,10 +69,11 @@ export const register = ({ addFilter, pluginConfig }) => {
             ...widgets,
             {
                 id: 'mailketing_credits',
+                title: 'Email Credits',
+                icon: CreditCard,
                 component: 'mailketing:MailketingCreditsWidget',
                 position: 'sidebar',
                 priority: 50,
-                frame: false,
             },
         ];
     });

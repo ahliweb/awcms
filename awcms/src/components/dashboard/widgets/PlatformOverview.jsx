@@ -24,20 +24,23 @@ export function PlatformOverview() {
 
     return (
         <div className="space-y-8 mb-10 overflow-hidden">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600">
-                    <ShieldCheck className="w-6 h-6" />
+            <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600">
+                    <ShieldCheck className="w-5 h-5" />
                 </div>
-                <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300">
-                    {t('dashboard.platform.overview')}
-                </h2>
+                <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Platform</p>
+                    <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+                        {t('dashboard.platform.overview')}
+                    </h2>
+                </div>
             </div>
 
             {/* Top Stats - Neo Glass */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card className="dashboard-surface dashboard-surface-hover">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.total_tenants')}</CardTitle>
+                    <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+                        <CardTitle className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t('dashboard.platform.total_tenants')}</CardTitle>
                         <Building2 className="h-4 w-4 text-indigo-500" />
                     </CardHeader>
                     <CardContent>
@@ -54,8 +57,8 @@ export function PlatformOverview() {
                 </Card>
 
                 <Card className="dashboard-surface dashboard-surface-hover">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.system_users')}</CardTitle>
+                    <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+                        <CardTitle className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t('dashboard.platform.system_users')}</CardTitle>
                         <Users className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
                     <CardContent>
@@ -65,8 +68,8 @@ export function PlatformOverview() {
                 </Card>
 
                 <Card className="dashboard-surface dashboard-surface-hover">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('dashboard.platform.system_storage')}</CardTitle>
+                    <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+                        <CardTitle className="text-sm font-semibold text-slate-600 dark:text-slate-300">{t('dashboard.platform.system_storage')}</CardTitle>
                         <Database className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent>
@@ -94,9 +97,11 @@ export function PlatformOverview() {
 
             {/* Recent Tenants Table - Glass Pane */}
             <Card className="dashboard-surface dashboard-surface-hover">
-                <CardHeader>
-                    <CardTitle className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-slate-400" />
+                <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+                    <CardTitle className="text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                            <TrendingUp className="w-4 h-4" />
+                        </span>
                         {t('dashboard.platform.recent_registrations')}
                     </CardTitle>
                 </CardHeader>

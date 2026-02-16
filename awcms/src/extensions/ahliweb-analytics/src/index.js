@@ -10,6 +10,7 @@ import AnalyticsDashboard from './components/AnalyticsDashboard';
 import AnalyticsReports from './components/AnalyticsReports';
 import AnalyticsWidget from './components/AnalyticsWidget';
 import manifest from '../manifest.json';
+import { BarChart3 } from 'lucide-react';
 
 // Export components
 export const components = {
@@ -36,10 +37,8 @@ export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
             component: 'awcms-ext-ahliweb-analytics:AnalyticsWidget',
             size: 'large',
             order: 1,
-            frame: 'flush',
-            props: {
-                className: 'rounded-none'
-            }
+            icon: BarChart3,
+            badge: 'Today'
         }];
     });
 

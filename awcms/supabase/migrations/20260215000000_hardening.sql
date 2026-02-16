@@ -40,8 +40,20 @@ FOR SELECT USING (("tenant_id" = "public"."current_tenant_id"()) OR "public"."is
 
 -- tenant_resource_registry
 DROP POLICY IF EXISTS "tenant_resource_registry_select" ON "public"."tenant_resource_registry";
-CREATE POLICY "tenant_resource_registry_select" ON "public"."tenant_resource_registry"
-FOR SELECT USING (("tenant_id" = "public"."current_tenant_id"()) OR "public"."is_platform_admin"());
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'tenant_resource_registry'
+      AND column_name = 'tenant_id'
+  ) THEN
+    EXECUTE 'CREATE POLICY "tenant_resource_registry_select" ON "public"."tenant_resource_registry" FOR SELECT USING (("tenant_id" = "public"."current_tenant_id"()) OR "public"."is_platform_admin"())';
+  ELSE
+    EXECUTE 'CREATE POLICY "tenant_resource_registry_select" ON "public"."tenant_resource_registry" FOR SELECT USING ("public"."is_platform_admin"())';
+  END IF;
+END $$;
 
 
 -- 2. Performance Fixes (Missing Indexes)

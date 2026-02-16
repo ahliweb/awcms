@@ -1,17 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, TrendingUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function TopBlogsWidget({ data, loading }) {
     return (
         <Card className="dashboard-surface dashboard-surface-hover hover:shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
-                    <span className="w-1 h-6 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full"></span>
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100/70 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-200">
+                        <TrendingUp className="h-4 w-4" />
+                    </span>
                     Top Performing Blogs
                 </CardTitle>
-                <Link to="/cmspanel/blogs" className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium flex items-center gap-1 group px-3 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
+                <Link to="/cmspanel/blogs" className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center gap-1 group px-3 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
                     View All <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </Link>
             </CardHeader>

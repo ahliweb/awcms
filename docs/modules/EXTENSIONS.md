@@ -217,6 +217,39 @@ const AnalyticsReport = () => {
 
 Signed IDs follow the `{uuid}.{signature}` pattern and redirect legacy raw UUIDs on first load.
 
+## Dashboard Widget Headers
+
+Dashboard widgets can opt into the standard card header UI by supplying `title`, `icon`, or a `header` configuration. The dashboard will render a consistent header bar and handle padding automatically.
+
+```javascript
+addFilter('dashboard_widgets', 'mailketing_stats', (widgets) => [
+  ...widgets,
+  {
+    id: 'mailketing_credits',
+    title: 'Email Credits',
+    icon: CreditCard,
+    badge: 'Live',
+    component: 'mailketing:MailketingCreditsWidget',
+    position: 'sidebar'
+  }
+]);
+```
+
+Use `header` for finer control:
+
+```javascript
+{
+  id: 'analytics-overview',
+  component: 'analytics:Widget',
+  header: {
+    title: 'Analytics Overview',
+    subtitle: 'Last 24 hours',
+    badge: 'Today',
+    icon: BarChart3
+  }
+}
+```
+
 ## Database Tables
 
 ### `extensions`

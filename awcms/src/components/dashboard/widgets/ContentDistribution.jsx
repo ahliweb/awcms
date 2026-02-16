@@ -1,6 +1,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart } from 'lucide-react';
 
 export function ContentDistribution({ data }) {
   const chartData = [
@@ -10,17 +11,27 @@ export function ContentDistribution({ data }) {
     { name: 'Users', value: data?.users || 0, color: '#22c55e' },
   ].filter(item => item.value > 0);
 
+  const totalItems = chartData.reduce((sum, item) => sum + item.value, 0);
+
   return (
     <Card className="dashboard-surface dashboard-surface-hover col-span-1 min-w-0">
-      <CardHeader>
-        <CardTitle>Content Overview</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
+        <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+            <PieChart className="h-4 w-4" />
+          </span>
+          Content Overview
+        </CardTitle>
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+          Total {totalItems}
+        </span>
       </CardHeader>
-      <CardContent className="p-6">
+      <CardContent className="p-6 pt-4">
         {chartData.length > 0 ? (
           <div className="w-full h-[300px] relative" style={{ minHeight: '300px' }}>
             {/* minWidth/minHeight added to suppress Recharts warning during initial render/animation */}
             <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
-              <PieChart>
+              <RePieChart>
                 <Pie
                   data={chartData}
                   cx="50%"
@@ -51,12 +62,13 @@ export function ContentDistribution({ data }) {
                   iconType="circle"
                   formatter={(value) => <span className="text-sm font-medium text-slate-600 dark:text-slate-300 ml-1">{value}</span>}
                 />
-              </PieChart>
+                </RePieChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-slate-400 dark:text-slate-500">
-            No data available
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200/70 bg-slate-50/60 px-6 py-10 text-slate-400 dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-500">
+            <PieChart className="h-6 w-6" />
+            <span className="text-sm font-medium">No data available</span>
           </div>
         )}
       </CardContent>

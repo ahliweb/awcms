@@ -14,6 +14,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - **Sidebar Access**: Platform admin/full-access roles now see all visible sidebar items regardless of permission filters.
 - **Permission Matrix UI**: Added resource counts, sticky headers, and scrollable layout improvements for large matrices.
+- **Dashboard UI**: Standardized widget headers and card styling, including plugin widgets.
 
 ### Fixed
 

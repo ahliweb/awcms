@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { CreditCard, RefreshCw } from 'lucide-react';
 import { checkCredits } from '../services/emailService';
+import { cn } from '@/lib/utils';
 
 /**
  * Dashboard widget showing Mailketing email credits
  */
-function MailketingCreditsWidget() {
+function MailketingCreditsWidget({ className = '' }) {
     const [credits, setCredits] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -39,12 +40,12 @@ function MailketingCreditsWidget() {
     };
 
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-slate-600 flex items-center gap-2">
+        <div className={cn('flex flex-col gap-3', className)}>
+            <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="flex items-center gap-2 font-medium">
                     <CreditCard className="w-4 h-4" />
-                    Email Credits
-                </h3>
+                    Credits Available
+                </span>
                 <button
                     onClick={loadCredits}
                     className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -65,7 +66,7 @@ function MailketingCreditsWidget() {
             )}
 
             {credits !== null && credits < 100 && (
-                <p className="text-xs text-amber-600 mt-2">
+                <p className="text-xs text-amber-600">
                     Low credits! Consider topping up.
                 </p>
             )}

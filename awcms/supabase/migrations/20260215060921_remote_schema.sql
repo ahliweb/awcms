@@ -170,8 +170,19 @@ using (((status = 'published'::text) OR (tenant_id = ( SELECT public.current_ten
 using (true);
 
 
-CREATE TRIGGER protect_buckets_delete BEFORE DELETE ON storage.buckets FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete();
-
-CREATE TRIGGER protect_objects_delete BEFORE DELETE ON storage.objects FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete();
-
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc
+    JOIN pg_namespace ON pg_proc.pronamespace = pg_namespace.oid
+    WHERE pg_namespace.nspname = 'storage'
+      AND pg_proc.proname = 'protect_delete'
+  ) THEN
+    EXECUTE 'DROP TRIGGER IF EXISTS protect_buckets_delete ON storage.buckets';
+    EXECUTE 'CREATE TRIGGER protect_buckets_delete BEFORE DELETE ON storage.buckets FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete()';
+    EXECUTE 'DROP TRIGGER IF EXISTS protect_objects_delete ON storage.objects';
+    EXECUTE 'CREATE TRIGGER protect_objects_delete BEFORE DELETE ON storage.objects FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete()';
+  END IF;
+END $$;
 
