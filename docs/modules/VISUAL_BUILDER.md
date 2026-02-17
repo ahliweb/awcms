@@ -37,10 +37,14 @@ Explain the Visual Page Builder architecture and integration with public renderi
 
 | Route | Purpose | Notes |
 | --- | --- | --- |
-| `/cmspanel/visual-editor/template/:id` | Edit a template layout | Redirects from legacy `?templateId=` links. |
-| `/cmspanel/visual-editor/part/:id` | Edit a template part | Redirects from legacy `?partId=` links. |
-| `/cmspanel/visual-editor/page/:id` | Edit a visual page layout | Used for Puck-backed pages. |
-| `/cmspanel/visual-editor/blog/:id` | Edit a visual blog layout | Optional for long-form posts. |
+| `/cmspanel/visual-editor/:mode/:id` | Edit a visual layout | `:mode` is `template`, `part`, `page`, or `blog`. `:id` uses signed route params (`{uuid}.{signature}`). Legacy `?templateId`/`?partId` links redirect here. |
+
+Modes:
+
+- `template`: template layout editor
+- `part`: template part editor
+- `page`: visual page layout editor
+- `blog`: visual blog layout editor
 
 ### Public Rendering
 
@@ -64,7 +68,7 @@ registerTemplateBlock({
 
 ### Context7 Guidance (Puck)
 
-Puck components should define explicit fields and render functions in a config object. Import `@puckeditor/core/puck.css` in the editor UI, use `<Puck>` for editing, and use `<Render>` or the Astro `PuckRenderer` allow-list for public rendering. Avoid rendering unknown blocks on the public portal.
+Puck components should define explicit fields and render functions in a config object. Import `@puckeditor/core/puck.css` in the editor UI, use `<Puck>` for editing, and render public output with `<Render config={config} data={data} />` (wrapped by the Astro `PuckRenderer` allow-list). Avoid rendering unknown blocks on the public portal.
 
 ## Permissions and Access
 

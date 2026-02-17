@@ -30,7 +30,7 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 | Rich text | TipTap | 3.13.0 | WYSIWYG editor |
 | Animations | Framer Motion | 12.23.26 | UI motion |
 | Routing | React Router DOM | 7.10.1 | Client routing |
-| Supabase JS | @supabase/supabase-js | 2.87.1 | API client |
+| Supabase JS | @supabase/supabase-js | 2.93.3 | API client |
 
 Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
@@ -40,14 +40,14 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | --- | --- | --- | --- |
 | Meta-framework | Astro | 5.17.1 | Static output + islands |
 | UI library | React | 19.2.4 | Island rendering |
-| Language | TypeScript | 5.8.3 | Typed components |
+| Language | TypeScript | 5.8.3 (primary), 5.9.3 (smandapbun) | Typed components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
 | Supabase JS | @supabase/supabase-js | 2.93.3 | Public API client |
 | Node.js | Node.js | >=20.0.0 | Runtime requirement |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
-Tenant-specific public portals may pin different Supabase JS versions (e.g., `awcms-public/smandapbun` uses 2.93.3).
+Tenant-specific public portals may pin different TypeScript minor versions (for example `awcms-public/smandapbun` uses 5.9.3).
 
 ### Backend (Supabase)
 

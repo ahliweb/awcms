@@ -34,8 +34,14 @@ Define UI component patterns for the admin panel and shared components.
 
 ### Context7 Guidance (Tailwind)
 
+- Tailwind v4 uses CSS-first configuration: import Tailwind with `@import "tailwindcss"` and define tokens in `@theme`.
 - Prefer CSS-first tokens via `@theme` and map them to utilities.
 - Use CSS variables for brand colors and fonts (e.g., `--primary`, `--font-sans`).
+
+### Context7 Guidance (Motion)
+
+- Use `motion` components with explicit `initial`/`animate`/`transition` props.
+- Wrap shared layout transitions in `LayoutGroup` when coordinating sibling animations.
 
 ## Implementation Patterns
 

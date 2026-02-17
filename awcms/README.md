@@ -45,6 +45,24 @@ VITE_SUPER_ADMIN_EMAIL=...
 VITE_DEV_TENANT_SLUG=primary
 ```
 
+## Local Bootstrap (Admin)
+
+The admin app resolves the tenant on `localhost` using `VITE_DEV_TENANT_SLUG` (default `primary`). Ensure the tenant exists before logging in.
+
+```bash
+node src/scripts/seed-primary-tenant.js
+node src/scripts/create-admin-user.js
+```
+
+Optional setup:
+
+```bash
+node src/scripts/assign-owner-role.js
+node src/scripts/seed-sidebar.js
+```
+
+`seed-sidebar.js` requires `VITE_SUPABASE_URL` and `SUPABASE_SECRET_KEY` in `awcms/.env.local` and should only be used in local or controlled environments.
+
 ## Architecture
 
 * **Context**: `TenantContext` resolves tenant by domain.

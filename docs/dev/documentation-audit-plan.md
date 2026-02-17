@@ -1,7 +1,7 @@
 # Documentation Audit Plan (Context7 MCP)
 
 > **Owner:** Documentation Steward
-> **Last Updated:** 2026-02-16
+> **Last Updated:** 2026-02-17
 > **Authority:** SYSTEM_MODEL.md -> AGENTS.md -> DOCS_INDEX.md
 
 ## Purpose
@@ -12,12 +12,14 @@ Establish a repeatable, Context7-driven workflow to audit and update all AWCMS d
 - Actual scripts and runtime behavior in each package
 - Latest library best practices (Context7 MCP is the primary reference)
 
-## Current Focus (2026-02-16)
+## Current Focus (2026-02-17)
 
 - Admin routes now use sub-slugs for tabs, trash views, and approvals.
 - Edit/detail routes use signed IDs (`{uuid}.{signature}`) with legacy redirects.
 - Dashboard widgets share a consistent header frame (core + plugin widgets).
 - Supabase admin client updated to `@supabase/supabase-js` 2.93.3.
+- Primary tenant seeding exists (`seed-primary-tenant.js` + migration) and must be documented in setup flows.
+- Extension seeding relies on `extensions_tenant_slug_unique` and uses `seed-sidebar.js` with the secret key.
 
 ## Scope
 

@@ -31,7 +31,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 - **Vite**: 7.2.7 (Admin)
 - **Astro**: 5.17.1 (Public) - *Requires Node.js >=20.0.0*
 - **TailwindCSS**: 4.1.18
-- **Supabase JS**: 2.87.1 (Admin), 2.93.3 (Public)
+- **Supabase JS**: 2.93.3 (Admin + Public)
 - **React Router DOM**: 7.10.1
 - **TipTap**: 3.13.0
 - **Puck**: 0.21.0

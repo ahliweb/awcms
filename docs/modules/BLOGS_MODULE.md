@@ -44,7 +44,7 @@ Stored in `blogs` table:
 | `/cmspanel/blogs/categories` | Blog categories | Tabs map to sub-slugs. |
 | `/cmspanel/blogs/tags` | Blog tags | Tabs map to sub-slugs. |
 | `/cmspanel/blogs/queue` | Review queue | Filters `workflow_state = reviewed`. |
-| `/cmspanel/blogs/edit/:id` | Edit blog | Used by approval widgets and deep links. |
+| `/cmspanel/blogs/edit/:id` | Edit blog | `:id` uses signed route params (`{uuid}.{signature}`). |
 
 ## Implementation Patterns
 
@@ -68,7 +68,7 @@ The Public Portal fetches posts via `published_blogs_view` to ensure:
 ### Context7 Guidance (TipTap)
 
 - Use `StarterKit` as the base extension set.
-- Configure extensions explicitly via `.configure()` (e.g., Image, Table, TextAlign).
+- Configure built-in extensions via `StarterKit.configure({ ... })`, and additional extensions with `Extension.configure({ ... })` (for example `Image`, `Table`, `TextAlign`).
 - Avoid rendering untrusted HTML; prefer JSON-to-HTML mapping or sanitized HTML output.
 
 ---

@@ -22,7 +22,7 @@ Describe how the public portal renders tenant content and enforces security cons
 
 - Astro static output with React islands on Cloudflare Pages.
 - Tenant resolution at build time via `PUBLIC_TENANT_ID` and `getStaticPaths`.
-- `PuckRenderer` for rendering Puck JSON with a server-side allow-list.
+- `PuckRenderer` (wraps `@puckeditor/core` `<Render>`) for rendering Puck JSON with a server-side allow-list.
 - View transitions are enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
 
 ## How It Works

@@ -28,6 +28,7 @@ Provide common fixes for local development and deployment issues.
 
 - Verify `VITE_DEV_TENANT_SLUG` in `awcms/.env.local` for local dev.
 - Confirm the tenant exists in `tenants` and domain matches.
+- Seed the default tenant if missing: `node awcms/src/scripts/seed-primary-tenant.js`.
 
 ### Tenant Not Found (Public)
 

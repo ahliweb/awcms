@@ -64,6 +64,27 @@ npm install
 | Mobile App | `flutter run` | `awcms-mobile/primary/` | Device/Emu |
 | IoT Firmware | `pio run -t upload` | `awcms-esp32/primary/` | Serial |
 
+### 3.1 Local Supabase Bootstrap (Admin)
+
+Local admin development expects a tenant to resolve on `localhost`. The default dev slug is `primary` via `VITE_DEV_TENANT_SLUG`, so make sure the tenant exists before signing in.
+
+```bash
+# Start local Supabase
+npx supabase start
+
+# Seed the primary tenant (required for localhost)
+node awcms/src/scripts/seed-primary-tenant.js
+
+# Create or reset the default admin user
+node awcms/src/scripts/create-admin-user.js
+
+# Optional: grant owner role and seed menus/modules
+node awcms/src/scripts/assign-owner-role.js
+node awcms/src/scripts/seed-sidebar.js
+```
+
+`seed-sidebar.js` requires `VITE_SUPABASE_URL` and `SUPABASE_SECRET_KEY` in `awcms/.env.local`. Never expose the secret key in client code.
+
 ## 4. Linting & Formatting
 
 We check code quality in CI. Run these before pushing:

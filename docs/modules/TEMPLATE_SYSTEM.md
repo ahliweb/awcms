@@ -42,9 +42,11 @@ Explain how templates, parts, widgets, and assignments drive multi-channel rende
 - `/cmspanel/templates/parts` manages template parts.
 - `/cmspanel/templates/assignments` manages route assignments by channel.
 - `/cmspanel/templates/languages` manages template strings.
-- `/cmspanel/visual-editor/template/:id` edits a template layout.
-- `/cmspanel/visual-editor/part/:id` edits a template part.
+- `/cmspanel/visual-editor/template/:id` edits a template layout (signed ID).
+- `/cmspanel/visual-editor/part/:id` edits a template part (signed ID).
 - `/cmspanel/widgets` manages widget instances.
+
+Use `encodeRouteParam` when generating template/part edit links so the `:id` includes the required signature.
 
 ### Public Portal Rendering
 

@@ -72,6 +72,8 @@ addFilter('dashboard_widgets', 'mailketing_stats', (widgets) => [
 
 The `useTenant` hook provides the currently selected tenant context. All API calls should include `tenant_id` unless they are super-admin global operations.
 
+Local development uses `VITE_DEV_TENANT_SLUG` (default `primary`) on localhost. If tenant resolution fails, run `node awcms/src/scripts/seed-primary-tenant.js`.
+
 ```jsx
 const { currentTenant } = useTenant();
 // Use currentTenant.id in mutations

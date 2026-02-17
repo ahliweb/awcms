@@ -1,7 +1,7 @@
 # AWCMS System Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-02-16 (Audited against `package.json`)
+> **Last Updated:** 2026-02-17 (Audited against `package.json`)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -18,7 +18,7 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Language:** JavaScript (ES2022+)
 * **Styling:** TailwindCSS 4.1.18 (CSS-based config)
 * **State Management:** React Context + Hooks (No Redux/Zustand unless specified)
-* **Backend Interface:** `@supabase/supabase-js` v2.87.1
+* **Backend Interface:** `@supabase/supabase-js` v2.93.3
 * **Routing:** React Router DOM 7.10.1
 * **Key Libraries:**
   * UI: `shadcn/ui` (Radix Primitives + Tailwind)

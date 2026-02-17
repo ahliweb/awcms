@@ -44,12 +44,19 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    storageKey: "supabase-auth-token",
+  },
+  db: {
+    schema: "public",
   },
   global: {
     headers: {
       "x-application-name": "awcms",
     },
     // fetch: customFetchImplementation,
+  },
+  realtime: {
+    params: { eventsPerSecond: 10 },
   },
 });
 ```
@@ -110,6 +117,7 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_TURNSTILE_SITE_KEY` (if Turnstile enabled)
 - `VITE_DEV_TENANT_SLUG` (local development)
+- Ensure the dev slug exists (seed with `node awcms/src/scripts/seed-primary-tenant.js` when using localhost).
 
 ### Environment Variables (Public)
 

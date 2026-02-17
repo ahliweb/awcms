@@ -1,6 +1,6 @@
 # AWCMS Core Standards
 
-> Version: 2.30.0 | Last Updated: 2026-02-16 | React: 19.2.4  
+> Version: 2.30.0 | Last Updated: 2026-02-17 | React: 19.2.4  
 > **Documentation Hierarchy**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) → [AGENTS.md](../../AGENTS.md) → This Document
 
 ## Purpose
@@ -164,15 +164,15 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 
 #### 5.1 Context7 Best Practices
 
-- **Supabase JS**: Use `createClient` with PKCE, `autoRefreshToken`, `persistSession`, `detectSessionInUrl`, and global headers; use a custom `fetch` implementation in edge runtimes when required.
-- **Vite**: Client-exposed variables must use the `VITE_` prefix; use `loadEnv` in `defineConfig` when env values are needed in the config itself.
-- **Astro**: Use `defineConfig`, set `site`, `output: "static"`, and a consistent `trailingSlash` strategy; use `getStaticPaths` for dynamic routes in static builds.
-- **TailwindCSS**: Prefer CSS-first configuration via `@import "tailwindcss"` and `@theme` tokens; use CSS variables for design tokens.
-- **React**: Keep effects focused and separated by concern; include full dependency arrays and place conditional logic inside the effect.
-- **React Router**: Prefer `createBrowserRouter` + `RouterProvider`; use `loader`/`useLoaderData` for data loading and `action`/`Form` for mutations.
-- **TipTap**: Start with `StarterKit` and configure extensions via `.configure()` (e.g., Image, Table, TextAlign).
-- **Puck**: Use `<Puck>` with a `config` + `data` model for editing, import `@puckeditor/core/puck.css`, and use `<Render>` for public rendering.
-- **Framer Motion**: Use `motion` components with explicit `initial/animate/transition` props and layout transitions to avoid hydration mismatches.
+- **Supabase JS**: Use `createClient` with `flowType: "pkce"`, `autoRefreshToken`, `persistSession`, `detectSessionInUrl`, and `storageKey`; include `db.schema` and `realtime.params` when needed, and provide `global.fetch` for edge runtimes.
+- **Vite**: Client-exposed variables must use the `VITE_` prefix; when config needs env values, call `loadEnv(mode, process.cwd(), "")` inside `defineConfig`.
+- **Astro**: Use `defineConfig`, set `site`, pick an `output` mode (`static` for AWCMS), and enforce a consistent `trailingSlash`; register integrations in the `integrations` array and rely on `getStaticPaths` for dynamic routes in static builds.
+- **TailwindCSS**: Tailwind v4 is CSS-first—use `@import "tailwindcss"` (not `@tailwind` directives) and declare tokens in `@theme`; keep colors as CSS variables.
+- **React**: Keep effects focused; use full dependency arrays so effects run only when dependencies change.
+- **React Router**: Prefer data routers (`createBrowserRouter`, `RouterProvider`) when adopting loaders/actions; use `loader`/`useLoaderData` for reads and `action`/`Form` for mutations.
+- **TipTap**: Start with `StarterKit` and configure built-in extensions via `StarterKit.configure({ ... })`.
+- **Puck**: Use `<Puck>` with `config` + `data` for editing, import `@puckeditor/core/puck.css`, and render public pages with `<Render config={...} data={...} />`.
+- **Framer Motion**: Use `motion` components with explicit `initial/animate/transition` props and wrap shared layout transitions in `LayoutGroup` where needed.
 
 **Standard**: Modern mobile/IoT integration, DevOps excellence, and high code quality.
 

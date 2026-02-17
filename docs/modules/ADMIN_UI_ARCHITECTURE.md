@@ -22,7 +22,7 @@ Describe the admin layout system and the shared template components.
 - Admin pages use `awcms/src/templates/flowbite-admin`.
 - `AdminPageLayout` handles permission checks and tenant context display.
 - Tables and forms use shared components for consistency.
-- Routing uses `BrowserRouter` + `Routes` in `awcms/src/components/MainRouter.jsx` with `React.lazy` + `Suspense` for code splitting.
+- Routing currently uses `BrowserRouter` + `Routes` in `awcms/src/components/MainRouter.jsx` with `React.lazy` + `Suspense` for code splitting. If adopting data routers in the future, prefer `createBrowserRouter` + `RouterProvider` with loaders/actions (see `docs/architecture/standards.md`).
 
 ## How It Works
 

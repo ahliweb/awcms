@@ -95,7 +95,7 @@ Roles are assigned via the `role_id` Foreign Key in `public.users`.
 | --- | --- | --- |
 | `/cmspanel/users` | User list | Default tab for active users. |
 | `/cmspanel/users/new` | Create user | Opens the user editor. |
-| `/cmspanel/users/edit/:id` | Edit user | Deep-linkable editor. |
+| `/cmspanel/users/edit/:id` | Edit user | `:id` uses signed route params (`{uuid}.{signature}`). |
 | `/cmspanel/users/approvals/:status` | Registration approvals | Status values: `pending`, `completed`, `rejected`. |
 
 ## Tenant Roles (Multi-Tenancy)

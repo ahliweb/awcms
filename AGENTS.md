@@ -477,12 +477,19 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    storageKey: "supabase-auth-token",
+  },
+  db: {
+    schema: "public",
   },
   global: {
     headers: {
       "x-application-name": "awcms",
     },
     // fetch: customFetchImplementation,
+  },
+  realtime: {
+    params: { eventsPerSecond: 10 },
   },
 });
 ```

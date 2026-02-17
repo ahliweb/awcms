@@ -1,36 +1,9 @@
 # AWCMS Public Portal
 
-## Purpose
-Multi-tenant public portal implemented in Astro.
+The public portal layer for tenant websites. The primary template lives in `awcms-public/primary` and is the canonical reference for configuration, env keys, and development workflow.
 
-## Audience
-- Public portal developers
+## Where to Start
 
-## Prerequisites
-- Node.js 20+
-
-## Quick Start
-
-```bash
-cd awcms-public/primary
-npm install
-# Create .env with Supabase variables and PUBLIC_TENANT_ID
-npm run dev
-```
-
-### Required Env Keys
-
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `PUBLIC_TENANT_ID`
-
-## Features
-
-- Tenant resolution via build-time `PUBLIC_TENANT_ID` (`awcms-public/primary/src/lib/publicTenant.ts`).
-- Visitor analytics logging is available when SSR/runtime middleware is enabled.
-- Public stats page at `/visitor-stats` and `/[tenant]/visitor-stats`.
-
-## References
-
-- `primary/README.md`
-- `../DOCS_INDEX.md`
+- `primary/README.md` - Primary public portal template and env requirements.
+- `../docs/dev/public.md` - Architecture and development notes.
+- `../docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md` - Rendering model and tenant strategy.

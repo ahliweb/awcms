@@ -1,5 +1,7 @@
 # Agent Rules
 
+> **Primary Authority**: See the root [AGENTS.md](../AGENTS.md) for full Context7 and implementation guidance.
+
 ## Supabase Keys
 
 - **Do not use** the Supabase "anon" key or "service role" key.

@@ -9,12 +9,15 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - **Admin Routing**: Introduced sub-slug routing for tabbed modules, trash views, approvals, and editor screens to support refresh-safe deep links.
 - **Route Signing**: Added signed route params and helper hooks to prevent guessable edit/detail URLs (with legacy redirects).
+- **Documentation**: Added local admin bootstrap guidance and a focused public portal README for the primary template.
 
 ### Changed
 
 - **Sidebar Access**: Platform admin/full-access roles now see all visible sidebar items regardless of permission filters.
 - **Permission Matrix UI**: Added resource counts, sticky headers, and scrollable layout improvements for large matrices.
 - **Dashboard UI**: Standardized widget headers and card styling, including plugin widgets.
+- **Documentation**: Aligned tech stack versions, updated Supabase client examples, and refreshed routing/Puck/TipTap guidance to match Context7 best practices.
+- **Documentation**: Trimmed the public portal root README to point to canonical guides.
 
 ### Fixed
 
