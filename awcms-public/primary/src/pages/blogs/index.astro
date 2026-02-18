@@ -4,10 +4,10 @@
  * Path: /blogs
  * Lists all published blogs from Supabase with pagination
  */
-import Layout from '~/layouts/PageLayout.astro';
-import { createClientFromEnv } from '~/lib/supabase';
-import { getBlogs } from '~/lib/content';
-import { Icon } from 'astro-icon/components';
+import Layout from "~/layouts/PageLayout.astro";
+import { createClientFromEnv } from "~/lib/supabase";
+import { getBlogs } from "~/lib/content";
+import { Icon } from "astro-icon/components";
 import { getLocale, t } from "~/utils/i18n";
 import { getPublicTenantId } from "~/lib/publicTenant";
 
@@ -15,9 +15,9 @@ export const prerender = true;
 
 // Get query params
 const url = Astro.url;
-const currentPage = parseInt(url.searchParams.get('page') || '1');
-const categorySlug = url.searchParams.get('category') || undefined;
-const tagSlug = url.searchParams.get('tag') || undefined;
+const currentPage = parseInt(url.searchParams.get("page") || "1");
+const categorySlug = url.searchParams.get("category") || undefined;
+const tagSlug = url.searchParams.get("tag") || undefined;
 const perPage = 12;
 
 const tenantId = getPublicTenantId();
@@ -35,7 +35,7 @@ if (supabase) {
   const result = await getBlogs(supabase, tenantId, {
     limit: perPage,
     offset: (currentPage - 1) * perPage,
-    categorySlug
+    categorySlug,
   });
   blogs = result.blogs;
   total = result.total;
@@ -48,148 +48,181 @@ const hasPrevPage = currentPage > 1;
 
 // Metadata
 const metadata = {
-  title: t('blogs_page.metadata.title', locale),
-  description: t('blogs_page.metadata.description', locale),
+  title: t("blogs_page.metadata.title", locale),
+  description: t("blogs_page.metadata.description", locale),
 };
 ---
 
 <Layout metadata={metadata}>
   <section class="py-12 sm:py-16 lg:py-20">
     <div class="mx-auto max-w-7xl px-6 sm:px-8">
-      <!-- Page Header -->
+      {/* Page Header */}
       <header class="mb-12 text-center">
-        <h1 class="text-4xl md:text-5xl font-bold tracking-tight dark:text-slate-200">
-          {t('blogs_page.header.title', locale)}
+        <h1
+          class="text-4xl md:text-5xl font-bold tracking-tight dark:text-slate-200"
+        >
+          {t("blogs_page.header.title", locale)}
         </h1>
         <p class="mt-4 text-xl text-muted-foreground max-w-2xl mx-auto">
-          {t('blogs_page.header.subtitle', locale)}
+          {t("blogs_page.header.subtitle", locale)}
         </p>
-        
-        <!-- Filter Info -->
-        {categorySlug && (
-          <div class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
-            <span>{t('blogs_page.filter.category', locale)} {categorySlug}</span>
-            <a href="/blogs" class="hover:bg-primary/20 rounded-full p-1">
-              <Icon name="tabler:x" class="w-4 h-4" />
-            </a>
-          </div>
-        )}
-        {tagSlug && (
-          <div class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary text-secondary-foreground">
-            <span>{t('blogs_page.filter.tag', locale)} {tagSlug}</span>
-            <a href="/blogs" class="hover:bg-secondary/80 rounded-full p-1">
-              <Icon name="tabler:x" class="w-4 h-4" />
-            </a>
-          </div>
-        )}
+
+        {/* Filter Info */}
+        {
+          categorySlug && (
+            <div class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
+              <span>
+                {t("blogs_page.filter.category", locale)} {categorySlug}
+              </span>
+              <a href="/blogs" class="hover:bg-primary/20 rounded-full p-1">
+                <Icon name="tabler:x" class="w-4 h-4" />
+              </a>
+            </div>
+          )
+        }
+        {
+          tagSlug && (
+            <div class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary text-secondary-foreground">
+              <span>
+                {t("blogs_page.filter.tag", locale)} {tagSlug}
+              </span>
+              <a href="/blogs" class="hover:bg-secondary/80 rounded-full p-1">
+                <Icon name="tabler:x" class="w-4 h-4" />
+              </a>
+            </div>
+          )
+        }
       </header>
 
-      <!-- Blogs Grid -->
-      {blogs.length > 0 ? (
-        <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {blogs.map((blog) => (
-            <article class="group flex flex-col bg-card rounded-xl border border-border overflow-hidden hover:shadow-lg transition-shadow">
-              <!-- Featured Image -->
-              {blog.featured_image ? (
-                <a href={`/blogs/${blog.slug}`} class="block aspect-video overflow-hidden">
-                  <img
-                    src={blog.featured_image}
-                    alt={blog.title}
-                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                  />
-                </a>
-              ) : (
-                <a href={`/blogs/${blog.slug}`} class="block aspect-video bg-muted flex items-center justify-center">
-                  <Icon name="tabler:photo" class="w-12 h-12 text-muted-foreground" />
-                </a>
-              )}
-              
-              <!-- Content -->
-              <div class="flex flex-col flex-1 p-6">
-                <!-- Category -->
-                {blog.category && (
-                  <a 
-                    href={`/blogs?category=${blog.category.slug}`}
-                    class="self-start mb-2 text-xs font-medium text-primary hover:underline"
-                  >
-                    {blog.category.name}
-                  </a>
-                )}
-                
-                <!-- Title -->
-                <h2 class="text-xl font-semibold leading-snug mb-2">
-                  <a 
+      {/* Blogs Grid */}
+      {
+        blogs.length > 0 ? (
+          <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {blogs.map((blog) => (
+              <article class="group flex flex-col bg-card rounded-xl border border-border overflow-hidden hover:shadow-lg transition-shadow">
+                {/* Featured Image */}
+                {blog.featured_image ? (
+                  <a
                     href={`/blogs/${blog.slug}`}
-                    class="hover:text-primary transition-colors"
+                    class="block aspect-video overflow-hidden"
                   >
-                    {blog.title}
+                    <img
+                      src={blog.featured_image}
+                      alt={blog.title}
+                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
                   </a>
-                </h2>
-                
-                <!-- Excerpt -->
-                {blog.excerpt && (
-                  <p class="text-muted-foreground text-sm line-clamp-2 flex-1">
-                    {blog.excerpt}
-                  </p>
+                ) : (
+                  <a
+                    href={`/blogs/${blog.slug}`}
+                    class="block aspect-video bg-muted flex items-center justify-center"
+                  >
+                    <Icon
+                      name="tabler:photo"
+                      class="w-12 h-12 text-muted-foreground"
+                    />
+                  </a>
                 )}
-                
-                <!-- Meta -->
-                <div class="mt-4 pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-                  <time datetime={blog.published_at || blog.created_at}>
-                    {new Date(blog.published_at || blog.created_at).toLocaleDateString(locale, {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
-                  </time>
-                  {blog.views > 0 && (
-                    <span class="flex items-center gap-1">
-                      <Icon name="tabler:eye" class="w-3.5 h-3.5" />
-                      {blog.views} {t('blogs_page.list.views', locale)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div class="text-center py-16">
-          <Icon name="tabler:news-off" class="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-          <h2 class="text-xl font-semibold mb-2">{t('blogs_page.list.no_blogs', locale)}</h2>
-          <p class="text-muted-foreground">{t('blogs_page.list.check_back', locale)}</p>
-        </div>
-      )}
 
-      <!-- Pagination -->
-      {totalPages > 1 && (
-        <nav class="mt-12 flex items-center justify-center gap-2">
-          {hasPrevPage && (
-            <a 
-              href={`/blogs?page=${currentPage - 1}${categorySlug ? `&category=${categorySlug}` : ''}`}
-              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors"
-            >
-              <Icon name="tabler:chevron-left" class="w-4 h-4" />
-              {t('blogs_page.pagination.previous', locale)}
-            </a>
-          )}
-          
-          <span class="px-4 py-2 text-muted-foreground">
-            {t('blogs_page.pagination.page', locale)} {currentPage} {t('blogs_page.pagination.of', locale)} {totalPages}
-          </span>
-          
-          {hasNextPage && (
-            <a 
-              href={`/blogs?page=${currentPage + 1}${categorySlug ? `&category=${categorySlug}` : ''}`}
-              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors"
-            >
-              {t('blogs_page.pagination.next', locale)}
-              <Icon name="tabler:chevron-right" class="w-4 h-4" />
-            </a>
-          )}
-        </nav>
-      )}
+                {/* Content */}
+                <div class="flex flex-col flex-1 p-6">
+                  {/* Category */}
+                  {blog.category && (
+                    <a
+                      href={`/blogs?category=${blog.category.slug}`}
+                      class="self-start mb-2 text-xs font-medium text-primary hover:underline"
+                    >
+                      {blog.category.name}
+                    </a>
+                  )}
+
+                  {/* Title */}
+                  <h2 class="text-xl font-semibold leading-snug mb-2">
+                    <a
+                      href={`/blogs/${blog.slug}`}
+                      class="hover:text-primary transition-colors"
+                    >
+                      {blog.title}
+                    </a>
+                  </h2>
+
+                  {/* Excerpt */}
+                  {blog.excerpt && (
+                    <p class="text-muted-foreground text-sm line-clamp-2 flex-1">
+                      {blog.excerpt}
+                    </p>
+                  )}
+
+                  {/* Meta */}
+                  <div class="mt-4 pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+                    <time datetime={blog.published_at || blog.created_at}>
+                      {new Date(
+                        blog.published_at || blog.created_at,
+                      ).toLocaleDateString(locale, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </time>
+                    {blog.views > 0 && (
+                      <span class="flex items-center gap-1">
+                        <Icon name="tabler:eye" class="w-3.5 h-3.5" />
+                        {blog.views} {t("blogs_page.list.views", locale)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div class="text-center py-16">
+            <Icon
+              name="tabler:news-off"
+              class="w-16 h-16 mx-auto text-muted-foreground mb-4"
+            />
+            <h2 class="text-xl font-semibold mb-2">
+              {t("blogs_page.list.no_blogs", locale)}
+            </h2>
+            <p class="text-muted-foreground">
+              {t("blogs_page.list.check_back", locale)}
+            </p>
+          </div>
+        )
+      }
+
+      {/* Pagination */}
+      {
+        totalPages > 1 && (
+          <nav class="mt-12 flex items-center justify-center gap-2">
+            {hasPrevPage && (
+              <a
+                href={`/blogs?page=${currentPage - 1}${categorySlug ? `&category=${categorySlug}` : ""}`}
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors"
+              >
+                <Icon name="tabler:chevron-left" class="w-4 h-4" />
+                {t("blogs_page.pagination.previous", locale)}
+              </a>
+            )}
+
+            <span class="px-4 py-2 text-muted-foreground">
+              {t("blogs_page.pagination.page", locale)} {currentPage}{" "}
+              {t("blogs_page.pagination.of", locale)} {totalPages}
+            </span>
+
+            {hasNextPage && (
+              <a
+                href={`/blogs?page=${currentPage + 1}${categorySlug ? `&category=${categorySlug}` : ""}`}
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors"
+              >
+                {t("blogs_page.pagination.next", locale)}
+                <Icon name="tabler:chevron-right" class="w-4 h-4" />
+              </a>
+            )}
+          </nav>
+        )
+      }
     </div>
   </section>
 </Layout>

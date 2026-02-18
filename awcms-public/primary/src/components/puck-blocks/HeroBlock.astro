@@ -1,0 +1,132 @@
+---
+interface Props {
+  title?: string;
+  titleColor?: string;
+  subtitle?: string;
+  subtitleColor?: string;
+  backgroundImage?: string;
+  buttonText?: string;
+  buttonLink?: string;
+  alignment?: "left" | "center" | "right";
+  overlay?: boolean;
+  overlayStyle?: "dark" | "gradient-bottom" | "gradient-center" | "blur";
+  height?: "small" | "medium" | "large" | "full";
+  scrollIndicator?: boolean;
+}
+
+const {
+  title,
+  titleColor,
+  subtitle,
+  subtitleColor,
+  backgroundImage,
+  buttonText,
+  buttonLink,
+  alignment = "center",
+  overlay,
+  overlayStyle = "dark",
+  height = "medium",
+  scrollIndicator,
+} = Astro.props;
+
+const heightClasses = {
+  small: "min-h-[300px]",
+  medium: "min-h-[450px]",
+  large: "min-h-[600px]",
+  full: "min-h-screen",
+};
+
+const alignmentClasses = {
+  left: "text-left items-start",
+  center: "text-center items-center",
+  right: "text-right items-end",
+};
+
+const overlayClasses = {
+  dark: "bg-black/50",
+  "gradient-bottom":
+    "bg-gradient-to-t from-black/80 via-black/20 to-transparent",
+  "gradient-center":
+    "bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent to-black/80",
+  blur: "bg-black/30 backdrop-blur-sm",
+};
+
+const appliedOverlayClass = overlayStyle
+  ? overlayClasses[overlayStyle]
+  : overlayClasses.dark;
+---
+
+<div
+  class:list={[
+    "relative flex flex-col justify-center px-8 py-16 bg-slate-900",
+    heightClasses[height] || heightClasses.medium,
+    alignmentClasses[alignment] || alignmentClasses.center,
+  ]}
+  style={{
+    backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundColor: backgroundImage ? undefined : "#1e293b",
+  }}
+>
+  {
+    overlay && backgroundImage && (
+      <div class:list={["absolute inset-0", appliedOverlayClass]} />
+    )
+  }
+
+  <div class="relative z-10 max-w-4xl mx-auto w-full">
+    {
+      title && (
+        <h1
+          class="text-4xl md:text-5xl lg:text-6xl font-bold mb-4"
+          style={{ color: titleColor || "#ffffff" }}
+        >
+          {title}
+        </h1>
+      )
+    }
+
+    {
+      subtitle && (
+        <p
+          class="text-lg md:text-xl mb-8 max-w-2xl"
+          style={{ color: subtitleColor || "rgba(255,255,255,0.9)" }}
+        >
+          {subtitle}
+        </p>
+      )
+    }
+
+    {
+      buttonText && (
+        <a
+          href={buttonLink || "#"}
+          class="inline-block px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+        >
+          {buttonText}
+        </a>
+      )
+    }
+  </div>
+
+  {
+    scrollIndicator && (
+      <div class="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
+        <svg
+          class="w-6 h-6 text-white/70"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M19 14l-7 7m0 0l-7-7m7 7V3"
+          />
+        </svg>
+      </div>
+    )
+  }
+</div>

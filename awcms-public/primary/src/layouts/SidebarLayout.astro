@@ -5,16 +5,24 @@ import Footer from "~/components/widgets/Footer.astro";
 import Sidebar from "~/components/common/Sidebar.astro";
 import Announcement from "~/components/widgets/Announcement.astro";
 
-import { headerData as fallbackHeaderData, footerData as fallbackFooterData } from "~/navigation";
+import {
+  headerData as fallbackHeaderData,
+  footerData as fallbackFooterData,
+} from "~/navigation";
 import { createClientFromEnv } from "~/lib/supabase";
-import { getFooterMenu, getHeaderMenu, mapMenuItemsToFooterLinks, mapMenuItemsToHeaderLinks } from "~/lib/menu";
+import {
+  getFooterMenu,
+  getHeaderMenu,
+  mapMenuItemsToFooterLinks,
+  mapMenuItemsToHeaderLinks,
+} from "~/lib/menu";
 import type { HeaderLink } from "~/lib/menu";
 import { getPublicTenantId } from "~/lib/publicTenant";
 
 import type { MetaData } from "~/types";
 
 export interface Props {
-    metadata?: MetaData;
+  metadata?: MetaData;
 }
 
 const { metadata } = Astro.props;
@@ -25,51 +33,51 @@ let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 let footerLinks = fallbackFooterData.links;
 
 if (supabase && tenantId) {
-    const headerItems = await getHeaderMenu(supabase, tenantId);
-    const footerItems = await getFooterMenu(supabase, tenantId);
+  const headerItems = await getHeaderMenu(supabase, tenantId);
+  const footerItems = await getFooterMenu(supabase, tenantId);
 
-    if (headerItems.length > 0) {
-        headerLinks = mapMenuItemsToHeaderLinks(headerItems);
-    }
+  if (headerItems.length > 0) {
+    headerLinks = mapMenuItemsToHeaderLinks(headerItems);
+  }
 
-    if (footerItems.length > 0) {
-        footerLinks = mapMenuItemsToFooterLinks(footerItems);
-    }
+  if (footerItems.length > 0) {
+    footerLinks = mapMenuItemsToFooterLinks(footerItems);
+  }
 }
 ---
 
 <Layout metadata={metadata}>
-    <slot name="announcement">
-        <Announcement />
-    </slot>
-    <slot name="header">
-        <Header
-            links={headerLinks}
-            actions={fallbackHeaderData.actions}
-            isSticky
-            showRssFeed
-            showToggleTheme
-        />
-    </slot>
+  <slot name="announcement">
+    <Announcement />
+  </slot>
+  <slot name="header">
+    <Header
+      links={headerLinks}
+      actions={fallbackHeaderData.actions}
+      isSticky
+      showRssFeed
+      showToggleTheme
+    />
+  </slot>
 
-    <div class="flex w-full">
-        {/* Sidebar - hidden on mobile, visible on medium+ screens */}
-        <Sidebar
-            className="hidden md:flex sticky top-[60px] h-[calc(100vh-60px)]"
-        />
+  <div class="flex w-full">
+    {/* Sidebar - hidden on mobile, visible on medium+ screens */}
+    <Sidebar
+      className="hidden md:flex sticky top-[60px] h-[calc(100vh-60px)]"
+    />
 
-        <div class="flex-1 min-w-0">
-            <main>
-                <slot />
-            </main>
-            <slot name="footer">
-                <Footer
-                    links={footerLinks}
-                    secondaryLinks={fallbackFooterData.secondaryLinks}
-                    socialLinks={fallbackFooterData.socialLinks}
-                    footNote={fallbackFooterData.footNote}
-                />
-            </slot>
-        </div>
+    <div class="flex-1 min-w-0">
+      <main>
+        <slot />
+      </main>
+      <slot name="footer">
+        <Footer
+          links={footerLinks}
+          secondaryLinks={fallbackFooterData.secondaryLinks}
+          socialLinks={fallbackFooterData.socialLinks}
+          footNote={fallbackFooterData.footNote}
+        />
+      </slot>
     </div>
+  </div>
 </Layout>

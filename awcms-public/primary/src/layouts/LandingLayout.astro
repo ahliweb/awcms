@@ -1,12 +1,12 @@
 ---
-import PageLayout from '~/layouts/PageLayout.astro';
-import Header from '~/components/widgets/Header.astro';
+import PageLayout from "~/layouts/PageLayout.astro";
+import Header from "~/components/widgets/Header.astro";
 
-import { headerData as fallbackHeaderData } from '~/navigation';
-import { createClientFromEnv } from '~/lib/supabase';
-import { getHeaderMenu, mapMenuItemsToHeaderLinks } from '~/lib/menu';
+import { headerData as fallbackHeaderData } from "~/navigation";
+import { createClientFromEnv } from "~/lib/supabase";
+import { getHeaderMenu, mapMenuItemsToHeaderLinks } from "~/lib/menu";
 import type { HeaderLink } from "~/lib/menu";
-import type { MetaData } from '~/types';
+import type { MetaData } from "~/types";
 import { getPublicTenantId } from "~/lib/publicTenant";
 
 export interface Props {
@@ -37,8 +37,8 @@ if (supabase && tenantId) {
         links={headerLinks?.[2] ? [headerLinks[2]] : headerLinks}
         actions={[
           {
-            text: 'Download',
-            href: 'https://ahliweb.co.id',
+            text: "Download",
+            href: "https://ahliweb.co.id",
           },
         ]}
         showToggleTheme

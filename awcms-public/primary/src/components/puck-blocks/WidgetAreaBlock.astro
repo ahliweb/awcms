@@ -1,0 +1,56 @@
+---
+import { createClientFromEnv } from "~/lib/supabase";
+import WidgetRenderer from "../common/WidgetRenderer.astro";
+
+interface Props {
+  area?: string;
+  title?: string;
+  [key: string]: unknown;
+}
+
+const { area, title } = Astro.props;
+
+const supabase = createClientFromEnv(import.meta.env);
+let widgets = [];
+
+if (supabase && area) {
+  try {
+    const { data } = await supabase
+      .from("widgets")
+      .select("*")
+      .eq("area", area)
+      .eq("is_active", true)
+      .order("order", { ascending: true });
+
+    if (data) {
+      widgets = data;
+    }
+  } catch (e) {
+    console.error("[WidgetAreaBlock] Error fetching widgets:", e);
+  }
+}
+---
+
+<div class="widget-area">
+  {
+    title && (
+      <h2 class="text-2xl font-bold mb-6 text-slate-800 dark:text-slate-200">
+        {title}
+      </h2>
+    )
+  }
+
+  {
+    widgets.length === 0 ? (
+      <div class="p-4 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-center text-slate-500">
+        Widget Area: {area} (Empty)
+      </div>
+    ) : (
+      <div class="space-y-6">
+        {widgets.map((widget) => (
+          <WidgetRenderer widget={widget} />
+        ))}
+      </div>
+    )
+  }
+</div>

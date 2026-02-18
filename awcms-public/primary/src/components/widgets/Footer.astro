@@ -8,10 +8,10 @@ import { getPublicSettings } from "~/lib/publicSettings";
 const locale = getLocale(Astro.url);
 const { siteInfo, seo } = await getPublicSettings();
 const siteName =
-  (siteInfo?.name as string)
-  || (siteInfo?.site_name as string)
-  || (seo?.site_title as string)
-  || SITE?.name;
+  (siteInfo?.name as string) ||
+  (siteInfo?.site_name as string) ||
+  (seo?.site_title as string) ||
+  SITE?.name;
 
 interface Link {
   text?: string;

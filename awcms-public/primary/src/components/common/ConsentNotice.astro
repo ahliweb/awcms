@@ -59,7 +59,7 @@ const version = readText(consentConfig?.version, "2026-02-02");
             <ul class="grid gap-1 text-xs text-slate-500 dark:text-slate-400 md:grid-cols-2">
               {resolvedDataPoints.map((point) => (
                 <li class="flex items-start gap-2">
-                  <span class="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-primary"></span>
+                  <span class="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
                   <span>{point}</span>
                 </li>
               ))}

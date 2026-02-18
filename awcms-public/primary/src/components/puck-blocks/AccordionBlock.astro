@@ -1,0 +1,36 @@
+---
+import FAQs from "~/components/widgets/FAQs.astro";
+
+const {
+  title,
+  subtitle,
+  tagline,
+  items = [],
+  columns = 1,
+  id,
+  isDark,
+  classes,
+  bg,
+} = Astro.props;
+
+// Map Puck items to FAQs widget props
+// Puck items: { title, content }
+// FAQs items: { title, description }
+const mappedItems = items.map((item) => ({
+  title: item.title,
+  description: item.content,
+  icon: "tabler:chevron-right", // Default icon
+}));
+---
+
+<FAQs
+  title={title}
+  subtitle={subtitle}
+  tagline={tagline}
+  items={mappedItems}
+  columns={columns}
+  id={id}
+  isDark={isDark}
+  classes={classes}
+  bg={bg}
+/>

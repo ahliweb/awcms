@@ -1,0 +1,64 @@
+---
+import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
+import { getLocale, t } from "~/utils/i18n";
+import Brands from "~/components/widgets/Brands.astro";
+import type { Image } from "~/types";
+
+interface Props {
+    count?: number;
+    title?: string;
+    subtitle?: string;
+    tagline?: string;
+}
+
+const {
+    count = 12, // Default higher for brands
+    title,
+    subtitle,
+    tagline,
+} = Astro.props;
+
+const tenantId = getPublicTenantId();
+const supabase = createClientFromEnv(import.meta.env);
+const locale = getLocale(Astro.url);
+
+let partners: Image[] = [];
+
+if (tenantId && supabase) {
+    try {
+        const { data: partnerData } = await supabase
+            .from("partners")
+            .select("*")
+            .eq("tenant_id", tenantId)
+            .eq("status", "published")
+            .order("display_order", { ascending: true })
+            .limit(count);
+
+        if (partnerData) {
+            partners = partnerData.map((p) => ({
+                src: p.image,
+                alt: p.name,
+            }));
+        }
+    } catch (e) {
+        console.error("[PartnersListBlock] Error fetching partners:", e);
+    }
+}
+---
+
+{
+    partners.length > 0 ? (
+        <Brands
+            title={title || t("home.partners.title", locale)}
+            subtitle={subtitle}
+            tagline={tagline}
+            icons={[]}
+            images={partners}
+        />
+    ) : (
+        <div class="text-center p-8 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
+            No partners found.
+        </div>
+    )
+}

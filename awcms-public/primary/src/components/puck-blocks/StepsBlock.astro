@@ -1,0 +1,38 @@
+---
+import Steps from "~/components/widgets/Steps.astro";
+
+const {
+    title,
+    subtitle,
+    tagline,
+    items = [],
+    image,
+    isReversed,
+    id,
+    isDark,
+    classes,
+    bg,
+} = Astro.props;
+
+// Map Puck items to Steps widget props if needed
+// Puck items: { title, description, icon }
+// Steps items: { title, description, icon } (Compatible)
+
+const mappedItems = items.map((item) => ({
+    ...item,
+    icon: item.icon || "tabler:check", // Ensure default icon
+}));
+---
+
+<Steps
+    title={title}
+    subtitle={subtitle}
+    tagline={tagline}
+    items={mappedItems}
+    image={image}
+    isReversed={isReversed}
+    id={id}
+    isDark={isDark}
+    classes={classes}
+    bg={bg}
+/>

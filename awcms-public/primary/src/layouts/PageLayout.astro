@@ -1,16 +1,24 @@
 ---
-import Layout from '~/layouts/Layout.astro';
-import Header from '~/components/widgets/Header.astro';
-import Footer from '~/components/widgets/Footer.astro';
-import Announcement from '~/components/widgets/Announcement.astro';
+import Layout from "~/layouts/Layout.astro";
+import Header from "~/components/widgets/Header.astro";
+import Footer from "~/components/widgets/Footer.astro";
+import Announcement from "~/components/widgets/Announcement.astro";
 
-import { headerData as fallbackHeaderData, footerData as fallbackFooterData } from '~/navigation';
-import { createClientFromEnv } from '~/lib/supabase';
-import { getFooterMenu, getHeaderMenu, mapMenuItemsToFooterLinks, mapMenuItemsToHeaderLinks } from '~/lib/menu';
+import {
+  headerData as fallbackHeaderData,
+  footerData as fallbackFooterData,
+} from "~/navigation";
+import { createClientFromEnv } from "~/lib/supabase";
+import {
+  getFooterMenu,
+  getHeaderMenu,
+  mapMenuItemsToFooterLinks,
+  mapMenuItemsToHeaderLinks,
+} from "~/lib/menu";
 import type { HeaderLink } from "~/lib/menu";
 import { getPublicTenantId } from "~/lib/publicTenant";
 
-import type { MetaData } from '~/types';
+import type { MetaData } from "~/types";
 
 export interface Props {
   metadata?: MetaData;

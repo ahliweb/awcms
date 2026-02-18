@@ -59,8 +59,8 @@ const {
           placeholder={textarea.placeholder}
           class="py-3 px-4 block w-full text-md rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900"
         />
-        <!-- Turnstile Widget (Explicit Render Container) -->
-        <div id="cf-turnstile-container" class="mt-4 min-h-[65px]"></div>
+        {/* Turnstile Widget (Explicit Render Container) */}
+        <div id="cf-turnstile-container" class="mt-4 min-h-[65px]" />
       </div>
     )
   }
@@ -153,7 +153,11 @@ const {
         console.log("[Turnstile] Callback invoked. Rendering widget...");
         if (!siteKey) {
           console.error("[Turnstile] Site Key missing!");
-          if (window.showToast) window.showToast("System Config Error: Turnstile Key Missing", "error");
+          if (window.showToast)
+            window.showToast(
+              "System Config Error: Turnstile Key Missing",
+              "error",
+            );
           return;
         }
 
@@ -161,22 +165,26 @@ const {
         if (!container) return; // Might be on a page without the form
 
         if (window.turnstile) {
-            try {
-                turnstileWidgetId = window.turnstile.render("#cf-turnstile-container", {
-                    sitekey: siteKey,
-                    theme: "light",
-                });
-                console.log("[Turnstile] Widget rendered, ID:", turnstileWidgetId);
-            } catch (e) {
-                console.error("[Turnstile] Render error:", e);
-            }
+          try {
+            turnstileWidgetId = window.turnstile.render(
+              "#cf-turnstile-container",
+              {
+                sitekey: siteKey,
+                theme: "light",
+              },
+            );
+            console.log("[Turnstile] Widget rendered, ID:", turnstileWidgetId);
+          } catch (e) {
+            console.error("[Turnstile] Render error:", e);
+          }
         }
       };
 
       // Explicit Loader
       if (!document.querySelector('script[src*="turnstile/v0/api.js"]')) {
         const script = document.createElement("script");
-        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback&render=explicit";
+        script.src =
+          "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback&render=explicit";
         script.async = true;
         script.defer = true;
         document.head.appendChild(script);
@@ -218,9 +226,10 @@ const {
           }
 
           // 1. Verify Turnstile
-          const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-turnstile', {
-            body: { token }
-          });
+          const { data: verifyData, error: verifyError } =
+            await supabase.functions.invoke("verify-turnstile", {
+              body: { token },
+            });
 
           if (verifyError || !verifyData?.success) {
             throw new Error("Security check failed. Please try again.");
@@ -243,12 +252,16 @@ const {
           window.showToast?.("Message sent successfully!", "success");
           (form as HTMLFormElement).reset();
 
-          if (window.turnstile && turnstileWidgetId) window.turnstile.reset(turnstileWidgetId);
-
+          if (window.turnstile && turnstileWidgetId)
+            window.turnstile.reset(turnstileWidgetId);
         } catch (err: unknown) {
           console.error("Error sending message:", err);
-          const errorMessage = err instanceof Error ? err.message : "Unknown error";
-          window.showToast?.(`Failed to send message: ${errorMessage}`, "error");
+          const errorMessage =
+            err instanceof Error ? err.message : "Unknown error";
+          window.showToast?.(
+            `Failed to send message: ${errorMessage}`,
+            "error",
+          );
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;

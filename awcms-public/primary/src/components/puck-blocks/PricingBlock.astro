@@ -1,0 +1,29 @@
+---
+import Pricing from "~/components/widgets/Pricing.astro";
+
+const { items = [], id, isDark, classes, bg } = Astro.props;
+
+// Map Puck items to Pricing widget props
+const prices = items.map((item) => ({
+  title: item.title,
+  subtitle: item.description,
+  price: item.price,
+  period: item.period,
+  items:
+    item.features?.map((f) => ({
+      description: f.text,
+      icon: "tabler:check",
+    })) || [],
+  callToAction: item.callToAction
+    ? {
+        href: item.callToAction,
+        text: item.buttonText || "Get Started",
+        target: "_self", // or _blank if external, but usually internal
+      }
+    : undefined,
+  hasRibbon: item.isPopular,
+  ribbonTitle: item.ribbonTitle,
+}));
+---
+
+<Pricing prices={prices} id={id} isDark={isDark} classes={classes} bg={bg} />

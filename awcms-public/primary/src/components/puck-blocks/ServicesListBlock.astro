@@ -1,0 +1,66 @@
+---
+import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
+import { getLocale, t } from "~/utils/i18n";
+import Features2 from "~/components/widgets/Features2.astro";
+import type { Item } from "~/types";
+
+interface Props {
+    count?: number;
+    layout?: "grid" | "list";
+    columns?: number;
+    title?: string;
+    subtitle?: string;
+    tagline?: string;
+}
+
+const { count = 6, columns = 3, title, subtitle, tagline } = Astro.props;
+
+const tenantId = getPublicTenantId();
+const supabase = createClientFromEnv(import.meta.env);
+const locale = getLocale(Astro.url);
+
+let services: Item[] = [];
+
+if (tenantId && supabase) {
+    try {
+        const { data: servicesData } = await supabase
+            .from("services")
+            .select("*")
+            .eq("tenant_id", tenantId)
+            .eq("status", "published")
+            .order("display_order", { ascending: true })
+            .limit(count);
+
+        if (servicesData) {
+            services = servicesData.map((s) => ({
+                title: s.title,
+                description: s.description,
+                icon: s.icon || "tabler:check", // Fallback if no icon in DB
+            }));
+        }
+    } catch (e) {
+        console.error("[ServicesListBlock] Error fetching services:", e);
+    }
+}
+---
+
+{
+    services.length > 0 ? (
+        <Features2
+            title={title || t("home.services.title", locale)}
+            subtitle={subtitle || t("home.services.subtitle", locale)}
+            tagline={tagline || t("home.services.tagline", locale)}
+            items={services}
+            columns={columns}
+        >
+            <Fragment slot="bg">
+                <div class="absolute inset-0 bg-blue-50 dark:bg-transparent" />
+            </Fragment>
+        </Features2>
+    ) : (
+        <div class="text-center p-8 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
+            No services found.
+        </div>
+    )
+}

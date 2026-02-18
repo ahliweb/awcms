@@ -28,10 +28,10 @@ const {
 
 const { seo, siteInfo } = await getPublicSettings();
 const siteName =
-  (siteInfo?.name as string)
-  || (siteInfo?.site_name as string)
-  || (seo?.site_title as string)
-  || SITE?.name;
+  (siteInfo?.name as string) ||
+  (siteInfo?.site_name as string) ||
+  (seo?.site_title as string) ||
+  SITE?.name;
 
 // Map Admin SEO structure to AstroSeo structure
 const tenantSeo = seo

@@ -1,41 +1,51 @@
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-import pg from 'pg';
+// Load environment variables
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
 
-// Default local Supabase connection
-const connectionString = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU'; // Standard local service role key
 
-const { Pool } = pg;
-const pool = new Pool({ connectionString });
+if (!supabaseUrl || !supabaseKey) {
+    console.error('Error: Supabase URL or Secret Key not found.');
+    process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        autoRefreshToken: false,
+        persistSession: false
+    }
+});
 
 async function seedPrimaryTenant() {
-    console.log('Connecting to DB via Default Local URL...');
-    const client = await pool.connect();
+    console.log('Seeding primary tenant...');
 
-    try {
-        // 1. Check if primary tenant exists
-        const checkRes = await client.query("SELECT * FROM public.tenants WHERE slug = 'primary'");
+    // Check if it exists first
+    const { data: existing } = await supabase.from('tenants').select('id').eq('slug', 'primary').single();
+    if (existing) {
+        console.log('Primary tenant already exists:', existing.id);
+        return;
+    }
 
-        if (checkRes.rows.length > 0) {
-            console.log('Primary tenant already exists:', checkRes.rows[0].id);
-            return;
-        }
+    const { data, error } = await supabase.rpc('create_tenant_with_defaults', {
+        p_name: 'Ahliweb CMS',
+        p_slug: 'primary',
+        p_domain: null,
+        p_tier: 'enterprise',
+        p_parent_tenant_id: null,
+        p_role_inheritance_mode: 'auto'
+    });
 
-        // 2. Insert if not exists
-        console.log('Inserting primary tenant...');
-        const insertRes = await client.query(`
-      INSERT INTO public.tenants (name, slug, domain, subscription_tier, status)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `, ['Primary Tenant', 'primary', 'primary', 'enterprise', 'active']);
-
-        console.log('Successfully created primary tenant:', insertRes.rows[0]);
-
-    } catch (err) {
-        console.error('Error seeding tenant:', err);
-        process.exit(1);
-    } finally {
-        client.release();
-        await pool.end();
+    if (error) {
+        console.error('Error seeding primary tenant:', error);
+    } else {
+        console.log('Primary tenant seeded successfully:', data);
     }
 }
 

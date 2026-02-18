@@ -16,14 +16,14 @@ const supabase = createClientFromEnv(import.meta.env);
 let themeCss = "";
 
 if (supabase) {
-    try {
-        const theme = await getActiveTheme(supabase, tenantId);
-        if (theme) {
-            themeCss = generateCssVariables(theme);
-        }
-    } catch (error) {
-        console.error("[ThemeLoader] Error loading theme:", error);
+  try {
+    const theme = await getActiveTheme(supabase, tenantId);
+    if (theme) {
+      themeCss = generateCssVariables(theme);
     }
+  } catch (error) {
+    console.error("[ThemeLoader] Error loading theme:", error);
+  }
 }
 ---
 

@@ -1,0 +1,69 @@
+---
+interface Props {
+  images?: Array<{ url: string; alt?: string; caption?: string }>;
+  columns?: number;
+  gap?: number;
+  aspectRatio?: string;
+  borderRadius?: string;
+  lightbox?: boolean;
+}
+
+const {
+  images = [],
+  columns = 3,
+  gap = 4,
+  aspectRatio = "aspect-square",
+  borderRadius = "rounded-lg",
+  lightbox = true,
+} = Astro.props;
+
+const gridCols: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3",
+  4: "grid-cols-1 sm:grid-cols-2 md:grid-cols-4",
+  5: "grid-cols-2 sm:grid-cols-3 md:grid-cols-5",
+  6: "grid-cols-2 sm:grid-cols-3 md:grid-cols-6",
+};
+
+// Map gap values (approximate Tailwind classes)
+const gapClass: Record<number, string> = {
+  0: "gap-0",
+  2: "gap-2",
+  4: "gap-4",
+  6: "gap-6",
+  8: "gap-8",
+  10: "gap-10",
+  12: "gap-12",
+};
+---
+
+<div
+  class={`grid ${gridCols[columns] || "grid-cols-3"} ${gapClass[gap] || "gap-4"} my-8`}
+>
+  {
+    images.map((img, index) => (
+      <div
+        class={`relative group overflow-hidden ${borderRadius} bg-slate-100 dark:bg-slate-800`}
+      >
+        <a
+          href={lightbox ? img.url : "#"}
+          class={`block w-full h-full ${lightbox ? "cursor-zoom-in" : "cursor-default"}`}
+          data-lightbox={lightbox ? "gallery" : undefined}
+        >
+          <img
+            src={img.url}
+            alt={img.alt || `Gallery Image ${index + 1}`}
+            class={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${aspectRatio}`}
+            loading="lazy"
+          />
+          {img.caption && (
+            <div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-sm opacity-0 group-hover:opacity-100 transition-opacity">
+              {img.caption}
+            </div>
+          )}
+        </a>
+      </div>
+    ))
+  }
+</div>

@@ -1,10 +1,33 @@
 ---
 /**
  * PuckRenderer.astro - Server-side renderer for Puck visual builder JSON blocks.
- * 
+ *
  * Renders Puck JSON structure to semantic HTML for the public portal.
- * Supports common Puck component types with Tailwind styling.
+ * Supports standard and custom Puck component types.
  */
+
+// Import Custom Blocks
+import HeroBlock from "../puck-blocks/HeroBlock.astro";
+import FeatureBlock from "../puck-blocks/FeatureBlock.astro";
+import StatsBlock from "../puck-blocks/StatsBlock.astro";
+import PricingBlock from "../puck-blocks/PricingBlock.astro";
+import TestimonialBlock from "../puck-blocks/TestimonialBlock.astro";
+import AccordionBlock from "../puck-blocks/AccordionBlock.astro";
+import LatestBlogsBlock from "../puck-blocks/LatestBlogsBlock.astro";
+import PromotionBlock from "../puck-blocks/PromotionBlock.astro";
+import NavigationBlock from "../puck-blocks/NavigationBlock.astro";
+import WidgetAreaBlock from "../puck-blocks/WidgetAreaBlock.astro";
+import GalleryBlock from "../puck-blocks/GalleryBlock.astro";
+
+import ContactFormBlock from "../puck-blocks/ContactFormBlock.astro";
+import ServicesListBlock from "../puck-blocks/ServicesListBlock.astro";
+import FeaturesListBlock from "../puck-blocks/FeaturesListBlock.astro";
+import StepsBlock from "../puck-blocks/StepsBlock.astro";
+import TeamListBlock from "../puck-blocks/TeamListBlock.astro";
+import PartnersListBlock from "../puck-blocks/PartnersListBlock.astro";
+import TestimonialsListBlock from "../puck-blocks/TestimonialsListBlock.astro";
+import ButtonBlock from "../puck-blocks/ButtonBlock.astro";
+import CardBlock from "../puck-blocks/CardBlock.astro";
 
 export interface Props {
   /** Puck JSON content object */
@@ -27,227 +50,293 @@ interface PuckBlock {
   props?: Record<string, unknown>;
 }
 
-const { content, class: className = '' } = Astro.props;
+const { content, class: className = "" } = Astro.props;
 
 // Parse content if it's a string
 let puckData: PuckContent | null = null;
 
-if (typeof content === 'string') {
+if (typeof content === "string") {
   try {
     puckData = JSON.parse(content);
   } catch (e) {
-    console.error('[PuckRenderer] Failed to parse content JSON:', e);
+    console.error("[PuckRenderer] Failed to parse content JSON:", e);
   }
 } else {
   puckData = content;
 }
 
+// Block Constants
+const HEADING_SIZES: Record<number, string> = {
+  1: "text-4xl md:text-5xl font-bold",
+  2: "text-3xl md:text-4xl font-bold",
+  3: "text-2xl md:text-3xl font-semibold",
+  4: "text-xl md:text-2xl font-semibold",
+  5: "text-lg font-medium",
+  6: "text-base font-medium",
+};
+
+const BUTTON_VARIANTS: Record<string, string> = {
+  primary: "bg-primary text-white hover:bg-primary/90",
+  secondary:
+    "bg-slate-200 text-slate-800 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200",
+  outline:
+    "border-2 border-primary text-primary hover:bg-primary hover:text-white",
+};
+
 // Get blocks from various possible structures
-const blocks: PuckBlock[] = 
-  puckData?.root?.children || 
-  puckData?.content || 
-  (puckData?.zones?.content) || 
+const blocks: PuckBlock[] =
+  puckData?.root?.children ||
+  puckData?.content ||
+  puckData?.zones?.content ||
   [];
-
-/**
- * Render a single Puck block to HTML
- */
-function renderBlock(block: PuckBlock): string {
-  const { type, props = {} } = block;
-  
-  switch (type) {
-    case 'Heading':
-    case 'heading': {
-      const level = (props.level as number) || 2;
-      const text = (props.text as string) || (props.content as string) || '';
-      const align = (props.align as string) || 'left';
-      const Tag = `h${level}`;
-      const sizes: Record<number, string> = {
-        1: 'text-4xl md:text-5xl font-bold',
-        2: 'text-3xl md:text-4xl font-bold',
-        3: 'text-2xl md:text-3xl font-semibold',
-        4: 'text-xl md:text-2xl font-semibold',
-        5: 'text-lg font-medium',
-        6: 'text-base font-medium',
-      };
-      return `<${Tag} class="${sizes[level] || sizes[2]} text-${align} mb-4 dark:text-slate-200">${text}</${Tag}>`;
-    }
-    
-    case 'Text':
-    case 'text':
-    case 'Paragraph': {
-      const text = (props.text as string) || (props.content as string) || '';
-      const align = (props.align as string) || 'left';
-      return `<p class="text-lg text-slate-600 dark:text-slate-400 mb-4 text-${align}">${text}</p>`;
-    }
-    
-    case 'Image':
-    case 'image': {
-      const src = (props.src as string) || (props.url as string) || '';
-      const alt = (props.alt as string) || '';
-      const caption = (props.caption as string) || '';
-      if (!src) return '';
-      return `
-        <figure class="my-6">
-          <img src="${src}" alt="${alt}" class="w-full rounded-xl shadow-lg" loading="lazy" />
-          ${caption ? `<figcaption class="mt-2 text-center text-sm text-slate-500 dark:text-slate-400">${caption}</figcaption>` : ''}
-        </figure>
-      `;
-    }
-    
-    case 'Button':
-    case 'button': {
-      const text = (props.text as string) || (props.label as string) || 'Click';
-      const href = (props.href as string) || (props.url as string) || '#';
-      const variant = (props.variant as string) || 'primary';
-      const variantClasses: Record<string, string> = {
-        primary: 'bg-primary text-white hover:bg-primary/90',
-        secondary: 'bg-slate-200 text-slate-800 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200',
-        outline: 'border-2 border-primary text-primary hover:bg-primary hover:text-white',
-      };
-      return `<a href="${href}" class="inline-block px-6 py-3 rounded-lg font-medium transition-colors ${variantClasses[variant] || variantClasses.primary}">${text}</a>`;
-    }
-    
-    case 'Columns':
-    case 'columns':
-    case 'TwoColumn': {
-      const columns = (props.columns as PuckBlock[]) || [];
-      const gap = (props.gap as string) || '6';
-      const colHtml = columns.map((col) => {
-        const innerBlocks = (col as { items?: PuckBlock[] }).items || [];
-        return `<div class="flex-1">${innerBlocks.map(renderBlock).join('')}</div>`;
-      }).join('');
-      return `<div class="flex flex-col md:flex-row gap-${gap} my-6">${colHtml}</div>`;
-    }
-    
-    case 'Container':
-    case 'container': {
-      const innerBlocks = (props.children as PuckBlock[]) || [];
-      const padding = (props.padding as string) || '6';
-      return `<div class="p-${padding} bg-slate-50 dark:bg-slate-800 rounded-xl my-6">${innerBlocks.map(renderBlock).join('')}</div>`;
-    }
-    
-    case 'Divider':
-    case 'divider':
-    case 'Separator': {
-      return `<hr class="my-8 border-slate-200 dark:border-slate-700" />`;
-    }
-    
-    case 'Spacer':
-    case 'spacer': {
-      const size = (props.size as string) || (props.height as string) || '8';
-      return `<div class="h-${size}"></div>`;
-    }
-    
-    case 'Video':
-    case 'video': {
-      const src = (props.src as string) || (props.url as string) || '';
-      if (!src) return '';
-      // Handle YouTube embeds
-      if (src.includes('youtube.com') || src.includes('youtu.be')) {
-        const videoId = src.includes('youtu.be') 
-          ? src.split('/').pop() 
-          : new URL(src).searchParams.get('v');
-        return `
-          <div class="my-6 aspect-video rounded-xl overflow-hidden shadow-lg">
-            <iframe 
-              src="https://www.youtube.com/embed/${videoId}" 
-              class="w-full h-full"
-              frameborder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowfullscreen
-            ></iframe>
-          </div>
-        `;
-      }
-      return `<video src="${src}" class="w-full rounded-xl shadow-lg my-6" controls></video>`;
-    }
-    
-    case 'Quote':
-    case 'quote':
-    case 'Blockquote': {
-      const text = (props.text as string) || (props.content as string) || '';
-      const author = (props.author as string) || '';
-      return `
-        <blockquote class="my-6 pl-6 border-l-4 border-primary">
-          <p class="text-xl italic text-slate-600 dark:text-slate-300">"${text}"</p>
-          ${author ? `<cite class="block mt-2 text-sm text-slate-500 dark:text-slate-400">— ${author}</cite>` : ''}
-        </blockquote>
-      `;
-    }
-    
-    case 'List':
-    case 'list': {
-      const items = (props.items as string[]) || [];
-      const style = (props.style as string) || 'bullet';
-      const listItems = items.map(item => `<li>${item}</li>`).join('');
-      if (style === 'numbered') {
-        return `<ol class="list-decimal list-inside space-y-2 my-4 text-slate-600 dark:text-slate-400">${listItems}</ol>`;
-      }
-      return `<ul class="list-disc list-inside space-y-2 my-4 text-slate-600 dark:text-slate-400">${listItems}</ul>`;
-    }
-    
-    case 'Code':
-    case 'code': {
-      const code = (props.code as string) || (props.content as string) || '';
-      const language = (props.language as string) || '';
-      return `<pre class="my-6 p-4 bg-slate-900 text-slate-100 rounded-xl overflow-x-auto"><code class="language-${language}">${code}</code></pre>`;
-    }
-    
-    case 'Card':
-    case 'card': {
-      const title = (props.title as string) || '';
-      const description = (props.description as string) || '';
-      const image = (props.image as string) || '';
-      return `
-        <div class="my-6 bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden">
-          ${image ? `<img src="${image}" alt="${title}" class="w-full h-48 object-cover" loading="lazy" />` : ''}
-          <div class="p-6">
-            ${title ? `<h3 class="text-xl font-semibold mb-2 dark:text-slate-200">${title}</h3>` : ''}
-            ${description ? `<p class="text-slate-600 dark:text-slate-400">${description}</p>` : ''}
-          </div>
-        </div>
-      `;
-    }
-    
-    case 'Html':
-    case 'html':
-    case 'RawHTML': {
-      const html = (props.html as string) || (props.content as string) || '';
-      return html;
-    }
-    
-    default: {
-      console.warn(`[PuckRenderer] Unknown block type: ${type}`);
-      // Attempt to render any text content
-      const text = (props.text as string) || (props.content as string) || '';
-      if (text) {
-        return `<div class="my-4">${text}</div>`;
-      }
-      return `<!-- Unknown block type: ${type} -->`;
-    }
-  }
-}
-
-const renderedHtml = blocks.map(renderBlock).join('');
 ---
 
-{renderedHtml ? (
-  <div class:list={['puck-content', className]} set:html={renderedHtml} />
-) : (
-  <div class="text-muted-foreground italic">
-    No visual content available.
-  </div>
-)}
+<div class:list={["puck-content", className]}>
+  {
+    blocks.map((block) => {
+      const { type, props = {} } = block;
 
-<style>
-  .puck-content {
-    /* Ensure proper spacing for all child elements */
+      switch (type) {
+        // --- Custom Blocks ---
+        case "Hero":
+          return <HeroBlock {...props} />;
+        case "Feature":
+          return <FeatureBlock {...props} />;
+        case "Stats":
+          return <StatsBlock {...props} />;
+        case "Pricing":
+          return <PricingBlock {...props} />;
+        case "Testimonial":
+          return <TestimonialBlock {...props} />;
+        case "Accordion":
+          return <AccordionBlock {...props} />;
+        case "FeaturesList":
+          return <FeaturesListBlock {...props} />;
+        case "Steps":
+          return <StepsBlock {...props} />;
+        case "LatestBlogs":
+          return <LatestBlogsBlock {...props} />;
+        case "Promotion":
+          return <PromotionBlock {...props} />;
+        case "Navigation":
+          return <NavigationBlock {...props} />;
+        case "WidgetArea":
+          return <WidgetAreaBlock {...props} />;
+        case "Gallery":
+          return <GalleryBlock {...props} />;
+        case "ContactForm":
+          return <ContactFormBlock {...props} />;
+        case "ServicesList":
+          return <ServicesListBlock {...props} />;
+        case "TeamList":
+          return <TeamListBlock {...props} />;
+        case "PartnersList":
+          return <PartnersListBlock {...props} />;
+        case "TestimonialsList":
+          return <TestimonialsListBlock {...props} />;
+
+        // --- Basic Blocks ---
+
+        case "Heading":
+        case "heading": {
+          const level = (props.level as number) || 2;
+          const text =
+            (props.text as string) || (props.content as string) || "";
+          const align = (props.align as string) || "left";
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const Tag = `h${level}` as any;
+          return (
+            <Tag
+              class={`${HEADING_SIZES[level] || HEADING_SIZES[2]} text-${align} mb-4 dark:text-slate-200`}
+            >
+              {text}
+            </Tag>
+          );
+        }
+
+        case "Text":
+        case "text":
+        case "Paragraph": {
+          const text =
+            (props.text as string) || (props.content as string) || "";
+          const align = (props.align as string) || "left";
+          return (
+            <p
+              class={`text-lg text-slate-600 dark:text-slate-400 mb-4 text-${align}`}
+            >
+              {text}
+            </p>
+          );
+        }
+
+        case "Image":
+        case "image": {
+          const src = (props.src as string) || (props.url as string) || "";
+          const alt = (props.alt as string) || "";
+          const caption = (props.caption as string) || "";
+          if (!src) return null;
+          return (
+            <figure class="my-6">
+              <img
+                src={src}
+                alt={alt}
+                class="w-full rounded-xl shadow-lg"
+                loading="lazy"
+              />
+              {caption && (
+                <figcaption class="mt-2 text-center text-sm text-slate-500 dark:text-slate-400">
+                  {caption}
+                </figcaption>
+              )}
+            </figure>
+          );
+        }
+
+        case "Button":
+        case "button":
+          return <ButtonBlock {...props} />;
+
+        // --- Layout Blocks ---
+
+        case "Columns":
+        case "columns":
+        case "TwoColumn": {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const columns = (props.columns as any[]) || [];
+          const gap = (props.gap as string) || "6";
+          return (
+            <div class={`flex flex-col md:flex-row gap-${gap} my-6`}>
+              {columns.map((col) => (
+                <div class="flex-1">
+                  <Astro.self content={{ content: col.items || [] }} />
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        case "Container":
+        case "container": {
+          const children = (props.children as PuckBlock[]) || [];
+          const padding = (props.padding as string) || "6";
+          return (
+            <div
+              class={`p-${padding} bg-slate-50 dark:bg-slate-800 rounded-xl my-6`}
+            >
+              <Astro.self content={{ content: children }} />
+            </div>
+          );
+        }
+
+        case "Divider":
+        case "divider":
+        case "Separator":
+          return <hr class="my-8 border-slate-200 dark:border-slate-700" />;
+
+        case "Spacer":
+        case "spacer": {
+          const size =
+            (props.size as string) || (props.height as string) || "8";
+          return <div class={`h-${size}`} />;
+        }
+
+        case "Video":
+        case "video": {
+          const src = (props.src as string) || (props.url as string) || "";
+          if (!src) return null;
+
+          let videoContent;
+          if (src.includes("youtube.com") || src.includes("youtu.be")) {
+            const videoId = src.includes("youtu.be")
+              ? src.split("/").pop()
+              : new URL(src).searchParams.get("v");
+            videoContent = (
+              <iframe
+                src={`https://www.youtube.com/embed/${videoId}`}
+                class="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+              />
+            );
+          } else {
+            videoContent = (
+              <video src={src} class="w-full rounded-xl shadow-lg" controls />
+            );
+          }
+
+          return (
+            <div class="my-6 aspect-video rounded-xl overflow-hidden shadow-lg">
+              {videoContent}
+            </div>
+          );
+        }
+
+        case "Quote":
+        case "quote":
+        case "Blockquote": {
+          const text =
+            (props.text as string) || (props.content as string) || "";
+          const author = (props.author as string) || "";
+          return (
+            <blockquote class="my-6 pl-6 border-l-4 border-primary">
+              <p class="text-xl italic text-slate-600 dark:text-slate-300">
+                "{text}"
+              </p>
+              {author && (
+                <cite class="block mt-2 text-sm text-slate-500 dark:text-slate-400">
+                  — {author}
+                </cite>
+              )}
+            </blockquote>
+          );
+        }
+
+        case "List":
+        case "list": {
+          const items = (props.items as string[]) || [];
+          const style = (props.style as string) || "bullet";
+          const Tag = style === "numbered" ? "ol" : "ul";
+          const listClass = style === "numbered" ? "list-decimal" : "list-disc";
+          return (
+            <Tag
+              class={`${listClass} list-inside space-y-2 my-4 text-slate-600 dark:text-slate-400`}
+            >
+              {items.map((item) => (
+                <li>{item}</li>
+              ))}
+            </Tag>
+          );
+        }
+
+        case "Code":
+        case "code": {
+          const code =
+            (props.code as string) || (props.content as string) || "";
+          const language = (props.language as string) || "";
+          return (
+            <pre class="my-6 p-4 bg-slate-900 text-slate-100 rounded-xl overflow-x-auto">
+              <code class={`language-${language}`}>{code}</code>
+            </pre>
+          );
+        }
+
+        case "Card":
+        case "card":
+          return <CardBlock {...props} />;
+
+        case "Html":
+        case "html":
+        case "RawHTML": {
+          const html =
+            (props.html as string) || (props.content as string) || "";
+          return <Fragment set:html={html} />;
+        }
+
+        default: {
+          console.warn(`[PuckRenderer] Unknown block type: ${type}`);
+          return null;
+        }
+      }
+    })
   }
-  .puck-content > :first-child {
-    margin-top: 0;
-  }
-  .puck-content > :last-child {
-    margin-bottom: 0;
-  }
-</style>
+</div>

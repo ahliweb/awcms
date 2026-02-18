@@ -1,0 +1,85 @@
+---
+import Features2 from "~/components/widgets/Features2.astro";
+import Content from "~/components/widgets/Content.astro";
+
+interface Props {
+    layout?: "grid" | "image-side";
+    title?: string;
+    subtitle?: string;
+    tagline?: string;
+    items?: Array<{
+        title?: string;
+        description?: string;
+        icon?: string;
+        link?: string;
+    }>;
+    columns?: number;
+    image?: string;
+    isReversed?: boolean;
+    id?: string;
+    isDark?: boolean;
+    classes?: Record<string, string>;
+    bg?: string;
+}
+
+const {
+    layout = "grid",
+    title,
+    subtitle,
+    tagline,
+    items = [],
+    columns = 3,
+    image,
+    isReversed,
+    id,
+    isDark = false,
+    classes = {},
+    bg,
+} = Astro.props;
+
+// Map items to ensure icon defaults
+const mappedItems = items.map((item) => ({
+    title: item.title,
+    description: item.description,
+    icon: item.icon || "tabler:check",
+    // callToAction: item.link ? { href: item.link, text: 'Learn more' } : undefined
+    // Features2/Content might support callToAction in items differently or via slot.
+    // Standard ItemGrid usually takes icon, title, description.
+    // If link is present, we might want to append it to description or handle it if widget supports it.
+    // Current ItemGrid implementation in Features2 might not support links per item directly unless extended.
+    // For now, we map basic fields.
+}));
+---
+
+{
+    layout === "grid" && (
+        <Features2
+            title={title}
+            subtitle={subtitle}
+            tagline={tagline}
+            items={mappedItems}
+            columns={columns}
+            id={id}
+            isDark={isDark}
+            classes={classes}
+            bg={bg}
+        />
+    )
+}
+
+{
+    layout === "image-side" && (
+        <Content
+            title={title}
+            subtitle={subtitle}
+            tagline={tagline}
+            items={mappedItems}
+            image={{ src: image || "", alt: title || "Feature Image" }}
+            isReversed={isReversed}
+            id={id}
+            isDark={isDark}
+            classes={classes}
+            bg={bg}
+        />
+    )
+}

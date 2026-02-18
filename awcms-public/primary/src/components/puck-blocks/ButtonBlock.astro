@@ -1,0 +1,91 @@
+---
+interface Props {
+    text?: string;
+    label?: string;
+    link?: string;
+    href?: string;
+    url?: string;
+    variant?:
+        | "primary"
+        | "secondary"
+        | "outline"
+        | "ghost"
+        | "gradient"
+        | "glass";
+    size?: "small" | "medium" | "large";
+    alignment?: "left" | "center" | "right";
+    textColor?: string;
+    backgroundColor?: string;
+    animation?: "none" | "scale" | "lift" | "glow";
+    className?: string;
+}
+
+const {
+    text: propText,
+    label,
+    link,
+    href,
+    url,
+    variant = "primary",
+    size = "medium",
+    alignment = "center",
+    textColor,
+    backgroundColor,
+    animation = "none",
+    className = "",
+} = Astro.props;
+
+const buttonText = propText || label || "Click me";
+const buttonLink = link || href || url || "#";
+
+const variantClasses = {
+    primary: "bg-blue-600 hover:bg-blue-700 text-white shadow-md",
+    secondary: "bg-slate-600 hover:bg-slate-700 text-white shadow-sm",
+    outline: "border-2 border-blue-600 text-blue-600 hover:bg-blue-50",
+    ghost: "text-blue-600 hover:bg-blue-50",
+    gradient:
+        "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg border-0",
+    glass: "bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30 shadow-lg",
+};
+
+const sizeClasses = {
+    small: "px-4 py-2 text-sm",
+    medium: "px-6 py-3 text-base",
+    large: "px-8 py-4 text-lg",
+};
+
+const alignmentClasses = {
+    left: "justify-start",
+    center: "justify-center",
+    right: "justify-end",
+};
+
+const animationClasses = {
+    none: "",
+    scale: "hover:scale-105 active:scale-95",
+    lift: "hover:-translate-y-1 hover:shadow-xl",
+    glow: "hover:shadow-[0_0_15px_rgba(59,130,246,0.6)]",
+};
+
+const customStyles: Record<string, string> = {};
+if (textColor) customStyles.color = textColor;
+if (backgroundColor) {
+    customStyles.backgroundColor = backgroundColor;
+    customStyles.backgroundImage = "none";
+}
+---
+
+<div class:list={["flex py-4", alignmentClasses[alignment], className]}>
+    <a
+        href={buttonLink}
+        class:list={[
+            "inline-block font-semibold rounded-full transition-all duration-300",
+            variantClasses[variant] || variantClasses.primary,
+            sizeClasses[size] || sizeClasses.medium,
+            animationClasses[animation] || animationClasses.none,
+        ]}
+        style={customStyles}
+    >
+        {buttonText}
+    </a>
+</div>

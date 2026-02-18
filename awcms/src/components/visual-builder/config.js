@@ -22,7 +22,14 @@ import { YouTubeBlock, YouTubeBlockFields } from './blocks/YouTubeBlock';
 import { StatsBlock, StatsBlockFields } from './blocks/StatsBlock';
 import { PricingBlock, PricingBlockFields } from './blocks/PricingBlock';
 import { AccordionBlock, AccordionBlockFields } from './blocks/AccordionBlock';
+import { FeaturesListBlock, FeaturesListBlockFields } from './blocks/FeaturesListBlock';
+import { StepsBlock, StepsBlockFields } from './blocks/StepsBlock';
 import { LatestBlogsBlock, LatestBlogsBlockFields, resolveLatestBlogsData } from './blocks/LatestBlogsBlock';
+import { ServicesListBlock, ServicesListBlockFields, resolveServicesData } from './blocks/ServicesListBlock';
+import { TeamListBlock, TeamListBlockFields, resolveTeamData } from './blocks/TeamListBlock';
+import { PartnersListBlock, PartnersListBlockFields, resolvePartnersData } from './blocks/PartnersListBlock';
+import { TestimonialsListBlock, TestimonialsListBlockFields, resolveTestimonialsData } from './blocks/TestimonialsListBlock';
+import { PageLinkField } from './fields/PageLinkField';
 import { ImageField, MultiImageField } from './fields/ImageField';
 
 import { WidgetAreaBlock, WidgetAreaBlockFields } from './blocks/WidgetAreaBlock';
@@ -40,11 +47,11 @@ export const puckConfig = {
         },
         marketing: {
             title: 'Marketing Components',
-            components: ['Hero', 'Feature', 'Card', 'Stats', 'Pricing', 'Testimonial', 'Accordion']
+            components: ['Hero', 'Feature', 'FeaturesList', 'Steps', 'Card', 'Stats', 'Pricing', 'Testimonial', 'Accordion']
         },
         dynamic: {
             title: 'Dynamic & Interactive',
-            components: ['LatestBlogs', 'Promotion', 'Gallery', 'ContactForm', 'Navigation']
+            components: ['LatestBlogs', 'ServicesList', 'TeamList', 'PartnersList', 'TestimonialsList', 'Promotion', 'Gallery', 'ContactForm', 'Navigation']
         }
     },
     components: {
@@ -110,7 +117,11 @@ export const puckConfig = {
                     render: ImageField
                 },
                 buttonText: { type: 'text', label: 'Button Text' },
-                buttonLink: { type: 'text', label: 'Button Link' },
+                buttonLink: {
+                    type: 'custom',
+                    label: 'Button Link',
+                    render: PageLinkField
+                },
                 alignment: {
                     type: 'select',
                     label: 'Text Alignment',
@@ -120,8 +131,21 @@ export const puckConfig = {
                         { label: 'Right', value: 'right' }
                     ]
                 },
-                overlay: {
-                    type: 'radio', label: 'Dark Overlay', options: [
+                overlayStyle: {
+                    type: 'select',
+                    label: 'Overlay Style',
+                    options: [
+                        { label: 'None', value: 'none' },
+                        { label: 'Dark (Standard)', value: 'dark' },
+                        { label: 'Gradient (Bottom)', value: 'gradient-bottom' },
+                        { label: 'Gradient (Center)', value: 'gradient-center' },
+                        { label: 'Blur (Glass)', value: 'blur' }
+                    ]
+                },
+                scrollIndicator: {
+                    type: 'radio',
+                    label: 'Show Scroll Indicator',
+                    options: [
                         { label: 'Yes', value: true },
                         { label: 'No', value: false }
                     ]
@@ -144,7 +168,8 @@ export const puckConfig = {
                 buttonText: 'Learn More',
                 buttonLink: '#',
                 alignment: 'center',
-                overlay: true,
+                overlayStyle: 'dark',
+                scrollIndicator: false,
                 height: 'large'
             },
             render: HeroBlock
@@ -202,7 +227,36 @@ export const puckConfig = {
         },
         Button: {
             label: 'Button',
-            fields: ButtonBlockFields,
+            fields: {
+                ...ButtonBlockFields,
+                link: {
+                    type: 'custom',
+                    label: 'Link URL',
+                    render: PageLinkField
+                },
+                variant: {
+                    type: 'select',
+                    label: 'Style',
+                    options: [
+                        { label: 'Primary (Blue)', value: 'primary' },
+                        { label: 'Secondary (Gray)', value: 'secondary' },
+                        { label: 'Outline', value: 'outline' },
+                        { label: 'Ghost', value: 'ghost' },
+                        { label: 'Gradient (Brand)', value: 'gradient' },
+                        { label: 'Glass (Blur)', value: 'glass' }
+                    ]
+                },
+                animation: {
+                    type: 'select',
+                    label: 'Hover Animation',
+                    options: [
+                        { label: 'None', value: 'none' },
+                        { label: 'Scale Up', value: 'scale' },
+                        { label: 'Lift', value: 'lift' },
+                        { label: 'Glow', value: 'glow' }
+                    ]
+                }
+            },
             defaultProps: {
                 text: 'Click Me',
                 link: '#',
@@ -245,14 +299,37 @@ export const puckConfig = {
                     label: 'Card Image',
                     render: ImageField
                 },
-                link: { type: 'text', label: 'Link URL' },
+                link: {
+                    type: 'custom',
+                    label: 'Link URL',
+                    render: PageLinkField
+                },
                 variant: {
                     type: 'select',
                     label: 'Style',
                     options: [
                         { label: 'Default', value: 'default' },
                         { label: 'Bordered', value: 'bordered' },
-                        { label: 'Shadow', value: 'shadow' }
+                        { label: 'Shadow', value: 'shadow' },
+                        { label: 'Glass', value: 'glass' }
+                    ]
+                },
+                aspectRatio: {
+                    type: 'select',
+                    label: 'Image Ratio',
+                    options: [
+                        { label: 'Video (16:9)', value: 'video' },
+                        { label: 'Standard (4:3)', value: 'standard' },
+                        { label: 'Square (1:1)', value: 'square' }
+                    ]
+                },
+                hoverEffect: {
+                    type: 'select',
+                    label: 'Hover Effect',
+                    options: [
+                        { label: 'None', value: 'none' },
+                        { label: 'Lift', value: 'lift' },
+                        { label: 'Scale Image', value: 'scale-image' }
                     ]
                 }
             },
@@ -342,6 +419,34 @@ export const puckConfig = {
             },
             render: AccordionBlock
         },
+        FeaturesList: {
+            label: 'Features List (Grid/Side)',
+            fields: FeaturesListBlockFields,
+            defaultProps: {
+                layout: 'grid',
+                columns: 3,
+                title: 'Our Features',
+                items: [
+                    { title: 'Feature 1', description: 'Description 1', icon: 'tabler:star' },
+                    { title: 'Feature 2', description: 'Description 2', icon: 'tabler:rocket' },
+                    { title: 'Feature 3', description: 'Description 3', icon: 'tabler:shield' }
+                ]
+            },
+            render: FeaturesListBlock
+        },
+        Steps: {
+            label: 'Steps / Timeline',
+            fields: StepsBlockFields,
+            defaultProps: {
+                title: 'How It Works',
+                items: [
+                    { title: 'Step 1', description: 'Do this first', icon: 'tabler:one' },
+                    { title: 'Step 2', description: 'Then do this', icon: 'tabler:two' },
+                    { title: 'Step 3', description: 'Finally do this', icon: 'tabler:three' }
+                ]
+            },
+            render: StepsBlock
+        },
 
         // --- Dynamic Integrations ---
         LatestBlogs: {
@@ -355,6 +460,46 @@ export const puckConfig = {
             },
             render: LatestBlogsBlock,
             resolveData: resolveLatestBlogsData
+        },
+        ServicesList: {
+            label: 'Services List',
+            fields: ServicesListBlockFields,
+            defaultProps: {
+                count: 6,
+                columns: 3,
+                showIcon: true
+            },
+            render: ServicesListBlock,
+            resolveData: resolveServicesData
+        },
+        TeamList: {
+            label: 'Team List',
+            fields: TeamListBlockFields,
+            defaultProps: {
+                count: 4,
+                showSocial: true
+            },
+            render: TeamListBlock,
+            resolveData: resolveTeamData
+        },
+        PartnersList: {
+            label: 'Partners List',
+            fields: PartnersListBlockFields,
+            defaultProps: {
+                count: 6
+            },
+            render: PartnersListBlock,
+            resolveData: resolvePartnersData
+        },
+        TestimonialsList: {
+            label: 'Testimonials List',
+            fields: TestimonialsListBlockFields,
+            defaultProps: {
+                count: 3,
+                layout: 'grid'
+            },
+            render: TestimonialsListBlock,
+            resolveData: resolveTestimonialsData
         },
         Promotion: {
             label: 'Promotion / Ad',

@@ -40,12 +40,14 @@ export const ButtonBlockFields = {
     }
 };
 
-export const ButtonBlock = ({ text, textColor, backgroundColor, link, variant, size, alignment }) => {
+export const ButtonBlock = ({ text, textColor, backgroundColor, link, variant, size, alignment, animation }) => {
     const variantClasses = {
-        primary: 'bg-blue-600 hover:bg-blue-700 text-white',
-        secondary: 'bg-slate-600 hover:bg-slate-700 text-white',
+        primary: 'bg-blue-600 hover:bg-blue-700 text-white shadow-md',
+        secondary: 'bg-slate-600 hover:bg-slate-700 text-white shadow-sm',
         outline: 'border-2 border-blue-600 text-blue-600 hover:bg-blue-50',
-        ghost: 'text-blue-600 hover:bg-blue-50'
+        ghost: 'text-blue-600 hover:bg-blue-50',
+        gradient: 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg border-0',
+        glass: 'bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30 shadow-lg'
     };
 
     const sizeClasses = {
@@ -60,15 +62,25 @@ export const ButtonBlock = ({ text, textColor, backgroundColor, link, variant, s
         right: 'justify-end'
     };
 
+    const animationClasses = {
+        none: '',
+        scale: 'hover:scale-105 active:scale-95',
+        lift: 'hover:-translate-y-1 hover:shadow-xl',
+        glow: 'hover:shadow-[0_0_15px_rgba(59,130,246,0.6)]'
+    };
+
     const customStyles = {};
     if (textColor) customStyles.color = textColor;
-    if (backgroundColor) customStyles.backgroundColor = backgroundColor;
+    if (backgroundColor) {
+        customStyles.backgroundColor = backgroundColor;
+        customStyles.backgroundImage = 'none'; // Override gradient if custom bg color set
+    }
 
     return (
         <div className={`flex ${alignmentClasses[alignment]} py-4`}>
             <a
                 href={link || '#'}
-                className={`inline-block font-medium rounded-lg transition-colors ${variantClasses[variant]} ${sizeClasses[size]}`}
+                className={`inline-block font-semibold rounded-full transition-all duration-300 ${variantClasses[variant]} ${sizeClasses[size]} ${animationClasses[animation]}`}
                 style={customStyles}
             >
                 {text}

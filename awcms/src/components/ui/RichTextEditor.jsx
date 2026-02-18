@@ -51,13 +51,16 @@ const ToolbarButton = ({ onClick, isActive, children, title }) => (
 // Toolbar Divider
 const Divider = () => <div className="w-px h-4 bg-slate-200 mx-1 self-center" />;
 
-const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd }) => {
+const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd, onLinkAdd }) => {
   const extensions = React.useMemo(() => [
     StarterKit.configure({
       heading: {
         levels: [1, 2, 3],
       },
       codeBlock: false,
+      // Disable extensions that we include manually or don't want
+      link: false,
+      underline: false,
     }),
     Underline,
     Link.configure({
@@ -117,9 +120,13 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd })
   }
 
   const addLink = () => {
-    const url = window.prompt('Enter URL:');
-    if (url) {
-      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    if (onLinkAdd) {
+      onLinkAdd(editor);
+    } else {
+      const url = window.prompt('Enter URL:');
+      if (url) {
+        editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+      }
     }
   };
 

@@ -50,12 +50,12 @@ VITE_TENANT_ID=...
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Start local dev server |
-| `npm run build` | Build static output |
-| `npm run preview` | Preview build locally |
-| `npm run check` | Astro + ESLint + Prettier checks |
+| Command           | Description                      |
+| ----------------- | -------------------------------- |
+| `npm run dev`     | Start local dev server           |
+| `npm run build`   | Build static output              |
+| `npm run preview` | Preview build locally            |
+| `npm run check`   | Astro + ESLint + Prettier checks |
 
 ## Template Lineage
 
