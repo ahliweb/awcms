@@ -56,6 +56,7 @@ const FilesManager = () => {
   }, [segments, basePath, navigate]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (showTrash) setSelectedCategory(null);
   }, [showTrash]);
 

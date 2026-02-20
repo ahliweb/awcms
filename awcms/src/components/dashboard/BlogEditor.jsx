@@ -41,7 +41,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Lock } from 'lucide-react';
 
 function BlogEditor({ item, onClose, onSuccess }) {
     const { toast } = useToast();

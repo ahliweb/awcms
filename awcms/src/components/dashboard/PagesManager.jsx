@@ -26,10 +26,10 @@ function PagesManager({ onlyVisual = false }) {
   const [selectedLanguage, setSelectedLanguage] = useState('en');
 
   // Language options
-  const languages = [
+  const languages = useMemo(() => [
     { value: 'en', label: 'English' },
     { value: 'id', label: 'Bahasa Indonesia' }
-  ];
+  ], []);
 
   // Tab definitions
   const tabs = useMemo(() => onlyVisual ? [] : [
@@ -183,7 +183,7 @@ function PagesManager({ onlyVisual = false }) {
     { key: 'og_image', label: t('pages.form.og_image') || 'OG Image', type: 'image', description: 'Social sharing image (1200x630 recommended)' },
     { key: 'canonical_url', label: t('pages.form.canonical_url') || 'Canonical URL', type: 'text', description: 'Full URL if this content exists elsewhere' },
     { key: 'is_active', label: t('pages.form.active'), type: 'boolean' }
-  ], [onlyVisual, t]);
+  ], [onlyVisual, t, languages, selectedLanguage]);
 
   // Custom row actions for Visual Builder
   const customRowActions = useCallback((page) => {

@@ -9,7 +9,6 @@ import PuckRenderer from "~/components/common/PuckRenderer.astro";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getPublicTenantId } from "~/lib/publicTenant";
 import { getPageBySlug } from "~/lib/content";
-import { supportedLocales, type Locale } from "~/utils/i18n";
 
 export const prerender = true;
 
@@ -32,9 +31,9 @@ export const getStaticPaths = (async () => {
   // Map each page to its locale and slug
   // We strictly respect the locale stored in the page record
   return (data || []).map((page) => ({
-    params: { 
+    params: {
       slug: page.slug,
-      locale: page.locale || 'en' // fallback to en if null
+      locale: page.locale || "en", // fallback to en if null
     },
   }));
 }) satisfies GetStaticPaths;
@@ -47,7 +46,9 @@ const supabase = createClientFromEnv(import.meta.env);
 
 // Fetch page data
 const page =
-  slug && supabase ? await getPageBySlug(supabase, slug, tenantId, locale) : null;
+  slug && supabase
+    ? await getPageBySlug(supabase, slug, tenantId, locale)
+    : null;
 
 if (!page) {
   console.log(`[Page] Page not found: ${locale}/${slug || "unknown"}`);
@@ -129,11 +130,14 @@ const htmlContent = page?.content || "";
             <footer class="mt-12 pt-8 border-t border-border">
               <p class="text-sm text-muted-foreground">
                 Last updated:{" "}
-                {new Date(page.updated_at).toLocaleDateString(locale === 'id' ? "id-ID" : "en-US", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+                {new Date(page.updated_at).toLocaleDateString(
+                  locale === "id" ? "id-ID" : "en-US",
+                  {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  },
+                )}
               </p>
             </footer>
           )}

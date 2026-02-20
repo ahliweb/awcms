@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 
 function AdminDashboard() {
     const perms = usePermissions() || {};
-    const { isTenantAdmin, isPlatformAdmin, userRole } = perms;
+    const { isPlatformAdmin, userRole } = perms;
     const { data, loading, error, lastUpdated, refresh } = useDashboardData();
     const spacingClass = 'space-y-8 lg:space-y-10';
     const layoutClass = 'w-full';

@@ -99,7 +99,6 @@ CREATE OR REPLACE FUNCTION public.create_tenant_with_defaults(p_name text, p_slu
 AS $function$
 DECLARE
     v_tenant_id uuid;
-    v_admin_role_id uuid;
 BEGIN
     INSERT INTO public.tenants (name, slug, domain, subscription_tier, status)
     VALUES (p_name, p_slug, p_domain, p_tier, 'active')
@@ -107,8 +106,7 @@ BEGIN
 
     -- 1. Admin (Tenant Admin)
     INSERT INTO public.roles (name, description, tenant_id, is_system, scope, is_tenant_admin)
-    VALUES ('admin', 'Tenant Administrator', v_tenant_id, true, 'tenant', true)
-    RETURNING id INTO v_admin_role_id;
+    VALUES ('admin', 'Tenant Administrator', v_tenant_id, true, 'tenant', true);
 
     -- 2. Editor
     INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
@@ -195,19 +193,19 @@ DECLARE
   v_slug TEXT;
   target_table regclass;
 BEGIN
-  -- Restrict tag usage to articles only
-  IF p_resource_type != 'articles' THEN
+  -- Restrict tag usage to blogs only
+  IF p_resource_type != 'blogs' AND p_resource_type != 'articles' THEN
     RETURN;
   END IF;
 
-  target_table := to_regclass('public.article_tags');
+  target_table := to_regclass('public.blog_tags');
   
   IF target_table IS NULL THEN
     RETURN;
   END IF;
 
   -- Delete existing tags for this resource
-  DELETE FROM "public"."article_tags" WHERE article_id = p_resource_id;
+  DELETE FROM "public"."blog_tags" WHERE blog_id = p_resource_id;
 
   IF p_tags IS NOT NULL THEN
     FOREACH v_tag_name IN ARRAY p_tags
@@ -221,7 +219,7 @@ BEGIN
       RETURNING id INTO v_tag_id;
 
       -- Link tag to article
-      INSERT INTO "public"."article_tags" (article_id, tag_id) VALUES (p_resource_id, v_tag_id);
+      INSERT INTO "public"."blog_tags" (blog_id, tag_id) VALUES (p_resource_id, v_tag_id);
     END LOOP;
   END IF;
 END;

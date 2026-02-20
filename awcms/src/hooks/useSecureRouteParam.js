@@ -11,6 +11,7 @@ const useSecureRouteParam = (encodedValue, scope) => {
 
     if (!encodedValue) {
       setValue(null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       setIsLegacy(false);
       return () => {

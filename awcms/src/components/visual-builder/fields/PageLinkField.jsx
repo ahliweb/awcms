@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,6 @@ export const PageLinkField = ({ name, value, onChange, field }) => {
     const [pages, setPages] = useState([]);
     const [loading, setLoading] = useState(false);
     const [customUrl, setCustomUrl] = useState('');
-    const [internalSlugs, setInternalSlugs] = useState(new Set());
 
     // Initialize state based on incoming value
     useEffect(() => {
@@ -27,6 +26,7 @@ export const PageLinkField = ({ name, value, onChange, field }) => {
                 setCustomUrl(value);
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Only run on mount to set initial tab
 
     // Fetch available pages and blogs
@@ -62,7 +62,6 @@ export const PageLinkField = ({ name, value, onChange, field }) => {
 
                 const allLinks = [...formattedPages, ...formattedBlogs];
                 setPages(allLinks);
-                setInternalSlugs(new Set(allLinks.map(l => l.value)));
 
             } catch (error) {
                 console.error("Error fetching link options:", error);

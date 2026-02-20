@@ -1,4 +1,3 @@
-import React from 'react';
 import { ImageIcon } from 'lucide-react';
 import { PageLinkField } from '../fields/PageLinkField';
 import { ImageField } from '../fields/ImageField';

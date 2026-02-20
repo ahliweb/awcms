@@ -105,20 +105,20 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase only (NO Node.js servers)                                        |
 
-5. **Environment Security**:
+1. **Environment Security**:
    - **Ignored Files**: Ensure `.env`, `.env.local`, `.env.production`, and `.env.remote` are always ignored by Git.
    - **Agent Workspace**: The `awcms/.agent/` directory contains local MCP configurations and potential sensitive data. It MUST be ignored by adding `awcms/.agent/` to `.gitignore`.
    - **Template Updates**: `.env.example` must contain ALL keys found in any `.env` file, but populated ONLY with dummy secrets.
    - **Key Naming**: Use `VITE_SUPABASE_PUBLISHABLE_KEY` (public) and `SUPABASE_SECRET_KEY` (private/service role). Avoid `ANON` or `SERVICE_ROLE` terminology.
    - **Vite Env Prefix**: Only `VITE_`-prefixed variables are exposed to client code; use `loadEnv` in `vite.config` when config values need env access.
 
-6. **Routing & URL Security**:
+2. **Routing & URL Security**:
    - **Sub-Slug Routing**: Use sub-slugs for tabbed/trash/approval views so refreshes work (add `*` to routes and use `useSplatSegments`).
    - **Signed IDs**: Edit/detail routes must use signed IDs (`{uuid}.{signature}`) via `encodeRouteParam` and `useSecureRouteParam`.
    - **Extension Routes**: Routes with identifiers must declare `secureParams` + `secureScope` in `admin_routes` and read values via `useRouteSecurityParams`.
    - **No Guessable URLs**: Avoid raw UUIDs in query strings or direct routes except for legacy redirect support.
 
-7. **Dashboard UI Conventions**:
+3. **Dashboard UI Conventions**:
    - **Widget Headers**: Use `title`, `icon`, `badge`, or a `header` object for plugin widgets so the dashboard renders consistent headers.
    - **Widget Frames**: Prefer the default widget frame; avoid wrapping plugin widgets in custom cards unless `frame` is disabled.
 
@@ -441,6 +441,8 @@ While powerful, Agents operating in this environment have specific boundaries:
 4. **No Binary Files**: Agents cannot generate images or binary assets. Use placeholder descriptions or reference existing assets.
 
 5. **Database Changes**: Always use timestamped Supabase migrations (`<timestamp>_name.sql`); ignore `current_*.sql` snapshots. Never hardcode database credentials.
+
+6. **Process Monitoring**: The running model must continue and ensure no background processes are stuck by restarting the process. Monitor all processes to ensure none remain stuck for long periods; periodically enforce a maximum runtime, output status updates, and terminate any processes that exceed the limit.
 
 ---
 

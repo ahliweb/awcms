@@ -1,11 +1,13 @@
 ---
 import { defaultLocale } from "~/utils/i18n";
-import { getClient } from "~/lib/supabase";
+import { createClientFromEnv } from "~/lib/supabase";
 
 export const prerender = true;
 
 export async function getStaticPaths() {
-  const supabase = getClient();
+  const supabase = createClientFromEnv(
+    import.meta.env as Record<string, string>,
+  );
   if (!supabase) return [];
 
   const { data } = await supabase

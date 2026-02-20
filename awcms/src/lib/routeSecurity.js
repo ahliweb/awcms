@@ -28,7 +28,7 @@ const readStoredKey = () => {
     if (!parsed?.value || parsed?.version !== STORAGE_VERSION) return null;
     if (Date.now() > parsed.expiresAt) return null;
     return parsed.value;
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 };

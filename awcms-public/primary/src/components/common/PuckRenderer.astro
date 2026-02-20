@@ -75,14 +75,6 @@ const HEADING_SIZES: Record<number, string> = {
   6: "text-base font-medium",
 };
 
-const BUTTON_VARIANTS: Record<string, string> = {
-  primary: "bg-primary text-white hover:bg-primary/90",
-  secondary:
-    "bg-slate-200 text-slate-800 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200",
-  outline:
-    "border-2 border-primary text-primary hover:bg-primary hover:text-white",
-};
-
 // Get blocks from various possible structures
 const blocks: PuckBlock[] =
   puckData?.root?.children ||

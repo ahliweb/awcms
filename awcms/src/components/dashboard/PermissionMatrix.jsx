@@ -278,7 +278,7 @@ const PermissionMatrix = ({ permissions = [], selectedPermissions = new Set(), o
                                             {/* Resources */}
                                             {!isCollapsed && resources.map((resource) => {
                                                 const stats = getRowStats(resource);
-                                                const resourceLabel = resource.replace(/[_\.]/g, ' ');
+                                                const resourceLabel = resource.replace(/[_.]/g, ' ');
 
                                                 return (
                                                     <tr key={resource} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">

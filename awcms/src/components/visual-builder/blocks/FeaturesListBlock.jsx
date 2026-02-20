@@ -1,5 +1,4 @@
-import React from 'react';
-import { LayoutGrid, ImageIcon, Columns, List } from 'lucide-react';
+import { ImageIcon } from 'lucide-react';
 import { PageLinkField } from '../fields/PageLinkField';
 import { ImageField } from '../fields/ImageField';
 
