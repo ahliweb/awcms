@@ -24,26 +24,31 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 | `awcms-ext/` | External Extensions | JavaScript modules |
 | `supabase/` | Migrations and Edge Functions | Supabase CLI |
 | `awcms-mcp/` | MCP Integration | Model Context Protocol tools |
+| `openclaw/` | AI Gateway | OpenClaw multi-tenant AI routing |
 
 ## Current Stack Versions (Core)
 
 - **React**: 19.2.4 (Admin + Public)
 - **Vite**: 7.2.7 (Admin)
-- **Astro**: 5.17.1 (Public) - *Requires Node.js >=20.0.0*
+- **Astro**: 5.17.1 (Public) - *Requires Node.js >=22.12.0*
 - **TailwindCSS**: 4.1.18
 - **Supabase JS**: 2.93.3 (Admin + Public)
 - **React Router DOM**: 7.10.1
 - **TipTap**: 3.13.0
 - **Puck**: 0.21.0
+- **OpenClaw**: 2026.2.21-2 (AI Gateway)
+- **Node.js**: >= 22.12.0 (managed via nvm)
 
 ## Quick Start
 
 ### For Developers
+
 1. Read **[SYSTEM_MODEL.md](SYSTEM_MODEL.md)** - Understand the architecture (5 min)
 2. Follow **[Developer Setup Guide](docs/dev/setup.md)** - Get running (10 min)
 3. Reference **[AGENTS.md](AGENTS.md)** - Coding standards and patterns
 
 ### Per-Component Guides
+
 - **Admin Panel**: [Guide](docs/dev/admin.md)
 - **Public Portal**: [Guide](docs/dev/public.md)
 - **Mobile App**: [Guide](docs/dev/mobile.md)
@@ -67,6 +72,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 ## Context7 MCP Integration
 
 This repository uses Context7 for AI-assisted development. Key library IDs:
+
 - `supabase/supabase-js` - Database operations
 - `vitejs/vite` - Build tooling  
 - `withastro/astro` - Public portal framework

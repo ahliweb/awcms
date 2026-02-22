@@ -91,6 +91,7 @@ All documentation follows this authority structure:
 | IoT Firmware | [docs/dev/esp32.md](docs/dev/esp32.md) | ESP32 platform |
 | CI/CD | [docs/dev/ci-cd.md](docs/dev/ci-cd.md) | GitHub Actions |
 | Testing | [docs/dev/testing.md](docs/dev/testing.md) | Vitest and smoke checks |
+| AI Gateway | [openclaw/openclaw.json](openclaw/openclaw.json) | OpenClaw multi-tenant config |
 
 ### Deployment
 
@@ -114,6 +115,7 @@ When implementing features, reference these Context7 library IDs:
 - `ueberdosis/tiptap-docs` - Rich text editor
 - `puckeditor/puck` - Visual builder
 - `grx7/framer-motion` - Animations
+- `openclaw/openclaw` - AI Gateway, Multi-Agent Routing
 
 See [AGENTS.md](AGENTS.md) for detailed Context7 usage patterns.
 

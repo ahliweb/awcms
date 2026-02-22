@@ -1,12 +1,12 @@
 {
     "name": "awcms-public-root",
-  "version": "2.25.0",
+    "version": "2.25.0",
     "private": true,
     "scripts": {
         "dev": "pnpm -C primary dev",
         "build": "cd primary && npm install && npm run build"
     },
     "engines": {
-        "node": ">=20.0.0"
+        "node": ">=22.12.0"
     }
 }

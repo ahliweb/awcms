@@ -59,12 +59,14 @@ Agents must be aware of the exact versions in use:
 | i18next          | 25.7.2   | Internationalization             |
 | Recharts         | 3.5.1    | Charts & Data Visualization      |
 | Leaflet          | 1.9.4    | Maps                             |
+| React Leaflet    | latest   | React bindings for Leaflet       |
 | Vitest           | 4.0.16   | Unit/Integration testing         |
 | Astro            | 5.17.1   | Public portal                    |
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
 > **Vite 7**: This project uses Vite 7.2.7. Be aware of deprecation warnings for `ViteDevServer` APIs in `future` config.
+> **Node.js**: Minimum required version is **22.12.0** (OpenClaw CLI dependency). Managed via `nvm`.
 
 ---
 
@@ -135,6 +137,7 @@ When updating docs or implementing library usage, **Context7 is the primary refe
 - `ueberdosis/tiptap-docs` (Rich Text)
 - `puckeditor/puck` (Visual Editor)
 - `grx7/framer-motion` (Animations)
+- `openclaw/openclaw` (AI Gateway, Multi-Agent Routing)
 
 ### Code Patterns
 
@@ -442,7 +445,9 @@ While powerful, Agents operating in this environment have specific boundaries:
 
 5. **Database Changes**: Always use timestamped Supabase migrations (`<timestamp>_name.sql`); ignore `current_*.sql` snapshots. Never hardcode database credentials.
 
-6. **Process Monitoring**: The running model must continue and ensure no background processes are stuck by restarting the process. Monitor all processes to ensure none remain stuck for long periods; periodically enforce a maximum runtime, output status updates, and terminate any processes that exceed the limit.
+6. **Process Monitoring**: The running model must continue and ensure no background processes are stuck by restarting the process.
+   Monitor all processes to ensure none remain stuck for long periods; periodically enforce a maximum runtime,
+   output status updates, and terminate any processes that exceed the limit.
 
 ---
 

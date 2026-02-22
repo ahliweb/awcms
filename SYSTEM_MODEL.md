@@ -1,7 +1,7 @@
 # AWCMS System Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-02-17 (Audited against `package.json`)
+> **Last Updated:** 2026-02-23 (Audited against `package.json`, OpenClaw, Node 22)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -25,6 +25,7 @@ Agents must respect these exact versions to ensure compatibility across the mono
   * Editor: `@puckeditor/core` v0.21.0 (Puck + Render)
   * Rich Text: `tiptap` v3.13.0
   * Motion: `framer-motion` v12.23.26
+  * Maps: `leaflet` v1.9.4 + `react-leaflet`
 
 ### 1.2 Public Portal (`awcms-public`)
 
@@ -33,7 +34,7 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Language:** TypeScript 5.x / TSX
 * **Styling:** TailwindCSS 4.1.18 (Vite Plugin)
 * **Backend Interface:** `@supabase/supabase-js` v2.93.3
-* **Node.js Requirement:** >= 20.0.0
+* **Node.js Requirement:** >= 22.12.0 (required by OpenClaw CLI)
 * **Rendering Model:** Static output (`output: "static"`) with React islands
 * **Sovereign Instances (Level 0):** For multi-national scale, distinct Supabase projects are used per region/country to ensure data sovereignty.
 * **Logical Regions (Global):** 10-level operational hierarchy (`regions`) for business segmentation.
@@ -48,6 +49,16 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Platform:** Supabase (PostgreSQL 17)
 * **Logic Layer:** PostgreSQL Functions (PL/pgSQL) + Edge Functions (Deno/TS).
 * **Node.js Servers:** **FORBIDDEN**. All backend logic must reside in Supabase.
+
+### 1.4 AI Gateway (OpenClaw)
+
+* **CLI:** OpenClaw v2026.2.21-2 (installed globally via npm)
+* **Node.js:** >= 22.12.0 (Active LTS)
+* **Config:** `~/.openclaw/openclaw.json` (multi-agent routing)
+* **Mode:** Per-tenant isolation — each AWCMS tenant maps to an OpenClaw agent with a separate workspace
+* **Security:** Token auth, rate limiting (10 attempts/60s, 5min lockout), loopback-only binding
+* **Project Config:** `openclaw/openclaw.json` (version-controlled, token excluded)
+* **Context7 ID:** `openclaw/openclaw`
 
 ---
 
@@ -118,5 +129,6 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Agent Guide:** `AGENTS.md`.
 * **Architecture:** `docs/architecture/*.md`.
 * **Tenancy:** `docs/tenancy/*.md`.
+* **AI Gateway:** `openclaw/openclaw.json`.
 
 Any deviation from this model requires an explicit update to this document.

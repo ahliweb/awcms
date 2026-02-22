@@ -1,7 +1,7 @@
 # Documentation Audit Plan (Context7 MCP)
 
 > **Owner:** Documentation Steward
-> **Last Updated:** 2026-02-17
+> **Last Updated:** 2026-02-23
 > **Authority:** SYSTEM_MODEL.md -> AGENTS.md -> DOCS_INDEX.md
 
 ## Purpose
@@ -12,14 +12,13 @@ Establish a repeatable, Context7-driven workflow to audit and update all AWCMS d
 - Actual scripts and runtime behavior in each package
 - Latest library best practices (Context7 MCP is the primary reference)
 
-## Current Focus (2026-02-17)
+## Current Focus (2026-02-23)
 
-- Admin routes now use sub-slugs for tabs, trash views, and approvals.
-- Edit/detail routes use signed IDs (`{uuid}.{signature}`) with legacy redirects.
-- Dashboard widgets share a consistent header frame (core + plugin widgets).
-- Supabase admin client updated to `@supabase/supabase-js` 2.93.3.
-- Primary tenant seeding exists (`seed-primary-tenant.js` + migration) and must be documented in setup flows.
-- Extension seeding relies on `extensions_tenant_slug_unique` and uses `seed-sidebar.js` with the secret key.
+- Node.js upgraded to v22.22.0 (OpenClaw requires >=22.12.0).
+- OpenClaw CLI installed globally (v2026.2.21-2) with multi-tenant gateway config.
+- Security audit: 17 npm vulnerabilities fixed (minimatch ReDoS + ajv) across `awcms` and `awcms-public/primary`.
+- OpenClaw gateway hardened: token auth, rate limiting, loopback binding, chmod 600.
+- `react-leaflet` added as a dependency in `awcms`.
 
 ## Scope
 
@@ -30,7 +29,7 @@ Establish a repeatable, Context7-driven workflow to audit and update all AWCMS d
 | Security | docs/security/* | RLS, ABAC, threat model, compliance |
 | Tenancy | docs/tenancy/* | Tenant hierarchy, isolation, sharing rules |
 | Modules | docs/modules/* | Feature guides and module behavior |
-| Dev guides | docs/dev/* | Setup, testing, CI/CD, public portal | 
+| Dev guides | docs/dev/* | Setup, testing, CI/CD, public portal |
 | Public portal | awcms-public/README.md, awcms-public/primary/README.md | Astro + React guidance |
 | Admin app | awcms/README.md, awcms/package.json scripts | React + Vite guidance |
 | MCP | awcms-mcp/README.md, awcms-mcp/src/tools/* | Tooling and MCP usage |
@@ -38,6 +37,7 @@ Establish a repeatable, Context7-driven workflow to audit and update all AWCMS d
 | Database ops | awcms/supabase/migrations/*.sql | Ignore `current_*.sql` snapshots; validate timestamped migrations |
 | Routing & security | docs/modules/ADMIN_UI_ARCHITECTURE.md, docs/security/* | Sub-slug routing + signed route params |
 | Dashboard UX | docs/modules/EXTENSIONS.md | Widget headers + plugin frame conventions |
+| AI Gateway | openclaw/openclaw.json, ~/.openclaw/ | OpenClaw per-tenant config |
 
 ## Context7 MCP Reference Workflow
 
@@ -56,13 +56,14 @@ Establish a repeatable, Context7-driven workflow to audit and update all AWCMS d
 | puckeditor/puck | editor usage, renderer constraints |
 | grx7/framer-motion | motion patterns and layout guidelines |
 | ueberdosis/tiptap-docs | tiptap 3 setup, extension usage |
+| openclaw/openclaw | multi-agent routing, gateway security, token auth |
 
 ## Audit Checklist
 
 ### 1. Tech Stack Alignment
 
 - Verify versions in SYSTEM_MODEL.md match `package.json` for each package.
-- Confirm Node.js requirement (>= 20.0.0) is consistent across docs.
+- Confirm Node.js requirement (>= 22.12.0) is consistent across docs.
 - Verify Supabase client versions (admin/public) match AGENTS.md and `package.json`.
 
 ### 2. Database Accuracy

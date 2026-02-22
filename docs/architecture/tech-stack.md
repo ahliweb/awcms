@@ -31,6 +31,11 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 | Animations | Framer Motion | 12.23.26 | UI motion |
 | Routing | React Router DOM | 7.10.1 | Client routing |
 | Supabase JS | @supabase/supabase-js | 2.93.3 | API client |
+| Maps | Leaflet + react-leaflet | 1.9.4 | Geolocation maps |
+| File upload | react-dropzone | 14.3.8 | Drag-and-drop file uploads |
+| Sanitization | DOMPurify | 3.3.1 | XSS sanitization |
+| 2FA | otpauth | 9.4.1 | TOTP authentication |
+| QR Codes | qrcode | 1.5.4 | QR code generation |
 
 Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
@@ -43,7 +48,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | Language | TypeScript | 5.8.3 (primary), 5.9.3 (smandapbun) | Typed components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
 | Supabase JS | @supabase/supabase-js | 2.93.3 | Public API client |
-| Node.js | Node.js | >=20.0.0 | Runtime requirement |
+| Node.js | Node.js | >=22.12.0 | Runtime (OpenClaw requires v22+) |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
@@ -82,3 +87,12 @@ Tenant-specific public portals may pin different TypeScript minor versions (for 
 
 - `docs/architecture/standards.md`
 - `docs/modules/VERSIONING.md`
+
+### AI Gateway (OpenClaw)
+
+| Category | Technology | Version | Purpose |
+| --- | --- | --- | --- |
+| CLI | OpenClaw | 2026.2.21-2 | AI gateway and multi-agent routing |
+| Runtime | Node.js | >=22.12.0 | OpenClaw requirement |
+| Config | openclaw.json | — | Per-tenant agent isolation |
+| Auth | Token + Rate Limit | — | 10 attempts/60s, 5min lockout |

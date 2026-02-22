@@ -1,0 +1,78 @@
+{
+  "gateway": {
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "rateLimit": {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000,
+        "exemptLoopback": true
+      }
+    },
+    "trustedProxies": [
+      "127.0.0.1"
+    ],
+    "tools": {
+      "deny": [
+        "browser"
+      ]
+    }
+  },
+  "agents": {
+    "list": [
+      {
+        "id": "tenant_a",
+        "default": true,
+        "workspace": "~/.openclaw/workspace-tenant-a",
+        "model": {
+          "primary": "anthropic/claude-3-5-sonnet"
+        },
+        "tools": {
+          "profile": "coding"
+        }
+      },
+      {
+        "id": "tenant_b",
+        "workspace": "~/.openclaw/workspace-tenant-b",
+        "model": {
+          "primary": "anthropic/claude-3-5-sonnet"
+        },
+        "tools": {
+          "profile": "messaging",
+          "allow": [
+            "slack",
+            "discord"
+          ]
+        }
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "agentId": "tenant_a",
+      "match": {
+        "channel": "whatsapp",
+        "accountId": "tenant_a_account"
+      }
+    },
+    {
+      "agentId": "tenant_a",
+      "match": {
+        "channel": "telegram"
+      }
+    },
+    {
+      "agentId": "tenant_b",
+      "match": {
+        "channel": "slack"
+      }
+    },
+    {
+      "agentId": "tenant_b",
+      "match": {
+        "channel": "discord"
+      }
+    }
+  ]
+}

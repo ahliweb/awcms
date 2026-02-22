@@ -61,6 +61,7 @@
     "react-helmet-async": "^2.0.5",
     "react-hook-form": "^7.68.0",
     "react-i18next": "^16.5.0",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.10.1",
     "recharts": "^3.5.1",
     "tailwind-merge": "^3.4.0",
@@ -91,9 +92,10 @@
     "vitest": "^4.0.16"
   },
   "overrides": {
-    "lodash": "^4.17.23"
+    "lodash": "^4.17.23",
+    "minimatch": ">=10.2.1"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.12.0"
   }
 }
