@@ -2,7 +2,7 @@
   "name": "awcms",
   "description": "AWCMS - Ahliweb Content Management System",
   "type": "module",
-  "version": "2.31.0",
+  "version": "2.32.0",
   "private": true,
   "scripts": {
     "deploy:functions": "npx supabase functions deploy",

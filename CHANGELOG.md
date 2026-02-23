@@ -5,6 +5,8 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.32.0] "OpenClaw Gateway" - 2026-02-23
+
 ### Security
 
 - **Dependency Audit**: Fixed 17 npm vulnerabilities (minimatch ReDoS + ajv) across `awcms` and `awcms-public/primary` via overrides and `npm audit fix`.
@@ -15,27 +17,23 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - **OpenClaw Integration**: Installed OpenClaw CLI v2026.2.21-2 with multi-tenant AI gateway config (per-tenant agent isolation via `~/.openclaw/openclaw.json`).
 - **Node.js Upgrade**: Upgraded from v20.20.0 to v22.22.0 via nvm (required by OpenClaw >=22.12.0).
 - **Missing Dependency**: Added `react-leaflet` to `awcms` to fix pre-existing build failure.
-
-### Changed
-
-- **Documentation**: Updated `SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, `DOCS_INDEX.md`, `tech-stack.md`, `documentation-audit-plan.md`, and `SECURITY.md` to reflect OpenClaw integration, Node 22 requirement, and new dependencies.
-
-### Added
-
 - **Admin Routing**: Introduced sub-slug routing for tabbed modules, trash views, approvals, and editor screens to support refresh-safe deep links.
 - **Route Signing**: Added signed route params and helper hooks to prevent guessable edit/detail URLs (with legacy redirects).
 - **Documentation**: Added local admin bootstrap guidance and a focused public portal README for the primary template.
 
 ### Changed
 
+- **Node.js Constraints**: Updated engine constraints in all `package.json` files to `>=22.12.0` to match openclaw dependency documentation.
+- **Documentation Summary**: Completed comprehensive documentation audit across 85+ files. Updated `SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, `DOCS_INDEX.md`, `tech-stack.md`, `documentation-audit-plan.md`, and `SECURITY.md` to reflect OpenClaw integration, Node 22 requirement, and new dependencies.
 - **Sidebar Access**: Platform admin/full-access roles now see all visible sidebar items regardless of permission filters.
 - **Permission Matrix UI**: Added resource counts, sticky headers, and scrollable layout improvements for large matrices.
 - **Dashboard UI**: Standardized widget headers and card styling, including plugin widgets.
-- **Documentation**: Aligned tech stack versions, updated Supabase client examples, and refreshed routing/Puck/TipTap guidance to match Context7 best practices.
-- **Documentation**: Trimmed the public portal root README to point to canonical guides.
+- **Documentation Updates**: Aligned tech stack versions, updated Supabase client examples, and refreshed routing/Puck/TipTap guidance to match Context7 best practices.
+- **Public Portal Docs**: Trimmed the public portal root README to point to canonical guides.
 
 ### Fixed
 
+- **Linting**: Fixed line-length lint warning in `AGENTS.md` to pass markdownlint checks.
 - **Legacy Links**: Redirected query-string links (blogs review queue and visual editor) to the new sub-slug routes.
 
 ## [2.31.0] "Persona" - 2026-02-16

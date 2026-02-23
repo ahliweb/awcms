@@ -10,10 +10,12 @@ const useSecureRouteParam = (encodedValue, scope) => {
     let active = true;
 
     if (!encodedValue) {
-      setValue(null);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoading(false);
-      setIsLegacy(false);
+      queueMicrotask(() => {
+        if (!active) return;
+        setValue(null);
+        setLoading(false);
+        setIsLegacy(false);
+      });
       return () => {
         active = false;
       };

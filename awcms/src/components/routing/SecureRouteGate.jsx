@@ -34,8 +34,11 @@ const SecureRouteGate = ({
     let active = true;
 
     if (!secureParams.length) {
-      setDecodedParams(null);
-      setLoading(false);
+      queueMicrotask(() => {
+        if (!active) return;
+        setDecodedParams(null);
+        setLoading(false);
+      });
       return () => {
         active = false;
       };
