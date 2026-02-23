@@ -40,3 +40,4 @@ supabase/functions/*/deno.lock
 supabase_status.txt
 supabase_status_json.txt
 **/supabase/migrations/current_*.sql
+awcms.wiki/
