@@ -2,7 +2,13 @@
 
 ## Overview
 
-This document serves as the authoritative registry of all resources within AWCMS. It maps technical resource keys to their UI representation, DB tables, and functional components. The registry is backed by the `resources_registry` table with ABAC-aligned permission prefixes. UI schemas live in `ui_configs`, and editor/component settings live in `component_registry`.
+This document serves as the authoritative registry of all resources within AWCMS.
+It maps technical resource keys to their UI representation, DB tables, and functional components.
+The registry is backed by the `resources_registry` table with ABAC-aligned permission prefixes.
+UI schemas live in `ui_configs`, and editor/component settings live in `component_registry`.
+
+> [!TIP]
+> For instructions on adding new custom schemas to this registry programmatically, see the [Programmatic Content Types](architecture/schema-definition.md) guide.
 
 ## Resource Registry (Draft Audit)
 
