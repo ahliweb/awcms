@@ -254,7 +254,12 @@ export async function getBlogBySlug(
 export async function getBlogs(
   supabase: SupabaseClient,
   tenantId?: string | null,
-  options: { limit?: number; offset?: number; categorySlug?: string; locale?: string } = {},
+  options: {
+    limit?: number;
+    offset?: number;
+    categorySlug?: string;
+    locale?: string;
+  } = {},
 ): Promise<{ blogs: BlogData[]; total: number }> {
   const { limit = 10, offset = 0, categorySlug, locale } = options;
 

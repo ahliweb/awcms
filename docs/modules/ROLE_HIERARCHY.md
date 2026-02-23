@@ -61,7 +61,7 @@ The following matrix represents the *default* configuration for new tenants.
 | Editor | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Author | ✅ | ✅ | Own Only* | ❌ | ❌ | ❌ | ❌ |
 
-*Own Only = `tenant_id` + `created_by` checks (enforced in RLS and UI).* 
+*Own Only = `tenant_id` + `created_by` checks (enforced in RLS and UI).*
 
 ### System Operations
 

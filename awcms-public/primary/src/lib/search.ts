@@ -106,7 +106,10 @@ async function searchPages(
     title: page.title,
     slug: page.slug,
     excerpt: page.excerpt || undefined,
-    url: locale && locale !== 'en' ? `/${locale}/p/${page.slug}` : `/p/${page.slug}`,
+    url:
+      locale && locale !== "en"
+        ? `/${locale}/p/${page.slug}`
+        : `/p/${page.slug}`,
     score: calculateScore(page.title, searchTerm),
   }));
 }
@@ -149,7 +152,10 @@ async function searchBlogs(
     title: blog.title,
     slug: blog.slug,
     excerpt: blog.excerpt || undefined,
-    url: locale && locale !== 'en' ? `/${locale}/blogs/${blog.slug}` : `/blogs/${blog.slug}`,
+    url:
+      locale && locale !== "en"
+        ? `/${locale}/blogs/${blog.slug}`
+        : `/blogs/${blog.slug}`,
     score: calculateScore(blog.title, searchTerm),
   }));
 }

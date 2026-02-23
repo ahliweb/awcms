@@ -169,15 +169,75 @@ If the remote config returns a higher `firmware_version`, the device triggers it
 
 ---
 
-## 8. Release Checklist
+## 8. Dependency Management Across Clients
+
+Since AWCMS clients function independently, managing shared assumptions (like Supabase API schemas or Edge Function payloads) requires strict coordination to avoid breaking changes.
+
+### Schema Versioning Strategy
+
+- **Additive Database Changes:** Never rename or delete columns used by existing clients. Always add new columns, make them nullable (or provide defaults), and write data to both old and new columns until all clients are updated.
+- **API Versioning (Edge Functions):** If a breaking change to an Edge Function cannot be avoided, create a new endpoint (e.g., `/functions/v1/device-config-v2`) rather than overwriting the existing one.
+- **Client Fallbacks:** Mobile and IoT clients must gracefully handle missing new fields or unrecognized enum values from the API without crashing.
+
+### Shared Node Packages
+
+For Node.js clients (`awcms` and `awcms-public/primary`), shared dependencies (e.g., `ajv`, `react-compiler`) are managed at the monorepo root via npm workspaces to ensure identical version resolution and prevent bundle duplication.
+
+---
+
+## 9. Deployment Orchestration & Coordination
+
+Deployments must be sequenced carefully when a feature spans the backend schema, Admin Panel, and end-user clients.
+
+### The Staged Rollout Sequence
+
+When a major feature releases:
+
+1. **Database & Edge Functions (Backend):** Deploy via `supabase db push` and `supabase functions deploy`. These must be non-breaking additive changes.
+2. **Admin Panel (`awcms`):** Deploy to Cloudflare Pages. Editors can begin creating data using the new schema.
+3. **Public Portal (`awcms-public`):** Deploy to Cloudflare Pages to render the new content for web users.
+4. **Mobile App (`awcms-mobile`):** Submit to App Stores. (Approval takes 1-3 days).
+5. **IoT Firmware (`awcms-esp32`):** Flag the new firmware version in the Admin config to trigger automatic OTA updates on the next polling cycle.
+
+*Because the backend changes are additive, older mobile and IoT clients continue to function perfectly during the multi-day rollout window.*
+
+---
+
+## 10. Rollback & Recovery Strategies
+
+Production incidents require immediate, client-specific rollback strategies:
+
+### Web Clients (Admin & Public Portal)
+
+- **Cloudflare Pages Instant Rollback:** In the Cloudflare Dashboard, go to Deployments, locate the last known good deployment, and click **Restore**. This reverts the live URLs to the previous build instantly without waiting for CI.
+- **Git Reversion:** Locally execute `git revert HEAD`, commit, and push to `main` to align the Git history with the live site.
+
+### Supabase Backend
+
+- **Edge Functions:** Re-deploy the previous commit via `supabase functions deploy`.
+- **Database Schema:** Direct rollback of schema migrations is risky. Prefer "roll-forward" fixes by creating a new migration (`supabase migration new fix_bug`) that reverts the problematic objects, then push.
+
+### Mobile App
+
+- **OTA Patch:** Revert the breaking commit, bump the `PATCH` version, rebuild, and push the OTA update manifest.
+- **App Store Rejection:** Mobile apps cannot be instantly rolled back on user devices. If an app release ships with a critical bug, immediately release a hotfix to the App Store and use an in-app "Force Update Required" wall (controlled via a Supabase Edge Function) to block broken clients.
+
+### IoT Devices
+
+- **Config Reversion:** Revert the offending `firmware_version` string in the AWCMS Device Config dashboard back to the previous stable version. Devices will downgrade on the next check-in.
+
+---
+
+## 11. Release Checklist
 
 ```markdown
 - [ ] Ensure all feature branches merged to `develop`
+- [ ] Ensure backend migrations (additive only) are applied to staging/prod
 - [ ] Run `npm run lint` and `npm run test` for all changed workspaces
 - [ ] Bump version in relevant `package.json` / `pubspec.yaml`
 - [ ] Update `CHANGELOG.md` with release notes
 - [ ] Merge `develop` → `main` via PR
 - [ ] Tag release: `git tag v2.33.0 && git push --tags`
-- [ ] GitHub Actions deploys to production automatically
-- [ ] Verify deployment in Cloudflare Pages dashboard
+- [ ] GitHub Actions deploys web portals automatically
+- [ ] Monitor error logs during deployment sequence
 ```

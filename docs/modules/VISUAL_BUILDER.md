@@ -37,7 +37,7 @@ Explain the Visual Page Builder architecture and integration with public renderi
 
 | Route | Purpose | Notes |
 | --- | --- | --- |
-| `/cmspanel/visual-editor/:mode/:id` | Edit a visual layout | `:mode` is `template`, `part`, `page`, or `blog`. `:id` uses signed route params (`{uuid}.{signature}`). Legacy `?templateId`/`?partId` links redirect here. |
+| `/cmspanel/visual-editor/:mode/:id` | Edit a visual layout | `:mode` specifies the type of layout: `template`, `part`, `page`, or `blog`. `:id` uses signed route parameters (`{uuid}.{signature}`). Legacy links using `?templateId` or `?partId` will redirect here. |
 
 Modes:
 
@@ -68,7 +68,13 @@ registerTemplateBlock({
 
 ### Context7 Guidance (Puck)
 
-Puck components should define explicit fields and render functions in a config object. Import `@puckeditor/core/puck.css` in the editor UI, use `<Puck>` for editing, and render public output with `<Render config={config} data={data} />` (wrapped by the Astro `PuckRenderer` allow-list). Avoid rendering unknown blocks on the public portal.
+Puck components should define explicit fields and render functions in a config object.
+Note the following patterns:
+
+- Import `@puckeditor/core/puck.css` in the editor UI.
+- Use `<Puck>` for editing and `<Render config={config} data={data} />` for public output.
+- The Astro `PuckRenderer` wraps `<Render>` with an allow-list component registry.
+- Avoid rendering unknown blocks on the public portal.
 
 ## Permissions and Access
 

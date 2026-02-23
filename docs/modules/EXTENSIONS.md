@@ -109,7 +109,7 @@ export const deactivate = async (supabase, tenantId) => { /* cleanup */ };
 
 Source packages live under `awcms-ext/` and are served from the external extensions path configured by `VITE_EXTERNAL_EXTENSIONS_PATH` (default `/ext`). The loader resolves:
 
-```
+```text
 {basePath}/awcms-ext-{vendor}-{slug}/{entry}
 ```
 

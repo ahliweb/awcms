@@ -133,6 +133,7 @@ const RoleEditor = () => {
   // roleId is decoded UUID or null
 };
 ```
+
 - Analytics events include IP address, page path, referrer, user agent, and geo headers; treat these as personal data and apply retention policies.
 - Admin-only profile metadata is encrypted at rest in `user_profile_admin` via pgcrypto and accessed only through RPC.
 

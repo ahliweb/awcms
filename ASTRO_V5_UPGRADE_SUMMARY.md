@@ -17,11 +17,13 @@ Context7 MCP and the npm registry confirm the latest stable Astro release is **v
 ### 1. Package.json Updates
 
 #### Primary Project (`awcms-public/primary`)
+
 - ✅ Updated `astro`: `^5.12.9` → `^5.17.1`
 - ✅ Confirmed `@astrojs/cloudflare`: `^12.6.12` (latest available)
 - ✅ Set `engines.node`: `>=20.0.0`
 
 #### Smandapbun Project (`awcms-public/smandapbun`)
+
 - ✅ Updated `astro`: `^5.12.9` → `^5.17.1`
 - ✅ Confirmed `@astrojs/cloudflare`: `^12.6.12` (latest available)
 - ✅ Set `engines.node`: `>=20.0.0`
@@ -29,17 +31,21 @@ Context7 MCP and the npm registry confirm the latest stable Astro release is **v
 ### 2. Documentation Updates
 
 #### SYSTEM_MODEL.md
+
 - ✅ Updated Astro version: 5.12.9 → 5.17.1
 - ✅ Updated Node.js requirement: >=20.0.0
 
 #### AGENTS.md
+
 - ✅ Updated Astro version in tech stack table: 5.12.9 → 5.17.1
 
 #### README.md
+
 - ✅ Updated Astro version: 5.12.9 → 5.17.1
 - ✅ Updated Node.js requirement note
 
 #### docs/architecture/tech-stack.md
+
 - ✅ Updated Astro version: 5.12.9 → 5.17.1
 - ✅ Updated Node.js requirement row to >=20.0.0
 
@@ -48,12 +54,14 @@ Context7 MCP and the npm registry confirm the latest stable Astro release is **v
 ## Next Steps
 
 1. Install dependencies in both projects:
+
    ```bash
    cd awcms-public/primary && npm install
    cd awcms-public/smandapbun && npm install
    ```
 
 2. Run build to verify:
+
    ```bash
    npm run build
    ```
@@ -64,7 +72,7 @@ Context7 MCP and the npm registry confirm the latest stable Astro release is **v
 
 - **Latest stable Astro**: v5.17.1 (npm)
 - **Upgrade command**: `npx @astrojs/upgrade`
-- **Upgrade guide**: https://docs.astro.build/en/upgrade-astro/
+- **Upgrade guide**: <https://docs.astro.build/en/upgrade-astro/>
 
 ---
 

@@ -89,10 +89,12 @@ const { data } = await supabase
 ## Security and Compliance Notes
 
 ### Row Level Security (RLS)
+
 - **Strict Enforcement**: RLS is mandatory for all tables.
 - **Bypass Prohibition**: Client-side code must NEVER bypass RLS. Elevation to Service Role is restricted to specific Edge Functions.
 
 ### Data Lifecycle (Soft Delete)
+
 - **Mechanism**: All tenant-scoped tables must use the "Soft Delete" pattern.
 - **Schema Requirement**: Tables must include a `deleted_at` (TIMESTAMPTZ, nullable) column.
 - **Operations**:
@@ -101,11 +103,11 @@ const { data } = await supabase
 - **Foreign Keys**: Must use `ON DELETE RESTRICT` or `SET NULL`. `ON DELETE CASCADE` is forbidden for business data to preserve audit trails.
 
 ### Query Requirements
+
 - **Tenant Filter**: All queries must include `.eq('tenant_id', tenantId)` even if RLS is enabled, to ensure query planner optimization and leak prevention.
 - **Cross-Tenant Access**: Allowed only for resources marked as shared in the registry.
 
 ## Operational Concerns
-
 
 - Tenant domains are configured in the `tenants` table (host/subdomain fields).
 - New tenant creation seeds default roles, staff hierarchy, and resource rules via SQL/RPC.

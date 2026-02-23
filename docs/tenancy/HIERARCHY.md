@@ -117,7 +117,7 @@ To support **legal/government boundaries**, the system implements the standard I
 | **Kecamatan** | District | `XX.XX.XX` | Cicendo (32.73.06) |
 | **Kelurahan/Desa** | Village | `XX.XX.XX.XXII` | Arjuna (32.73.06.1004) |
 
-### User Assignment
+### Administrative User Assignment
 
 - **Administrative Assignment**: `users.administrative_region_id` maps to the legal hierarchy.
 
