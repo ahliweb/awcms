@@ -501,15 +501,86 @@ CREATE OR REPLACE FUNCTION "public"."create_tenant_with_defaults"("p_name" "text
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
+DECLARE
+    v_tenant_id uuid;
 BEGIN
-  RETURN public.create_tenant_with_defaults(
-    p_name,
-    p_slug,
-    p_domain,
-    p_tier,
-    NULL,
-    'auto'
-  );
+    INSERT INTO public.tenants (name, slug, domain, subscription_tier, status)
+    VALUES (p_name, p_slug, p_domain, p_tier, 'active')
+    RETURNING id INTO v_tenant_id;
+
+    -- 1. Admin (Tenant Admin)
+    INSERT INTO public.roles (name, description, tenant_id, is_system, scope, is_tenant_admin)
+    VALUES ('admin', 'Tenant Administrator', v_tenant_id, true, 'tenant', true);
+
+    -- 2. Editor
+    INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
+    VALUES ('editor', 'Content Editor', v_tenant_id, true, 'tenant');
+
+    -- 3. Author
+    INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
+    VALUES ('author', 'Content Author', v_tenant_id, true, 'tenant');
+
+    -- 4. Auditor (Read-Only) - NEW
+    INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
+    VALUES ('auditor', 'Auditor (Read-Only)', v_tenant_id, true, 'tenant');
+
+    -- 5. Member - NEW
+    INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
+    VALUES ('member', 'Standard Member', v_tenant_id, true, 'tenant');
+
+    -- 6. Subscriber - NEW
+    INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
+    VALUES ('subscriber', 'Premium Subscriber', v_tenant_id, true, 'tenant');
+
+    -- 7. Public - NEW
+    INSERT INTO public.roles (name, description, tenant_id, is_system, scope, is_public)
+    VALUES ('public', 'Public Visitor', v_tenant_id, true, 'tenant', true);
+
+    -- 8. No Access - NEW
+    INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
+    VALUES ('no_access', 'Suspended / No Access', v_tenant_id, true, 'tenant');
+
+    -- Seed Staff Roles
+    PERFORM public.seed_staff_roles(v_tenant_id);
+
+    -- Default Pages
+    INSERT INTO public.pages (tenant_id, title, slug, content, status, is_active, page_type, created_by)
+    VALUES (
+        v_tenant_id,
+        'Home',
+        'home',
+        '{"root":{"props":{"title":"Home"},"children":[]}}',
+        'published',
+        true,
+        'homepage',
+        (SELECT auth.uid())
+    );
+
+    INSERT INTO public.pages (tenant_id, title, slug, content, status, is_active, page_type, created_by)
+    VALUES (
+        v_tenant_id,
+        'About Us',
+        'about',
+        '{"root":{"props":{"title":"About Us"},"children":[]}}',
+        'published',
+        true,
+        'regular',
+        (SELECT auth.uid())
+    );
+
+    -- Default Menus
+    INSERT INTO public.menus (tenant_id, label, url, group_label, is_active, is_public, "order")
+    VALUES (v_tenant_id, 'Home', '/', 'header', true, true, 1);
+
+    INSERT INTO public.menus (tenant_id, label, url, group_label, is_active, is_public, "order")
+    VALUES (v_tenant_id, 'About', '/about', 'header', true, true, 2);
+
+    RETURN jsonb_build_object(
+        'tenant_id', v_tenant_id,
+        'message', 'Tenant created with default data (Standard Roles applied).'
+    );
+EXCEPTION WHEN OTHERS THEN
+    RAISE;
 END;
 $$;
 
@@ -592,6 +663,23 @@ $$;
 ALTER FUNCTION "public"."create_tenant_with_defaults"("p_name" "text", "p_slug" "text", "p_domain" "text", "p_tier" "text", "p_parent_tenant_id" "uuid", "p_role_inheritance_mode" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."create_user_profile"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions', 'pg_temp'
+    AS $$
+BEGIN
+  INSERT INTO public.user_profiles (user_id, tenant_id)
+  VALUES (NEW.id, NEW.tenant_id)
+  ON CONFLICT (user_id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."create_user_profile"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."current_tenant_id"() RETURNS "uuid"
     LANGUAGE "plpgsql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -621,6 +709,63 @@ $_$;
 
 
 ALTER FUNCTION "public"."current_tenant_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."decrypt_user_profile_admin_field"("p_value" "bytea", "p_description" "text", "p_salt" "text") RETURNS "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions', 'pg_temp'
+    AS $$
+BEGIN
+  IF p_value IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN extensions.pgp_sym_decrypt(
+    p_value,
+    public.derive_user_profile_passphrase(p_description, p_salt)
+  );
+END;
+$$;
+
+
+ALTER FUNCTION "public"."decrypt_user_profile_admin_field"("p_value" "bytea", "p_description" "text", "p_salt" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."derive_user_profile_passphrase"("p_description" "text", "p_salt" "text") RETURNS "text"
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  SELECT encode(
+    extensions.digest(
+      coalesce(p_description, '') || ':' || coalesce(p_salt, ''),
+      'sha256'
+    ),
+    'hex'
+  );
+$$;
+
+
+ALTER FUNCTION "public"."derive_user_profile_passphrase"("p_description" "text", "p_salt" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."encrypt_user_profile_admin_field"("p_value" "text", "p_description" "text", "p_salt" "text") RETURNS "bytea"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions', 'pg_temp'
+    AS $$
+BEGIN
+  IF p_value IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN extensions.pgp_sym_encrypt(
+    p_value,
+    public.derive_user_profile_passphrase(p_description, p_salt)
+  );
+END;
+$$;
+
+
+ALTER FUNCTION "public"."encrypt_user_profile_admin_field"("p_value" "text", "p_description" "text", "p_salt" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."enforce_storage_limit"() RETURNS "trigger"
@@ -1111,6 +1256,58 @@ $$;
 ALTER FUNCTION "public"."get_tenant_id_by_host"("lookup_host" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_user_profile_admin_fields"("p_user_id" "uuid") RETURNS TABLE("admin_notes" "text", "admin_flags" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions', 'pg_temp'
+    AS $$
+DECLARE
+  v_target_tenant uuid;
+BEGIN
+  SELECT tenant_id
+  INTO v_target_tenant
+  FROM public.users
+  WHERE id = p_user_id;
+
+  IF v_target_tenant IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF NOT (
+    public.is_platform_admin()
+    OR public.tenant_can_access_resource(v_target_tenant, 'users', 'write')
+    OR (
+      v_target_tenant = public.current_tenant_id()
+      AND (public.is_admin_or_above() OR public.has_permission('tenant.user.update'))
+    )
+  ) THEN
+    RAISE EXCEPTION 'Not authorized to access admin profile fields';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    public.decrypt_user_profile_admin_field(
+      admin.admin_notes_encrypted,
+      profile.description,
+      admin.admin_salt
+    ) AS admin_notes,
+    public.decrypt_user_profile_admin_field(
+      admin.admin_flags_encrypted,
+      profile.description,
+      admin.admin_salt
+    ) AS admin_flags
+  FROM public.user_profile_admin admin
+  JOIN public.user_profiles profile
+    ON profile.user_id = admin.user_id
+  WHERE admin.user_id = p_user_id
+    AND admin.deleted_at IS NULL
+    AND profile.deleted_at IS NULL;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_user_profile_admin_fields"("p_user_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_user_role_name"("user_uuid" "uuid") RETURNS "text"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1338,6 +1535,19 @@ $$;
 
 
 ALTER FUNCTION "public"."handle_storage_sync"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."handle_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."handle_updated_at"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."has_permission"("permission_name" "text") RETURNS boolean
@@ -1746,6 +1956,63 @@ $$;
 ALTER FUNCTION "public"."refresh_tenant_subtree_trigger"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."rekey_user_profile_admin_fields"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions', 'pg_temp'
+    AS $$
+DECLARE
+  v_admin public.user_profile_admin%ROWTYPE;
+  v_notes text;
+  v_flags text;
+BEGIN
+  IF NEW.description IS NOT DISTINCT FROM OLD.description THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT *
+  INTO v_admin
+  FROM public.user_profile_admin
+  WHERE user_id = NEW.user_id
+    AND deleted_at IS NULL;
+
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+
+  v_notes := public.decrypt_user_profile_admin_field(
+    v_admin.admin_notes_encrypted,
+    OLD.description,
+    v_admin.admin_salt
+  );
+
+  v_flags := public.decrypt_user_profile_admin_field(
+    v_admin.admin_flags_encrypted,
+    OLD.description,
+    v_admin.admin_salt
+  );
+
+  UPDATE public.user_profile_admin
+  SET admin_notes_encrypted = public.encrypt_user_profile_admin_field(
+        v_notes,
+        NEW.description,
+        v_admin.admin_salt
+      ),
+      admin_flags_encrypted = public.encrypt_user_profile_admin_field(
+        v_flags,
+        NEW.description,
+        v_admin.admin_salt
+      ),
+      updated_at = now()
+  WHERE id = v_admin.id;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."rekey_user_profile_admin_fields"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."remove_duplicates"("table_name" "text", "column_name" "text") RETURNS "void"
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public', 'pg_catalog'
@@ -2059,6 +2326,75 @@ $$;
 ALTER FUNCTION "public"."set_tenant_id"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."set_user_profile_admin_fields"("p_user_id" "uuid", "p_admin_notes" "text", "p_admin_flags" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions', 'pg_temp'
+    AS $$
+DECLARE
+  v_target_tenant uuid;
+  v_description text;
+  v_admin_salt text;
+BEGIN
+  SELECT tenant_id
+  INTO v_target_tenant
+  FROM public.users
+  WHERE id = p_user_id;
+
+  IF v_target_tenant IS NULL THEN
+    RAISE EXCEPTION 'User not found';
+  END IF;
+
+  IF NOT (
+    public.is_platform_admin()
+    OR public.tenant_can_access_resource(v_target_tenant, 'users', 'write')
+    OR (
+      v_target_tenant = public.current_tenant_id()
+      AND (public.is_admin_or_above() OR public.has_permission('tenant.user.update'))
+    )
+  ) THEN
+    RAISE EXCEPTION 'Not authorized to update admin profile fields';
+  END IF;
+
+  INSERT INTO public.user_profiles (user_id, tenant_id)
+  VALUES (p_user_id, v_target_tenant)
+  ON CONFLICT (user_id) DO NOTHING;
+
+  INSERT INTO public.user_profile_admin (user_id, tenant_id)
+  VALUES (p_user_id, v_target_tenant)
+  ON CONFLICT (user_id) DO NOTHING;
+
+  SELECT description
+  INTO v_description
+  FROM public.user_profiles
+  WHERE user_id = p_user_id
+    AND deleted_at IS NULL;
+
+  SELECT admin_salt
+  INTO v_admin_salt
+  FROM public.user_profile_admin
+  WHERE user_id = p_user_id
+    AND deleted_at IS NULL;
+
+  UPDATE public.user_profile_admin
+  SET admin_notes_encrypted = public.encrypt_user_profile_admin_field(
+        p_admin_notes,
+        v_description,
+        v_admin_salt
+      ),
+      admin_flags_encrypted = public.encrypt_user_profile_admin_field(
+        p_admin_flags,
+        v_description,
+        v_admin_salt
+      ),
+      updated_at = now()
+  WHERE user_id = p_user_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."set_user_profile_admin_fields"("p_user_id" "uuid", "p_admin_notes" "text", "p_admin_flags" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."sync_linked_tenant_roles"("p_tenant_id" "uuid") RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -2108,19 +2444,19 @@ DECLARE
   v_slug TEXT;
   target_table regclass;
 BEGIN
-  -- Restrict tag usage to articles only
-  IF p_resource_type != 'articles' THEN
+  -- Restrict tag usage to blogs only
+  IF p_resource_type != 'blogs' AND p_resource_type != 'articles' THEN
     RETURN;
   END IF;
 
-  target_table := to_regclass('public.article_tags');
+  target_table := to_regclass('public.blog_tags');
   
   IF target_table IS NULL THEN
     RETURN;
   END IF;
 
   -- Delete existing tags for this resource
-  DELETE FROM "public"."article_tags" WHERE article_id = p_resource_id;
+  DELETE FROM "public"."blog_tags" WHERE blog_id = p_resource_id;
 
   IF p_tags IS NOT NULL THEN
     FOREACH v_tag_name IN ARRAY p_tags
@@ -2134,7 +2470,7 @@ BEGIN
       RETURNING id INTO v_tag_id;
 
       -- Link tag to article
-      INSERT INTO "public"."article_tags" (article_id, tag_id) VALUES (p_resource_id, v_tag_id);
+      INSERT INTO "public"."blog_tags" (blog_id, tag_id) VALUES (p_resource_id, v_tag_id);
     END LOOP;
   END IF;
 END;
@@ -2707,11 +3043,31 @@ CREATE TABLE IF NOT EXISTS "public"."admin_menus" (
     "updated_at" timestamp with time zone DEFAULT "now"(),
     "group_label" "text" DEFAULT 'General'::"text",
     "group_order" integer DEFAULT 0,
-    "resource_id" "uuid"
+    "resource_id" "uuid",
+    "tenant_id" "uuid"
 );
 
 
 ALTER TABLE "public"."admin_menus" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."administrative_regions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "code" "text" NOT NULL,
+    "name" "text" NOT NULL,
+    "level" "text" NOT NULL,
+    "parent_id" "uuid",
+    "postal_code" "text",
+    "latitude" numeric,
+    "longitude" numeric,
+    "is_active" boolean DEFAULT true,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "administrative_regions_level_check" CHECK (("level" = ANY (ARRAY['provinsi'::"text", 'kabupaten'::"text", 'kota'::"text", 'kecamatan'::"text", 'kelurahan'::"text", 'desa'::"text"])))
+);
+
+
+ALTER TABLE "public"."administrative_regions" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."analytics_daily" (
@@ -2922,7 +3278,8 @@ CREATE TABLE IF NOT EXISTS "public"."blogs" (
     "tiptap_doc_jsonb" "jsonb" DEFAULT '{}'::"jsonb",
     "region_id" "uuid",
     "current_assignee_id" "uuid",
-    "sync_source_id" "uuid"
+    "sync_source_id" "uuid",
+    "locale" "text" DEFAULT 'en'::"text" NOT NULL
 );
 
 
@@ -3558,6 +3915,7 @@ CREATE TABLE IF NOT EXISTS "public"."pages" (
     "workflow_state" "text" DEFAULT 'draft'::"text",
     "current_assignee_id" "uuid",
     "sync_source_id" "uuid",
+    "locale" "text" DEFAULT 'en'::"text" NOT NULL,
     CONSTRAINT "pages_editor_type_check" CHECK (("editor_type" = ANY (ARRAY['richtext'::"text", 'visual'::"text"])))
 );
 
@@ -4428,6 +4786,48 @@ CREATE TABLE IF NOT EXISTS "public"."ui_configs" (
 ALTER TABLE "public"."ui_configs" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."user_profile_admin" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "tenant_id" "uuid",
+    "admin_notes_encrypted" "bytea",
+    "admin_flags_encrypted" "bytea",
+    "admin_salt" "text" DEFAULT "encode"("extensions"."gen_random_bytes"(16), 'hex'::"text") NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "deleted_at" timestamp with time zone,
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."user_profile_admin" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."user_profiles" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "tenant_id" "uuid",
+    "description" "text",
+    "job_title" "text",
+    "department" "text",
+    "phone" "text",
+    "alternate_email" "text",
+    "location" "text",
+    "timezone" "text",
+    "website_url" "text",
+    "linkedin_url" "text",
+    "twitter_url" "text",
+    "github_url" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "deleted_at" timestamp with time zone,
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."user_profiles" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."users" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "email" "text" NOT NULL,
@@ -4447,6 +4847,7 @@ CREATE TABLE IF NOT EXISTS "public"."users" (
     "super_admin_approved_by" "uuid",
     "rejection_reason" "text",
     "region_id" "uuid",
+    "administrative_region_id" "uuid",
     CONSTRAINT "users_approval_status_check" CHECK (("approval_status" = ANY (ARRAY['pending_admin'::"text", 'pending_super_admin'::"text", 'approved'::"text", 'rejected'::"text"])))
 );
 
@@ -4522,6 +4923,16 @@ ALTER TABLE ONLY "public"."admin_menus"
 
 
 
+ALTER TABLE ONLY "public"."administrative_regions"
+    ADD CONSTRAINT "administrative_regions_code_key" UNIQUE ("code");
+
+
+
+ALTER TABLE ONLY "public"."administrative_regions"
+    ADD CONSTRAINT "administrative_regions_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."analytics_daily"
     ADD CONSTRAINT "analytics_daily_pkey" PRIMARY KEY ("id");
 
@@ -4574,6 +4985,11 @@ ALTER TABLE ONLY "public"."backup_schedules"
 
 ALTER TABLE ONLY "public"."backups"
     ADD CONSTRAINT "backups_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."blogs"
+    ADD CONSTRAINT "blogs_slug_tenant_locale_key" UNIQUE ("slug", "tenant_id", "locale");
 
 
 
@@ -4682,6 +5098,11 @@ ALTER TABLE ONLY "public"."extensions"
 
 
 
+ALTER TABLE ONLY "public"."extensions"
+    ADD CONSTRAINT "extensions_tenant_slug_unique" UNIQUE ("tenant_id", "slug");
+
+
+
 ALTER TABLE ONLY "public"."file_permissions"
     ADD CONSTRAINT "file_permissions_pkey" PRIMARY KEY ("id");
 
@@ -4774,6 +5195,11 @@ ALTER TABLE ONLY "public"."page_files"
 
 ALTER TABLE ONLY "public"."pages"
     ADD CONSTRAINT "pages_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."pages"
+    ADD CONSTRAINT "pages_slug_tenant_locale_key" UNIQUE ("slug", "tenant_id", "locale");
 
 
 
@@ -5067,6 +5493,26 @@ ALTER TABLE ONLY "public"."two_factor_auth"
 
 
 
+ALTER TABLE ONLY "public"."user_profile_admin"
+    ADD CONSTRAINT "user_profile_admin_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."user_profile_admin"
+    ADD CONSTRAINT "user_profile_admin_user_id_key" UNIQUE ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."user_profiles"
+    ADD CONSTRAINT "user_profiles_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."user_profiles"
+    ADD CONSTRAINT "user_profiles_user_id_key" UNIQUE ("user_id");
+
+
+
 ALTER TABLE ONLY "public"."users"
     ADD CONSTRAINT "users_pkey" PRIMARY KEY ("id");
 
@@ -5126,11 +5572,35 @@ CREATE INDEX "idx_admin_menus_resource_id" ON "public"."admin_menus" USING "btre
 
 
 
+CREATE INDEX "idx_admin_menus_tenant_id" ON "public"."admin_menus" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_admin_regions_code" ON "public"."administrative_regions" USING "btree" ("code");
+
+
+
+CREATE INDEX "idx_admin_regions_level" ON "public"."administrative_regions" USING "btree" ("level");
+
+
+
+CREATE INDEX "idx_admin_regions_parent_id" ON "public"."administrative_regions" USING "btree" ("parent_id");
+
+
+
 CREATE INDEX "idx_analytics_daily_tenant_date" ON "public"."analytics_daily" USING "btree" ("tenant_id", "date");
 
 
 
+CREATE INDEX "idx_analytics_daily_tenant_id" ON "public"."analytics_daily" USING "btree" ("tenant_id");
+
+
+
 CREATE INDEX "idx_analytics_events_tenant_created" ON "public"."analytics_events" USING "btree" ("tenant_id", "created_at" DESC);
+
+
+
+CREATE INDEX "idx_analytics_events_tenant_id" ON "public"."analytics_events" USING "btree" ("tenant_id");
 
 
 
@@ -5558,6 +6028,10 @@ CREATE INDEX "idx_menus_tenant_id" ON "public"."menus" USING "btree" ("tenant_id
 
 
 
+CREATE INDEX "idx_mobile_app_config_tenant_id" ON "public"."mobile_app_config" USING "btree" ("tenant_id");
+
+
+
 CREATE INDEX "idx_mobile_app_config_updated_by" ON "public"."mobile_app_config" USING "btree" ("updated_by");
 
 
@@ -5567,6 +6041,10 @@ CREATE INDEX "idx_mobile_users_tenant" ON "public"."mobile_users" USING "btree" 
 
 
 CREATE INDEX "idx_mobile_users_user_id" ON "public"."mobile_users" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_modules_tenant_id" ON "public"."modules" USING "btree" ("tenant_id");
 
 
 
@@ -5870,6 +6348,10 @@ CREATE INDEX "idx_regions_parent" ON "public"."regions" USING "btree" ("parent_i
 
 
 
+CREATE INDEX "idx_regions_parent_id" ON "public"."regions" USING "btree" ("parent_id");
+
+
+
 CREATE INDEX "idx_regions_tenant" ON "public"."regions" USING "btree" ("tenant_id");
 
 
@@ -6062,7 +6544,15 @@ CREATE INDEX "idx_tenant_channels_tenant_channel" ON "public"."tenant_channels" 
 
 
 
+CREATE INDEX "idx_tenant_channels_tenant_id" ON "public"."tenant_channels" USING "btree" ("tenant_id");
+
+
+
 CREATE INDEX "idx_tenant_resource_rules_resource_key" ON "public"."tenant_resource_rules" USING "btree" ("resource_key");
+
+
+
+CREATE INDEX "idx_tenant_resource_rules_tenant_id" ON "public"."tenant_resource_rules" USING "btree" ("tenant_id");
 
 
 
@@ -6071,6 +6561,10 @@ CREATE INDEX "idx_tenant_role_links_child_role_id" ON "public"."tenant_role_link
 
 
 CREATE INDEX "idx_tenant_role_links_parent_role_id" ON "public"."tenant_role_links" USING "btree" ("parent_role_id");
+
+
+
+CREATE INDEX "idx_tenant_role_links_tenant_id" ON "public"."tenant_role_links" USING "btree" ("tenant_id");
 
 
 
@@ -6138,7 +6632,19 @@ CREATE INDEX "idx_ui_configs_tenant_id" ON "public"."ui_configs" USING "btree" (
 
 
 
+CREATE INDEX "idx_user_profile_admin_tenant_id" ON "public"."user_profile_admin" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_user_profiles_tenant_id" ON "public"."user_profiles" USING "btree" ("tenant_id");
+
+
+
 CREATE INDEX "idx_users_admin_approved_by" ON "public"."users" USING "btree" ("admin_approved_by");
+
+
+
+CREATE INDEX "idx_users_admin_region_id" ON "public"."users" USING "btree" ("administrative_region_id");
 
 
 
@@ -6159,6 +6665,10 @@ CREATE INDEX "idx_users_deleted_at" ON "public"."users" USING "btree" ("deleted_
 
 
 CREATE INDEX "idx_users_region" ON "public"."users" USING "btree" ("region_id");
+
+
+
+CREATE INDEX "idx_users_region_id" ON "public"."users" USING "btree" ("region_id");
 
 
 
@@ -6327,6 +6837,14 @@ CREATE OR REPLACE TRIGGER "audit_settings" AFTER INSERT OR DELETE OR UPDATE ON "
 
 
 CREATE OR REPLACE TRIGGER "extension_audit_trigger" AFTER INSERT OR DELETE OR UPDATE ON "public"."extensions" FOR EACH ROW EXECUTE FUNCTION "public"."log_extension_change"();
+
+
+
+CREATE OR REPLACE TRIGGER "handle_updated_at" BEFORE UPDATE ON "public"."administrative_regions" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "handle_updated_at" BEFORE UPDATE ON "public"."regions" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
 
 
 
@@ -6590,6 +7108,14 @@ CREATE OR REPLACE TRIGGER "set_created_by_trg" BEFORE INSERT ON "public"."testim
 
 
 
+CREATE OR REPLACE TRIGGER "set_created_by_trg" BEFORE INSERT ON "public"."user_profile_admin" FOR EACH ROW EXECUTE FUNCTION "public"."set_created_by"();
+
+
+
+CREATE OR REPLACE TRIGGER "set_created_by_trg" BEFORE INSERT ON "public"."user_profiles" FOR EACH ROW EXECUTE FUNCTION "public"."set_created_by"();
+
+
+
 CREATE OR REPLACE TRIGGER "set_created_by_trg" BEFORE INSERT ON "public"."users" FOR EACH ROW EXECUTE FUNCTION "public"."set_created_by"();
 
 
@@ -6710,7 +7236,15 @@ CREATE OR REPLACE TRIGGER "trg_set_tenant_id" BEFORE INSERT ON "public"."video_g
 
 
 
+CREATE OR REPLACE TRIGGER "trigger_create_user_profile" AFTER INSERT ON "public"."users" FOR EACH ROW EXECUTE FUNCTION "public"."create_user_profile"();
+
+
+
 CREATE OR REPLACE TRIGGER "trigger_ensure_single_active_theme" BEFORE INSERT OR UPDATE OF "is_active" ON "public"."themes" FOR EACH ROW EXECUTE FUNCTION "public"."ensure_single_active_theme"();
+
+
+
+CREATE OR REPLACE TRIGGER "trigger_user_profiles_rekey_admin" AFTER UPDATE OF "description" ON "public"."user_profiles" FOR EACH ROW EXECUTE FUNCTION "public"."rekey_user_profile_admin_fields"();
 
 
 
@@ -6786,6 +7320,14 @@ CREATE OR REPLACE TRIGGER "update_testimonies_updated_at" BEFORE UPDATE ON "publ
 
 
 
+CREATE OR REPLACE TRIGGER "update_user_profile_admin_updated_at" BEFORE UPDATE ON "public"."user_profile_admin" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+CREATE OR REPLACE TRIGGER "update_user_profiles_updated_at" BEFORE UPDATE ON "public"."user_profiles" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
 CREATE OR REPLACE TRIGGER "update_users_updated_at" BEFORE UPDATE ON "public"."users" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
 
 
@@ -6815,6 +7357,16 @@ ALTER TABLE ONLY "public"."account_requests"
 
 ALTER TABLE ONLY "public"."admin_menus"
     ADD CONSTRAINT "admin_menus_resource_id_fkey" FOREIGN KEY ("resource_id") REFERENCES "public"."resources_registry"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."admin_menus"
+    ADD CONSTRAINT "admin_menus_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id");
+
+
+
+ALTER TABLE ONLY "public"."administrative_regions"
+    ADD CONSTRAINT "administrative_regions_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "public"."administrative_regions"("id") ON DELETE SET NULL;
 
 
 
@@ -7708,8 +8260,43 @@ ALTER TABLE ONLY "public"."ui_configs"
 
 
 
+ALTER TABLE ONLY "public"."user_profile_admin"
+    ADD CONSTRAINT "user_profile_admin_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."user_profile_admin"
+    ADD CONSTRAINT "user_profile_admin_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."user_profile_admin"
+    ADD CONSTRAINT "user_profile_admin_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."user_profiles"
+    ADD CONSTRAINT "user_profiles_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."user_profiles"
+    ADD CONSTRAINT "user_profiles_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."user_profiles"
+    ADD CONSTRAINT "user_profiles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE RESTRICT;
+
+
+
 ALTER TABLE ONLY "public"."users"
     ADD CONSTRAINT "users_admin_approved_by_fkey" FOREIGN KEY ("admin_approved_by") REFERENCES "public"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."users"
+    ADD CONSTRAINT "users_administrative_region_id_fkey" FOREIGN KEY ("administrative_region_id") REFERENCES "public"."administrative_regions"("id") ON DELETE SET NULL;
 
 
 
@@ -7780,19 +8367,11 @@ CREATE POLICY "Authenticated Insert" ON "public"."extension_logs" FOR INSERT WIT
 
 
 
-CREATE POLICY "Enable insert for anonymous users" ON "public"."orders" FOR INSERT TO "anon" WITH CHECK (true);
+CREATE POLICY "Enable insert for anonymous users" ON "public"."orders" FOR INSERT TO "anon" WITH CHECK (("tenant_id" = "public"."current_tenant_id"()));
 
 
 
-CREATE POLICY "Enable insert for authenticated users with permission" ON "public"."orders" FOR INSERT TO "authenticated" WITH CHECK ((("user_id" = "auth"."uid"()) OR "public"."is_platform_admin"() OR (("tenant_id" = "public"."current_tenant_id"()) AND ("public"."has_permission"('create_orders'::"text") OR "public"."has_permission"('tenant.orders.create'::"text")))));
-
-
-
-CREATE POLICY "Enable read access for all users" ON "public"."blogs" FOR SELECT USING (("status" = 'published'::"text"));
-
-
-
-CREATE POLICY "Enable read access for all users" ON "public"."categories" FOR SELECT USING (true);
+CREATE POLICY "Enable read access for authenticated users" ON "public"."admin_menus" FOR SELECT TO "authenticated" USING ((("tenant_id" IS NULL) OR ("tenant_id" = (("auth"."jwt"() ->> 'tenant_id'::"text"))::"uuid")));
 
 
 
@@ -7914,22 +8493,6 @@ CREATE POLICY "Platform admins update schemas" ON "public"."ui_configs" FOR UPDA
 
 
 
-CREATE POLICY "Public Read Published Funfacts" ON "public"."funfacts" FOR SELECT TO "anon" USING (("status" = 'published'::"text"));
-
-
-
-CREATE POLICY "Public Read Published Partners" ON "public"."partners" FOR SELECT TO "anon" USING (("status" = 'published'::"text"));
-
-
-
-CREATE POLICY "Public Read Published Services" ON "public"."services" FOR SELECT TO "anon" USING (("status" = 'published'::"text"));
-
-
-
-CREATE POLICY "Public Read Published Teams" ON "public"."teams" FOR SELECT TO "anon" USING (("status" = 'published'::"text"));
-
-
-
 CREATE POLICY "Region levels viewable by authenticated" ON "public"."region_levels" FOR SELECT TO "authenticated" USING (true);
 
 
@@ -7963,18 +8526,6 @@ CREATE POLICY "Tenant Insert Teams" ON "public"."teams" FOR INSERT TO "authentic
 
 
 CREATE POLICY "Tenant Read Own Logs" ON "public"."extension_logs" FOR SELECT USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."is_platform_admin"()));
-
-
-
-CREATE POLICY "Tenant Select Funfacts" ON "public"."funfacts" FOR SELECT TO "authenticated" USING (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")));
-
-
-
-CREATE POLICY "Tenant Select Partners" ON "public"."partners" FOR SELECT TO "authenticated" USING (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")));
-
-
-
-CREATE POLICY "Tenant Select Teams" ON "public"."teams" FOR SELECT TO "authenticated" USING (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")));
 
 
 
@@ -8124,12 +8675,31 @@ CREATE POLICY "admin_menus_insert_unified" ON "public"."admin_menus" FOR INSERT 
 
 
 
-CREATE POLICY "admin_menus_select_unified" ON "public"."admin_menus" FOR SELECT TO "authenticated" USING (true);
+CREATE POLICY "admin_menus_select_unified" ON "public"."admin_menus" FOR SELECT TO "authenticated" USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."is_platform_admin"()));
 
 
 
 CREATE POLICY "admin_menus_update_unified" ON "public"."admin_menus" FOR UPDATE USING ("public"."is_platform_admin"());
 
+
+
+CREATE POLICY "admin_regions_delete_admin" ON "public"."administrative_regions" FOR DELETE USING ("public"."is_platform_admin"());
+
+
+
+CREATE POLICY "admin_regions_insert_admin" ON "public"."administrative_regions" FOR INSERT WITH CHECK ("public"."is_platform_admin"());
+
+
+
+CREATE POLICY "admin_regions_select_all" ON "public"."administrative_regions" FOR SELECT USING ((("is_active" = true) OR "public"."is_platform_admin"()));
+
+
+
+CREATE POLICY "admin_regions_update_admin" ON "public"."administrative_regions" FOR UPDATE USING ("public"."is_platform_admin"()) WITH CHECK ("public"."is_platform_admin"());
+
+
+
+ALTER TABLE "public"."administrative_regions" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."analytics_daily" ENABLE ROW LEVEL SECURITY;
@@ -8150,7 +8720,7 @@ CREATE POLICY "analytics_events_admin_read" ON "public"."analytics_events" FOR S
 
 
 
-CREATE POLICY "analytics_events_public_insert" ON "public"."analytics_events" FOR INSERT TO "anon", "authenticated" WITH CHECK (("tenant_id" = "public"."current_tenant_id"()));
+CREATE POLICY "analytics_events_public_insert" ON "public"."analytics_events" FOR INSERT TO "authenticated", "anon" WITH CHECK (("tenant_id" = "public"."current_tenant_id"()));
 
 
 
@@ -8270,7 +8840,7 @@ CREATE POLICY "blogs_insert_hierarchy" ON "public"."blogs" FOR INSERT WITH CHECK
 
 
 
-CREATE POLICY "blogs_select_hierarchy" ON "public"."blogs" FOR SELECT USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."tenant_can_access_resource"("tenant_id", 'content'::"text", 'read'::"text") OR "public"."is_platform_admin"()));
+CREATE POLICY "blogs_select_unified" ON "public"."blogs" FOR SELECT USING ((("status" = 'published'::"text") OR (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."tenant_can_access_resource"("tenant_id", 'content'::"text", 'read'::"text") OR "public"."is_platform_admin"())));
 
 
 
@@ -8319,7 +8889,11 @@ CREATE POLICY "categories_insert_unified" ON "public"."categories" FOR INSERT WI
 
 
 
-CREATE POLICY "categories_select_unified" ON "public"."categories" FOR SELECT USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."is_platform_admin"()));
+CREATE POLICY "categories_select_tenant" ON "public"."categories" FOR SELECT USING (("tenant_id" = "public"."current_tenant_id"()));
+
+
+
+CREATE POLICY "categories_select_unified" ON "public"."categories" FOR SELECT USING (true);
 
 
 
@@ -8379,7 +8953,7 @@ CREATE POLICY "content_translations_insert_tenant" ON "public"."content_translat
 
 
 
-CREATE POLICY "content_translations_read_all" ON "public"."content_translations" FOR SELECT USING (true);
+CREATE POLICY "content_translations_read_all" ON "public"."content_translations" FOR SELECT USING (("tenant_id" = "public"."current_tenant_id"()));
 
 
 
@@ -8523,6 +9097,10 @@ CREATE POLICY "files_update_hierarchy" ON "public"."files" FOR UPDATE USING ((("
 ALTER TABLE "public"."funfacts" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "funfacts_select_unified" ON "public"."funfacts" FOR SELECT USING ((("status" = 'published'::"text") OR ("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."is_platform_admin"()));
+
+
+
 ALTER TABLE "public"."menu_permissions" ENABLE ROW LEVEL SECURITY;
 
 
@@ -8626,15 +9204,13 @@ CREATE POLICY "order_items_update_unified" ON "public"."order_items" FOR UPDATE 
 ALTER TABLE "public"."orders" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "orders_insert_own" ON "public"."orders" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = ( SELECT "auth"."uid"() AS "uid")));
+CREATE POLICY "orders_insert_auth" ON "public"."orders" FOR INSERT TO "authenticated" WITH CHECK ((( SELECT "auth"."uid"() AS "uid") = "user_id"));
 
 
 
-CREATE POLICY "orders_select_own" ON "public"."orders" FOR SELECT TO "authenticated" USING (("user_id" = ( SELECT "auth"."uid"() AS "uid")));
-
-
-
-CREATE POLICY "orders_select_tenant_staff" ON "public"."orders" FOR SELECT TO "authenticated" USING (((("tenant_id" = "public"."current_tenant_id"()) AND (( SELECT "public"."get_my_role_name"() AS "get_my_role_name") = ANY (ARRAY['admin'::"text", 'editor'::"text"]))) OR "public"."is_platform_admin"()));
+CREATE POLICY "orders_select_auth" ON "public"."orders" FOR SELECT TO "authenticated" USING (((( SELECT "auth"."uid"() AS "uid") = "user_id") OR (("tenant_id" = ( SELECT "users"."tenant_id"
+   FROM "public"."users"
+  WHERE ("users"."id" = ( SELECT "auth"."uid"() AS "uid")))) AND (( SELECT "public"."get_my_role_name"() AS "get_my_role_name") = ANY (ARRAY['admin'::"text", 'editor'::"text"]))) OR (( SELECT "public"."get_my_role_name"() AS "get_my_role_name") = 'super_admin'::"text")));
 
 
 
@@ -8668,7 +9244,7 @@ CREATE POLICY "page_files_insert_tenant" ON "public"."page_files" FOR INSERT WIT
 
 
 
-CREATE POLICY "page_files_read_all" ON "public"."page_files" FOR SELECT USING (true);
+CREATE POLICY "page_files_read_all" ON "public"."page_files" FOR SELECT USING (("tenant_id" = "public"."current_tenant_id"()));
 
 
 
@@ -8696,6 +9272,10 @@ CREATE POLICY "pages_update_hierarchy" ON "public"."pages" FOR UPDATE USING ((("
 
 
 ALTER TABLE "public"."partners" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "partners_select_unified" ON "public"."partners" FOR SELECT USING ((("status" = 'published'::"text") OR ("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."is_platform_admin"()));
+
 
 
 ALTER TABLE "public"."payment_methods" ENABLE ROW LEVEL SECURITY;
@@ -8849,6 +9429,22 @@ ALTER TABLE "public"."region_levels" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."regions" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "regions_delete_admin" ON "public"."regions" FOR DELETE USING ("public"."is_platform_admin"());
+
+
+
+CREATE POLICY "regions_insert_admin" ON "public"."regions" FOR INSERT WITH CHECK ("public"."is_platform_admin"());
+
+
+
+CREATE POLICY "regions_select_all" ON "public"."regions" FOR SELECT USING ((("is_active" = true) OR "public"."is_platform_admin"()));
+
+
+
+CREATE POLICY "regions_update_admin" ON "public"."regions" FOR UPDATE USING ("public"."is_platform_admin"()) WITH CHECK ("public"."is_platform_admin"());
+
+
+
 ALTER TABLE "public"."resources_registry" ENABLE ROW LEVEL SECURITY;
 
 
@@ -8911,7 +9507,7 @@ CREATE POLICY "sensor_readings_access" ON "public"."sensor_readings" USING ((("t
 ALTER TABLE "public"."seo_metadata" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "seo_metadata_select_public" ON "public"."seo_metadata" FOR SELECT USING (true);
+CREATE POLICY "seo_metadata_select_public" ON "public"."seo_metadata" FOR SELECT USING (("tenant_id" = "public"."current_tenant_id"()));
 
 
 
@@ -8926,7 +9522,7 @@ CREATE POLICY "services_insert_hierarchy" ON "public"."services" FOR INSERT WITH
 
 
 
-CREATE POLICY "services_select_hierarchy" ON "public"."services" FOR SELECT TO "authenticated" USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."tenant_can_access_resource"("tenant_id", 'content'::"text", 'read'::"text") OR "public"."is_platform_admin"()));
+CREATE POLICY "services_select_unified" ON "public"."services" FOR SELECT USING ((("status" = 'published'::"text") OR (("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."tenant_can_access_resource"("tenant_id", 'content'::"text", 'read'::"text") OR "public"."is_platform_admin"())));
 
 
 
@@ -9012,6 +9608,10 @@ CREATE POLICY "tags_update_unified" ON "public"."tags" FOR UPDATE USING (((("ten
 ALTER TABLE "public"."teams" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "teams_select_unified" ON "public"."teams" FOR SELECT USING ((("status" = 'published'::"text") OR ("tenant_id" = ( SELECT "public"."current_tenant_id"() AS "current_tenant_id")) OR "public"."is_platform_admin"()));
+
+
+
 ALTER TABLE "public"."template_assignments" ENABLE ROW LEVEL SECURITY;
 
 
@@ -9061,7 +9661,7 @@ CREATE POLICY "template_strings_insert_unified" ON "public"."template_strings" F
 
 
 
-CREATE POLICY "template_strings_select_unified" ON "public"."template_strings" FOR SELECT USING (true);
+CREATE POLICY "template_strings_select_unified" ON "public"."template_strings" FOR SELECT USING (("tenant_id" = "public"."current_tenant_id"()));
 
 
 
@@ -9218,6 +9818,36 @@ ALTER TABLE "public"."two_factor_auth" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."ui_configs" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."user_profile_admin" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "user_profile_admin_insert_admin" ON "public"."user_profile_admin" FOR INSERT WITH CHECK (("public"."is_platform_admin"() OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR (("tenant_id" = "public"."current_tenant_id"()) AND ("public"."is_admin_or_above"() OR "public"."has_permission"('tenant.user.update'::"text")))));
+
+
+
+CREATE POLICY "user_profile_admin_select_admin" ON "public"."user_profile_admin" FOR SELECT USING (("public"."is_platform_admin"() OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR (("tenant_id" = "public"."current_tenant_id"()) AND ("public"."is_admin_or_above"() OR "public"."has_permission"('tenant.user.update'::"text")))));
+
+
+
+CREATE POLICY "user_profile_admin_update_admin" ON "public"."user_profile_admin" FOR UPDATE USING (("public"."is_platform_admin"() OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR (("tenant_id" = "public"."current_tenant_id"()) AND ("public"."is_admin_or_above"() OR "public"."has_permission"('tenant.user.update'::"text"))))) WITH CHECK (("public"."is_platform_admin"() OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR (("tenant_id" = "public"."current_tenant_id"()) AND ("public"."is_admin_or_above"() OR "public"."has_permission"('tenant.user.update'::"text")))));
+
+
+
+ALTER TABLE "public"."user_profiles" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "user_profiles_insert_self_or_admin" ON "public"."user_profiles" FOR INSERT WITH CHECK (("public"."is_platform_admin"() OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR (("tenant_id" = "public"."current_tenant_id"()) AND (("user_id" = "auth"."uid"()) OR "public"."is_admin_or_above"() OR "public"."has_permission"('tenant.user.update'::"text")))));
+
+
+
+CREATE POLICY "user_profiles_select_self_or_admin" ON "public"."user_profiles" FOR SELECT USING (("public"."is_platform_admin"() OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'read'::"text") OR (("tenant_id" = "public"."current_tenant_id"()) AND (("user_id" = "auth"."uid"()) OR "public"."is_admin_or_above"() OR "public"."has_permission"('tenant.user.update'::"text")))));
+
+
+
+CREATE POLICY "user_profiles_update_self_or_admin" ON "public"."user_profiles" FOR UPDATE USING (("public"."is_platform_admin"() OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR (("tenant_id" = "public"."current_tenant_id"()) AND (("user_id" = "auth"."uid"()) OR "public"."is_admin_or_above"() OR "public"."has_permission"('tenant.user.update'::"text"))))) WITH CHECK (("public"."is_platform_admin"() OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR (("tenant_id" = "public"."current_tenant_id"()) AND (("user_id" = "auth"."uid"()) OR "public"."is_admin_or_above"() OR "public"."has_permission"('tenant.user.update'::"text")))));
+
+
+
 ALTER TABLE "public"."users" ENABLE ROW LEVEL SECURITY;
 
 
@@ -9225,7 +9855,15 @@ CREATE POLICY "users_select_hierarchy" ON "public"."users" FOR SELECT USING ((("
 
 
 
-CREATE POLICY "users_update_hierarchy" ON "public"."users" FOR UPDATE USING ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR "public"."is_platform_admin"())) WITH CHECK ((("tenant_id" = "public"."current_tenant_id"()) OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text") OR "public"."is_platform_admin"()));
+CREATE POLICY "users_update_hierarchy" ON "public"."users" FOR UPDATE USING (("public"."is_platform_admin"() OR (("tenant_id" = "public"."current_tenant_id"()) AND (("id" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+   FROM (("public"."role_permissions" "rp"
+     JOIN "public"."permissions" "p" ON (("p"."id" = "rp"."permission_id")))
+     JOIN "public"."users" "u" ON (("u"."role_id" = "rp"."role_id")))
+  WHERE (("u"."id" = "auth"."uid"()) AND ("u"."tenant_id" = "public"."current_tenant_id"()) AND ("p"."name" = 'tenant.user.update'::"text")))))) OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text"))) WITH CHECK (("public"."is_platform_admin"() OR (("tenant_id" = "public"."current_tenant_id"()) AND (("id" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+   FROM (("public"."role_permissions" "rp"
+     JOIN "public"."permissions" "p" ON (("p"."id" = "rp"."permission_id")))
+     JOIN "public"."users" "u" ON (("u"."role_id" = "rp"."role_id")))
+  WHERE (("u"."id" = "auth"."uid"()) AND ("u"."tenant_id" = "public"."current_tenant_id"()) AND ("p"."name" = 'tenant.user.update'::"text")))))) OR "public"."tenant_can_access_resource"("tenant_id", 'users'::"text", 'write'::"text")));
 
 
 
@@ -9270,10 +9908,6 @@ CREATE POLICY "widgets_update_hierarchy" ON "public"."widgets" FOR UPDATE USING 
 
 
 ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
-
-
-
-
 
 
 ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."devices";
@@ -9626,9 +10260,33 @@ GRANT ALL ON FUNCTION "public"."create_tenant_with_defaults"("p_name" "text", "p
 
 
 
+GRANT ALL ON FUNCTION "public"."create_user_profile"() TO "anon";
+GRANT ALL ON FUNCTION "public"."create_user_profile"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_user_profile"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."current_tenant_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."current_tenant_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."current_tenant_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."decrypt_user_profile_admin_field"("p_value" "bytea", "p_description" "text", "p_salt" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."decrypt_user_profile_admin_field"("p_value" "bytea", "p_description" "text", "p_salt" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."decrypt_user_profile_admin_field"("p_value" "bytea", "p_description" "text", "p_salt" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."derive_user_profile_passphrase"("p_description" "text", "p_salt" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."derive_user_profile_passphrase"("p_description" "text", "p_salt" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."derive_user_profile_passphrase"("p_description" "text", "p_salt" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."encrypt_user_profile_admin_field"("p_value" "text", "p_description" "text", "p_salt" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."encrypt_user_profile_admin_field"("p_value" "text", "p_description" "text", "p_salt" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."encrypt_user_profile_admin_field"("p_value" "text", "p_description" "text", "p_salt" "text") TO "service_role";
 
 
 
@@ -9710,6 +10368,12 @@ GRANT ALL ON FUNCTION "public"."get_tenant_id_by_host"("lookup_host" "text") TO 
 
 
 
+GRANT ALL ON FUNCTION "public"."get_user_profile_admin_fields"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_user_profile_admin_fields"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_user_profile_admin_fields"("p_user_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_user_role_name"("user_uuid" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_user_role_name"("user_uuid" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_user_role_name"("user_uuid" "uuid") TO "service_role";
@@ -9725,6 +10389,12 @@ GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."handle_storage_sync"() TO "anon";
 GRANT ALL ON FUNCTION "public"."handle_storage_sync"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."handle_storage_sync"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "service_role";
 
 
 
@@ -9819,6 +10489,12 @@ GRANT ALL ON FUNCTION "public"."refresh_tenant_subtree_trigger"() TO "service_ro
 
 
 
+GRANT ALL ON FUNCTION "public"."rekey_user_profile_admin_fields"() TO "anon";
+GRANT ALL ON FUNCTION "public"."rekey_user_profile_admin_fields"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rekey_user_profile_admin_fields"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."remove_duplicates"("table_name" "text", "column_name" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."remove_duplicates"("table_name" "text", "column_name" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."remove_duplicates"("table_name" "text", "column_name" "text") TO "service_role";
@@ -9871,6 +10547,12 @@ GRANT ALL ON FUNCTION "public"."set_tenant_hierarchy"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."set_tenant_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."set_tenant_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."set_tenant_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_user_profile_admin_fields"("p_user_id" "uuid", "p_admin_notes" "text", "p_admin_flags" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."set_user_profile_admin_fields"("p_user_id" "uuid", "p_admin_notes" "text", "p_admin_flags" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_user_profile_admin_fields"("p_user_id" "uuid", "p_admin_notes" "text", "p_admin_flags" "text") TO "service_role";
 
 
 
@@ -9964,6 +10646,12 @@ GRANT ALL ON TABLE "public"."account_requests" TO "service_role";
 GRANT ALL ON TABLE "public"."admin_menus" TO "anon";
 GRANT ALL ON TABLE "public"."admin_menus" TO "authenticated";
 GRANT ALL ON TABLE "public"."admin_menus" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."administrative_regions" TO "anon";
+GRANT ALL ON TABLE "public"."administrative_regions" TO "authenticated";
+GRANT ALL ON TABLE "public"."administrative_regions" TO "service_role";
 
 
 
@@ -10477,6 +11165,18 @@ GRANT ALL ON TABLE "public"."ui_configs" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."user_profile_admin" TO "anon";
+GRANT ALL ON TABLE "public"."user_profile_admin" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_profile_admin" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_profiles" TO "anon";
+GRANT ALL ON TABLE "public"."user_profiles" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_profiles" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."users" TO "anon";
 GRANT ALL ON TABLE "public"."users" TO "authenticated";
 GRANT ALL ON TABLE "public"."users" TO "service_role";
@@ -10556,65 +11256,36 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
-revoke insert on table "public"."sso_audit_logs" from "anon";
 
-revoke insert on table "public"."sso_audit_logs" from "authenticated";
+--
+-- Dumped schema changes for auth and storage
+--
 
-revoke insert on table "public"."two_factor_audit_logs" from "anon";
-
-revoke insert on table "public"."two_factor_audit_logs" from "authenticated";
-
-CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
-
-  create policy "public_read_files"
-  on "storage"."objects"
-  as permissive
-  for select
-  to public
-using ((bucket_id = 'cms-uploads'::text));
+CREATE OR REPLACE TRIGGER "on_auth_user_created" AFTER INSERT ON "auth"."users" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_user"();
 
 
 
-  create policy "tenant_delete_isolation"
-  on "storage"."objects"
-  as permissive
-  for delete
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
+CREATE OR REPLACE TRIGGER "tr_sync_storage_to_files" AFTER INSERT OR DELETE OR UPDATE ON "storage"."objects" FOR EACH ROW EXECUTE FUNCTION "public"."handle_storage_sync"();
 
 
 
-  create policy "tenant_select_isolation"
-  on "storage"."objects"
-  as permissive
-  for select
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
+CREATE POLICY "public_read_files" ON "storage"."objects" FOR SELECT USING (("bucket_id" = 'cms-uploads'::"text"));
 
 
 
-  create policy "tenant_update_isolation"
-  on "storage"."objects"
-  as permissive
-  for update
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
+CREATE POLICY "tenant_delete_isolation" ON "storage"."objects" FOR DELETE TO "authenticated" USING ((("bucket_id" = 'cms-uploads'::"text") AND (("name" ~~ ("public"."current_tenant_id"() || '/%'::"text")) OR "public"."is_platform_admin"())));
 
 
 
-  create policy "tenant_upload_isolation"
-  on "storage"."objects"
-  as permissive
-  for insert
-  to authenticated
-with check (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
+CREATE POLICY "tenant_select_isolation" ON "storage"."objects" FOR SELECT TO "authenticated" USING ((("bucket_id" = 'cms-uploads'::"text") AND (("name" ~~ ("public"."current_tenant_id"() || '/%'::"text")) OR "public"."is_platform_admin"())));
 
 
--- CREATE TRIGGER protect_buckets_delete BEFORE DELETE ON storage.buckets FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete();
 
--- CREATE TRIGGER protect_objects_delete BEFORE DELETE ON storage.objects FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete();
+CREATE POLICY "tenant_update_isolation" ON "storage"."objects" FOR UPDATE TO "authenticated" USING ((("bucket_id" = 'cms-uploads'::"text") AND (("name" ~~ ("public"."current_tenant_id"() || '/%'::"text")) OR "public"."is_platform_admin"())));
 
-CREATE TRIGGER tr_sync_storage_to_files AFTER INSERT OR DELETE OR UPDATE ON storage.objects FOR EACH ROW EXECUTE FUNCTION public.handle_storage_sync();
+
+
+CREATE POLICY "tenant_upload_isolation" ON "storage"."objects" FOR INSERT TO "authenticated" WITH CHECK ((("bucket_id" = 'cms-uploads'::"text") AND (("name" ~~ ("public"."current_tenant_id"() || '/%'::"text")) OR "public"."is_platform_admin"())));
+
 
 
