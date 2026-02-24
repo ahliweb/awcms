@@ -6,7 +6,7 @@ import { PROJECT_ROOT, env } from "../lib/config.js";
 export function registerSupabaseTools(server: McpServer) {
   async function runSupabaseCommand(args: string[]) {
     try {
-      const { stdout, stderr } = await execa("npx", ["supabase", ...args], {
+      const { all, stdout, stderr } = await execa("npx", ["supabase", ...args], {
         cwd: PROJECT_ROOT,
         env: env,
         all: true,
@@ -14,7 +14,7 @@ export function registerSupabaseTools(server: McpServer) {
       });
 
       return {
-        output: stdout || stderr,
+        output: all ?? stdout ?? stderr,
         isError: false,
       };
     } catch (error: unknown) {

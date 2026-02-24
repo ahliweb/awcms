@@ -9,7 +9,7 @@ export function registerFlutterTools(server: McpServer) {
 
   async function runFlutterCommand(args: string[]) {
     try {
-      const { stdout, stderr } = await execa("flutter", args, {
+      const { all, stdout, stderr } = await execa("flutter", args, {
         cwd: MOBILE_ROOT,
         env: env,
         all: true,
@@ -17,7 +17,7 @@ export function registerFlutterTools(server: McpServer) {
       });
 
       return {
-        output: stdout || stderr,
+        output: all ?? stdout ?? stderr,
         isError: false,
       };
     } catch (error: unknown) {
