@@ -85,7 +85,7 @@ All documentation follows this authority structure:
 | Topic | Canonical Doc | Notes |
 | --- | --- | --- |
 | Setup Guide | [docs/dev/setup.md](docs/dev/setup.md) | **Start Here** |
-| Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Context7-driven doc updates |
+| Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Repository-wide Context7-first audit and revision workflow |
 | Stitch Integration Plan | [docs/dev/stitch-integration-plan.md](docs/dev/stitch-integration-plan.md) | File-by-file execution checklist + migration skeletons |
 | Admin Panel | [docs/dev/admin.md](docs/dev/admin.md) | React Admin development |
 | Public Portal | [docs/dev/public.md](docs/dev/public.md) | Astro development |
