@@ -22,6 +22,13 @@ Run a repository-wide audit and revision cycle so docs always match current:
 3. Library guidance is reviewed against latest Context7 references before publication.
 4. `DOCS_INDEX.md` remains a valid map of the documentation surface.
 
+## Phase 0 Baseline Snapshot (2026-02-24)
+
+- **Node Runtime:** `v22.22.0`
+- **MCP Topology:** 11 connected servers in OpenCode (`context7`, `supabase`, `stitch`, `github`, and 7 Cloudflare managed servers)
+- **Migration Baseline:** `npx supabase migration list --local` shows local/remote alignment through latest timestamped migrations
+- **Migration Hygiene:** non-migration SQL moved out of migration folder to `supabase/manual/`
+
 ## Scope (Repository-Wide)
 
 | Tier | Areas | Paths |

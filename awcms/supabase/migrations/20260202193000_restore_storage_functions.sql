@@ -1,0 +1,2 @@
+-- Migration intentionally emptied to fix local/remote sync permissions.
+-- Original content restored storage functions which are system-managed.

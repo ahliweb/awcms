@@ -6,7 +6,7 @@ AWCMS is architected to be "AI-Native", meaning the codebase structure, naming c
 
 ## 🤖 Agent Overview
 
-In the AWCMS ecosystem, AI Agents are treated as specialized team members. We define two primary personas for AI interactions:
+In the AWCMS ecosystem, AI Agents are treated as specialized team members. We define three primary personas for AI interactions:
 
 ### 1. The Coding Agent (Architect/Builder)
 
@@ -31,12 +31,12 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 - **Capabilities**:
-- Working with **Astro 5.17.1** and **React 19.2.4** (Static output + Islands).
+  - Working with **Astro 5.17.1** and **React 19.2.4** (Static output + Islands).
   - Implementing **Zod** schemas for component prop validation.
   - Optimizing for Cloudflare Pages static builds (cache headers, asset optimization).
 - **Constraints**:
   - **NO** direct database access (must use Supabase JS Client or Functions).
-- **NO** Puck editor runtime in the public portal (use `Render` from `@puckeditor/core` only).
+  - **NO** Puck editor runtime in the public portal (use `Render` from `@puckeditor/core` only).
 
 ---
 
@@ -55,11 +55,11 @@ Agents must be aware of the exact versions in use:
 | TipTap           | 3.13.0   | Rich text editor (XSS-safe)      |
 | Framer Motion    | 12.23.26 | Animations                       |
 | Radix UI         | Latest   | Accessible UI primitives         |
-| Lucide React     | 0.561.0  | Icon library                     |
+| Lucide React     | 0.561.0 / 0.564.0 | Admin / Public icon library |
 | i18next          | 25.7.2   | Internationalization             |
 | Recharts         | 3.5.1    | Charts & Data Visualization      |
 | Leaflet          | 1.9.4    | Maps                             |
-| React Leaflet    | latest   | React bindings for Leaflet       |
+| React Leaflet    | 5.0.0    | React bindings for Leaflet       |
 | Vitest           | 4.0.16   | Unit/Integration testing         |
 | Astro            | 5.17.1   | Public portal                    |
 
@@ -435,17 +435,15 @@ Use CSS variables for colors and fonts to support white-labeling. **Do not hardc
 
 While powerful, Agents operating in this environment have specific boundaries:
 
-1. **No Shell Access**: Agents cannot run `npm install` or execute shell commands directly in all environments.
+1. **Shell Access Depends on Host**: In OpenCode, shell commands are available. In other agent hosts, shell access may be restricted or unavailable.
 
-2. **No File Deletion**: Agents can only create or overwrite files. Deprecated files must be manually cleaned up.
+2. **Backend Logic Placement**: Backend business logic must remain in Supabase (Edge Functions, Database Functions, SQL), not custom Node.js servers.
 
-3. **Frontend Logic Only**: Backend logic must be implemented via Supabase (Edge Functions, Database Functions, or SQL), not Node.js servers.
+3. **Binary Asset Generation**: Agents should not generate binary assets directly; reference existing assets or placeholders.
 
-4. **No Binary Files**: Agents cannot generate images or binary assets. Use placeholder descriptions or reference existing assets.
+4. **Database Changes**: Always use timestamped Supabase migrations (`<timestamp>_name.sql`). Keep non-migration SQL outside migration folders (for example `supabase/manual/`). Never hardcode database credentials.
 
-5. **Database Changes**: Always use timestamped Supabase migrations (`<timestamp>_name.sql`); ignore `current_*.sql` snapshots. Never hardcode database credentials.
-
-6. **Process Monitoring**: The running model must continue and ensure no background processes are stuck by restarting the process.
+5. **Process Monitoring**: The running model must continue and ensure no background processes are stuck by restarting the process.
    Monitor all processes to ensure none remain stuck for long periods; periodically enforce a maximum runtime,
    output status updates, and terminate any processes that exceed the limit.
 
@@ -600,9 +598,13 @@ case 'delete': {
 
 ## 🔌 Unified MCP Server
 
-AWCMS provides a "Swiss Army Knife" MCP server in `awcms-mcp/` that grants Agents capabilities across the entire stack.
+AWCMS uses a hybrid MCP topology: a local `awcms-mcp/` server plus managed/remote MCP servers declared in `mcp.json`.
 
-### 1. Supabase Tools
+### 1. Local AWCMS MCP (`awcms-mcp/`)
+
+The local server provides project-scoped tools:
+
+#### Supabase Tools
 
 - `supabase_status`: Check local stack status.
 - `supabase_db_pull`: Sync remote schema to local migrations.
@@ -613,21 +615,32 @@ AWCMS provides a "Swiss Army Knife" MCP server in `awcms-mcp/` that grants Agent
 > [!NOTE]
 > Ensure your `.env` uses `SUPABASE_SECRET_KEY` instead of `SUPABASE_SERVICE_ROLE_KEY` for these tools if applicable.
 
-### 2. Context7 Tools (AI Documentation)
+#### Context7 Tools (AI Documentation)
 
 - `context7_search`: Query the Context7 documentation index for up-to-date library usage (e.g., "how to use Supabase Auth with RLS").
   - **Requirement**: Set `CONTEXT7_API_KEY` in `.env`.
 
-### 3. Flutter Tools (Mobile)
+#### Flutter Tools (Mobile)
 
 - `flutter_doctor`: Check mobile environment health.
 - `flutter_pub_get`: Install mobile dependencies.
 - `flutter_analyze`: Run static analysis on `awcms-mobile`.
 
+### 2. Additional MCP Servers (`mcp.json`)
+
+AWCMS also runs external MCP servers for cloud and ecosystem tasks:
+
+- `context7` (remote): `https://mcp.context7.com/mcp`
+- `stitch` (local proxy): `npx @_davideast/stitch-mcp proxy`
+- `github` (local wrapper): `scripts/start_github_mcp.sh` -> Docker `ghcr.io/github/github-mcp-server`
+- Cloudflare managed remote servers:
+  - `cloudflare-api`, `cloudflare-docs`, `cloudflare-bindings`, `cloudflare-observability`, `cloudflare-builds`, `cloudflare-radar`, `cloudflare-browser`
+
 ### Setup
 
 1. Ensure `awcms/.env` has `SUPABASE_DB_URL` and `CONTEXT7_API_KEY`.
 2. Run `cd awcms-mcp && npm run dev`.
+3. Verify connectivity with `opencode mcp list`.
 
 ---
 
@@ -673,7 +686,7 @@ _\* Author → hanya konten milik sendiri (tenant_id + owner_id)_
 - **RS**: Restore
 - **DP**: Delete Permanent
 
-Example: `tenant.user.create`, `tenant.blog.publish`, `tenant.extensions.read`.
+Example: `tenant.user.create`, `tenant.blog.publish`, `platform.extensions.read`.
 
 ### Implementation Pattern
 

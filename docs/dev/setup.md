@@ -6,7 +6,7 @@
 
 - [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for technology stack and version requirements
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- **Node.js**: v20.0.0 or higher (LTS recommended)
+- **Node.js**: v22.12.0 or higher (required by current Admin/Public toolchain)
 - **npm**: v10+
 - **Flutter**: v3.38.5+ (if working on mobile)
 - **PlatformIO**: Core 6.1+ (if working on IoT)
@@ -25,18 +25,28 @@ cd <repo-root>
 
 Refer to `.env.example` in each directory. Public portal static builds require `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
 
-When pulling schema changes from Supabase, prefer:
+When syncing linked/remote schema snapshots, prefer:
 
 ```sh
+npx supabase migration list --linked
 npx supabase db pull --schema public,extensions
 ```
 
 This avoids storage-managed objects that can churn migrations in local shadow databases.
 
-For local schema changes, prefer:
+For local schema changes, run:
 
 ```sh
+npx supabase migration list --local
 npx supabase db push --local
+```
+
+If migration history drifts, use the repair helper from repo root:
+
+```sh
+scripts/repair_supabase_migration_history.sh
+scripts/repair_supabase_migration_history.sh --apply --local
+scripts/repair_supabase_migration_history.sh --apply --linked
 ```
 
 If using Context7 tools via `awcms-mcp`, set `CONTEXT7_API_KEY` in `awcms/.env`.
@@ -84,6 +94,31 @@ node awcms/src/scripts/seed-sidebar.js
 ```
 
 `seed-sidebar.js` requires `VITE_SUPABASE_URL` and `SUPABASE_SECRET_KEY` in `awcms/.env.local`. Never expose the secret key in client code.
+
+### 3.2 MCP Tooling (OpenCode)
+
+Use `mcp.json` as the repo source of truth for MCP topology.
+
+```bash
+# Optional: run local AWCMS MCP server directly
+cd awcms-mcp
+npm install
+npm run dev
+
+# Verify connected MCP servers in OpenCode
+opencode mcp list
+```
+
+GitHub MCP uses `scripts/start_github_mcp.sh` and requires one of: `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_MCP_PERSONAL_ACCESS_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`.
+
+### 3.3 Operational Script Quick Reference
+
+| Script | Purpose | Scope |
+| --- | --- | --- |
+| `scripts/repair_supabase_migration_history.sh` | Repair migration history states (`applied`/`reverted`) from local timestamps | Local (`--local`) and linked (`--linked`) |
+| `scripts/verify_supabase_migration_consistency.sh` | Verify root/mirror migration parity and migration-list alignment | Local by default; add `--linked` for remote check |
+| `scripts/start_github_mcp.sh` | Start local Docker-backed GitHub MCP with token auto-discovery | MCP runtime |
+| `scripts/update_cloudflare_secrets.sh` | Interactive Cloudflare Pages secret sync from project `.env` files | Deployment ops |
 
 ## 4. Linting & Formatting
 

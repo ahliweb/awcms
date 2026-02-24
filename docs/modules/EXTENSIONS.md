@@ -298,10 +298,12 @@ Audit trail with RLS for all extension actions:
 
 | Permission | Description |
 | ---------- | ----------- |
-| `tenant.extensions.create` | Install/upload extensions |
-| `tenant.extensions.delete` | Uninstall/remove extensions |
-| `tenant.extensions.view` | View installed extensions and logs |
-| `tenant.extensions.publish` | Activate/Deactivate extensions |
+| `platform.extensions.read` | View extensions registry, routes, and logs |
+| `platform.extensions.create` | Install/upload extensions |
+| `platform.extensions.update` | Activate/deactivate and update extension metadata |
+| `platform.extensions.delete` | Uninstall/remove extensions |
+
+Tenant-level plugin pages and extension settings should use `tenant.setting.*` permissions (for example `tenant.setting.read`).
 
 ### Requirements
 

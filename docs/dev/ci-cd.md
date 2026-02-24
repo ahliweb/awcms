@@ -24,7 +24,7 @@ Describe the GitHub Actions workflows used for AWCMS.
 
 - `.github/workflows/ci-push.yml` (pushes to `main`/`develop`, deploys)
 - `.github/workflows/ci-pr.yml` (pull requests to `main`)
-- `.github/workflows/docs-link-check.yml` (scheduled link validation)
+- `.github/workflows/docs-link-check.yml` (docs link checks on markdown changes)
 
 ### Trigger Events
 
@@ -39,16 +39,21 @@ Describe the GitHub Actions workflows used for AWCMS.
 | `lint-build-public` | Build public portal | `awcms-public/primary/` | ci-push, ci-pr |
 | `build-mobile` | Flutter build and tests | `awcms-mobile/primary/` | ci-push, ci-pr |
 | `db-check` | Supabase migration lint | `awcms/supabase` | ci-pr |
-| `deploy-production` | Cloudflare Pages deploy | `awcms/` | ci-push |
+| `deploy-production` | Cloudflare Pages deploy (admin panel artifact) | `awcms/` | ci-push |
+
+### Runtime Notes
+
+- Current GitHub workflows set `NODE_VERSION=20` (legacy pin in `.github/workflows/ci-push.yml` and `.github/workflows/ci-pr.yml`).
+- Repository runtime baseline remains Node `>=22.12.0`; align workflow Node versions with package `engines` before enforcing strict engine checks.
 
 ### Required Secrets
 
 - `VITE_SUPABASE_URL` (admin build)
 - `VITE_SUPABASE_PUBLISHABLE_KEY` (admin build, preferred)
-- `VITE_SUPABASE_ANON_KEY` (legacy CI alias; keep aligned with publishable key)
+- `VITE_SUPABASE_ANON_KEY` (legacy CI alias still consumed by workflows; mirror publishable key value)
 - `PUBLIC_SUPABASE_URL` (public build fallback)
 - `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (public build fallback, preferred)
-- `PUBLIC_SUPABASE_ANON_KEY` (legacy CI alias; keep aligned with publishable key)
+- `PUBLIC_SUPABASE_ANON_KEY` (legacy CI alias still consumed by workflows; mirror publishable key value)
 - `PUBLIC_TENANT_ID` (public build tenant scope)
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ENABLED` (repo variable; must be `true` to deploy)
@@ -73,13 +78,18 @@ cd ../../awcms-mobile/primary
 flutter pub get
 flutter analyze
 flutter test
+
+# Database lint job parity
+cd ../../awcms/supabase
+supabase db lint
 ```
 
 ## Troubleshooting
 
 - Missing env vars: verify secrets and repo variables.
 - Cloudflare deploys: `CLOUDFLARE_API_TOKEN` is required and must be scoped to a single account with access to the Accounts API. The workflow resolves the account ID automatically via the Cloudflare Accounts API.
-- Public build env mismatch: CI injects `PUBLIC_SUPABASE_*`, while runtime code prefers `VITE_SUPABASE_*`. Keep values aligned; `createClientFromEnv` accepts both. Legacy `*_ANON_KEY` aliases should match the publishable keys.
+- Public build env mismatch: CI injects `PUBLIC_SUPABASE_*`, while runtime code often prefers `VITE_SUPABASE_*`. Keep values aligned; `createClientFromEnv` accepts both. Legacy `*_ANON_KEY` aliases should match the publishable keys.
+- Deploy scope confusion: `deploy-production` currently deploys only `awcms/dist` (admin panel). Public deployment remains a separate Cloudflare Pages pipeline.
 
 ## References
 

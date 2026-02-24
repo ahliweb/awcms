@@ -2,6 +2,13 @@
 
 Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
+## Status Snapshot (2026-02-24)
+
+- Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
+- Stitch import flow is tenant-configurable (`settings.key = 'stitch_import'`) with sanitized HTML fallback support.
+- MCP topology includes Context7, Supabase, Stitch, Cloudflare managed servers, and GitHub MCP.
+- Supabase migration repair workflow is scripted via `scripts/repair_supabase_migration_history.sh`.
+
 ## Documentation Authority
 
 This repository follows a strict documentation hierarchy aligned with the **Context7 MCP** (Model Context Protocol):
@@ -64,10 +71,16 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 ## Database & Migrations
 
-- Canonical migrations live in `supabase/migrations/` and are mirrored in `awcms/supabase/migrations/` for the Admin runtime.
-- Use `npx supabase db push --local` for local dev and `npx supabase db push --linked` for remote.
-- Use `npx supabase db pull --schema public,extensions` to sync remote history when needed.
-- If migration history is out of sync, use `supabase migration repair` before pushing.
+- Canonical timestamped migrations live in `supabase/migrations/` and are mirrored in `awcms/supabase/migrations/` for the Admin runtime.
+- Non-migration SQL files must be kept outside migration folders (for example `supabase/manual/`).
+- Local workflow:
+  - `npx supabase migration list --local`
+  - `npx supabase db push --local`
+- Linked/remote workflow:
+  - `npx supabase migration list --linked`
+  - `npx supabase db push --linked`
+- If migration history is out of sync, use `scripts/repair_supabase_migration_history.sh` (dry-run by default, `--apply` to execute).
+- Validate migration health after apply/repair with `scripts/verify_supabase_migration_consistency.sh` (`--linked` for remote checks).
 
 ## Context7 MCP Integration
 
@@ -77,6 +90,17 @@ This repository uses Context7 for AI-assisted development. Key library IDs:
 - `vitejs/vite` - Build tooling  
 - `withastro/astro` - Public portal framework
 - See [AGENTS.md](AGENTS.md) for complete list
+
+## MCP Topology (OpenCode)
+
+- Repo config: `mcp.json`
+- Runtime client config: `~/.config/opencode/opencode.json`
+- Active servers:
+  - Context7: `https://mcp.context7.com/mcp`
+  - Supabase (local): `node awcms-mcp/dist/index.js`
+  - Stitch (local): `npx @_davideast/stitch-mcp proxy`
+  - Cloudflare (remote): api/docs/bindings/observability/builds/radar/browser endpoints
+  - GitHub (local): `scripts/start_github_mcp.sh` (Docker-based `github/github-mcp-server`)
 
 ## Contributing
 

@@ -129,7 +129,23 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 
 ### Migrations
 
-Run from repo root:
+Run from repo root.
+
+Local-first workflow:
+
+```bash
+npx supabase migration list --local
+npx supabase db push --local
+```
+
+Linked/remote workflow:
+
+```bash
+npx supabase migration list --linked
+npx supabase db push --linked
+```
+
+Linked schema sync snapshot (when needed):
 
 ```bash
 npx supabase db pull --schema public,extensions
@@ -140,8 +156,14 @@ npx supabase db pull --schema public,extensions
 If migration history is mismatched:
 
 ```bash
-supabase migration repair --status reverted <missing_version>
+scripts/repair_supabase_migration_history.sh
+scripts/repair_supabase_migration_history.sh --apply --local
+scripts/repair_supabase_migration_history.sh --apply --linked
+scripts/verify_supabase_migration_consistency.sh
+scripts/verify_supabase_migration_consistency.sh --linked
 ```
+
+Keep non-migration SQL in `supabase/manual/` and keep `supabase/migrations/` timestamp-only.
 
 Supabase CLI configuration lives in `supabase/config.toml`.
 

@@ -37,7 +37,7 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 
 ### Public Portal (Astro)
 
-- Static builds resolve tenant at build time using `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
+- Static builds resolve tenant at build time using `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID` / `VITE_TENANT_ID`).
 - Tenant-specific routes are generated with `getStaticPaths` when needed.
 - Middleware-based resolution is reserved for SSR/runtime deployments.
 
@@ -53,6 +53,7 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 - SQL functions read `app.current_tenant_id` via `current_tenant_id()`.
 - Hierarchy functions (`is_tenant_descendant`, `tenant_can_access_resource`) enforce shared vs isolated resources.
 - Public aggregates (e.g., `analytics_daily`) are readable only when scoped to the tenant id.
+- Build-time public tenant fallback order is implemented in `awcms-public/primary/src/lib/publicTenant.ts`.
 
 ## Implementation Details
 
@@ -61,16 +62,20 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 Creating a new tenant requires precise coordination between the database definition, initial content, and staff roles. AWCMS orchestrates this provisioning securely via the backend Edge Function invoking a specialized RPC method: `create_tenant_with_defaults()`.
 
 **Step 1: Admin Creates Tenant**  
-The platform admin issues a POST request to `awcms/supabase/functions/manage-tenant/index.ts` containing the tenant payload:
+The platform admin (or trusted automation) invokes `create_tenant_with_defaults()` via a privileged backend path. For local development, the seed script demonstrates this flow:
 
 ```ts
-const { data, error } = await supabase.functions.invoke('manage-tenant', {
-  body: {
-    action: 'create',
-    tenant_details: { name: 'Dinkes Jatim', slug: 'dinkes', tier: 'pro' }
-  }
+const { data, error } = await supabase.rpc('create_tenant_with_defaults', {
+  p_name: 'Dinkes Jatim',
+  p_slug: 'dinkes',
+  p_domain: null,
+  p_tier: 'pro',
+  p_parent_tenant_id: null,
+  p_role_inheritance_mode: 'auto'
 });
 ```
+
+Reference implementation: `awcms/src/scripts/seed-primary-tenant.js`.
 
 **Step 2: Database Provisioning via `create_tenant_with_defaults()`**  
 The Edge Function securely calls the Postgres RPC function below (running with `SECURITY DEFINER` privileges), which guarantees consistent initialization and isolation:
@@ -168,6 +173,7 @@ Finally, the newly created tenant requires an admin user. Through the admin pane
 
 - Tenant domains are configured in the `tenants` table (host/subdomain fields).
 - New tenant creation seeds default roles, staff hierarchy, and resource rules via SQL/RPC.
+- Tenant feature flags such as Stitch import controls are stored in `settings` (`key = 'stitch_import'`) and remain tenant-scoped.
 
 ## Troubleshooting
 

@@ -123,7 +123,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 | School Pages     | `tenant.school_pages.*`     | read, update                                            |
 | Backups          | `tenant.backups.*`          | read, create, delete                                    |
 
-#### Mobile, IoT & Extensions
+#### Mobile, IoT & Platform Extensions
 
 | Module             | Permission Prefix             | Actions                      |
 | :----------------- | :---------------------------- | :--------------------------- |
@@ -131,7 +131,7 @@ These lists correspond directly to the database `permissions` table and `Permiss
 | Mobile Config      | `tenant.mobile.*`             | read, update                 |
 | Push Notifications | `tenant.push_notifications.*` | read, create, update, delete |
 | IoT Devices        | `tenant.iot.*`                | read, create, update, delete |
-| Extensions         | `tenant.extensions.*`         | view, create, delete, publish |
+| Platform Extensions | `platform.extensions.*`      | read, create, update, delete  |
 | Analytics          | `tenant.analytics.*`          | read                         |
 
 ---
@@ -289,6 +289,7 @@ $$;
 - Use registry keys when referencing plugin UI components (`mailketing:MailketingCreditsWidget`).
 - New plugin permissions must be inserted into the `permissions` table before use.
 - Prefer tenant scope permissions unless the feature is truly platform-wide.
+- Extension lifecycle management in admin uses platform scope permissions (`platform.extensions.*`), while tenant-level extension settings should use tenant scope (`tenant.setting.*`).
 
 ### Context API (`usePermissions`)
 

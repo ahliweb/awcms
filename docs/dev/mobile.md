@@ -23,7 +23,7 @@
 
 ## 3. Supabase Client Initialization
 
-Initialize the Supabase client once on app startup using the **publishable key**. Never use the service role (secret) key in the mobile app.
+Initialize the Supabase client once on app startup using the **publishable key**. Never use `SUPABASE_SECRET_KEY` in the mobile app.
 
 ```dart
 // lib/main.dart
@@ -214,7 +214,7 @@ class ArticlesScreen extends ConsumerWidget {
 |------|--------|
 | Use `SUPABASE_PUBLISHABLE_KEY` only | Publishable key is safe to bundle; secret key is not |
 | Store session in `flutter_secure_storage` | Protects JWT from plain-text access |
-| All privileged operations via Edge Functions | Functions hold the service role key server-side |
+| All privileged operations via Edge Functions | Functions hold `SUPABASE_SECRET_KEY` server-side |
 | RLS policies enforce tenant isolation | Guarantees users only see their own tenant's data |
 
 ---

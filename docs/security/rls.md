@@ -25,7 +25,7 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 
 | Function | Returns | Purpose |
 | --- | --- | --- |
-| `current_tenant_id()` | UUID | Tenant from `app.current_tenant_id` or user profile |
+| `current_tenant_id()` | UUID | Tenant from JWT/app context (`app.current_tenant_id`) with user/profile fallbacks |
 | `auth_is_admin()` | boolean | **SECURITY DEFINER**: Checks platform admin/full-access flags. Bypasses RLS recursion. |
 | `is_platform_admin()` | boolean | **Standard**: Checks platform admin/full-access flags. Subject to RLS recursion. |
 | `has_permission(key)` | boolean | Checks if current user has specific permission key |
@@ -38,7 +38,19 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 ### Table Policy Sources
 
 - `supabase/migrations` contains the canonical SQL definitions.
-- Use `npx supabase db pull --schema public,extensions` to refresh local schema history when syncing with remote.
+- Use `npx supabase migration list --local` before local migration ops.
+- Use `npx supabase db pull --schema public,extensions` only when syncing linked/remote schema snapshots.
+- Keep non-migration SQL in `supabase/manual/` (not in migration directories).
+
+### Migration History Drift
+
+Use the helper script for safe repair planning/execution:
+
+```bash
+scripts/repair_supabase_migration_history.sh
+scripts/repair_supabase_migration_history.sh --apply --local
+scripts/repair_supabase_migration_history.sh --apply --linked
+```
 
 ### ⚠️ IMPORTANT: ABAC Policy Pattern (New Standard)
 
@@ -130,6 +142,7 @@ FOR SELECT USING (
 - **Public access**: Public reads must be explicitly scoped to published content (e.g. `is_published = true`).
 - **Plugins**: Extension/Plugin routes must query tenant-scoped tables with `tenant_id = current_tenant_id()` and rely on ABAC permissions (no role-name checks).
 - **Public portal headers**: Ensure `x-tenant-id` is set by scoped Supabase clients (static builds) or middleware (SSR) so `current_tenant_id()` resolves correctly.
+- **Migration files**: RLS policy SQL must be committed as timestamped migrations only.
 
 ## References
 

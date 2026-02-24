@@ -42,22 +42,30 @@ For `awcms-public/smandapbun`:
 - Build command: `npm run build`
 - Output directory: `dist`
 - Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_TURNSTILE_SITE_KEY`
-- Set `NODE_VERSION=20`
+- Set `NODE_VERSION=22` (or any value `>=22.12.0`)
 
 ### 3. Supabase
 
 - Apply migrations from repo root:
 
 ```bash
+npx supabase migration list --linked
 npx supabase db push --linked
 ```
 
 > Use `--local` for local dev stacks and `--linked` for remote projects.
 
+If migration history is out of sync, repair before pushing:
+
+```bash
+scripts/repair_supabase_migration_history.sh
+scripts/repair_supabase_migration_history.sh --apply --linked
+```
+
 - Deploy edge functions as needed:
 
 ```bash
-npx supabase functions deploy
+npx supabase functions deploy --project-ref <project_ref>
 ```
 
 ### 3.1 Supabase Auth URLs

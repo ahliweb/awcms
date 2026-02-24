@@ -17,6 +17,57 @@ APPLY=false
 YES=false
 REPAIR_SCOPE="linked"
 
+load_env_file() {
+  local file_path="$1"
+  [ -f "$file_path" ] || return 0
+
+  while IFS= read -r raw_line || [ -n "$raw_line" ]; do
+    local line="$raw_line"
+    line="${line#export }"
+
+    case "$line" in
+      ''|\#*)
+        continue
+        ;;
+    esac
+
+    if [[ "$line" != *"="* ]]; then
+      continue
+    fi
+
+    local key="${line%%=*}"
+    local value="${line#*=}"
+
+    key="${key## }"
+    key="${key%% }"
+    value="${value%$'\r'}"
+    value="${value%\#*}"
+    value="${value#\"}"
+    value="${value%\"}"
+    value="${value#\'}"
+    value="${value%\'}"
+
+    if [ -z "$key" ]; then
+      continue
+    fi
+
+    if [ -n "${!key:-}" ]; then
+      continue
+    fi
+
+    export "$key=$value"
+  done < "$file_path"
+}
+
+load_linked_env_defaults() {
+  load_env_file "$REPO_ROOT/awcms/.env"
+  load_env_file "$REPO_ROOT/awcms/.env.local"
+  load_env_file "$REPO_ROOT/awcms/.env.remote"
+  load_env_file "$REPO_ROOT/.env"
+  load_env_file "$REPO_ROOT/.env.local"
+  load_env_file "$REPO_ROOT/.env.remote"
+}
+
 usage() {
   cat <<EOF
 Usage: $SCRIPT_NAME [options]
@@ -109,6 +160,10 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+if [ "$REPAIR_SCOPE" = "linked" ]; then
+  load_linked_env_defaults
+fi
 
 if [ ! -d "$MIGRATIONS_DIR" ]; then
   echo "Error: migrations directory not found: $MIGRATIONS_DIR"
@@ -206,3 +261,4 @@ if [ "$REPAIR_SCOPE" = "local" ]; then
 else
   echo "  npx supabase db pull"
 fi
+echo "  scripts/verify_supabase_migration_consistency.sh"

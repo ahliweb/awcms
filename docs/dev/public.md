@@ -19,9 +19,9 @@ The Public Portal (`awcms-public/`) handles the visitor-facing websites for each
 
 ### Astro Config (Context7)
 
-- Use `defineConfig` in `astro.config.mjs`.
-- Set `site`, `output: "static"`, and a consistent `trailingSlash` policy.
-- Register framework integrations (React, sitemap) in the `integrations` array.
+- Use `defineConfig` in `astro.config.ts`.
+- Keep `output: "static"` for default public deployments.
+- Register integrations in the `integrations` array (for example React, sitemap, mdx, icon, and compression utilities).
 
 ## 3. Multi-Tenancy Strategy
 

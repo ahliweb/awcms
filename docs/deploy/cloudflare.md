@@ -28,14 +28,14 @@ Provide Cloudflare Pages settings for the Admin Panel and Public Portal.
 | Root directory | `awcms` |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Node version | `20` |
+| Node version | `22` (or `>=22.12.0`) |
 
 Environment variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_TURNSTILE_SITE_KEY`
-- `NODE_VERSION=20`
+- `NODE_VERSION=22`
 
 ### Public Portal (awcms-public/primary)
 
@@ -46,7 +46,7 @@ Environment variables:
 | Root directory | `awcms-public/primary` |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Node version | `20` |
+| Node version | `22` (or `>=22.12.0`) |
 
 Environment variables:
 
@@ -54,7 +54,7 @@ Environment variables:
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (build fallback)
 - `PUBLIC_TENANT_ID`
-- `NODE_VERSION=20`
+- `NODE_VERSION=22`
 
 **Runtime note**: Public portals are built as static sites; environment variables are resolved at build time via `import.meta.env`.
 
@@ -67,16 +67,20 @@ Environment variables:
 | Root directory | `awcms-public/smandapbun` |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Node version | `20` |
+| Node version | `22` (or `>=22.12.0`) |
 
 Environment variables:
 
 - `PUBLIC_SUPABASE_URL`
 - `PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `PUBLIC_TURNSTILE_SITE_KEY`
-- `NODE_VERSION=20`
+- `NODE_VERSION=22`
 
 KV bindings: none (sessions use the in-memory driver).
+
+### Optional Secret Sync Helper
+
+Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env values into Cloudflare Pages secrets interactively.
 
 ## Verification
 

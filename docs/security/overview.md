@@ -23,6 +23,7 @@ Describe AWCMS security posture, enforcement points, and operational expectation
 - Zero Trust with ABAC and RLS.
 - Tenant isolation at UI, API, and database layers.
 - Soft delete lifecycle for all tenant-scoped data.
+- Rich content import/rendering paths must enforce sanitization before any `set:html`/`dangerouslySetInnerHTML` usage.
 
 ## How It Works
 
@@ -32,7 +33,7 @@ Describe AWCMS security posture, enforcement points, and operational expectation
 | --- | --- |
 | A01: Broken Access Control | ABAC + RLS + protected routes |
 | A02: Cryptographic Failures | Supabase managed encryption at rest |
-| A03: Injection (XSS) | TipTap sanitization and DOMPurify |
+| A03: Injection (XSS) | TipTap-safe rendering + admin DOMPurify + public `sanitize-html` for RawHTML fallback |
 | A04: Insecure Design | Multi-layer architecture |
 | A05: Security Misconfiguration | CSP headers + secure defaults |
 | A06: Vulnerable Components | Dependency audits |
@@ -52,8 +53,10 @@ Describe AWCMS security posture, enforcement points, and operational expectation
 
 ### XSS Prevention
 
-- TipTap data is rendered with controlled JSON-to-React mapping.
-- HTML rendering uses `awcms/src/utils/sanitize.js` (DOMPurify).
+- TipTap data is rendered with controlled editor mappings.
+- Stitch import HTML is sanitized in `awcms/src/lib/stitch/sanitizeStitchHtml.js` before insertion.
+- Admin fallback HTML rendering uses `awcms/src/utils/sanitize.js` (DOMPurify).
+- Public fallback HTML rendering uses `awcms-public/primary/src/components/common/puckRendererRawHtml.ts` + `awcms-public/primary/src/utils/sanitize.ts` (`sanitize-html`).
 
 ```javascript
 import { sanitizeHTML } from '@/utils/sanitize';
@@ -91,11 +94,12 @@ Legacy tables may still use tenant-only select policies and rely on admin UI ABA
 - Tenant context is injected via `x-tenant-id` in Supabase requests.
 - `current_tenant_id()` resolves tenant context in SQL.
 - Storage paths are scoped to `{tenant_id}/...`.
+- Public static builds resolve tenant via `PUBLIC_TENANT_ID`, `VITE_PUBLIC_TENANT_ID`, or `VITE_TENANT_ID`.
 
 ### Edge Functions
 
 - All edge functions must validate tenant context and permissions.
-- Service role access is allowed only in functions and migrations.
+- Service-role access is allowed only in edge functions, migrations, and trusted operational scripts.
 
 ## Implementation Patterns
 
@@ -147,6 +151,12 @@ Development headers are set in `awcms/vite.config.js`. Production headers must b
 
 - Never commit `.env.local` or `SUPABASE_SECRET_KEY` values.
 - Store production secrets in CI or Cloudflare Pages environment variables.
+
+### Migration Hygiene
+
+- Keep timestamped migrations in `supabase/migrations/`.
+- Keep non-migration SQL in `supabase/manual/`.
+- Use `scripts/repair_supabase_migration_history.sh` when migration history drifts.
 
 ## Troubleshooting
 

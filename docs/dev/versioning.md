@@ -193,7 +193,7 @@ Deployments must be sequenced carefully when a feature spans the backend schema,
 
 When a major feature releases:
 
-1. **Database & Edge Functions (Backend):** Deploy via `supabase db push` and `supabase functions deploy`. These must be non-breaking additive changes.
+1. **Database & Edge Functions (Backend):** Deploy via `npx supabase migration list --linked`, `npx supabase db push --linked`, and `npx supabase functions deploy --project-ref <project_ref>`. These must be non-breaking additive changes.
 2. **Admin Panel (`awcms`):** Deploy to Cloudflare Pages. Editors can begin creating data using the new schema.
 3. **Public Portal (`awcms-public`):** Deploy to Cloudflare Pages to render the new content for web users.
 4. **Mobile App (`awcms-mobile`):** Submit to App Stores. (Approval takes 1-3 days).
@@ -215,7 +215,7 @@ Production incidents require immediate, client-specific rollback strategies:
 ### Supabase Backend
 
 - **Edge Functions:** Re-deploy the previous commit via `supabase functions deploy`.
-- **Database Schema:** Direct rollback of schema migrations is risky. Prefer "roll-forward" fixes by creating a new migration (`supabase migration new fix_bug`) that reverts the problematic objects, then push.
+- **Database Schema:** Direct rollback of schema migrations is risky. Prefer "roll-forward" fixes by creating a new migration (`npx supabase migration new fix_bug`) that reverts the problematic objects, then push (`npx supabase db push --linked`).
 
 ### Mobile App
 

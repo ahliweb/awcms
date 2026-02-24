@@ -140,7 +140,7 @@ A “workflow-engine” topic typically indicates:
 
 Recommended baseline tooling:
 
-- Node.js 20 LTS + npm/pnpm
+- Node.js 22.12+ LTS + npm/pnpm
 - Git
 - Supabase CLI (for local DB + migrations)
 - Docker (optional but helpful for local Supabase)
@@ -387,7 +387,7 @@ The repository includes:
 
 ### 3) Build fails on React 19 / Vite 7.x
 
-- Verify Node 20 LTS
+- Verify Node 22.12+ LTS
 - Ensure dependencies support React 19
 - Replace outdated UI libs (slideshow, etc.) if incompatible
 

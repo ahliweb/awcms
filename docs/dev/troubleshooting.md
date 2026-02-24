@@ -48,10 +48,15 @@ Provide common fixes for local development and deployment issues.
 
 ### Migration History Mismatch
 
-- Use `supabase migration repair --status reverted <missing_version>`.
-- Re-run `npx supabase db push --local` after repairs.
-- Helper script (safe dry-run by default): `scripts/repair_supabase_migration_history.sh`.
-- Run with `--apply` only after reviewing generated commands.
+- Use helper script (safe dry-run by default): `scripts/repair_supabase_migration_history.sh`.
+- Local repair execution: `scripts/repair_supabase_migration_history.sh --apply --local`.
+- Linked/remote repair execution: `scripts/repair_supabase_migration_history.sh --apply --linked`.
+- Re-run `npx supabase db push --local` after local repairs.
+
+### Invalid Migration Filename Warning
+
+- Ensure files in `supabase/migrations/` follow `<timestamp>_name.sql`.
+- Move helper/manual SQL files into `supabase/manual/` to avoid CLI skip warnings.
 
 ### Supabase DB Lint Warning (index_advisor)
 
@@ -71,6 +76,13 @@ Provide common fixes for local development and deployment issues.
 ### Cloudflare Runtime Env Missing
 
 - Runtime env access applies only when SSR/middleware is enabled.
+
+### MCP Servers Not Connected
+
+- Verify OpenCode MCP status with `opencode mcp list`.
+- Confirm repository MCP config is present in `mcp.json`.
+- For local Supabase MCP, start `awcms-mcp` (`cd awcms-mcp && npm run dev`) if needed.
+- For GitHub MCP, ensure Docker is running and one token env is set (`GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_MCP_PERSONAL_ACCESS_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`).
 
 ## Verification
 

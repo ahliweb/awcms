@@ -8,6 +8,40 @@
 
 ## Summary of Changes
 
+### 2026-02-24 Updates (Phase 0 + Phase 1)
+
+- Reworked the documentation audit runbook into a repository-wide Context7-first execution plan in `docs/dev/documentation-audit-plan.md`.
+- Updated `DOCS_INDEX.md` to reflect the expanded audit plan scope and wording.
+- Updated `README.md` with a current status snapshot (Node runtime, Stitch import, MCP topology, migration repair workflow).
+- Revised root migration guidance in `README.md` to match current local/linked flows and scripted repair process.
+- Updated `SYSTEM_MODEL.md` baseline metadata and added explicit MCP topology mandates (Context7, Supabase, Stitch, GitHub, Cloudflare MCP servers).
+- Added content import/sanitization governance in `SYSTEM_MODEL.md` for tenant-scoped Stitch import behavior and admin/public sanitization enforcement.
+- Corrected `AGENTS.md` persona count and formatting issues in the Public Experience persona section.
+- Aligned `AGENTS.md` tech stack references (Lucide admin/public versions and `react-leaflet` 5.0.0).
+- Replaced outdated `AGENTS.md` limitations text (no-shell/no-deletion) with host-aware constraints and current migration file policy (`supabase/manual` for non-migration SQL).
+- Updated `AGENTS.md` MCP section to mirror the active hybrid topology and current server inventory.
+
+### 2026-02-24 Updates (Phase 2 - Security/Tenancy Reconciliation)
+
+- Updated `docs/security/overview.md` with current XSS sanitization paths for Stitch import and RawHTML fallback rendering.
+- Updated `docs/security/rls.md` with current migration workflow (`supabase/manual/`, drift repair script) and tenant header notes for public/static clients.
+- Updated `docs/security/abac.md` to align extension permissions with live platform scope keys (`platform.extensions.*`) and kept tenant plugin pages under `tenant.setting.*`.
+- Updated `docs/tenancy/overview.md` to reflect build-time tenant fallback order, hierarchy/resource-sharing notes, and tenant-scoped Stitch settings.
+- Updated `docs/tenancy/supabase.md` with current local vs linked Supabase CLI workflows and dual `supabase/` + `awcms/supabase/` repository layout caveat.
+- Updated `docs/dev/troubleshooting.md` with migration mismatch repair commands and invalid filename guidance (`supabase/manual/`).
+- Updated `docs/modules/EXTENSIONS.md` ABAC table to use platform extension lifecycle permissions and added tenant settings permission guidance.
+- Corrected a permission key example in `AGENTS.md` from tenant extension scope to platform extension scope.
+
+### 2026-02-24 Updates (Phase 3 - Scripts/Operations Reconciliation)
+
+- Updated `docs/dev/setup.md` with current Node baseline (`>=22.12.0`), local vs linked Supabase command flow, migration repair script usage, MCP verification steps (`opencode mcp list`), and an operational scripts quick-reference table.
+- Updated `docs/dev/ci-cd.md` to reflect actual workflow behavior (admin-only deploy job), legacy Node 20 workflow pin caveat, and explicit legacy alias handling for CI Supabase key variables.
+- Replaced stale `docs/dev/edge-functions.md` examples with current function inventory (`verify-turnstile`, `manage-users`, `mailketing`, `mailketing-webhook`, `serve-sitemap`), updated secret naming (`SUPABASE_SECRET_KEY`), and current local/deploy command runbook.
+- Updated `docs/deploy/overview.md` and `docs/deploy/cloudflare.md` with Node 22+ deployment guidance, linked migration checks, and Cloudflare secret sync helper documentation.
+- Updated `docs/dev/troubleshooting.md` with MCP connectivity diagnostics and token/runtime prerequisites.
+- Updated `docs/dev/testing.md`, `docs/dev/versioning.md`, `docs/dev/public.md`, `docs/dev/mobile.md`, and `docs/README.md` for runtime/version/env naming consistency with current operations and authority docs.
+- Added migration consistency verification script documentation (`scripts/verify_supabase_migration_consistency.sh`) in setup/tenancy/root docs and linked it from the migration repair workflow.
+
 ### 2026-02-16 Updates
 
 - Added a Context7-driven documentation audit plan at `docs/dev/documentation-audit-plan.md`.

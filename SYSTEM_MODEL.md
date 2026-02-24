@@ -1,7 +1,7 @@
 # AWCMS System Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-02-23 (Audited against `package.json`, OpenClaw, Node 22)
+> **Last Updated:** 2026-02-24 (Audited against `package.json`, migration status, and MCP topology)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -60,6 +60,18 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Project Config:** `openclaw/openclaw.json` (version-controlled, token excluded)
 * **Context7 ID:** `openclaw/openclaw`
 
+### 1.5 MCP Topology (Developer Tooling)
+
+* **Primary Config (Repo):** `mcp.json`
+* **Runtime Config (OpenCode):** `~/.config/opencode/opencode.json`
+* **Connected Servers (authoritative baseline):**
+  * `context7` (remote)
+  * `supabase` (local `awcms-mcp` server)
+  * `stitch` (local proxy)
+  * `github` (local Docker-backed `github/github-mcp-server`)
+  * Cloudflare managed remote MCPs: `cloudflare-api`, `cloudflare-docs`, `cloudflare-bindings`, `cloudflare-observability`, `cloudflare-builds`, `cloudflare-radar`, `cloudflare-browser`
+* **GitHub Auth Pattern:** token-based local runtime via `GITHUB_PERSONAL_ACCESS_TOKEN` (or equivalent mapped vars).
+
 ---
 
 ## 2. Architectural Pillars
@@ -110,6 +122,18 @@ Agents must respect these exact versions to ensure compatibility across the mono
 
 * **System:** TailwindCSS v4 with CSS Variables.
 * **Constraint:** **NO** hardcoded hex values (e.g., `bg-[#123456]`) in components. Use semantic variables (`bg-primary`, `text-foreground`) to support white-labeling and dark mode.
+
+### 2.5 Content Import & Sanitization
+
+* **Stitch Import Policy:** Tenant-controlled via `settings.key = 'stitch_import'`.
+* **Config Surface:** `enabled`, `mode`, `max_input_kb`, `allow_raw_html_fallback`.
+* **Import Modes:**
+  * `html`: single sanitized block import.
+  * `mapped`: structured block mapping with optional `RawHTML` fallback.
+* **Sanitization Enforcement:**
+  * Admin import sanitization in `awcms/src/lib/stitch/sanitizeStitchHtml.js`.
+  * Admin fallback rendering sanitization in `awcms/src/utils/sanitize.js`.
+  * Public fallback rendering sanitization in `awcms-public/primary/src/utils/sanitize.ts` via `PuckRenderer`.
 
 ---
 
