@@ -676,7 +676,7 @@ _\* Author → hanya konten milik sendiri (tenant_id + owner_id)_
 
 > Platform admin access is determined by role flags (`is_platform_admin`/`is_full_access`), not role names.
 
-#### Legend:
+#### Legend
 
 - **C**: Create
 - **R**: Read
@@ -854,11 +854,11 @@ export default function CreateBlogPostForm({ authorId }) {
 
 ### 2) Tenant Onboarding and Isolation (70/100)
 
-#### Objective
+#### Tenant Onboarding Objective
 
 Onboard a tenant using an atomic bootstrap path that creates tenant defaults and preserves strict RLS isolation.
 
-#### Implementation Workflow
+#### Tenant Onboarding Workflow
 
 1. Platform Admin submits `name`, `slug`, `domain`, and first admin identity.
 2. Secure backend path (Edge Function or privileged admin workflow) validates uniqueness.
@@ -904,11 +904,11 @@ if (inviteError) throw inviteError;
 
 ### 3) Login and Registration Flow (71/100)
 
-#### Objective
+#### Login & Auth Objective
 
 Implement secure registration and login with Turnstile pre-verification, Supabase Auth, and audit logging.
 
-#### Implementation Workflow
+#### Login & Auth Workflow
 
 1. Verify Turnstile token before any auth action.
 2. For registration, call `signUp` and include tenant metadata as needed.
@@ -977,7 +977,7 @@ export async function secureLogin({ email, password, turnstileToken }) {
 }
 ```
 
-#### Validation Checklist
+#### Auth Validation Checklist
 
 - Invalid Turnstile token blocks auth.
 - Failed login returns explicit error.
@@ -986,7 +986,7 @@ export async function secureLogin({ email, password, turnstileToken }) {
 
 ### 4) Fine-Grained Authorization Beyond Basic RLS (71/100)
 
-#### Objective
+#### Authorization Objective
 
 Map ABAC permission keys (`scope.resource.action`) into PostgreSQL-enforced checks for tenant + action + ownership.
 
@@ -1056,7 +1056,7 @@ if (!hasPermission("tenant.blog.update")) {
 
 ### 5) Astro Static Fetch and Render (79/100)
 
-#### Objective
+#### SSG Fetch Objective
 
 Fetch tenant-scoped published content at build time and render static pages with deterministic routing.
 
@@ -1124,7 +1124,7 @@ if (error || !article) return Astro.redirect("/404");
 </Layout>
 ```
 
-#### Validation Checklist
+#### Astro SSG Validation Checklist
 
 - Build fails fast if tenant env key is missing.
 - `getStaticPaths()` only emits published, non-deleted content.
@@ -1132,7 +1132,7 @@ if (error || !article) return Astro.redirect("/404");
 
 ### 6) Supabase Edge Function Lifecycle (81/100)
 
-#### Objective
+#### Edge Function Objective
 
 Provide a secure, repeatable create-test-deploy flow for business logic execution.
 
@@ -1232,11 +1232,11 @@ npx supabase functions deploy process-content --project-ref your-project-ref
 
 ### 7) Flutter Real-Time Dynamic Content Retrieval (83/100)
 
-#### Objective
+#### Flutter Dynamic Content Objective
 
 Stream tenant-scoped updates securely with clear handling for loading, error, empty, and signed-out states.
 
-#### Implementation Workflow
+#### Flutter Dynamic Content Workflow
 
 1. Initialize Supabase client via `supabase_flutter`.
 2. Confirm authenticated session exists.
@@ -1312,7 +1312,7 @@ class _LiveAnnouncementsWidgetState extends State<LiveAnnouncementsWidget> {
 }
 ```
 
-#### Validation Checklist
+#### Flutter Validation Checklist
 
 - Signed-out user is blocked from stream view.
 - Stream only returns rows for `tenant_id = widget.tenantId`.
@@ -1327,13 +1327,13 @@ class _LiveAnnouncementsWidgetState extends State<LiveAnnouncementsWidget> {
 
 To create and submit new content for a specific tenant in the AWCMS Admin Panel (React), developers should use the internal `customSupabaseClient` for authenticated requests, and handle form state securely.
 
-#### Key Requirements:
+#### Key Requirements
 
 1. **Target Table**: Use standard content tables (e.g., `pages`, `blogs`, `portfolio`), not the `tenants` table.
 2. **Tenant Context**: The `tenant_id` must be injected into the payload.
 3. **Authentication**: `customSupabaseClient.js` automatically handles token injection.
 
-#### Implementation Example:
+#### Implementation Example
 
 ```jsx
 import React, { useState } from 'react';
@@ -1426,7 +1426,7 @@ export default function CreateBlogPostForm({ currentTenantId, authorId }) {
 
 Onboarding a new tenant in AWCMS involves strict data isolation using PostgreSQL Row Level Security (RLS). All data is tagged with a `tenant_id`. Access is governed by ensuring the user's JWT matches the data's `tenant_id`.
 
-#### Step-by-Step Onboarding Process:
+#### Step-by-Step Onboarding Process
 
 1. **Tenant Record Creation**:
    The Super Admin initiates creation via the Admin UI, which inserts a record into the `tenants` table containing the `name`, `slug`, and `domain`.
@@ -1455,12 +1455,12 @@ Onboarding a new tenant in AWCMS involves strict data isolation using PostgreSQL
 
 AWCMS uses a secure, two-step login/registration flow integrating Cloudflare Turnstile to prevent bot attacks before passing credentials to Supabase.
 
-#### Implementation Checklist:
+#### Implementation Checklist
 
 1. **Turnstile Verification**: The client must solve a CAPTCHA. The token is sent to the `verify-turnstile` Supabase Edge Function.
 2. **Supabase Auth Execution**: If Turnstile validates, standard Supabase Auth methods are invoked.
 
-#### Code Implementation (Login Flow):
+#### Code Implementation (Login Flow)
 
 ```javascript
 import supabase from '../utils/customSupabaseClient';
@@ -1511,18 +1511,18 @@ async function secureLogin(email, password, turnstileToken) {
 
 AWCMS transcends basic RLS (which only checks "Is this my user ID?" or "Is this my tenant ID?") by implementing an RBAC (Role-Based Access Control) architecture embedded directly into PostgreSQL functions for use within RLS policies.
 
-#### Architecture Components:
+#### Architecture Components
 
 1. **Roles Table**: `roles (id, text name, uuid tenant_id)`
 2. **Permissions Table**: `permissions (id, text name)` (e.g., `publish_blog`, `manage_users`)
 3. **Role-Permissions Map**: `role_permissions (role_id, permission_id)`
 4. **User-Role Map**: Defined by `role_id` on `public.users`.
 
-#### RLS Integration Pattern:
+#### RLS Integration Pattern
 
 To maintain fast, secure RLS queries without complex join calculations on every request, AWCMS utilizes a `SECURITY DEFINER` function: `has_permission('permission_name')`.
 
-#### SQL Function Snippet:
+#### SQL Function Snippet
 
 ```sql
 CREATE OR REPLACE FUNCTION public.has_permission(permission_name text) RETURNS boolean
@@ -1544,7 +1544,7 @@ END;
 $$;
 ```
 
-#### Implementation in an RLS Policy:
+#### Implementation in an RLS Policy
 
 ```sql
 CREATE POLICY "Editors can update published blogs"
@@ -1563,7 +1563,7 @@ USING (
 
 The frontend uses Astro for Static Site Generation (SSG). Because the portal is public, it fetches content at build-time using `getStaticPaths` or standard component scripting, filtering by `tenant_id` and `status`.
 
-#### Astro Code Snippet (`src/pages/blogs/[slug].astro`):
+#### Astro Code Snippet (`src/pages/blogs/[slug].astro`)
 
 ```astro
 ---
@@ -1626,15 +1626,15 @@ if (error || !article) return Astro.redirect('/404');
 
 Edge Functions in AWCMS execute custom server-side business logic, like validating Turnstile or processing webhooks, securely within a V8 isolate environment.
 
-#### Deployment Walkthrough:
+#### Deployment Walkthrough
 
-#### 1. Create the Function CLI:
+#### 1. Create the Function CLI
 
 ```bash
 npx supabase functions new process-webhook
 ```
 
-#### 2. Write the Deno Code (`supabase/functions/process-webhook/index.ts`):
+#### 2. Write the Deno Code (`supabase/functions/process-webhook/index.ts`)
 
 ```typescript
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
@@ -1669,7 +1669,7 @@ serve(async (req) => {
 })
 ```
 
-#### 3. Deploy the Function:
+#### 3. Deploy the Function
 
 ```bash
 npx supabase functions deploy process-webhook --project-ref your-project-id
@@ -1683,7 +1683,7 @@ npx supabase functions deploy process-webhook --project-ref your-project-id
 
 The AWCMS Flutter application retrieves live data updates (e.g., chat, announcements) using Supabase's Realtime broadcast channels seamlessly abstracted via the `stream` API. Security is automatically maintained via authenticated JWT passing on initial connection.
 
-#### Flutter Code Snippet:
+#### Flutter Code Snippet
 
 ```dart
 import 'package:flutter/material.dart';

@@ -2,12 +2,7 @@
 import type { GetStaticPaths } from "astro";
 import Layout from "../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
-import {
-  t,
-  getLocalizedValue,
-  getLocalizedPath,
-  type Locale,
-} from "../../utils/i18n";
+import { t, getLocalizedValue, getLocalizedPath } from "../../utils/i18n";
 
 import { getPosts } from "../../lib/api";
 
@@ -27,7 +22,7 @@ const allPosts = await getPosts(500);
 const post = allPosts.find((item) => item.slug === slug);
 
 if (!post) {
-  Astro.response.status = 404;
+  return Astro.redirect("/404");
 }
 
 // Get related blogs (same category, exclude current)

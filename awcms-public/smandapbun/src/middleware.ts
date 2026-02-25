@@ -91,7 +91,7 @@ const shouldTrackRequest = (request: Request, pathname: string) => {
 };
 
 const ensureId = () => {
-  const webCrypto = globalThis.crypto;
+  const webCrypto = globalThis.crypto as any;
   if (!webCrypto) {
     throw new Error("Crypto unavailable for ID generation.");
   }

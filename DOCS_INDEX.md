@@ -97,6 +97,8 @@ All documentation follows this authority structure:
 | Programmatic Content Types | [docs/architecture/schema-definition.md](docs/architecture/schema-definition.md) | Defining and migrating custom schemas |
 | Edge Functions | [docs/dev/edge-functions.md](docs/dev/edge-functions.md) | Supabase Deno Edge Functions |
 | Versioning Strategy | [docs/dev/versioning.md](docs/dev/versioning.md) | Monorepo versioning & release process |
+| WordPress Migration | [docs/guides/wp-to-awcms-migration.md](docs/guides/wp-to-awcms-migration.md) | Migrating from WordPress Elementor to AWCMS |
+| WP Migration Script | [docs/guides/wp-data-migration-script.md](docs/guides/wp-data-migration-script.md) | Node.js script to migrate WP posts to Supabase |
 
 ### Deployment
 

@@ -2,12 +2,7 @@
 import type { GetStaticPaths } from "astro";
 import Layout from "../../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
-import {
-  t,
-  getLocalizedValue,
-  getLocalizedPath,
-  type Locale,
-} from "../../../utils/i18n";
+import { t, getLocalizedValue, getLocalizedPath } from "../../../utils/i18n";
 
 import { getPosts } from "../../../lib/api";
 
@@ -27,7 +22,7 @@ const allPosts = await getPosts(500);
 const post = allPosts.find((item) => item.slug === slug);
 
 if (!post) {
-  Astro.response.status = 404;
+  return Astro.redirect("/404");
 }
 
 // Get related blogs (same category, exclude current)
@@ -64,14 +59,11 @@ const relatedBlogs = allPosts
         <div class="flex items-center gap-2">
           <Icon name="tabler:calendar" class="w-5 h-5" />
           {
-            new Date(post.published_at).toLocaleDateString(
-              locale === "id" ? "id-ID" : "en-US",
-              {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              },
-            )
+            new Date(post.published_at).toLocaleDateString("en-US", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })
           }
         </div>
         <div class="flex items-center gap-2">
@@ -191,7 +183,7 @@ const relatedBlogs = allPosts
                 data-testid="related-blogs"
               >
                 <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-4">
-                  {locale === "id" ? "Blog Terkait" : "Related Blogs"}
+                  {"Related Blogs"}
                 </h3>
                 <div class="space-y-4">
                   {relatedBlogs.map((related: any) => (
@@ -216,7 +208,7 @@ const relatedBlogs = allPosts
                           </h4>
                           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             {new Date(related.published_at).toLocaleDateString(
-                              locale === "id" ? "id-ID" : "en-US",
+                              "en-US",
                             )}
                           </p>
                         </div>
@@ -233,7 +225,7 @@ const relatedBlogs = allPosts
             class="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 transition-colors duration-200"
           >
             <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-4">
-              {locale === "id" ? "Kategori" : "Categories"}
+              {"Categories"}
             </h3>
             <div class="space-y-2">
               <a

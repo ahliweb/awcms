@@ -10,8 +10,6 @@ const locale = getLocale(Astro.url) as Locale;
 const contactData = await getContactPageData();
 const tenantId = await getTenantId();
 const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
-
-const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 ---
 
 <Layout title={t("contact.title", locale)}>
@@ -401,7 +399,10 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
       return;
     }
 
-    const client = createScopedClient({ "x-tenant-id": tenantId }, import.meta.env);
+    const client = createScopedClient(
+      { "x-tenant-id": tenantId },
+      import.meta.env,
+    );
     if (!client) {
       window.showToast?.("System Error: Supabase client missing.", "error");
       return;

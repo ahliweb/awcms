@@ -16,3 +16,19 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare namespace App {
+  interface Locals {
+    tenant_id: string;
+    tenant_slug: string;
+    host: string;
+    tenant_source: "path" | "host";
+    ref_code: string | null;
+    locale: string;
+    analytics_consent?: Record<string, unknown>;
+    runtime?: {
+      env?: Record<string, any>;
+    };
+  }
+}
+
