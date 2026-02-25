@@ -66,4 +66,4 @@ export const STITCH_FORBID_TAGS = ['script', 'style', 'noscript', 'form', 'input
 
 export const STITCH_FORBID_ATTR = ['style'];
 
-export const STITCH_ALLOWED_URI_REGEXP = /^(?:(?:https?|mailto|tel):|data:image\/(?:png|jpe?g|gif|webp|svg\+xml);base64,|[^a-z]|[a-z0-9.+-]+(?:[^a-z0-9+.-:]|$))/i;
+export const STITCH_ALLOWED_URI_REGEXP = /^(?:(?:https?|mailto|tel):|data:image\/(?:png|jpe?g|gif|webp|svg\+xml);base64,|[^a-z]|[a-z0-9.+\-]+(?:[^a-z0-9+\.\-:]|$))/i;
