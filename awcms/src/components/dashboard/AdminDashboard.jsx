@@ -1,5 +1,5 @@
 
-import { RefreshCw, LayoutGrid, Calendar } from 'lucide-react';
+import { RefreshCw, LayoutGrid, Calendar, FileText, Users2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -20,12 +20,42 @@ function AdminDashboard() {
     const perms = usePermissions() || {};
     const { isPlatformAdmin, userRole } = perms;
     const { data, loading, error, lastUpdated, refresh } = useDashboardData();
-    const spacingClass = 'space-y-8 lg:space-y-10';
+    const spacingClass = 'space-y-7 lg:space-y-9';
     const layoutClass = 'w-full';
     const gridGap = 'gap-6 lg:gap-8';
     const columnSpacing = 'space-y-6 lg:space-y-8';
     const roleLabel = userRole?.replace('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase()) || 'User';
     const lastUpdatedLabel = lastUpdated instanceof Date ? lastUpdated.toLocaleTimeString() : '-';
+    const contentTotal = Number(data?.overview?.blogs || 0) + Number(data?.overview?.pages || 0) + Number(data?.overview?.products || 0);
+    const teamSize = Number(data?.overview?.users || 0);
+    const activityItems = Number(data?.activity?.length || 0);
+    const isHealthy = data?.systemHealth?.database === 'connected' && data?.systemHealth?.api === 'operational';
+
+    const heroSignals = [
+        {
+            label: 'Content Assets',
+            value: contentTotal,
+            hint: `${data?.overview?.blogs || 0} blogs / ${data?.overview?.pages || 0} pages`,
+            icon: FileText,
+            iconClassName: 'border-primary/25 bg-primary/10 text-primary',
+        },
+        {
+            label: 'Team Members',
+            value: teamSize,
+            hint: `${data?.overview?.orders || 0} orders in tracking`,
+            icon: Users2,
+            iconClassName: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+        },
+        {
+            label: 'System Pulse',
+            value: isHealthy ? 'Stable' : 'Needs Review',
+            hint: `${activityItems} recent activity events`,
+            icon: ShieldCheck,
+            iconClassName: isHealthy
+                ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+        },
+    ];
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -44,7 +74,7 @@ function AdminDashboard() {
                 loading && 'opacity-70'
             )}
         >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
             Refresh Data
         </Button>
     );
@@ -72,17 +102,40 @@ function AdminDashboard() {
                     icon={LayoutGrid}
                     actions={headerActions}
                 >
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
-                            {isPlatformAdmin ? 'Platform Scope' : 'Tenant Scope'}
-                        </span>
-                        <span className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                            {loading ? 'Refreshing' : 'Live Data'}
-                        </span>
-                    </div>
-                    <div className="mt-2 flex w-fit items-center gap-2 rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-sm text-muted-foreground backdrop-blur-sm">
-                        <Calendar className="w-3 h-3" />
-                        <span>Last updated: {lastUpdatedLabel}</span>
+                    <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+                                {isPlatformAdmin ? 'Platform Scope' : 'Tenant Scope'}
+                            </span>
+                            <span className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                                {loading ? 'Refreshing' : 'Live Data'}
+                            </span>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-3">
+                            {heroSignals.map((signal) => {
+                                const SignalIcon = signal.icon;
+                                return (
+                                    <div key={signal.label} className="rounded-xl border border-border/70 bg-background/70 p-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{signal.label}</p>
+                                                <p className="mt-1 text-lg font-semibold text-foreground">{signal.value}</p>
+                                                <p className="text-xs text-muted-foreground">{signal.hint}</p>
+                                            </div>
+                                            <span className={cn('rounded-lg border p-1.5', signal.iconClassName)}>
+                                                <SignalIcon className="h-3.5 w-3.5" />
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="flex w-fit items-center gap-2 rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-sm text-muted-foreground backdrop-blur-sm">
+                            <Calendar className="w-3 h-3" />
+                            <span>Last updated: {lastUpdatedLabel}</span>
+                        </div>
                     </div>
                 </PageHeader>
 

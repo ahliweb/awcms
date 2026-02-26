@@ -510,6 +510,7 @@ function TenantsManager() {
     ];
 
     const activeTenantCount = filteredTenants.filter((tenant) => tenant.status === 'active').length;
+    const suspendedTenantCount = filteredTenants.filter((tenant) => tenant.status === 'suspended').length;
     const expiringSoonCount = filteredTenants.filter((tenant) => {
         if (!tenant.subscription_expires_at) {
             return false;
@@ -552,6 +553,19 @@ function TenantsManager() {
             />
 
             <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/75 shadow-sm backdrop-blur-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-background/35 px-4 py-3 text-xs sm:px-5">
+                    <span className="font-medium text-muted-foreground">
+                        Tenant registry snapshot - {filteredTenants.length} visible
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                            {activeTenantCount} active
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                            {suspendedTenantCount} suspended
+                        </span>
+                    </div>
+                </div>
                 <TenantsListToolbar
                     query={query}
                     setQuery={setQuery}
@@ -562,6 +576,7 @@ function TenantsManager() {
                     searchMessage={searchMessage}
                     minLength={minLength}
                     itemsPerPage={itemsPerPage}
+                    resultCount={filteredTenants.length}
                     onItemsPerPageChange={(value) => {
                         setItemsPerPage(value);
                         setCurrentPage(1);

@@ -8,54 +8,67 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, loadEnv } from 'vite';
 
-const MANUAL_CHUNK_GROUPS = {
-	'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-	'vendor-ui': [
-		'@radix-ui/react-alert-dialog',
-		'@radix-ui/react-avatar',
-		'@radix-ui/react-checkbox',
-		'@radix-ui/react-dialog',
-		'@radix-ui/react-dropdown-menu',
-		'@radix-ui/react-label',
-		'@radix-ui/react-progress',
-		'@radix-ui/react-scroll-area',
-		'@radix-ui/react-select',
-		'@radix-ui/react-separator',
-		'@radix-ui/react-slider',
-		'@radix-ui/react-slot',
-		'@radix-ui/react-switch',
-		'@radix-ui/react-tabs',
-		'@radix-ui/react-toast',
-		'@radix-ui/react-tooltip',
-		'lucide-react',
-		'framer-motion',
-	],
-	'vendor-editor': [
-		'@tiptap/extension-image',
-		'@tiptap/extension-link',
-		'@tiptap/extension-placeholder',
-		'@tiptap/extension-underline',
-		'@tiptap/react',
-		'@tiptap/starter-kit',
-		'@puckeditor/core',
-	],
-	'vendor-charts': ['recharts'],
-	'vendor-maps': ['leaflet', 'react-leaflet'],
-	'vendor-utils': ['date-fns', 'i18next', 'react-i18next', 'class-variance-authority', 'clsx', 'tailwind-merge'],
-	'vendor-supabase': ['@supabase/supabase-js'],
+const MANUAL_CHUNK_GROUPS = [
+	{
+		name: 'vendor-react',
+		packages: ['react', 'react-dom', 'react-router-dom'],
+	},
+	{
+		name: 'vendor-ui',
+		packages: [
+			'@radix-ui/',
+			'@floating-ui/',
+			'lucide-react',
+			'framer-motion',
+			'class-variance-authority',
+			'clsx',
+			'tailwind-merge',
+		],
+	},
+	{
+		name: 'vendor-editor',
+		packages: ['@tiptap/', '@puckeditor/'],
+	},
+	{
+		name: 'vendor-charts',
+		packages: ['recharts'],
+	},
+	{
+		name: 'vendor-maps',
+		packages: ['leaflet', 'react-leaflet'],
+	},
+	{
+		name: 'vendor-utils',
+		packages: ['date-fns', 'i18next', 'react-i18next'],
+	},
+	{
+		name: 'vendor-supabase',
+		packages: ['@supabase/supabase-js'],
+	},
+];
+
+const getNodeModulePackageName = (id) => {
+	const normalizedId = id.replace(/\\/g, '/');
+	const match = normalizedId.match(/\/node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?((?:@[^/]+\/)?[^/]+)/);
+	return match?.[1];
 };
 
-const isNodeModulePackage = (id, packageName) =>
-	id.includes(`/node_modules/${packageName}/`) || id.includes(`\\node_modules\\${packageName}\\`);
+const isPackageRuleMatch = (packageName, rule) =>
+	rule.endsWith('/') ? packageName.startsWith(rule) : packageName === rule;
 
 const getManualChunkName = (id) => {
 	if (!id.includes('node_modules')) {
 		return undefined;
 	}
 
-	for (const [chunkName, packages] of Object.entries(MANUAL_CHUNK_GROUPS)) {
-		if (packages.some((packageName) => isNodeModulePackage(id, packageName))) {
-			return chunkName;
+	const packageName = getNodeModulePackageName(id);
+	if (!packageName) {
+		return undefined;
+	}
+
+	for (const chunkGroup of MANUAL_CHUNK_GROUPS) {
+		if (chunkGroup.packages.some((rule) => isPackageRuleMatch(packageName, rule))) {
+			return chunkGroup.name;
 		}
 	}
 

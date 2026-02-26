@@ -14,17 +14,17 @@ function TenantsPagination({
 	}
 
 	return (
-		<div className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-3">
+		<div className="flex flex-col gap-3 border-t border-border/70 bg-background/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
 			<div className="text-sm text-muted-foreground">
 				Showing {startIndex + 1} - {Math.min(endIndex, totalItems)} of {totalItems} tenants
 			</div>
-			<div className="flex items-center gap-1">
+			<div className="flex items-center gap-1 rounded-full border border-border/70 bg-background/80 p-1 shadow-sm">
 				<Button
 					variant="outline"
 					size="sm"
 					onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
 					disabled={currentPage === 1}
-					className="h-8 w-8 p-0"
+					className="h-8 w-8 rounded-full border-border/70 bg-transparent p-0"
 				>
 					<ChevronLeft className="w-4 h-4" />
 				</Button>
@@ -47,7 +47,9 @@ function TenantsPagination({
 							variant={currentPage === pageNumber ? 'default' : 'outline'}
 							size="sm"
 							onClick={() => setCurrentPage(pageNumber)}
-							className="h-8 w-8 p-0"
+							className={currentPage === pageNumber
+								? 'h-8 w-8 rounded-full border-primary/20 bg-primary text-primary-foreground p-0'
+								: 'h-8 w-8 rounded-full border-border/70 bg-transparent p-0'}
 						>
 							{pageNumber}
 						</Button>
@@ -59,7 +61,7 @@ function TenantsPagination({
 					size="sm"
 					onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
 					disabled={currentPage === totalPages}
-					className="h-8 w-8 p-0"
+					className="h-8 w-8 rounded-full border-border/70 bg-transparent p-0"
 				>
 					<ChevronRight className="w-4 h-4" />
 				</Button>
