@@ -9,7 +9,7 @@ import { createClientFromEnv } from "~/lib/supabase";
 import { getPublicTenantId } from "~/lib/publicTenant";
 import { getBlogBySlug } from "~/lib/content";
 import { Icon } from "astro-icon/components";
-import { t, type Locale } from "~/utils/i18n";
+import { t, supportedLocales, type Locale } from "~/utils/i18n";
 
 export const prerender = true;
 
@@ -17,23 +17,54 @@ export const getStaticPaths = (async () => {
     const supabase = createClientFromEnv(import.meta.env);
     if (!supabase) return [];
 
-    const { data, error } = await supabase
+    type BlogSlugRow = {
+        slug: string;
+        locale?: Locale | null;
+    };
+
+    let localeColumnEnabled = true;
+    let data: BlogSlugRow[] | null = null;
+
+    const localizedQuery = await supabase
         .from("blogs")
         .select("slug, locale")
         .eq("status", "published")
         .is("deleted_at", null);
 
-    if (error) {
-        console.error("[Blog] Error fetching blog slugs:", error.message);
-        return [];
+    if (localizedQuery.error) {
+        const message = localizedQuery.error.message || "";
+
+        if (message.includes("blogs.locale") && message.includes("does not exist")) {
+            localeColumnEnabled = false;
+            const fallbackQuery = await supabase
+                .from("blogs")
+                .select("slug")
+                .eq("status", "published")
+                .is("deleted_at", null);
+
+            if (fallbackQuery.error) {
+                console.error("[Blog] Error fetching blog slugs:", fallbackQuery.error.message);
+                return [];
+            }
+
+            data = (fallbackQuery.data || []) as BlogSlugRow[];
+        } else {
+            console.error("[Blog] Error fetching blog slugs:", localizedQuery.error.message);
+            return [];
+        }
+    } else {
+        data = (localizedQuery.data || []) as BlogSlugRow[];
     }
 
-    return (data || []).map((blog) => ({
-        params: {
-            slug: blog.slug,
-            locale: blog.locale || "en",
-        },
-    }));
+    return (data || []).flatMap((blog) => {
+        const locales = localeColumnEnabled && blog.locale ? [blog.locale] : supportedLocales;
+        return locales.map((locale) => ({
+            params: {
+                slug: blog.slug,
+                locale,
+            },
+        }));
+    });
 }) satisfies GetStaticPaths;
 
 const { slug, locale } = Astro.params as { slug: string; locale: Locale };

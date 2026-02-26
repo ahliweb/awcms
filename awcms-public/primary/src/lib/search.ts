@@ -4,6 +4,9 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+const isMissingLocaleColumnError = (message: string): boolean =>
+  message.includes(".locale") && message.includes("does not exist");
+
 export interface SearchResult {
   id: string;
   type: "page" | "blog" | "product";
@@ -19,6 +22,20 @@ export interface SearchOptions {
   limit?: number;
   offset?: number;
   locale?: string;
+}
+
+interface PageSearchRow {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt?: string | null;
+}
+
+interface BlogSearchRow {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt?: string | null;
 }
 
 /**
@@ -74,33 +91,61 @@ async function searchPages(
   limit: number = 10,
   locale?: string,
 ): Promise<SearchResult[]> {
-  let query = supabase
-    .from("pages")
-    .select("id, title, slug, excerpt, locale")
-    .eq("status", "published")
-    .eq("is_active", true)
-    .is("deleted_at", null)
-    .or(
-      `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,
-    )
-    .limit(limit);
+  const runQuery = async (
+    withLocale: boolean,
+    includeLocaleColumn: boolean,
+  ) => {
+    let query = supabase
+      .from("pages")
+      .select(
+        includeLocaleColumn
+          ? "id, title, slug, excerpt, locale"
+          : "id, title, slug, excerpt",
+      )
+      .eq("status", "published")
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .or(
+        `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,
+      )
+      .limit(limit);
 
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    if (withLocale && locale) {
+      query = query.eq("locale", locale);
+    }
+
+    return query;
+  };
+
+  let localeFilterEnabled = Boolean(locale);
+  let includeLocaleColumn = true;
+  let { data, error } = await runQuery(
+    localeFilterEnabled,
+    includeLocaleColumn,
+  );
+
+  if (
+    error &&
+    localeFilterEnabled &&
+    isMissingLocaleColumnError(error.message || "")
+  ) {
+    localeFilterEnabled = false;
+    includeLocaleColumn = false;
+    ({ data, error } = await runQuery(false, false));
   }
-
-  if (locale) {
-    query = query.eq("locale", locale);
-  }
-
-  const { data, error } = await query;
 
   if (error) {
     console.error("[Search] Error searching pages:", error.message);
     return [];
   }
 
-  return (data || []).map((page) => ({
+  const rows = (data || []) as unknown as PageSearchRow[];
+
+  return rows.map((page) => ({
     id: page.id,
     type: "page" as const,
     title: page.title,
@@ -121,32 +166,60 @@ async function searchBlogs(
   limit: number = 10,
   locale?: string,
 ): Promise<SearchResult[]> {
-  let query = supabase
-    .from("blogs")
-    .select("id, title, slug, excerpt, locale")
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .or(
-      `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,
-    )
-    .limit(limit);
+  const runQuery = async (
+    withLocale: boolean,
+    includeLocaleColumn: boolean,
+  ) => {
+    let query = supabase
+      .from("blogs")
+      .select(
+        includeLocaleColumn
+          ? "id, title, slug, excerpt, locale"
+          : "id, title, slug, excerpt",
+      )
+      .eq("status", "published")
+      .is("deleted_at", null)
+      .or(
+        `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,
+      )
+      .limit(limit);
 
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    if (withLocale && locale) {
+      query = query.eq("locale", locale);
+    }
+
+    return query;
+  };
+
+  let localeFilterEnabled = Boolean(locale);
+  let includeLocaleColumn = true;
+  let { data, error } = await runQuery(
+    localeFilterEnabled,
+    includeLocaleColumn,
+  );
+
+  if (
+    error &&
+    localeFilterEnabled &&
+    isMissingLocaleColumnError(error.message || "")
+  ) {
+    localeFilterEnabled = false;
+    includeLocaleColumn = false;
+    ({ data, error } = await runQuery(false, false));
   }
-
-  if (locale) {
-    query = query.eq("locale", locale);
-  }
-
-  const { data, error } = await query;
 
   if (error) {
     console.error("[Search] Error searching blogs:", error.message);
     return [];
   }
 
-  return (data || []).map((blog) => ({
+  const rows = (data || []) as unknown as BlogSearchRow[];
+
+  return rows.map((blog) => ({
     id: blog.id,
     type: "blog" as const,
     title: blog.title,

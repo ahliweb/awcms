@@ -28,9 +28,13 @@ import { t, supportedLocales, type Locale } from "~/utils/i18n";
 export const prerender = true;
 
 export function getStaticPaths() {
-    return supportedLocales.map((locale) => ({
+    const dedicatedLocalizedHomeRoutes = new Set<Locale>(["en", "id"]);
+
+    return supportedLocales
+        .filter((locale) => !dedicatedLocalizedHomeRoutes.has(locale))
+        .map((locale) => ({
         params: { locale },
-    }));
+        }));
 }
 
 const { locale } = Astro.params as { locale: Locale };

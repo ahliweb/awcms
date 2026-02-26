@@ -4,6 +4,9 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+const isMissingLocaleColumnError = (message: string): boolean =>
+  message.includes(".locale") && message.includes("does not exist");
+
 export interface PageData {
   id: string;
   title: string;
@@ -63,24 +66,38 @@ export async function getPageBySlug(
   tenantId?: string | null,
   locale?: string,
 ): Promise<PageData | null> {
-  let query = supabase
-    .from("pages")
-    .select("*")
-    .eq("slug", slug)
-    .eq("status", "published");
+  const runQuery = async (withLocale: boolean) => {
+    let query = supabase
+      .from("pages")
+      .select("*")
+      .eq("slug", slug)
+      .eq("status", "published");
 
-  if (locale) {
-    query = query.eq("locale", locale);
+    if (withLocale && locale) {
+      query = query.eq("locale", locale);
+    }
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    return query
+      .order("published_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+  };
+
+  let localeFilterEnabled = Boolean(locale);
+  let { data, error } = await runQuery(localeFilterEnabled);
+
+  if (
+    error &&
+    localeFilterEnabled &&
+    isMissingLocaleColumnError(error.message || "")
+  ) {
+    localeFilterEnabled = false;
+    ({ data, error } = await runQuery(false));
   }
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
-
-  const { data, error } = await query
-    .order("published_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   if (error) {
     console.error("[Content] Error fetching page:", error.message);
@@ -99,23 +116,37 @@ export async function getAllPages(
   locale?: string,
   limit = 100,
 ): Promise<PageData[]> {
-  let query = supabase
-    .from("pages")
-    .select("*")
-    .eq("status", "published")
-    .eq("page_type", "regular")
-    .order("published_at", { ascending: false })
-    .limit(limit);
+  const runQuery = async (withLocale: boolean) => {
+    let query = supabase
+      .from("pages")
+      .select("*")
+      .eq("status", "published")
+      .eq("page_type", "regular")
+      .order("published_at", { ascending: false })
+      .limit(limit);
 
-  if (locale) {
-    query = query.eq("locale", locale);
+    if (withLocale && locale) {
+      query = query.eq("locale", locale);
+    }
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    return query;
+  };
+
+  let localeFilterEnabled = Boolean(locale);
+  let { data, error } = await runQuery(localeFilterEnabled);
+
+  if (
+    error &&
+    localeFilterEnabled &&
+    isMissingLocaleColumnError(error.message || "")
+  ) {
+    localeFilterEnabled = false;
+    ({ data, error } = await runQuery(false));
   }
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
-
-  const { data, error } = await query;
 
   if (error) {
     console.error("[Content] Error fetching pages:", error.message);
@@ -134,24 +165,38 @@ export async function getPageByType(
   tenantId?: string | null,
   locale?: string,
 ): Promise<PageData | null> {
-  let query = supabase
-    .from("pages")
-    .select("*")
-    .eq("page_type", pageType)
-    .eq("status", "published");
+  const runQuery = async (withLocale: boolean) => {
+    let query = supabase
+      .from("pages")
+      .select("*")
+      .eq("page_type", pageType)
+      .eq("status", "published");
 
-  if (locale) {
-    query = query.eq("locale", locale);
+    if (withLocale && locale) {
+      query = query.eq("locale", locale);
+    }
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    return query
+      .order("published_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+  };
+
+  let localeFilterEnabled = Boolean(locale);
+  let { data, error } = await runQuery(localeFilterEnabled);
+
+  if (
+    error &&
+    localeFilterEnabled &&
+    isMissingLocaleColumnError(error.message || "")
+  ) {
+    localeFilterEnabled = false;
+    ({ data, error } = await runQuery(false));
   }
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
-
-  const { data, error } = await query
-    .order("published_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   if (error) {
     console.error("[Content] Error fetching page by type:", error.message);
@@ -170,26 +215,40 @@ export async function getBlogBySlug(
   tenantId?: string | null,
   locale?: string,
 ): Promise<BlogData | null> {
-  let query = supabase
-    .from("blogs")
-    .select(
-      `
+  const runPrimaryQuery = async (withLocale: boolean) => {
+    let query = supabase
+      .from("blogs")
+      .select(
+        `
       *,
       category:categories!blogs_category_id_fkey(id, name, slug)
     `,
-    )
-    .eq("slug", slug)
-    .eq("status", "published");
+      )
+      .eq("slug", slug)
+      .eq("status", "published");
 
-  if (locale) {
-    query = query.eq("locale", locale);
+    if (withLocale && locale) {
+      query = query.eq("locale", locale);
+    }
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    return query.maybeSingle();
+  };
+
+  let localeFilterEnabled = Boolean(locale);
+  let { data, error } = await runPrimaryQuery(localeFilterEnabled);
+
+  if (
+    error &&
+    localeFilterEnabled &&
+    isMissingLocaleColumnError(error.message || "")
+  ) {
+    localeFilterEnabled = false;
+    ({ data, error } = await runPrimaryQuery(false));
   }
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
-
-  const { data, error } = await query.maybeSingle();
 
   if (!error) {
     return (data || null) as BlogData | null;
@@ -214,7 +273,7 @@ export async function getBlogBySlug(
     fallbackQuery = fallbackQuery.eq("tenant_id", tenantId);
   }
 
-  if (locale) {
+  if (locale && localeFilterEnabled) {
     fallbackQuery = fallbackQuery.eq("locale", locale);
   }
 
@@ -263,33 +322,46 @@ export async function getBlogs(
 ): Promise<{ blogs: BlogData[]; total: number }> {
   const { limit = 10, offset = 0, categorySlug, locale } = options;
 
-  let query = supabase
-    .from("blogs")
-    .select(
-      `
+  const runPrimaryQuery = async (withLocale: boolean) => {
+    let query = supabase
+      .from("blogs")
+      .select(
+        `
       *,
       category:categories!blogs_category_id_fkey(id, name, slug)
     `,
-      { count: "exact" },
-    )
-    .eq("status", "published")
-    .order("published_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+        { count: "exact" },
+      )
+      .eq("status", "published")
+      .order("published_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    if (categorySlug) {
+      query = query.eq("category.slug", categorySlug);
+    }
+
+    if (withLocale && locale) {
+      query = query.eq("locale", locale);
+    }
+
+    return query;
+  };
+
+  let localeFilterEnabled = Boolean(locale);
+  let { data, error, count } = await runPrimaryQuery(localeFilterEnabled);
+
+  if (
+    error &&
+    localeFilterEnabled &&
+    isMissingLocaleColumnError(error.message || "")
+  ) {
+    localeFilterEnabled = false;
+    ({ data, error, count } = await runPrimaryQuery(false));
   }
-
-  // Filter by category if provided
-  if (categorySlug) {
-    query = query.eq("category.slug", categorySlug);
-  }
-
-  if (locale) {
-    query = query.eq("locale", locale);
-  }
-
-  const { data, error, count } = await query;
 
   if (!error) {
     return {
@@ -345,7 +417,7 @@ export async function getBlogs(
     fallbackQuery = fallbackQuery.eq("category_id", categoryId);
   }
 
-  if (locale) {
+  if (locale && localeFilterEnabled) {
     fallbackQuery = fallbackQuery.eq("locale", locale);
   }
 

@@ -24,6 +24,6 @@ const { slug } = Astro.params;
 ---
 
 <meta http-equiv="refresh" content={`0;url=/${defaultLocale}/blogs/${slug}`} />
-<script define:vars={{ defaultLocale, slug }}>
+<script is:inline define:vars={{ defaultLocale, slug }}>
   window.location.href = `/${defaultLocale}/blogs/${slug}`;
 </script>

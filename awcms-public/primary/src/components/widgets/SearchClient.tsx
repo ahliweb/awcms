@@ -54,7 +54,7 @@ export default function SearchClient({ locale, labels }: SearchClientProps) {
     }
   };
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = (e: SubmitEvent) => {
     e.preventDefault();
     // Update URL without refreshing
     const url = new URL(window.location.href);
@@ -75,7 +75,10 @@ export default function SearchClient({ locale, labels }: SearchClientProps) {
       </div>
 
       <div className="max-w-2xl mx-auto mb-12">
-        <form onSubmit={onSubmit} className="flex gap-2">
+        <form
+          onSubmit={(event) => onSubmit(event.nativeEvent)}
+          className="flex gap-2"
+        >
           <div className="relative w-full">
             <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
               <svg

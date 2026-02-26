@@ -6,7 +6,7 @@
  */
 import Layout from "~/layouts/PageLayout.astro";
 import { createClientFromEnv } from "~/lib/supabase";
-import { getBlogs } from "~/lib/content";
+import { getBlogs, type BlogData } from "~/lib/content";
 import { Icon } from "astro-icon/components";
 import { t, supportedLocales, type Locale } from "~/utils/i18n";
 import { getPublicTenantId } from "~/lib/publicTenant";
@@ -33,8 +33,7 @@ const tenantId = getPublicTenantId();
 // Create Supabase client
 const supabase = createClientFromEnv(import.meta.env);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let blogs: any[] = [];
+let blogs: BlogData[] = [];
 let total = 0;
 
 if (supabase) {
@@ -42,7 +41,6 @@ if (supabase) {
         limit: perPage,
         offset: (currentPage - 1) * perPage,
         categorySlug,
-        locale: locale, // Filter by locale
     });
     blogs = result.blogs;
     total = result.total;

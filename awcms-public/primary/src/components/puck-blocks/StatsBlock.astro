@@ -3,8 +3,15 @@ import Stats from "~/components/widgets/Stats.astro";
 
 const { items = [], id, isDark, classes, bg } = Astro.props;
 
+type StatsItem = {
+  value?: string | number;
+  label?: string;
+  icon?: string;
+};
+
 // Map Puck items to Stats widget props
-const stats = items.map((item: any) => ({
+const safeItems = Array.isArray(items) ? (items as StatsItem[]) : [];
+const stats = safeItems.map((item) => ({
   amount: item.value,
   title: item.label,
   icon: item.icon || "tabler:users",

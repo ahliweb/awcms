@@ -13,10 +13,16 @@ const {
   bg,
 } = Astro.props;
 
+type AccordionItem = {
+  title?: string;
+  content?: string;
+};
+
 // Map Puck items to FAQs widget props
 // Puck items: { title, content }
 // FAQs items: { title, description }
-const mappedItems = items.map((item: any) => ({
+const safeItems = Array.isArray(items) ? (items as AccordionItem[]) : [];
+const mappedItems = safeItems.map((item) => ({
   title: item.title,
   description: item.content,
   icon: "tabler:chevron-right", // Default icon

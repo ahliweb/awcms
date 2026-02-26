@@ -9,6 +9,7 @@ import PuckRenderer from "~/components/common/PuckRenderer.astro";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getPublicTenantId } from "~/lib/publicTenant";
 import { getPageBySlug } from "~/lib/content";
+import { supportedLocales, type Locale } from "~/utils/i18n";
 
 export const prerender = true;
 
@@ -16,26 +17,56 @@ export const getStaticPaths = (async () => {
   const supabase = createClientFromEnv(import.meta.env);
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  type PageSlugRow = {
+    slug: string;
+    locale?: Locale | null;
+  };
+
+  let localeColumnEnabled = true;
+  let data: PageSlugRow[] | null = null;
+
+  const localizedQuery = await supabase
     .from("pages")
     .select("slug, locale")
     .eq("status", "published")
     .eq("page_type", "regular")
     .is("deleted_at", null);
 
-  if (error) {
-    console.error("[Page] Error fetching page slugs:", error.message);
-    return [];
+  if (localizedQuery.error) {
+    const message = localizedQuery.error.message || "";
+
+    if (message.includes("pages.locale") && message.includes("does not exist")) {
+      localeColumnEnabled = false;
+      const fallbackQuery = await supabase
+        .from("pages")
+        .select("slug")
+        .eq("status", "published")
+        .eq("page_type", "regular")
+        .is("deleted_at", null);
+
+      if (fallbackQuery.error) {
+        console.error("[Page] Error fetching page slugs:", fallbackQuery.error.message);
+        return [];
+      }
+
+      data = (fallbackQuery.data || []) as PageSlugRow[];
+    } else {
+      console.error("[Page] Error fetching page slugs:", localizedQuery.error.message);
+      return [];
+    }
+  } else {
+    data = (localizedQuery.data || []) as PageSlugRow[];
   }
 
-  // Map each page to its locale and slug
-  // We strictly respect the locale stored in the page record
-  return (data || []).map((page) => ({
-    params: {
-      slug: page.slug,
-      locale: page.locale || "en", // fallback to en if null
-    },
-  }));
+  return (data || []).flatMap((page) => {
+    const locales = localeColumnEnabled && page.locale ? [page.locale] : supportedLocales;
+    return locales.map((locale) => ({
+      params: {
+        slug: page.slug,
+        locale,
+      },
+    }));
+  });
 }) satisfies GetStaticPaths;
 
 const { slug, locale } = Astro.params;

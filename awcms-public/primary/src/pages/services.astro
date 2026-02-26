@@ -4,6 +4,6 @@ export const prerender = true;
 ---
 
 <meta http-equiv="refresh" content={`0;url=/${defaultLocale}/services`} />
-<script define:vars={{ defaultLocale }}>
+<script is:inline define:vars={{ defaultLocale }}>
   window.location.href = `/${defaultLocale}/services`;
 </script>

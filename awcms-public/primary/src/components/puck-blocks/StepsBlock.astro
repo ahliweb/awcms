@@ -14,11 +14,19 @@ const {
     bg,
 } = Astro.props;
 
+type StepItem = {
+    title?: string;
+    description?: string;
+    icon?: string;
+    [key: string]: unknown;
+};
+
 // Map Puck items to Steps widget props if needed
 // Puck items: { title, description, icon }
 // Steps items: { title, description, icon } (Compatible)
 
-const mappedItems = items.map((item: any) => ({
+const safeItems = Array.isArray(items) ? (items as StepItem[]) : [];
+const mappedItems = safeItems.map((item) => ({
     ...item,
     icon: item.icon || "tabler:check", // Ensure default icon
 }));

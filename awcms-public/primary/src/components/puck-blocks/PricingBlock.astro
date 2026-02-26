@@ -3,15 +3,32 @@ import Pricing from "~/components/widgets/Pricing.astro";
 
 const { items = [], id, isDark, classes, bg } = Astro.props;
 
+type PricingFeature = {
+  text?: string;
+};
+
+type PricingItem = {
+  title?: string;
+  description?: string;
+  price?: string;
+  period?: string;
+  features?: PricingFeature[];
+  callToAction?: string;
+  buttonText?: string;
+  isPopular?: boolean;
+  ribbonTitle?: string;
+};
+
 // Map Puck items to Pricing widget props
-const prices = items.map((item: any) => ({
+const safeItems = Array.isArray(items) ? (items as PricingItem[]) : [];
+const prices = safeItems.map((item) => ({
   title: item.title,
   subtitle: item.description,
   price: item.price,
   period: item.period,
   items:
-    item.features?.map((f: any) => ({
-      description: f.text,
+    item.features?.map((feature) => ({
+      description: feature.text,
       icon: "tabler:check",
     })) || [],
   callToAction: item.callToAction

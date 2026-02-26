@@ -4,6 +4,9 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+const isMissingLocaleColumnError = (message: string): boolean =>
+  message.includes(".locale") && message.includes("does not exist");
+
 export interface MenuItem {
   id: string;
   title: string;
@@ -47,23 +50,37 @@ export async function getMenuByLocation(
   tenantId?: string | null,
   locale?: string,
 ): Promise<MenuItem[] | null> {
-  let query = supabase
-    .from("menus")
-    .select("*")
-    .eq("is_active", true)
-    .is("deleted_at", null)
-    .or(`location.eq.${location},group_label.eq.${location}`)
-    .order("order", { ascending: true });
+  const runQuery = async (withLocale: boolean) => {
+    let query = supabase
+      .from("menus")
+      .select("*")
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .or(`location.eq.${location},group_label.eq.${location}`)
+      .order("order", { ascending: true });
 
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    if (withLocale && locale) {
+      query = query.eq("locale", locale);
+    }
+
+    return query;
+  };
+
+  let localeFilterEnabled = Boolean(locale);
+  let { data, error } = await runQuery(localeFilterEnabled);
+
+  if (
+    error &&
+    localeFilterEnabled &&
+    isMissingLocaleColumnError(error.message || "")
+  ) {
+    localeFilterEnabled = false;
+    ({ data, error } = await runQuery(false));
   }
-
-  if (locale) {
-    query = query.eq("locale", locale);
-  }
-
-  const { data, error } = await query;
 
   if (error) {
     console.error(
