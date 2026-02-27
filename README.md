@@ -2,7 +2,7 @@
 
 Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
-## Status Snapshot (2026-02-24)
+## Status Snapshot (2026-02-27)
 
 - Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
 - Stitch import flow is tenant-configurable (`settings.key = 'stitch_import'`) with sanitized HTML fallback support.
@@ -13,10 +13,11 @@ Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with adm
 
 This repository follows a strict documentation hierarchy aligned with the **Context7 MCP** (Model Context Protocol):
 
-1. **[SYSTEM_MODEL.md](SYSTEM_MODEL.md)** - **Single Source of Truth**: Tech stack versions, architectural pillars, security mandates
-2. **[AGENTS.md](AGENTS.md)** - AI coding guidelines, Context7 library references, permission patterns
-3. **[DOCS_INDEX.md](DOCS_INDEX.md)** - Navigation and canonical references for all documentation
-4. **Implementation Guides** - Specific how-to documentation in `docs/`
+1. **[SYSTEM_MODEL.md](SYSTEM_MODEL.md)** - **Single Source of Truth**: stack versions, architecture constraints, security mandates
+2. **[AGENTS.md](AGENTS.md)** - agent execution rules, Context7 references, implementation patterns
+3. **[README.md](README.md)** - canonical monorepo entrypoint and operational overview
+4. **[DOCS_INDEX.md](DOCS_INDEX.md)** - canonical documentation map and topic routing
+5. **Implementation Guides** - specific how-to documentation in `docs/`
 
 > **For AI Agents**: Always follow `AGENTS.md` and `SYSTEM_MODEL.md` as primary authorities.
 
@@ -68,10 +69,11 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 - **[DOCS_INDEX.md](DOCS_INDEX.md)**: Central navigation for all documentation
 - **[docs/README.md](docs/README.md)**: Detailed wiki and concepts
 - **[docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md)**: Context7-driven doc audit workflow
+- **[docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md)**: Phase progress, drift register, and reconciliation backlog
 
 ## Database & Migrations
 
-- Canonical timestamped migrations live in `supabase/migrations/` and are mirrored in `awcms/supabase/migrations/` for the Admin runtime.
+- Canonical timestamped migrations live in `supabase/migrations/` and are mirrored in `awcms/supabase/migrations/` for CI/Admin tooling compatibility.
 - Non-migration SQL files must be kept outside migration folders (for example `supabase/manual/`).
 - Local workflow:
   - `npx supabase migration list --local`

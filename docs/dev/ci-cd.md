@@ -36,27 +36,29 @@ Describe the GitHub Actions workflows used for AWCMS.
 | Job | Purpose | Working Directory | Workflow |
 | --- | --- | --- | --- |
 | `lint-test-admin` | Lint, test, build admin | `awcms/` | ci-push, ci-pr |
-| `lint-build-public` | Build public portal | `awcms-public/primary/` | ci-push, ci-pr |
+| `lint-build-public` | Build public portal (no lint step in workflow yet) | `awcms-public/primary/` | ci-push, ci-pr |
 | `build-mobile` | Flutter build and tests | `awcms-mobile/primary/` | ci-push, ci-pr |
 | `db-check` | Supabase migration lint | `awcms/supabase` | ci-pr |
 | `deploy-production` | Cloudflare Pages deploy (admin panel artifact) | `awcms/` | ci-push |
+| `link-check` | Markdown link validation | repo root | docs-link-check |
 
 ### Runtime Notes
 
-- Current GitHub workflows set `NODE_VERSION=20` (legacy pin in `.github/workflows/ci-push.yml` and `.github/workflows/ci-pr.yml`).
-- Repository runtime baseline remains Node `>=22.12.0`; align workflow Node versions with package `engines` before enforcing strict engine checks.
+- GitHub workflows pin Node runtime to `22.12.0` to match package `engines` constraints.
+- Keep workflow/runtime Node versions aligned with `SYSTEM_MODEL.md` and package `engines` before bumping toolchains.
 
-### Required Secrets
+### Required Secrets and Variables (GitHub Actions)
 
-- `VITE_SUPABASE_URL` (admin build)
-- `VITE_SUPABASE_PUBLISHABLE_KEY` (admin build, preferred)
-- `VITE_SUPABASE_ANON_KEY` (legacy CI alias still consumed by workflows; mirror publishable key value)
-- `PUBLIC_SUPABASE_URL` (public build fallback)
-- `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (public build fallback, preferred)
-- `PUBLIC_SUPABASE_ANON_KEY` (legacy CI alias still consumed by workflows; mirror publishable key value)
-- `PUBLIC_TENANT_ID` (public build tenant scope)
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ENABLED` (repo variable; must be `true` to deploy)
+- `VITE_SUPABASE_URL` (used by admin build/test and mapped into public build env)
+- `VITE_SUPABASE_PUBLISHABLE_KEY` (used by admin build/test and mapped into public build env)
+- `CLOUDFLARE_API_TOKEN` (required by `deploy-production`)
+- `CLOUDFLARE_ENABLED` (repo variable; must be `true` for deploy job execution)
+
+Notes:
+
+- `ci-pr` uses mock Supabase values for admin/public jobs and does not require repository Supabase secrets.
+- Public portal CI jobs currently map `VITE_*` secrets into `PUBLIC_*` variables in workflow env.
+- `PUBLIC_TENANT_ID` is still required for static tenant-scoped production builds, but is not currently injected by the GitHub CI workflows.
 
 ## Verification
 
@@ -73,6 +75,10 @@ npm run build
 cd ../awcms-public/primary
 npm run build
 
+# Docs link check parity
+cd ../../awcms
+npm run docs:check
+
 # Mobile
 cd ../../awcms-mobile/primary
 flutter pub get
@@ -88,8 +94,9 @@ supabase db lint
 
 - Missing env vars: verify secrets and repo variables.
 - Cloudflare deploys: `CLOUDFLARE_API_TOKEN` is required and must be scoped to a single account with access to the Accounts API. The workflow resolves the account ID automatically via the Cloudflare Accounts API.
-- Public build env mismatch: CI injects `PUBLIC_SUPABASE_*`, while runtime code often prefers `VITE_SUPABASE_*`. Keep values aligned; `createClientFromEnv` accepts both. Legacy `*_ANON_KEY` aliases should match the publishable keys.
+- Public build env mismatch: CI injects `PUBLIC_SUPABASE_*`, while runtime code often prefers `VITE_SUPABASE_*`. Keep values aligned; `createClientFromEnv` accepts both.
 - Deploy scope confusion: `deploy-production` currently deploys only `awcms/dist` (admin panel). Public deployment remains a separate Cloudflare Pages pipeline.
+- Docs workflow differences: docs link checks run in `docs-link-check.yml` and are independent from `ci-pr.yml` and `ci-push.yml`.
 
 ## References
 

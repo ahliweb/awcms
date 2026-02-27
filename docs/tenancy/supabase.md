@@ -131,21 +131,38 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 
 Run from repo root.
 
-Local-first workflow:
+#### Canonical dual-root policy
+
+- `supabase/migrations/` is the canonical authoring source.
+- `awcms/supabase/migrations/` is a required mirror used by CI linting.
+- Every migration change must be mirrored with identical filename and content.
+- Validate parity before merge:
+
+```bash
+scripts/verify_supabase_migration_consistency.sh
+```
+
+If you need linked-project history validation too:
+
+```bash
+scripts/verify_supabase_migration_consistency.sh --linked
+```
+
+#### Local-first workflow
 
 ```bash
 npx supabase migration list --local
 npx supabase db push --local
 ```
 
-Linked/remote workflow:
+#### Linked/remote workflow
 
 ```bash
 npx supabase migration list --linked
 npx supabase db push --linked
 ```
 
-Linked schema sync snapshot (when needed):
+#### Linked schema sync snapshot (when needed)
 
 ```bash
 npx supabase db pull --schema public,extensions
@@ -153,7 +170,7 @@ npx supabase db pull --schema public,extensions
 
 > **Note**: We explicitly pull only the `public` and `extensions` schemas to avoid permission errors with the managed `storage` and `auth` schemas.
 
-If migration history is mismatched:
+#### If migration history is mismatched
 
 ```bash
 scripts/repair_supabase_migration_history.sh
@@ -169,7 +186,7 @@ Supabase CLI configuration lives in `supabase/config.toml`.
 
 ### Repo Layout Note
 
-This repository currently contains both `supabase/` (root) and `awcms/supabase/`. CI uses `awcms/supabase` for linting, while the Supabase CLI defaults to the root `supabase/` directory. Keep migrations aligned across both paths if both are in use.
+This repository contains both `supabase/` (root) and `awcms/supabase/`. CI currently lints from `awcms/supabase`, while local Supabase CLI commands default to root `supabase/`. Follow the canonical dual-root policy above to keep both paths aligned.
 
 ## Troubleshooting
 

@@ -46,6 +46,14 @@ For `awcms-public/smandapbun`:
 
 ### 3. Supabase
 
+- Author migration/function changes in root `supabase/**` and mirror them to `awcms/supabase/**` before CI.
+- Verify root/mirror parity from repo root:
+
+```bash
+scripts/verify_supabase_migration_consistency.sh
+scripts/verify_supabase_function_consistency.sh
+```
+
 - Apply migrations from repo root:
 
 ```bash
@@ -60,6 +68,12 @@ If migration history is out of sync, repair before pushing:
 ```bash
 scripts/repair_supabase_migration_history.sh
 scripts/repair_supabase_migration_history.sh --apply --linked
+```
+
+If deploying Edge Functions to a linked project, verify local/remote slug coverage:
+
+```bash
+scripts/verify_supabase_function_consistency.sh --linked --project-ref <project_ref>
 ```
 
 - Deploy edge functions as needed:
@@ -87,6 +101,11 @@ flutter build ipa --release
 cd awcms-esp32/primary
 source .env && pio run -t uploadfs && pio run -t upload
 ```
+
+### 6. GitHub Actions Deploy Scope
+
+- `ci-push.yml` deploys only the admin artifact (`awcms/dist`) through `deploy-production`.
+- Public portal deployments are managed as separate Cloudflare Pages projects/pipelines.
 
 ## Verification
 

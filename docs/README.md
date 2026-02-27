@@ -2,7 +2,7 @@
 
 **Repository:** `github.com/ahliweb/awcms`
 
-> **Documentation Authority**: This wiki follows the hierarchy: [SYSTEM_MODEL.md](../SYSTEM_MODEL.md) → [AGENTS.md](../AGENTS.md) → Implementation Guides
+> **Documentation Authority**: This wiki follows the hierarchy: [SYSTEM_MODEL.md](../SYSTEM_MODEL.md) -> [AGENTS.md](../AGENTS.md) -> [README.md](../README.md) -> [DOCS_INDEX.md](../DOCS_INDEX.md) -> Implementation Guides
 
 AWCMS (**AhliWeb Content Management System**) is an **enterprise-grade, multi-tenant CMS** with **ABAC security** and a **Supabase-backed** architecture. The monorepo hosts multiple clients (Admin, Public, Mobile, IoT) plus extensions and backend migrations.
 
@@ -10,8 +10,10 @@ AWCMS (**AhliWeb Content Management System**) is an **enterprise-grade, multi-te
 
 - **[SYSTEM_MODEL.md](../SYSTEM_MODEL.md)** - Authoritative tech stack and architecture
 - **[AGENTS.md](../AGENTS.md)** - AI coding guidelines and Context7 references  
+- **[README.md](../README.md)** - Monorepo operational overview and baseline commands
 - **[DOCS_INDEX.md](../DOCS_INDEX.md)** - Documentation navigation
 - **[Documentation Audit Plan](./dev/documentation-audit-plan.md)** - Context7-driven doc updates
+- **[Documentation Audit Tracker](./dev/documentation-audit-tracker.md)** - Phase status and drift register
 - **[RESOURCE_MAP.md](./RESOURCE_MAP.md)** - Resource and permission registry
 
 ---
@@ -408,6 +410,9 @@ The repository includes:
 ## Roadmap Checklist
 
 Use this as a living checklist:
+
+- Checked state in this section represents documentation backlog tracking, not release gating.
+- Items may be partially implemented elsewhere; verify current behavior in module docs and source paths before treating an item as pending work.
 
 - [ ] Formalize tenant isolation guarantees (schema + RLS + tests)
 - [ ] Formalize ABAC policy model (attributes + evaluation)

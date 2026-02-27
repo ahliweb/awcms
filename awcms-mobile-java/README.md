@@ -37,6 +37,6 @@ same Supabase backend, tenant rules, and permission model.
 - `docs/troubleshooting.md`
 
 ## References
-- `docs/dev/mobile.md`
-- `docs/deploy/overview.md`
-- `docs/tenancy/overview.md`
+- `../docs/dev/mobile.md`
+- `../docs/deploy/overview.md`
+- `../docs/tenancy/overview.md`

@@ -2,6 +2,12 @@
 
 # Indonesia Compliance Guide
 
+## Status Classification (Audit 2026-02-27)
+
+- This guide combines implemented technical controls with deployer-specific obligations.
+- Sections 2-3 describe platform capabilities and constraints.
+- Section 4 is an operator action checklist (deployment/legal backlog), not an assertion that all items are already completed.
+
 ## 1. Overview
 
 This document outlines how AWCMS supports compliance with Indonesian regulations, specifically **UU PDP (Personal Data Protection Law)** and **PP 71/2019 (Penyelenggaraan Sistem dan Transaksi Elektronik)**.

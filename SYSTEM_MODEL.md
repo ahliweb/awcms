@@ -1,7 +1,7 @@
 # AWCMS System Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-02-24 (Audited against `package.json`, migration status, and MCP topology)
+> **Last Updated:** 2026-02-27 (Audited against `package.json`, migration status, CI runtime, and MCP topology)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -143,16 +143,18 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * `src/components/[feature]/`: Feature-specific business logic.
 * `src/hooks/`: Custom React hooks for data fetching and state.
 * `src/lib/`: Stateless utilities and configuration.
-* `supabase/migrations/`: SQL migration files (Timestamped).
+* `supabase/migrations/`: canonical SQL migration files (timestamped).
+* `awcms/supabase/migrations/`: mirrored migration path used by CI/admin tooling; must remain synchronized with root migrations.
 
 ---
 
 ## 4. Documentation Authority
 
-* **Primary:** `SYSTEM_MODEL.md` (This file).
-* **Agent Guide:** `AGENTS.md`.
-* **Architecture:** `docs/architecture/*.md`.
-* **Tenancy:** `docs/tenancy/*.md`.
-* **AI Gateway:** `openclaw/openclaw.json`.
+* **Level 1 (Primary):** `SYSTEM_MODEL.md` (this file).
+* **Level 2:** `AGENTS.md`.
+* **Level 3:** `README.md`.
+* **Level 4:** `DOCS_INDEX.md`.
+* **Level 5:** module/dev/architecture docs in `docs/**`.
+* **AI Gateway Runtime Source:** `openclaw/openclaw.json`.
 
 Any deviation from this model requires an explicit update to this document.

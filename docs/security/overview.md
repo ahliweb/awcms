@@ -154,9 +154,11 @@ Development headers are set in `awcms/vite.config.js`. Production headers must b
 
 ### Migration Hygiene
 
-- Keep timestamped migrations in `supabase/migrations/`.
+- Author timestamped migrations in `supabase/migrations/`.
+- Mirror each migration into `awcms/supabase/migrations/` for CI parity.
 - Keep non-migration SQL in `supabase/manual/`.
 - Use `scripts/repair_supabase_migration_history.sh` when migration history drifts.
+- Run `scripts/verify_supabase_migration_consistency.sh` before PR merge.
 
 ## Troubleshooting
 

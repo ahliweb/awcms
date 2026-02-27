@@ -41,6 +41,13 @@ npx supabase migration list --local
 npx supabase db push --local
 ```
 
+Validate root/mirror Supabase parity before opening a PR:
+
+```sh
+scripts/verify_supabase_migration_consistency.sh
+scripts/verify_supabase_function_consistency.sh
+```
+
 If migration history drifts, use the repair helper from repo root:
 
 ```sh

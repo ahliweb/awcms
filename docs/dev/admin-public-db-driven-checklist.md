@@ -1,5 +1,11 @@
 # Admin/Public DB-Driven Checklist (AWCMS)
 
+## Status Classification (Audit 2026-02-27)
+
+- This document is a mixed implementation + backlog checklist.
+- Checked items (`[x]`) reflect implemented behavior at audit time.
+- Unchecked items (`[ ]`) are roadmap tasks and should not be read as current platform behavior.
+
 This checklist aligns `docs/security/abac.md`, `docs/RESOURCE_MAP.md`, and `docs/architecture/standards.md` with a database-driven Admin UI/UX that controls all public tenants (`awcms-public/primary`, `awcms-public/smandapbun`).
 
 ## Legend

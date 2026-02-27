@@ -1054,6 +1054,22 @@ WHERE deleted_at IS NULL;
 - RLS policies and helper functions are defined in `supabase/migrations` and mirrored in `awcms/supabase/migrations` for CI linting.
 - Public analytics inserts and aggregate reads are explicitly scoped by `current_tenant_id()`.
 
+## Migration Source of Truth
+
+- Author migrations in `supabase/migrations/` only.
+- Mirror each migration to `awcms/supabase/migrations/` with identical filename and SQL content.
+- Validate parity before PR merge:
+
+```bash
+scripts/verify_supabase_migration_consistency.sh
+```
+
+- Validate linked migration history when preparing production database changes:
+
+```bash
+scripts/verify_supabase_migration_consistency.sh --linked
+```
+
 ## References
 
 - `docs/security/rls.md`

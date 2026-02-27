@@ -1,6 +1,6 @@
 # AWCMS Documentation Index
 
-> **Documentation Authority**: This index follows the hierarchy defined in `SYSTEM_MODEL.md` → `AGENTS.md` → Implementation Guides.
+> **Documentation Authority**: This index follows the hierarchy defined in `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md` -> Implementation Guides.
 
 ## Purpose
 
@@ -11,14 +11,16 @@ Provide a single entry point for all AWCMS documentation across the monorepo and
 All documentation follows this authority structure:
 
 1. **[SYSTEM_MODEL.md](SYSTEM_MODEL.md)** - **Single Source of Truth** for architecture, tech stack, and security mandates
-2. **[AGENTS.md](AGENTS.md)** - AI agent guidelines and coding standards  
-3. **[DOCS_INDEX.md](DOCS_INDEX.md)** - This file: navigation and canonical references
-4. **Implementation Guides** - Specific how-to documentation
+2. **[AGENTS.md](AGENTS.md)** - AI agent guidelines and coding standards
+3. **[README.md](README.md)** - Canonical monorepo overview and operational baseline
+4. **[DOCS_INDEX.md](DOCS_INDEX.md)** - This file: navigation and canonical references
+5. **Implementation Guides** - Specific how-to documentation
 
 ## Prerequisites
 
 - **Start Here**: Read [SYSTEM_MODEL.md](SYSTEM_MODEL.md) for authoritative tech stack and architectural constraints
 - **For AI Agents**: Follow [AGENTS.md](AGENTS.md) over all other instructions
+- **Operational Summary**: Review [README.md](README.md) before diving into module docs
 - **For Developers**: Start with [docs/dev/setup.md](docs/dev/setup.md) after reviewing SYSTEM_MODEL.md
 
 ---
@@ -31,7 +33,8 @@ All documentation follows this authority structure:
 |----------|----------|---------|-------------------|
 | **1** | [SYSTEM_MODEL.md](SYSTEM_MODEL.md) | Tech stack versions, architectural pillars, security mandates | Primary authority |
 | **2** | [AGENTS.md](AGENTS.md) | AI coding guidelines, Context7 library IDs, permission patterns | Agent operations |
-| **3** | [DOCS_INDEX.md](DOCS_INDEX.md) | Navigation and canonical references | This document |
+| **3** | [README.md](README.md) | Canonical monorepo overview and baseline commands | Runtime entrypoint |
+| **4** | [DOCS_INDEX.md](DOCS_INDEX.md) | Navigation and canonical references | This document |
 
 ### General
 
@@ -86,6 +89,7 @@ All documentation follows this authority structure:
 | --- | --- | --- |
 | Setup Guide | [docs/dev/setup.md](docs/dev/setup.md) | **Start Here** |
 | Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Repository-wide Context7-first audit and revision workflow |
+| Documentation Audit Tracker | [docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md) | Phase progress, drift register, and reconciliation status |
 | Stitch Integration Plan | [docs/dev/stitch-integration-plan.md](docs/dev/stitch-integration-plan.md) | File-by-file execution checklist + migration skeletons |
 | Admin Panel | [docs/dev/admin.md](docs/dev/admin.md) | React Admin development |
 | Public Portal | [docs/dev/public.md](docs/dev/public.md) | Astro development |

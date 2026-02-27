@@ -8,7 +8,7 @@ The primary public portal template for AWCMS, built on Astro with React islands 
 - React 19.2.4 (islands)
 - Tailwind CSS 4 (CSS-first config)
 - Supabase JS 2.93.3
-- Node.js >= 20
+- Node.js >= 22.12.0
 
 ## Quick Start
 

@@ -38,6 +38,7 @@ UI schemas live in `ui_configs`, and editor/component settings live in `componen
 | `tags` | Tenant | `tenant.tag` | Tags | Taxonomy | `tags` |
 | `users` | Tenant | `tenant.user` | Users | RBAC | `users` |
 | `visitor_stats` | Tenant | `tenant.analytics` | Visitor Statistics | Analytics | `analytics_events` |
+| `stitch_import` | Tenant | `tenant.stitch_import` | Stitch Import | Settings | `stitch_import_jobs` |
 | `roles` | Tenant | `tenant.role` | Roles & Permissions | RBAC | `roles` |
 | `policies` | Tenant | `tenant.policy` | Policies | Data | `policies` |
 | `seo_manager` | Tenant | `tenant.seo` | SEO Manager | Settings | `seo_settings` |

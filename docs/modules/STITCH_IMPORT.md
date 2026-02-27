@@ -112,7 +112,8 @@ Public renderer hardening references:
 
 - CSS from Stitch is accepted in the dialog for compatibility but currently ignored; warnings include `css_ignored`.
 - Import warnings are informational and describe sanitization/fallback/dropped elements.
-- Migration files under `supabase/migrations/2026022415*.sql` are skeletons for rollout planning; align seeded values with active runtime config (`html`/`mapped`) before production rollout.
+- Stitch import baseline migrations are active in `supabase/migrations/2026022415*.sql` and mirrored in `awcms/supabase/migrations/`.
+- Runtime settings currently support `mode = html|mapped`; if a tenant has legacy values (for example `hybrid`), resave settings in `ExtensionSettings` to normalize.
 
 ## Verification Checklist (Per Tenant)
 

@@ -2,6 +2,12 @@
 
 # Versioning & Deployment Strategy
 
+## Status Classification (Audit 2026-02-27)
+
+- This document is a strategy guide and may include aspirational workflow patterns.
+- Authoritative live behavior for CI/CD and runtime checks is defined in `.github/workflows/**` and package manifests.
+- Treat checklist items in this file as release-process guidance, not as proof that every step is automated in all environments.
+
 ## 1. Overview
 
 AWCMS is a **monorepo** with multiple independently-versioned apps. Each client application can be updated and deployed independently without requiring a coordinated full-stack release.

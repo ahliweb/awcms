@@ -52,8 +52,8 @@ Environment variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (build fallback)
-- `PUBLIC_TENANT_ID`
+- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (build/runtime fallback)
+- `PUBLIC_TENANT_ID` (fallbacks: `VITE_PUBLIC_TENANT_ID`, `VITE_TENANT_ID`)
 - `NODE_VERSION=22`
 
 **Runtime note**: Public portals are built as static sites; environment variables are resolved at build time via `import.meta.env`.
@@ -81,6 +81,12 @@ KV bindings: none (sessions use the in-memory driver).
 ### Optional Secret Sync Helper
 
 Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env values into Cloudflare Pages secrets interactively.
+
+### GitHub Actions Secret Mapping
+
+- `ci-push.yml` and `ci-pr.yml` currently map repository `VITE_SUPABASE_*` values into `PUBLIC_SUPABASE_*` env names for the public build job.
+- Keep both key sets aligned in Cloudflare and GitHub secrets if you use both pipelines.
+- Admin production deploy from GitHub Actions currently targets only `awcms-admin`.
 
 ## Verification
 

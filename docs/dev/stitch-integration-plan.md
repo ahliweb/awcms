@@ -2,6 +2,11 @@
 
 # Stitch Integration Execution Plan
 
+## Implementation Status (Audit 2026-02-27)
+
+- This file is a mixed execution record: most integration work is implemented.
+- Remaining unchecked items should be treated as backlog or optional follow-up, not release blockers for the shipped Stitch import baseline.
+
 ## Purpose
 
 Provide an implementation-ready, file-by-file execution checklist to integrate Google Stitch design imports into AWCMS for both TipTap and Puck editors, with strict per-tenant controls and safe fallback behavior.
@@ -42,11 +47,11 @@ Notes:
 
 ### Phase A - Database, Tenant Control, and Security Baseline
 
-- [ ] `supabase/migrations/20260224150000_add_stitch_import_settings.sql`: seed tenant-level Stitch import settings (`stitch_import`) in `settings`.
-- [ ] `supabase/migrations/20260224151000_create_stitch_import_jobs.sql`: create import audit table (`stitch_import_jobs`) with RLS + tenant isolation policies.
-- [ ] `supabase/migrations/20260224152000_register_stitch_import_resource.sql`: register `stitch_import` in `resources_registry` and seed permission keys.
-- [ ] `docs/RESOURCE_MAP.md`: add `stitch_import` resource mapping entry (scope, permission prefix, table linkage).
-- [ ] `docs/security/overview.md`: document import sanitization and tenant controls.
+- [x] `supabase/migrations/20260224150000_add_stitch_import_settings.sql`: seed tenant-level Stitch import settings (`stitch_import`) in `settings`.
+- [x] `supabase/migrations/20260224151000_create_stitch_import_jobs.sql`: create import audit table (`stitch_import_jobs`) with RLS + tenant isolation policies.
+- [x] `supabase/migrations/20260224152000_register_stitch_import_resource.sql`: register `stitch_import` in `resources_registry` and seed permission keys.
+- [x] `docs/RESOURCE_MAP.md`: add `stitch_import` resource mapping entry (scope, permission prefix, table linkage).
+- [x] `docs/security/overview.md`: document import sanitization and tenant controls.
 
 ### Phase B - Shared Stitch Import Core (Admin)
 
@@ -61,8 +66,8 @@ Notes:
 
 - [x] `awcms/src/components/ui/RichTextEditor.jsx`: add `Import from Stitch` toolbar action and invoke shared import service.
 - [x] `awcms/src/components/stitch/ImportFromStitchDialog.jsx` (new): modal for pasted HTML (and optional CSS) + preview + warning summary.
-- [ ] `awcms/src/components/visual-builder/fields/RichTextField.jsx`: pass through import hooks when RichTextEditor is used inside Puck fields.
-- [ ] `awcms/src/components/ui/LocalizedInput.jsx`: verify localized richtext mode supports import flow without breaking language tabs.
+- [x] `awcms/src/components/visual-builder/fields/RichTextField.jsx`: uses shared `RichTextEditor` so Stitch import behavior is inherited in Puck rich text fields.
+- [x] `awcms/src/components/ui/LocalizedInput.jsx`: localized richtext mode uses shared `RichTextEditor`, preserving Stitch import flow per language tab.
 
 ### Phase D - Puck Integration + Safe Fallback Block
 

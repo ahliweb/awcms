@@ -53,6 +53,13 @@ Provide common fixes for local development and deployment issues.
 - Linked/remote repair execution: `scripts/repair_supabase_migration_history.sh --apply --linked`.
 - Re-run `npx supabase db push --local` after local repairs.
 
+### Root/Mirror Supabase Drift (CI passes locally, fails in `db-check`)
+
+- CI lint runs from `awcms/supabase`, while local CLI defaults to root `supabase/`.
+- Run `scripts/verify_supabase_migration_consistency.sh` to detect missing or content-drifted migration files.
+- Run `scripts/verify_supabase_function_consistency.sh` to detect root/mirror Edge Function drift.
+- Mirror any changed files between `supabase/**` and `awcms/supabase/**`, then re-run verification.
+
 ### Invalid Migration Filename Warning
 
 - Ensure files in `supabase/migrations/` follow `<timestamp>_name.sql`.

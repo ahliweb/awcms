@@ -2,6 +2,16 @@
 
 AWCMS is architected to be "AI-Native", meaning the codebase structure, naming conventions, and documentation are optimized for collaboration with AI Coding Assistants (Agents) like GitHub Copilot, Cursor, Claude, and Gemini.
 
+## Documentation Authority
+
+All agent work must respect this chain:
+
+1. `SYSTEM_MODEL.md` (primary source of truth)
+2. `AGENTS.md` (this file)
+3. `README.md` (canonical monorepo operational baseline)
+4. `DOCS_INDEX.md` (documentation routing)
+5. implementation/module docs in `docs/**`
+
 ---
 
 ## 🤖 Agent Overview
@@ -126,11 +136,13 @@ To ensure successful code generation and integration, Agents must adhere to the 
 
 ### Context7 (Primary Reference)
 
-When updating docs or implementing library usage, **Context7 is the primary reference**. Use the following verified library IDs with `context7_search`:
+When updating docs or implementing library usage, **Context7 is the primary reference**. Use the following verified library IDs:
 
+- `supabase/supabase` (Platform guidance: database, RLS, migrations)
 - `supabase/supabase-js` (Auth, Database)
+- `supabase/cli` (Migration/CLI workflows)
 - `vitejs/vite` (Build Tooling)
-- `withastro/astro` (Public Portal)
+- `withastro/docs` (Public Portal)
 - `remix-run/react-router` (Routing v7)
 - `websites/react_dev` (React 19)
 - `websites/tailwindcss` (v4 CSS-first)

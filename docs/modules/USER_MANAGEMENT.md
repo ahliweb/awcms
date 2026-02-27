@@ -78,7 +78,7 @@ User management actions are strictly controlled by Attribute-Based Access Contro
 | **Update User (Profile)** | `tenant.user.update` | `users_update_hierarchy` |
 | **Assign Region** | `tenant.user.update` | `users_update_hierarchy` |
 | **Admin Profile Fields** | `tenant.user.update` | `user_profile_admin_*` policies |
-| **Delete User** | `tenant.user.delete` | *TBD / Soft Delete* |
+| **Delete User** | `tenant.user.delete` | Soft-delete via update workflow (no direct `DELETE` policy path) |
 
 > **Security Note**: The RLS policy `users_update_hierarchy` explicitly checks for the `tenant.user.update` permission for any intra-tenant user modification.
 
