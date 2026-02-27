@@ -5,6 +5,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation: Added benchmark-ready sections for the ten Context7 benchmark prompts using a standard structure: Objective, Required Inputs, Workflow, Reference Implementation, Validation Checklist, and Failure Modes and Guardrails.
+
 ## [2.32.1] "Codex" - 2026-02-27
 
 ### Added

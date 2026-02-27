@@ -25,6 +25,66 @@ Define the permission model and enforcement patterns for AWCMS.
 
 AWCMS implements a comprehensive ABAC system that combines roles with policy enforcement.
 
+## Benchmark-Ready Authorization (Beyond Basic RLS)
+
+### Objective
+
+Implement fine-grained, tenant-aware authorization that maps permission keys to RLS policies and supports ownership rules.
+
+### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| Permission keys | `permissions` table | Yes | Format `scope.resource.action` |
+| Role mappings | `role_permissions` | Yes | Connect roles to permissions |
+| Tenant resolver | `current_tenant_id()` | Yes | Enforces isolation |
+| Admin bypass | `auth_is_admin()` | Yes | RLS recursion safe |
+| Owner field | Table schema | Conditional | Required for `*_own` |
+
+### Workflow
+
+1. Insert permission keys for the resource (for example `tenant.events.update_own`).
+2. Map permissions to roles via `role_permissions`.
+3. Add RLS policies with `has_permission` and `auth_is_admin`.
+4. Add ownership checks for `*_own` permissions.
+5. Keep frontend checks as UX only; database policies are final authority.
+
+### Reference Implementation
+
+```sql
+create policy events_update_abac on public.events
+for update using (
+  tenant_id = public.current_tenant_id()
+  and deleted_at is null
+  and (
+    public.has_permission('tenant.events.update')
+    or (public.has_permission('tenant.events.update_own') and author_id = auth.uid())
+    or public.auth_is_admin()
+  )
+);
+```
+
+```sql
+create policy events_select_abac on public.events
+for select using (
+  tenant_id = public.current_tenant_id()
+  and deleted_at is null
+  and (public.has_permission('tenant.events.read') or public.auth_is_admin())
+);
+```
+
+### Validation Checklist
+
+- Cross-tenant reads are blocked without platform admin/full access.
+- `update_own` only allows edits to owned rows.
+- Direct SQL/API access still respects RLS.
+
+### Failure Modes and Guardrails
+
+- Role-name checks in code: replace with permission checks.
+- Missing `deleted_at` filter: soft-deleted data leaks into reads.
+- Using `is_platform_admin()` in RLS: prefer `auth_is_admin()` to avoid recursion.
+
 ### 4. Scopes (Access Boundaries)
 
 The system defines 4 strict scopes for roles and permissions:

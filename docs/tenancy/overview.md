@@ -57,75 +57,174 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 
 ## Implementation Details
 
-### Tenant Onboarding & Provisioning Process
+### Tenant Onboarding and Isolation (Benchmark-Ready)
 
-Creating a new tenant requires precise coordination between the database definition, initial content, and staff roles. AWCMS orchestrates this provisioning securely via the backend Edge Function invoking a specialized RPC method: `create_tenant_with_defaults()`.
+#### Objective
 
-**Step 1: Admin Creates Tenant**  
-The platform admin (or trusted automation) invokes `create_tenant_with_defaults()` via a privileged backend path. For local development, the seed script demonstrates this flow:
+Provision a new tenant using a privileged, idempotent flow that seeds default roles/content and guarantees isolation via RLS from first use.
+
+#### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `actor` | `auth.getUser()` | Yes | Must hold `platform.tenant.create` |
+| `name` | Onboarding payload | Yes | Human-readable tenant name |
+| `slug` | Onboarding payload | Yes | Unique tenant identifier |
+| `domain` | Onboarding payload | Conditional | Required for custom domain mode |
+| `admin_email` | Onboarding payload | Yes | Initial tenant admin invite |
+| `p_tier` | Onboarding payload | Optional | `free`/`pro`/`enterprise` |
+| `p_parent_tenant_id` | Onboarding payload | Optional | Hierarchy parent |
+| `role_inheritance_mode` | Onboarding payload | Optional | `auto` or `manual` |
+
+#### Workflow
+
+1. Authenticate caller and enforce `platform.tenant.create` before any writes.
+2. Normalize and uniqueness-check `slug`/`domain` for non-deleted tenants.
+3. Call `create_tenant_with_defaults()` using `SUPABASE_SECRET_KEY`.
+4. Invite the initial tenant admin via `auth.admin.inviteUserByEmail` with `tenant_id` metadata.
+5. Write an audit log entry with actor, tenant, and invite status.
+6. Verify isolation: cross-tenant read denies, default roles/pages exist, headers resolve tenant correctly.
+7. Return idempotent response on retries (409 on duplicate slug or 202 on invite failure).
+
+#### Reference Implementation (Edge Function)
 
 ```ts
-const { data, error } = await supabase.rpc('create_tenant_with_defaults', {
-  p_name: 'Dinkes Jatim',
-  p_slug: 'dinkes',
-  p_domain: null,
-  p_tier: 'pro',
-  p_parent_tenant_id: null,
-  p_role_inheritance_mode: 'auto'
+// supabase/functions/platform-tenant-onboard/index.ts
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Content-Type": "application/json",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const publishableKey = Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY") ?? "";
+  const secretKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
+
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const caller = createClient(supabaseUrl, publishableKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const { data: authData } = await caller.auth.getUser();
+  if (!authData?.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+
+  const { data: canCreate } = await caller.rpc("has_permission", {
+    permission_name: "platform.tenant.create",
+  });
+  if (!canCreate) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: corsHeaders });
+
+  const payload = await req.json();
+  if (!payload?.name || !payload?.slug || !payload?.admin_email) {
+    return new Response(JSON.stringify({ error: "Missing required payload" }), { status: 400, headers: corsHeaders });
+  }
+
+  const admin = createClient(supabaseUrl, secretKey);
+
+  const { data: existing } = await admin
+    .from("tenants")
+    .select("id")
+    .eq("slug", payload.slug)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return new Response(JSON.stringify({ error: "Slug already exists", tenant_id: existing.id }), { status: 409, headers: corsHeaders });
+  }
+
+  const { data: tenant, error: tenantError } = await admin.rpc("create_tenant_with_defaults", {
+    p_name: payload.name,
+    p_slug: payload.slug,
+    p_domain: payload.domain ?? null,
+    p_tier: payload.tier ?? "free",
+    p_parent_tenant_id: payload.parent_tenant_id ?? null,
+    p_role_inheritance_mode: payload.role_inheritance_mode ?? "auto",
+  });
+
+  if (tenantError || !tenant?.tenant_id) {
+    return new Response(JSON.stringify({ error: tenantError?.message ?? "Create tenant failed" }), { status: 400, headers: corsHeaders });
+  }
+
+  const invite = await admin.auth.admin.inviteUserByEmail(payload.admin_email, {
+    data: { tenant_id: tenant.tenant_id, role: "admin" },
+  });
+
+  await admin.from("audit_logs").insert({
+    tenant_id: tenant.tenant_id,
+    user_id: authData.user.id,
+    action: "platform.tenant.create",
+    details: { slug: payload.slug, invite_status: invite.error ? "failed" : "sent" },
+  });
+
+  return new Response(JSON.stringify({
+    tenant_id: tenant.tenant_id,
+    invite_status: invite.error ? "failed" : "sent",
+  }), { status: invite.error ? 202 : 201, headers: corsHeaders });
 });
 ```
 
-Reference implementation: `awcms/src/scripts/seed-primary-tenant.js`.
-
-**Step 2: Database Provisioning via `create_tenant_with_defaults()`**  
-The Edge Function securely calls the Postgres RPC function below (running with `SECURITY DEFINER` privileges), which guarantees consistent initialization and isolation:
+#### Reference Implementation (Database RPC)
 
 ```sql
-CREATE OR REPLACE FUNCTION "public"."create_tenant_with_defaults"("p_name" text, "p_slug" text, "p_domain" text DEFAULT NULL, "p_tier" text DEFAULT 'free', "p_parent_tenant_id" uuid DEFAULT NULL, "p_role_inheritance_mode" text DEFAULT 'auto') RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+CREATE OR REPLACE FUNCTION public.create_tenant_with_defaults(
+  p_name text,
+  p_slug text,
+  p_domain text DEFAULT NULL,
+  p_tier text DEFAULT 'free',
+  p_parent_tenant_id uuid DEFAULT NULL,
+  p_role_inheritance_mode text DEFAULT 'auto'
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
-    v_tenant_id uuid;
+  v_tenant_id uuid;
 BEGIN
-    -- 1. Insert Base Tenant
-    INSERT INTO public.tenants (
-      name, slug, domain, subscription_tier, status, parent_tenant_id, role_inheritance_mode
-    ) VALUES (p_name, p_slug, p_domain, p_tier, 'active', p_parent_tenant_id, p_role_inheritance_mode)
-    RETURNING id INTO v_tenant_id;
+  INSERT INTO public.tenants (name, slug, domain, subscription_tier, status, parent_tenant_id, role_inheritance_mode)
+  VALUES (p_name, p_slug, p_domain, p_tier, 'active', p_parent_tenant_id, p_role_inheritance_mode)
+  RETURNING id INTO v_tenant_id;
 
-    -- 2. Seed Core Tenant Roles
-    INSERT INTO public.roles (name, description, tenant_id, is_system, scope, is_tenant_admin)
-    VALUES ('admin', 'Tenant Administrator', v_tenant_id, true, 'tenant', true);
-    
-    INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
-    VALUES ('editor', 'Content Editor', v_tenant_id, true, 'tenant');
+  INSERT INTO public.roles (name, description, tenant_id, is_system, scope, is_tenant_admin)
+  VALUES ('admin', 'Tenant Administrator', v_tenant_id, true, 'tenant', true);
 
-    INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
-    VALUES ('author', 'Content Author', v_tenant_id, true, 'tenant');
+  INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
+  VALUES ('editor', 'Content Editor', v_tenant_id, true, 'tenant');
 
-    -- 3. Seed Inheritance, Resource Sharing, and Permissions
-    PERFORM public.seed_staff_roles(v_tenant_id);
-    PERFORM public.seed_tenant_resource_rules(v_tenant_id);
-    PERFORM public.apply_tenant_role_inheritance(v_tenant_id);
+  INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
+  VALUES ('author', 'Content Author', v_tenant_id, true, 'tenant');
 
-    -- 4. Seed Default CMS Content
-    INSERT INTO public.pages (tenant_id, title, slug, content, status, is_active, page_type, created_by)
-    VALUES (
-        v_tenant_id, 'Home', 'home', '{"root":{"props":{"title":"Home"},"children":[]}}', 'published', true, 'homepage', (SELECT auth.uid())
-    );
+  PERFORM public.seed_staff_roles(v_tenant_id);
+  PERFORM public.seed_tenant_resource_rules(v_tenant_id);
+  PERFORM public.apply_tenant_role_inheritance(v_tenant_id);
 
-    -- 5. Set Default Menus
-    INSERT INTO public.menus (tenant_id, name, label, url, group_label, is_active, is_public, "order")
-    VALUES (v_tenant_id, 'home', 'Home', '/', 'header', true, true, 1);
+  INSERT INTO public.pages (tenant_id, title, slug, content, status, is_active, page_type, created_by)
+  VALUES (v_tenant_id, 'Home', 'home', '{"root":{"props":{"title":"Home"},"children":[]}}', 'published', true, 'homepage', (SELECT auth.uid()));
 
-    RETURN jsonb_build_object('tenant_id', v_tenant_id, 'message', 'Tenant created with default data.');
-EXCEPTION WHEN OTHERS THEN
-    RAISE;
+  INSERT INTO public.menus (tenant_id, name, label, url, group_label, is_active, is_public, "order")
+  VALUES (v_tenant_id, 'home', 'Home', '/', 'header', true, true, 1);
+
+  RETURN jsonb_build_object('tenant_id', v_tenant_id, 'message', 'Tenant created with default data.');
 END;
 $$;
 ```
 
-**Step 3: User Assignment**  
-Finally, the newly created tenant requires an admin user. Through the admin panel UI or Edge Functions, a user is associated with the `admin` role ID created in Step 2.
+#### Validation Checklist
+
+- New tenant has default roles (`admin`, `editor`, `author`) and baseline pages/menus.
+- `x-tenant-id` resolves and `current_tenant_id()` returns the new tenant.
+- Cross-tenant reads are denied by RLS.
+- Invite email includes `tenant_id` metadata for first-login role assignment.
+
+#### Failure Modes and Guardrails
+
+- Invite fails after tenant creation: return 202 with retry guidance and audit log.
+- Duplicate slug/domain: return 409 and do not re-create tenant.
+- Missing tenant header: deny reads/writes until resolved.
+- Non-admin caller: 403 with audit entry.
 
 ---
 

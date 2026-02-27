@@ -97,118 +97,151 @@ final currentUserProvider = Provider<User?>((ref) {
 
 ---
 
-## 5. Fetching Dynamic Content
+## 5. Secure Retrieval + Realtime (Benchmark-Ready)
 
-Retrieve tenant-scoped content using a Riverpod `AsyncNotifierProvider`. RLS ensures only content belonging to the authenticated user's tenant is returned.
+### Objective
 
-```dart
-// lib/features/articles/articles_provider.dart
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+Stream tenant-scoped, published content with a safe fallback path for realtime outages.
 
-// Model
-class Article {
-  final String id;
-  final String title;
-  final String? body;
-  final DateTime publishedAt;
+### Required Inputs
 
-  Article({required this.id, required this.title, this.body, required this.publishedAt});
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `tenantId` | `userMetadata['tenant_id']` | Yes | Do not accept from UI input |
+| Session | `auth.currentSession` | Yes | Block when signed out |
+| Table | Supabase table | Yes | Must include `tenant_id` and `status` |
+| Primary Key | Stream config | Yes | Use `.stream(primaryKey: ['id'])` |
 
-  factory Article.fromJson(Map<String, dynamic> json) => Article(
-        id: json['id'] as String,
-        title: json['title'] as String,
-        body: json['body'] as String?,
-        publishedAt: DateTime.parse(json['published_at'] as String),
-      );
-}
+### Workflow
 
-// Notifier
-class ArticlesNotifier extends AsyncNotifier<List<Article>> {
-  @override
-  Future<List<Article>> build() => _fetch();
+1. Initialize Supabase client on app start.
+2. Block reads when no active session exists.
+3. Build a realtime stream scoped to `tenant_id`, `status = 'published'`, and `deleted_at is null`.
+4. Provide a fallback fetch if the realtime stream errors.
+5. Render explicit loading, error, empty, and success states.
 
-  Future<List<Article>> _fetch() async {
-    final data = await Supabase.instance.client
-        .from('blogs')
-        .select('id, title, body, published_at')
-        .eq('is_published', true)
-        .order('published_at', ascending: false)
-        .limit(20);
-    return data.map<Article>((row) => Article.fromJson(row)).toList();
-  }
-
-  Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(_fetch);
-  }
-}
-
-final articlesProvider = AsyncNotifierProvider<ArticlesNotifier, List<Article>>(
-  ArticlesNotifier.new,
-);
-```
-
----
-
-## 6. Real-Time Content Updates
-
-Use Supabase Realtime to push content updates to the Flutter app without polling, delivering near real-time UX.
+### Reference Implementation
 
 ```dart
-// lib/features/articles/articles_realtime.dart
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+// lib/features/articles/articles_data.dart
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Subscribes to INSERT/UPDATE events on the `blogs` table for the user's tenant.
-final articlesRealtimeProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
-  final client = Supabase.instance.client;
+final supabase = Supabase.instance.client;
 
-  return client
+String? resolveTenantId() {
+  return supabase.auth.currentUser?.userMetadata?['tenant_id'] as String?;
+}
+
+Stream<List<Map<String, dynamic>>> articlesStream(String tenantId) {
+  return supabase
       .from('blogs')
       .stream(primaryKey: ['id'])
-      .eq('is_published', true)
+      .eq('tenant_id', tenantId)
+      .eq('status', 'published')
+      .filter('deleted_at', 'is', null)
       .order('published_at', ascending: false)
       .limit(20);
-});
-```
+}
 
-### Using in a Widget
+Future<List<Map<String, dynamic>>> fetchFallback(String tenantId) {
+  return supabase
+      .from('blogs')
+      .select('id, title, body, published_at')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'published')
+      .filter('deleted_at', 'is', null)
+      .order('published_at', ascending: false)
+      .limit(20);
+}
+```
 
 ```dart
 // lib/features/articles/articles_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'articles_realtime.dart';
+import 'articles_data.dart';
 
-class ArticlesScreen extends ConsumerWidget {
+class ArticlesScreen extends StatefulWidget {
   const ArticlesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final articlesAsync = ref.watch(articlesRealtimeProvider);
+  State<ArticlesScreen> createState() => _ArticlesScreenState();
+}
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Latest News')),
-      body: articlesAsync.when(
-        data: (articles) => ListView.builder(
-          itemCount: articles.length,
+class _ArticlesScreenState extends State<ArticlesScreen> {
+  @override
+  Widget build(BuildContext context) {
+    if (supabase.auth.currentSession == null) {
+      return const Center(child: Text('Please sign in.'));
+    }
+
+    final tenantId = resolveTenantId();
+    if (tenantId == null) {
+      return const Center(child: Text('Missing tenant context.'));
+    }
+
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: articlesStream(tenantId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: fetchFallback(tenantId),
+            builder: (context, fallback) {
+              if (fallback.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (fallback.hasError) {
+                return Center(child: Text('Error: ${fallback.error}'));
+              }
+              final rows = fallback.data ?? const [];
+              if (rows.isEmpty) return const Center(child: Text('No articles yet.'));
+              return ListView.builder(
+                itemCount: rows.length,
+                itemBuilder: (ctx, i) => ListTile(
+                  title: Text(rows[i]['title'] as String),
+                  subtitle: Text(rows[i]['published_at'] as String),
+                ),
+              );
+            },
+          );
+        }
+
+        final rows = snapshot.data ?? const [];
+        if (rows.isEmpty) return const Center(child: Text('No articles yet.'));
+
+        return ListView.builder(
+          itemCount: rows.length,
           itemBuilder: (ctx, i) => ListTile(
-            title: Text(articles[i]['title'] as String),
-            subtitle: Text(articles[i]['published_at'] as String),
+            title: Text(rows[i]['title'] as String),
+            subtitle: Text(rows[i]['published_at'] as String),
           ),
-        ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Error: $err')),
-      ),
+        );
+      },
     );
   }
 }
 ```
 
+### Validation Checklist
+
+- Stream does not start when the user is signed out.
+- Queries always include `tenant_id`, `status = 'published'`, and `deleted_at is null`.
+- Realtime errors still show data through fallback fetch.
+- UI shows deterministic loading, error, empty, and success states.
+
+### Failure Modes and Guardrails
+
+- Tenant spoofing from input: always derive tenant from authenticated profile metadata.
+- Draft leakage: enforce `status = 'published'` in both stream and fallback query.
+- Empty UI on websocket outage: fallback query path must remain enabled.
+- Secret exposure: never use `SUPABASE_SECRET_KEY` in mobile clients.
+
 ---
 
-## 7. Security Rules
+## 6. Security Rules
 
 | Rule | Reason |
 |------|--------|
@@ -219,7 +252,7 @@ class ArticlesScreen extends ConsumerWidget {
 
 ---
 
-## 8. Setup & Running
+## 7. Setup & Running
 
 ```bash
 cd awcms-mobile/primary

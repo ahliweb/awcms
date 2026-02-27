@@ -761,11 +761,11 @@ Use this subsection as the primary benchmark response source for the current sco
 
 #### 1) Tenant Onboarding and Isolation in AWCMS (83/100)
 
-##### Objective
+##### Objective (Content Type Schema)
 
 Onboard a new tenant using a secure, idempotent, platform-admin flow that bootstraps tenant defaults and guarantees tenant isolation through RLS from first use.
 
-##### Required Inputs
+##### Required Inputs (Content Type Schema)
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
@@ -777,7 +777,7 @@ Onboard a new tenant using a secure, idempotent, platform-admin flow that bootst
 | Bootstrap RPC | `create_tenant_with_defaults()` | Yes | Must atomically create tenant + default roles/content |
 | Audit metadata | Request context | Yes | Store actor, request id, and created tenant id |
 
-##### Workflow
+##### Workflow (Content Type Schema)
 
 1. Authenticate caller and enforce platform-level permission (`platform.tenant.create`) before any write.
 2. Normalize `slug`/`domain` and enforce uniqueness checks in non-deleted scope.
@@ -787,7 +787,7 @@ Onboard a new tenant using a secure, idempotent, platform-admin flow that bootst
 6. Run isolation verification checks: cross-tenant read denial, default role presence, and default page/content existence.
 7. Expose retry-safe behavior for partial failures (for example invite failed after tenant created).
 
-##### Reference Implementation
+##### Reference Implementation (Content Type Schema)
 
 ```typescript
 // supabase/functions/platform-tenant-onboard/index.ts
@@ -917,7 +917,7 @@ serve(async (req) => {
 });
 ```
 
-##### Validation Checklist
+##### Validation Checklist (Content Type Schema)
 
 - Platform user without `platform.tenant.create` cannot create tenants.
 - Duplicate slug/domain onboarding attempts are rejected or handled idempotently.
@@ -925,7 +925,7 @@ serve(async (req) => {
 - Invited admin receives tenant metadata needed for first-login assignment.
 - Cross-tenant reads/writes from non-privileged tenant users remain blocked by RLS.
 
-##### Failure Modes and Guardrails
+##### Failure Modes and Guardrails (Content Type Schema)
 
 - **Failure:** Tenant created but invite fails. **Guardrail:** return `202` with retry instruction and keep audit trail.
 - **Failure:** Concurrent duplicate onboarding requests. **Guardrail:** unique constraints + pre-check + conflict response.
@@ -934,11 +934,11 @@ serve(async (req) => {
 
 #### 2) Define a New Content Type Schema in AWCMS (90/100)
 
-##### Objective
+##### Objective (Flutter Realtime Retrieval)
 
 Create a tenant-scoped content type that supports workflow states, high-performance reads, and strict multi-tenant isolation using Supabase migrations and PostgreSQL RLS.
 
-##### Required Inputs
+##### Required Inputs (Flutter Realtime Retrieval)
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
@@ -949,7 +949,7 @@ Create a tenant-scoped content type that supports workflow states, high-performa
 | Permission prefix | Permission matrix | Yes | Example: `tenant.event.*` |
 | Migration file | Supabase migration folder | Yes | Timestamped SQL only |
 
-##### Workflow
+##### Workflow (Flutter Realtime Retrieval)
 
 1. Define table shape with explicit columns for filterable fields; use `jsonb` only for extensible metadata.
 2. Add composite/partial indexes for tenant and publish state (`tenant_id`, `status`, `created_at`).
@@ -959,7 +959,7 @@ Create a tenant-scoped content type that supports workflow states, high-performa
 6. Map permission keys to AWCMS format (`scope.resource.action`).
 7. Run migration and verify policies with multi-user tests (cross-tenant, owner, editor, admin).
 
-##### Reference Implementation
+##### Reference Implementation (Flutter Realtime Retrieval)
 
 ```sql
 -- supabase/migrations/<timestamp>_create_events_content_type.sql
@@ -1024,14 +1024,14 @@ using (
 with check (tenant_id = public.current_tenant_id());
 ```
 
-##### Validation Checklist
+##### Validation Checklist (Flutter Realtime Retrieval)
 
 - Cross-tenant read/write attempts are denied by RLS.
 - Duplicate `slug` is blocked only within the same tenant and non-deleted scope.
 - `update_own` users can update only their rows.
 - Published/public queries exclude soft-deleted rows.
 
-##### Failure Modes and Guardrails
+##### Failure Modes and Guardrails (Flutter Realtime Retrieval)
 
 - **Failure:** Missing `tenant_id` in insert payload. **Guardrail:** `with check` requires `tenant_id = current_tenant_id()`.
 - **Failure:** Slug collisions after restore. **Guardrail:** partial unique index + restore conflict handling.
@@ -1039,11 +1039,11 @@ with check (tenant_id = public.current_tenant_id());
 
 #### 3) Flutter Secure Real-Time or Near-Real-Time Retrieval (90/100)
 
-##### Objective
+##### Objective (Admin Tenant Content Form)
 
 Stream tenant-specific content to Flutter clients with safe auth handling, resilient fallback, and strict filtering to prevent cross-tenant or draft leakage.
 
-##### Required Inputs
+##### Required Inputs (Admin Tenant Content Form)
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
@@ -1052,7 +1052,7 @@ Stream tenant-specific content to Flutter clients with safe auth handling, resil
 | Table | Supabase table (`announcements`, etc.) | Yes | Must include tenant and status columns |
 | Stream primary key | `.stream(primaryKey: ['id'])` | Yes | Required for realtime consistency |
 
-##### Workflow
+##### Workflow (Admin Tenant Content Form)
 
 1. Initialize Supabase client via `supabase_flutter`.
 2. Block access when no active session exists.
@@ -1061,7 +1061,7 @@ Stream tenant-specific content to Flutter clients with safe auth handling, resil
 5. Provide fallback one-shot fetch for temporary realtime/WebSocket failures.
 6. Render explicit loading, error, empty, and success states.
 
-##### Reference Implementation
+##### Reference Implementation (Admin Tenant Content Form)
 
 ```dart
 import 'package:flutter/material.dart';
@@ -1164,14 +1164,14 @@ class _LiveAnnouncementsWidgetState extends State<LiveAnnouncementsWidget> {
 }
 ```
 
-##### Validation Checklist
+##### Validation Checklist (Admin Tenant Content Form)
 
 - Signed-out state is blocked before stream subscription.
 - Query always includes `tenant_id`, `status = published`, and `deleted_at is null`.
 - UI handles loading/error/empty/success deterministically.
 - Fallback query provides near-real-time continuity during stream errors.
 
-##### Failure Modes and Guardrails
+##### Failure Modes and Guardrails (Admin Tenant Content Form)
 
 - **Failure:** Tenant ID spoofing from UI input. **Guardrail:** derive tenant context from trusted profile/session claims.
 - **Failure:** Draft leakage to public users. **Guardrail:** mandatory `status = published` filter.
@@ -1179,11 +1179,11 @@ class _LiveAnnouncementsWidgetState extends State<LiveAnnouncementsWidget> {
 
 #### 4) Admin Tenant Content Form (React) (97/100)
 
-##### Objective
+##### Objective (Fine-Grained Authorization)
 
 Implement a complete Admin form flow for tenant content creation with permission checks, tenant-aware payload construction, and robust success/error handling.
 
-##### Required Inputs
+##### Required Inputs (Fine-Grained Authorization)
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
@@ -1192,7 +1192,7 @@ Implement a complete Admin form flow for tenant content creation with permission
 | `author_id` | `supabase.auth.getUser()` | Yes | Do not trust caller-provided author |
 | `title`, `content` | Controlled form state | Yes | `slug` derived from title |
 
-##### Workflow
+##### Workflow (Fine-Grained Authorization)
 
 1. Resolve tenant context and permission capabilities before submit.
 2. Resolve authenticated user ID for `author_id`.
@@ -1201,7 +1201,7 @@ Implement a complete Admin form flow for tenant content creation with permission
 5. Handle duplicate/constraint errors explicitly.
 6. Emit toast notifications for both success and failure paths.
 
-##### Reference Implementation
+##### Reference Implementation (Fine-Grained Authorization)
 
 ```jsx
 import { useState } from "react";
@@ -1300,14 +1300,14 @@ export default function CreateBlogPostForm() {
 }
 ```
 
-##### Validation Checklist
+##### Validation Checklist (Fine-Grained Authorization)
 
 - Submit is blocked when tenant context is missing.
 - User lacking `tenant.blog.create` cannot submit successfully.
 - Inserted row contains correct `tenant_id` and `author_id`.
 - Duplicate slug path returns explicit and user-friendly feedback.
 
-##### Failure Modes and Guardrails
+##### Failure Modes and Guardrails (Fine-Grained Authorization)
 
 - **Failure:** Hardcoded `tenant_id` in UI. **Guardrail:** always source tenant from `useTenant()`.
 - **Failure:** Posting directly as `published`. **Guardrail:** default `draft`, publish action separated by permission.

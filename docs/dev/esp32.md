@@ -40,7 +40,30 @@ awcms-esp32/primary/
 
 ---
 
-## 4. Receiving & Applying Configuration Changes
+## 4. Receiving & Applying Configuration Changes (Benchmark-Ready)
+
+### Objective
+
+Deliver device configuration updates securely via a Supabase Edge Function, apply settings locally, and persist a safe last-known configuration for offline boot.
+
+### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `device_token` | Device provisioning | Yes | Publishable per-device token |
+| `device-config` URL | Admin config | Yes | Supabase Functions URL |
+| `polling_interval_sec` | Config payload | Yes | Device checks interval |
+| Config schema | Server response | Yes | JSON payload with known keys |
+
+### Workflow
+
+1. Device boots, connects to WiFi, and loads last-known config from `Preferences`.
+2. Device polls `/functions/v1/device-config` with `Authorization: Bearer <device_token>`.
+3. Edge Function validates token, resolves tenant/device, and returns scoped config.
+4. Firmware applies config and persists it for offline recovery.
+5. When `firmware_version` increases, device triggers OTA update.
+
+### Reference Implementation
 
 AWCMS pushes configuration to devices via a Supabase Edge Function endpoint (`/functions/v1/device-config`). The firmware's `ConfigManager` polls this endpoint on a configurable interval and applies any changes immediately.
 
@@ -185,6 +208,20 @@ void loop() {
 // Per-device Supabase publishable key (NOT the secret key)
 #define DEVICE_TOKEN  "sb_publishable_..."
 ```
+
+### Validation Checklist
+
+- Device uses last-known config when the network is unavailable.
+- Config updates apply within one polling interval.
+- OTA update triggers only when `firmware_version` increases.
+- Token revocation prevents future config/telemetry updates.
+
+### Failure Modes and Guardrails
+
+- Token leaked: revoke token in AWCMS, block requests in Edge Function.
+- Invalid JSON payload: fall back to last-known settings and log parse error.
+- WiFi failures: keep device in safe mode and retry connection.
+- Breaking config changes: use versioned endpoints (for example `device-config-v2`).
 
 ---
 

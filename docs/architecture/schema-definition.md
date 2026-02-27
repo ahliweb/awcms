@@ -1,146 +1,168 @@
 # Programmatic Content Type Schemas
 
-AWCMS leverages Supabase for its foundational database structure, but defining a new content type requires bridging the PostgreSQL schema with the React application layer. This guide details the programmatic workflow for defining, registering, and consuming a new custom content type (e.g., `events`).
+AWCMS leverages Supabase for its foundational database structure, but defining a new content type requires a tenant-safe schema, ABAC-driven policies, and admin UI registration.
 
-## 1. Database Migration (SQL Structure)
+## Objective
 
-Every new content type begins with a table structure migrated via the Supabase CLI. AWCMS schemas strictly require audit fields (`created_at`, `created_by`, `updated_at`, `updated_by`) and tenant isolation (`tenant_id`).
+Create a new tenant-scoped content type (for example `events`) that is fully isolated, permissioned, and ready for Admin and Public clients.
+
+## Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `content_type` | Module spec | Yes | Example: `events` |
+| `permission_prefix` | Permission matrix | Yes | Example: `tenant.events.*` |
+| `status` lifecycle | Workflow design | Yes | `draft`/`review`/`published`/`archived` |
+| `tenant_id` | `useTenant()` / RLS | Yes | Isolation boundary |
+| `author_id` | `auth.uid()` | Yes | Ownership enforcement |
+| Migration name | Supabase CLI | Yes | Timestamped SQL file |
+
+## Workflow
+
+1. Create a migration in `supabase/migrations/` and mirror it in `awcms/supabase/migrations/`.
+2. Define the table with `tenant_id`, audit fields, `deleted_at`, and a workflow `status`.
+3. Add partial unique indexes for slug and tenant-scoped listing performance.
+4. Enable RLS and create ABAC policies using `has_permission` and `auth_is_admin`.
+5. Register the resource in `resources_registry` (`key`, `label`, `scope`, `type`, `db_table`, `permission_prefix`) and add permissions in `permissions` + `role_permissions`.
+6. (Optional) Register blocks/components in `component_registry` using `resource_key` and `editor_type`.
+
+## Reference Implementation
+
+### A. Migration SQL (Table + Indexes + RLS)
 
 ```sql
--- supabase/migrations/20260223000000_create_events_schema.sql
-
-CREATE TABLE public.events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    start_date TIMESTAMPTZ NOT NULL,
-    end_date TIMESTAMPTZ,
-    location TEXT,
-    is_published BOOLEAN DEFAULT false,
-    
-    -- Standard AWCMS Audit Fields
-    created_at TIMESTAMPTZ DEFAULT now(),
-    created_by UUID REFERENCES auth.users(id),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    updated_by UUID REFERENCES auth.users(id)
+-- supabase/migrations/<timestamp>_create_events.sql
+create table if not exists public.events (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id),
+  author_id uuid not null references public.users(id),
+  title text not null,
+  slug text not null,
+  summary text,
+  content jsonb not null default '{}'::jsonb,
+  status text not null default 'draft'
+    check (status in ('draft','review','published','archived')),
+  published_at timestamptz,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
--- Indexing for performance and tenant isolation
-CREATE INDEX idx_events_tenant ON public.events(tenant_id);
-CREATE INDEX idx_events_date ON public.events(start_date DESC);
+create unique index if not exists events_tenant_slug_unique
+  on public.events (tenant_id, lower(slug))
+  where deleted_at is null;
 
--- Enable Row Level Security
-ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+create index if not exists events_tenant_status_created_idx
+  on public.events (tenant_id, status, created_at desc)
+  where deleted_at is null;
+
+alter table public.events enable row level security;
 ```
 
-## 2. Resource Registration (`resources_registry`)
+### B. RLS Policies (ABAC Standard)
 
-For the AWCMS ABAC (Attribute-Based Access Control) system and Admin UI to recognize the new content type as a manageable entity, it must be registered programmatically in the `resources_registry`.
+```sql
+create policy events_select_abac on public.events
+for select using (
+  tenant_id = public.current_tenant_id()
+  and deleted_at is null
+  and (public.has_permission('tenant.events.read') or public.auth_is_admin())
+);
 
-```typescript
-// src/api/schemaRegistry.ts
-import { supabase } from '@/lib/supabaseClient';
+create policy events_insert_abac on public.events
+for insert with check (
+  tenant_id = public.current_tenant_id()
+  and author_id = auth.uid()
+  and public.has_permission('tenant.events.create')
+);
 
-export async function registerContentType() {
-  const { data, error } = await supabase
-    .from('resources_registry')
-    .insert([
-      {
-        resource_key: 'events',
-        display_name: 'Events',
-        description: 'Manage tenant events and schedules',
-        base_table: 'events',
-        icon: 'Calendar',
-        is_dynamic: true,
-        schema_version: '1.0.0'
-      }
-    ]);
-
-  if (error) throw new Error(`Schema registration failed: ${error.message}`);
-  return data;
-}
+create policy events_update_abac on public.events
+for update using (
+  tenant_id = public.current_tenant_id()
+  and deleted_at is null
+  and (
+    public.has_permission('tenant.events.update')
+    or (public.has_permission('tenant.events.update_own') and author_id = auth.uid())
+    or public.auth_is_admin()
+  )
+);
 ```
 
-## 3. UI and Component Wiring (`component_registry`)
+### C. Resource Registration
 
-AWCMS uses dynamic block editors (Puck/TipTap). To make the new content type available to the visual builder (e.g., an "Event List" block), its schema definition maps into the `component_registry`.
+```javascript
+// awcms/src/lib/registerContentType.js
+import { supabase } from "@/lib/customSupabaseClient";
 
-```typescript
-// src/api/componentRegistry.ts
-import { supabase } from '@/lib/supabaseClient';
-
-export interface ComponentConfig {
-  name: string;
-  props: Record<string, any>;
-  defaultData: Record<string, any>;
-}
-
-export async function registerEventBlocks(tenantId: string) {
-  const eventListConfig: ComponentConfig = {
-    name: 'EventListFeature',
-    props: {
-      limit: { type: 'number', default: 3 },
-      showLocation: { type: 'boolean', default: true }
+export async function registerEventsResource() {
+  const { error } = await supabase.from("resources_registry").insert([
+    {
+      key: "events",
+      label: "Events",
+      scope: "tenant",
+      type: "content",
+      db_table: "events",
+      icon: "Calendar",
+      permission_prefix: "tenant.events",
+      active: true,
     },
-    defaultData: {
-      querySort: 'start_date:asc'
-    }
-  };
+  ]);
 
-  const { error } = await supabase
-    .from('component_registry')
-    .upsert({
-      tenant_id: tenantId,
-      component_type: 'puck_block',
-      identifier: 'events_list',
-      configuration: eventListConfig,
-      is_active: true
-    });
-
-  if (error) throw new Error('UI Component registration failed');
+  if (error) throw new Error(error.message);
 }
 ```
 
-## 4. Application Layer interfaces (TypeScript)
+### D. Component Registry (Optional)
 
-On the React frontend, schemas are strictly typed. This interface bridges the API boundary and enables IntelliSense for frontend developers building forms or displaying the content.
+```javascript
+import { supabase } from "@/lib/customSupabaseClient";
 
-```typescript
-// src/types/schemas/events.ts
-import { BaseEntity } from './core';
-
-export interface EventEntity extends BaseEntity {
-  title: string;
-  start_date: string; // ISO 8601
-  end_date?: string;  // ISO 8601
-  location?: string;
-  is_published: boolean;
-}
-
-// Hook for Data Fetching
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
-
-export function useEvents(tenantId: string) {
-  return useQuery({
-    queryKey: ['events', tenantId],
-    queryFn: async (): Promise<EventEntity[]> => {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('start_date', { ascending: true });
-        
-      if (error) throw error;
-      return data as EventEntity[];
-    }
-  });
-}
+await supabase.from("component_registry").upsert({
+  resource_key: "events",
+  tenant_id: tenantId,
+  editor_type: "puck",
+  config: {
+    blocks: ["EventList"],
+  },
+});
 ```
 
-## Summary Workflow
+### E. Admin Create Flow (Minimal Insert)
 
-1. **SQL Migration**: Define strict table structure and RLS.
-2. **`resources_registry`**: Expose the table to the API and ABAC permissions engine.
-3. **`component_registry`**: Map the content to visual parameters for the visual editor.
-4. **TypeScript layer**: Bind it all together in the React application using standard `@supabase/supabase-js` patterns and strongly typed interfaces.
+```javascript
+import { supabase } from "@/lib/customSupabaseClient";
+import { useTenant } from "@/contexts/TenantContext";
+
+const { tenantId } = useTenant();
+const { data: authData } = await supabase.auth.getUser();
+const user = authData?.user;
+
+await supabase.from("events").insert({
+  tenant_id: tenantId,
+  author_id: user.id,
+  title,
+  slug,
+  content,
+  status: "draft",
+});
+```
+
+## Validation Checklist
+
+- Cross-tenant reads and writes are denied by RLS.
+- Duplicate slugs are blocked within the same tenant and non-deleted scope.
+- `update_own` permissions only allow edits by the original author.
+- Public queries include `status = 'published'` and `deleted_at is null`.
+
+## Failure Modes and Guardrails
+
+- Missing `deleted_at` column: soft delete pattern breaks.
+- No partial unique index on slug: restore collisions occur.
+- RLS policy without `tenant_id`: cross-tenant leaks.
+- Missing permission keys: ABAC policies return false for all users.
+
+## References
+
+- `docs/security/abac.md`
+- `docs/security/rls.md`
+- `docs/tenancy/overview.md`

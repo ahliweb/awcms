@@ -25,6 +25,70 @@ AWCMS relies on **Supabase Auth** (GoTrue) for identity management.
 - **Sign In**: Email & Password.
 - **Session**: JWT (JSON Web Token) stored in LocalStorage/Cookies. Handled automatically by `@supabase/supabase-js`.
 
+## Benchmark-Ready Login and Registration Flow
+
+### Objective
+
+Implement a secure login and registration flow that respects tenant context, approval gates, and RLS policies.
+
+### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| Email/Password | Login form | Yes | Turnstile validated in admin UI |
+| `tenant_id` | Tenant resolver | Yes | Required for registration requests |
+| `account_requests` | Public registration | Yes | Approval workflow table |
+| Admin invite | `manage-users` function | Optional | Admin-controlled onboarding |
+
+### Workflow
+
+1. Login uses Supabase Auth (`signInWithPassword`) and checks for soft-deleted users.
+2. Public registration writes to `account_requests` with `pending_admin` status.
+3. Tenant admin approval moves status to `pending_super_admin`.
+4. Platform admin approval invokes `inviteUserByEmail` and marks request `completed`.
+5. DB triggers create `public.users` and `public.user_profiles` for the invited user.
+
+### Reference Implementation
+
+```javascript
+// Login
+const { data, error } = await supabase.auth.signInWithPassword({
+  email,
+  password,
+});
+
+if (error) throw error;
+```
+
+```javascript
+// Public registration request
+await supabase.from("account_requests").insert({
+  tenant_id,
+  email,
+  full_name,
+  status: "pending_admin",
+});
+```
+
+```javascript
+// Admin invite (Edge Function)
+await supabase.functions.invoke("manage-users", {
+  body: { action: "invite", email, role_id, tenant_id },
+});
+```
+
+### Validation Checklist
+
+- Users cannot access the admin portal until approved and invited.
+- `public.users` and `user_profiles` are created after invite acceptance.
+- Soft-deleted users cannot sign in.
+
+### Failure Modes and Guardrails
+
+- Direct client creation of privileged users: enforce invites via Edge Functions.
+- Missing default role flags: ensure `is_default_invite` and `is_default_public_registration` are set.
+- Approval bypass: restrict `account_requests` updates to admins via RLS.
+
 ## User Profile Sync
 
 Supabase separates Auth Users (`auth.users`) from Application Data. AWCMS bridges this using a public table:

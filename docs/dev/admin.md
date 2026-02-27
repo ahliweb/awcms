@@ -78,3 +78,120 @@ Local development uses `VITE_DEV_TENANT_SLUG` (default `primary`) on localhost. 
 const { currentTenant } = useTenant();
 // Use currentTenant.id in mutations
 ```
+
+## 5. Tenant Content Form (Benchmark-Ready)
+
+### Objective
+
+Create a tenant-aware form that inserts draft content while enforcing permissions and author ownership.
+
+### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `tenantId` | `useTenant()` | Yes | Scope for all inserts |
+| Permission | `usePermissions()` | Yes | `tenant.blog.create` |
+| `author_id` | `auth.getUser()` | Yes | Do not trust caller input |
+| `slug` | Derived from title | Yes | Enforce per-tenant uniqueness |
+
+### Workflow
+
+1. Block submit if tenant context is missing.
+2. Block submit if permission is missing.
+3. Resolve current user and build payload with `status: 'draft'`.
+4. Insert via `customSupabaseClient` and handle duplicate slug errors.
+5. Show toast on success/failure and reset form state.
+
+### Reference Implementation
+
+```javascript
+import { useState } from "react";
+import { supabase } from "@/lib/customSupabaseClient";
+import { useTenant } from "@/contexts/TenantContext";
+import { usePermissions } from "@/contexts/PermissionContext";
+import { useToast } from "@/components/ui/use-toast";
+
+const toSlug = (value) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+
+export default function CreateBlogPostForm() {
+  const { tenantId } = useTenant();
+  const { hasPermission } = usePermissions();
+  const { toast } = useToast();
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!tenantId) {
+      toast({ variant: "destructive", title: "Missing tenant context" });
+      return;
+    }
+
+    if (!hasPermission("tenant.blog.create")) {
+      toast({ variant: "destructive", title: "Permission denied" });
+      return;
+    }
+
+    setLoading(true);
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+
+    if (!user) {
+      setLoading(false);
+      toast({ variant: "destructive", title: "Session expired" });
+      return;
+    }
+
+    const { error } = await supabase.from("blogs").insert({
+      tenant_id: tenantId,
+      author_id: user.id,
+      title,
+      content,
+      slug: toSlug(title),
+      status: "draft",
+    });
+
+    setLoading(false);
+
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Create failed",
+        description: error.code === "23505" ? "Slug already exists." : error.message,
+      });
+      return;
+    }
+
+    toast({ title: "Saved", description: "Draft created." });
+    setTitle("");
+    setContent("");
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* inputs and submit button */}
+    </form>
+  );
+}
+```
+
+### Validation Checklist
+
+- Insert is blocked without tenant context.
+- User without `tenant.blog.create` cannot submit.
+- `author_id` matches authenticated user.
+- Duplicate slugs return a friendly error.
+
+### Failure Modes and Guardrails
+
+- Hardcoded tenant IDs: always use `useTenant()`.
+- Publishing on create: keep `status = 'draft'` and require publish permission.
+- Silent errors: use toast feedback for all error paths.

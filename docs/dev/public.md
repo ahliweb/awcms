@@ -32,6 +32,65 @@ Each tenant has a dedicated directory under `awcms-public/`. We currently use a 
 
 Static builds scope content by build-time tenant ID (`PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID`) and use `getStaticPaths` for tenant-specific routes. Middleware-based tenant resolution is reserved for SSR/runtime deployments.
 
+## 3.1 Static Content Fetching (Benchmark-Ready)
+
+### Objective
+
+Statically render tenant-scoped content using Astro build-time data fetching without leaking drafts or cross-tenant data.
+
+### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `PUBLIC_TENANT_ID` | Build env | Yes | Primary tenant resolver |
+| `VITE_PUBLIC_TENANT_ID` | Build env | Optional | Fallback resolver |
+| `VITE_SUPABASE_URL` | Build env | Yes | Supabase URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Build env | Yes | Publishable key |
+
+### Workflow
+
+1. Resolve tenant at build time (no `Astro.locals` in static builds).
+2. Create a Supabase client with `x-tenant-id` header.
+3. Query only published and non-deleted records.
+4. Use `getStaticPaths` to generate routes.
+5. Render page data in the template.
+
+### Reference Implementation
+
+```ts
+// awcms-public/primary/src/pages/blogs/[slug].astro
+import { createClientFromEnv } from "../../lib/supabase";
+
+export async function getStaticPaths() {
+  const tenantId =
+    import.meta.env.PUBLIC_TENANT_ID ||
+    import.meta.env.VITE_PUBLIC_TENANT_ID ||
+    import.meta.env.VITE_TENANT_ID;
+
+  const supabase = createClientFromEnv(import.meta.env, { "x-tenant-id": tenantId });
+
+  const { data } = await supabase
+    .from("blogs")
+    .select("slug")
+    .eq("status", "published")
+    .is("deleted_at", null);
+
+  return (data ?? []).map((row) => ({ params: { slug: row.slug } }));
+}
+```
+
+### Validation Checklist
+
+- Static build renders only `published` content.
+- Tenant ID resolves consistently across environments.
+- Cross-tenant slugs are not rendered.
+
+### Failure Modes and Guardrails
+
+- Missing `PUBLIC_TENANT_ID`: builds may render wrong tenant or no content.
+- Using runtime-only tenant resolution: static builds cannot access `Astro.locals`.
+- Draft leakage: always filter `status = 'published'` and `deleted_at is null`.
+
 ### Smandapbun Portal
 
 - `awcms-public/smandapbun` is a single-tenant Astro site.

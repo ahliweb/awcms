@@ -17,6 +17,98 @@ Document the current Edge Function runtime layout, secret conventions, and deplo
 - [AGENTS.md](../../AGENTS.md) - Supabase and security implementation rules
 - Supabase CLI v2.70+
 
+## Benchmark-Ready Edge Function Workflow
+
+### Objective
+
+Create and deploy a Supabase Edge Function that performs privileged business logic while enforcing tenant context and authentication.
+
+### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| Function name | Implementation spec | Yes | Folder name under `supabase/functions/` |
+| `SUPABASE_URL` | Supabase runtime | Yes | Provided by Supabase |
+| `SUPABASE_SECRET_KEY` | Supabase secrets | Yes | Server-side only |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Client auth checks | Yes | Used for `auth.getUser()` |
+| `x-tenant-id` | Request header | Conditional | Required for tenant-scoped writes |
+
+### Workflow
+
+1. Create `supabase/functions/<name>/index.ts`.
+2. Add CORS handling and method validation.
+3. Validate caller with publishable key client (`auth.getUser`).
+4. Use admin client with `SUPABASE_SECRET_KEY` for privileged ops.
+5. Enforce tenant scope checks and `deleted_at` patterns.
+6. Serve locally, then deploy and set secrets.
+
+### Reference Implementation
+
+```ts
+// supabase/functions/content-transform/index.ts
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Content-Type": "application/json",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const publishableKey = Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY") ?? "";
+  const secretKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
+
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const caller = createClient(supabaseUrl, publishableKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const { data: authData } = await caller.auth.getUser();
+  if (!authData?.user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+  }
+
+  const admin = createClient(supabaseUrl, secretKey);
+  const payload = await req.json();
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) {
+    return new Response(JSON.stringify({ error: "Missing tenant header" }), { status: 400, headers: corsHeaders });
+  }
+
+  const { error } = await admin
+    .from("blogs")
+    .update({ content: payload.transformed, updated_at: new Date().toISOString() })
+    .eq("id", payload.blog_id)
+    .eq("tenant_id", tenantId)
+    .is("deleted_at", null);
+
+  if (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders });
+  }
+
+  return new Response(JSON.stringify({ ok: true }), { status: 200, headers: corsHeaders });
+});
+```
+
+### Validation Checklist
+
+- Function rejects unauthenticated calls.
+- Privileged writes use `SUPABASE_SECRET_KEY` only.
+- Tenant headers are validated for tenant-scoped operations.
+- Local `supabase functions serve` matches production behavior.
+
+### Failure Modes and Guardrails
+
+- Missing CORS headers: browser calls fail on preflight.
+- Using secret key in client: security breach.
+- No `deleted_at` filter: soft-deleted rows mutated.
+- Missing permission checks: add `has_permission` or admin-only routes.
+
 ## Runtime Layout
 
 - Canonical Supabase CLI path: `supabase/functions/`

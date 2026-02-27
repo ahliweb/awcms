@@ -12,6 +12,67 @@
 
 AWCMS is a **monorepo** with multiple independently-versioned apps. Each client application can be updated and deployed independently without requiring a coordinated full-stack release.
 
+## 1.1 Benchmark-Ready Strategy
+
+### Objective
+
+Enable independent releases per client while preserving backward compatibility across shared schemas and APIs.
+
+### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| App version | `package.json` / `pubspec.yaml` | Yes | SemVer per client |
+| CI path filters | GitHub Actions | Yes | Deploy only changed apps |
+| Additive schema rules | DB migration policy | Yes | Prevent breaking clients |
+| Root changelog | `CHANGELOG.md` | Yes | Global release history |
+
+### Workflow
+
+1. Make backend changes additive (new columns, new endpoints).
+2. Bump only the app versions affected by the change.
+3. Deploy in a staged order: database/functions -> admin -> public -> mobile -> IoT.
+4. For breaking API changes, create versioned endpoints (for example `device-config-v2`).
+5. Record releases in root `CHANGELOG.md` and tag when merging to `main`.
+
+### Reference Implementation
+
+```bash
+# Admin only
+npm version minor --prefix awcms
+
+# Public portal only
+npm version patch --prefix awcms-public/primary
+```
+
+```yaml
+# .github/workflows/ci-push.yml (excerpt)
+jobs:
+  deploy-admin:
+    if: contains(github.event.commits[0].modified, 'awcms/')
+    steps:
+      - run: npm run build
+        working-directory: awcms/
+
+  deploy-public:
+    if: contains(github.event.commits[0].modified, 'awcms-public/')
+    steps:
+      - run: npm run build
+        working-directory: awcms-public/primary/
+```
+
+### Validation Checklist
+
+- A single-app change only deploys that app.
+- Older clients continue to work after schema changes.
+- All releases have a matching `CHANGELOG.md` entry.
+
+### Failure Modes and Guardrails
+
+- Breaking DB changes: use additive migrations and dual-write during transitions.
+- Function signature changes: create a new endpoint instead of overwriting.
+- Mobile rollback: use OTA plus a force-update wall for critical fixes.
+
 | Application | Versioned In | Deploy Target |
 |-------------|-------------|---------------|
 | `awcms` (Admin Panel) | `awcms/package.json` | Cloudflare Pages |
