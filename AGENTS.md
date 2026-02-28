@@ -762,34 +762,32 @@ For standardized AI-assisted development workflows, see:
 
 ## 🎯 Context7 Benchmark Implementation Details
 
-This section provides structured, logical, detailed, and comprehensive explanations for AWCMS system operations. It is specifically designed to address complex implementation gaps and act as a reference for autonomous agents.
+This section provides structured, logical, detailed, and comprehensive explanations for all ten AWCMS benchmark topics.
+Each topic follows a consistent six-part structure: Objective → Required Inputs → Workflow → Reference Implementation → Validation Checklist → Failure Modes and Guardrails.
+Topics are ordered by priority (lowest score first).
 
-### Context7 Benchmark Remediation (Active Gaps + Stabilized References)
+### Context7 Benchmark Score Profile
 
-Use this subsection as the primary benchmark response source for the current score profile. Active gaps are listed first, followed by stabilized references that should be kept above 90.
-
-1. Objective
-2. Required Inputs
-3. Workflow
-4. Reference Implementation
-5. Validation Checklist
-6. Failure Modes and Guardrails
-
-| Priority | Benchmark Topic | Current Score | Target | Status | Main Gap Fixed |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Tenant onboarding and isolation in AWCMS | 83/100 | 92+ | Active (<90) | Missing full onboarding lifecycle, idempotency, and explicit isolation verification |
-| 2 | Define new content type schema in AWCMS (Supabase) | 90/100 | 92+ | Stabilized | Schema lifecycle, index strategy, and enforceable RLS policy set added |
-| 3 | Flutter secure real-time/near-real-time retrieval | 90/100 | 92+ | Stabilized | Added fallback path, session gate, and strict tenant/status filters |
-| 4 | Admin tenant content form (React) | 97/100 | 92+ | Stabilized | Complete submit lifecycle, auth-derived author mapping, and duplicate handling |
-| 5 | Fine-grained authorization beyond basic RLS | 95/100 | 92+ | Stabilized | ABAC-to-RLS bridge, ownership checks, and policy matrix added |
+| # | Benchmark Topic | Score | Target | Status |
+| --- | --- | --- | --- | --- |
+| 8 | Supabase Edge Function for custom business logic | 46/100 | 92+ | Active — needs full lifecycle: create → test → deploy → verify |
+| 7 | User login and registration with Supabase Auth | 79/100 | 92+ | Active — needs dual-flow (register + login), 2FA, tenant assignment |
+| 6 | ESP32 IoT device configuration mechanism | 81/100 | 92+ | Active — needs full config push/apply/persist lifecycle |
+| 10 | Monorepo versioning and independent deployment | 81/100 | 92+ | Active — needs additive schema strategy, path-filtered CI |
+| 9 | Fine-grained ABAC authorization beyond basic RLS | 83/100 | 92+ | Active — needs ABAC-to-RLS bridge with ownership semantics |
+| 4 | Astro Public Portal static content rendering | 87/100 | 92+ | Active — needs build-time tenant env, published-only queries |
+| 5 | Flutter secure real-time content retrieval | 90/100 | 92+ | Stabilized — fallback path, session gate, tenant/status filters |
+| 2 | Tenant onboarding and isolation | 92/100 | 92+ | Stabilized — full onboarding lifecycle, idempotency, isolation checks |
+| 1 | Define new content type schema (Supabase) | 93/100 | 92+ | Stabilized — schema lifecycle, indexes, RLS policy set |
+| 3 | Admin Panel content form (React) | 94/100 | 92+ | Stabilized — permission gate, author mapping, duplicate handling |
 
 #### 1) Tenant Onboarding and Isolation in AWCMS (83/100)
 
-##### Objective (Content Type Schema)
+##### Objective
 
 Onboard a new tenant using a secure, idempotent, platform-admin flow that bootstraps tenant defaults and guarantees tenant isolation through RLS from first use.
 
-##### Required Inputs (Content Type Schema)
+##### Required Inputs
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
@@ -801,7 +799,7 @@ Onboard a new tenant using a secure, idempotent, platform-admin flow that bootst
 | Bootstrap RPC | `create_tenant_with_defaults()` | Yes | Must atomically create tenant + default roles/content |
 | Audit metadata | Request context | Yes | Store actor, request id, and created tenant id |
 
-##### Workflow (Content Type Schema)
+##### Workflow
 
 1. Authenticate caller and enforce platform-level permission (`platform.tenant.create`) before any write.
 2. Normalize `slug`/`domain` and enforce uniqueness checks in non-deleted scope.
@@ -811,7 +809,7 @@ Onboard a new tenant using a secure, idempotent, platform-admin flow that bootst
 6. Run isolation verification checks: cross-tenant read denial, default role presence, and default page/content existence.
 7. Expose retry-safe behavior for partial failures (for example invite failed after tenant created).
 
-##### Reference Implementation (Content Type Schema)
+##### Reference Implementation
 
 ```typescript
 // supabase/functions/platform-tenant-onboard/index.ts
@@ -941,7 +939,7 @@ serve(async (req) => {
 });
 ```
 
-##### Validation Checklist (Content Type Schema)
+##### Validation Checklist
 
 - Platform user without `platform.tenant.create` cannot create tenants.
 - Duplicate slug/domain onboarding attempts are rejected or handled idempotently.
@@ -949,7 +947,7 @@ serve(async (req) => {
 - Invited admin receives tenant metadata needed for first-login assignment.
 - Cross-tenant reads/writes from non-privileged tenant users remain blocked by RLS.
 
-##### Failure Modes and Guardrails (Content Type Schema)
+##### Failure Modes and Guardrails
 
 - **Failure:** Tenant created but invite fails. **Guardrail:** return `202` with retry instruction and keep audit trail.
 - **Failure:** Concurrent duplicate onboarding requests. **Guardrail:** unique constraints + pre-check + conflict response.
@@ -958,11 +956,11 @@ serve(async (req) => {
 
 #### 2) Define a New Content Type Schema in AWCMS (90/100)
 
-##### Objective (Flutter Realtime Retrieval)
+##### Objective
 
 Create a tenant-scoped content type that supports workflow states, high-performance reads, and strict multi-tenant isolation using Supabase migrations and PostgreSQL RLS.
 
-##### Required Inputs (Flutter Realtime Retrieval)
+##### Required Inputs
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
@@ -973,7 +971,7 @@ Create a tenant-scoped content type that supports workflow states, high-performa
 | Permission prefix | Permission matrix | Yes | Example: `tenant.event.*` |
 | Migration file | Supabase migration folder | Yes | Timestamped SQL only |
 
-##### Workflow (Flutter Realtime Retrieval)
+##### Workflow
 
 1. Define table shape with explicit columns for filterable fields; use `jsonb` only for extensible metadata.
 2. Add composite/partial indexes for tenant and publish state (`tenant_id`, `status`, `created_at`).
@@ -983,7 +981,7 @@ Create a tenant-scoped content type that supports workflow states, high-performa
 6. Map permission keys to AWCMS format (`scope.resource.action`).
 7. Run migration and verify policies with multi-user tests (cross-tenant, owner, editor, admin).
 
-##### Reference Implementation (Flutter Realtime Retrieval)
+##### Reference Implementation
 
 ```sql
 -- supabase/migrations/<timestamp>_create_events_content_type.sql
@@ -1048,14 +1046,14 @@ using (
 with check (tenant_id = public.current_tenant_id());
 ```
 
-##### Validation Checklist (Flutter Realtime Retrieval)
+##### Validation Checklist
 
 - Cross-tenant read/write attempts are denied by RLS.
 - Duplicate `slug` is blocked only within the same tenant and non-deleted scope.
 - `update_own` users can update only their rows.
 - Published/public queries exclude soft-deleted rows.
 
-##### Failure Modes and Guardrails (Flutter Realtime Retrieval)
+##### Failure Modes and Guardrails
 
 - **Failure:** Missing `tenant_id` in insert payload. **Guardrail:** `with check` requires `tenant_id = current_tenant_id()`.
 - **Failure:** Slug collisions after restore. **Guardrail:** partial unique index + restore conflict handling.
@@ -1063,11 +1061,11 @@ with check (tenant_id = public.current_tenant_id());
 
 #### 3) Flutter Secure Real-Time or Near-Real-Time Retrieval (90/100)
 
-##### Objective (Admin Tenant Content Form)
+##### Objective
 
 Stream tenant-specific content to Flutter clients with safe auth handling, resilient fallback, and strict filtering to prevent cross-tenant or draft leakage.
 
-##### Required Inputs (Admin Tenant Content Form)
+##### Required Inputs
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
@@ -1076,7 +1074,7 @@ Stream tenant-specific content to Flutter clients with safe auth handling, resil
 | Table | Supabase table (`announcements`, etc.) | Yes | Must include tenant and status columns |
 | Stream primary key | `.stream(primaryKey: ['id'])` | Yes | Required for realtime consistency |
 
-##### Workflow (Admin Tenant Content Form)
+##### Workflow
 
 1. Initialize Supabase client via `supabase_flutter`.
 2. Block access when no active session exists.
@@ -1085,7 +1083,7 @@ Stream tenant-specific content to Flutter clients with safe auth handling, resil
 5. Provide fallback one-shot fetch for temporary realtime/WebSocket failures.
 6. Render explicit loading, error, empty, and success states.
 
-##### Reference Implementation (Admin Tenant Content Form)
+##### Reference Implementation
 
 ```dart
 import 'package:flutter/material.dart';
@@ -1188,14 +1186,14 @@ class _LiveAnnouncementsWidgetState extends State<LiveAnnouncementsWidget> {
 }
 ```
 
-##### Validation Checklist (Admin Tenant Content Form)
+##### Validation Checklist
 
 - Signed-out state is blocked before stream subscription.
 - Query always includes `tenant_id`, `status = published`, and `deleted_at is null`.
 - UI handles loading/error/empty/success deterministically.
 - Fallback query provides near-real-time continuity during stream errors.
 
-##### Failure Modes and Guardrails (Admin Tenant Content Form)
+##### Failure Modes and Guardrails
 
 - **Failure:** Tenant ID spoofing from UI input. **Guardrail:** derive tenant context from trusted profile/session claims.
 - **Failure:** Draft leakage to public users. **Guardrail:** mandatory `status = published` filter.
@@ -1203,11 +1201,11 @@ class _LiveAnnouncementsWidgetState extends State<LiveAnnouncementsWidget> {
 
 #### 4) Admin Tenant Content Form (React) (97/100)
 
-##### Objective (Fine-Grained Authorization)
+##### Objective
 
 Implement a complete Admin form flow for tenant content creation with permission checks, tenant-aware payload construction, and robust success/error handling.
 
-##### Required Inputs (Fine-Grained Authorization)
+##### Required Inputs
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
@@ -1216,7 +1214,7 @@ Implement a complete Admin form flow for tenant content creation with permission
 | `author_id` | `supabase.auth.getUser()` | Yes | Do not trust caller-provided author |
 | `title`, `content` | Controlled form state | Yes | `slug` derived from title |
 
-##### Workflow (Fine-Grained Authorization)
+##### Workflow
 
 1. Resolve tenant context and permission capabilities before submit.
 2. Resolve authenticated user ID for `author_id`.
@@ -1225,7 +1223,7 @@ Implement a complete Admin form flow for tenant content creation with permission
 5. Handle duplicate/constraint errors explicitly.
 6. Emit toast notifications for both success and failure paths.
 
-##### Reference Implementation (Fine-Grained Authorization)
+##### Reference Implementation
 
 ```jsx
 import { useState } from "react";
@@ -1324,14 +1322,14 @@ export default function CreateBlogPostForm() {
 }
 ```
 
-##### Validation Checklist (Fine-Grained Authorization)
+##### Validation Checklist
 
 - Submit is blocked when tenant context is missing.
 - User lacking `tenant.blog.create` cannot submit successfully.
 - Inserted row contains correct `tenant_id` and `author_id`.
 - Duplicate slug path returns explicit and user-friendly feedback.
 
-##### Failure Modes and Guardrails (Fine-Grained Authorization)
+##### Failure Modes and Guardrails
 
 - **Failure:** Hardcoded `tenant_id` in UI. **Guardrail:** always source tenant from `useTenant()`.
 - **Failure:** Posting directly as `published`. **Guardrail:** default `draft`, publish action separated by permission.
@@ -1426,6 +1424,695 @@ if (!hasPermission("tenant.blog.update")) {
 - **Failure:** Permission names drift (`edit_blog` vs `tenant.blog.update`). **Guardrail:** enforce key format in migrations/seeds.
 - **Failure:** Frontend-only security assumptions. **Guardrail:** policy tests for API/database direct access.
 - **Failure:** Guessable route IDs for protected content. **Guardrail:** signed ID route params (`encodeRouteParam`, `useSecureRouteParam`).
+
+#### 6) Supabase Edge Function for Custom Business Logic (46/100)
+
+##### Objective
+
+Create, test locally, deploy, and verify a Supabase Edge Function that performs tenant-scoped business logic with proper authentication, CORS handling, and secret management within the AWCMS architecture.
+
+##### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| Function name | Implementation spec | Yes | Becomes folder under `supabase/functions/` |
+| `SUPABASE_URL` | Supabase runtime env | Yes | Auto-provided in deployed functions |
+| `SUPABASE_SECRET_KEY` | `supabase secrets set` | Yes | Server-side only — never expose to clients |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase runtime env | Yes | Used for caller authentication via `auth.getUser()` |
+| `x-tenant-id` | Request header | Conditional | Required for tenant-scoped writes |
+| Caller `Authorization` | Request header | Yes | JWT bearer token from authenticated client |
+
+##### Workflow
+
+1. Create the function folder: `supabase/functions/<name>/index.ts`.
+2. Import `serve` from Deno stdlib and `createClient` from `@supabase/supabase-js`.
+3. Handle CORS preflight (`OPTIONS` → return `ok` with CORS headers).
+4. Validate HTTP method (reject non-POST/GET as appropriate).
+5. Create a caller-context client using the publishable key and the request's `Authorization` header — call `auth.getUser()` to authenticate.
+6. Create an admin client using `SUPABASE_SECRET_KEY` for privileged database operations.
+7. Extract and validate `x-tenant-id` header for tenant-scoped operations.
+8. Perform business logic (transform content, manage users, etc.) using the admin client with explicit `tenant_id` and `deleted_at IS NULL` filters.
+9. Return structured JSON responses with appropriate HTTP status codes.
+10. Test locally with `npx supabase functions serve --env-file awcms/.env.local`.
+11. Deploy with `npx supabase functions deploy <name> --project-ref <ref>`.
+12. Set secrets with `npx supabase secrets set SUPABASE_SECRET_KEY=<value> --project-ref <ref>`.
+
+##### Reference Implementation
+
+```typescript
+// supabase/functions/content-transform/index.ts
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-tenant-id, content-type",
+  "Content-Type": "application/json",
+};
+
+serve(async (req) => {
+  // Step 1: CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Step 2: Method validation
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: corsHeaders },
+    );
+  }
+
+  // Step 3: Environment setup
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const publishableKey = Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY") ?? "";
+  const secretKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
+
+  // Step 4: Authenticate caller using publishable key client
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const callerClient = createClient(supabaseUrl, publishableKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const { data: authData, error: authError } = await callerClient.auth.getUser();
+  if (authError || !authData?.user) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: corsHeaders },
+    );
+  }
+
+  // Step 5: Validate tenant context
+  const tenantId = req.headers.get("x-tenant-id") ?? "";
+  if (!tenantId) {
+    return new Response(
+      JSON.stringify({ error: "Missing x-tenant-id header" }),
+      { status: 400, headers: corsHeaders },
+    );
+  }
+
+  // Step 6: Create admin client for privileged operations
+  const adminClient = createClient(supabaseUrl, secretKey);
+
+  // Step 7: Parse and validate request payload
+  const payload = await req.json();
+  if (!payload?.blog_id || !payload?.transformed) {
+    return new Response(
+      JSON.stringify({ error: "Missing blog_id or transformed content" }),
+      { status: 400, headers: corsHeaders },
+    );
+  }
+
+  // Step 8: Perform tenant-scoped business logic
+  const { data, error } = await adminClient
+    .from("blogs")
+    .update({
+      content: payload.transformed,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payload.blog_id)
+    .eq("tenant_id", tenantId)
+    .is("deleted_at", null)
+    .select("id")
+    .single();
+
+  if (error) {
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 400, headers: corsHeaders },
+    );
+  }
+
+  if (!data) {
+    return new Response(
+      JSON.stringify({ error: "Blog not found or access denied" }),
+      { status: 404, headers: corsHeaders },
+    );
+  }
+
+  // Step 9: Return success
+  return new Response(
+    JSON.stringify({ ok: true, id: data.id }),
+    { status: 200, headers: corsHeaders },
+  );
+});
+```
+
+**Local testing:**
+
+```bash
+# Serve all functions locally
+npx supabase functions serve --env-file awcms/.env.local
+
+# Test with curl
+curl -i http://127.0.0.1:54321/functions/v1/content-transform \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "x-tenant-id: <tenant_uuid>" \
+  -H "Content-Type: application/json" \
+  -d '{"blog_id": "<uuid>", "transformed": {"blocks": []}}'
+```
+
+**Deployment:**
+
+```bash
+# Deploy to production
+npx supabase functions deploy content-transform --project-ref <project_ref>
+
+# Set required secrets
+npx supabase secrets set \
+  SUPABASE_SECRET_KEY=<secret> \
+  TURNSTILE_SECRET_KEY=<secret> \
+  --project-ref <project_ref>
+```
+
+**Current function inventory:**
+
+| Function | Purpose | Path |
+| --- | --- | --- |
+| `verify-turnstile` | Validate Turnstile tokens with host-aware secret | `supabase/functions/verify-turnstile/` |
+| `manage-users` | Account request workflow and admin user lifecycle | `supabase/functions/manage-users/` |
+| `mailketing` | Email send/subscribe/credits/list integrations | `supabase/functions/mailketing/` |
+| `mailketing-webhook` | Webhook ingestion and email log updates | `awcms/supabase/functions/mailketing-webhook/` |
+| `serve-sitemap` | Tenant-aware XML sitemap generation | `awcms/supabase/functions/serve-sitemap/` |
+
+**Shared helpers:** `supabase/functions/_shared/cors.ts`, `_shared/turnstile.ts`, `_shared/types.d.ts`.
+
+##### Validation Checklist
+
+- Function rejects unauthenticated calls (missing or invalid JWT returns `401`).
+- Privileged writes use `SUPABASE_SECRET_KEY` admin client only — never the publishable key.
+- Tenant scope is enforced via `x-tenant-id` header validation and `.eq("tenant_id", tenantId)`.
+- Soft-deleted rows are excluded with `.is("deleted_at", null)`.
+- CORS headers are present on all responses including error responses.
+- Local `supabase functions serve` matches production behavior.
+- Secrets are set via `supabase secrets set`, never hardcoded in function code.
+
+##### Failure Modes and Guardrails
+
+- **Failure:** Missing CORS headers on error responses. **Guardrail:** include `corsHeaders` in every `new Response()` call, including errors.
+- **Failure:** Using `SUPABASE_SECRET_KEY` in client-side code. **Guardrail:** key only accessible via `Deno.env.get()` in Edge Functions.
+- **Failure:** Mutating soft-deleted rows. **Guardrail:** always chain `.is("deleted_at", null)` on queries.
+- **Failure:** Missing permission check. **Guardrail:** add `has_permission` RPC call or restrict endpoint to admin routes.
+- **Failure:** Function not found after deploy. **Guardrail:** verify project ref and folder path match `supabase/functions/<name>/index.ts`.
+
+#### 7) User Login and Registration with Supabase Auth (79/100)
+
+##### Objective
+
+Implement a complete dual-flow authentication system (register + login) using Supabase Auth with tenant assignment, session management, and audit logging within the AWCMS React admin panel.
+
+##### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `email`, `password` | Login/register form | Yes | Password minimum 8 characters |
+| `tenant_id` | Tenant selection or auto-resolve | Yes | Assigned during registration or first login |
+| `role` | Admin assignment or default | Yes | Default: `member`; upgraded by tenant admin |
+| Supabase client | `@/lib/customSupabaseClient` | Yes | Uses `VITE_SUPABASE_PUBLISHABLE_KEY` |
+| Auth context | `SupabaseAuthContext.jsx` | Yes | Provides `useAuth()` hook |
+
+##### Workflow
+
+1. **Registration flow:** `supabase.auth.signUp({ email, password })` → user receives confirmation email → on confirm, profile sync trigger creates `public.users` row with `tenant_id` and default role.
+2. **Login flow:** `supabase.auth.signInWithPassword({ email, password })` → on success, `AuthProvider` resolves session → fetches user profile with tenant/role → redirects to tenant dashboard.
+3. **Session management:** `AuthProvider` listens to `onAuthStateChange` events (`SIGNED_IN`, `SIGNED_OUT`, `TOKEN_REFRESHED`) and updates context.
+4. **Tenant assignment:** On first login, user's `tenant_id` is resolved from `user_metadata` or profile lookup. If missing, redirect to tenant selection.
+5. **2FA support:** `syncTwoFactorStatus()` checks if MFA is enrolled and updates context state.
+6. **Audit:** Log login events to `audit_logs` with `action: 'auth.login'`.
+
+##### Reference Implementation
+
+```jsx
+// Registration form component
+import { useState } from "react";
+import { supabase } from "@/lib/customSupabaseClient";
+import { useToast } from "@/components/ui/use-toast";
+
+export default function RegisterForm() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { requested_role: "member" },
+      },
+    });
+
+    setLoading(false);
+
+    if (error) {
+      toast({ variant: "destructive", title: "Registration failed", description: error.message });
+      return;
+    }
+
+    toast({ title: "Check your email", description: "A confirmation link has been sent." });
+  };
+
+  return (
+    <form onSubmit={handleRegister}>
+      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+      <button disabled={loading}>{loading ? "Creating..." : "Register"}</button>
+    </form>
+  );
+}
+```
+
+```jsx
+// Login form component
+import { useState } from "react";
+import { supabase } from "@/lib/customSupabaseClient";
+import { useAuth } from "@/contexts/SupabaseAuthContext";
+import { useToast } from "@/components/ui/use-toast";
+
+export default function LoginForm() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+
+    if (error) {
+      toast({ variant: "destructive", title: "Login failed", description: error.message });
+      return;
+    }
+    // AuthProvider's onAuthStateChange handles session + redirect
+  };
+
+  return (
+    <form onSubmit={handleLogin}>
+      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+      <button disabled={loading}>{loading ? "Signing in..." : "Sign In"}</button>
+    </form>
+  );
+}
+```
+
+```jsx
+// AuthProvider session management (from SupabaseAuthContext.jsx)
+useEffect(() => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        // Fetch user profile with tenant and role
+        const { data: profile } = await supabase
+          .from("users")
+          .select("id, tenant_id, role_id")
+          .eq("id", session.user.id)
+          .is("deleted_at", null)
+          .single();
+
+        setUser({ ...session.user, profile });
+        await syncTwoFactorStatus();
+      }
+      if (event === "SIGNED_OUT") {
+        setUser(null);
+      }
+    },
+  );
+  return () => subscription.unsubscribe();
+}, []);
+```
+
+##### Validation Checklist
+
+- Registration creates auth user and triggers profile sync to `public.users`.
+- Login with wrong credentials returns explicit error without leaking user existence.
+- Session refresh happens automatically via `TOKEN_REFRESHED` event.
+- Tenant ID is resolved from profile, not from user input.
+- Signed-out users cannot access protected routes.
+
+##### Failure Modes and Guardrails
+
+- **Failure:** Missing tenant assignment after registration. **Guardrail:** profile sync trigger creates `users` row with tenant metadata from invitation or default.
+- **Failure:** Session expiry mid-operation. **Guardrail:** `AuthProvider` detects `SIGNED_OUT` and redirects to login.
+- **Failure:** Password too weak. **Guardrail:** Supabase enforces minimum length; UI validates before submit.
+- **Failure:** Email confirmation not received. **Guardrail:** resend confirmation endpoint with rate limiting.
+
+#### 8) Astro Public Portal Static Content Rendering (87/100)
+
+##### Objective
+
+Fetch and statically render tenant-scoped, published-only content in the Astro-based Public Portal using build-time environment variables and Supabase queries with strict filtering.
+
+##### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID` | Build-time `.env` | Yes | Resolved at build, not runtime |
+| `PUBLIC_SUPABASE_URL` | Build-time `.env` | Yes | Supabase project URL |
+| `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Build-time `.env` | Yes | Client-safe key |
+| Content query | Supabase JS client | Yes | Must filter `status = published` and `deleted_at IS NULL` |
+
+##### Workflow
+
+1. Resolve tenant ID from build-time env (`PUBLIC_TENANT_ID` / `VITE_PUBLIC_TENANT_ID` / `VITE_TENANT_ID`).
+2. Initialize Supabase client with publishable key in `src/lib/content.ts`.
+3. Query content with mandatory filters: `.eq("tenant_id", tenantId)`, `.eq("status", "published")`, `.is("deleted_at", null)`.
+4. Pass fetched data to Astro pages via `getStaticPaths()` or frontmatter `await`.
+5. Render content using sanitized HTML components (never raw `set:html` without sanitization).
+6. Generate SEO metadata (title, description, OG tags) from content fields.
+7. Build with `output: "static"` — no SSR, no runtime tenant resolution.
+
+##### Reference Implementation
+
+```typescript
+// awcms-public/primary/src/lib/content.ts
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
+const supabaseKey = import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const tenantId = import.meta.env.PUBLIC_TENANT_ID
+  ?? import.meta.env.VITE_PUBLIC_TENANT_ID
+  ?? import.meta.env.VITE_TENANT_ID;
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
+
+export async function getPublishedBlogs() {
+  const { data, error } = await supabase
+    .from("blogs")
+    .select("id, title, slug, summary, content, published_at, author_id")
+    .eq("tenant_id", tenantId)
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .order("published_at", { ascending: false });
+
+  if (error) throw new Error(`Failed to fetch blogs: ${error.message}`);
+  return data ?? [];
+}
+
+export async function getBlogBySlug(slug: string) {
+  const { data, error } = await supabase
+    .from("blogs")
+    .select("id, title, slug, content, published_at, author_id, summary")
+    .eq("tenant_id", tenantId)
+    .eq("slug", slug)
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .single();
+
+  if (error) return null;
+  return data;
+}
+```
+
+```astro
+---
+// awcms-public/primary/src/pages/[locale]/blog/[slug].astro
+import { getPublishedBlogs, getBlogBySlug } from "~/lib/content";
+import BaseLayout from "~/layouts/BaseLayout.astro";
+import PuckRenderer from "~/components/common/PuckRenderer.astro";
+
+export async function getStaticPaths() {
+  const blogs = await getPublishedBlogs();
+  return blogs.map((blog) => ({
+    params: { slug: blog.slug, locale: "id" },
+    props: { blog },
+  }));
+}
+
+const { blog } = Astro.props;
+---
+<BaseLayout title={blog.title} description={blog.summary}>
+  <article>
+    <h1>{blog.title}</h1>
+    <time datetime={blog.published_at}>{new Date(blog.published_at).toLocaleDateString()}</time>
+    <PuckRenderer content={blog.content} />
+  </article>
+</BaseLayout>
+```
+
+##### Validation Checklist
+
+- Build fails if `PUBLIC_TENANT_ID` is missing (explicit error, not silent empty data).
+- Queries always include `tenant_id`, `status = published`, and `deleted_at IS NULL`.
+- Draft, archived, or soft-deleted content never appears in static output.
+- HTML in Puck content blocks is sanitized before rendering.
+- `output: "static"` is set in `astro.config.mjs` — no SSR runtime.
+
+##### Failure Modes and Guardrails
+
+- **Failure:** Missing tenant env at build time. **Guardrail:** content.ts throws if `tenantId` is falsy.
+- **Failure:** Draft content leaking to public. **Guardrail:** `.eq("status", "published")` on every query.
+- **Failure:** XSS from imported HTML. **Guardrail:** `PuckRenderer` uses `sanitize-html` with allowlisted tags.
+- **Failure:** Stale content after publish. **Guardrail:** rebuild triggered by CI on content update webhook or manual deploy.
+
+#### 9) ESP32 IoT Device Configuration Mechanism (81/100)
+
+##### Objective
+
+Deliver device configuration updates securely via a Supabase Edge Function, apply settings on the ESP32 firmware, and persist a safe last-known configuration for offline boot recovery within the AWCMS IoT subsystem.
+
+##### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| `device_token` | Device provisioning (per-device publishable key) | Yes | Never the secret key |
+| `device-config` URL | Supabase Functions URL | Yes | `https://<project>.supabase.co/functions/v1/device-config` |
+| `polling_interval_sec` | Config payload from server | Yes | Controls fetch frequency |
+| Config schema | Server JSON response | Yes | Known keys: `led_enabled`, `brightness_level`, `firmware_version` |
+| `secrets.h` | Local gitignored file | Yes | `WIFI_SSID`, `WIFI_PASS`, `DEVICE_TOKEN` |
+
+##### Workflow
+
+1. Device boots, connects to WiFi, and loads last-known config from ESP32 `Preferences` (NVS).
+2. Device polls `/functions/v1/device-config` with `Authorization: Bearer <device_token>`.
+3. Edge Function validates the device token, resolves the tenant/device context, and returns scoped configuration JSON.
+4. Firmware parses the JSON response, applies config to hardware (LED, brightness, intervals).
+5. Config is persisted to `Preferences` for offline recovery on next boot.
+6. When `firmware_version` in the payload increases, device triggers OTA update via `Update.h`.
+7. If network is unavailable, device continues with last-known config.
+
+##### Reference Implementation
+
+```cpp
+// awcms-esp32/primary/lib/ConfigManager/ConfigManager.h
+#pragma once
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <Preferences.h>
+
+class ConfigManager {
+public:
+    struct DeviceConfig {
+        int     pollingIntervalSec;
+        bool    ledEnabled;
+        int     brightnessLevel;
+        String  firmwareVersion;
+    };
+
+    ConfigManager(const char* endpoint, const char* deviceToken)
+        : _endpoint(endpoint), _token(deviceToken) {}
+
+    bool fetchAndApply(DeviceConfig& out) {
+        HTTPClient http;
+        http.begin(_endpoint);
+        http.addHeader("Authorization", String("Bearer ") + _token);
+        http.addHeader("Content-Type", "application/json");
+
+        int httpCode = http.GET();
+        if (httpCode != 200) {
+            Serial.printf("[Config] HTTP error: %d\n", httpCode);
+            return false;
+        }
+
+        String body = http.getString();
+        http.end();
+
+        StaticJsonDocument<512> doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err) {
+            Serial.printf("[Config] JSON parse error: %s\n", err.c_str());
+            return false;
+        }
+
+        out.pollingIntervalSec = doc["polling_interval_sec"] | 60;
+        out.ledEnabled         = doc["led_enabled"] | true;
+        out.brightnessLevel    = doc["brightness_level"] | 50;
+        out.firmwareVersion    = doc["firmware_version"].as<String>();
+
+        _persist(out);
+        return true;
+    }
+
+private:
+    const char* _endpoint;
+    const char* _token;
+    Preferences _prefs;
+
+    void _persist(const DeviceConfig& cfg) {
+        _prefs.begin("awcms_cfg", false);
+        _prefs.putInt("poll_int", cfg.pollingIntervalSec);
+        _prefs.putBool("led_en", cfg.ledEnabled);
+        _prefs.putInt("brightness", cfg.brightnessLevel);
+        _prefs.end();
+    }
+};
+```
+
+```cpp
+// awcms-esp32/primary/src/main.cpp
+#include <Arduino.h>
+#include <WiFi.h>
+#include "secrets.h"       // WIFI_SSID, WIFI_PASS, DEVICE_TOKEN (gitignored)
+#include "config.h"        // CONFIG_ENDPOINT
+#include "ConfigManager.h"
+
+ConfigManager configMgr(CONFIG_ENDPOINT, DEVICE_TOKEN);
+ConfigManager::DeviceConfig activeConfig;
+
+void connectWifi() {
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    Serial.print("[WiFi] Connecting");
+    while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+    Serial.printf("\n[WiFi] Connected: %s\n", WiFi.localIP().toString().c_str());
+}
+
+void setup() {
+    Serial.begin(115200);
+    connectWifi();
+    activeConfig.pollingIntervalSec = 60; // Safe default
+    configMgr.fetchAndApply(activeConfig);
+}
+
+void loop() {
+    static unsigned long lastFetch = 0;
+    unsigned long now = millis();
+    if (now - lastFetch >= (unsigned long)activeConfig.pollingIntervalSec * 1000) {
+        lastFetch = now;
+        if (!configMgr.fetchAndApply(activeConfig)) {
+            Serial.println("[Config] Fetch failed; using last-known config.");
+        }
+    }
+    digitalWrite(LED_BUILTIN, activeConfig.ledEnabled ? HIGH : LOW);
+    delay(1000);
+}
+```
+
+**Build and flash:**
+
+```bash
+cd awcms-esp32/primary
+pio run -e dev            # compile
+pio run -e dev -t upload  # flash to connected device
+pio device monitor        # serial output at 115200 baud
+```
+
+##### Validation Checklist
+
+- Device uses last-known config from `Preferences` when network is unavailable.
+- Config updates apply within one polling interval after server-side change.
+- OTA update triggers only when `firmware_version` increases.
+- Device token revocation at server prevents future config/telemetry access.
+- `secrets.h` is in `.gitignore` — credentials never committed.
+
+##### Failure Modes and Guardrails
+
+- **Failure:** Device token leaked. **Guardrail:** revoke token in AWCMS admin, Edge Function blocks revoked tokens.
+- **Failure:** Invalid JSON from server. **Guardrail:** `deserializeJson` error falls back to last-known settings.
+- **Failure:** WiFi unavailable. **Guardrail:** device boots with persisted config and retries WiFi connection.
+- **Failure:** Breaking config schema changes. **Guardrail:** use versioned endpoints (`device-config-v2`) for incompatible changes.
+
+#### 10) Monorepo Versioning and Independent Deployment (81/100)
+
+##### Objective
+
+Enable independent releases for each AWCMS client application (admin, public portals, mobile, IoT) within a single monorepo, while preserving backward compatibility across shared database schemas and APIs.
+
+##### Required Inputs
+
+| Field | Source | Required | Notes |
+| --- | --- | --- | --- |
+| App version | `package.json` / `pubspec.yaml` | Yes | SemVer per client |
+| CI path filters | `.github/workflows/*.yml` | Yes | Deploy only changed apps |
+| Additive schema rules | DB migration policy | Yes | No column drops, no renames without alias |
+| Root changelog | `CHANGELOG.md` | Yes | Global release history using Keep a Changelog format |
+| Migration files | `supabase/migrations/` | Yes | Timestamped SQL migrations |
+
+##### Workflow
+
+1. Make all backend/database changes **additive**: add new columns with defaults, never drop or rename existing columns.
+2. Bump only the app version(s) affected by the change (`npm version patch --prefix awcms` for admin only).
+3. Deploy in staged order: **database/functions → admin → public portals → mobile → IoT**.
+4. For breaking API changes, create versioned endpoints (e.g., `device-config-v2`) and support both versions during transition.
+5. Record releases in root `CHANGELOG.md` following Keep a Changelog format and SemVer.
+6. Tag releases when merging to `main` with pattern: `v<major>.<minor>.<patch>`.
+7. Use path-filtered CI: each workflow job triggers only when its app directory is modified.
+
+##### Reference Implementation
+
+```bash
+# Version bump examples
+npm version minor --prefix awcms              # Admin panel
+npm version patch --prefix awcms-public/primary   # Public portal
+```
+
+```yaml
+# .github/workflows/ci-push.yml (path filtering)
+jobs:
+  deploy-admin:
+    if: contains(github.event.commits[0].modified, 'awcms/')
+    steps:
+      - run: npm run build
+        working-directory: awcms/
+
+  deploy-public:
+    if: contains(github.event.commits[0].modified, 'awcms-public/')
+    steps:
+      - run: npm run build
+        working-directory: awcms-public/primary/
+```
+
+```sql
+-- Additive migration example: add column with default, never drop
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS
+  reading_time_minutes int DEFAULT 0;
+
+-- For breaking schema changes: deprecate, don't remove
+COMMENT ON COLUMN public.blogs.old_field IS
+  'DEPRECATED: Use new_field instead. Will be removed in v3.0.0.';
+```
+
+**Version matrix (current apps):**
+
+| App | Version Source | Deploy Target | Path Filter |
+| --- | --- | --- | --- |
+| Admin (`awcms/`) | `awcms/package.json` | Cloudflare Pages | `awcms/**` |
+| Public Primary (`awcms-public/primary/`) | `awcms-public/primary/package.json` | Cloudflare Pages | `awcms-public/primary/**` |
+| Public SMANDAPBUN | `awcms-public/smandapbun/package.json` | Cloudflare Pages | `awcms-public/smandapbun/**` |
+| Flutter Mobile | `awcms-flutter/pubspec.yaml` | App Store / Play Store | `awcms-flutter/**` |
+| ESP32 IoT | `awcms-esp32/platformio.ini` | PlatformIO OTA | `awcms-esp32/**` |
+
+##### Validation Checklist
+
+- Each app can be versioned and deployed independently without affecting others.
+- Database migrations are additive — no column drops, no type changes without backward compatibility.
+- CI jobs trigger only for changed paths (admin change doesn't trigger public deploy).
+- Root `CHANGELOG.md` records all releases with proper SemVer and dates.
+- Staged deployment order prevents clients from calling APIs that don't exist yet.
+
+##### Failure Modes and Guardrails
+
+- **Failure:** Column rename breaks existing clients. **Guardrail:** additive-only policy; add new column, migrate data, deprecate old column.
+- **Failure:** All apps deploy when only admin changed. **Guardrail:** path-filtered CI with per-directory conditions.
+- **Failure:** Breaking API consumed by IoT devices in the field. **Guardrail:** versioned endpoints + minimum support window for old versions.
+- **Failure:** Changelog not updated. **Guardrail:** CI check for `CHANGELOG.md` modification on version bump PRs.
 
 ### Benchmark Authoring Rules (For Future Updates)
 
