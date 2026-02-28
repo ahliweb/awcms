@@ -5,6 +5,8 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.33.0] "Blueprint" - 2026-02-28
+
 ### Added
 
 - Context Engineering: Created `docs/product/PRD.md` (Product Requirements Document) with personas, capabilities, non-goals, and success metrics.
