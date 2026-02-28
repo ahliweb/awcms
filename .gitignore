@@ -15,6 +15,7 @@ dist
 # Misc
 .DS_Store
 temp_debug_files/
+temp_supabase/
 **/.env
 **/.env.local
 **/.env.development.local

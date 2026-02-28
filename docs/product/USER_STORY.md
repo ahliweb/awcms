@@ -45,9 +45,51 @@
 | PU-2 | As a Public User, I can search content so that I find specific information | Search scoped to tenant's published content; no draft/deleted content leaked |
 | PU-3 | As a Public User, I am informed about data collection so that I can consent | Analytics consent banner shown; telemetry respects consent setting |
 
+## Tenant Auditor
+
+| ID | Story | Acceptance |
+|----|-------|------------|
+| AD-1 | As an Auditor, I can view audit logs within my tenant so that I can monitor all write operations | Audit log view filtered by own `tenant_id`; read-only — no create/update/delete actions available |
+| AD-2 | As an Auditor, I can generate compliance reports so that regulatory obligations are documented | Reports scoped to own tenant; exportable as PDF/CSV; no cross-tenant data included |
+| AD-3 | As an Auditor, I can verify content integrity so that published content matches approved versions | Content diff view shows version history; `deleted_at` records visible for audit purposes |
+
+## IoT / Device Operator
+
+| ID | Story | Acceptance |
+|----|-------|------------|
+| IO-1 | As a Device Operator, I can register ESP32 devices so that they connect to the correct tenant | Device registered with `tenant_id` and unique `device_id`; credentials scoped to tenant |
+| IO-2 | As a Device Operator, I can push content to digital signage so that public displays stay current | Content push targets devices within own tenant only; display content is published-only |
+| IO-3 | As a Device Operator, I can trigger firmware OTA updates so that devices run the latest version | OTA manifest served per-tenant; devices only accept firmware flagged for their `tenant_id` |
+
+## AI-Assisted Content (Cross-Persona)
+
+| ID | Story | Acceptance |
+|----|-------|------------|
+| AI-1 | As an Editor, I can use AI to generate content drafts so that content creation is accelerated | AI drafts scoped to tenant's OpenClaw agent workspace; output saved as draft (not auto-published) |
+| AI-2 | As an Editor, I can use AI-assisted translation so that content is available in multiple languages | Translation requests routed through per-tenant AI agent; output stored with correct `locale` |
+| AI-3 | As a Tenant Admin, I can review AI-generated content suggestions so that quality standards are maintained | AI suggestions appear in review queue; require human approval before publishing |
+
+## Multi-Language Content (Cross-Persona)
+
+| ID | Story | Acceptance |
+|----|-------|------------|
+| ML-1 | As an Editor, I can create content in multiple languages so that the site serves diverse audiences | Content entries support `locale` field; each translation linked to the parent entry |
+| ML-2 | As a Public User, I can switch display language so that I read content in my preferred language | Language switcher shows available translations; URL reflects locale; fallback to default language |
+| ML-3 | As a Tenant Admin, I can configure available languages so that only relevant locales are enabled | Enabled locales stored in tenant settings; public portal builds only active locale pages |
+
+## Email Integration (Cross-Persona)
+
+| ID | Story | Acceptance |
+|----|-------|------------|
+| EM-1 | As a Tenant Admin, I can manage newsletter campaigns so that subscribers receive updates | Campaign CRUD scoped to own `tenant_id`; sends via Mailketing SMTP; delivery status tracked |
+| EM-2 | As a Tenant Admin, I can manage subscriber lists so that email targeting is accurate | Subscriber lists isolated per tenant; import/export available; unsubscribe honored per UU PDP |
+
 ## References
 
 - [PRD.md](PRD.md) — Product requirements
 - [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) — Testable requirements
 - [HIERARCHY.md](../tenancy/HIERARCHY.md) — Role hierarchy details
 - [abac.md](../security/abac.md) — Permission system details
+- [INTERNATIONALIZATION.md](../modules/INTERNATIONALIZATION.md) — Multi-language module
+- [EMAIL_INTEGRATION.md](../modules/EMAIL_INTEGRATION.md) — Email module
+- [esp32.md](../dev/esp32.md) — IoT development guide
