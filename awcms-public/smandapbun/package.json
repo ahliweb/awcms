@@ -17,6 +17,7 @@
     "lint:fix": "eslint --fix ."
   },
   "dependencies": {
+    "@awcms/shared": "file:../../packages/awcms-shared",
     "@astrojs/react": "^4.4.2",
     "@astrojs/sitemap": "^3.4.2",
     "@fontsource-variable/inter": "^5.2.6",

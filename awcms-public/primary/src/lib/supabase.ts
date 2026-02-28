@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClientFromEnv as createSharedClientFromEnv } from "@awcms/shared/supabase";
 
 // Global instance removed to prevent startup crashes on Cloudflare
 // where import.meta.env might not be fully populated at module-level.
@@ -10,31 +11,7 @@ export const createClientFromEnv = (
   env: Record<string, string> = {},
   headers: Record<string, string> = {},
 ) => {
-  // Try Runtime Env first, then fallback to Build Env
-  const url =
-    env.VITE_SUPABASE_URL ||
-    env.PUBLIC_SUPABASE_URL ||
-    import.meta.env.VITE_SUPABASE_URL ||
-    import.meta.env.PUBLIC_SUPABASE_URL ||
-    "";
-  const key =
-    env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    "";
-
-  if (!url || !key) {
-    console.error("[Supabase] Missing URL or Key. Check Cloudflare Variables.");
-    // Return null to indicate failure
-    return null;
-  }
-
-  return createClient(url, key, {
-    global: {
-      headers: headers,
-    },
-  });
+  return createSharedClientFromEnv(createClient, env, headers);
 };
 
 export const getTenant = async (

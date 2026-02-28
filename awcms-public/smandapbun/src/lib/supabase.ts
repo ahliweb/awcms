@@ -1,5 +1,5 @@
-
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClientFromEnv as createSharedClientFromEnv } from '@awcms/shared/supabase';
 
 const supabaseUrl =
     import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
@@ -17,29 +17,7 @@ export const createClientFromEnv = (
     env: Record<string, string> = {},
     headers: Record<string, string> = {},
 ) => {
-    const url =
-        env.PUBLIC_SUPABASE_URL ||
-        env.VITE_SUPABASE_URL ||
-        import.meta.env.PUBLIC_SUPABASE_URL ||
-        import.meta.env.VITE_SUPABASE_URL ||
-        '';
-    const key =
-        env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-        env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-        import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-        '';
-
-    if (!url || !key) {
-        console.error('[Supabase] Missing URL or Key. Check environment variables.');
-        return null;
-    }
-
-    return createClient(url, key, {
-        global: {
-            headers,
-        },
-    });
+    return createSharedClientFromEnv(createClient, env, headers);
 };
 
 export const createScopedClient = (
