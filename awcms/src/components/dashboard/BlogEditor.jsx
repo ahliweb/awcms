@@ -108,7 +108,6 @@ function BlogEditor({ item, onClose, onSuccess }) {
 
     useEffect(() => {
         fetchCategories();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const fetchCategories = async () => {
@@ -119,7 +118,7 @@ function BlogEditor({ item, onClose, onSuccess }) {
                 .eq('type', 'blog');
 
             const { data, error } = await query;
-            
+
             if (error) {
                 // Try without type filter
                 const { data: allData } = await supabase

@@ -4,9 +4,6 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const isMissingLocaleColumnError = (message: string): boolean =>
-  message.includes(".locale") && message.includes("does not exist");
-
 export interface PageData {
   id: string;
   title: string;
@@ -236,7 +233,7 @@ export async function getBlogs(
   }
 
   const blogs = (data || []) as BlogData[];
-  
+
   // Fetch categories separately
   const categoryIds = Array.from(
     new Set(blogs.map((blog) => blog.category_id).filter(Boolean)),

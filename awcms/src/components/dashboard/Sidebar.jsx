@@ -114,6 +114,7 @@ function Sidebar({ isOpen, setIsOpen }) {
     hasAnyPermission,
     isPlatformAdmin,
     isFullAccess,
+    isTenantAdmin,
     searchQuery,
     t,
     applyFilters,

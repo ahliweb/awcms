@@ -14,10 +14,34 @@ permissions:
   contents: read
 
 jobs:
+  paths-filter:
+    runs-on: ubuntu-latest
+    outputs:
+      admin: ${{ steps.filter.outputs.admin }}
+      public: ${{ steps.filter.outputs.public }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      smandapbun: ${{ steps.filter.outputs.smandapbun }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            admin:
+              - 'awcms/**'
+            public:
+              - 'awcms-public/primary/**'
+            mobile:
+              - 'awcms-mobile/**'
+            smandapbun:
+              - 'awcms-public/smandapbun/**'
+
   # ============================================
   # Lint & Test - Admin Panel
   # ============================================
   lint-test-admin:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.admin == 'true' }}
     name: Lint & Test (Admin)
     runs-on: ubuntu-latest
     defaults:
@@ -57,6 +81,8 @@ jobs:
   # Lint & Build - Public Portal (Astro)
   # ============================================
   lint-build-public:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.public == 'true' }}
     name: Lint & Build (Public Portal)
     runs-on: ubuntu-latest
     defaults:
@@ -87,6 +113,8 @@ jobs:
   # Flutter Build - Mobile App
   # ============================================
   build-mobile:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.mobile == 'true' }}
     name: Build (Mobile - Flutter)
     runs-on: ubuntu-latest
     defaults:
@@ -122,9 +150,9 @@ jobs:
   deploy-production:
     name: Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
-    needs: [lint-test-admin, lint-build-public]
+    needs: [paths-filter, lint-test-admin, lint-build-public]
     # Only deploy when on main branch
-    if: ${{ github.ref == 'refs/heads/main' && vars['CLOUDFLARE_ENABLED'] == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && vars['CLOUDFLARE_ENABLED'] == 'true' && needs.paths-filter.outputs.admin == 'true' }}
     
     steps:
       - name: Checkout code
@@ -195,6 +223,8 @@ jobs:
   # Lint & Build - SMANDAPBUN Portal (Astro)
   # ============================================
   lint-build-smandapbun:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.smandapbun == 'true' }}
     name: Lint & Build (Smandapbun)
     runs-on: ubuntu-latest
     defaults:

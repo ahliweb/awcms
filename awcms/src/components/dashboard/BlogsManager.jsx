@@ -103,14 +103,14 @@ function BlogsManager() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      
+
       if (response.ok) {
         setRebuildRequired(false);
         alert('Public site rebuild started! Changes will be live in a few minutes.');
       } else {
         throw new Error('API not available');
       }
-    } catch (error) {
+    } catch (_error) {
       // Show manual rebuild instructions
       setRebuildRequired(false);
       alert(

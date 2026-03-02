@@ -25,11 +25,10 @@ function SidebarMenuItemRow({
 }) {
   const iconComponent = getIconComponent(item.icon);
   const inputId = `visible-${item.id}`;
-  
+
   const isExtension = item.source === 'extension';
   const isPlugin = item.source === 'plugin';
   const isResource = item.source === 'resource' || item.is_resource_fallback;
-  const isCore = item.plugin_type === 'core' || item.is_core;
   const canEdit = canManage && !isExtension && !isPlugin && !isResource;
   const canToggle = canManage && !isPlugin;
 

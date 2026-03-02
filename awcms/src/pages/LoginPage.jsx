@@ -48,7 +48,7 @@ function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     await signUp(signupData.email, signupData.password, {
-      data: { full_name: signupData.fullName }
+      data: { full_name: signupData.fullName, requested_role: "member" }
     });
     setIsLoading(false);
   };

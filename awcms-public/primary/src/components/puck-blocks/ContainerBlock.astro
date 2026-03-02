@@ -1,49 +1,51 @@
 ---
-import { generateInlineStyles } from '../../utils/styleHelpers';
-import PuckRenderer from '../common/PuckRenderer.astro';
+import { generateInlineStyles } from "../../utils/styleHelpers";
+import PuckRenderer from "../common/PuckRenderer.astro";
 
 const props = Astro.props;
-const { 
-    display = 'flex',
-    flexDirection = 'column',
-    alignItems = 'flex-start',
-    justifyContent = 'flex-start',
+const {
+    display = "flex",
+    flexDirection = "column",
+    alignItems = "flex-start",
+    justifyContent = "flex-start",
     gridTemplateColumns,
-    gap = '1rem',
-    maxWidth = '100%',
+    gap = "1rem",
+    maxWidth = "100%",
     marginAuto = false,
     content = [], // The slot content array
-    ...rest 
+    ...rest
 } = props;
 
 const baseStyles: Record<string, string> = {
     display: display as string,
-    width: '100%',
+    width: "100%",
 };
 
 if (gap) baseStyles.gap = gap as string;
 if (maxWidth) baseStyles.maxWidth = maxWidth as string;
 
-if (display === 'flex') {
+if (display === "flex") {
     if (flexDirection) baseStyles.flexDirection = flexDirection as string;
     if (alignItems) baseStyles.alignItems = alignItems as string;
     if (justifyContent) baseStyles.justifyContent = justifyContent as string;
 }
 
-if (display === 'grid' && gridTemplateColumns) {
+if (display === "grid" && gridTemplateColumns) {
     baseStyles.gridTemplateColumns = gridTemplateColumns as string;
 }
 
 if (marginAuto) {
-    baseStyles.marginRight = 'auto';
-    baseStyles.marginLeft = 'auto';
+    baseStyles.marginRight = "auto";
+    baseStyles.marginLeft = "auto";
 }
 
 const advancedStylesString = generateInlineStyles(rest);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const baseStylesString = generateInlineStyles(baseStyles as any);
-const combinedStylesString = `${baseStylesString} ${advancedStylesString}`.trim();
-
+const combinedStylesString =
+    `${baseStylesString} ${advancedStylesString}`.trim();
 ---
+
 <div style={combinedStylesString} class="awcms-container-block">
     <PuckRenderer content={{ content }} />
 </div>

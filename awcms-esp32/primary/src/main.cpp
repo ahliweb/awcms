@@ -16,6 +16,7 @@
 #include "supabase_client.h"
 #include "webserver.h"
 #include <Arduino.h>
+#include "ConfigManager.h"
 
 // ============================================
 // Global Variables
@@ -24,6 +25,9 @@ unsigned long lastSensorRead = 0;
 unsigned long lastDataSync = 0;
 unsigned long lastGasCheck = 0;
 bool supabaseConnected = false;
+
+ConfigManager configMgr("https://awcms.supabase.co/functions/v1/device-config", DEVICE_ID);
+ConfigManager::DeviceConfig activeConfig;
 
 // ============================================
 // Setup
@@ -63,6 +67,9 @@ void setup() {
     // Initialize Supabase
     supabaseConnected = initSupabase();
 
+    activeConfig.pollingIntervalSec = 60; // Safe default
+    configMgr.fetchAndApply(activeConfig);
+
     // Log startup event
     if (supabaseConnected) {
       logEvent("startup", "Device started with gas sensor and camera");
@@ -86,6 +93,16 @@ void loop() {
   // Read gas sensor at interval
   if (millis() - lastSensorRead >= SENSOR_READ_INTERVAL) {
     lastSensorRead = millis();
+
+    static unsigned long lastFetch = 0;
+    unsigned long now = millis();
+    if (now - lastFetch >= (unsigned long)activeConfig.pollingIntervalSec * 1000) {
+        lastFetch = now;
+        if (!configMgr.fetchAndApply(activeConfig)) {
+            DEBUG_PRINTLN("[Config] Fetch failed; using last-known config.");
+        }
+    }
+    digitalWrite(LED_BUILTIN, activeConfig.ledEnabled ? HIGH : LOW);
 
     // Read gas sensor
     readGasSensor();
