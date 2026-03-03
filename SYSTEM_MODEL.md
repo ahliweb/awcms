@@ -60,7 +60,18 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Project Config:** `openclaw/openclaw.json` (version-controlled, token excluded)
 * **Context7 ID:** `openclaw/openclaw`
 
-### 1.5 MCP Topology (Developer Tooling)
+### 1.5 Self-Hosted AI Models (Ollama)
+
+* **Runtime:** [Ollama](https://ollama.com) — run open-source LLMs locally
+* **API:** OpenAI-compatible `/v1/chat/completions` endpoint at `http://localhost:11434/v1/`
+* **Recommended Models:** `qwen3` (tool calling + reasoning), `llama3.2` (general purpose)
+* **Capabilities:** Chat completions, streaming, tool calling (single + parallel), JSON mode, vision
+* **Integration:** Point the OpenAI SDK or OpenClaw `baseUrl` to `http://127.0.0.1:11434/v1`
+* **Node.js SDK:** `ollama` npm package (native client) or standard `openai` SDK with custom `baseURL`
+* **Multi-Tenancy:** Ollama is stateless; tenant isolation is managed at the OpenClaw Gateway layer
+* **Architecture Doc:** [docs/architecture/ollama-integration.md](docs/architecture/ollama-integration.md)
+
+### 1.6 MCP Topology (Developer Tooling)
 
 * **Primary Config (Repo):** `mcp.json`
 * **Runtime Config (OpenCode):** `~/.config/opencode/opencode.json`

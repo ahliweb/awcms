@@ -1,10 +1,43 @@
 # Documentation Audit Tracker - Context7 Re-Audit
 
-> **Date:** 2026-02-27
+> **Date:** 2026-03-03
 >
 > **Related Plan:** `docs/dev/documentation-audit-plan.md`
 >
-> **Status:** All phases (Phase 0 through Phase 5) completed for the new re-audit cycle; previous cycle archived below as baseline evidence.
+> **Status:** 2026-02-27 re-audit cycle completed. 2026-03-03 micro-cycle in progress.
+
+## 2026-03-03 Micro-Cycle
+
+### Trigger
+
+Post-audit changes (2026-03-01 migration batch, new Ollama integration doc, Lucide version drift) introduced new drift items not covered by the completed 2026-02-27 cycle.
+
+### Drift Register (2026-03-03)
+
+| ID | Severity | Finding | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| NEWDRIFT-001 | High | Migration parity broken: root had 107 files, mirror had 101 (6 unmirrored + 2 renamed files from 2026-03-01 batch) | Resolved | `diff` of `supabase/migrations/` vs `awcms/supabase/migrations/`; files copied and parity verified |
+| NEWDRIFT-002 | High | Mirror contained renamed files (`remote_sync.sql`) that didn't match root filenames (`remote_schema.sql`, `fix_create_tenant_unused_var.sql`, etc.) | Resolved | Deleted incorrect files, copied correct files from root |
+| NEWDRIFT-003 | Medium | AGENTS.md Lucide React version listed as `0.561.0 / 0.564.0` but admin `package.json` uses `^0.564.0` | Resolved | `AGENTS.md` line 68 updated to `0.564.0` |
+| NEWDRIFT-004 | Medium | Tracker baseline claimed 99 mirrored migrations; actual count is now 107/107 | Resolved | This entry; baseline snapshot updated below |
+| NEWDRIFT-005 | Low | `awcms.wiki/architecture/ollama-integration.md` added but not in tracker inventory | Resolved | Listed in DOCS_INDEX.md; added to inventory below |
+
+### Updated Baseline Snapshot (2026-03-03)
+
+| Surface | Evidence |
+| --- | --- |
+| Migration parity | `supabase/migrations/*.sql` = 107, `awcms/supabase/migrations/*.sql` = 107 (verified via `diff`) |
+| Total markdown files in repository | 105+ (includes new `awcms.wiki/architecture/ollama-integration.md`) |
+| Lucide React (Admin + Public) | `^0.564.0` (aligned) |
+
+### Micro-Cycle Exit Check
+
+- NEWDRIFT-001 through NEWDRIFT-005: all resolved.
+- Migration parity confirmed via filename diff.
+- AGENTS.md Lucide version corrected.
+- Tracker inventory and baseline counts refreshed.
+
+---
 
 ## Current Cycle Status
 

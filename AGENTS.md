@@ -65,7 +65,7 @@ Agents must be aware of the exact versions in use:
 | TipTap           | 3.13.0   | Rich text editor (XSS-safe)      |
 | Framer Motion    | 12.23.26 | Animations                       |
 | Radix UI         | Latest   | Accessible UI primitives         |
-| Lucide React     | 0.561.0 / 0.564.0 | Admin / Public icon library |
+| Lucide React     | 0.564.0  | Admin / Public icon library      |
 | i18next          | 25.7.2   | Internationalization             |
 | Recharts         | 3.5.1    | Charts & Data Visualization      |
 | Leaflet          | 1.9.4    | Maps                             |
@@ -150,6 +150,8 @@ When updating docs or implementing library usage, **Context7 is the primary refe
 - `puckeditor/puck` (Visual Editor)
 - `grx7/framer-motion` (Animations)
 - `openclaw/openclaw` (AI Gateway, Multi-Agent Routing)
+- `ollama/ollama` (Self-hosted LLM runtime)
+- `ollama/ollama-js` (Ollama Node.js SDK)
 
 ### Code Patterns
 
@@ -653,6 +655,126 @@ AWCMS also runs external MCP servers for cloud and ecosystem tasks:
 1. Ensure `awcms/.env` has `SUPABASE_DB_URL` and `CONTEXT7_API_KEY`.
 2. Run `cd awcms-mcp && npm run dev`.
 3. Verify connectivity with `opencode mcp list`.
+
+---
+
+## 🧠 Self-Hosted AI Models (Ollama)
+
+AWCMS supports running local, open-source AI models via [Ollama](https://ollama.com) as an alternative or complement to cloud AI providers. Ollama provides an OpenAI-compatible API and native tool calling, making it a drop-in backend for OpenClaw.
+
+> **Architecture Reference:** [docs/architecture/ollama-integration.md](docs/architecture/ollama-integration.md)
+
+### Quick Setup
+
+```bash
+# 1. Install Ollama (see https://ollama.com for platform-specific installers)
+# 2. Pull a tool-calling capable model
+ollama pull qwen3
+ollama pull llama3.2
+
+# 3. Verify the service is running
+curl http://localhost:11434/api/tags
+```
+
+### Integration via OpenAI SDK (Drop-In)
+
+If AWCMS code already uses the `openai` SDK, point `baseURL` to Ollama:
+
+```javascript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'http://localhost:11434/v1/',
+  apiKey: 'ollama', // required by SDK but ignored by Ollama
+});
+
+const response = await client.chat.completions.create({
+  model: 'qwen3',
+  messages: [{ role: 'user', content: 'Summarize the latest blog posts.' }],
+});
+console.log(response.choices[0].message.content);
+```
+
+### Integration via Ollama Native SDK
+
+```javascript
+import ollama from 'ollama'
+
+// Basic chat
+const response = await ollama.chat({
+  model: 'qwen3',
+  messages: [{ role: 'user', content: 'Summarize tenant activity.' }],
+})
+console.log(response.message.content)
+
+// Streaming
+const stream = await ollama.chat({
+  model: 'qwen3',
+  messages: [{ role: 'user', content: 'Generate a status report.' }],
+  stream: true,
+})
+for await (const part of stream) {
+  process.stdout.write(part.message.content)
+}
+```
+
+### Tool Calling Pattern
+
+Ollama models like `qwen3` and `llama3.1` support function/tool calling:
+
+```javascript
+import ollama from 'ollama'
+
+const tools = [{
+  type: 'function',
+  function: {
+    name: 'get_tenant_stats',
+    description: 'Get tenant usage statistics',
+    parameters: {
+      type: 'object',
+      required: ['tenantId'],
+      properties: {
+        tenantId: { type: 'string', description: 'The tenant UUID' }
+      }
+    }
+  }
+}]
+
+const messages = [{ role: 'user', content: 'Show stats for tenant abc-123' }]
+const response = await ollama.chat({ model: 'qwen3', messages, tools })
+
+if (response.message.tool_calls) {
+  for (const call of response.message.tool_calls) {
+    const result = await executeTool(call.function.name, call.function.arguments)
+    messages.push(response.message)
+    messages.push({ role: 'tool', content: JSON.stringify(result) })
+  }
+  // Get final answer with tool results
+  const final = await ollama.chat({ model: 'qwen3', messages })
+  console.log(final.message.content)
+}
+```
+
+### OpenClaw Integration
+
+To route a tenant to a local Ollama model, update `openclaw/openclaw.json`:
+
+```json
+{
+  "id": "tenant_local",
+  "workspace": "~/.openclaw/workspace-tenant-local",
+  "model": {
+    "primary": "ollama/qwen3",
+    "baseUrl": "http://127.0.0.1:11434/v1"
+  },
+  "tools": { "profile": "coding" }
+}
+```
+
+### Context7 Library IDs
+
+- `ollama/ollama` — Runtime capabilities, API reference, model management
+- `ollama/ollama-js` — Node.js SDK usage, streaming, tool calling patterns
 
 ---
 

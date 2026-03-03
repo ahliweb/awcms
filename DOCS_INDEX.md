@@ -156,6 +156,8 @@ When implementing features, reference these Context7 library IDs:
 - `puckeditor/puck` - Visual builder
 - `grx7/framer-motion` - Animations
 - `openclaw/openclaw` - AI Gateway, Multi-Agent Routing
+- `ollama/ollama` - Self-hosted LLM runtime
+- `ollama/ollama-js` - Ollama Node.js SDK
 
 See [AGENTS.md](AGENTS.md) for detailed Context7 usage patterns.
 
