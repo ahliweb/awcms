@@ -108,6 +108,7 @@ All documentation follows this authority structure:
 | Testing | [docs/dev/testing.md](docs/dev/testing.md) | Vitest and smoke checks |
 | AI Workflows | [docs/dev/ai-workflows.md](docs/dev/ai-workflows.md) | Prompt templates, plan mode triggers, iteration loops |
 | AI Gateway | [docs/architecture/openclaw-gateway.md](docs/architecture/openclaw-gateway.md) | OpenClaw per-tenant setup, routing, and security runbook |
+| Autonomous Brain | [docs/architecture/ollama-integration.md](docs/architecture/ollama-integration.md) | Local autonomous AI brain integration via Ollama |
 | Programmatic Content Types | [docs/architecture/schema-definition.md](docs/architecture/schema-definition.md) | Defining and migrating custom schemas |
 | Edge Functions | [docs/dev/edge-functions.md](docs/dev/edge-functions.md) | Supabase Deno Edge Functions |
 | Versioning Strategy | [docs/dev/versioning.md](docs/dev/versioning.md) | Monorepo versioning & release process |
