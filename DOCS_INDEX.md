@@ -136,9 +136,9 @@ All documentation follows this authority structure:
 
 | Topic | Path | Notes |
 | --- | --- | --- |
-| Agent Rules | [.agents/rules/](.agents/rules/) | 7 guardrail playbooks (tenancy, RLS, ABAC, etc.) |
-| Agent Skills | [.agents/skills/](.agents/skills/) | Technology-specific skills (React, Vite, etc.) |
-| Agent Workflows | [.agents/workflows/](.agents/workflows/) | Step-by-step procedures for common tasks |
+| Agent Rules | [.agents/rules/](./.agents/rules/) | 7 guardrail playbooks (tenancy, RLS, ABAC, etc.) |
+| Agent Skills | [.agents/skills/](./.agents/skills/) | Technology-specific skills (React, Vite, etc.) |
+| Agent Workflows | [.agents/workflows/](./.agents/workflows/) | Step-by-step procedures for common tasks |
 
 ---
 

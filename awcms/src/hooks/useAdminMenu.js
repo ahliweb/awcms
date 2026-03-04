@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { hooks } from '@/lib/hooks';
 import { normalizeMenuPath, resolveGroupMeta } from '@/lib/adminMenuUtils';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 // Default menu configuration - used as fallback when admin_menus table is empty
 // Default menu configuration - used as fallback when admin_menus table is empty
@@ -12,6 +13,7 @@ const DEFAULT_MENU_CONFIG = [];
 
 export function useAdminMenu() {
   const [menuItems, setMenuItems] = useState([]);
+  const { isPlatformAdmin } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -84,7 +86,7 @@ export function useAdminMenu() {
       // ENRICH baseMenus with Resource details
       if (resources && resources.length > 0) {
         const resourceMap = new Map(resources.map(r => [r.key, r]));
-        
+
         // Track which resources already have menu entries
         const menuResourceKeys = new Set();
         baseMenus.forEach(menu => {
@@ -156,6 +158,12 @@ export function useAdminMenu() {
       }
 
       let combined = [...baseMenus, ...normalizedExtMenus, ...resourceFallbackItems];
+
+      // Scope-aware filtering based on platform vs tenant
+      combined = combined.filter(item => {
+        if (item.scope === 'platform') return isPlatformAdmin;
+        return true; // tenant + shared visible to all authenticated
+      });
 
       // Sort again by group_order then order to ensure merged list is correct
       combined.sort((a, b) => {
@@ -359,7 +367,7 @@ export function useAdminMenu() {
     try {
       // Check if it's an extension item (ext- prefix)
       const isExtension = id.toString().startsWith('ext-');
-      
+
       // Check if it's a plugin item (plugin- prefix)
       const isPlugin = id.toString().startsWith('plugin-');
 

@@ -46,3 +46,4 @@ awcms.wiki/
 
 # Vendored template dependencies
 awcms/src/templates/flowbiteadminastro/node_modules/
+supabase/functions/.env

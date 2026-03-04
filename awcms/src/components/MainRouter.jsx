@@ -76,6 +76,8 @@ const SidebarMenuManager = lazy(() => import('@/components/dashboard/SidebarMenu
 const ModulesManager = lazy(() => import('@/pages/cmspanel/ModulesManager'));
 
 const SettingsManager = lazy(() => import('@/components/dashboard/SettingsManager'));
+const PlatformSettingsManager = lazy(() => import('@/components/dashboard/PlatformSettingsManager'));
+const PlatformDashboard = lazy(() => import('@/components/dashboard/PlatformDashboard'));
 const SchoolPagesManager = lazy(() => import('@/components/dashboard/SchoolPagesManager'));
 const SiteImagesManager = lazy(() => import('@/components/dashboard/SiteImagesManager'));
 const AuditLogsManager = lazy(() => import('@/components/dashboard/AuditLogsManager'));
@@ -260,6 +262,10 @@ const MainRouter = () => {
 
           <Route path="settings/general/*" element={<SettingsManager />} />
           <Route path="settings/branding" element={<TenantSettings />} />
+
+          <Route path="platform" element={<PlatformDashboard />} />
+          <Route path="platform/settings" element={<PlatformSettingsManager />} />
+
           <Route path="logs" element={<AuditLogsManager />} />
           <Route path="audit-logs" element={<AuditLogsManager />} />
           <Route path="visitor-stats" element={<VisitorStatisticsManager />} />

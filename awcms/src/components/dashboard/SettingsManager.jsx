@@ -6,6 +6,17 @@ function SettingsManager() {
 	const columns = [
 		{ key: 'key', label: 'Setting Key', className: 'font-mono font-medium' },
 		{ key: 'value', label: 'Value', className: 'truncate max-w-[200px]' },
+		{
+			key: 'scope',
+			label: 'Scope',
+			className: 'w-[100px]',
+			render: (_, row) => (
+				<span className={`px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider ${row.scope === 'platform' ? 'bg-primary/10 text-primary' : 'bg-emerald-500/10 text-emerald-500'
+					}`}>
+					{row.scope || 'tenant'}
+				</span>
+			)
+		},
 		{ key: 'description', label: 'Description', className: 'text-muted-foreground text-xs' }
 	];
 
@@ -102,6 +113,7 @@ function SettingsManager() {
 				customSelect="*"
 				enableSoftDelete={false}
 				defaultSortColumn="key"
+				defaultFilters={{ scope: 'tenant' }}
 				showBreadcrumbs={false}
 			/>
 		</AdminPageLayout>

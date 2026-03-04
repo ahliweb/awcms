@@ -95,20 +95,34 @@ const Sidebar = ({ isOpen, onClose }) => {
             : authorizedItems;
 
         // Grouping
-        const groups = {};
+        const groups = {
+            platform: { label: '🏢 PLATFORM', order: 0, items: [] },
+            tenant: { label: currentTenant ? `🏠 TENANT: ${currentTenant.name}` : '🏠 TENANT', order: 1, items: [] }
+        };
+
         filteredItems.forEach(item => {
-            const groupLabel = item.group_label || 'General';
-            if (!groups[groupLabel]) {
-                groups[groupLabel] = { order: item.group_order || 999, items: [] };
+            if (item.scope === 'platform') {
+                groups.platform.items.push(item);
+            } else {
+                groups.tenant.items.push(item);
             }
-            groups[groupLabel].items.push(item);
         });
 
-        // Sort items within groups
-        Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a.order - b.order));
+        // Sort items within their original groups before we flattened the structure
+        Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => {
+            if ((a.group_order || 0) !== (b.group_order || 0)) {
+                return (a.group_order || 0) - (b.group_order || 0);
+            }
+            return (a.order || 0) - (b.order || 0);
+        }));
 
-        return groups;
-    }, [menuItems, loading, isPlatformAdmin, isFullAccess, hasPermission, hasAnyPermission, searchQuery, t, userRole, currentTenant?.subscription_tier]);
+        // Remove empty top-level groups to keep UI clean
+        const activeGroups = {};
+        if (groups.platform.items.length > 0) activeGroups.platform = groups.platform;
+        if (groups.tenant.items.length > 0) activeGroups.tenant = groups.tenant;
+
+        return activeGroups;
+    }, [menuItems, loading, isPlatformAdmin, isFullAccess, hasPermission, hasAnyPermission, searchQuery, t, userRole, currentTenant]);
 
     const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
         groupedMenus[a].order - groupedMenus[b].order
@@ -193,39 +207,65 @@ const Sidebar = ({ isOpen, onClose }) => {
                                 </div>
                             )}
 
-                            {!loading && sortedGroupKeys.map(groupLabel => {
-                                const group = groupedMenus[groupLabel];
-                                return (
-                                    <div key={groupLabel} className="pt-2">
-                                        {groupLabel !== 'General' && (
-                                            <div className="mb-2 flex items-center gap-2 px-2">
-                                                <span className="h-px flex-1 bg-border/70" />
-                                                <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/90">
-                                                    {groupLabel}
-                                                </h3>
-                                                <span className="h-px flex-1 bg-border/70" />
-                                            </div>
-                                        )}
+                            {!loading && sortedGroupKeys.map(topGroupKey => {
+                                const topGroup = groupedMenus[topGroupKey];
 
-                                        <ul className="space-y-1">
-                                            {group.items.map(item => {
-                                                const Icon = getIconComponent(item.icon);
-                                                return (
-                                                    <SidebarItem
-                                                        key={item.id}
-                                                        href={item.path ? `/cmspanel/${item.path}` : '/cmspanel'}
-                                                        icon={Icon}
-                                                        label={t(`menu.${item.key}`, item.label)}
-                                                        active={isActive(item.path)}
-                                                        onClick={() => {
-                                                            if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                                                                onClose();
-                                                            }
-                                                        }}
-                                                    />
-                                                );
-                                            })}
-                                        </ul>
+                                // Sub-group the items for this top-level section
+                                const subGroups = {};
+                                topGroup.items.forEach(item => {
+                                    const subLabel = item.group_label || 'General';
+                                    if (!subGroups[subLabel]) {
+                                        subGroups[subLabel] = { order: item.group_order || 999, items: [] };
+                                    }
+                                    subGroups[subLabel].items.push(item);
+                                });
+
+                                const sortedSubGroupKeys = Object.keys(subGroups).sort((a, b) =>
+                                    subGroups[a].order - subGroups[b].order
+                                );
+
+                                return (
+                                    <div key={topGroupKey} className="pt-2 mb-4">
+                                        <div className="mb-2 px-2">
+                                            <h2 className="text-xs font-bold uppercase tracking-widest text-primary/80 dark:text-primary/70">
+                                                {topGroup.label}
+                                            </h2>
+                                        </div>
+
+                                        {sortedSubGroupKeys.map(subGroupLabel => {
+                                            const subGroup = subGroups[subGroupLabel];
+                                            return (
+                                                <div key={`${topGroupKey}-${subGroupLabel}`} className="pt-1 mb-2 pl-2 border-l border-border/50 ml-2">
+                                                    {subGroupLabel !== 'General' && (
+                                                        <div className="mb-1.5 flex items-center gap-2">
+                                                            <h3 className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80">
+                                                                {subGroupLabel}
+                                                            </h3>
+                                                        </div>
+                                                    )}
+
+                                                    <ul className="space-y-1">
+                                                        {subGroup.items.map(item => {
+                                                            const Icon = getIconComponent(item.icon);
+                                                            return (
+                                                                <SidebarItem
+                                                                    key={item.id}
+                                                                    href={item.path ? `/cmspanel/${item.path}` : '/cmspanel'}
+                                                                    icon={Icon}
+                                                                    label={t(`menu.${item.key}`, item.label)}
+                                                                    active={isActive(item.path)}
+                                                                    onClick={() => {
+                                                                        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                                                                            onClose();
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            );
+                                                        })}
+                                                    </ul>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 );
                             })}
