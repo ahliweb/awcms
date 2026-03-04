@@ -22,8 +22,9 @@ const SecureRouteGate = ({
 }) => {
   const params = useParams();
   const navigate = useNavigate();
-  const [decodedParams, setDecodedParams] = useState(null);
-  const [loading, setLoading] = useState(secureParams.length > 0);
+  const hasSecureParams = secureParams.length > 0;
+  const [decodedParams, setDecodedParams] = useState(hasSecureParams ? undefined : null);
+  const [loading, setLoading] = useState(hasSecureParams);
 
   const scopePrefix = useMemo(() => {
     if (scopeBase) return scopeBase;
@@ -33,15 +34,8 @@ const SecureRouteGate = ({
   useEffect(() => {
     let active = true;
 
-    if (!secureParams.length) {
-      queueMicrotask(() => {
-        if (!active) return;
-        setDecodedParams(null);
-        setLoading(false);
-      });
-      return () => {
-        active = false;
-      };
+    if (!hasSecureParams) {
+      return;
     }
 
     const resolveParams = async () => {
@@ -98,7 +92,7 @@ const SecureRouteGate = ({
     return () => {
       active = false;
     };
-  }, [params, secureParams, scopePrefix, routePath, fallback, navigate]);
+  }, [params, secureParams, hasSecureParams, scopePrefix, routePath, fallback, navigate]);
 
   if (loading) return loadingFallback;
 

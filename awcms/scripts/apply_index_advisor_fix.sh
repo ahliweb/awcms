@@ -17,6 +17,9 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
   exit 1
 fi
 
+# Read password from environment or .env file, fallback to default local dev password
+PGPASSWORD="${SUPABASE_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}"
+
 echo "Applying index_advisor patch as supabase_admin..."
-docker exec -e PGPASSWORD=postgres -i "$CONTAINER_NAME" psql -U supabase_admin -d postgres < "$MIGRATION_PATH"
+docker exec -e PGPASSWORD="$PGPASSWORD" -i "$CONTAINER_NAME" psql -U supabase_admin -d postgres < "$MIGRATION_PATH"
 echo "Done."

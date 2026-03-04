@@ -2,23 +2,16 @@ import { useEffect, useState } from 'react';
 import { decodeRouteParam, isLikelyUuid } from '@/lib/routeSecurity';
 
 const useSecureRouteParam = (encodedValue, scope) => {
+  const hasValue = Boolean(encodedValue);
   const [value, setValue] = useState(null);
-  const [loading, setLoading] = useState(Boolean(encodedValue));
+  const [loading, setLoading] = useState(hasValue);
   const [isLegacy, setIsLegacy] = useState(false);
 
   useEffect(() => {
     let active = true;
 
-    if (!encodedValue) {
-      queueMicrotask(() => {
-        if (!active) return;
-        setValue(null);
-        setLoading(false);
-        setIsLegacy(false);
-      });
-      return () => {
-        active = false;
-      };
+    if (!hasValue) {
+      return;
     }
 
     const resolveValue = async () => {
@@ -42,7 +35,7 @@ const useSecureRouteParam = (encodedValue, scope) => {
     return () => {
       active = false;
     };
-  }, [encodedValue, scope]);
+  }, [encodedValue, hasValue, scope]);
 
   return {
     value,

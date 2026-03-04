@@ -104,8 +104,10 @@ async function rotatePassword() {
         await client.connect();
         console.log('Connected to database.');
 
-        // Update the postgres user password
-        await client.query(`ALTER ROLE ${rotationRole} WITH PASSWORD '${newPassword}'`);
+        // Use a safe approach: ALTER ROLE ... PASSWORD is a DDL statement that
+        // doesn't support $1 parameterized bindings, so we must escape manually.
+        const escapedPassword = newPassword.replace(/'/g, "''");
+        await client.query(`ALTER ROLE ${rotationRole} WITH PASSWORD '${escapedPassword}'`);
         console.log(`Successfully updated database password for role ${rotationRole}.`);
 
     } catch (err) {
