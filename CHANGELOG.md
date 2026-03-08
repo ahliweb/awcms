@@ -5,6 +5,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Media: Unified the admin media system on canonical `media_objects` backed by Cloudflare R2 signed uploads and Worker-side finalize writes, removing the parallel gallery-manager flow and pointing public photo/video galleries at filtered canonical media records.
+
+### Fixed
+
+- Media: Corrected the Cloudflare Worker tenant-role lookup for upload sessions, aligned admin/media pickers with canonical public URL helpers, and restored category-aware Media Library uploads and filtering.
+
 ## [3.0.0] "Convergence" - 2026-03-08
 
 ### Added
