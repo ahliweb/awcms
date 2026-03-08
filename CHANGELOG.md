@@ -38,6 +38,9 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Documentation: Closed the 2026-03-08 maintained-doc audit cycle by rerunning parity/validation
   gates, restoring local migration history parity, and carrying remaining dependency upgrades into a
   separate maintenance backlog.
+- Documentation: Added a concrete dependency-upgrade follow-up plan for `awcms`,
+  `awcms-public/primary`, and `awcms-mcp` so the remaining package drift can be addressed in staged,
+  validation-backed batches.
 
 ### Fixed
 

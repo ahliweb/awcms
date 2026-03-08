@@ -191,6 +191,35 @@ had drifted again after subsequent schema, media, and workflow changes.
 - `packages/awcms-shared`: `npm outdated` produced no current output in this pass
 - `awcms-ext/primary-analytics`: `npm outdated` produced no current output in this pass
 
+## Dependency Upgrade Follow-Up Plan
+
+### 1. `awcms` (Admin Panel)
+
+- **Goal:** Keep the React 19 / Vite 7 admin surface current without mixing framework, lint, and runtime-risk upgrades in one batch.
+- **Batch A - low-risk tools first:** bump `@eslint/js`, `eslint`, `@types/node`, `lucide-react`, and `jsdom`; run `npm run lint`, `npm run test -- --run`, and `npm run build`.
+- **Batch B - UI/runtime libraries:** evaluate `react-dropzone` `15.x` and `react-helmet-async` `3.x` together because both may require code changes; verify upload flows, document head behavior, and SSR-safe rendering.
+- **Batch C - ecosystem alignment:** review `@vitejs/plugin-react` `5.x` only after confirming Vite 7 compatibility and existing build behavior remain stable.
+- **Hold for targeted review:** `@supabase/supabase-js`, `react-router-dom`, `recharts`, `framer-motion`, and TipTap packages should be upgraded in feature-specific branches because they touch core app behavior and user-facing flows.
+
+### 2. `awcms-public/primary` (Astro Public Portal)
+
+- **Goal:** Preserve the current stable Astro/Tailwind build while separating safe upgrades from the known Tailwind `4.2.x` compatibility risk.
+- **Batch A - low-risk packages:** bump `@eslint/js`, `eslint`, `globals`, and `lucide-react`; run `npm run check` and `npm run build`.
+- **Batch B - content/runtime packages:** evaluate `astro-embed` and `sharp` in a separate branch; verify embeds, image optimization, and Cloudflare build output.
+- **Explicit hold:** keep `@tailwindcss/postcss`, `@tailwindcss/vite`, and `tailwindcss` pinned at `4.1.18` until Astro/Vite compatibility is revalidated against the earlier type-mismatch regression.
+
+### 3. `awcms-mcp` (MCP Server)
+
+- **Goal:** Refresh server/tooling dependencies while keeping the TypeScript build and lint surface stable.
+- **Batch A - type/tooling only:** bump `@types/node` and `@types/pg`; run `npm run lint` and `npm run build`.
+- **Batch B - protocol/tooling stack:** review `@modelcontextprotocol/sdk` and ESLint major upgrades together; confirm no API surface changes in the SDK and no config breakage in the lint stack before merging.
+
+### Sequencing Rules
+
+- Upgrade one workspace at a time and keep each batch small enough to attribute regressions quickly.
+- Re-run the existing package validation commands after every dependency batch instead of combining all upgrades into one PR.
+- Update docs only if an upgrade changes a documented baseline or intentional version pin.
+
 ## Historical Note
 
 The previous 2026-02-27 and 2026-03-03 documentation audit cycles remain part of project history and changelog evidence.
