@@ -41,10 +41,25 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Documentation: Added a concrete dependency-upgrade follow-up plan for `awcms`,
   `awcms-public/primary`, and `awcms-mcp` so the remaining package drift can be addressed in staged,
   validation-backed batches.
+- Configuration: Disabled Supabase storage and edge-runtime services in `supabase/config.toml` for the
+  current local baseline.
+- Dependencies: Completed Batch A MCP dependency maintenance by updating `@types/node` to the latest
+  Node 22-compatible patch range and `@types/pg` to `^8.18.0`, with lint/build validation passing.
+- Dependencies: Completed Batch A public-portal dependency maintenance by updating the low-risk
+  ESLint/globals/lucide packages in `awcms-public/primary` and fixing the surfaced sidebar/menu/
+  localized-slug lint and type issues so `npm run check` and `npm run build` pass again.
+- Dependencies: Completed the safe Batch A admin dependency maintenance path by updating
+  `lucide-react`, `jsdom`, `@types/node`, and the ESLint 9 patch line in `awcms`, while explicitly
+  excluding `e2e/**` from Vitest runs so unit tests remain separate from Playwright coverage.
 
 ### Fixed
 
 - Media: Corrected the Cloudflare Worker tenant-role lookup for upload sessions, aligned admin/media pickers with canonical public URL helpers, and restored category-aware Media Library uploads and filtering.
+- Documentation: Fixed `DOCS_INDEX.md` so optional local `.agents/*` directories are documented as
+  non-link code paths instead of broken local markdown links.
+- Tooling: Reworked `scripts/check_markdown_local_links.mjs` to replace regex-based comment stripping
+  with a stateful scanner for fenced code blocks and HTML comments, resolving the CodeQL
+  incomplete-sanitization finding while keeping docs validation behavior unchanged.
 
 ## [3.0.0] "Convergence" - 2026-03-08
 
