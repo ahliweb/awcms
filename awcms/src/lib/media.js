@@ -1,4 +1,4 @@
-const FALLBACK_EDGE_URL = 'http://localhost:8787';
+const FALLBACK_EDGE_URL = 'https://awcms-edge.ahliweb.workers.dev';
 
 export const getEdgeBaseUrl = () => {
   const configuredUrl = import.meta.env.VITE_EDGE_URL?.trim();
