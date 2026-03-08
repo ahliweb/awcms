@@ -82,7 +82,7 @@ const getUserContext = async (env: Bindings, userId: string) => {
   const adminSupabase = getAdminSupabase(env)
   const { data, error } = await adminSupabase
     .from('users')
-    .select('id, tenant_id, role:roles(is_platform_admin, is_full_access)')
+    .select('id, tenant_id, role:roles!users_role_id_fkey(is_platform_admin, is_full_access)')
     .eq('id', userId)
     .is('deleted_at', null)
     .maybeSingle()
