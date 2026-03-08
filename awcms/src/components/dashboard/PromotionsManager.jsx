@@ -41,7 +41,7 @@ function PromotionsManager() {
             options: [{ value: '_self', label: 'Same Tab' }, { value: '_blank', label: 'New Tab' }],
             defaultValue: '_self'
         },
-        { key: 'category_id', label: 'Category', type: 'relation', table: 'categories', filter: { type: 'promotion' } },
+        { key: 'category_id', label: 'Category', type: 'relation', table: 'categories', filter: { type: ['promotion', 'promotions'] } },
         { key: 'discount_percentage', label: 'Discount %', type: 'number', description: 'Leave empty if using fixed amount' },
         { key: 'discount_amount', label: 'Discount Amount', type: 'number', description: 'Fixed discount value' },
         { key: 'start_date', label: 'Start Date', type: 'datetime' },

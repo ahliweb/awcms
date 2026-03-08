@@ -11,6 +11,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useSearch } from '@/hooks/useSearch';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -43,7 +44,11 @@ function PublicPages() {
 
     useEffect(() => {
         const fetchCategories = async () => {
-            const { data } = await supabase.from('categories').select('*').eq('type', 'pages').is('deleted_at', null);
+            const { data } = await supabase
+                .from('categories')
+                .select('*')
+                .in('type', getCategoryTypesForModule('pages'))
+                .is('deleted_at', null);
             if (data) setCategories(data);
         };
         fetchCategories();

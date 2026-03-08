@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { buildMediaPublicUrl, getEdgeBaseUrl, normalizeMediaKind } from '@/lib/media';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
 const EDGE_URL = getEdgeBaseUrl();
 
@@ -132,9 +133,7 @@ export function useMedia() {
     const softDeleteFile = useCallback(async (id) => {
         try {
             const { error } = await supabase
-                .from('media_objects')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id);
+                .rpc('soft_delete_media_object', { p_media_id: id });
 
             if (error) throw error;
 
@@ -151,16 +150,14 @@ export function useMedia() {
     const bulkSoftDelete = useCallback(async (ids) => {
         if (!ids || ids.length === 0) return { success: 0, error: 0 };
         try {
-            const { error } = await supabase
-                .from('media_objects')
-                .update({ deleted_at: new Date().toISOString() })
-                .in('id', ids)
-                .select('id', { count: 'exact' });
+            const { data, error } = await supabase
+                .rpc('bulk_soft_delete_media_objects', { p_media_ids: ids });
 
             if (error) throw error;
 
-            toast({ title: 'Files Moved to Trash', description: `${ids.length} files moved to trash bin.` });
-            return { success: ids.length, error: 0 };
+            const successCount = Number(data || 0);
+            toast({ title: 'Files Moved to Trash', description: `${successCount} files moved to trash bin.` });
+            return { success: successCount, error: Math.max(0, ids.length - successCount) };
         } catch (err) {
             console.error('Bulk delete failed:', err);
             toast({ variant: 'destructive', title: 'Bulk Delete Failed', description: err.message });
@@ -172,9 +169,7 @@ export function useMedia() {
     const restoreFile = useCallback(async (id) => {
         try {
             const { error } = await supabase
-                .from('media_objects')
-                .update({ deleted_at: null })
-                .eq('id', id);
+                .rpc('restore_media_object', { p_media_id: id });
 
             if (error) throw error;
 
@@ -195,7 +190,7 @@ export function useMedia() {
             let query = supabase
                 .from('categories')
                 .select('*')
-                .in('type', ['media', 'gallery'])
+                .in('type', getCategoryTypesForModule('media'))
                 .order('name');
 
             if (!isPlatformAdmin && tenantId) {

@@ -280,7 +280,7 @@ function BlogsManager() {
         { value: 'archived', label: t('common.archived') }
       ]
     },
-    { key: 'category_id', label: t('common.category'), type: 'resource_select', resourceTable: 'categories' },
+    { key: 'category_id', label: t('common.category'), type: 'resource_select', resourceTable: 'categories', filter: { type: ['blog', 'blogs', 'content'] } },
     { key: 'excerpt', label: t('blogs.form.excerpt'), type: 'textarea' },
     { key: 'content', label: t('blogs.form.content'), type: 'richtext', description: t('blogs.form.content_desc') || "Main blog content with WYSIWYG editor" },
     { key: 'featured_image', label: t('blogs.form.featured_image'), type: 'image', description: t('blogs.form.image_desc') || "Upload or select from Media Library" },
@@ -310,9 +310,9 @@ function BlogsManager() {
     { key: 'description', label: t('common.description'), type: 'textarea' },
     {
       key: 'type', label: t('blogs.type'), type: 'select', options: [
+        { value: 'content', label: 'Shared Content (Blogs & Pages)' },
         { value: 'blog', label: t('menu.blogs') },
-        { value: 'product', label: t('menu.products') },
-        { value: 'portfolio', label: t('menu.portfolio') }
+        { value: 'page', label: t('menu.pages') }
       ], defaultValue: 'blog'
     }
   ];

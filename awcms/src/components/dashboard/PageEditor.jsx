@@ -15,6 +15,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import RichTextEditor from '@/components/ui/RichTextEditor';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
 
 function PageEditor({ page, onClose, onSuccess }) {
@@ -76,7 +77,12 @@ function PageEditor({ page, onClose, onSuccess }) {
         const fetchData = async () => {
             try {
                 // Fetch Categories
-                let catQuery = supabase.from('categories').select('id, name').eq('type', 'page');
+                let catQuery = supabase
+                    .from('categories')
+                    .select('id, name')
+                    .in('type', getCategoryTypesForModule('pages'))
+                    .is('deleted_at', null)
+                    .order('name');
                 if (currentTenant?.id) catQuery = catQuery.eq('tenant_id', currentTenant.id);
                 const { data: catData } = await catQuery;
                 setCategories(catData || []);

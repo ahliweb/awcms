@@ -10,6 +10,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useSearch } from '@/hooks/useSearch';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
 function PublicProducts() {
     const [products, setProducts] = useState([]);
@@ -34,7 +35,11 @@ function PublicProducts() {
 
     useEffect(() => {
         const fetchCategories = async () => {
-            const { data } = await supabase.from('categories').select('*').eq('type', 'products').is('deleted_at', null);
+            const { data } = await supabase
+                .from('categories')
+                .select('*')
+                .in('type', getCategoryTypesForModule('products'))
+                .is('deleted_at', null);
             if (data) setCategories(data);
         };
         fetchCategories();

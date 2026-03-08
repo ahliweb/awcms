@@ -6,6 +6,7 @@ import GenericContentManager from '@/components/dashboard/GenericContentManager'
 import { Package, Layers, FolderOpen } from 'lucide-react';
 import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/flowbite-admin';
 import useSplatSegments from '@/hooks/useSplatSegments';
+import { restoreCategory, softDeleteCategory } from '@/lib/taxonomyMutations';
 
 function ProductsManager() {
   const { t } = useTranslation();
@@ -108,7 +109,7 @@ function ProductsManager() {
     { key: 'featured_image', label: t('products.main_image'), type: 'image', description: 'Product cover/thumbnail' },
     { key: 'images', label: t('products.gallery'), type: 'images', description: 'Additional product images', maxImages: 10 },
     { key: 'description', label: t('common.description'), type: 'richtext' },
-    { key: 'category_id', label: t('common.category'), type: 'relation', table: 'categories', filter: { type: 'product' } },
+    { key: 'category_id', label: t('common.category'), type: 'relation', table: 'categories', filter: { type: ['product', 'products'] } },
     { key: 'product_type_id', label: t('menu.product_types'), type: 'relation', table: 'product_types', description: 'Specific type/brand/collection' },
     // { key: 'tags', label: t('common.tags'), type: 'tags' }, // Removed
     { key: 'published_at', label: t('products.launch_date'), type: 'datetime' },
@@ -234,8 +235,11 @@ function ProductsManager() {
             formFields={categoryFormFields}
             permissionPrefix="categories"
             customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-            defaultFilters={{ type: 'product' }}
+            defaultFilters={{ type: ['product', 'products'] }}
             showBreadcrumbs={false}
+            restorePermission="tenant.categories.restore"
+            onSoftDeleteOverride={softDeleteCategory}
+            onRestoreOverride={restoreCategory}
           />
         </TabsContent>
       </PageTabs>
