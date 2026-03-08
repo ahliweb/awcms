@@ -89,7 +89,7 @@ All documentation follows this authority structure:
 | User Management | [docs/modules/USER_MANAGEMENT.md](docs/modules/USER_MANAGEMENT.md) | User lifecycle, profiles, and roles |
 | Theme System | [docs/modules/THEMING.md](docs/modules/THEMING.md) | Theme engine details |
 | Extension System | [docs/modules/EXTENSIONS.md](docs/modules/EXTENSIONS.md) | Plugin and extension architecture |
-| Stitch Import | [docs/modules/STITCH_IMPORT.md](docs/modules/STITCH_IMPORT.md) | Per-tenant Stitch configuration, import modes, and sanitization pipeline |
+| Stitch Import | [docs/modules/STITCH_IMPORT.md](docs/modules/STITCH_IMPORT.md) | Compatibility-only historical note; not part of the canonical runtime |
 
 ### Developer Guides
 
@@ -107,7 +107,7 @@ All documentation follows this authority structure:
 | Testing | [docs/dev/testing.md](docs/dev/testing.md) | Vitest and smoke checks |
 | AI Workflows | [docs/dev/ai-workflows.md](docs/dev/ai-workflows.md) | Prompt templates, plan mode triggers, iteration loops |
 | AI Gateway | [docs/architecture/openclaw-gateway.md](docs/architecture/openclaw-gateway.md) | OpenClaw per-tenant setup, routing, and security runbook |
-| Autonomous Brain | [docs/architecture/ollama-integration.md](docs/architecture/ollama-integration.md) | Local autonomous AI brain integration via Ollama |
+| Autonomous Brain | [docs/architecture/ollama-integration.md](docs/architecture/ollama-integration.md) | Local Ollama runtime and OpenClaw hand-off guidance |
 | Programmatic Content Types | [docs/architecture/schema-definition.md](docs/architecture/schema-definition.md) | Defining and migrating custom schemas |
 | Edge Logic | [docs/dev/edge-functions.md](docs/dev/edge-functions.md) | Cloudflare Workers and transitional Supabase functions |
 | Versioning Strategy | [docs/dev/versioning.md](docs/dev/versioning.md) | Monorepo versioning & release process |

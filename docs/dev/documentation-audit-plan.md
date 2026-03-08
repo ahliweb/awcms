@@ -2,7 +2,7 @@
 
 > **Owner:** Documentation Steward (AI + Maintainers)
 >
-> **Audit Cycle:** 2026-03-08 Full-Scope Documentation and Repository Integrity Cycle
+> **Audit Cycle:** 2026-03-08 Full-Scope Documentation, Integrity, and Conflict-Resolution Cycle
 >
 > **Last Updated:** 2026-03-08
 >
@@ -28,12 +28,12 @@ This cycle explicitly includes conflict detection and resolution planning for:
 
 | Phase | Status | Notes |
 | --- | --- | --- |
-| Phase 0 - Re-Baseline and Inventory Refresh | In Progress | 2026-03-08 baseline and active plan refresh underway |
-| Phase 1 - Authority Reconciliation | In Progress | `README.md`, `AGENTS.md`, `SYSTEM_MODEL.md`, and navigation surfaces being refreshed first |
-| Phase 2 - Schema, Security, and Tenancy Reconciliation | Pending | Re-validate against current migrations, RLS, and edge/runtime model |
-| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | In Progress | Core parity helpers, deploy docs, and public validation flows reconciled; broader script/deploy review remains |
-| Phase 4 - Feature, Module, and Package Documentation Pass | In Progress | High-value module/guides and maintained package README surfaces are being reconciled |
-| Phase 5 - Conflict Resolution and Publication | Pending | Resolve open drift items, rerun checks, and publish updated baseline |
+| Phase 0 - Re-Baseline and Inventory Refresh | Completed | Repository inventory refreshed to current markdown, migration, workflow, and package-manifest counts |
+| Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | `README.md`, `docs/README.md`, `SYSTEM_MODEL.md`, `AGENTS.md`, and `DOCS_INDEX.md` must be aligned first |
+| Phase 2 - Schema, Security, and Tenancy Reconciliation | Pending | Re-validate against `127/127` migrations, current RLS helpers, and Cloudflare-first edge runtime wording |
+| Phase 3 - Scripts, Tooling, Deployment, and Workflow Reconciliation | Pending | Reconcile package scripts, parity helpers, MCP topology, and CI coverage against live manifests/workflows |
+| Phase 4 - Feature, Module, Client, and Package README Pass | Pending | Review all maintained docs under `docs/**` plus workspace/package README surfaces |
+| Phase 5 - Conflict Resolution, Validation, and Publication | Pending | Close drift items, rerun validation gates, and publish updated baseline |
 
 See `docs/dev/documentation-audit-tracker.md` for the live drift register and evidence log.
 
@@ -46,6 +46,7 @@ See `docs/dev/documentation-audit-tracker.md` for the live drift register and ev
 5. Top-level repo docs reflect the current MCP topology, edge-runtime model, and script inventory.
 6. Potential conflict areas (dependencies, scripts, security, performance, dead links, stale roadmap/checklists) are identified and triaged.
 7. Stitch is no longer used as a top-level repository status signal in `README.md`; feature-specific Stitch docs remain explicitly scoped where implementation still exists.
+8. Missing or broken canonical references are either repaired, rerouted, or explicitly tracked with an owner and next action.
 
 ## Scope
 
@@ -56,8 +57,8 @@ See `docs/dev/documentation-audit-tracker.md` for the live drift register and ev
 | Tier 0 (Authority) | Governance and canonical references | `SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, `DOCS_INDEX.md`, `docs/README.md` |
 | Tier 1 (Architecture/Security/Tenancy) | Core system behavior and constraints | `docs/architecture/**`, `docs/security/**`, `docs/tenancy/**`, `docs/deploy/**`, `docs/compliance/**` |
 | Tier 1 (Dev/Modules/Guides) | Operational runbooks and feature docs | `docs/dev/**`, `docs/modules/**`, `docs/guides/**` |
-| Tier 2 (Package READMEs) | Package-level setup and usage docs | `awcms/**/README*.md`, `awcms-public/**/README*.md`, `awcms-mcp/**/README*.md`, `awcms-mobile*/**/README*.md`, `awcms-esp32/**/README*.md`, `awcms-ext/**/README*.md` |
-| Tier 2 (Truth Sources) | Implementation evidence used for reconciliation | `supabase/**`, `awcms/supabase/**`, `awcms-edge/**`, `scripts/**`, `.github/workflows/**`, `package.json` files, `mcp.json` |
+| Tier 2 (Package READMEs) | Package-level setup and usage docs | `awcms/**/README*.md`, `awcms-public/**/README*.md`, `awcms-mcp/**/README*.md`, `awcms-mobile*/**/README*.md`, `awcms-esp32/**/README*.md`, `awcms-ext/**/README*.md`, `packages/**/README*.md` |
+| Tier 2 (Truth Sources) | Implementation evidence used for reconciliation | `supabase/**`, `awcms/supabase/**`, `awcms-edge/**`, `scripts/**`, `.github/workflows/**`, `package.json` files, `mcp.json`, `openclaw/**`, `.agents/**` |
 
 ### Out of Scope
 
@@ -69,14 +70,27 @@ See `docs/dev/documentation-audit-tracker.md` for the live drift register and ev
 
 | Surface | Baseline |
 | --- | --- |
-| Total markdown files in repository | `113` |
+| Total markdown files in repository | `115` |
 | `docs/**/*.md` count | `71` |
-| Root migrations | `118` SQL files in `supabase/migrations/` |
-| Mirrored migrations | `118` SQL files in `awcms/supabase/migrations/` |
+| Root migrations | `127` SQL files in `supabase/migrations/` |
+| Mirrored migrations | `127` SQL files in `awcms/supabase/migrations/` |
+| Maintained package README surfaces | `14` |
+| Package manifests (`package.json`) | `10` |
+| GitHub workflow files | `3` |
 | MCP servers from `mcp.json` | `cloudflare`, `context7`, `github`, `supabase` |
 | Node baseline | `>=22.12.0` (validated runtime currently `v22.22.0`) |
 | Public runtime model | Astro static output with React islands |
 | Primary edge HTTP layer | Cloudflare Workers (`awcms-edge/`) |
+
+## Immediate Blocker Queue
+
+These issues should be addressed before broader doc polishing because they break trust in the documentation surface:
+
+| ID | Severity | Blocker | Evidence | Planned Resolution |
+| --- | --- | --- | --- | --- |
+| PLAN-002 | High | Validation baselines keep drifting as the audit itself adds new maintained docs | README/package-doc additions changed the inventory again during this cycle | Recount repository surfaces after each audit batch and treat the tracker as the live baseline |
+| PLAN-003 | Medium | Documentation workflow scope mismatch | `docs-link-check.yml` checks all markdown while audit docs distinguish maintained vs non-canonical surfaces | Decide one policy and align CI plus audit docs in Phase 3 |
+| PLAN-006 | Medium | CI/workflow coverage still does not cover every maintained workspace/package | `awcms-ext/` and `packages/awcms-shared/` still rely on local or indirect validation after the edge/MCP CI additions | Reconcile docs with actual CI guarantees and create follow-up backlog where needed |
 
 ## Context7 Protocol (Mandatory)
 
@@ -149,6 +163,9 @@ Review and triage the following repository-wide conflict classes:
 | Performance drift | public/admin best-practice docs vs current build/runtime model | Update docs and log required code follow-up if needed |
 | Dead links/navigation | `README.md`, `DOCS_INDEX.md`, package READMEs, relative links | Repair links and update canonical routing |
 | Stale roadmap/checklists | execution-plan docs, backlog docs, historical runbooks | Mark as backlog/historical or remove from canonical guidance |
+| Missing package docs | workspace/package manifests without maintained README surfaces | Add README or explicitly mark the workspace as internal-only |
+| CI/documentation scope mismatch | workflow filters vs documented guarantees | Align docs to the actual guarantee or broaden automation |
+| Incomplete link validation | current link checker treats many local file links as pending | Add a filesystem-aware validation step and rerun before closure |
 
 ### Step 5 - Consistency and Publication Pass
 
@@ -173,6 +190,7 @@ Deliverables:
 - current stack/runtime baseline
 - contradiction-free terminology and env naming
 - current status snapshot without stale Stitch/MCP references
+- repaired or intentionally rerouted canonical links for missing authority-level references
 
 ### Workstream B - Schema, Security, and Tenancy Docs
 
@@ -204,6 +222,7 @@ Deliverables:
 - executable commands
 - accurate script and MCP topology references
 - correct deploy/runtime expectations
+- documented CI/workflow coverage boundaries per maintained workspace
 
 ### Workstream D - Feature, Module, and Client Docs
 
@@ -276,6 +295,7 @@ Required outputs for this cycle:
 2. Evidence log and drift register in `docs/dev/documentation-audit-tracker.md`.
 3. Updated navigation in `DOCS_INDEX.md` and `docs/README.md` where needed.
 4. Changelog entry summarizing documentation and planning updates.
+5. Resolution plan for every open high-severity drift item, including missing docs, broken links, and version/script mismatches.
 
 ## Definition of Done
 
@@ -284,3 +304,4 @@ Required outputs for this cycle:
 - Context7 verification evidence exists for revised library-facing sections.
 - Validation gates pass for lint/link and relevant package checks.
 - No unresolved high-severity drift items remain open in the tracker without an owner and next action.
+- Canonical documentation links resolve successfully or are replaced with clearly scoped backlog references.

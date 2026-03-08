@@ -8,6 +8,16 @@ All notable changes to the **AWCMS** project will be documented in this file.
 ### Changed
 
 - Media: Unified the admin media system on canonical `media_objects` backed by Cloudflare R2 signed uploads and Worker-side finalize writes, removing the parallel gallery-manager flow and pointing public photo/video galleries at filtered canonical media records.
+- Documentation: Re-baselined the documentation audit plan/tracker to the current repository inventory
+  (`115` markdown files, `71` docs, `127/127` mirrored migrations), refreshed the docs hub and
+  README status snapshot, and added an explicit conflict-resolution queue for broken links,
+  dependency drift, script accuracy, CI coverage, and missing package-doc surfaces.
+- Documentation: Added the missing `docs/architecture/ollama-integration.md`, added a compatibility-only
+  `docs/modules/STITCH_IMPORT.md`, and created maintained README coverage for `awcms-edge/` and
+  `packages/awcms-shared/` while reconciling setup/CI docs against live manifests and workflows.
+- Tooling: Added `scripts/check_markdown_local_links.mjs`, wired it into `awcms` `docs:check` and
+  the docs-link-check workflow, and added dedicated GitHub Actions jobs for `awcms-edge` and
+  `awcms-mcp` validation.
 
 ### Fixed
 

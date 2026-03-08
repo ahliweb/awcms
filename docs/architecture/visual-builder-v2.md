@@ -1,7 +1,7 @@
 # Visual Builder Architecture (v2)
 
 > **Source of Truth**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 3
-> **Reference**: [VISUAL_BUILDER.md](./VISUAL_BUILDER.md) (Legacy Architecture)
+> **Reference**: [VISUAL_BUILDER.md](../modules/VISUAL_BUILDER.md) (Legacy Architecture)
 
 ## Purpose
 

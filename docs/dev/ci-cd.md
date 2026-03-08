@@ -36,16 +36,28 @@ Describe the GitHub Actions workflows used for AWCMS.
 | Job | Purpose | Working Directory | Workflow |
 | --- | --- | --- | --- |
 | `lint-test-admin` | Lint, test, build admin | `awcms/` | ci-push, ci-pr |
-| `lint-build-public` | Build public portal (no lint step in workflow yet) | `awcms-public/primary/` | ci-push, ci-pr |
+| `paths-filter` | Detect changed push-paths for selected workspaces | repo root | ci-push |
+| `lint-build-public` | Run `npm run check`, then build the primary public portal | `awcms-public/primary/` | ci-push, ci-pr |
 | `build-mobile` | Flutter build and tests | `awcms-mobile/primary/` | ci-push, ci-pr |
+| `typecheck-edge` | Install dependencies and run Worker TypeScript checks | `awcms-edge/` | ci-push, ci-pr |
+| `lint-build-mcp` | Install dependencies, lint, and build the MCP server | `awcms-mcp/` | ci-push, ci-pr |
+| `lint-build-smandapbun` | Check and build the SMANDAPBUN public portal | `awcms-public/smandapbun/` | ci-push, ci-pr |
 | `db-check` | Supabase migration lint | `awcms/supabase` | ci-pr |
 | `deploy-production` | Cloudflare Pages deploy (admin panel artifact) | `awcms/` | ci-push |
 | `link-check` | Markdown link validation | repo root | docs-link-check |
+
+Current workflow coverage boundaries:
+
+- `ci-push` path filters now cover `awcms/`, `awcms-public/primary/`, `awcms-mobile/`, `awcms-public/smandapbun/`, `awcms-edge/`, and `awcms-mcp/`.
+- `ci-pr` now includes dedicated jobs for `awcms-edge/` and `awcms-mcp/`.
+- `awcms-ext/` and `packages/awcms-shared/` still rely on local validation or indirect consumer validation.
 
 ### Runtime Notes
 
 - GitHub workflows pin Node runtime to `22.12.0` to match package `engines` constraints.
 - Keep workflow/runtime Node versions aligned with `SYSTEM_MODEL.md` and package `engines` before bumping toolchains.
+- `awcms-edge/` and `awcms-mcp/` are now first-class CI surfaces.
+- `packages/awcms-shared/` remains validated indirectly through the public-portal jobs that consume it.
 
 ### Required Secrets and Variables (GitHub Actions)
 
@@ -58,7 +70,10 @@ Notes:
 
 - `ci-pr` uses mock Supabase values for admin/public jobs and does not require repository Supabase secrets.
 - Public portal CI jobs currently map `VITE_*` secrets into `PUBLIC_*` variables in workflow env.
-- `PUBLIC_TENANT_ID` is still required for static tenant-scoped production builds, but is not currently injected by the GitHub CI workflows.
+- `PUBLIC_TENANT_ID` is injected in workflow env using either repository secrets or a zero UUID fallback for static-check/build safety.
+- `deploy-production` currently deploys only the admin artifact (`awcms/dist`) to Cloudflare Pages.
+- Worker deploys for `awcms-edge/` are not part of the current GitHub Actions push/PR workflows.
+- `docs-link-check.yml` now runs `scripts/check_markdown_local_links.mjs` before `markdown-link-check` so missing local file targets fail explicitly instead of showing as pending.
 
 ## Verification
 
@@ -75,11 +90,27 @@ npm run build
 
 # Public Portal
 cd ../awcms-public/primary
+npm run check
+npm run build
+
+# Smandapbun portal
+cd ../smandapbun
+npm run check
+npm run lint
 npm run build
 
 # Docs link check parity
 cd ../../awcms
 npm run docs:check
+
+# Edge Worker
+cd ../awcms-edge
+npm run typecheck
+
+# MCP server
+cd ../awcms-mcp
+npm run lint
+npm run build
 
 # Mobile
 cd ../awcms-mobile/primary
@@ -100,6 +131,8 @@ npx supabase db lint
 - DB lint warnings: `supabase db lint` may report known advisory warnings (for example `extensions.index_advisor`) while still passing CI. Track these in migration notes before treating as regressions.
 - Deploy scope confusion: `deploy-production` currently deploys only `awcms/dist` (admin panel). Public deployment remains a separate Cloudflare Pages pipeline.
 - Docs workflow differences: docs link checks run in `docs-link-check.yml` and are independent from `ci-pr.yml` and `ci-push.yml`.
+- Docs workflow limitation: `markdown-link-check` can still report some filesystem links as pending `[ / ]`, but the local validator script now enforces the existence of maintained local targets before that step runs.
+- Coverage confusion: `awcms-ext/` and `packages/awcms-shared/` still require local validation planning because they do not yet have dedicated standalone jobs.
 
 ## References
 

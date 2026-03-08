@@ -129,6 +129,63 @@ jobs:
         run: flutter test
 
   # ============================================
+  # Typecheck - Edge Worker
+  # ============================================
+  typecheck-edge:
+    name: Typecheck (Edge Worker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-edge
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms-edge/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+  # ============================================
+  # Lint & Build - MCP Server
+  # ============================================
+  lint-build-mcp:
+    name: Lint & Build (MCP)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-mcp
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms-mcp/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run build
+        run: npm run build
+
+  # ============================================
   # Lint & Build - SMANDAPBUN Portal (Astro)
   # ============================================
   lint-build-smandapbun:

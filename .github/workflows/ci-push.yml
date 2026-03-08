@@ -21,6 +21,8 @@ jobs:
       public: ${{ steps.filter.outputs.public }}
       mobile: ${{ steps.filter.outputs.mobile }}
       smandapbun: ${{ steps.filter.outputs.smandapbun }}
+      edge: ${{ steps.filter.outputs.edge }}
+      mcp: ${{ steps.filter.outputs.mcp }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -35,6 +37,10 @@ jobs:
               - 'awcms-mobile/**'
             smandapbun:
               - 'awcms-public/smandapbun/**'
+            edge:
+              - 'awcms-edge/**'
+            mcp:
+              - 'awcms-mcp/**'
 
   # ============================================
   # Lint & Test - Admin Panel
@@ -151,6 +157,67 @@ jobs:
 
       - name: Run tests
         run: flutter test
+
+  # ============================================
+  # Typecheck - Edge Worker
+  # ============================================
+  typecheck-edge:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.edge == 'true' }}
+    name: Typecheck (Edge Worker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-edge
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms-edge/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+  # ============================================
+  # Lint & Build - MCP Server
+  # ============================================
+  lint-build-mcp:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.mcp == 'true' }}
+    name: Lint & Build (MCP)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-mcp
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms-mcp/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run build
+        run: npm run build
 
   # ============================================
   # Deploy to Cloudflare Pages (Production)

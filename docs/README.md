@@ -4,7 +4,7 @@
 >
 > **Status:** Maintained
 >
-> **Last Updated:** 2026-02-27
+> **Last Updated:** 2026-03-08
 
 ## Purpose
 
@@ -49,6 +49,9 @@ When updating any document in this repo, verify claims against these implementat
 - Audit plan: `docs/dev/documentation-audit-plan.md`
 - Audit tracker and drift log: `docs/dev/documentation-audit-tracker.md`
 - Benchmark response standard: `docs/dev/context7-benchmark-playbook.md`
+
+The active 2026-03-08 cycle re-baselines repository counts, authority-doc drift, broken navigation,
+dependency/version mismatches, script accuracy, security wording, and dead-link remediation planning.
 
 Use Context7 MCP as the primary external source for library guidance and preserve verified IDs from
 `AGENTS.md` and `docs/dev/documentation-audit-plan.md`.

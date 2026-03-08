@@ -1,6 +1,6 @@
 # Platform vs Tenant Admin Configuration Separation: Execution Guide
 
-> **Authority Reference:** [SYSTEM_MODEL.md](../SYSTEM_MODEL.md) Sections 2.1 (Multi-Tenancy) and 2.3 (Permissions)
+> **Authority Reference:** [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Sections 2.1 (Multi-Tenancy) and 2.3 (Permissions)
 
 ## Overview
 

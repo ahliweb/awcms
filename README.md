@@ -5,10 +5,10 @@ Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with adm
 ## Status Snapshot (2026-03-08)
 
 - Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
-- The 2026-03-08 documentation and repository-integrity audit cycle is active via `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
+- The 2026-03-08 documentation, repository-integrity, and conflict-resolution audit cycle is active via `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
 - Public portal and edge-runtime docs are aligned to Astro static output plus Cloudflare Workers as the primary edge HTTP layer.
 - MCP topology from `mcp.json` currently includes `cloudflare`, `context7`, `github`, and `supabase`.
-- Supabase migration parity baseline is `118` root migrations and `118` mirrored admin/CI migrations.
+- Supabase migration parity baseline is `127` root migrations and `127` mirrored admin/CI migrations.
 - Repair and verification workflows are scripted via `scripts/repair_supabase_migration_history.sh`, `scripts/verify_supabase_migration_consistency.sh`, and `scripts/verify_supabase_function_consistency.sh`.
 
 ## Documentation Authority
@@ -33,6 +33,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 | `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
 | `awcms-ext/` | External Extensions | JavaScript modules |
 | `awcms-edge/` | Worker API & Edge Logic | Cloudflare Workers, Hono |
+| `packages/awcms-shared/` | Shared public-portal utilities | TypeScript helpers |
 | `supabase/` | Migrations and transitional Supabase functions | Supabase CLI |
 | `awcms-mcp/` | MCP Integration | Model Context Protocol tools |
 | `openclaw/` | AI Gateway | OpenClaw multi-tenant AI routing |
@@ -49,6 +50,11 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 - **Puck**: 0.21.0
 - **OpenClaw**: 2026.2.21-2 (AI Gateway)
 - **Node.js**: >= 22.12.0 (managed via nvm)
+
+Notes:
+
+- Admin and public workspaces currently use `@supabase/supabase-js` `2.93.3`.
+- `awcms-edge/` currently pins `@supabase/supabase-js` `^2.45.0`; use `awcms-edge/package.json` as the source of truth for Worker-only dependency alignment until that workspace is upgraded deliberately.
 
 ## Quick Start
 

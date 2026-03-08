@@ -70,6 +70,14 @@ npm install
 # Public Portal (Primary Tenant)
 cd ../awcms-public/primary
 npm install
+
+# Edge Worker
+cd ../../awcms-edge
+npm install
+
+# MCP Server
+cd ../awcms-mcp
+npm install
 ```
 
 ## 3. Running Locally
@@ -78,6 +86,8 @@ npm install
 | --- | --- | --- | --- |
 | Admin Panel | `npm run dev` | `awcms/` | `3000` |
 | Public Portal | `npm run dev` | `awcms-public/primary/` | `4321` |
+| Edge Worker | `npm run dev:local` | `awcms-edge/` | `8787` |
+| MCP Server | `npm run dev` | `awcms-mcp/` | stdio / MCP runtime |
 | Mobile App | `flutter run` | `awcms-mobile/primary/` | Device/Emu |
 | IoT Firmware | `pio run -t upload` | `awcms-esp32/primary/` | Serial |
 
@@ -118,15 +128,38 @@ opencode mcp list
 
 GitHub MCP uses `scripts/start_github_mcp.sh` and requires one of: `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_MCP_PERSONAL_ACCESS_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`.
 
-### 3.3 Operational Script Quick Reference
+### 3.3 Edge Worker Local Runtime
+
+The Cloudflare Worker layer lives in `awcms-edge/` and is the primary edge HTTP runtime for AWCMS.
+
+```bash
+cd awcms-edge
+npm install
+npm run dev:local
+```
+
+Notes:
+
+- `npm run dev:local` loads `../awcms/.env.local`.
+- Worker bindings are defined in `awcms-edge/wrangler.jsonc`.
+- The current Worker workspace pins `@supabase/supabase-js` separately from the admin/public workspaces; use `awcms-edge/package.json` as the source of truth before upgrading.
+
+### 3.4 Operational Script Quick Reference
 
 | Script | Purpose | Scope |
 | --- | --- | --- |
 | `scripts/repair_supabase_migration_history.sh` | Repair migration history states (`applied`/`reverted`) from local timestamps | Local (`--local`) and linked (`--linked`) |
 | `scripts/verify_supabase_migration_consistency.sh` | Verify root/mirror migration parity and migration-list alignment | Local by default; add `--linked` for remote check |
 | `scripts/verify_supabase_function_consistency.sh` | Verify root/mirror Edge Function parity and optional linked function slug coverage (local `supabase/functions/.env` is intentionally ignored) | Local by default; add `--linked --project-ref <ref>` for remote check |
+| `scripts/check_markdown_local_links.mjs` | Validate maintained markdown links to local repository targets before external link checks run | Docs workflow and local docs validation |
 | `scripts/start_github_mcp.sh` | Start local Docker-backed GitHub MCP with token auto-discovery | MCP runtime |
 | `scripts/update_cloudflare_secrets.sh` | Interactive Cloudflare Pages secret sync from project `.env` files | Deployment ops |
+
+### 3.5 Shared Package Note
+
+`packages/awcms-shared/` is a maintained source-first TypeScript package used by the public portals.
+It currently has no standalone build script; validation happens through consuming workspaces such as
+`awcms-public/primary` and `awcms-public/smandapbun`.
 
 ## 4. Linting & Formatting
 

@@ -4,7 +4,7 @@
 >
 > **Related Plan:** `docs/dev/documentation-audit-plan.md`
 >
-> **Status:** 2026-03-08 full-scope documentation and repository-integrity cycle in progress; current remediation batch revalidated locally and against the linked Supabase project.
+> **Status:** 2026-03-08 full-scope documentation, repository-integrity, and conflict-resolution cycle remains active; this refresh re-baselined counts, identified broken canonical links, and reopened the execution queue for remaining drift.
 
 ## 2026-03-08 Cycle Trigger
 
@@ -13,24 +13,30 @@ Core authority docs still carried an outdated README status snapshot, incomplete
 and no active plan for repository-wide conflict detection across dependencies, scripts, security, performance,
 dead links, and stale implementation guidance.
 
+This planning refresh also confirmed that repository inventory counts and a small set of maintained docs
+had drifted again after subsequent schema, media, and workflow changes.
+
 ## Current Cycle Status
 
 | Phase | Status | Notes |
 | --- | --- | --- |
-| Phase 0 - Re-Baseline and Inventory Refresh | In Progress | Baseline refreshed to current counts and topology |
-| Phase 1 - Authority Reconciliation | In Progress | README snapshot, authority wording, and audit-plan surfaces updated first |
-| Phase 2 - Schema, Security, and Tenancy Reconciliation | In Progress | Targeted reconciliation completed for `docs/security/**`, `docs/tenancy/**`, and `docs/architecture/database.md`; broader cycle review still open |
-| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | In Progress | Parity helpers now pass locally and against the linked project; broader script/deploy review still open |
-| Phase 4 - Feature, Module, and Package Documentation Pass | In Progress | Primary public and MCP package README surfaces reviewed and clarified; broader feature/module pass still open |
-| Phase 5 - Conflict Resolution and Publication | In Progress | Validation gates rerun, linked Supabase checks recovered, changelog/tracker closure underway |
+| Phase 0 - Re-Baseline and Inventory Refresh | Completed | Counts updated to `115` markdown, `71` docs, `127/127` migrations, `10` package manifests, `14` maintained package README surfaces |
+| Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | `README.md`, `docs/README.md`, audit plan/tracker baseline refreshed; AGENTS/SYSTEM_MODEL/DOCS_INDEX link reconciliation still pending |
+| Phase 2 - Schema, Security, and Tenancy Reconciliation | Pending | Re-check schema/security docs against current `127/127` migration baseline and Cloudflare-first edge guidance |
+| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | Pending | Reconcile documented scripts, MCP topology, docs-link workflow scope, and CI guarantees against live manifests/workflows |
+| Phase 4 - Feature, Module, and Package Documentation Pass | Pending | Review all maintained module/dev/guides surfaces plus workspace/package READMEs |
+| Phase 5 - Conflict Resolution and Publication | Pending | Close drift items, rerun validation gates, and publish updated docs baseline |
 
 ## Baseline Snapshot (2026-03-08)
 
 | Surface | Evidence |
 | --- | --- |
-| Total markdown files in repository | `113` (current inventory count) |
+| Total markdown files in repository | `115` (current inventory count) |
 | `docs/**/*.md` | `71` (current docs inventory count) |
-| Migration parity | `118` root migrations and `118` mirrored migrations |
+| Migration parity | `127` root migrations and `127` mirrored migrations |
+| Maintained package README surfaces | `14` |
+| Package manifests (`package.json`) | `10` |
+| GitHub workflows | `3` |
 | MCP topology | `cloudflare`, `context7`, `github`, `supabase` from `mcp.json` |
 | Node baseline | `>=22.12.0`; current validated runtime in README snapshot is `v22.22.0` |
 | Public runtime model | Astro static output with React islands |
@@ -55,64 +61,64 @@ dead links, and stale implementation guidance.
 | DOCSYNC-013 | Medium | Linked migration parity required an explicit `SUPABASE_DB_PASSWORD` even though repository env files already carry derivable database URLs | Resolved | `scripts/verify_supabase_migration_consistency.sh` now derives `SUPABASE_DB_PASSWORD` from `DATABASE_URL` / `DATABASE_ADMIN_URL` when needed; linked check passes |
 | DOCSYNC-014 | Medium | Linked function parity failed because the env-provided `SUPABASE_ACCESS_TOKEN` returned `401`, and JSON validation masked successful fallback output | Resolved | `scripts/verify_supabase_function_consistency.sh` now retries with the local Supabase CLI profile when the env token 401s and validates JSON correctly |
 | DOCSYNC-015 | Low | Benchmark-only `content-transform` source should remain mirrored locally but should not block remote deployed-function inventory parity | Resolved | Linked function parity now excludes benchmark-only `content-transform` from required remote slug coverage while preserving root/mirror source parity checks |
+| DOCSYNC-016 | High | Current plan/tracker baselines were stale (`113` markdown / `71` docs / `118` migrations) after subsequent repository changes | Resolved | `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md` are now re-baselined to the current `115` markdown / `71` docs / `127/127` migrations inventory |
+| DOCSYNC-017 | Medium | Maintained docs carried stale baseline details (`README.md` migration parity, `docs/README.md` update marker, `docs/tenancy/supabase.md` migration count) | Resolved | Updated those docs to the current 2026-03-08 planning baseline |
+| DOCSYNC-018 | High | Canonical navigation still points to missing docs (`docs/architecture/ollama-integration.md`, `docs/modules/STITCH_IMPORT.md`) | Resolved | Added both docs and updated `DOCS_INDEX.md` notes to reflect their current scope |
+| DOCSYNC-019 | Medium | Documentation automation scope is inconsistent: audit docs distinguish maintained vs non-canonical docs, but `docs-link-check.yml` still scans all markdown | Open | `.github/workflows/docs-link-check.yml`, `.markdownlintignore`, and audit docs need one shared policy |
+| DOCSYNC-020 | Medium | Runtime dependency guidance drifts from implementation: `awcms-edge` still uses `@supabase/supabase-js` `^2.45.0` while authority docs describe `2.93.3` baseline | Resolved | Scoped docs now treat admin/public and Worker dependency versions separately, with `awcms-edge/package.json` documented as the Worker source of truth |
+| DOCSYNC-021 | Medium | Maintained package-doc coverage is incomplete for some active workspaces/packages | Resolved | Added maintained README surfaces for `awcms-edge/` and `packages/awcms-shared/` |
+| DOCSYNC-022 | Medium | CI coverage guarantees for maintained workspaces are not clearly documented and may not include every active package | Resolved | Added dedicated CI jobs for `awcms-edge` and `awcms-mcp`, and updated `docs/dev/ci-cd.md` to document the remaining uncovered surfaces explicitly |
+| DOCSYNC-023 | Medium | Current docs link automation cannot reliably prove local markdown targets exist because many filesystem links are reported as pending `[ / ]` | Resolved | Added `scripts/check_markdown_local_links.mjs`, wired it into `awcms/package.json` and `docs-link-check.yml`, and used it to correct newly detected broken local links |
+| DOCSYNC-024 | Medium | Dedicated CI coverage still does not include every maintained workspace/package | Open | `awcms-ext/` and `packages/awcms-shared/` still rely on local or indirect validation rather than standalone workflow jobs |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
 | Library ID | Query Focus | Takeaway |
 | --- | --- | --- |
-| `/supabase/cli` | migration workflow, pull/push, linked safety, repair docs | Keep local vs linked commands explicit; use `db pull`, `db push --dry-run`, and migration repair guidance carefully |
+| `/supabase/cli` | migration workflow, pull/push, linked safety, repair docs | Keep local vs linked commands explicit; prefer `db push --dry-run`, document `db pull`, and use migration repair only with evidence-backed recovery steps |
+| `/supabase/supabase-js` | client init, auth session handling, secure key usage | Preserve PKCE/session guidance, document `getSession()` / `onAuthStateChange()`, and keep `SUPABASE_SECRET_KEY` server-side only |
+| `/vitejs/vite` | `VITE_` exposure rules and `loadEnv` behavior | Preserve strict `VITE_` client exposure guidance, avoid broad `envPrefix`, and use `loadEnv` only inside config-time code |
 | `/withastro/docs` | static output, `getStaticPaths`, build-time data, env usage | Keep public docs static-first and use `getStaticPaths`/build-time props instead of runtime-only assumptions |
-| `/vitejs/vite` | `VITE_` exposure rules and `loadEnv` behavior | Preserve strict `VITE_` client exposure guidance and use `loadEnv` only at config time |
-| `/cloudflare/cloudflare-docs` | Workers deployment, secrets, bindings, runtime responsibilities | Keep secrets in Wrangler-managed bindings, document `env` access, and position Workers as the primary edge HTTP layer |
+| `/cloudflare/cloudflare-docs` | Workers deployment, secrets, bindings, runtime responsibilities | Keep secrets in Wrangler-managed bindings or secret stores, document `env` access, and position Workers as the primary edge HTTP layer |
+| `/remix-run/react-router` | route modules, data loaders/actions, nested routes | Prefer route-module/data-API guidance in docs where React Router 7 patterns are documented |
+| `/websites/tailwindcss` | v4 theme variables, CSS custom properties | Keep Tailwind docs CSS-variable-first and avoid reintroducing `theme()` or hardcoded design tokens as canonical guidance |
+| `/websites/react_dev` | React 19 purity/effects/state derivation | Keep examples aligned to pure components and avoid redundant effect-driven derived state in documentation examples |
 
 ## Execution Queue
 
-### Phase 0 / 1 Completed in This Refresh
+### Planning Refresh Completed in This Pass
 
-- Updated `README.md` status snapshot to the 2026-03-08 baseline.
-- Removed Stitch from the top-level repository status narrative and MCP summary in README.
-- Updated `SYSTEM_MODEL.md` last-updated baseline.
-- Updated `AGENTS.md` documentation standards to require plan/tracker refresh for repo-wide doc changes.
-- Updated `DOCS_INDEX.md` notes for the active audit plan/tracker surfaces.
+- Re-baselined markdown, docs, migration, workflow, and manifest counts.
+- Refreshed `README.md`, `docs/README.md`, and `docs/tenancy/supabase.md` where baseline values were already stale.
+- Refreshed the audit plan/tracker so current open drift is tracked before broader doc editing resumes.
 
-### Phase 2 Progress in This Pass
+### Phase 1 / 3 Progress in This Pass
 
-- Reconciled `docs/security/abac.md` and `docs/security/rls.md` audience/runtime wording to use edge-runtime terminology instead of edge-function-only wording.
-- Updated `docs/tenancy/overview.md` so the onboarding blueprint explicitly treats Supabase Edge Functions as a compatibility shape and Cloudflare Workers as the preferred production path.
-- Updated `docs/tenancy/supabase.md` to document that migration counts alone do not guarantee filename/content parity verification.
-- Reworked the RLS section in `docs/architecture/database.md` to match the current ABAC + tenant-scoped policy model instead of older generic examples.
-
-### Phase 3 / 4 Progress in This Pass
-
-- Updated `docs/dev/setup.md`, `docs/dev/troubleshooting.md`, `docs/deploy/overview.md`, and `docs/deploy/cloudflare.md` to reflect the current parity-helper behavior and public validation baseline.
-- Reviewed `awcms-public/primary/README.md` and `awcms-mcp/README.md` so package-level setup docs align with current scripts, links, and MCP topology guidance.
-- Corrected the static public data-fetching example in `docs/dev/public.md` so it now fails fast without `PUBLIC_TENANT_ID` and filters by `tenant_id`, `status`, and `deleted_at`.
-- Updated `docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md` to clarify supported build-time env fallbacks for canonical static deployments.
-- Updated `docs/modules/USER_MANAGEMENT.md` to frame `manage-users` as the current transitional server-side handler instead of timeless edge-function-only wording.
-- Revised `docs/guides/wp-data-migration-script.md`, `docs/guides/wp-to-awcms-migration.md`, and `docs/guides/opencode-models.md` to match the current Node baseline, tenant-scoped uniqueness rules, static public architecture wording, and OpenCode runtime branding.
-- Reviewed the remaining maintained package README surfaces in `awcms/`, `awcms-mobile/`, `awcms-esp32/`, and `awcms-ext/` so they now align with current env names, workspace roles, and security guidance.
-- Added `.markdownlintignore` for non-canonical content/template/wiki/debug markdown surfaces and fixed the remaining repo-wide markdownlint blockers in `awcms-mobile-java/docs/**`, `docs/architecture/platform-tenant-separation.md`, and `docs/product/PRD.md`.
-- Recovered linked Supabase parity validation by teaching `scripts/verify_supabase_migration_consistency.sh` to derive `SUPABASE_DB_PASSWORD` from existing DB URLs and teaching `scripts/verify_supabase_function_consistency.sh` to fall back to the local Supabase CLI profile when an env token returns `401`.
-- Stabilized the public workspace after `npm update` by pinning the Tailwind v4 toolchain to `4.1.18` and updating `awcms-public/primary/astro.config.ts` so `astro check`, ESLint, Prettier, and the production build all pass again.
+- Added `docs/architecture/ollama-integration.md` and `docs/modules/STITCH_IMPORT.md` so authority/navigation links resolve again.
+- Added maintained README coverage for `awcms-edge/` and `packages/awcms-shared/`.
+- Reconciled `docs/dev/ci-cd.md`, `docs/dev/setup.md`, and `README.md` with the current package manifests and GitHub workflow coverage boundaries.
+- Added dedicated GitHub Actions jobs for `awcms-edge` and `awcms-mcp`, and added a stricter local markdown target validator to docs workflows.
 
 ### Remaining Work by Phase
 
 #### Phase 2 - Schema, Security, and Tenancy
 
-- Re-verify `docs/architecture/database.md` against the current `118/118` migration baseline.
+- Re-verify `docs/architecture/database.md` against the current `127/127` migration baseline.
 - Re-check `docs/security/**` and `docs/tenancy/**` against current RLS, helper-function, and edge-runtime guidance.
 - Confirm package/env docs do not reintroduce secret-key or legacy key-name drift.
 
 #### Phase 3 - Scripts, Tooling, and Deployment
 
 - Reconcile docs with current package scripts in `awcms/`, `awcms-public/primary/`, and `awcms-mcp/`.
+- Reconcile `awcms-edge/package.json`, `mcp.json`, and workflow files with current authority-doc claims.
 - Reconcile remaining deployment/docs surfaces beyond `docs/deploy/overview.md`, `docs/deploy/cloudflare.md`, `docs/dev/setup.md`, and `docs/dev/troubleshooting.md`.
-- Review deploy docs for Cloudflare Workers, Supabase functions, and MCP topology consistency.
+- Review deploy docs for Cloudflare Workers, Supabase functions, MCP topology consistency, documented CI guarantees, and remaining uncovered workspaces.
 
 #### Phase 4 - Feature, Module, and Package Docs
 
 - Review `docs/modules/**` for backlog-vs-shipped clarity.
 - Review `docs/guides/**` and remaining package README command examples beyond `awcms-public/primary/README.md` and `awcms-mcp/README.md`.
+- Add or explicitly classify missing package README coverage for `awcms-edge/` and `packages/awcms-shared/`.
 - Re-check feature docs for dead links and route/path drift.
 
 #### Phase 5 - Conflict Resolution and Publication
@@ -126,35 +132,40 @@ dead links, and stale implementation guidance.
 | Conflict Class | Current State | Next Action |
 | --- | --- | --- |
 | Outdated dependencies | Planning coverage exists; execution pending | Run `npm outdated` in maintained workspaces and reconcile docs/version claims |
-| Broken or nonfunctional scripts | Partial reconciliation already completed in prior cycle | Revalidate documented commands against active scripts in Phase 3 |
+| Broken or nonfunctional scripts | Partial reconciliation already completed in prior cycle | Revalidate documented commands against active scripts and package manifests in Phase 3 |
 | Security risks | Key naming and edge-runtime wording improved in authority docs | Re-scan env examples, auth docs, and security docs repo-wide in Phase 2 |
 | Performance issues | Public/admin guidance partially aligned | Re-review public/admin performance docs against current architecture in Phase 4 |
-| Dead links / stale navigation | Top-level routing surfaces refreshed | Run link checks and package README routing pass in Phase 5 |
+| Dead links / stale navigation | Highest-risk missing canonical targets are resolved; broader rerun remains | Rerun link validation and fix any additional local-path findings in Phase 5 |
 | Stale backlog/checklists | Some checklist-style docs remain | Explicitly classify backlog/historical vs canonical docs during feature pass |
+| Missing package docs | Highest-risk coverage gaps resolved for edge/shared workspaces | Re-check remaining maintained README surfaces during Phase 4 |
+| CI/doc scope mismatch | Narrowed after edge/MCP CI additions; remaining standalone coverage gap is `awcms-ext/` and `packages/awcms-shared/` | Align workflow scope and documented policy in Phase 3 |
 
 ## Validation Gate Results (2026-03-08)
 
 | Gate | Result | Notes |
 | --- | --- | --- |
-| Markdown lint (`**/*.md`) | Passed | Repo-wide markdownlint now passes with `.markdownlintignore` excluding non-canonical content/template/wiki/debug markdown surfaces and the remaining lintable docs corrected |
-| Markdown lint (touched canonical docs) | Passed | Scoped lint succeeds for the authority, deploy, audit, and public-portal docs updated in this pass |
-| Markdown lint (Phase 4 docs and package READMEs) | Passed | Scoped lint succeeds for updated module docs, guides, and maintained workspace README surfaces |
-| Docs link validation (`cd awcms && npm run docs:check`) | Passed | Local file links resolve as expected; `markdown-link-check` shows filesystem links as pending `[ / ]` while still completing successfully |
-| Migration consistency (`scripts/verify_supabase_migration_consistency.sh`) | Passed | Root/mirror parity now matches at `118/118`; local migration history aligned after applying the two pending local migrations |
-| Migration consistency linked (`scripts/verify_supabase_migration_consistency.sh --linked`) | Passed | Linked check now derives `SUPABASE_DB_PASSWORD` from existing DB URLs when needed and validates all `118` remote migration rows |
+| Markdown lint (`**/*.md`) | Historical pass | Previous cycle succeeded; rerun required after current authority/navigation edits |
+| Markdown lint (touched canonical docs) | Pending rerun | Refresh after current planning and authority-doc edits |
+| Markdown lint (Phase 4 docs and package READMEs) | Historical pass | Treat previous results as baseline evidence, not closure for this refresh |
+| Docs local-target validation (`node scripts/check_markdown_local_links.mjs`) | Passed after fixes | The new validator caught and helped repair broken local links in `docs/architecture/platform-tenant-separation.md` and `docs/architecture/visual-builder-v2.md` |
+| Docs link validation (`cd awcms && npm run docs:check`) | Passed with stronger local validation | `docs:check` now runs the local validator first, then `markdown-link-check`; remote/local pending markers remain a tooling quirk, not a missing-target blocker |
+| Migration consistency (`scripts/verify_supabase_migration_consistency.sh`) | Historical pass | Previous cycle passed; current doc baseline now tracks `127/127` parity |
+| Migration consistency linked (`scripts/verify_supabase_migration_consistency.sh --linked`) | Historical pass | Previous linked parity remains evidence but should be rerun before cycle closure |
 | Function consistency (`scripts/verify_supabase_function_consistency.sh`) | Passed | Root/mirror function source parity now passes; local-only `supabase/functions/.env` is intentionally ignored |
 | Function consistency linked (`scripts/verify_supabase_function_consistency.sh --linked`) | Passed | Linked check retries with the local Supabase CLI profile after env-token `401`, then validates the deployed inventory against the 5 non-example local slugs |
 | Admin package sanity (`cd awcms && npm run lint && npm run test -- --run && npm run build`) | Passed | ESLint, Vitest (`77` tests), and production build all succeed |
 | Public package sanity (`cd awcms-public/primary && npm run check`) | Passed | `astro check`, ESLint, and Prettier all pass after the Tailwind/Astro compatibility fix |
 | Public build (`cd awcms-public/primary && npm run build`) | Passed | Astro static build succeeds again with the Cloudflare adapter after the Tailwind toolchain pin |
-| MCP package sanity (`cd awcms-mcp && npm run lint && npm run build`) | Passed | Lint and TypeScript build succeed |
-| Dependency review (`npm outdated`) | Findings logged | Admin, public, and MCP workspaces all have upgrade candidates |
+| MCP package sanity (`cd awcms-mcp && npm run lint && npm run build`) | Passed | Lint and TypeScript build succeed; this now mirrors the new dedicated CI job |
+| Edge worker sanity (`cd awcms-edge && npm run typecheck`) | Passed | TypeScript check succeeds and now mirrors the new dedicated CI job |
+| Dependency review (`npm outdated`) | Findings logged | Admin, public, and MCP workspaces all have upgrade candidates; edge/shared coverage still pending |
 
 ## Dependency Drift Snapshot (2026-03-08)
 
 - `awcms`: notable drift includes `@supabase/supabase-js`, Tailwind v4 packages, TipTap packages, `react-router-dom`, `recharts`, and `framer-motion`
 - `awcms-public/primary`: notable drift includes `astro-embed`, `lucide-react`, `sharp`, and Tailwind v4 `4.2.x`; the Tailwind toolchain is intentionally pinned at `4.1.18` until Astro's Vite typing surface no longer conflicts with the newer plugin release
 - `awcms-mcp`: notable drift includes `@modelcontextprotocol/sdk`, `@types/pg`, and ESLint
+- `awcms-edge`: docs/runtime alignment review is still required because `@supabase/supabase-js` remains behind the authority-doc baseline
 
 ## Historical Note
 
