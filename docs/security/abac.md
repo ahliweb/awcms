@@ -10,7 +10,7 @@ Define the permission model and enforcement patterns for AWCMS.
 ## Audience
 
 - Admin panel developers
-- Edge function authors
+- Edge-runtime authors
 
 ## Prerequisites
 

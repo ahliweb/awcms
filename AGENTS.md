@@ -855,6 +855,7 @@ When updating documentation:
 3. Keep version numbers accurate (check `package.json`)
 4. Use relative links between docs files
 5. Update `CHANGELOG.md` for significant changes
+6. For repository-wide doc changes, update `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`
 
 ---
 

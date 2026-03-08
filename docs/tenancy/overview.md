@@ -88,7 +88,7 @@ Provision a new tenant using a privileged, idempotent flow that seeds default ro
 
 #### Reference Blueprint (Example Edge Function)
 
-> This is a benchmark-ready implementation blueprint. If this endpoint is implemented, place it under `supabase/functions/` and wire it to platform admin routes.
+> This is a benchmark-ready compatibility blueprint using a Supabase Edge Function shape. For new production endpoints, prefer Cloudflare Workers in `awcms-edge/`; use `supabase/functions/` only when a legacy or transitional flow still requires it.
 
 ```ts
 // supabase/functions/platform-tenant-onboard/index.ts

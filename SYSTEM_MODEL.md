@@ -1,7 +1,7 @@
 # AWCMS System Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-02-27 (Audited against `package.json`, migration status, CI runtime, and MCP topology)
+> **Last Updated:** 2026-03-08 (Audited against `package.json`, migration status, scripts, MCP topology, and current documentation audit cycle)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 

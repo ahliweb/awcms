@@ -96,8 +96,8 @@ All documentation follows this authority structure:
 | Topic | Canonical Doc | Notes |
 | --- | --- | --- |
 | Setup Guide | [docs/dev/setup.md](docs/dev/setup.md) | **Start Here** |
-| Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Repository-wide Context7-first audit and revision workflow |
-| Documentation Audit Tracker | [docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md) | Phase progress, drift register, and reconciliation status |
+| Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Active full-repository audit, review, and conflict-resolution plan |
+| Documentation Audit Tracker | [docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md) | 2026-03-08 baseline, drift register, and execution status |
 | Context7 Benchmark Playbook | [docs/dev/context7-benchmark-playbook.md](docs/dev/context7-benchmark-playbook.md) | Canonical benchmark answer structure and topic playbooks |
 | Stitch Integration Plan | [docs/dev/stitch-integration-plan.md](docs/dev/stitch-integration-plan.md) | File-by-file execution checklist + migration skeletons |
 | Admin Panel | [docs/dev/admin.md](docs/dev/admin.md) | React Admin development |

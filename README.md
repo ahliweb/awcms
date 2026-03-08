@@ -2,12 +2,14 @@
 
 Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
-## Status Snapshot (2026-02-27)
+## Status Snapshot (2026-03-08)
 
 - Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
-- Stitch import flow is tenant-configurable (`settings.key = 'stitch_import'`) with sanitized HTML fallback support.
-- MCP topology includes Context7, Supabase, Stitch, Cloudflare managed servers, and GitHub MCP.
-- Supabase migration repair workflow is scripted via `scripts/repair_supabase_migration_history.sh`.
+- The 2026-03-08 documentation and repository-integrity audit cycle is active via `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
+- Public portal and edge-runtime docs are aligned to Astro static output plus Cloudflare Workers as the primary edge HTTP layer.
+- MCP topology from `mcp.json` currently includes `cloudflare`, `context7`, `github`, and `supabase`.
+- Supabase migration parity baseline is `117` root migrations and `117` mirrored admin/CI migrations.
+- Repair and verification workflows are scripted via `scripts/repair_supabase_migration_history.sh`, `scripts/verify_supabase_migration_consistency.sh`, and `scripts/verify_supabase_function_consistency.sh`.
 
 ## Documentation Authority
 
@@ -31,7 +33,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 | `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
 | `awcms-ext/` | External Extensions | JavaScript modules |
 | `awcms-edge/` | Worker API & Edge Logic | Cloudflare Workers, Hono |
-| `supabase/` | Migrations | Supabase CLI |
+| `supabase/` | Migrations and transitional Supabase functions | Supabase CLI |
 | `awcms-mcp/` | MCP Integration | Model Context Protocol tools |
 | `openclaw/` | AI Gateway | OpenClaw multi-tenant AI routing |
 
@@ -91,8 +93,10 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 This repository uses Context7 for AI-assisted development. Key library IDs:
 
 - `supabase/supabase-js` - Database operations
+- `supabase/cli` - Migration and deployment workflows
 - `vitejs/vite` - Build tooling  
 - `withastro/docs` - Public portal framework
+- `cloudflare/cloudflare-docs` - Worker and binding guidance
 - See [AGENTS.md](AGENTS.md) for complete list
 
 ## MCP Topology (OpenCode)
