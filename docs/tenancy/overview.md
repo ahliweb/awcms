@@ -74,13 +74,13 @@ Provision a new tenant using a privileged, idempotent flow that seeds default ro
 | `admin_email` | Onboarding payload | Yes | Initial tenant admin invite |
 | `p_tier` | Onboarding payload | Optional | `free`/`pro`/`enterprise` |
 | `p_parent_tenant_id` | Onboarding payload | Optional | Hierarchy parent |
-| `role_inheritance_mode` | Onboarding payload | Optional | `auto` or `manual` |
+| `role_inheritance_mode` | Onboarding payload | Optional | `auto` or `linked` |
 
 #### Workflow
 
 1. Authenticate caller and enforce `platform.tenant.create` before any writes.
 2. Normalize and uniqueness-check `slug`/`domain` for non-deleted tenants.
-3. Call `create_tenant_with_defaults()` using `SUPABASE_SECRET_KEY` (4-argument standard signature or 6-argument hierarchy-aware signature).
+3. Call `create_tenant_with_defaults()` using `SUPABASE_SECRET_KEY` and the current 6-argument hierarchy-aware signature.
 4. Invite the initial tenant admin via `auth.admin.inviteUserByEmail` with `tenant_id` metadata.
 5. Write an audit log entry with actor, tenant, and invite status.
 6. Verify isolation: cross-tenant read denies, default roles/pages exist, headers resolve tenant correctly.
@@ -263,7 +263,7 @@ $$;
 - **Operations**:
   - **Delete**: Implemented as `UPDATE table SET deleted_at = NOW() ...`.
   - **Read**: Queries must explicitly filter `.is('deleted_at', null)`.
-- **Foreign Keys**: Must use `ON DELETE RESTRICT` or `SET NULL`. `ON DELETE CASCADE` is forbidden for business data to preserve audit trails.
+- **Foreign Keys**: Prefer `ON DELETE RESTRICT` or `SET NULL` for business-owned records. `ON DELETE CASCADE` is acceptable for bridge/join rows or explicitly disposable associations where audit history is preserved elsewhere.
 
 ### Query Requirements
 

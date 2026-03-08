@@ -25,15 +25,19 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 
 | Function | Returns | Purpose |
 | --- | --- | --- |
-| `current_tenant_id()` | UUID | Tenant from JWT/app context (`app.current_tenant_id`) with user/profile fallbacks |
-| `auth_is_admin()` | boolean | **SECURITY DEFINER**: Checks platform admin/full-access flags. Bypasses RLS recursion. |
+| `current_tenant_id()` | UUID | Tenant from the authenticated `public.users` row, with `app.current_tenant_id` fallback for unauthenticated/request-scoped flows |
+| `auth_is_admin()` | boolean | **SECURITY DEFINER**: Checks tenant-admin, platform-admin, or full-access flags for recursion-safe administrative bypass |
 | `is_platform_admin()` | boolean | **Standard**: Checks platform admin/full-access flags. Subject to RLS recursion. |
 | `has_permission(key)` | boolean | Checks if current user has specific permission key |
 | `is_admin_or_above()` | boolean | Legacy helper still used in existing policies; prefer `has_permission` for new policy authoring. |
 | `is_tenant_descendant(ancestor, descendant)` | boolean | Checks tenant hierarchy membership (descendant path). |
 | `tenant_can_access_resource(row_tenant, resource_key, action)` | boolean | Enforces shared vs isolated resource access across tenant levels. |
 
-`current_tenant_id()` reads `app.current_tenant_id`, which is set from the `x-tenant-id` request header by database helpers.
+`current_tenant_id()` is currently defined with `SECURITY DEFINER` and `row_security = off`
+to avoid recursion against `public.users`.
+For authenticated requests it resolves the tenant from `public.users.tenant_id`.
+For public/request-scoped flows it falls back to `app.current_tenant_id`, which is populated
+from the `x-tenant-id` request header.
 
 ### Table Policy Sources
 
@@ -44,7 +48,7 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 
 ### Helper Function Source Snapshot
 
-- `public.current_tenant_id()` -> `supabase/migrations/20260119230212_remote_schema.sql`
+- `public.current_tenant_id()` -> `supabase/migrations/20260307070000_fix_users_rls_recursion.sql`
 - `public.auth_is_admin()` -> `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
 - `public.has_permission()` -> `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
 - Hierarchy access helpers (`tenant_can_access_resource`, `is_tenant_descendant`) -> `supabase/migrations/20260127160000_tenant_hierarchy_resource_sharing.sql`
@@ -149,6 +153,7 @@ FOR SELECT USING (
 - **Public access**: Public reads must be explicitly scoped to published content (for example `status = 'published'` and `deleted_at IS NULL`).
 - **Plugins**: Extension/Plugin routes must query tenant-scoped tables with `tenant_id = current_tenant_id()` and rely on ABAC permissions (no role-name checks).
 - **Public portal headers**: Ensure `x-tenant-id` is set by scoped Supabase clients (static builds) or middleware (SSR) so `current_tenant_id()` resolves correctly.
+- **Recursion safety**: If a helper must query `public.users` or `public.roles` inside a policy path, keep it `SECURITY DEFINER` and explicitly evaluate whether `row_security = off` is required to avoid self-referential policy loops.
 - **Migration files**: RLS policy SQL must be committed as timestamped migrations only.
 
 ## References

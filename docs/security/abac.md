@@ -219,34 +219,43 @@ order by name;
 
 AWCMS relies on a robust set of PostgreSQL helper functions to execute ABAC logic at the Row-Level Security (RLS) layer. Below are the canonical definitions:
 
-- `current_tenant_id()` source baseline: `supabase/migrations/20260119230212_remote_schema.sql`
+- `current_tenant_id()` source baseline: `supabase/migrations/20260307070000_fix_users_rls_recursion.sql`
 - `has_permission()` and `auth_is_admin()` source baseline: `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
 - Hierarchical sharing helper source baseline: `supabase/migrations/20260127160000_tenant_hierarchy_resource_sharing.sql`
 
 #### 1. `current_tenant_id()`
 
-Resolves the active tenant ID with three fallbacks: JWT (Auth), User Record, or App Config (used in server-side edge runtimes).
+Resolves the active tenant ID from the authenticated `public.users` row first, then falls back to `app.current_tenant_id` for public/request-scoped flows. The current implementation is `SECURITY DEFINER` with `row_security = off` so it can safely read `public.users` during RLS evaluation.
 
 ```sql
 CREATE OR REPLACE FUNCTION "public"."current_tenant_id"() RETURNS "uuid"
-    LANGUAGE "plpgsql" STABLE SECURITY DEFINER SET "search_path" TO 'public' AS $_$
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER SET "search_path" TO 'public' SET "row_security" TO 'off' AS $_$
 DECLARE
-  config_tenant text;
+  v_tenant_id uuid;
+  v_user_id uuid;
 BEGIN
-  -- 1. Try JWT (Auth)
-  IF (auth.jwt() -> 'app_metadata' ->> 'tenant_id') IS NOT NULL THEN
-    RETURN (auth.jwt() -> 'app_metadata' ->> 'tenant_id')::uuid;
+  v_user_id := auth.uid();
+
+  IF v_user_id IS NULL THEN
+    BEGIN
+      v_tenant_id := current_setting('app.current_tenant_id', true)::uuid;
+      IF v_tenant_id IS NOT NULL THEN
+        RETURN v_tenant_id;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+
+    RETURN NULL;
   END IF;
 
-  -- 2. Try User Record (Auth)
-  IF auth.uid() IS NOT NULL THEN
-     RETURN (SELECT tenant_id FROM public.users WHERE id = auth.uid());
-  END IF;
+  SELECT tenant_id INTO v_tenant_id
+  FROM public.users
+  WHERE id = v_user_id
+    AND deleted_at IS NULL;
 
-  -- 3. Try Config (server-side pre-request hook setup by edge runtimes)
-  config_tenant := current_setting('app.current_tenant_id', true);
-  IF config_tenant IS NOT NULL AND config_tenant ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    RETURN config_tenant::uuid;
+  IF v_tenant_id IS NOT NULL THEN
+    RETURN v_tenant_id;
   END IF;
 
   RETURN NULL;
@@ -256,7 +265,7 @@ $_$;
 
 #### 2. `has_permission(permission_name)`
 
-Dynamically checks if the current authenticated user holds a specific permission via their assigned role. Short-circuits for platform admins or full-access roles for maximum performance.
+Dynamically checks if the current authenticated user holds a specific permission via their assigned role. Short-circuits for tenant-admin, platform-admin, or full-access roles for maximum performance.
 
 ```sql
 CREATE OR REPLACE FUNCTION "public"."has_permission"("permission_name" "text") RETURNS boolean

@@ -3,6 +3,9 @@
     "version": "1.0.0",
     "description": "Shared utilities for AWCMS public portals",
     "type": "module",
+    "scripts": {
+        "typecheck": "tsc --noEmit"
+    },
     "main": "src/index.ts",
     "types": "src/index.ts",
     "exports": {

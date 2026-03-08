@@ -186,6 +186,60 @@ jobs:
         run: npm run build
 
   # ============================================
+  # Build - External Extension Package
+  # ============================================
+  build-ext-primary-analytics:
+    name: Build (Extension - Primary Analytics)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-ext/primary-analytics
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms-ext/primary-analytics/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run CI build
+        run: npm run build:ci
+
+  # ============================================
+  # Typecheck - Shared Package
+  # ============================================
+  typecheck-shared:
+    name: Typecheck (@awcms/shared)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./packages/awcms-shared
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './packages/awcms-shared/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+  # ============================================
   # Lint & Build - SMANDAPBUN Portal (Astro)
   # ============================================
   lint-build-smandapbun:

@@ -15,6 +15,7 @@
     },
     "scripts": {
         "build": "vite build",
+        "build:ci": "vite build --ssr src/index.js",
         "dev": "vite"
     }
 }

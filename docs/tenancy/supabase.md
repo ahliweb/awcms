@@ -65,7 +65,7 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 ### Public Portal Client
 
 - Static builds resolve tenant via `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
-- `awcms-public/primary/src/lib/supabase.ts` builds clients from `import.meta.env`; headers are set when scoped access is required.
+- `awcms-public/primary/src/lib/supabase.ts` and `awcms-public/smandapbun/src/lib/supabase.ts` both build on `@awcms/shared/supabase`; headers are set when scoped access is required.
 - Canonical static deployments do not depend on middleware-based analytics logging.
 
 ### Edge Logic
@@ -77,12 +77,11 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 
 ### Tenant Provisioning RPC Signatures
 
-`create_tenant_with_defaults` currently exists in both compatibility and hierarchy-aware signatures in migration history:
+`create_tenant_with_defaults` is currently authored as the hierarchy-aware 6-argument function:
 
-- 4-argument signature: `(p_name, p_slug, p_domain, p_tier)`
 - 6-argument signature: `(p_name, p_slug, p_domain, p_tier, p_parent_tenant_id, p_role_inheritance_mode)`
 
-Seed migrations for hierarchy-enabled tenants currently use the 6-argument signature.
+The older 4-argument compatibility overload appears in migration history but was dropped by `supabase/migrations/20260303110000_fix_advisor_security_performance.sql`. Current seed migrations and onboarding flows should call the 6-argument signature only.
 
 ## Implementation Patterns
 
@@ -172,6 +171,7 @@ npx supabase db push --local
 
 ```bash
 npx supabase migration list --linked
+npx supabase db push --linked --dry-run
 npx supabase db push --linked
 ```
 

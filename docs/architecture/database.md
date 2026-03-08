@@ -25,7 +25,7 @@ AWCMS uses PostgreSQL via Supabase. This document describes the core database sc
 > **Schema Accuracy Note:** SQL blocks in this document are representative snapshots for developer orientation.
 > Canonical executable schema truth is the migration history in `supabase/migrations/` (mirrored in `awcms/supabase/migrations/`).
 > Before relying on a specific column, constraint, or policy shape, verify against the latest migration files.
-> **2026-03-08 Baseline:** Migration inventory currently shows `118` root migrations and `118` mirrored migrations. Always run `scripts/verify_supabase_migration_consistency.sh` because matching counts alone do not guarantee filename/content parity.
+> **2026-03-08 Baseline:** Migration inventory currently shows `127` root migrations and `127` mirrored migrations. Always run `scripts/verify_supabase_migration_consistency.sh` because matching counts alone do not guarantee filename/content parity.
 
 ---
 
@@ -61,9 +61,10 @@ CREATE TABLE tenants (
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE, -- subdomain
   domain TEXT UNIQUE, -- custom domain
+  deleted_at TIMESTAMPTZ,
   host TEXT UNIQUE, -- resolved host header (e.g. "tenant.awcms.com")
   parent_tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
-  level INTEGER DEFAULT 1,
+  level INTEGER DEFAULT 1, -- constrained to 1..5
   hierarchy_path UUID[],
   role_inheritance_mode TEXT DEFAULT 'auto', -- auto | linked
   subscription_tier TEXT DEFAULT 'free', -- free, pro, enterprise
@@ -397,6 +398,7 @@ CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
+  created_by UUID REFERENCES users(id),
   tenant_id UUID REFERENCES tenants(id),
   scope TEXT DEFAULT 'tenant',
   is_system BOOLEAN DEFAULT FALSE,
@@ -410,7 +412,8 @@ CREATE TABLE roles (
   is_default_public_registration BOOLEAN DEFAULT FALSE,
   is_default_invite BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 
 -- Uniqueness: (tenant_id, name) for tenant roles + global unique name when tenant_id IS NULL.
@@ -447,10 +450,16 @@ INSERT INTO permissions (name, description, resource, action) VALUES
 
 ```sql
 CREATE TABLE role_permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
   permission_id UUID REFERENCES permissions(id) ON DELETE CASCADE,
-  PRIMARY KEY (role_id, permission_id)
+  tenant_id UUID REFERENCES tenants(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES users(id),
+  deleted_at TIMESTAMPTZ
 );
+
+-- Current helper functions filter soft-deleted mappings with rp.deleted_at IS NULL.
 ```
 
 ---
@@ -498,9 +507,10 @@ CREATE TABLE blogs (
   sync_source_id UUID
 );
 
-CREATE UNIQUE INDEX articles_slug_key ON blogs(slug); -- Legacy index name
-CREATE INDEX idx_articles_tenant_slug ON blogs(tenant_id, slug); -- Optimized lookup (legacy name)
-CREATE INDEX idx_articles_tenant_status ON blogs(tenant_id, status); -- Filter optimization (legacy name)
+CREATE UNIQUE INDEX blogs_tenant_slug_key
+  ON blogs(tenant_id, slug)
+  WHERE deleted_at IS NULL;
+CREATE INDEX idx_articles_tenant_status ON blogs(tenant_id, status); -- Legacy index name retained in migration history
 ```
 
 ### pages
@@ -510,7 +520,7 @@ CREATE TABLE pages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
+  slug TEXT NOT NULL,
   content TEXT,
   template TEXT DEFAULT 'default',
   parent_id UUID REFERENCES pages(id),
@@ -532,7 +542,9 @@ CREATE TABLE pages (
   deleted_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_pages_tenant_slug ON pages(tenant_id, slug);
+CREATE UNIQUE INDEX pages_tenant_slug_key
+  ON pages(tenant_id, slug)
+  WHERE deleted_at IS NULL;
 CREATE INDEX idx_pages_category_id ON pages(category_id);
 ```
 
@@ -679,7 +691,9 @@ CREATE TABLE blog_tags (
 CREATE TABLE menus (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
   label TEXT NOT NULL,
+  slug TEXT,
   url TEXT NOT NULL,
   icon TEXT,
   location TEXT DEFAULT 'header', -- 'header', 'footer', 'sidebar'
@@ -688,7 +702,11 @@ CREATE TABLE menus (
   is_active BOOLEAN DEFAULT TRUE,
   is_public BOOLEAN DEFAULT FALSE,
   group_label TEXT,
+  role_id UUID REFERENCES roles(id),
+  page_id UUID REFERENCES pages(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES users(id),
   deleted_at TIMESTAMPTZ
 );
 ```
@@ -757,7 +775,7 @@ WITH CHECK (tenant_id = public.current_tenant_id());
 
 Helper function source baselines:
 
-- `public.current_tenant_id()` -> `supabase/migrations/20260119230212_remote_schema.sql`
+- `public.current_tenant_id()` -> `supabase/migrations/20260307070000_fix_users_rls_recursion.sql`
 - `public.has_permission()` -> `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
 - `public.auth_is_admin()` -> `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
 

@@ -23,6 +23,8 @@ jobs:
       smandapbun: ${{ steps.filter.outputs.smandapbun }}
       edge: ${{ steps.filter.outputs.edge }}
       mcp: ${{ steps.filter.outputs.mcp }}
+      ext: ${{ steps.filter.outputs.ext }}
+      shared: ${{ steps.filter.outputs.shared }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -41,6 +43,10 @@ jobs:
               - 'awcms-edge/**'
             mcp:
               - 'awcms-mcp/**'
+            ext:
+              - 'awcms-ext/**'
+            shared:
+              - 'packages/awcms-shared/**'
 
   # ============================================
   # Lint & Test - Admin Panel
@@ -218,6 +224,64 @@ jobs:
 
       - name: Run build
         run: npm run build
+
+  # ============================================
+  # Build - External Extension Package
+  # ============================================
+  build-ext-primary-analytics:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.ext == 'true' }}
+    name: Build (Extension - Primary Analytics)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-ext/primary-analytics
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms-ext/primary-analytics/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run CI build
+        run: npm run build:ci
+
+  # ============================================
+  # Typecheck - Shared Package
+  # ============================================
+  typecheck-shared:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.shared == 'true' }}
+    name: Typecheck (@awcms/shared)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./packages/awcms-shared
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './packages/awcms-shared/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run typecheck
+        run: npm run typecheck
 
   # ============================================
   # Deploy to Cloudflare Pages (Production)

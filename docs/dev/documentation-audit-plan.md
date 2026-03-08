@@ -30,7 +30,7 @@ This cycle explicitly includes conflict detection and resolution planning for:
 | --- | --- | --- |
 | Phase 0 - Re-Baseline and Inventory Refresh | Completed | Repository inventory refreshed to current markdown, migration, workflow, and package-manifest counts |
 | Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | `README.md`, `docs/README.md`, `SYSTEM_MODEL.md`, `AGENTS.md`, and `DOCS_INDEX.md` must be aligned first |
-| Phase 2 - Schema, Security, and Tenancy Reconciliation | Pending | Re-validate against `127/127` migrations, current RLS helpers, and Cloudflare-first edge runtime wording |
+| Phase 2 - Schema, Security, and Tenancy Reconciliation | In Progress | Core schema/security/tenancy docs are being reconciled against the `127/127` migration baseline, current helper functions, and Cloudflare-first edge runtime wording |
 | Phase 3 - Scripts, Tooling, Deployment, and Workflow Reconciliation | Pending | Reconcile package scripts, parity helpers, MCP topology, and CI coverage against live manifests/workflows |
 | Phase 4 - Feature, Module, Client, and Package README Pass | Pending | Review all maintained docs under `docs/**` plus workspace/package README surfaces |
 | Phase 5 - Conflict Resolution, Validation, and Publication | Pending | Close drift items, rerun validation gates, and publish updated baseline |
@@ -89,8 +89,8 @@ These issues should be addressed before broader doc polishing because they break
 | ID | Severity | Blocker | Evidence | Planned Resolution |
 | --- | --- | --- | --- | --- |
 | PLAN-002 | High | Validation baselines keep drifting as the audit itself adds new maintained docs | README/package-doc additions changed the inventory again during this cycle | Recount repository surfaces after each audit batch and treat the tracker as the live baseline |
-| PLAN-003 | Medium | Documentation workflow scope mismatch | `docs-link-check.yml` checks all markdown while audit docs distinguish maintained vs non-canonical surfaces | Decide one policy and align CI plus audit docs in Phase 3 |
-| PLAN-006 | Medium | CI/workflow coverage still does not cover every maintained workspace/package | `awcms-ext/` and `packages/awcms-shared/` still rely on local or indirect validation after the edge/MCP CI additions | Reconcile docs with actual CI guarantees and create follow-up backlog where needed |
+| PLAN-003 | Resolved | Documentation workflow scope mismatch | `docs-link-check.yml` now delegates to `cd awcms && npm run docs:check`, matching the maintained-doc policy already used by the local validator and audit docs | Keep `awcms/package.json` and workflow scope aligned when maintained-doc surfaces change |
+| PLAN-006 | Resolved | CI/workflow coverage still does not cover every maintained workspace/package | Dedicated jobs now exist for `awcms-ext/primary-analytics/` and `packages/awcms-shared/`, closing the previous standalone coverage gap | Extend the extension job set or move to a matrix if more maintained extension packages are added |
 
 ## Context7 Protocol (Mandatory)
 

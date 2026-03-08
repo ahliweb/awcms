@@ -18,6 +18,13 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Tooling: Added `scripts/check_markdown_local_links.mjs`, wired it into `awcms` `docs:check` and
   the docs-link-check workflow, and added dedicated GitHub Actions jobs for `awcms-edge` and
   `awcms-mcp` validation.
+- CI: Added dedicated validation jobs for `awcms-ext/primary-analytics` and `packages/awcms-shared`,
+  aligned the docs-link workflow with the maintained-doc policy, and added package-level validation
+  scripts/types needed for those new CI surfaces.
+- Documentation: Reconciled schema, security, and tenancy docs with the current migration/helper
+  baseline by updating the database schema snapshot, documenting the recursion-safe
+  `current_tenant_id()` behavior, and standardizing tenant provisioning guidance on the canonical
+  6-argument `create_tenant_with_defaults(...)` signature.
 
 ### Fixed
 

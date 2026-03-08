@@ -4,7 +4,7 @@
 >
 > **Related Plan:** `docs/dev/documentation-audit-plan.md`
 >
-> **Status:** 2026-03-08 full-scope documentation, repository-integrity, and conflict-resolution cycle remains active; this refresh re-baselined counts, identified broken canonical links, and reopened the execution queue for remaining drift.
+> **Status:** 2026-03-08 full-scope documentation, repository-integrity, and conflict-resolution cycle remains active; the current pass has now closed the CI coverage gap and reconciled the first schema/security/tenancy doc set against the latest migration/helper baselines.
 
 ## 2026-03-08 Cycle Trigger
 
@@ -22,7 +22,7 @@ had drifted again after subsequent schema, media, and workflow changes.
 | --- | --- | --- |
 | Phase 0 - Re-Baseline and Inventory Refresh | Completed | Counts updated to `115` markdown, `71` docs, `127/127` migrations, `10` package manifests, `14` maintained package README surfaces |
 | Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | `README.md`, `docs/README.md`, audit plan/tracker baseline refreshed; AGENTS/SYSTEM_MODEL/DOCS_INDEX link reconciliation still pending |
-| Phase 2 - Schema, Security, and Tenancy Reconciliation | Pending | Re-check schema/security docs against current `127/127` migration baseline and Cloudflare-first edge guidance |
+| Phase 2 - Schema, Security, and Tenancy Reconciliation | In Progress | `docs/architecture/database.md`, `docs/security/abac.md`, `docs/security/rls.md`, `docs/tenancy/overview.md`, and `docs/tenancy/supabase.md` reconciled; broader phase review remains open |
 | Phase 3 - Scripts, Tooling, and Deployment Reconciliation | Pending | Reconcile documented scripts, MCP topology, docs-link workflow scope, and CI guarantees against live manifests/workflows |
 | Phase 4 - Feature, Module, and Package Documentation Pass | Pending | Review all maintained module/dev/guides surfaces plus workspace/package READMEs |
 | Phase 5 - Conflict Resolution and Publication | Pending | Close drift items, rerun validation gates, and publish updated docs baseline |
@@ -64,12 +64,13 @@ had drifted again after subsequent schema, media, and workflow changes.
 | DOCSYNC-016 | High | Current plan/tracker baselines were stale (`113` markdown / `71` docs / `118` migrations) after subsequent repository changes | Resolved | `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md` are now re-baselined to the current `115` markdown / `71` docs / `127/127` migrations inventory |
 | DOCSYNC-017 | Medium | Maintained docs carried stale baseline details (`README.md` migration parity, `docs/README.md` update marker, `docs/tenancy/supabase.md` migration count) | Resolved | Updated those docs to the current 2026-03-08 planning baseline |
 | DOCSYNC-018 | High | Canonical navigation still points to missing docs (`docs/architecture/ollama-integration.md`, `docs/modules/STITCH_IMPORT.md`) | Resolved | Added both docs and updated `DOCS_INDEX.md` notes to reflect their current scope |
-| DOCSYNC-019 | Medium | Documentation automation scope is inconsistent: audit docs distinguish maintained vs non-canonical docs, but `docs-link-check.yml` still scans all markdown | Open | `.github/workflows/docs-link-check.yml`, `.markdownlintignore`, and audit docs need one shared policy |
+| DOCSYNC-019 | Medium | Documentation automation scope is inconsistent: audit docs distinguish maintained vs non-canonical docs, but `docs-link-check.yml` still scans all markdown | Resolved | `docs-link-check.yml` now delegates to `cd awcms && npm run docs:check`, so workflow scope matches the maintained-doc policy already encoded in the local validator and package script |
 | DOCSYNC-020 | Medium | Runtime dependency guidance drifts from implementation: `awcms-edge` still uses `@supabase/supabase-js` `^2.45.0` while authority docs describe `2.93.3` baseline | Resolved | Scoped docs now treat admin/public and Worker dependency versions separately, with `awcms-edge/package.json` documented as the Worker source of truth |
 | DOCSYNC-021 | Medium | Maintained package-doc coverage is incomplete for some active workspaces/packages | Resolved | Added maintained README surfaces for `awcms-edge/` and `packages/awcms-shared/` |
 | DOCSYNC-022 | Medium | CI coverage guarantees for maintained workspaces are not clearly documented and may not include every active package | Resolved | Added dedicated CI jobs for `awcms-edge` and `awcms-mcp`, and updated `docs/dev/ci-cd.md` to document the remaining uncovered surfaces explicitly |
 | DOCSYNC-023 | Medium | Current docs link automation cannot reliably prove local markdown targets exist because many filesystem links are reported as pending `[ / ]` | Resolved | Added `scripts/check_markdown_local_links.mjs`, wired it into `awcms/package.json` and `docs-link-check.yml`, and used it to correct newly detected broken local links |
-| DOCSYNC-024 | Medium | Dedicated CI coverage still does not include every maintained workspace/package | Open | `awcms-ext/` and `packages/awcms-shared/` still rely on local or indirect validation rather than standalone workflow jobs |
+| DOCSYNC-024 | Medium | Dedicated CI coverage still does not include every maintained workspace/package | Resolved | Added dedicated jobs for `awcms-ext/primary-analytics/` and `packages/awcms-shared/`, plus package-level validation scripts/lockfiles so both surfaces can run standalone in CI |
+| DOCSYNC-025 | Medium | Schema/security/tenancy docs still described stale migration counts, helper-function baselines, and tenant provisioning signatures | Resolved | Updated `docs/architecture/database.md`, `docs/security/abac.md`, `docs/security/rls.md`, `docs/tenancy/overview.md`, and `docs/tenancy/supabase.md` to reflect the current `127/127` migration baseline, recursion-safe `current_tenant_id()`, and the canonical 6-argument tenant provisioning RPC |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -98,27 +99,34 @@ had drifted again after subsequent schema, media, and workflow changes.
 - Added maintained README coverage for `awcms-edge/` and `packages/awcms-shared/`.
 - Reconciled `docs/dev/ci-cd.md`, `docs/dev/setup.md`, and `README.md` with the current package manifests and GitHub workflow coverage boundaries.
 - Added dedicated GitHub Actions jobs for `awcms-edge` and `awcms-mcp`, and added a stricter local markdown target validator to docs workflows.
+- Closed the remaining docs-workflow scope gap by routing `docs-link-check.yml` through `cd awcms && npm run docs:check`.
+- Added standalone CI coverage for `awcms-ext/primary-analytics/` and `packages/awcms-shared/`, including the shared-package type declarations needed for direct TypeScript validation.
+
+### Phase 2 Progress in This Pass
+
+- Rebased `docs/architecture/database.md` to the current `127/127` migration baseline and corrected the most drift-prone schema snapshots (`tenants`, `roles`, `role_permissions`, tenant-scoped slug indexes, and helper-function baselines).
+- Updated `docs/security/abac.md` and `docs/security/rls.md` to reflect the current recursion-safe `current_tenant_id()` implementation and the tenant-admin/platform-admin/full-access semantics of `auth_is_admin()`.
+- Updated `docs/tenancy/overview.md` and `docs/tenancy/supabase.md` to reflect the canonical 6-argument `create_tenant_with_defaults(...)` signature, current public shared-client usage, and the linked-workflow `db push --dry-run` recommendation.
 
 ### Remaining Work by Phase
 
 #### Phase 2 - Schema, Security, and Tenancy
 
-- Re-verify `docs/architecture/database.md` against the current `127/127` migration baseline.
-- Re-check `docs/security/**` and `docs/tenancy/**` against current RLS, helper-function, and edge-runtime guidance.
+- Re-check the remaining schema/security/tenancy surfaces beyond the files already reconciled in this pass.
 - Confirm package/env docs do not reintroduce secret-key or legacy key-name drift.
 
 #### Phase 3 - Scripts, Tooling, and Deployment
 
-- Reconcile docs with current package scripts in `awcms/`, `awcms-public/primary/`, and `awcms-mcp/`.
+- Reconcile docs with current package scripts in `awcms/`, `awcms-public/primary/`, `awcms-mcp/`, `awcms-ext/primary-analytics/`, and `packages/awcms-shared/`.
 - Reconcile `awcms-edge/package.json`, `mcp.json`, and workflow files with current authority-doc claims.
 - Reconcile remaining deployment/docs surfaces beyond `docs/deploy/overview.md`, `docs/deploy/cloudflare.md`, `docs/dev/setup.md`, and `docs/dev/troubleshooting.md`.
-- Review deploy docs for Cloudflare Workers, Supabase functions, MCP topology consistency, documented CI guarantees, and remaining uncovered workspaces.
+- Review deploy docs for Cloudflare Workers, Supabase functions, MCP topology consistency, documented CI guarantees, and any newly added extension-package coverage.
 
 #### Phase 4 - Feature, Module, and Package Docs
 
 - Review `docs/modules/**` for backlog-vs-shipped clarity.
 - Review `docs/guides/**` and remaining package README command examples beyond `awcms-public/primary/README.md` and `awcms-mcp/README.md`.
-- Add or explicitly classify missing package README coverage for `awcms-edge/` and `packages/awcms-shared/`.
+- Add or explicitly classify missing package README coverage for any newly introduced maintained workspace/package.
 - Re-check feature docs for dead links and route/path drift.
 
 #### Phase 5 - Conflict Resolution and Publication
@@ -138,7 +146,7 @@ had drifted again after subsequent schema, media, and workflow changes.
 | Dead links / stale navigation | Highest-risk missing canonical targets are resolved; broader rerun remains | Rerun link validation and fix any additional local-path findings in Phase 5 |
 | Stale backlog/checklists | Some checklist-style docs remain | Explicitly classify backlog/historical vs canonical docs during feature pass |
 | Missing package docs | Highest-risk coverage gaps resolved for edge/shared workspaces | Re-check remaining maintained README surfaces during Phase 4 |
-| CI/doc scope mismatch | Narrowed after edge/MCP CI additions; remaining standalone coverage gap is `awcms-ext/` and `packages/awcms-shared/` | Align workflow scope and documented policy in Phase 3 |
+| CI/doc scope mismatch | Resolved for currently maintained surfaces | Keep package scripts, docs policy, and workflow targets aligned when new maintained workspaces are introduced |
 
 ## Validation Gate Results (2026-03-08)
 
@@ -158,7 +166,9 @@ had drifted again after subsequent schema, media, and workflow changes.
 | Public build (`cd awcms-public/primary && npm run build`) | Passed | Astro static build succeeds again with the Cloudflare adapter after the Tailwind toolchain pin |
 | MCP package sanity (`cd awcms-mcp && npm run lint && npm run build`) | Passed | Lint and TypeScript build succeed; this now mirrors the new dedicated CI job |
 | Edge worker sanity (`cd awcms-edge && npm run typecheck`) | Passed | TypeScript check succeeds and now mirrors the new dedicated CI job |
-| Dependency review (`npm outdated`) | Findings logged | Admin, public, and MCP workspaces all have upgrade candidates; edge/shared coverage still pending |
+| Extension package sanity (`cd awcms-ext/primary-analytics && npm run build:ci`) | Passed | SSR smoke build succeeds and now mirrors the new dedicated CI job |
+| Shared package sanity (`cd packages/awcms-shared && npm run typecheck`) | Passed | Added local `ImportMeta` typings and a dedicated typecheck script so the package can validate standalone |
+| Dependency review (`npm outdated`) | Findings logged | Admin, public, and MCP workspaces all have upgrade candidates; edge/shared version review remains a follow-up task |
 
 ## Dependency Drift Snapshot (2026-03-08)
 
