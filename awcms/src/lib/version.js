@@ -1,23 +1,24 @@
 // AWCMS Version Configuration
-// This file is the single source of truth for application version
+// Package manifests are the canonical release source.
+// This file mirrors the current admin UI display version.
 
 export const VERSION = {
     // Semantic Version (Major.Minor.Patch)
-    major: 2,
-    minor: 32,
-    patch: 1,
+    major: 3,
+    minor: 1,
+    patch: 0,
 
     // Pre-release identifier (alpha, beta, rc.1, etc.) - empty for stable
     prerelease: '',
 
     // Build metadata
-    build: 231,
+    build: 232,
 
     // Release date
-    date: '2026-02-27',
+    date: '2026-03-09',
 
     // Codename (optional)
-    codename: 'Codex',
+    codename: '',
 };
 
 // Computed version strings

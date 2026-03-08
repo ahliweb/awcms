@@ -184,11 +184,11 @@ Because each client app has its own `package.json` with an independent `version`
 ```bash
 # Bump only the Admin Panel (e.g., after a UI-only change)
 npm version minor --prefix awcms
-# → awcms/package.json: "version": "3.0.0"
+# → awcms/package.json: "version": "3.1.0"
 
 # Bump only the Public Portal
 npm version patch --prefix awcms-public/primary
-# → awcms-public/primary/package.json: "version": "2.28.1"
+# → awcms-public/primary/package.json: "version": "3.1.1"
 ```
 
 ### Keeping the Monorepo in Sync
@@ -199,10 +199,10 @@ The **root** `CHANGELOG.md` is the single source of truth for the overall projec
 ## [Unreleased]
 
 ### Changed
-- **AWCMS 3.0.0 "Convergence"**: Landed the Supabase and Cloudflare validation/parity refresh, public-portal query hardening, and repository-wide release cleanup.
+- **AWCMS 3.1.0**: Landed the documentation/CI hardening sweep, release-baseline cleanup, and Batch A dependency maintenance updates.
 
-## [3.0.0] "Convergence" - 2026-03-08
-Applies to: `awcms@3.0.0`, `awcms-public-root@3.0.0`, `@onwidget/astrowind@3.0.0`, `smanda-pangkalan-bun@3.0.0`, `awcms-mcp@3.0.0`
+## [3.1.0] - 2026-03-09
+Applies to: `awcms@3.1.0`, `awcms-public-root@3.1.0`, `@onwidget/astrowind@3.1.0`, `smanda-pangkalan-bun@3.1.0`, `awcms-mcp@3.1.0`
 ```
 
 ---
@@ -339,7 +339,7 @@ Production incidents require immediate, client-specific rollback strategies:
 - [ ] Bump version in relevant `package.json` / `pubspec.yaml`
 - [ ] Update `CHANGELOG.md` with release notes
 - [ ] Merge `develop` → `main` via PR
-- [ ] Tag release: `git tag v3.0.0 && git push --tags`
+- [ ] Tag release: `git tag v3.1.0 && git push --tags`
 - [ ] GitHub Actions deploys web portals automatically
 - [ ] Monitor error logs during deployment sequence
 ```
