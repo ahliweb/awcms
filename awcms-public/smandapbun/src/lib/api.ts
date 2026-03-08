@@ -1,3 +1,4 @@
+import { type SupabaseClient } from '@supabase/supabase-js';
 import { supabase, createScopedClient } from './supabase';
 import contactDefault from '../data/pages/contact.json';
 import profileDefault from '../data/pages/profile.json';
@@ -13,13 +14,13 @@ import blogsDefault from '../data/blogs/blogs.json';
 
 const TENANT_SLUG = 'smandapbun';
 
-const getTenantClient = (tenantId?: string | null) => {
-    if (!tenantId) return supabase;
+const getTenantClient = (tenantId?: string | null): SupabaseClient => {
+    if (!tenantId) return supabase as SupabaseClient;
     const scopedClient = createScopedClient(
         { 'x-tenant-id': tenantId },
         import.meta.env,
     );
-    return scopedClient || supabase;
+    return (scopedClient || supabase) as SupabaseClient;
 };
 
 export interface LocalizedString {
@@ -293,6 +294,10 @@ export interface SiteData {
 
 export async function getTenantId(overrideTenantId?: string | null) {
     if (overrideTenantId) return overrideTenantId;
+
+    if (!supabase) {
+        return null;
+    }
 
     const { data, error } = await supabase.rpc('get_tenant_by_slug', {
         lookup_slug: TENANT_SLUG

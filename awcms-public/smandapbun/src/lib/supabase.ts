@@ -1,17 +1,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createClientFromEnv as createSharedClientFromEnv } from '@awcms/shared/supabase';
 
-const supabaseUrl =
-    import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-const supabasePublishableKey =
-    import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-if (!supabaseUrl || !supabasePublishableKey) {
-    console.error('Missing Supabase URL or Publishable Key. Please check your .env file.');
-}
-
-export const supabase = createClient(supabaseUrl, supabasePublishableKey);
+// Avoid module-level crashes during static builds when PUBLIC_* env values
+// are intentionally absent or injected only at runtime/CI.
+export const supabase = createSharedClientFromEnv(createClient);
 
 export const createClientFromEnv = (
     env: Record<string, string> = {},
@@ -26,7 +18,7 @@ export const createScopedClient = (
 ) => createClientFromEnv(env as Record<string, string>, headers);
 
 export const getTenant = async (
-    client: SupabaseClient,
+    client: SupabaseClient | null,
     tenantIdOrSlug: string,
     type: 'id' | 'slug' = 'id',
 ) => {
