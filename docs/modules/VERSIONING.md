@@ -20,9 +20,9 @@ Define how AWCMS versions are managed across code and documentation.
 ## Core Concepts
 
 - AWCMS follows Semantic Versioning.
-- `awcms/src/lib/version.js` is used for UI/version display.
-- `awcms/package.json` provides the build/version metadata for the Admin package.
-- Release process should update both files to keep them aligned.
+- Package manifests are the canonical release/version source for each maintained workspace.
+- `awcms/src/lib/version.js` is a UI/version-display helper for the admin panel.
+- If `version.js` is still used in a release path, update it intentionally after bumping the relevant package manifest.
 - Documentation-only releases should use a patch bump.
 - `awcms-public/primary/package.json` tracks the public portal template version and may differ from the admin version.
 - If `version.js` drifts from `package.json`, the UI will display a stale version.
@@ -39,8 +39,10 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 
 | File | Purpose |
 | --- | --- |
-| `awcms/src/lib/version.js` | Canonical version object |
-| `awcms/package.json` | npm version (keep aligned with `version.js`) |
+| `awcms/package.json` | Canonical Admin package version |
+| `awcms-public/*/package.json` | Canonical public-portal package versions |
+| `awcms-mcp/package.json` / other workspace manifests | Canonical package versions for those workspaces |
+| `awcms/src/lib/version.js` | Admin UI display helper (keep aligned when used) |
 | `CHANGELOG.md` | Release history |
 
 ## Implementation Patterns

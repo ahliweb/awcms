@@ -31,8 +31,8 @@ This cycle explicitly includes conflict detection and resolution planning for:
 | Phase 0 - Re-Baseline and Inventory Refresh | Completed | Repository inventory refreshed to current markdown, migration, workflow, and package-manifest counts |
 | Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | `README.md`, `docs/README.md`, `SYSTEM_MODEL.md`, `AGENTS.md`, and `DOCS_INDEX.md` must be aligned first |
 | Phase 2 - Schema, Security, and Tenancy Reconciliation | In Progress | Core schema/security/tenancy docs are being reconciled against the `127/127` migration baseline, current helper functions, and Cloudflare-first edge runtime wording |
-| Phase 3 - Scripts, Tooling, Deployment, and Workflow Reconciliation | Pending | Reconcile package scripts, parity helpers, MCP topology, and CI coverage against live manifests/workflows |
-| Phase 4 - Feature, Module, Client, and Package README Pass | Pending | Review all maintained docs under `docs/**` plus workspace/package README surfaces |
+| Phase 3 - Scripts, Tooling, Deployment, and Workflow Reconciliation | In Progress | Core CI/docs validation, workspace coverage, and deploy docs are reconciled; broader deploy/runtime review remains open |
+| Phase 4 - Feature, Module, Client, and Package README Pass | In Progress | High-confidence module drift has been corrected and guides have been spot-checked; broader feature-doc review remains open |
 | Phase 5 - Conflict Resolution, Validation, and Publication | Pending | Close drift items, rerun validation gates, and publish updated baseline |
 
 See `docs/dev/documentation-audit-tracker.md` for the live drift register and evidence log.

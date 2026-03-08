@@ -25,6 +25,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
   baseline by updating the database schema snapshot, documenting the recursion-safe
   `current_tenant_id()` behavior, and standardizing tenant provisioning guidance on the canonical
   6-argument `create_tenant_with_defaults(...)` signature.
+- Documentation: Updated deploy/module docs to reflect `awcms-edge/` as the primary edge deploy
+  surface, the current GitHub Actions secret mapping split between push and PR workflows, direct
+  public blog queries against `blogs`, package-manifest version authority, and the current editor
+  soft-delete baseline.
 
 ### Fixed
 

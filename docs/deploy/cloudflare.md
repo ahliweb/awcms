@@ -84,7 +84,8 @@ Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env value
 
 ### GitHub Actions Secret Mapping
 
-- `ci-push.yml` and `ci-pr.yml` currently map repository `VITE_SUPABASE_*` values into `PUBLIC_SUPABASE_*` env names for the public build job.
+- `ci-push.yml` maps repository `VITE_SUPABASE_*` secrets into `PUBLIC_SUPABASE_*` env names for the public build job.
+- `ci-pr.yml` uses mock `PUBLIC_SUPABASE_*` values so fork-safe validation can run without repository secrets.
 - Keep both key sets aligned in Cloudflare and GitHub secrets if you use both pipelines.
 - Admin production deploy from GitHub Actions currently targets only `awcms-admin`.
 

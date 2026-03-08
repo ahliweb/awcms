@@ -23,8 +23,8 @@ had drifted again after subsequent schema, media, and workflow changes.
 | Phase 0 - Re-Baseline and Inventory Refresh | Completed | Counts updated to `115` markdown, `71` docs, `127/127` migrations, `10` package manifests, `14` maintained package README surfaces |
 | Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | `README.md`, `docs/README.md`, audit plan/tracker baseline refreshed; AGENTS/SYSTEM_MODEL/DOCS_INDEX link reconciliation still pending |
 | Phase 2 - Schema, Security, and Tenancy Reconciliation | In Progress | `docs/architecture/database.md`, `docs/security/abac.md`, `docs/security/rls.md`, `docs/tenancy/overview.md`, and `docs/tenancy/supabase.md` reconciled; broader phase review remains open |
-| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | Pending | Reconcile documented scripts, MCP topology, docs-link workflow scope, and CI guarantees against live manifests/workflows |
-| Phase 4 - Feature, Module, and Package Documentation Pass | Pending | Review all maintained module/dev/guides surfaces plus workspace/package READMEs |
+| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | In Progress | CI/docs validation scope, workspace coverage, and the first deploy docs are reconciled; broader deploy/runtime review remains open |
+| Phase 4 - Feature, Module, and Package Documentation Pass | In Progress | High-confidence module drift is corrected and guides were spot-checked with no immediate contradictions found |
 | Phase 5 - Conflict Resolution and Publication | Pending | Close drift items, rerun validation gates, and publish updated docs baseline |
 
 ## Baseline Snapshot (2026-03-08)
@@ -71,6 +71,7 @@ had drifted again after subsequent schema, media, and workflow changes.
 | DOCSYNC-023 | Medium | Current docs link automation cannot reliably prove local markdown targets exist because many filesystem links are reported as pending `[ / ]` | Resolved | Added `scripts/check_markdown_local_links.mjs`, wired it into `awcms/package.json` and `docs-link-check.yml`, and used it to correct newly detected broken local links |
 | DOCSYNC-024 | Medium | Dedicated CI coverage still does not include every maintained workspace/package | Resolved | Added dedicated jobs for `awcms-ext/primary-analytics/` and `packages/awcms-shared/`, plus package-level validation scripts/lockfiles so both surfaces can run standalone in CI |
 | DOCSYNC-025 | Medium | Schema/security/tenancy docs still described stale migration counts, helper-function baselines, and tenant provisioning signatures | Resolved | Updated `docs/architecture/database.md`, `docs/security/abac.md`, `docs/security/rls.md`, `docs/tenancy/overview.md`, and `docs/tenancy/supabase.md` to reflect the current `127/127` migration baseline, recursion-safe `current_tenant_id()`, and the canonical 6-argument tenant provisioning RPC |
+| DOCSYNC-026 | Medium | Remaining deploy/module docs still carried stale claims about primary edge deployment, public blog fetch paths, version-source authority, and default editor permissions | Resolved | Updated `docs/deploy/overview.md`, `docs/deploy/cloudflare.md`, `docs/modules/BLOGS_MODULE.md`, `docs/modules/VERSIONING.md`, and `docs/modules/ROLE_HIERARCHY.md` to match current workflows, public queries, and authority guidance |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -108,6 +109,13 @@ had drifted again after subsequent schema, media, and workflow changes.
 - Updated `docs/security/abac.md` and `docs/security/rls.md` to reflect the current recursion-safe `current_tenant_id()` implementation and the tenant-admin/platform-admin/full-access semantics of `auth_is_admin()`.
 - Updated `docs/tenancy/overview.md` and `docs/tenancy/supabase.md` to reflect the canonical 6-argument `create_tenant_with_defaults(...)` signature, current public shared-client usage, and the linked-workflow `db push --dry-run` recommendation.
 
+### Phase 3 / 4 Progress in This Pass
+
+- Updated `docs/deploy/overview.md` so deployment guidance now treats `awcms-edge/` as the primary edge HTTP deploy surface and scopes Supabase Edge Functions to legacy/transitional flows.
+- Updated `docs/deploy/cloudflare.md` to distinguish production secret mapping in `ci-push.yml` from the mock fork-safe values used by `ci-pr.yml`.
+- Updated `docs/modules/BLOGS_MODULE.md`, `docs/modules/VERSIONING.md`, and `docs/modules/ROLE_HIERARCHY.md` to match current public query paths, package-manifest version authority, and the editor delete baseline from the canonical permission matrix.
+- Spot-checked `docs/guides/**` and did not find additional high-confidence repo-state contradictions in the currently maintained guides.
+
 ### Remaining Work by Phase
 
 #### Phase 2 - Schema, Security, and Tenancy
@@ -124,8 +132,8 @@ had drifted again after subsequent schema, media, and workflow changes.
 
 #### Phase 4 - Feature, Module, and Package Docs
 
-- Review `docs/modules/**` for backlog-vs-shipped clarity.
-- Review `docs/guides/**` and remaining package README command examples beyond `awcms-public/primary/README.md` and `awcms-mcp/README.md`.
+- Review remaining `docs/modules/**` surfaces for backlog-vs-shipped clarity beyond the highest-confidence fixes already applied.
+- Review remaining package README command examples beyond `awcms-public/primary/README.md` and `awcms-mcp/README.md`.
 - Add or explicitly classify missing package README coverage for any newly introduced maintained workspace/package.
 - Re-check feature docs for dead links and route/path drift.
 
@@ -168,6 +176,7 @@ had drifted again after subsequent schema, media, and workflow changes.
 | Edge worker sanity (`cd awcms-edge && npm run typecheck`) | Passed | TypeScript check succeeds and now mirrors the new dedicated CI job |
 | Extension package sanity (`cd awcms-ext/primary-analytics && npm run build:ci`) | Passed | SSR smoke build succeeds and now mirrors the new dedicated CI job |
 | Shared package sanity (`cd packages/awcms-shared && npm run typecheck`) | Passed | Added local `ImportMeta` typings and a dedicated typecheck script so the package can validate standalone |
+| Deploy/module doc reconciliation | Passed | Updated deploy and module docs now match current workflow behavior, edge deployment reality, and public blog query paths |
 | Dependency review (`npm outdated`) | Findings logged | Admin, public, and MCP workspaces all have upgrade candidates; edge/shared version review remains a follow-up task |
 
 ## Dependency Drift Snapshot (2026-03-08)

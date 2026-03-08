@@ -51,15 +51,18 @@ Stored in `blogs` table:
 1. **Draft**: Author creates content. Visible only to Author/Editor.
 2. **In Review**: Author submits for review. Editor receives notification.
 3. **Approved**: Editor approves content. Ready for scheduling.
-4. **Published**: Publicly visible via `published_blogs_view`.
+4. **Published**: Publicly visible through tenant-scoped `blogs` queries filtered to `status = 'published'` and `deleted_at IS NULL`.
 
 ## Operational Concerns
 
-The Public Portal fetches posts via `published_blogs_view` to ensure:
+The Public Portal currently fetches posts directly from `blogs` to ensure:
 
 1. Only `status = 'published'` items are fetched.
-2. Internal fields (like internal notes) are stripped.
+2. Tenant scoping is explicit in the query path.
 3. Rendering uses HTML/markdown content or Puck layouts where configured.
+
+`published_blogs_view` remains part of schema history and can still be useful for restricted read surfaces,
+but it is not the current public-portal fetch path.
 
 ### TipTap JSON
 
