@@ -66,7 +66,12 @@ export async function getMenuByLocation(
           locale: localeArg,
           roleIds: roleIdsArg,
         };
-  const { tenantId, locale, roleIds = [], includeRestricted = roleIds.length > 0 } = options;
+  const {
+    tenantId,
+    locale,
+    roleIds = [],
+    includeRestricted = roleIds.length > 0,
+  } = options;
 
   const runQuery = async (withLocale: boolean) => {
     let query = supabase
@@ -88,7 +93,7 @@ export async function getMenuByLocation(
     return query;
   };
 
-  let localeFilterEnabled = Boolean(locale);
+  const localeFilterEnabled = Boolean(locale);
   let { data, error } = await runQuery(localeFilterEnabled);
 
   if (
@@ -96,7 +101,6 @@ export async function getMenuByLocation(
     localeFilterEnabled &&
     isMissingLocaleColumnError(error.message || "")
   ) {
-    localeFilterEnabled = false;
     ({ data, error } = await runQuery(false));
   }
 
@@ -115,7 +119,7 @@ export async function getMenuByLocation(
   const rows = (data || []) as MenuRow[];
   const publicRows = rows.filter((row) => row.is_public !== false);
 
-  let allowedMenuIds = new Set<string>();
+  const allowedMenuIds = new Set<string>();
   if (includeRestricted && roleIds.length > 0) {
     const directRoleMatches = rows
       .filter((row) => row.role_id && roleIds.includes(row.role_id))
@@ -130,7 +134,10 @@ export async function getMenuByLocation(
       .select("menu_id, role_id, can_view")
       .in("role_id", roleIds)
       .eq("can_view", true)
-      .in("menu_id", rows.map((row) => row.id));
+      .in(
+        "menu_id",
+        rows.map((row) => row.id),
+      );
 
     if (permissionsError) {
       console.error(
@@ -191,7 +198,9 @@ export async function getAllMenus(
 
   return Object.entries(grouped).reduce(
     (acc, [location, rows]) => {
-      acc[location] = filterActiveItems(buildMenuTree(rows.filter((row) => row.is_public !== false)));
+      acc[location] = filterActiveItems(
+        buildMenuTree(rows.filter((row) => row.is_public !== false)),
+      );
       return acc;
     },
     {} as Record<string, MenuItem[]>,

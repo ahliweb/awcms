@@ -28,7 +28,7 @@ export const getStaticPaths = (async () => {
   };
 
   let localeColumnEnabled = true;
-  let data: PageSlugRow[] | null = null;
+  let data: PageSlugRow[];
 
   const localizedQuery = await supabase
     .from("pages")
@@ -65,7 +65,7 @@ export const getStaticPaths = (async () => {
     data = (localizedQuery.data || []) as PageSlugRow[];
   }
 
-  return (data || []).flatMap((page) => {
+  return data.flatMap((page) => {
     const locales = localeColumnEnabled && page.locale ? [page.locale] : supportedLocales;
     return locales.map((locale) => ({
       params: {

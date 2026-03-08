@@ -121,8 +121,8 @@ async function searchPages(
     return query;
   };
 
-  let localeFilterEnabled = Boolean(locale);
-  let includeLocaleColumn = true;
+  const localeFilterEnabled = Boolean(locale);
+  const includeLocaleColumn = true;
   let { data, error } = await runQuery(
     localeFilterEnabled,
     includeLocaleColumn,
@@ -133,8 +133,6 @@ async function searchPages(
     localeFilterEnabled &&
     isMissingLocaleColumnError(error.message || "")
   ) {
-    localeFilterEnabled = false;
-    includeLocaleColumn = false;
     ({ data, error } = await runQuery(false, false));
   }
 
@@ -195,8 +193,8 @@ async function searchBlogs(
     return query;
   };
 
-  let localeFilterEnabled = Boolean(locale);
-  let includeLocaleColumn = true;
+  const localeFilterEnabled = Boolean(locale);
+  const includeLocaleColumn = true;
   let { data, error } = await runQuery(
     localeFilterEnabled,
     includeLocaleColumn,
@@ -207,8 +205,6 @@ async function searchBlogs(
     localeFilterEnabled &&
     isMissingLocaleColumnError(error.message || "")
   ) {
-    localeFilterEnabled = false;
-    includeLocaleColumn = false;
     ({ data, error } = await runQuery(false, false));
   }
 

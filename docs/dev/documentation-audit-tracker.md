@@ -184,8 +184,11 @@ had drifted again after subsequent schema, media, and workflow changes.
 
 ## Dependency Drift Snapshot (2026-03-08)
 
-- `awcms`: notable drift includes `@supabase/supabase-js`, Tailwind v4 packages, TipTap packages, `react-router-dom`, `recharts`, and `framer-motion`
-- `awcms-public/primary`: notable drift includes `astro-embed`, `lucide-react`, `sharp`, and Tailwind v4 `4.2.x`; the Tailwind toolchain is intentionally pinned at `4.1.18` until Astro's Vite typing surface no longer conflicts with the newer plugin release
+- `awcms`: notable drift now centers on the held ESLint 10 jump, the optional cross-major move to
+  `@types/node` `25.x`, `@vitejs/plugin-react`, `react-dropzone`, `react-helmet-async`, and the
+  previously deferred core runtime packages (`@supabase/supabase-js`, TipTap,
+  `react-router-dom`, `recharts`, `framer-motion`)
+- `awcms-public/primary`: notable drift now centers on `astro-embed` and the intentionally held Tailwind v4 `4.2.x` toolchain packages; Batch A already cleared the ESLint/globals/lucide updates
 - `awcms-mcp`: notable drift now centers on `@modelcontextprotocol/sdk`, ESLint, and the optional cross-major move from Node 22 type definitions to `@types/node` `25.x`
 - `awcms-edge`: `npm outdated` produced no current output in this pass; the Worker-specific Supabase version pin remains a deliberate scoped difference already documented elsewhere
 - `packages/awcms-shared`: `npm outdated` produced no current output in this pass
@@ -196,15 +199,22 @@ had drifted again after subsequent schema, media, and workflow changes.
 ### 1. `awcms` (Admin Panel)
 
 - **Goal:** Keep the React 19 / Vite 7 admin surface current without mixing framework, lint, and runtime-risk upgrades in one batch.
-- **Batch A - low-risk tools first:** bump `@eslint/js`, `eslint`, `@types/node`, `lucide-react`, and `jsdom`; run `npm run lint`, `npm run test -- --run`, and `npm run build`.
+- **Batch A - low-risk tools first:** completed in a compatibility-safe form. `lucide-react`,
+  `jsdom`, and `@types/node` were updated, `@eslint/js`/`eslint` were refreshed to the latest
+  ESLint 9 patch line, and `vitest.config.js` now explicitly excludes `e2e/**` so unit-test runs
+  stay separate from Playwright specs. `npm run lint`, `npm run test -- --run`, and
+  `npm run build` all pass.
 - **Batch B - UI/runtime libraries:** evaluate `react-dropzone` `15.x` and `react-helmet-async` `3.x` together because both may require code changes; verify upload flows, document head behavior, and SSR-safe rendering.
-- **Batch C - ecosystem alignment:** review `@vitejs/plugin-react` `5.x` only after confirming Vite 7 compatibility and existing build behavior remain stable.
+- **Batch C - ecosystem alignment:** review the held ESLint 10 jump together with `@vitejs/plugin-react` `5.x` only after confirming plugin compatibility and existing build behavior remain stable.
 - **Hold for targeted review:** `@supabase/supabase-js`, `react-router-dom`, `recharts`, `framer-motion`, and TipTap packages should be upgraded in feature-specific branches because they touch core app behavior and user-facing flows.
 
 ### 2. `awcms-public/primary` (Astro Public Portal)
 
 - **Goal:** Preserve the current stable Astro/Tailwind build while separating safe upgrades from the known Tailwind `4.2.x` compatibility risk.
-- **Batch A - low-risk packages:** bump `@eslint/js`, `eslint`, `globals`, and `lucide-react`; run `npm run check` and `npm run build`.
+- **Batch A - low-risk packages:** completed. `@eslint/js`, `eslint`, `globals`, and
+  `lucide-react` were updated; validation surfaced a few lint/type issues in `src/lib/menu.ts`,
+  `src/lib/search.ts`, `src/lib/sidebar.ts`, and localized slug pages, and those were fixed so
+  `npm run check` and `npm run build` pass again.
 - **Batch B - content/runtime packages:** evaluate `astro-embed` and `sharp` in a separate branch; verify embeds, image optimization, and Cloudflare build output.
 - **Explicit hold:** keep `@tailwindcss/postcss`, `@tailwindcss/vite`, and `tailwindcss` pinned at `4.1.18` until Astro/Vite compatibility is revalidated against the earlier type-mismatch regression.
 

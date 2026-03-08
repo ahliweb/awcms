@@ -28,7 +28,7 @@ export const getStaticPaths = (async () => {
     };
 
     let localeColumnEnabled = true;
-    let data: BlogSlugRow[] | null = null;
+    let data: BlogSlugRow[];
 
     const localizedQuery = await supabase
         .from("blogs")
@@ -63,7 +63,7 @@ export const getStaticPaths = (async () => {
         data = (localizedQuery.data || []) as BlogSlugRow[];
     }
 
-    return (data || []).flatMap((blog) => {
+    return data.flatMap((blog) => {
         const locales = localeColumnEnabled && blog.locale ? [blog.locale] : supportedLocales;
         return locales.map((locale) => ({
             params: {

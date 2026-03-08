@@ -39,7 +39,10 @@ export async function getSidebarConfig(
   tenantId?: string | null,
   locale?: string,
 ): Promise<SidebarConfig | null> {
-  const items = await getMenuByLocation(supabase, location, { tenantId, locale });
+  const items = await getMenuByLocation(supabase, location, {
+    tenantId,
+    locale,
+  });
 
   if (!items || items.length === 0) {
     return null;
@@ -63,13 +66,15 @@ function groupSidebarItems(items: MenuItem[]): SidebarGroup[] {
   const ungroupedItems: SidebarItem[] = [];
 
   for (const item of items) {
-    const children = (item.children || []).map((child) => mapMenuItemToSidebarItem(child));
+    const children = (item.children || []).map((child) =>
+      mapMenuItemToSidebarItem(child),
+    );
 
     if (children.length > 0) {
       groups.push({
         id: item.id,
         title: item.title,
-        icon: item.icon,
+        icon: item.icon ?? undefined,
         items: children.filter((child) => child.is_active !== false),
         sort_order: item.sort_order,
       });
