@@ -52,8 +52,6 @@ const TeamManager = lazy(() => import('@/components/dashboard/TeamManager'));
 const PartnersManager = lazy(() => import('@/components/dashboard/PartnersManager'));
 const FunFactsManager = lazy(() => import('@/components/dashboard/FunFactsManager'));
 const TestimonyManager = lazy(() => import('@/components/dashboard/TestimonyManager'));
-const PhotoGalleryManager = lazy(() => import('@/components/dashboard/PhotoGalleryManager'));
-const VideoGalleryManager = lazy(() => import('@/components/dashboard/VideoGalleryManager'));
 const AnnouncementsManager = lazy(() => import('@/components/dashboard/AnnouncementsManager'));
 const ContactMessagesManager = lazy(() => import('@/components/dashboard/ContactMessagesManager'));
 const ContactsManager = lazy(() => import('@/components/dashboard/ContactsManager'));
@@ -232,11 +230,6 @@ const MainRouter = () => {
           <Route path="partners/*" element={<PartnersManager />} />
           <Route path="funfacts/*" element={<FunFactsManager />} />
           <Route path="testimonials/*" element={<TestimonyManager />} />
-
-          <Route path="gallery/photos/*" element={<PhotoGalleryManager />} />
-          <Route path="gallery/videos/*" element={<VideoGalleryManager />} />
-          <Route path="photo-gallery/*" element={<PhotoGalleryManager />} />
-          <Route path="video-gallery/*" element={<VideoGalleryManager />} />
 
           <Route path="announcements/*" element={<AnnouncementsManager />} />
 

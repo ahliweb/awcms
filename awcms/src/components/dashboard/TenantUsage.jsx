@@ -41,13 +41,13 @@ export function TenantUsage() {
                     .from('users')
                     .select('*', { count: 'exact', head: true });
 
-                // 3. Get Storage Usage (Sum file_size)
+                // 3. Get Storage Usage (Sum size_bytes)
                 const { data: files } = await supabase
                     .from('media_objects')
-                    .select('file_size')
+                    .select('size_bytes')
                     .is('deleted_at', null);
 
-                const totalSize = files?.reduce((acc, f) => acc + (f.file_size || 0), 0) || 0;
+                const totalSize = files?.reduce((acc, f) => acc + (f.size_bytes || 0), 0) || 0;
 
                 setUsage({ users: userCount || 0, storage: totalSize });
 

@@ -1,13 +1,19 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createClient } from '@supabase/supabase-js'
-import { generateStorageKey, UploadSessionRequest } from './mediaContracts'
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { generateStorageKey, inferMediaKind, slugifyMediaValue, UploadSessionRequest } from './mediaContracts'
 
 type Bindings = {
   STORAGE: R2Bucket
   VITE_SUPABASE_URL: string
   VITE_SUPABASE_PUBLISHABLE_KEY: string
   SUPABASE_SECRET_KEY: string
+  R2_ACCOUNT_ID: string
+  R2_ACCESS_KEY_ID: string
+  R2_SECRET_ACCESS_KEY: string
+  R2_BUCKET_NAME: string
   MAILKETING_API_TOKEN: string
   MAILKETING_DEFAULT_LIST_ID?: string
 }
@@ -21,6 +27,94 @@ type Variables = {
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 app.use('*', cors())
+
+const getAuthedSupabase = (env: Bindings, token: string) => createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, {
+  global: { headers: { Authorization: `Bearer ${token}` } }
+})
+
+const getAdminSupabase = (env: Bindings) => createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SECRET_KEY)
+
+const getR2S3Client = (env: Bindings) => new S3Client({
+  region: 'auto',
+  endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: env.R2_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+  },
+})
+
+const ensureR2SigningConfig = (env: Bindings) => {
+  if (!env.R2_ACCOUNT_ID || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY || !env.R2_BUCKET_NAME) {
+    throw new Error('Missing R2 signing configuration')
+  }
+}
+
+const sanitizeFolder = (folder?: string) => String(folder || '')
+  .trim()
+  .replace(/(^\/|\/$)/g, '')
+  .replace(/[^a-zA-Z0-9/_-]/g, '')
+
+const buildStorageKey = (tenantId: string, fileName: string, folder?: string) => {
+  const baseKey = generateStorageKey(tenantId, fileName)
+  const normalizedFolder = sanitizeFolder(folder)
+
+  if (!normalizedFolder) return baseKey
+
+  const [tenantPrefix, fileKey] = baseKey.split(/\/(.+)/)
+  return `${tenantPrefix}/${normalizedFolder}/${fileKey}`
+}
+
+const buildMediaSlug = (fileName: string, sessionId: string) => {
+  const base = slugifyMediaValue(fileName) || 'media-item'
+  return `${base}-${sessionId.slice(0, 8)}`
+}
+
+const buildPublicMediaUrl = (requestUrl: string, storageKey: string) => {
+  const encodedKey = String(storageKey || '')
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+
+  return new URL(`/public/media/${encodedKey}`, requestUrl).toString()
+}
+
+const getUserContext = async (env: Bindings, userId: string) => {
+  const adminSupabase = getAdminSupabase(env)
+  const { data, error } = await adminSupabase
+    .from('users')
+    .select('id, tenant_id, role:roles(is_platform_admin, is_full_access)')
+    .eq('id', userId)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (error || !data) {
+    throw new Error('Unable to resolve user tenant context')
+  }
+
+  const role = Array.isArray(data.role) ? data.role[0] : data.role
+  return {
+    id: data.id,
+    tenantId: data.tenant_id,
+    isPlatformAdmin: Boolean(role?.is_platform_admin),
+    isFullAccess: Boolean(role?.is_full_access),
+  }
+}
+
+const resolveTenantId = (requestedTenantId: string | null, userContext: { tenantId: string | null; isPlatformAdmin: boolean; isFullAccess: boolean }) => {
+  if (userContext.isPlatformAdmin || userContext.isFullAccess) {
+    return requestedTenantId || userContext.tenantId
+  }
+
+  if (!userContext.tenantId) {
+    throw new Error('Missing tenant context')
+  }
+
+  if (requestedTenantId && requestedTenantId !== userContext.tenantId) {
+    throw new Error('Tenant mismatch')
+  }
+
+  return userContext.tenantId
+}
 
 // Middleware to verify Supabase JWT
 app.use('/api/*', async (c, next) => {
@@ -53,111 +147,154 @@ app.post('/api/media/upload-session', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  // Use the authenticated user's token so RLS applies
-  const supabase = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } }
-  });
+  try {
+    ensureR2SigningConfig(c.env)
 
-  // Extract tenantId from JWT claims (AWCMS specific, or assume the client sends it and RLS validates it)
-  // Let's assume the client passes the tenant_id in header `x-tenant-id`
-  const tenantId = c.req.header('x-tenant-id');
-  if (!tenantId) {
-    return c.json({ error: 'Missing tenant id header' }, 400);
-  }
+    const userSupabase = getAuthedSupabase(c.env, token)
+    const adminSupabase = getAdminSupabase(c.env)
+    const userContext = await getUserContext(c.env, user.id)
+    const tenantId = resolveTenantId(c.req.header('x-tenant-id') ?? null, userContext)
 
-  const storageKey = generateStorageKey(tenantId, body.fileName);
-  
-  // Note: We cannot generate a signed R2 PUT URL with simple R2Bucket binding in Workers natively 
-  // without S3 API unless we use the standard Workers `put()` or create a custom pre-signed proxy endpoint.
-  // Actually, Cloudflare Workers doesn't natively generate AWS v4 presigned URLs via the R2Bindings. 
-  // We usually either handle the upload directly through this worker endpoint by streaming the body, OR we use aws4fetch to sign URLs.
-  // Given that this is a worker, streaming the PUT directly through the worker is very efficient! Let's do a direct upload endpoint instead of a presigned URL session for simplicity, or keep the session concept but route uploads via the worker.
-  
-  // Let's create a session record in Supabase
-  const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
-  
-  const { data: session, error: dbError } = await supabase
-    .from('media_upload_sessions')
-    .insert({
-      tenant_id: tenantId,
-      uploader_id: user.id,
-      file_name: body.fileName,
-      mime_type: body.mimeType,
-      size_bytes: body.sizeBytes,
-      storage_key: storageKey,
-      upload_url: '/api/media/upload-direct', // Internal route
-      expires_at: expiresAt,
-      status: 'pending'
+    if (!tenantId) {
+      return c.json({ error: 'Missing tenant id header' }, 400)
+    }
+
+    const [{ data: canCreate, error: createPermissionError }, { data: canManage, error: managePermissionError }] = await Promise.all([
+      userSupabase.rpc('has_permission', { permission_name: 'tenant.files.create' }),
+      userSupabase.rpc('has_permission', { permission_name: 'tenant.files.manage' }),
+    ])
+
+    if (createPermissionError || managePermissionError) {
+      return c.json({ error: 'Failed to verify upload permissions' }, 500)
+    }
+
+    if (!userContext.isPlatformAdmin && !userContext.isFullAccess && !canCreate && !canManage) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    const storageKey = buildStorageKey(tenantId, body.fileName, body.folder)
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+    const s3 = getR2S3Client(c.env)
+    const uploadUrl = await getSignedUrl(
+      s3,
+      new PutObjectCommand({
+        Bucket: c.env.R2_BUCKET_NAME,
+        Key: storageKey,
+        ContentType: body.mimeType,
+      }),
+      { expiresIn: 15 * 60 }
+    )
+
+    const { data: session, error: dbError } = await adminSupabase
+      .from('media_upload_sessions')
+      .insert({
+        tenant_id: tenantId,
+        uploader_id: user.id,
+        file_name: body.fileName,
+        mime_type: body.mimeType,
+        size_bytes: body.sizeBytes,
+        storage_key: storageKey,
+        upload_url: uploadUrl,
+        category_id: body.categoryId || null,
+        access_control: body.accessControl || 'public',
+        meta_data: {
+          folder: sanitizeFolder(body.folder),
+          source: 'r2',
+        },
+        expires_at: expiresAt,
+        status: 'pending'
+      })
+      .select('id, expires_at, storage_key')
+      .single();
+
+    if (dbError || !session) {
+      return c.json({ error: 'Failed to create upload session', details: dbError }, 500)
+    }
+
+    const finalizeUrl = new URL(`/api/media/upload/${session.id}/finalize`, c.req.url).toString()
+
+    return c.json({
+      sessionId: session.id,
+      uploadUrl,
+      finalizeUrl,
+      expiresAt: session.expires_at,
+      storageKey: session.storage_key
     })
-    .select()
-    .single();
-
-  if (dbError || !session) {
-    return c.json({ error: 'Failed to create upload session', details: dbError }, 500);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to create upload session' }, 500)
   }
-
-  return c.json({
-    sessionId: session.id,
-    uploadUrl: `/api/media/upload/${session.id}`,
-    expiresAt: session.expires_at,
-    storageKey: session.storage_key
-  });
 });
 
-// Direct upload endpoint using the session
-app.put('/api/media/upload/:sessionId', async (c) => {
+// Finalize upload after the client PUTs directly to signed R2 URL
+app.post('/api/media/upload/:sessionId/finalize', async (c) => {
   const sessionId = c.req.param('sessionId');
   const user = c.get('user');
-  const token = c.get('token');
+  const adminSupabase = getAdminSupabase(c.env)
 
-  const supabase = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } }
-  });
+  try {
+    const { data: session, error: sessionError } = await adminSupabase
+      .from('media_upload_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
 
-  const { data: session, error: sessionError } = await supabase
-    .from('media_upload_sessions')
-    .select('*')
-    .eq('id', sessionId)
-    .single();
-
-  if (sessionError || !session || session.status !== 'pending' || session.uploader_id !== user.id) {
-    return c.json({ error: 'Invalid or expired upload session' }, 403);
-  }
-
-  if (new Date(session.expires_at) < new Date()) {
-    return c.json({ error: 'Session expired' }, 403);
-  }
-
-  // Upload to R2
-  const body = await c.req.arrayBuffer();
-  await c.env.STORAGE.put(session.storage_key, body, {
-    httpMetadata: { contentType: session.mime_type },
-    customMetadata: {
-      tenantId: session.tenant_id,
-      uploaderId: user.id
+    if (sessionError || !session || session.status !== 'pending' || session.uploader_id !== user.id) {
+      return c.json({ error: 'Invalid or expired upload session' }, 403);
     }
-  });
 
-  // Mark session completed and create media object
-  await supabase.from('media_upload_sessions').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', sessionId);
-  
-  const { data: mediaObject, error: insertError } = await supabase.from('media_objects').insert({
-    tenant_id: session.tenant_id,
-    file_name: session.file_name,
-    original_name: session.file_name,
-    mime_type: session.mime_type,
-    size_bytes: session.size_bytes,
-    storage_key: session.storage_key,
-    uploader_id: user.id,
-    status: 'uploaded',
-    access_control: 'public'
-  }).select().single();
+    if (new Date(session.expires_at) < new Date()) {
+      return c.json({ error: 'Session expired' }, 403);
+    }
 
-  if (insertError) {
-    return c.json({ error: 'Failed to create media object', details: insertError }, 500);
+    const object = await c.env.STORAGE.head(session.storage_key)
+    if (!object) {
+      return c.json({ error: 'Uploaded file not found in storage' }, 404)
+    }
+
+    const { data: mediaObject, error: insertError } = await adminSupabase
+      .from('media_objects')
+      .upsert({
+        tenant_id: session.tenant_id,
+        title: slugifyMediaValue(session.file_name).replace(/-/g, ' ').trim() || session.file_name,
+        file_name: session.file_name,
+        original_name: session.file_name,
+        slug: buildMediaSlug(session.file_name, session.id),
+        description: null,
+        alt_text: session.file_name,
+        mime_type: session.mime_type,
+        media_kind: inferMediaKind(session.mime_type),
+        size_bytes: object.size || session.size_bytes || 0,
+        storage_key: session.storage_key,
+        category_id: session.category_id || null,
+        uploader_id: user.id,
+        status: 'uploaded',
+        access_control: session.access_control || 'public',
+        meta_data: {
+          ...(session.meta_data || {}),
+          etag: object.httpEtag,
+          uploaded_via: 'cloudflare-r2',
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'storage_key' })
+      .select('*')
+      .single();
+
+    if (insertError) {
+      return c.json({ error: 'Failed to create media object', details: insertError }, 500);
+    }
+
+    await adminSupabase
+      .from('media_upload_sessions')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', sessionId);
+
+    return c.json({
+      mediaObject,
+      publicUrl: buildPublicMediaUrl(c.req.url, session.storage_key),
+    });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to finalize upload' }, 500)
   }
-
-  return c.json(mediaObject);
 });
 
 // Get presigned URL for GET (Or proxy)
@@ -165,9 +302,7 @@ app.get('/api/media/file/:id', async (c) => {
   const mediaId = c.req.param('id');
   const token = c.get('token');
 
-  const supabase = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } }
-  });
+  const supabase = getAuthedSupabase(c.env, token)
 
   const { data: media, error } = await supabase
     .from('media_objects')
@@ -192,8 +327,14 @@ app.get('/api/media/file/:id', async (c) => {
 });
 
 // Public proxy for public images
-app.get('/public/media/:storageKey{*.*}', async (c) => {
-  const storageKey = c.req.param('storageKey');
+app.get('/public/media/*', async (c) => {
+  const pathname = new URL(c.req.url).pathname
+  const storageKeyParam = pathname.replace(/^\/public\/media\//, '')
+  if (!storageKeyParam) {
+    return c.json({ error: 'Missing storage key' }, 400);
+  }
+
+  const storageKey = decodeURIComponent(storageKeyParam);
   // Public reads rely on the public-read policy; a publishable key is enough here.
   const supabase = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY);
   
@@ -202,6 +343,9 @@ app.get('/public/media/:storageKey{*.*}', async (c) => {
     .from('media_objects')
     .select('storage_key')
     .eq('storage_key', storageKey)
+    .eq('status', 'uploaded')
+    .eq('access_control', 'public')
+    .is('deleted_at', null)
     .single();
 
   if (error || !media) {

@@ -9,10 +9,8 @@ import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useMedia } from '@/hooks/useMedia'; // Import useMedia
-import { supabase } from '@/lib/customSupabaseClient'; // Keep for usage analysis only if needed, or move to hook
 import { cn } from '@/lib/utils';
 
 const formatFileSize = (bytes) => {
@@ -45,7 +43,6 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
     const [loading, setLoading] = useState(true);
     const [query, setQuery] = useState('');
     const [viewMode, setViewMode] = useState('grid');
-    const [usageData, setUsageData] = useState({});
     const [deleteConfirm, setDeleteConfirm] = useState({ open: false, fileId: null, fileName: '', isBulk: false });
     const [selectedFiles, setSelectedFiles] = useState(new Set());
 
@@ -83,36 +80,12 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
 
             setFiles(data);
             setTotalItems(count);
-
-            // Fetch usage data for files (keep existing logic or move to hook later)
-            if (!isTrashView && data?.length > 0) {
-                fetchUsageData();
-            }
         } catch (err) {
             console.error('Error fetching files:', err);
         } finally {
             setLoading(false);
         }
     }, [hookFetchFiles, query, isTrashView, currentPage, itemsPerPage, categoryId]);
-
-    const fetchUsageData = async () => {
-        try {
-            const { data: usage, error } = await supabase.rpc('analyze_file_usage');
-            if (!error && usage) {
-                const usageMap = {};
-                usage.forEach(u => {
-                    usageMap[u.file_path] = {
-                        count: u.usage_count || 0,
-                        modules: u.modules || [],
-                        details: u.details || []
-                    };
-                });
-                setUsageData(usageMap);
-            }
-        } catch (err) {
-            console.warn('Usage analysis not available:', err);
-        }
-    };
 
     useEffect(() => {
         fetchFiles();
@@ -144,7 +117,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                     throw new Error('Permission denied: Cannot upload files.');
                 }
 
-                await uploadFile(file);
+                await uploadFile(file, '', categoryId);
                 successCount++;
             } catch (err) {
                 console.error(`Failed to upload ${file.name}: `, err);
@@ -156,7 +129,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
             toast({ title: 'Upload Complete', description: `${successCount} files uploaded successfully.` });
             fetchFiles();
         }
-    }, [fetchFiles, toast, canUpload, uploadFile]);
+    }, [categoryId, fetchFiles, toast, canUpload, uploadFile]);
 
     // ... dropzone ...
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -481,7 +454,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                                 </div>
                             )}
                             <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-muted/60">
-                                {file.file_type.startsWith('image/') ? (
+                                {file.file_type?.startsWith('image/') ? (
                                     <img src={getFileUrl(file)} alt={file.name} className="w-full h-full object-cover" />
                                 ) : (
                                     <File className="h-10 w-10 text-muted-foreground" />
@@ -535,8 +508,6 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
             ) : (
                 <div className="rounded-xl border border-border/60 bg-card/75">
                     {files.map(file => {
-                        const usage = usageData[file.file_path] || usageData[getFileUrl(file)] || { count: 0, modules: [] };
-
                         return (
                             <div key={file.id} className={cn('flex items-center justify-between border-b border-border/50 p-3 last:border-0 hover:bg-muted/40', selectedFiles.has(file.id) ? 'bg-primary/10' : '')}>
                                 {/* Selection Checkbox */}
@@ -550,7 +521,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                                 )}
                                 <div className="flex items-center gap-3 overflow-hidden flex-1">
                                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-muted/60">
-                                        {file.file_type.startsWith('image/') ? (
+                                        {file.file_type?.startsWith('image/') ? (
                                             <img src={getFileUrl(file)} alt="" className="w-full h-full object-cover rounded" />
                                         ) : (
                                             <File className="h-5 w-5 text-muted-foreground" />
@@ -570,34 +541,14 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                                             <span>{formatFileSize(file.file_size)}</span>
                                             <span>•</span>
                                             <span>{new Date(file.created_at).toLocaleDateString()}</span>
-                                            {file.users && (
+                                            {file.uploader && (
                                                 <>
                                                     <span>•</span>
-                                                    <span className="text-muted-foreground">by {file.users.full_name || file.users.email}</span>
+                                                    <span className="text-muted-foreground">by {file.uploader.full_name || file.uploader.email}</span>
                                                 </>
                                             )}
                                         </div>
                                     </div>
-                                    {/* Usage Badge */}
-                                    {!isTrashView && (
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <div className={cn('flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium', usage.count > 0
-                                                        ? 'border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                                        : 'border border-border/70 bg-muted text-muted-foreground')}>
-                                                        <Link2 className="w-3 h-3" />
-                                                        <span>{usage.count || 0}</span>
-                                                    </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                    <p>{usage.count > 0
-                                                        ? `Used in ${usage.count} place(s): ${usage.modules.join(', ') || 'Unknown'}`
-                                                        : 'Not used anywhere'}</p>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 ml-2">
                                     {!selectionMode && (
@@ -617,7 +568,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                                                     <div className="space-y-4 mt-4">
                                                         {/* Preview */}
                                                         <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-muted/60">
-                                                            {file.file_type.startsWith('image/') ? (
+                                                            {file.file_type?.startsWith('image/') ? (
                                                                 <img src={getFileUrl(file)} alt={file.name} className="max-w-full max-h-full object-contain" />
                                                             ) : (
                                                                 <File className="h-16 w-16 text-muted-foreground" />
@@ -643,26 +594,9 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                                                             </div>
                                                             <div>
                                                                 <p className="text-muted-foreground">Uploaded By</p>
-                                                                <p className="font-medium text-foreground">{file.users?.full_name || file.users?.email || 'Unknown'}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-muted-foreground">Usage Count</p>
-                                                                <p className="font-medium text-foreground">{usage.count || 0} location(s)</p>
+                                                                <p className="font-medium text-foreground">{file.uploader?.full_name || file.uploader?.email || 'Unknown'}</p>
                                                             </div>
                                                         </div>
-                                                        {/* Usage Details */}
-                                                        {usage.count > 0 && (
-                                                            <div>
-                                                                <p className="mb-2 text-sm text-muted-foreground">Used In:</p>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {(usage.modules || []).map((mod, idx) => (
-                                                                        <span key={idx} className="rounded-full border border-primary/25 bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                                                                            {mod}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
                                                         {/* URL */}
                                                         <div>
                                                             <p className="mb-1 text-sm text-muted-foreground">Public URL</p>

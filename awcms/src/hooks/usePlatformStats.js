@@ -42,13 +42,13 @@ export function usePlatformStats() {
             // 3. Fetch Total File Storage
             const { data: files, error: fileError } = await supabase
                 .from('media_objects')
-                .select('file_size')
+                .select('size_bytes')
                 .is('deleted_at', null);
 
             if (fileError) throw fileError;
 
             // Process Data
-            const totalStorage = files?.reduce((acc, curr) => acc + (curr.file_size || 0), 0) || 0;
+            const totalStorage = files?.reduce((acc, curr) => acc + (curr.size_bytes || 0), 0) || 0;
 
             const tiers = { free: 0, pro: 0, enterprise: 0 };
             tenants?.forEach(t => {

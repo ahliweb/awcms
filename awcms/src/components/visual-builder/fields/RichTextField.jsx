@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import MediaLibrary from '@/components/dashboard/media/MediaLibrary';
 import { PageLinkField } from './PageLinkField';
+import { resolveMediaUrl } from '@/lib/media';
 
 
 /**
@@ -34,11 +35,7 @@ export const RichTextField = ({ field, value, onChange, name }) => {
     const handleMediaSelect = (file) => {
         if (!editorInstance) return;
 
-        let finalUrl = file.file_path;
-        if (!finalUrl?.startsWith('http')) {
-            const edgeUrl = import.meta.env.VITE_EDGE_URL || 'http://localhost:8787';
-            finalUrl = `${edgeUrl.replace(/\/$/, '')}/public/media/${file.file_path}`;
-        }
+        const finalUrl = resolveMediaUrl(file);
 
         if (finalUrl) {
             editorInstance.chain().focus().setImage({ src: finalUrl }).run();

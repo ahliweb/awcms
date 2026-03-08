@@ -15,8 +15,7 @@ const RESOURCE_CATEGORIES = {
         'themes', 'widgets', 'templates', 'contact_messages'
     ],
     'Media': [
-        'photo_gallery', 'photo_galleries', 'video_gallery', 'video_galleries',
-        'files', 'media', 'galleries'
+        'files', 'media', 'media_objects', 'galleries'
     ],
     'Commerce': [
         'orders', 'products', 'product_types'

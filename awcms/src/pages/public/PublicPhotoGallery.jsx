@@ -1,29 +1,39 @@
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/customSupabaseClient';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
-import { Image as ImageIcon, Layers } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { usePublicTenant } from '@/hooks/usePublicTenant';
+import { fetchPublicMediaItems } from '@/lib/publicMedia';
 
 function PublicPhotoGallery() {
   const [items, setItems] = useState([]);
-
-  const fetchGalleries = async () => {
-
-    const { data } = await supabase
-      .from('photo_gallery')
-      .select('*')
-      .eq('status', 'published')
-      .order('created_at', { ascending: false });
-    setItems(data || []);
-
-  };
+  const { tenant } = usePublicTenant();
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchGalleries();
-  }, []);
+    let isCancelled = false;
+
+    const loadItems = async () => {
+      try {
+        const data = await fetchPublicMediaItems({ mediaKind: 'image', tenantId: tenant?.id });
+        if (!isCancelled) {
+          setItems(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch public photo gallery:', error);
+        if (!isCancelled) {
+          setItems([]);
+        }
+      }
+    };
+
+    void loadItems();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [tenant]);
 
   return (
     <div className="min-h-screen bg-background py-16">
@@ -36,7 +46,6 @@ function PublicPhotoGallery() {
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {items.map((item, i) => {
-            const coverImage = item.photos?.[0]?.url;
             return (
               <motion.div
                 key={item.id}
@@ -44,14 +53,14 @@ function PublicPhotoGallery() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: i * 0.1 }}
               >
-                <Link to={`/photo-gallery/${item.slug}`} className="group block">
+                <Link to={`/gallery/photos/${item.slug}`} className="group block">
                   <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-muted relative mb-4 border border-border">
-                    {coverImage ? (
-                      <img
-                        src={coverImage}
-                        alt={item.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
+                    {item.imageUrl ? (
+                       <img
+                         src={item.imageUrl}
+                         alt={item.alt_text || item.title}
+                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                       />
                     ) : (
                       <div className="flex items-center justify-center h-full text-muted-foreground">
                         <ImageIcon className="w-8 h-8 opacity-50" />
@@ -62,13 +71,9 @@ function PublicPhotoGallery() {
                         View Album
                       </div>
                     </div>
-                    <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-md flex items-center gap-1 backdrop-blur-sm">
-                      <Layers className="w-3 h-3" />
-                      {item.photos?.length || 0}
-                    </div>
                   </div>
                   <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-1">{item.description}</p>
+                  <p className="text-sm text-muted-foreground line-clamp-1">{item.description || item.category?.name || 'Media Library image'}</p>
                 </Link>
               </motion.div>
             );

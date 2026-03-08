@@ -40,7 +40,7 @@ export function useDashboardData() {
         supabase.from('products').select('*', { count: 'exact', head: true }).is('deleted_at', null),
         supabase.from('users').select('*', { count: 'exact', head: true }).is('deleted_at', null),
         supabase.from('orders').select('*', { count: 'exact', head: true }),
-        supabase.from('media_objects').select('file_size').is('deleted_at', null)
+        supabase.from('media_objects').select('size_bytes').is('deleted_at', null)
       ]);
 
       const [
@@ -69,7 +69,7 @@ export function useDashboardData() {
       const files = filesRes.status === 'fulfilled' ? filesRes.value.data : [];
 
       // Calculate storage usage
-      const totalBytes = files?.reduce((acc, curr) => acc + (curr.file_size || 0), 0) || 0;
+      const totalBytes = files?.reduce((acc, curr) => acc + (curr.size_bytes || 0), 0) || 0;
       const storageMB = (totalBytes / (1024 * 1024)).toFixed(2);
 
       // 2. Fetch Recent Activity (Simulated by combining recent updates)

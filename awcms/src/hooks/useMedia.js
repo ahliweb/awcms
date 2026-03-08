@@ -7,15 +7,15 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { buildMediaPublicUrl, getEdgeBaseUrl, normalizeMediaKind } from '@/lib/media';
 
-// Configure Edge URL
-const EDGE_URL = import.meta.env.VITE_EDGE_URL || 'http://localhost:8787';
+const EDGE_URL = getEdgeBaseUrl();
 
 export function useMedia() {
     const { toast } = useToast();
     const { currentTenant } = useTenant();
     const tenantId = currentTenant?.id;
-    const { isPlatformAdmin } = usePermissions();
+    const { isPlatformAdmin, isFullAccess, hasPermission } = usePermissions();
 
     const [uploading, setUploading] = useState(false);
     const [syncing, setSyncing] = useState(false);
@@ -35,18 +35,27 @@ export function useMedia() {
     // Helper: Map old 'files' format to 'media_objects' where needed for components
     const formatMediaObject = (mo) => {
         if (!mo) return null;
+
+        const publicUrl = buildMediaPublicUrl(mo.storage_key);
+
         return {
             ...mo,
             // Map to old property names just in case some components rely on them
             id: mo.id,
-            name: mo.original_name || mo.file_name,
+            name: mo.title || mo.original_name || mo.file_name,
             file_name: mo.original_name || mo.file_name,
             file_path: mo.storage_key,
             file_size: mo.size_bytes,
             file_type: mo.mime_type,
             uploaded_by: mo.uploader_id,
             created_at: mo.created_at,
-            deleted_at: mo.deleted_at
+            deleted_at: mo.deleted_at,
+            public_url: publicUrl,
+            url: publicUrl,
+            users: mo.uploader || null,
+            uploader: mo.uploader || null,
+            category: mo.category || null,
+            media_kind: mo.media_kind || normalizeMediaKind(mo.mime_type)
         };
     };
 
@@ -57,7 +66,7 @@ export function useMedia() {
         query = '',
         isTrash = false,
         typeFilter = null,
-        _categoryId = null
+        categoryId = null
     } = {}) => {
         if (!tenantId && !isPlatformAdmin) return { data: [], count: 0 };
 
@@ -65,7 +74,12 @@ export function useMedia() {
         try {
             let dbQuery = supabase
                 .from('media_objects')
-                .select('*, users:uploader_id(email, full_name), tenant:tenants(name)', { count: 'exact' })
+                .select(`
+                    *,
+                    tenant:tenants(name),
+                    uploader:users!media_objects_uploader_id_fkey(id, email, full_name, avatar_url),
+                    category:categories(id, name, slug, type)
+                `, { count: 'exact' })
                 .order('created_at', { ascending: false });
 
             // Platform admins see all files, others are tenant-scoped
@@ -87,7 +101,13 @@ export function useMedia() {
 
             // Type Filter
             if (typeFilter) {
-                dbQuery = dbQuery.ilike('mime_type', `${typeFilter}%`);
+                dbQuery = typeFilter.includes('/')
+                    ? dbQuery.eq('mime_type', typeFilter)
+                    : dbQuery.eq('media_kind', typeFilter);
+            }
+
+            if (categoryId) {
+                dbQuery = dbQuery.eq('category_id', categoryId);
             }
 
             // Pagination
@@ -175,7 +195,7 @@ export function useMedia() {
             let query = supabase
                 .from('categories')
                 .select('*')
-                .eq('type', 'media')
+                .in('type', ['media', 'gallery'])
                 .order('name');
 
             if (!isPlatformAdmin && tenantId) {
@@ -222,34 +242,32 @@ export function useMedia() {
     // Helper: Get Public URL
     const getFileUrl = useCallback((file) => {
         if (!file) return '';
-        // If it's already an absolute URL, return it
-        const path = file.file_path || file.storage_key || (typeof file === 'string' ? file : '');
-        if (path.startsWith('http')) return path;
-
-        return `${EDGE_URL}/public/media/${path}`;
+        return buildMediaPublicUrl(file.file_path || file.storage_key || (typeof file === 'string' ? file : ''));
     }, []);
 
     // Fetch file stats
     const fetchStats = useCallback(async () => {
         setStatsLoading(true);
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('media_objects')
-                .select('size_bytes, mime_type')
+                .select('size_bytes, mime_type, media_kind')
                 .is('deleted_at', null);
+
+            if (!isPlatformAdmin && !isFullAccess && tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
 
             const statsData = {
                 total_files: data.length,
                 total_size: data.reduce((acc, f) => acc + (f.size_bytes || 0), 0),
-                image_count: data.filter(f => f.mime_type?.startsWith('image/')).length,
-                doc_count: data.filter(f =>
-                    f.mime_type?.includes('pdf') ||
-                    f.mime_type?.includes('document') ||
-                    f.mime_type?.includes('text')
-                ).length,
-                video_count: data.filter(f => f.mime_type?.startsWith('video/')).length,
+                image_count: data.filter(f => (f.media_kind || normalizeMediaKind(f.mime_type)) === 'image').length,
+                doc_count: data.filter(f => (f.media_kind || normalizeMediaKind(f.mime_type)) === 'document').length,
+                video_count: data.filter(f => (f.media_kind || normalizeMediaKind(f.mime_type)) === 'video').length,
                 other_count: 0
             };
             statsData.other_count = statsData.total_files - statsData.image_count - statsData.doc_count - statsData.video_count;
@@ -260,7 +278,7 @@ export function useMedia() {
         } finally {
             setStatsLoading(false);
         }
-    }, []);
+    }, [isFullAccess, isPlatformAdmin, tenantId]);
 
     // Initial fetch
     useEffect(() => {
@@ -268,54 +286,71 @@ export function useMedia() {
     }, [fetchStats]);
 
     // Upload a single file via Edge API
-    const uploadFile = useCallback(async (file, folder = '', _categoryId = null) => {
+    const uploadFile = useCallback(async (file, folder = '', categoryId = null) => {
         setUploading(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Not authenticated");
+            if (!tenantId && !isPlatformAdmin && !isFullAccess) {
+                throw new Error('Missing tenant context');
+            }
+            if (!(hasPermission('tenant.files.create') || hasPermission('tenant.files.manage') || isPlatformAdmin || isFullAccess)) {
+                throw new Error('Permission denied: Cannot upload files.');
+            }
 
             // 1. Request Upload Session
             const sessionRes = await fetch(`${EDGE_URL}/api/media/upload-session`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`
+                    'Authorization': `Bearer ${session.access_token}`,
+                    ...(tenantId ? { 'x-tenant-id': tenantId } : {})
                 },
                 body: JSON.stringify({
-                    tenantId: tenantId,
                     fileName: file.name,
                     mimeType: file.type,
                     sizeBytes: file.size,
                     accessControl: 'public',
-                    folder: folder
+                    folder: folder,
+                    categoryId: categoryId || null
                 })
             });
 
             if (!sessionRes.ok) throw new Error("Failed to initialize upload session");
             const sessionData = await sessionRes.json();
-            const { sessionId } = sessionData;
+            const { sessionId, uploadUrl, finalizeUrl } = sessionData;
 
-            // 2. Upload file directly to Edge endpoint
-            const uploadRes = await fetch(`${EDGE_URL}/api/media/upload/${sessionId}`, {
+            // 2. Upload file directly to signed R2 URL
+            const uploadRes = await fetch(uploadUrl, {
                 method: 'PUT',
                 headers: {
-                    'Content-Type': file.type,
-                    'Authorization': `Bearer ${session.access_token}`
+                    'Content-Type': file.type || 'application/octet-stream'
                 },
                 body: file
             });
 
             if (!uploadRes.ok) throw new Error("File upload failed");
-            const uploadResult = await uploadRes.json();
-            
-            // Note: Upload endpoint creates the media_objects record.
-            
+
+            // 3. Finalize upload and create canonical media_objects record
+            const finalizeRes = await fetch(finalizeUrl || `${EDGE_URL}/api/media/upload/${sessionId}/finalize`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                    ...(tenantId ? { 'x-tenant-id': tenantId } : {})
+                },
+                body: JSON.stringify({ sessionId })
+            });
+
+            if (!finalizeRes.ok) throw new Error('Failed to finalize upload');
+            const uploadResult = await finalizeRes.json();
+
             // Refresh stats after upload
             await fetchStats();
 
             return { 
                 success: true, 
-                url: `${EDGE_URL}/public/media/${uploadResult.mediaObject.storage_key}`,
+                url: buildMediaPublicUrl(uploadResult.mediaObject.storage_key),
                 mediaObject: uploadResult.mediaObject 
             };
         } catch (err) {
@@ -324,7 +359,7 @@ export function useMedia() {
         } finally {
             setUploading(false);
         }
-    }, [fetchStats, tenantId]);
+    }, [fetchStats, hasPermission, isFullAccess, isPlatformAdmin, tenantId]);
 
     // Sync files from storage bucket to database
     const syncFiles = useCallback(async () => {

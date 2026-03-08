@@ -24,8 +24,7 @@ function CategoriesManager() {
         { value: 'testimony', label: 'Testimony Category' },
         { value: 'announcement', label: 'Announcement Category' },
         { value: 'promotion', label: 'Promotion Category' },
-        { value: 'photo_gallery', label: 'Photo Gallery Category' },
-        { value: 'video_gallery', label: 'Video Gallery Category' },
+        { value: 'media', label: 'Media Library Category' },
         { value: 'gallery', label: 'General Gallery' }
       ]
     }

@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import MediaLibrary from '@/components/dashboard/media/MediaLibrary';
+import { resolveMediaUrl } from '@/lib/media';
 
 
 // Enhanced ImageUpload that includes FilePicker
@@ -31,11 +32,7 @@ export function ImageUpload({ value, onChange, disabled, className, hidePreview 
     }, [normalizedValue]);
 
     const handleSelect = (file) => {
-        let finalUrl = file.file_path;
-        if (!finalUrl?.startsWith('http')) {
-            const edgeUrl = import.meta.env.VITE_EDGE_URL || 'http://localhost:8787';
-            finalUrl = `${edgeUrl.replace(/\/$/, '')}/public/media/${file.file_path}`;
-        }
+        const finalUrl = resolveMediaUrl(file);
 
         if (finalUrl) {
             onChange(finalUrl);

@@ -11,8 +11,6 @@ import ProductsManager from '@/components/dashboard/ProductsManager';
 import PortfolioManager from '@/components/dashboard/PortfolioManager';
 import AnnouncementsManager from '@/components/dashboard/AnnouncementsManager';
 import PromotionsManager from '@/components/dashboard/PromotionsManager';
-import PhotoGalleryManager from '@/components/dashboard/PhotoGalleryManager';
-import VideoGalleryManager from '@/components/dashboard/VideoGalleryManager';
 import UsersManager from '@/components/dashboard/UsersManager';
 import RolesManager from '@/components/dashboard/RolesManager';
 import AuditLogsERP from '@/components/dashboard/AuditLogsERP';
@@ -41,10 +39,6 @@ function Dashboard() {
         return <AnnouncementsManager />;
       case 'promotions':
         return <PromotionsManager />;
-      case 'photo-gallery':
-        return <PhotoGalleryManager />;
-      case 'video-gallery':
-        return <VideoGalleryManager />;
       case 'users':
         return <UsersManager />;
       case 'roles':
