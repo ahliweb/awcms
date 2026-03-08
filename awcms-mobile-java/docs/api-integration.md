@@ -2,7 +2,7 @@
 
 ## Base Endpoints
 
-```
+```sh
 SUPABASE_URL=https://<project>.supabase.co
 REST_BASE=${SUPABASE_URL}/rest/v1
 AUTH_BASE=${SUPABASE_URL}/auth/v1
@@ -31,13 +31,13 @@ STORAGE_BASE=${SUPABASE_URL}/storage/v1
 
 ## Example: Fetch Blogs
 
-```
+```http
 GET /rest/v1/blogs?tenant_id=eq.<tenantId>&select=*
 ```
 
 ## Edge Handlers
 
-```
+```http
 POST /functions/v1/verify-turnstile
 ```
 

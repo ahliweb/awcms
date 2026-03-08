@@ -1,12 +1,14 @@
 # Architecture Overview
 
 ## Position in the AWCMS Ecosystem
+
 - **Admin Panel**: `awcms/` (React/Vite) manages content, roles, and settings.
 - **Public Portal**: `awcms-public/` (Astro) serves tenant websites.
 - **Mobile Java**: `awcms-mobile-java/` delivers a native Android client.
 - **Backend**: Supabase (Auth, PostgREST, Storage) with RLS plus edge handlers for privileged workflows.
 
 ## Module Boundaries
+
 The Android app follows a layered structure to keep UI, domain logic, and data
 integration isolated:
 
@@ -16,6 +18,7 @@ integration isolated:
 - **Core layer**: Network clients, auth session manager, and secure storage.
 
 ## Data Flow
+
 1. User authenticates via Supabase Auth (`/auth/v1`).
 2. Access and refresh tokens are stored in encrypted storage.
 3. API calls include `apikey`, `Authorization`, and `x-tenant-id` headers.
@@ -24,12 +27,14 @@ integration isolated:
 6. Local cache (Room) stores read-heavy data for offline access.
 
 ## Tenant Scoping
+
 - The tenant is resolved from the user profile or a tenant selector screen.
 - Every request includes `x-tenant-id` and a `tenant_id` filter where relevant.
 - Content creation is allowed for `mobile` or `web` channels; publishing remains
   web-only per AWCMS governance rules.
 
 ## Cross-Module Contracts
+
 - **Auth**: Supabase GoTrue REST endpoints.
 - **Data**: PostgREST queries against tenant-scoped tables.
 - **Media**: Supabase Storage buckets (`/storage/v1`).

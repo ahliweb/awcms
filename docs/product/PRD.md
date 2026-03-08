@@ -6,11 +6,20 @@
 
 ## 1. Overview
 
-AWCMS (Ahliweb Content Management System) is an AI-native, multi-tenant CMS platform for organizations that need one operational backend with strict tenant isolation and multiple delivery channels. The current repository shows four active client surfaces: a React admin panel, an Astro public portal, a Flutter mobile app, and ESP32-based IoT/device integrations, all centered on Supabase as the core backend.
+AWCMS (Ahliweb Content Management System) is an AI-native, multi-tenant CMS
+platform for organizations that need one operational backend with strict tenant
+isolation and multiple delivery channels. The current repository shows four
+active client surfaces: a React admin panel, an Astro public portal, a Flutter
+mobile app, and ESP32-based IoT/device integrations, all centered on Supabase
+as the core backend.
 
 The main problem AWCMS solves is fragmented digital publishing and operations: organizations need to manage content, users, branding, permissions, media, and delivery channels without mixing tenant data or building separate systems for web, mobile, and device use cases.
 
-The product goal is to let each tenant operate an isolated workspace where platform operators can onboard tenants, tenant admins can configure modules and branding, editors and authors can manage content safely, and public users can consume published content through fast static portals and other connected channels.
+The product goal is to let each tenant operate an isolated workspace where
+platform operators can onboard tenants, tenant admins can configure modules and
+branding, editors and authors can manage content safely, and public users can
+consume published content through fast static portals and other connected
+channels.
 
 ## 2. Requirements
 
@@ -124,16 +133,16 @@ erDiagram
     tenants ||--o{ audit_logs : records
 ```
 
-| Table / Domain | Description |
-| --- | --- |
-| `tenants` | Master tenant record including slug/domain, hierarchy, and configuration baseline |
-| `users` | Tenant-scoped user profiles linked to auth identities and roles |
-| `roles`, `permissions`, `role_permissions` | ABAC model for UI and database enforcement |
-| `blogs` and related content tables | Draft-to-publish content records owned by tenant and author |
-| `files` | Tenant-scoped media and file assets |
-| `modules` | Tenant-level feature activation and module lifecycle |
-| `devices` | Device and IoT records bound to a tenant |
-| `audit_logs` | Change history for operational accountability and compliance review |
+| Table / Domain                             | Description                                                                       |
+| ------------------------------------------ | --------------------------------------------------------------------------------- |
+| `tenants`                                  | Master tenant record including slug/domain, hierarchy, and configuration baseline |
+| `users`                                    | Tenant-scoped user profiles linked to auth identities and roles                   |
+| `roles`, `permissions`, `role_permissions` | ABAC model for UI and database enforcement                                        |
+| `blogs` and related content tables         | Draft-to-publish content records owned by tenant and author                       |
+| `files`                                    | Tenant-scoped media and file assets                                               |
+| `modules`                                  | Tenant-level feature activation and module lifecycle                              |
+| `devices`                                  | Device and IoT records bound to a tenant                                          |
+| `audit_logs`                               | Change history for operational accountability and compliance review               |
 
 **Data rules:**
 

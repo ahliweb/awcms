@@ -46,7 +46,7 @@ dead links, and stale implementation guidance.
 | DOCSYNC-004 | Medium | Authority docs needed refreshed status/baseline wording to align with current edge-runtime and MCP topology | Resolved | `README.md`, `SYSTEM_MODEL.md`, `DOCS_INDEX.md`, `AGENTS.md` |
 | DOCSYNC-005 | Medium | Full per-file review of all maintained docs is not yet rerun for the 2026-03-08 cycle | Open | This tracker; execution remains pending for Phases 2-5 |
 | DOCSYNC-006 | Medium | Dependency/script/security/performance conflict review has a plan but still needs execution across all maintained surfaces | Open | `docs/dev/documentation-audit-plan.md` workstreams + validation gates |
-| DOCSYNC-007 | Medium | Repository-wide markdown lint still fails because the docs surface includes non-canonical package/mobile/template/content markdown that does not meet current markdownlint standards | Open | `npx markdownlint-cli --config .markdownlint.json "**/*.md" --ignore "**/node_modules/**"` |
+| DOCSYNC-007 | Medium | Repository-wide markdown lint previously failed because non-canonical package/mobile/template/content markdown was still included in the repo-wide lint surface | Resolved | Added `.markdownlintignore`, fixed the remaining `awcms-mobile-java/docs/**` issues and canonical long-line drift, then re-ran repo-wide markdownlint successfully |
 | DOCSYNC-008 | High | Migration mirror parity was filename-drifted and local history was missing the latest mirrored migrations | Resolved | Added `20260307175000_move_sidebar_items.sql` to root, mirrored `20260308070000_add_cloudflare_media_schema.sql`, fixed the media resource registry insert, and re-ran local migration push plus parity verification successfully |
 | DOCSYNC-009 | Medium | Function parity check reported root-only transitional files not mirrored into `awcms/supabase/functions/` | Resolved | Mirrored `content-transform/index.ts` and updated `scripts/verify_supabase_function_consistency.sh` to ignore local-only `supabase/functions/.env` secrets |
 | DOCSYNC-010 | Medium | Public workspace validation was blocked by formatting drift in `awcms-public/primary/package.json` | Resolved | Reformatted `awcms-public/primary/package.json` and re-ran `npm run check` successfully |
@@ -87,6 +87,7 @@ dead links, and stale implementation guidance.
 - Updated `docs/modules/USER_MANAGEMENT.md` to frame `manage-users` as the current transitional server-side handler instead of timeless edge-function-only wording.
 - Revised `docs/guides/wp-data-migration-script.md`, `docs/guides/wp-to-awcms-migration.md`, and `docs/guides/opencode-models.md` to match the current Node baseline, tenant-scoped uniqueness rules, static public architecture wording, and OpenCode runtime branding.
 - Reviewed the remaining maintained package README surfaces in `awcms/`, `awcms-mobile/`, `awcms-esp32/`, and `awcms-ext/` so they now align with current env names, workspace roles, and security guidance.
+- Added `.markdownlintignore` for non-canonical content/template/wiki/debug markdown surfaces and fixed the remaining repo-wide markdownlint blockers in `awcms-mobile-java/docs/**`, `docs/architecture/platform-tenant-separation.md`, and `docs/product/PRD.md`.
 
 ### Remaining Work by Phase
 
@@ -129,7 +130,7 @@ dead links, and stale implementation guidance.
 
 | Gate | Result | Notes |
 | --- | --- | --- |
-| Markdown lint (`**/*.md`) | Failed | Initial run included vendored `awcms-edge/node_modules/**`; scoped rerun still reports non-canonical markdown debt in `awcms-mobile-java/docs/**`, template docs, public content markdown, and temp/debug surfaces |
+| Markdown lint (`**/*.md`) | Passed | Repo-wide markdownlint now passes with `.markdownlintignore` excluding non-canonical content/template/wiki/debug markdown surfaces and the remaining lintable docs corrected |
 | Markdown lint (touched canonical docs) | Passed | Scoped lint succeeds for the authority, deploy, audit, and public-portal docs updated in this pass |
 | Markdown lint (Phase 4 docs and package READMEs) | Passed | Scoped lint succeeds for updated module docs, guides, and maintained workspace README surfaces |
 | Docs link validation (`cd awcms && npm run docs:check`) | Passed | Local file links resolve as expected; `markdown-link-check` shows filesystem links as pending `[ / ]` while still completing successfully |
