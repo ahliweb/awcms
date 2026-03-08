@@ -1,6 +1,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { AUTH_STORAGE_KEY, LEGACY_AUTH_STORAGE_KEY } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 
 const AuthContext = createContext(undefined);
@@ -71,6 +72,11 @@ export const AuthProvider = ({ children }) => {
           localStorage.removeItem(key);
         }
       });
+
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      if (LEGACY_AUTH_STORAGE_KEY !== AUTH_STORAGE_KEY) {
+        localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY);
+      }
 
       // 2. Clear 2FA State
       sessionStorage.removeItem('awcms_2fa_verified');
