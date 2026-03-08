@@ -33,6 +33,7 @@ function MenuPermissionsDialog({
 							<label className="flex cursor-pointer items-center gap-2">
 								<input
 									type="checkbox"
+									aria-label={`Allow ${role.name}`}
 									checked={menuPermissions[role.id] || false}
 									onChange={(event) => setMenuPermissions({
 										...menuPermissions,

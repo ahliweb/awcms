@@ -61,12 +61,13 @@ function MenuReorderItem({
 						size="sm"
 						onClick={() => onPerms(menu)}
 						title="Access Permissions"
+						aria-label={`Manage permissions for ${menu.label}`}
 						className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
 					>
 						<Lock className="h-4 w-4" />
 					</Button>
 					{canEdit && (
-						<Button variant="ghost" size="sm" onClick={() => onEdit(menu)} className="h-8 w-8 p-0 text-primary hover:bg-primary/10">
+						<Button variant="ghost" size="sm" onClick={() => onEdit(menu)} aria-label={`Edit ${menu.label}`} className="h-8 w-8 p-0 text-primary hover:bg-primary/10">
 							<Edit className="h-4 w-4" />
 						</Button>
 					)}
@@ -75,6 +76,7 @@ function MenuReorderItem({
 							variant="ghost"
 							size="sm"
 							onClick={() => onRequestDelete(menu)}
+							aria-label={`Delete ${menu.label}`}
 							className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
 						>
 							<Trash2 className="h-4 w-4" />
@@ -101,13 +103,13 @@ function MenuReorderItem({
 									</div>
 								</div>
 								<div className="flex gap-1">
-									<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onPerms(child)}>
+									<Button variant="ghost" size="icon" aria-label={`Manage permissions for ${child.label}`} className="h-6 w-6" onClick={() => onPerms(child)}>
 										<Lock className="h-3 w-3 text-muted-foreground" />
 									</Button>
-									<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(child)}>
+									<Button variant="ghost" size="icon" aria-label={`Edit ${child.label}`} className="h-6 w-6" onClick={() => onEdit(child)}>
 										<Edit className="h-3 w-3 text-primary" />
 									</Button>
-									<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRequestDelete(child)}>
+									<Button variant="ghost" size="icon" aria-label={`Delete ${child.label}`} className="h-6 w-6" onClick={() => onRequestDelete(child)}>
 										<Trash2 className="h-3 w-3 text-destructive" />
 									</Button>
 								</div>

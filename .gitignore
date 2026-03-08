@@ -5,6 +5,8 @@ node_modules
 
 # Testing
 coverage
+awcms/playwright-report/
+awcms/test-results/
 
 # Production
 build

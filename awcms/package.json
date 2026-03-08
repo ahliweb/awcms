@@ -10,6 +10,7 @@
     "dev": "node scripts/check_secrets.js && vite",
     "dev:full": "node scripts/check_secrets.js && (cd .. && npx supabase functions serve &) && vite",
     "test": "vitest",
+    "test:e2e": "playwright test",
     "docs:check": "npx markdown-link-check --config ../.mlc_config.json ../README.md ../AGENTS.md README.md ../DOCS_INDEX.md ../CHANGELOG.md ../CONTRIBUTING.md ../SECURITY.md ../CODE_OF_CONDUCT.md ../docs/**/*.md",
     "db:pull": "npx supabase db pull --schema public",
     "build": "vite build",
@@ -71,6 +72,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/typography": "^0.5.19",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
