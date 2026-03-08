@@ -21,7 +21,15 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Documentation: Refreshed the repository-wide documentation audit plan/tracker for a 2026-03-08 full-scope review and updated authority docs to remove Stitch from the top-level README status baseline.
 - Documentation: Restructured `docs/product/PRD.md`, `docs/product/USER_STORY.md`, and `docs/product/ACCEPTANCE_CRITERIA.md` into a minimal, aligned product documentation set and synced `DOCS_INDEX.md` descriptions.
 - Documentation: Aligned public-portal architecture docs to the canonical Astro static-output model and clarified that middleware-based analytics logging is non-canonical runtime behavior.
+- Documentation: Refreshed maintained docs across deploy/dev guides, module guides, package READMEs, and OpenCode/MCP setup references to match the current runtime model, env naming, and static public build flow.
+- Documentation: Added `.markdownlintignore`, resolved the remaining repo-linted markdown debt, and updated the audit tracker to record a passing repository-wide markdownlint baseline.
 - Wiki: Synced 6 new files and 4 updated files to local GitHub wiki, updated `Home.md`.
+
+### Fixed
+
+- Supabase: Restored root/mirror parity by adding the missing mirrored migration/function files and correcting the `resources_registry` insert in `20260308070000_add_cloudflare_media_schema.sql`.
+- Scripts: Updated `scripts/verify_supabase_function_consistency.sh` to ignore local-only `supabase/functions/.env` files so secret material does not break parity validation.
+- Validation: Resolved public workspace formatting drift in `awcms-public/primary/package.json`, allowing the previously failing check pipeline to pass again.
 
 ## [2.33.0] "Blueprint" - 2026-02-28
 
