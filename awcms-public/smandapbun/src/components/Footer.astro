@@ -11,7 +11,7 @@ export interface Props {
 const { locale } = Astro.props;
 const currentYear = new Date().getFullYear();
 const site = await getSiteData();
-const footerMenu = await getMenuTree("footer");
+const footerMenu = await getMenuTree("footer", locale);
 const menuItems = footerMenu.length > 0 ? footerMenu : navigation.mainMenu;
 
 function getLabel(item: any): string {

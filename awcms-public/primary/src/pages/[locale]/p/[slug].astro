@@ -19,8 +19,7 @@ export const getStaticPaths = (async () => {
 
   const tenantId = getPublicTenantId();
   if (!tenantId) {
-    console.warn("[Page] No tenant ID configured, skipping static path generation");
-    return [];
+    throw new Error("[Page] Missing PUBLIC_TENANT_ID for static path generation");
   }
 
   type PageSlugRow = {

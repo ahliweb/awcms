@@ -14,7 +14,7 @@ The Public Portal (`awcms-public/`) handles the visitor-facing websites for each
 - **Rendering**: Static output (`output: "static"`) with React islands. SSR is optional if explicitly enabled.
 - **Styling**: Tailwind CSS 4.
 - **Data Source**: Supabase (via direct client).
-- **Analytics**: Server-side logging is available only when middleware runs (SSR/runtime). Static builds require client-side instrumentation or edge functions.
+- **Analytics**: Static builds require client-side instrumentation or dedicated edge services. Middleware-based server-side logging is non-canonical runtime behavior.
 - **View Transitions**: Enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
 
 ### Astro Config (Context7)
@@ -44,14 +44,14 @@ Statically render tenant-scoped content using Astro build-time data fetching wit
 | --- | --- | --- | --- |
 | `PUBLIC_TENANT_ID` | Build env | Yes | Primary tenant resolver |
 | `VITE_PUBLIC_TENANT_ID` | Build env | Optional | Fallback resolver |
-| `VITE_SUPABASE_URL` | Build env | Yes | Supabase URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Build env | Yes | Publishable key |
+| `VITE_SUPABASE_URL` / `PUBLIC_SUPABASE_URL` | Build env | Yes | Supabase URL (`PUBLIC_*` supported as build fallback) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Build env | Yes | Publishable key (`PUBLIC_*` supported as build fallback) |
 
 ### Workflow
 
 1. Resolve tenant at build time (no `Astro.locals` in static builds).
-2. Create a Supabase client with `x-tenant-id` header.
-3. Query only published and non-deleted records.
+2. Create a Supabase client from build-time env values.
+3. Query only tenant-scoped, published, and non-deleted records.
 4. Use `getStaticPaths` to generate routes.
 5. Render page data in the template.
 
@@ -67,11 +67,16 @@ export async function getStaticPaths() {
     import.meta.env.VITE_PUBLIC_TENANT_ID ||
     import.meta.env.VITE_TENANT_ID;
 
+  if (!tenantId) {
+    throw new Error("Missing PUBLIC_TENANT_ID for static public build.");
+  }
+
   const supabase = createClientFromEnv(import.meta.env, { "x-tenant-id": tenantId });
 
   const { data } = await supabase
     .from("blogs")
     .select("slug")
+    .eq("tenant_id", tenantId)
     .eq("status", "published")
     .is("deleted_at", null);
 
@@ -87,7 +92,7 @@ export async function getStaticPaths() {
 
 ### Failure Modes and Guardrails
 
-- Missing `PUBLIC_TENANT_ID`: builds may render wrong tenant or no content.
+- Missing `PUBLIC_TENANT_ID`: fail the build instead of silently rendering wrong-tenant or empty content.
 - Using runtime-only tenant resolution: static builds cannot access `Astro.locals`.
 - Draft leakage: always filter `status = 'published'` and `deleted_at is null`.
 
@@ -128,7 +133,7 @@ Public portals require:
 ## 6. Visitor Analytics + Consent
 
 - Consent banner: `awcms-public/primary/src/components/common/ConsentNotice.astro`.
-- Logging: `awcms-public/primary/src/middleware.ts` logs page views only when running with SSR/runtime middleware.
+- Logging: `awcms-public/primary/src/middleware.ts` applies only to non-canonical runtime experiments; the standard public deployment is static-first and does not rely on middleware logging.
 - Public stats: `/visitor-stats` and `/[tenant]/visitor-stats`.
 
 ## 7. DB-Driven Admin Control

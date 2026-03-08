@@ -5,7 +5,7 @@
 
 import { supabase } from '@/lib/customSupabaseClient';
 
-const EDGE_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mailketing`;
+const EDGE_FUNCTION_URL = `${import.meta.env.VITE_EDGE_URL}/api/mailketing`;
 
 /**
  * Send a transactional email via Mailketing

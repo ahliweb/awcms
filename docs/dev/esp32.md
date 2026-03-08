@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-AWCMS manages ESP32 devices remotely via Supabase Edge Functions and REST APIs. The firmware:
+AWCMS manages ESP32 devices remotely via Cloudflare Workers, existing Supabase functions where still required, and REST APIs. The firmware:
 
 - Connects to WiFi.
 - Polls or subscribes to AWCMS configuration endpoints to receive pushed settings.

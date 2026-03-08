@@ -21,6 +21,35 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+const formatCreatedAt = (value) => {
+  if (!value) return '-';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+
+  return date.toLocaleDateString();
+};
+
+const slugify = (value) => {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+};
+
+const buildModuleSlugFromMenuItem = (item) => {
+  if (!item) return '';
+
+  if (item.source === 'extension') {
+    const extensionKey = item.key || 'extension';
+    const menuPath = normalizeMenuPath(item.path);
+    const slugSuffix = slugify(menuPath || item.label || 'menu');
+    return `ext-${extensionKey}-${slugSuffix}`;
+  }
+
+  return item.key || item.id || '';
+};
+
 const ModulesManager = () => {
   /* const supabase = useSupabaseClient(); - Replaced by global import */
   const { toast } = useToast();
@@ -35,27 +64,17 @@ const ModulesManager = () => {
 
   const isLoading = loading || menuLoading;
 
-  const slugify = useCallback((value) => {
-    return String(value || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-  }, []);
-
-  const buildModuleSlug = useCallback((item) => {
-    if (!item) return '';
-    if (item.source === 'extension') {
-      const extensionKey = item.key || 'extension';
-      const menuPath = normalizeMenuPath(item.path);
-      const slugSuffix = slugify(menuPath || item.label || 'menu');
-      return `ext-${extensionKey}-${slugSuffix}`;
-    }
-    return item.key || item.id || '';
-  }, [slugify]);
-
   const fetchModules = useCallback(async () => {
     setLoading(true);
     try {
+      const { error: syncError } = await supabase.rpc('sync_modules_from_sidebar', {
+        p_tenant_id: currentTenant?.id || null,
+      });
+
+      if (syncError) {
+        console.warn('Error syncing modules from sidebar:', syncError);
+      }
+
       let query = supabase
         .from('modules')
         .select(`
@@ -113,40 +132,77 @@ const ModulesManager = () => {
     userRole
   ]);
 
-  const displayModules = useMemo(() => {
-    const moduleMap = new Map(modules.map((module) => [module.slug, module]));
-    const seen = new Set();
+  const sidebarModules = useMemo(() => {
+    const seenSlugs = new Set();
 
-    const merged = visibleMenuItems
+    return visibleMenuItems
       .map((item) => {
-        const slug = buildModuleSlug(item);
-        if (!slug || seen.has(slug)) return null;
-        seen.add(slug);
-        const module = moduleMap.get(slug);
+        const slug = buildModuleSlugFromMenuItem(item);
+        if (!slug || seenSlugs.has(slug)) return null;
+
+        seenSlugs.add(slug);
+
         return {
-          id: module?.id || slug,
-          name: module?.name || item.label,
+          id: `sidebar-${slug}`,
+          name: item.label || slug,
           slug,
-          description: module?.description || null,
-          status: module?.status || 'missing',
-          created_at: module?.created_at || null,
-          tenant: module?.tenant || (currentTenant ? { name: currentTenant.name } : null),
-          group_label: item.group_label,
-          menu_path: item.path
+          description: item.source === 'extension'
+            ? 'Available from sidebar extension menu'
+            : 'Available from sidebar menu',
+          status: item.is_visible === false ? 'inactive' : 'active',
+          created_at: null,
+          tenant: item.scope === 'platform'
+            ? { name: 'Platform' }
+            : (currentTenant ? { name: currentTenant.name } : null),
+          group_label: item.group_label || null,
+          menu_path: normalizeMenuPath(item.path),
+          source: 'sidebar',
         };
       })
       .filter(Boolean);
+  }, [currentTenant, visibleMenuItems]);
 
-    if (!searchQuery) return merged;
+  const displayModules = useMemo(() => {
+    const mergedModules = new Map(
+      sidebarModules.map((module) => [module.slug, module])
+    );
+
+    modules.forEach((module) => {
+      const sidebarModule = mergedModules.get(module.slug);
+      mergedModules.set(module.slug, {
+        ...(sidebarModule || {}),
+        ...module,
+        group_label: module.group_label || sidebarModule?.group_label || null,
+        menu_path: sidebarModule?.menu_path || null,
+        tenant: module.tenant || sidebarModule?.tenant || (currentTenant ? { name: currentTenant.name } : null),
+        source: module.source || 'database',
+      });
+    });
+
+    const enrichedModules = Array.from(mergedModules.values()).sort((a, b) => {
+      const groupA = a.group_label || '';
+      const groupB = b.group_label || '';
+
+      if (groupA !== groupB) {
+        return groupA.localeCompare(groupB);
+      }
+
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    if (!searchQuery) return enrichedModules;
 
     const query = searchQuery.toLowerCase();
-    return merged.filter((module) => (
+    return enrichedModules.filter((module) => (
       module.name?.toLowerCase().includes(query) ||
       module.slug?.toLowerCase().includes(query) ||
+      module.status?.toLowerCase().includes(query) ||
+      module.tenant?.name?.toLowerCase().includes(query) ||
+      module.description?.toLowerCase().includes(query) ||
       module.group_label?.toLowerCase().includes(query) ||
       module.menu_path?.toLowerCase().includes(query)
     ));
-  }, [modules, visibleMenuItems, buildModuleSlug, searchQuery, currentTenant]);
+  }, [currentTenant, modules, searchQuery, sidebarModules]);
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -240,7 +296,7 @@ const ModulesManager = () => {
                     </TableCell>
                     <TableCell>{getStatusBadge(module.status)}</TableCell>
                     <TableCell className="text-slate-500 text-xs">
-                      {new Date(module.created_at).toLocaleDateString()}
+                      {formatCreatedAt(module.created_at)}
                     </TableCell>
                   </TableRow>
                 ))

@@ -2,7 +2,7 @@
 
 ## Recommended Layout
 
-```
+```text
 awcms-mobile-java/
   app/
     src/main/java/com/awcms/mobile/
@@ -34,6 +34,7 @@ awcms-mobile-java/
 ```
 
 ## Naming Conventions
+
 - **Packages**: `com.awcms.mobile` or tenant-specific reverse domain.
 - **Classes**: PascalCase (e.g., `LoginViewModel`).
 - **Resources**: `snake_case` (e.g., `activity_login.xml`).
@@ -44,6 +45,7 @@ awcms-mobile-java/
 - **Drawables**: prefix by type (e.g., `ic_`, `bg_`, `shape_`).
 
 ## Conventions
+
 - Keep feature-specific UI inside `ui/feature/<feature-name>`.
 - Repositories are the only layer that talks to remote/local data sources.
 - Do not place secrets in code; use `secrets.properties` and `BuildConfig`.

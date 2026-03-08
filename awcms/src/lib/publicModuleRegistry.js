@@ -17,69 +17,64 @@
  * @property {string} icon - Lucide icon name
  * @property {string} [group] - Optional grouping
  * @property {number} [order] - Sort order
+ * @property {string[]} [portalVariants] - Supported public portal variants
+ * @property {string[]} [requiredModuleSlugs] - Active tenant modules required for this route
  */
 
 /** @type {PublicModule[]} */
 export const PUBLIC_MODULES = [
-    // Main pages
     { key: 'home', label: 'Home', url: '/', icon: 'Home', group: 'Main', order: 10 },
-    { key: 'about', label: 'About', url: '/about', icon: 'Info', group: 'Main', order: 20 },
-    { key: 'contact', label: 'Contact', url: '/contact', icon: 'Mail', group: 'Main', order: 30 },
-
-    // Content modules
-    { key: 'blogs', label: 'Blogs', url: '/blogs', icon: 'FileText', group: 'Content', order: 100 },
-    { key: 'pages', label: 'Pages', url: '/pages', icon: 'FileEdit', group: 'Content', order: 110 },
-    { key: 'portfolio', label: 'Portfolio', url: '/portfolio', icon: 'Briefcase', group: 'Content', order: 120 },
-    { key: 'testimonials', label: 'Testimonials', url: '/testimonials', icon: 'MessageSquareQuote', group: 'Content', order: 130 },
-    { key: 'announcements', label: 'Announcements', url: '/announcements', icon: 'Megaphone', group: 'Content', order: 140 },
-    { key: 'promotions', label: 'Promotions', url: '/promotions', icon: 'Tag', group: 'Content', order: 150 },
-
-    // School (Smandapbun)
-    { key: 'school_profile', label: 'School Profile', url: '/profil', icon: 'Building2', group: 'School', order: 160 },
-    { key: 'school_organization', label: 'Organization', url: '/profil/struktur-organisasi', icon: 'Users', group: 'School', order: 170 },
-    { key: 'school_staff', label: 'Staff', url: '/profil/tenaga-pendidik', icon: 'UserCheck', group: 'School', order: 180 },
-    { key: 'school_services', label: 'Services', url: '/layanan', icon: 'Settings', group: 'School', order: 190 },
-    { key: 'school_finance', label: 'Finance', url: '/keuangan', icon: 'Wallet', group: 'School', order: 200 },
-    { key: 'school_achievements', label: 'Achievements', url: '/prestasi', icon: 'Trophy', group: 'School', order: 210 },
-    { key: 'school_alumni', label: 'Alumni', url: '/alumni', icon: 'GraduationCap', group: 'School', order: 220 },
-    { key: 'school_agenda', label: 'Agenda', url: '/blogs/agenda', icon: 'CalendarDays', group: 'School', order: 230 },
-    { key: 'school_gallery', label: 'Gallery', url: '/blogs/galeri', icon: 'Image', group: 'School', order: 240 },
-    { key: 'school_contact', label: 'School Contact', url: '/kontak', icon: 'Phone', group: 'School', order: 250 },
-
-    // Media
-    { key: 'gallery', label: 'Gallery', url: '/gallery', icon: 'Image', group: 'Media', order: 200 },
-    { key: 'photo_gallery', label: 'Photo Gallery', url: '/gallery/photos', icon: 'Image', group: 'Media', order: 210 },
-    { key: 'video_gallery', label: 'Video Gallery', url: '/gallery/videos', icon: 'Video', group: 'Media', order: 220 },
-
-    // Commerce
-    { key: 'products', label: 'Products', url: '/products', icon: 'Package', group: 'Commerce', order: 300 },
-    { key: 'shop', label: 'Shop', url: '/shop', icon: 'ShoppingCart', group: 'Commerce', order: 310 },
-
-    // Legal
-    { key: 'privacy', label: 'Privacy Policy', url: '/privacy', icon: 'Shield', group: 'Legal', order: 400 },
-    { key: 'terms', label: 'Terms of Service', url: '/terms', icon: 'FileCheck', group: 'Legal', order: 410 },
-    { key: 'faq', label: 'FAQ', url: '/faq', icon: 'HelpCircle', group: 'Legal', order: 420 },
-
-    // Discovery
-    { key: 'categories', label: 'Categories', url: '/categories', icon: 'FolderTree', group: 'Discovery', order: 500 },
-    { key: 'tags', label: 'Tags', url: '/tags', icon: 'Hash', group: 'Discovery', order: 510 },
-    { key: 'search', label: 'Search', url: '/search', icon: 'Search', group: 'Discovery', order: 520 },
-    { key: 'visitor_stats', label: 'Visitor Statistics', url: '/visitor-stats', icon: 'LineChart', group: 'Discovery', order: 530 },
-
-    // User
-    { key: 'login', label: 'Login', url: '/login', icon: 'LogIn', group: 'User', order: 600 },
-    { key: 'register', label: 'Register', url: '/register', icon: 'UserPlus', group: 'User', order: 610 },
-    { key: 'profile', label: 'Profile', url: '/profile', icon: 'User', group: 'User', order: 620 },
-    { key: 'cart', label: 'Cart', url: '/cart', icon: 'ShoppingCart', group: 'User', order: 630 },
+    { key: 'about', label: 'About', url: '/about', icon: 'Info', group: 'Main', order: 20, portalVariants: ['primary'] },
+    { key: 'contact', label: 'Contact', url: '/contact', icon: 'Mail', group: 'Main', order: 30, portalVariants: ['primary'] },
+    { key: 'services', label: 'Services', url: '/services', icon: 'Settings', group: 'Main', order: 40, portalVariants: ['primary'] },
+    { key: 'pricing', label: 'Pricing', url: '/pricing', icon: 'Wallet', group: 'Main', order: 50, portalVariants: ['primary'] },
+    { key: 'blogs', label: 'Blogs', url: '/blogs', icon: 'FileText', group: 'Content', order: 100, requiredModuleSlugs: ['blogs'] },
+    { key: 'search', label: 'Search', url: '/search', icon: 'Search', group: 'Discovery', order: 110, portalVariants: ['primary'] },
+    { key: 'visitor_stats', label: 'Visitor Statistics', url: '/visitor-stats', icon: 'LineChart', group: 'Discovery', order: 120 },
+    { key: 'school_profile', label: 'School Profile', url: '/profil', icon: 'Building2', group: 'School', order: 200, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages'] },
+    { key: 'school_organization', label: 'Organization', url: '/profil/struktur-organisasi', icon: 'Users', group: 'School', order: 210, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages'] },
+    { key: 'school_staff', label: 'Staff', url: '/profil/tenaga-pendidik', icon: 'UserCheck', group: 'School', order: 220, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages'] },
+    { key: 'school_services', label: 'Services', url: '/layanan', icon: 'Settings', group: 'School', order: 230, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages'] },
+    { key: 'school_finance', label: 'Finance', url: '/keuangan', icon: 'Wallet', group: 'School', order: 240, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages'] },
+    { key: 'school_achievements', label: 'Achievements', url: '/prestasi', icon: 'Trophy', group: 'School', order: 250, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages'] },
+    { key: 'school_alumni', label: 'Alumni', url: '/alumni', icon: 'GraduationCap', group: 'School', order: 260, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages'] },
+    { key: 'school_agenda', label: 'Agenda', url: '/blogs/agenda', icon: 'CalendarDays', group: 'School', order: 270, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages', 'blogs'] },
+    { key: 'school_gallery', label: 'Gallery', url: '/blogs/galeri', icon: 'Image', group: 'School', order: 280, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages', 'blogs'] },
+    { key: 'school_contact', label: 'School Contact', url: '/kontak', icon: 'Phone', group: 'School', order: 290, portalVariants: ['smandapbun'], requiredModuleSlugs: ['school_pages'] },
 ];
+
+export function getPublicPortalVariant(tenant) {
+    return tenant?.slug === 'smandapbun' ? 'smandapbun' : 'primary';
+}
+
+export function getPublicModulesForTenant(tenant, activeModuleSlugs = []) {
+    const portalVariant = getPublicPortalVariant(tenant);
+    const activeModuleSet = new Set(activeModuleSlugs.filter(Boolean));
+
+    return PUBLIC_MODULES
+        .filter((module) => {
+            if (module.portalVariants && !module.portalVariants.includes(portalVariant)) {
+                return false;
+            }
+
+            if (!module.requiredModuleSlugs || module.requiredModuleSlugs.length === 0) {
+                return true;
+            }
+
+            return module.requiredModuleSlugs.every((slug) => activeModuleSet.has(slug));
+        })
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+}
 
 /**
  * Get modules grouped by category
+ * @param {Record<string, unknown>} [tenant]
+ * @param {string[]} [activeModuleSlugs]
  * @returns {Object.<string, PublicModule[]>}
  */
-export function getModulesByGroup() {
+export function getModulesByGroup(tenant, activeModuleSlugs = []) {
     const groups = {};
-    PUBLIC_MODULES.forEach(mod => {
+    getPublicModulesForTenant(tenant, activeModuleSlugs).forEach(mod => {
         const group = mod.group || 'Other';
         if (!groups[group]) groups[group] = [];
         groups[group].push(mod);

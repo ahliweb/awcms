@@ -1,73 +1,88 @@
-# AWCMS Resource System Documentation
+# AWCMS Resource Map
 
-## Overview
+> **Documentation Authority**: [SYSTEM_MODEL.md](../SYSTEM_MODEL.md) -> [AGENTS.md](../AGENTS.md) -> [README.md](../README.md) -> [DOCS_INDEX.md](../DOCS_INDEX.md)
 
-This document serves as the authoritative registry of all resources within AWCMS.
-It maps technical resource keys to their UI representation, DB tables, and functional components.
-The registry is backed by the `resources_registry` table with ABAC-aligned permission prefixes.
-UI schemas live in `ui_configs`, and editor/component settings live in `component_registry`.
+## Purpose
 
-> [!TIP]
-> For instructions on adding new custom schemas to this registry programmatically, see the [Programmatic Content Types](architecture/schema-definition.md) guide.
+Provide a cleaned-up reference for the AWCMS `resources_registry` without repeating redundant settings-backed entries.
 
-## Resource Registry (Draft Audit)
+## Canonical Sources
 
-| Resource Key | Scope | Permission Prefix | UI Label | Component Type | DB Table |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `blogs` | Tenant | `tenant.blog` | Blogs | Content | `blogs` |
-| `pages` | Tenant | `tenant.page` | Pages | Content | `pages` |
-| `visual_builder` | Tenant | `tenant.visual_pages` | Visual Builder | Settings/Builder | `visual_pages` |
-| `themes` | Tenant | `tenant.theme` | Themes | Config | `themes` |
-| `widgets` | Tenant | `tenant.widgets` | Widgets | Config | `widgets` |
-| `portfolio` | Tenant | `tenant.portfolio` | Portfolio | Content | `portfolio` |
-| `testimonials` | Tenant | `tenant.testimonies` | Testimonials | Content | `testimonies` |
-| `announcements` | Tenant | `tenant.announcements` | Announcements | Content | `announcements` |
-| `promotions` | Tenant | `tenant.promotions` | Promotions | Content | `promotions` |
-| `school_pages` | Tenant | `tenant.school_pages` | School Website | Settings | `settings` |
-| `site_images` | Tenant | `tenant.school_pages` | Site Images | Settings | `settings` |
-| `contact_messages` | Tenant | `tenant.contact_messages` | Contact Messages | Data | `contact_messages` |
-| `contacts` | Tenant | `tenant.contacts` | Contacts CRM | Data | `contacts` |
-| `files` | Tenant | `tenant.files` | Media Library | Media | `files` |
-| `photo_gallery` | Tenant | `tenant.photo_gallery` | Photo Gallery | Media | `galleries` |
-| `video_gallery` | Tenant | `tenant.video_gallery` | Video Gallery | Media | `galleries` |
-| `products` | Tenant | `tenant.products` | Products | Commerce | `products` |
-| `product_types` | Tenant | `tenant.product_types` | Product Types | Commerce | `product_types` |
-| `orders` | Tenant | `tenant.orders` | Orders | Commerce | `orders` |
-| `menus` | Tenant | `tenant.menu` | Menu Manager | Navigation | `menus` |
-| `categories` | Tenant | `tenant.categories` | Categories | Taxonomy | `categories` |
-| `tags` | Tenant | `tenant.tag` | Tags | Taxonomy | `tags` |
-| `users` | Tenant | `tenant.user` | Users | RBAC | `users` |
-| `visitor_stats` | Tenant | `tenant.analytics` | Visitor Statistics | Analytics | `analytics_events` |
-| `stitch_import` | Tenant | `tenant.stitch_import` | Stitch Import | Settings | `stitch_import_jobs` |
-| `roles` | Tenant | `tenant.role` | Roles & Permissions | RBAC | `roles` |
-| `policies` | Tenant | `tenant.policy` | Policies | Data | `policies` |
-| `seo_manager` | Tenant | `tenant.seo` | SEO Manager | Settings | `seo_settings` |
-| `languages` | Tenant | `tenant.languages` | Languages | Config | `languages` |
-| `extensions` | Platform | `platform.extensions` | Extensions | System | `extensions` |
-| `modules` | Platform | `platform.module` | Modules | System | `modules` |
-| `sidebar_manager` | Platform | `platform.sidebar` | Sidebar Manager | Config | `admin_menus` |
-| `notifications` | Tenant | `tenant.notification` | Notifications | Data | `notifications` |
-| `audit_logs` | Tenant | `tenant.audit` | Audit Logs | Logs | `audit_logs` |
-| `settings_general` | Tenant | `tenant.setting` | General Settings | Settings | `settings` |
-| `settings_branding`| Tenant | `tenant.setting` | Branding | Settings | `settings` |
-| `sso` | Tenant | `tenant.sso` | SSO & Security | Config | `sso_config` |
-| `email_settings` | Tenant | `tenant.setting` | Email Settings | Config | `settings` |
-| `email_logs` | Tenant | `tenant.setting` | Email Logs | Logs | `email_logs` |
-| `iot_devices` | Tenant | `tenant.iot` | IoT Devices | IoT | `iot_devices` |
-| `mobile_users` | Tenant | `tenant.mobile_users` | Mobile Users | Mobile | `mobile_users` |
-| `push_notifications`| Tenant | `tenant.push_notifications` | Push Notifications | Mobile | `push_notifications` |
-| `mobile_config` | Tenant | `tenant.mobile` | App Config | Mobile | `settings` |
-| `tenants` | Platform | `platform.tenant` | Tenant Management | System | `tenants` |
-| `test_dynamic` | Tenant | `tenant.setting` | Test Dynamic Resource | Settings | `settings` |
+- `public.resources_registry` is the live registry table.
+- [docs/architecture/database.md](architecture/database.md) defines the registry schema.
+- [docs/security/abac.md](security/abac.md) is the canonical permission-prefix reference.
+- [docs/modules/MODULES_GUIDE.md](modules/MODULES_GUIDE.md) is the canonical admin-module map.
 
-## UI Components Map
+## How This Map Is Trimmed
 
-### Hardcoded components to be replaced by Dynamic UI
+- This file lists unique operational resources first.
+- Settings-backed admin views that share the same underlying table are grouped instead of repeated inline.
+- Dev/test-only seed data such as `test_dynamic` is intentionally excluded from the canonical map.
 
-- `SchoolPagesManager` -> `DynamicResourceManager(resource='school_pages')`
-- `RolesManager` -> `DynamicTable(resource='roles')`
+## Canonical Resource Registry
 
-## Editor Configurations
+| Resource Key | Scope | Permission Prefix | Admin Surface | Backing Table/Store | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `blogs` | Tenant | `tenant.blog` | Blogs | `blogs` | Canonical content table after resource-registry parity fixes |
+| `pages` | Tenant | `tenant.page` | Pages | `pages` | Core page manager |
+| `visual_builder` | Tenant | `tenant.visual_pages` | Visual Builder | `visual_pages` | Visual page builder resources |
+| `themes` | Tenant | `tenant.theme` | Themes | `themes` | Tenant theme management |
+| `widgets` | Tenant | `tenant.widgets` | Widgets | `widgets` | Widget registry and placement |
+| `portfolio` | Tenant | `tenant.portfolio` | Portfolio | `portfolio` | Public portfolio content |
+| `testimonials` | Tenant | `tenant.testimonies` | Testimonials | `testimonies` | Resource key remains `testimonials`; backing content uses `testimonies` |
+| `announcements` | Tenant | `tenant.announcements` | Announcements | `announcements` | Tenant-scoped notice content |
+| `promotions` | Tenant | `tenant.promotions` | Promotions | `promotions` | Commerce/content promotions |
+| `contact_messages` | Tenant | `tenant.contact_messages` | Contact Messages | `contact_messages` | Inbound public contact submissions |
+| `contacts` | Tenant | `tenant.contacts` | Contacts CRM | `contacts` | Tenant CRM contacts |
+| `files` | Tenant | `tenant.files` | Media Library | `media_objects` | Media library is backed by `media_objects`, not `files` |
+| `photo_gallery` | Tenant | `tenant.photo_gallery` | Photo Gallery | `photo_gallery` | Gallery records after parity fix |
+| `video_gallery` | Tenant | `tenant.video_gallery` | Video Gallery | `video_gallery` | Gallery records after parity fix |
+| `products` | Tenant | `tenant.products` | Products | `products` | Commerce catalog |
+| `product_types` | Tenant | `tenant.product_types` | Product Types | `product_types` | Commerce taxonomy |
+| `orders` | Tenant | `tenant.orders` | Orders | `orders` | Commerce orders |
+| `menus` | Tenant | `tenant.menu` | Menu Manager | `menus` | Navigation menus |
+| `categories` | Tenant | `tenant.categories` | Categories | `categories` | Tenant taxonomy; `content` scope is shared across blogs and pages |
+| `tags` | Tenant | `tenant.tag` | Tags | `tags` | Tenant-scoped shared tags reused across supported modules |
+| `users` | Tenant | `tenant.user` | Users | `users` | Registry parity fixed from legacy `profiles` mapping |
+| `roles` | Tenant | `tenant.role` | Roles & Permissions | `roles` | Tenant role management |
+| `policies` | Tenant | `tenant.policy` | Policies | `policies` | Tenant policy rules |
+| `visitor_stats` | Tenant | `tenant.analytics` | Visitor Statistics | `analytics_events` | Admin analytics surface |
+| `seo_manager` | Tenant | `tenant.seo` | SEO Manager | `seo_metadata` | Registry parity fixed from legacy `seo_settings` mapping |
+| `languages` | Tenant | `tenant.languages` | Languages | `languages` | Tenant language config |
+| `notifications` | Tenant | `tenant.notification` | Notifications | `notifications` | In-app notifications |
+| `audit_logs` | Tenant | `tenant.audit` | Audit Logs | `audit_logs` | Compliance/audit read surface |
+| `sso` | Tenant | `tenant.sso` | SSO & Security | `sso_providers` | Registry parity fixed from legacy `sso_config` mapping |
+| `iot_devices` | Tenant | `tenant.iot` | IoT Devices | `devices` | Registry parity fixed from legacy `iot_devices` mapping |
+| `mobile_users` | Tenant | `tenant.mobile_users` | Mobile Users | `mobile_users` | Mobile account management |
+| `push_notifications` | Tenant | `tenant.push_notifications` | Push Notifications | `push_notifications` | Mobile notification surface |
+| `extensions` | Platform | `platform.extensions` | Extensions | `extensions` | Platform extension lifecycle |
+| `modules` | Platform | `platform.module` | Modules | `modules` | Platform module lifecycle |
+| `sidebar_manager` | Platform | `platform.sidebar` | Sidebar Manager | `admin_menus` | Platform navigation configuration |
+| `tenants` | Platform | `platform.tenant` | Tenant Management | `tenants` | Platform tenant administration |
 
-- **TipTap**: Configuration stored in `component_registry` table.
-- **Puck**: Components allowed stored in `puck_components` table or JSON field.
+## Grouped Settings-Backed Views
+
+These resource keys are valid, but they are grouped here because they reuse the same backing store or represent closely related admin surfaces.
+
+| Resource Key | Permission Prefix | Admin Surface | Backing Table | Grouping Reason |
+| --- | --- | --- | --- | --- |
+| `school_pages` | `tenant.school_pages` | School Website | `settings` | Same settings store as site-level tenant configuration |
+| `site_images` | `tenant.school_pages` | Site Images | `settings` | Same permission family and settings-backed storage as `school_pages` |
+| `settings_general` | `tenant.setting` | General Settings | `settings` | Shared settings resource family |
+| `settings_branding` | `tenant.setting` | Branding | `settings` | Shared settings resource family |
+| `email_settings` | `tenant.setting` | Email Settings | `settings` | Shared settings resource family; remains visible with activation guidance when Mailketing is inactive |
+| `mobile_config` | `tenant.mobile` | App Config | `settings` | Mobile-specific settings surface |
+| `email_logs` | `tenant.setting` | Email Logs | `email_logs` | Operationally separate table, but grouped with email/settings surfaces to avoid duplicate configuration rows |
+
+## Removed From The Canonical List
+
+| Entry | Reason |
+| --- | --- |
+| `test_dynamic` | Test-only seed resource from `20260201133000_seed_test_schema.sql`; not a canonical product resource |
+| `stitch_import` | Stitch import surface and runtime were removed; keep only admin-facing transition notes in release/docs history |
+
+## Dynamic UI Note
+
+- `RolesManager` is a known example of a dashboard surface that can be rendered through `GenericContentManager`.
+- `ui_configs` stores table/form schemas per resource.
+- `component_registry` stores editor configuration such as TipTap and Puck settings.

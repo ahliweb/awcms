@@ -44,7 +44,7 @@ function Header({ toggleSidebar, _onNavigate }) {
             <Menu className="w-6 h-6" />
           </Button>
 
-          <div className="hidden md:flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-600 p-2 text-white shadow-md shadow-blue-500/30">
               <ShieldCheck className="h-full w-full" />
             </div>

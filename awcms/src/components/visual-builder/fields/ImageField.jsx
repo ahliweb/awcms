@@ -11,7 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FolderOpen, X, Trash2 } from 'lucide-react';
 import MediaLibrary from '@/components/dashboard/media/MediaLibrary';
-import { supabase } from '@/lib/customSupabaseClient';
+import { resolveMediaUrl } from '@/lib/media';
+
 
 /**
  * Image Field with Media Library integration
@@ -22,13 +23,11 @@ export const ImageField = ({ field, value, onChange, name }) => {
     const [urlInput, setUrlInput] = useState(value || '');
 
     const handleSelect = (file) => {
-        const { data } = supabase.storage
-            .from(file.bucket_name || 'cms-uploads')
-            .getPublicUrl(file.file_path);
+        const finalUrl = resolveMediaUrl(file);
 
-        if (data.publicUrl) {
-            onChange(data.publicUrl);
-            setUrlInput(data.publicUrl);
+        if (finalUrl) {
+            onChange(finalUrl);
+            setUrlInput(finalUrl);
             setOpen(false);
         }
     };
@@ -125,12 +124,10 @@ export const MultiImageField = ({ field, value, onChange, name }) => {
         : [];
 
     const handleSelect = (file) => {
-        const { data } = supabase.storage
-            .from(file.bucket_name || 'cms-uploads')
-            .getPublicUrl(file.file_path);
+        const finalUrl = resolveMediaUrl(file);
 
-        if (data.publicUrl) {
-            const newImages = [...imageList, data.publicUrl];
+        if (finalUrl) {
+            const newImages = [...imageList, finalUrl];
             onChange(newImages.join('\n'));
             setOpen(false);
         }

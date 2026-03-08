@@ -39,7 +39,7 @@ Modules are categorized to match the **Permission Matrix**. The canonical source
 - **Widgets** (`WidgetsManager.jsx`)
 - **Templates** (`TemplatesManager.jsx`)
 - **Portfolio** (`PortfolioManager.jsx`)
-- **Testimonies** (`TestimonyManager.jsx`)
+- **Testimonials** (`TestimonyManager.jsx`)
 - **Announcements** (`AnnouncementsManager.jsx`)
 - **Fun Facts** (`FunFactsManager.jsx`)
 - **Services** (`ServicesManager.jsx`)

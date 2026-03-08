@@ -14,9 +14,6 @@ import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
 import { Button } from '@/components/ui/button';
-import { useStitchImportConfig } from '@/hooks/useStitchImportConfig';
-import ImportFromStitchDialog from '@/components/stitch/ImportFromStitchDialog';
-import { importToTiptap } from '@/lib/stitch';
 import {
   Bold,
   Italic,
@@ -34,8 +31,7 @@ import {
   Redo,
   RemoveFormatting,
   Code,
-  FileCode,
-  Upload
+  FileCode
 } from 'lucide-react';
 
 // Toolbar Button Component
@@ -61,9 +57,7 @@ const ToolbarButton = ({ onClick, isActive, children, title, disabled = false })
 // Toolbar Divider
 const Divider = () => <div className="w-px h-4 bg-slate-200 mx-1 self-center" />;
 
-const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd, onLinkAdd, onStitchImport }) => {
-  const { config: stitchImportConfig, loading: stitchImportConfigLoading } = useStitchImportConfig();
-  const [stitchDialogOpen, setStitchDialogOpen] = React.useState(false);
+const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd, onLinkAdd }) => {
 
   const extensions = React.useMemo(() => [
     StarterKit.configure({
@@ -152,46 +146,6 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd, o
         editor.chain().focus().setImage({ src: url }).run();
       }
     }
-  };
-
-  const stitchImportEnabled = !stitchImportConfigLoading && !!stitchImportConfig?.enabled;
-  const stitchImportTitle = stitchImportConfigLoading
-    ? 'Loading Stitch import settings...'
-    : stitchImportEnabled
-      ? 'Import from Stitch'
-      : 'Stitch import disabled for this tenant';
-
-  const handleStitchImport = () => {
-    if (!stitchImportEnabled) return;
-
-    setStitchDialogOpen(true);
-  };
-
-  const handleStitchImportSubmit = async ({ html, css, warnings }) => {
-    const result = importToTiptap({
-      html,
-      css,
-      config: stitchImportConfig,
-    });
-
-    let contentToInsert = result.html;
-
-    if (onStitchImport) {
-      const customContent = await onStitchImport({
-        editor,
-        config: stitchImportConfig,
-        html,
-        css,
-        warnings: warnings || result.warnings,
-        defaultHtml: result.html,
-      });
-
-      if (typeof customContent === 'string') {
-        contentToInsert = customContent;
-      }
-    }
-
-    editor.commands.setContent(contentToInsert, true);
   };
 
   return (
@@ -315,15 +269,6 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd, o
         >
           <ImageIcon className="w-4 h-4" />
         </ToolbarButton>
-        <ToolbarButton
-          onClick={handleStitchImport}
-          isActive={false}
-          disabled={!stitchImportEnabled}
-          title={stitchImportTitle}
-        >
-          <Upload className="w-4 h-4" />
-        </ToolbarButton>
-
         <div className="flex-1" /> {/* Spacer */}
 
         {/* History & Clear */}
@@ -354,13 +299,6 @@ const RichTextEditor = ({ value, onChange, placeholder, className, onImageAdd, o
 
       {/* Editor Content */}
       <EditorContent editor={editor} />
-
-      <ImportFromStitchDialog
-        open={stitchDialogOpen}
-        onOpenChange={setStitchDialogOpen}
-        onImport={handleStitchImportSubmit}
-        maxInputKb={Number(stitchImportConfig?.max_input_kb) || 256}
-      />
 
       {/* Styles for placeholder and prose */}
       <style>{`

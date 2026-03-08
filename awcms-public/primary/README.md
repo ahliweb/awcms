@@ -46,7 +46,7 @@ VITE_TENANT_ID=...
 ## Analytics Logging
 
 - Server-side logging is available only when middleware runs (SSR/runtime).
-- Static builds require client-side instrumentation or edge functions.
+- Static builds require client-side instrumentation or dedicated edge services.
 
 ## Commands
 
@@ -56,6 +56,7 @@ VITE_TENANT_ID=...
 | `npm run build`   | Build static output              |
 | `npm run preview` | Preview build locally            |
 | `npm run check`   | Astro + ESLint + Prettier checks |
+| `npm run fix`     | ESLint + Prettier autofix pass   |
 
 ## Template Lineage
 
@@ -64,6 +65,7 @@ This portal started from the AstroWind template. For upstream template details, 
 ## References
 
 - `../../docs/dev/public.md`
+- `../../docs/deploy/overview.md`
 - `../../docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md`
 - `../../docs/dev/admin-public-db-driven-checklist.md`
 - `../../docs/tenancy/supabase.md`

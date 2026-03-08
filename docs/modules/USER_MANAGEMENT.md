@@ -38,7 +38,7 @@ Implement a secure login and registration flow that respects tenant context, app
 | Email/Password | Login form | Yes | Turnstile validated in admin UI |
 | `tenant_id` | Tenant resolver | Yes | Required for registration requests |
 | `account_requests` | Public registration | Yes | Approval workflow table |
-| Admin invite | `manage-users` function | Optional | Admin-controlled onboarding |
+| Admin invite | Approved server-side invite handler | Optional | `manage-users` remains the current transitional implementation |
 
 ### Workflow
 
@@ -71,7 +71,7 @@ await supabase.from("account_requests").insert({
 ```
 
 ```javascript
-// Admin invite (Edge Function)
+// Admin invite (current transitional server-side handler)
 await supabase.functions.invoke("manage-users", {
   body: { action: "invite", email, role_id, tenant_id },
 });
@@ -85,7 +85,7 @@ await supabase.functions.invoke("manage-users", {
 
 ### Failure Modes and Guardrails
 
-- Direct client creation of privileged users: enforce invites via Edge Functions.
+- Direct client creation of privileged users: enforce invites via approved server-side edge handlers (currently `manage-users`).
 - Missing default role flags: ensure `is_default_invite` and `is_default_public_registration` are set.
 - Approval bypass: restrict `account_requests` updates to admins via RLS.
 
@@ -180,7 +180,7 @@ Users are strictly scoped to a single `tenant_id`. Platform admin/full-access ro
 ### Invitation Flow
 
 1. Admin enters email in **User Manager**.
-2. System triggers `manage-users` Edge Function.
+2. System triggers the approved server-side invite handler (`manage-users` in the current transitional path).
 3. New user is created in `auth.users` with `tenant_id` metadata.
 4. Invite email sent.
 
@@ -247,7 +247,7 @@ The login process (`/login`) includes:
 ## Permissions and Access
 
 - User management requires `tenant.user.*` permissions.
-- User deletion is soft-delete only and validated via the `manage-users` Edge Function.
+- User deletion is soft-delete only and validated via the approved server-side user-management handler (`manage-users` in the current transitional path).
 
 ### Deletion Safety Check
 
@@ -267,7 +267,7 @@ if (count > 0) {
 ## Security and Compliance Notes
 
 - Soft delete applies to users.
-- Service role access is restricted to edge functions.
+- Secret-key access is restricted to approved server-side edge runtimes.
 
 ## References
 

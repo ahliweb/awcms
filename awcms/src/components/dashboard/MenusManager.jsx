@@ -1,15 +1,21 @@
 
-import { useState, useEffect } from 'react';
-import { Plus, Save, RefreshCw, Menu } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CopyX, Plus, Save, RefreshCw, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
-import { PUBLIC_MODULES } from '@/lib/publicModuleRegistry';
+import {
+  getModuleByKey,
+  getModulesByGroup,
+  getPublicModulesForTenant,
+  getPublicPortalVariant,
+} from '@/lib/publicModuleRegistry';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import { SUPPORTED_LOCALES } from '@/lib/i18n';
 import MenusOverviewCards from '@/components/dashboard/menus/MenusOverviewCards';
+import MenusFiltersBar from '@/components/dashboard/menus/MenusFiltersBar';
 import MenusLocaleSelector from '@/components/dashboard/menus/MenusLocaleSelector';
 import MenusLocationSelector from '@/components/dashboard/menus/MenusLocationSelector';
 import MenusTreePanel from '@/components/dashboard/menus/MenusTreePanel';
@@ -24,6 +30,92 @@ const MENU_LOCATIONS = [
   { id: 'public_sidebar', label: 'Public Sidebar' },
   { id: 'mobile_menu', label: 'Mobile Menu' }
 ];
+
+const normalizeMenuUrl = (value) => {
+  const trimmed = (value || '').trim();
+
+  if (!trimmed) return '';
+  if (/^(https?:|mailto:|tel:|#)/i.test(trimmed)) return trimmed;
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+};
+
+const createMenuSlug = (label, url = '') => {
+  const source = (label || url || 'menu-item').toLowerCase();
+  return source
+    .replace(/https?:\/\//g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'menu-item';
+};
+
+const buildMenuTree = (items) => {
+  const menuMap = {};
+  const roots = [];
+
+  items.forEach((item) => {
+    menuMap[item.id] = { ...item, children: [] };
+  });
+
+  items.forEach((item) => {
+    if (item.parent_id && menuMap[item.parent_id]) {
+      menuMap[item.parent_id].children.push(menuMap[item.id]);
+    } else {
+      roots.push(menuMap[item.id]);
+    }
+  });
+
+  roots.sort((a, b) => (a.order || 0) - (b.order || 0));
+  Object.values(menuMap).forEach((node) => {
+    node.children.sort((a, b) => (a.order || 0) - (b.order || 0));
+  });
+
+  return roots;
+};
+
+const filterMenuTree = (items, searchQuery, visibilityFilter) => {
+  const searchValue = searchQuery.trim().toLowerCase();
+
+  return items.reduce((acc, item) => {
+    const filteredChildren = item.children?.length
+      ? filterMenuTree(item.children, searchQuery, visibilityFilter)
+      : [];
+
+    const matchesSearch = !searchValue || [item.label, item.url, item.name]
+      .filter(Boolean)
+      .some((value) => value.toLowerCase().includes(searchValue));
+
+    const matchesVisibility = visibilityFilter === 'all'
+      || (visibilityFilter === 'public' && item.is_public)
+      || (visibilityFilter === 'restricted' && !item.is_public);
+
+    if ((matchesSearch && matchesVisibility) || filteredChildren.length > 0) {
+      acc.push({ ...item, children: filteredChildren });
+    }
+
+    return acc;
+  }, []);
+};
+
+const getDuplicateMenuIds = (items) => {
+  const signatures = new Map();
+  const duplicateIds = new Set();
+
+  items.forEach((item) => {
+    const signature = [
+      item.parent_id || 'root',
+      (item.label || '').trim().toLowerCase(),
+      (item.url || '').trim().toLowerCase(),
+    ].join('::');
+
+    if (!signatures.has(signature)) {
+      signatures.set(signature, item.id);
+      return;
+    }
+
+    duplicateIds.add(item.id);
+  });
+
+  return duplicateIds;
+};
 
 function MenusManager() {
   const { toast } = useToast();
@@ -50,6 +142,9 @@ function MenusManager() {
   const [menuToDelete, setMenuToDelete] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [selectedModule, setSelectedModule] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [visibilityFilter, setVisibilityFilter] = useState('all');
+  const [activeModuleSlugs, setActiveModuleSlugs] = useState([]);
 
   const canView = hasPermission('tenant.menu.read');
   const canCreate = hasPermission('tenant.menu.create');
@@ -63,9 +158,31 @@ function MenusManager() {
       fetchMenus();
       fetchRoles();
       fetchPages();
+      fetchTenantModules();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, currentLocation, currentLocale, currentTenant?.id]); // Re-fetch when location or tenant changes
+
+  const fetchTenantModules = async () => {
+    if (!currentTenant?.id) {
+      setActiveModuleSlugs([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('modules')
+        .select('slug')
+        .eq('tenant_id', currentTenant.id)
+        .eq('status', 'active');
+
+      if (error) throw error;
+      setActiveModuleSlugs((data || []).map((module) => module.slug));
+    } catch (error) {
+      console.error(error);
+      setActiveModuleSlugs([]);
+    }
+  };
 
   const fetchPages = async () => {
     try {
@@ -109,33 +226,6 @@ function MenusManager() {
     }
   };
 
-  const buildMenuTree = (items) => {
-    const menuMap = {};
-    const roots = [];
-
-    // Initialize map
-    items.forEach(item => {
-      menuMap[item.id] = { ...item, children: [] };
-    });
-
-    // Build hierarchy
-    items.forEach(item => {
-      if (item.parent_id && menuMap[item.parent_id]) {
-        menuMap[item.parent_id].children.push(menuMap[item.id]);
-      } else {
-        roots.push(menuMap[item.id]);
-      }
-    });
-
-    // Sort by order
-    roots.sort((a, b) => a.order - b.order);
-    Object.values(menuMap).forEach(node => {
-      node.children.sort((a, b) => a.order - b.order);
-    });
-
-    return roots;
-  };
-
   const fetchRoles = async () => {
     if (!currentTenant?.id && !isPlatformAdmin) {
       setRoles([]);
@@ -177,15 +267,33 @@ function MenusManager() {
     setMenus(updateRecursive(menus));
   };
 
+  const duplicateMenuIds = useMemo(() => getDuplicateMenuIds(flatMenus), [flatMenus]);
+  const duplicateCount = duplicateMenuIds.size;
+  const portalVariant = getPublicPortalVariant(currentTenant);
+  const portalVariantLabel = portalVariant === 'smandapbun' ? 'Smandapbun portal' : 'Primary portal';
+  const availableModules = useMemo(
+    () => getPublicModulesForTenant(currentTenant, activeModuleSlugs),
+    [currentTenant, activeModuleSlugs],
+  );
+  const moduleGroups = useMemo(
+    () => getModulesByGroup(currentTenant, activeModuleSlugs),
+    [currentTenant, activeModuleSlugs],
+  );
+  const hasActiveFilters = Boolean(searchQuery.trim()) || visibilityFilter !== 'all';
+  const displayedMenus = useMemo(
+    () => filterMenuTree(menus, searchQuery, visibilityFilter),
+    [menus, searchQuery, visibilityFilter],
+  );
+
   const saveOrder = async () => {
     try {
       // Flatten the current tree state back into a list of updates
       const updates = [];
 
-      const processNode = (node, index) => {
-        updates.push({ id: node.id, order: index });
+      const processNode = (node, index, parentId = null) => {
+        updates.push({ id: node.id, order: index, parent_id: parentId });
         if (node.children && node.children.length > 0) {
-          node.children.forEach((child, childIndex) => processNode(child, childIndex));
+          node.children.forEach((child, childIndex) => processNode(child, childIndex, node.id));
         }
       };
 
@@ -205,11 +313,12 @@ function MenusManager() {
 
   const handleEdit = (menu) => {
     setEditingMenu(menu);
-    setSelectedModule('');
+    setSelectedModule(menu?.name || '');
     if (menu) {
       // Ensure boolean values are properly set when editing existing menu
       setMenuFormData({
         ...menu,
+        slug: menu.slug || createMenuSlug(menu.label, menu.url),
         is_active: menu.is_active === true,
         is_public: menu.is_public === true,
         page_id: menu.page_id || '', // Handle page_id
@@ -222,6 +331,7 @@ function MenusManager() {
         label: '',
         url: '',
         name: '',
+        slug: '',
         is_public: true,
         is_active: true,
         parent_id: null,
@@ -240,8 +350,9 @@ function MenusManager() {
       setMenuFormData(prev => ({
         ...prev,
         page_id: pageId,
-        url: page.slug.startsWith('/') ? page.slug : `/${page.slug}`, // Auto-set URL
-        label: prev.label || page.title // Auto-set label if empty
+        url: page.slug.startsWith('/') ? page.slug : `/${page.slug}`,
+        label: prev.label || page.title,
+        slug: prev.slug || createMenuSlug(page.title, page.slug),
       }));
     } else {
       // Clear page association
@@ -252,10 +363,14 @@ function MenusManager() {
   const handleSaveMenu = async (e) => {
     e.preventDefault();
 
+    const normalizedUrl = normalizeMenuUrl(menuFormData.url);
+    const resolvedSlug = menuFormData.slug || createMenuSlug(menuFormData.label, normalizedUrl);
+
     const payload = {
       label: menuFormData.label,
-      name: menuFormData.name || menuFormData.label.toLowerCase().replace(/[^a-z0-9_]+/g, '_'),
-      url: menuFormData.url,
+      name: menuFormData.name || resolvedSlug.replace(/-/g, '_'),
+      slug: resolvedSlug,
+      url: normalizedUrl,
       parent_id: menuFormData.parent_id || null,
       page_id: menuFormData.page_id || null,
       location: menuFormData.location || currentLocation,
@@ -275,7 +390,7 @@ function MenusManager() {
         error = updateError;
       } else {
         // Get max order for new item
-        payload.order = 99; // Default to end, user can reorder
+        payload.order = Math.max(0, ...flatMenus.map((item) => item.order || 0)) + 10;
         payload.tenant_id = currentTenant?.id; // Set tenant context
         const { error: insertError } = await supabase
           .from('menus')
@@ -303,10 +418,7 @@ function MenusManager() {
       return;
     }
 
-    const { error } = await supabase
-      .from('menus')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', menuToDelete.id);
+    const { error } = await supabase.rpc('soft_delete_menu', { p_menu_id: menuToDelete.id });
 
     if (error) {
       toast({ variant: 'destructive', title: 'Error deleting menu' });
@@ -339,16 +451,15 @@ function MenusManager() {
   };
 
   const savePermissions = async () => {
-    const upserts = Object.entries(menuPermissions).map(([roleId, canView]) => ({
-      menu_id: selectedMenuPerms.id,
+    const permissionsPayload = Object.entries(menuPermissions).map(([roleId, canView]) => ({
       role_id: roleId,
       can_view: canView,
-      updated_at: new Date().toISOString()
     }));
 
-    const { error } = await supabase
-      .from('menu_permissions')
-      .upsert(upserts, { onConflict: 'menu_id, role_id' });
+    const { error } = await supabase.rpc('save_menu_permissions', {
+      p_menu_id: selectedMenuPerms.id,
+      p_permissions: permissionsPayload,
+    });
 
     if (error) {
       toast({ variant: 'destructive', title: 'Failed to save permissions' });
@@ -366,8 +477,14 @@ function MenusManager() {
     }
     setSyncing(true);
     try {
-      const existingUrls = new Set(flatMenus.map(m => m.url));
-      const modulesToAdd = PUBLIC_MODULES.filter(mod => !existingUrls.has(mod.url));
+      const existingKeys = new Set(flatMenus.map((menu) => [
+        (menu.label || '').trim().toLowerCase(),
+        (menu.url || '').trim().toLowerCase(),
+      ].join('::')));
+      const modulesToAdd = availableModules.filter((module) => {
+        const signature = [module.label.trim().toLowerCase(), module.url.trim().toLowerCase()].join('::');
+        return !existingKeys.has(signature);
+      });
 
       if (modulesToAdd.length === 0) {
         toast({ title: 'All modules already exist', description: 'No new items to add' });
@@ -379,9 +496,11 @@ function MenusManager() {
       const newItems = modulesToAdd.map((mod, idx) => ({
         label: mod.label,
         name: mod.key,
+        slug: mod.key,
         url: mod.url,
         icon: mod.icon,
         location: currentLocation,
+        locale: currentLocale,
         parent_id: null,
         order: maxOrder + ((idx + 1) * 10),
         is_active: true,
@@ -407,15 +526,34 @@ function MenusManager() {
   const handleModuleSelect = (moduleKey) => {
     setSelectedModule(moduleKey);
     if (moduleKey) {
-      const mod = PUBLIC_MODULES.find(m => m.key === moduleKey);
+      const mod = availableModules.find((module) => module.key === moduleKey) || getModuleByKey(moduleKey);
       if (mod) {
         setMenuFormData(prev => ({
           ...prev,
           label: mod.label,
           name: mod.key,
+          slug: mod.key,
           url: mod.url,
         }));
       }
+    }
+  };
+
+  const dedupeMenus = async () => {
+    if (duplicateMenuIds.size === 0) {
+      return;
+    }
+
+    try {
+      await Promise.all(Array.from(duplicateMenuIds).map((id) => (
+        supabase.rpc('soft_delete_menu', { p_menu_id: id })
+      )));
+
+      toast({ title: 'Duplicates removed', description: 'Repeated links were moved out of the active menu scope.' });
+      fetchMenus();
+    } catch (error) {
+      console.error(error);
+      toast({ variant: 'destructive', title: 'Failed to clean duplicates', description: error.message });
     }
   };
 
@@ -441,7 +579,12 @@ function MenusManager() {
                 <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> Sync Modules
               </Button>
             )}
-            <Button onClick={saveOrder} variant="outline" className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground">
+            {duplicateCount > 0 && canDelete && (
+              <Button onClick={dedupeMenus} variant="outline" className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground">
+                <CopyX className="w-4 h-4 mr-2" /> Clean Duplicates
+              </Button>
+            )}
+            <Button onClick={saveOrder} variant="outline" disabled={hasActiveFilters} className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60">
               <Save className="w-4 h-4 mr-2" /> Save Order
             </Button>
             {canCreate && (
@@ -454,11 +597,21 @@ function MenusManager() {
       />
 
       <div className="space-y-6">
-        <MenusOverviewCards
-          flatMenus={flatMenus}
-          rolesCount={roles.length}
-          currentLocationLabel={MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label}
-        />
+          <MenusOverviewCards
+            flatMenus={flatMenus}
+            rolesCount={roles.length}
+            currentLocationLabel={MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label}
+            portalVariantLabel={portalVariantLabel}
+            duplicateCount={duplicateCount}
+          />
+
+          <MenusFiltersBar
+            searchQuery={searchQuery}
+            onChangeSearch={setSearchQuery}
+            visibilityFilter={visibilityFilter}
+            onChangeVisibility={setVisibilityFilter}
+            duplicateCount={duplicateCount}
+          />
 
         <MenusLocaleSelector
           locales={SUPPORTED_LOCALES}
@@ -474,7 +627,8 @@ function MenusManager() {
 
         <MenusTreePanel
           loading={loading}
-          menus={menus}
+          menus={displayedMenus}
+          hasActiveFilters={hasActiveFilters}
           canEdit={canEdit}
           canDelete={canDelete}
           onEdit={handleEdit}
@@ -498,6 +652,7 @@ function MenusManager() {
           pages={pages}
           onPageSelect={handlePageSelect}
           flatMenus={flatMenus}
+          moduleGroups={moduleGroups}
           onSave={handleSaveMenu}
         />
 

@@ -1,6 +1,9 @@
 ---
 import { createClientFromEnv } from "~/lib/supabase";
 import { ChevronDown } from "lucide-react";
+import { getPublicTenantId } from "~/lib/publicTenant";
+import { getLocale } from "~/utils/i18n";
+import { getMenuByLocation, type MenuItem } from "~/lib/menu";
 
 interface Props {
   style?: "horizontal" | "vertical";
@@ -9,18 +12,6 @@ interface Props {
   fontSize?: "sm" | "base" | "lg";
   gap?: number;
   linkColor?: string;
-}
-
-interface MenuItem {
-  id: string;
-  parent_id: string | null;
-  label: string;
-  url: string;
-  target?: string;
-  icon?: string;
-  order: number;
-  children?: MenuItem[];
-  [key: string]: unknown;
 }
 
 const {
@@ -33,36 +24,17 @@ const {
 } = Astro.props;
 
 const supabase = createClientFromEnv(import.meta.env);
+const tenantId = getPublicTenantId();
+const locale = getLocale(Astro.url);
 let menus: MenuItem[] = [];
 
 if (supabase) {
   try {
-    const { data } = await supabase
-      .from("menus")
-      .select("*")
-      .eq("is_active", true)
-      .eq("is_public", true)
-      .is("deleted_at", null)
-      .order("order", { ascending: true });
-
-    if (data) {
-      // Build tree structure
-      const menuMap: Record<string, MenuItem> = {};
-      data.forEach((m: MenuItem) => (menuMap[m.id] = { ...m, children: [] }));
-
-      const rootMenus: MenuItem[] = [];
-      data.forEach((m: MenuItem) => {
-        if (m.parent_id && menuMap[m.parent_id]) {
-          menuMap[m.parent_id].children?.push(menuMap[m.id]);
-        } else {
-          rootMenus.push(menuMap[m.id]);
-        }
-      });
-
-      // Sort children
-      rootMenus.forEach((r) => r.children?.sort((a, b) => a.order - b.order));
-      menus = rootMenus;
-    }
+    menus =
+      (await getMenuByLocation(supabase, "header", {
+        tenantId,
+        locale,
+      })) || [];
   } catch (e) {
     console.error("[NavigationBlock] Error fetching menus:", e);
   }
@@ -100,7 +72,7 @@ const fontSizeClass = {
                 class="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors font-medium"
                 style={{ color: linkColor }}
               >
-                {menu.label}
+                {menu.title}
               </a>
               {showDropdowns && menu.children && menu.children.length > 0 && (
                 <ul class="pl-4 mt-1 space-y-1 border-l-2 border-slate-100 dark:border-slate-700 ml-3">
@@ -111,7 +83,7 @@ const fontSizeClass = {
                         class="block px-3 py-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                         style={{ color: linkColor }}
                       >
-                        {child.label}
+                        {child.title}
                       </a>
                     </li>
                   ))}
@@ -134,7 +106,7 @@ const fontSizeClass = {
                   class="flex items-center gap-1 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors font-medium"
                   style={{ color: linkColor }}
                 >
-                  {menu.label}
+                  {menu.title}
                   {hasChildren && showDropdowns && (
                     <ChevronDown
                       className="w-3.5 h-3.5 opacity-70"
@@ -152,7 +124,7 @@ const fontSizeClass = {
                           class="block px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                           style={{ color: linkColor }}
                         >
-                          {child.label}
+                          {child.title}
                         </a>
                       ))}
                     </div>

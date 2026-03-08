@@ -270,6 +270,7 @@ export async function getSearchSuggestions(
     .from("pages")
     .select("title")
     .eq("status", "published")
+    .is("deleted_at", null)
     .ilike("title", searchTerm)
     .limit(limit);
 

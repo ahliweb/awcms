@@ -12,10 +12,10 @@ const MENUS = [
     { id: 'blogs', key: 'blogs', label: 'Blogs', path: 'blogs', icon: 'FileText', permission: 'tenant.blog.read', group_label: 'CONTENT', group_order: 10, order: 20, is_visible: true },
     { id: 'pages', key: 'pages', label: 'Pages', path: 'pages', icon: 'FileEdit', permission: 'tenant.page.read', group_label: 'CONTENT', group_order: 10, order: 30, is_visible: true },
     { id: 'visual_builder', key: 'visual_builder', label: 'Visual Builder', path: 'visual-pages', icon: 'Layout', permission: 'tenant.visual_pages.read', group_label: 'CONTENT', group_order: 10, order: 35, is_visible: true },
-    { id: 'themes', key: 'themes', label: 'Themes', path: 'themes', icon: 'Palette', permission: 'tenant.theme.read', group_label: 'CONTENT', group_order: 10, order: 40, is_visible: true },
-    { id: 'widgets', key: 'widgets', label: 'Widgets', path: 'widgets', icon: 'Layers', permission: 'tenant.widgets.read', group_label: 'CONTENT', group_order: 10, order: 45, is_visible: true },
+    { id: 'themes', key: 'themes', label: 'Themes', path: 'themes', icon: 'Palette', permission: 'tenant.theme.read', group_label: 'SYSTEM', group_order: 60, order: 40, is_visible: true },
+    { id: 'widgets', key: 'widgets', label: 'Widgets', path: 'widgets', icon: 'Layers', permission: 'tenant.widgets.read', group_label: 'SYSTEM', group_order: 60, order: 45, is_visible: true },
     { id: 'portfolio', key: 'portfolio', label: 'Portfolio', path: 'portfolio', icon: 'Briefcase', permission: 'tenant.portfolio.read', group_label: 'CONTENT', group_order: 10, order: 50, is_visible: true },
-    { id: 'testimonials', key: 'testimonials', label: 'Testimonials', path: 'testimonies', icon: 'MessageSquareQuote', permission: 'tenant.testimonies.read', group_label: 'CONTENT', group_order: 10, order: 60, is_visible: true },
+    { id: 'testimonials', key: 'testimonials', label: 'Testimonials', path: 'testimonials', icon: 'MessageSquareQuote', permission: 'tenant.testimonies.read', group_label: 'CONTENT', group_order: 10, order: 60, is_visible: true },
     { id: 'announcements', key: 'announcements', label: 'Announcements', path: 'announcements', icon: 'Megaphone', permission: 'tenant.announcements.read', group_label: 'CONTENT', group_order: 10, order: 70, is_visible: true },
     { id: 'promotions', key: 'promotions', label: 'Promotions', path: 'promotions', icon: 'Tag', permission: 'tenant.promotions.read', group_label: 'CONTENT', group_order: 10, order: 80, is_visible: true },
     { id: 'contact_messages', key: 'contact_messages', label: 'Contact Messages', path: 'messages', icon: 'Inbox', permission: 'tenant.contact_messages.read', group_label: 'CONTENT', group_order: 10, order: 90, is_visible: true },
@@ -23,8 +23,6 @@ const MENUS = [
 
     // MEDIA Group
     { id: 'files', key: 'files', label: 'Media Library', path: 'files', icon: 'FolderOpen', permission: 'tenant.files.read', group_label: 'MEDIA', group_order: 20, order: 10, is_visible: true },
-    { id: 'photo_gallery', key: 'photo_gallery', label: 'Photo Gallery', path: 'photo-gallery', icon: 'Image', permission: 'tenant.photo_gallery.read', group_label: 'MEDIA', group_order: 20, order: 20, is_visible: true },
-    { id: 'video_gallery', key: 'video_gallery', label: 'Video Gallery', path: 'video-gallery', icon: 'Video', permission: 'tenant.video_gallery.read', group_label: 'MEDIA', group_order: 20, order: 30, is_visible: true },
 
     // COMMERCE Group
     { id: 'products', key: 'products', label: 'Products', path: 'products', icon: 'Package', permission: 'tenant.products.read', group_label: 'COMMERCE', group_order: 30, order: 10, is_visible: true },
@@ -53,7 +51,7 @@ const MENUS = [
 
     // CONFIGURATION Group
     { id: 'settings_general', key: 'settings_general', label: 'General Settings', path: 'settings/general', icon: 'Settings', permission: 'tenant.setting.read', group_label: 'CONFIGURATION', group_order: 70, order: 5, is_visible: true },
-    { id: 'settings_branding', key: 'branding', label: 'Branding', path: 'settings/branding', icon: 'Palette', permission: 'tenant.setting.update', group_label: 'CONFIGURATION', group_order: 70, order: 10, is_visible: true },
+    { id: 'settings_branding', key: 'settings_branding', label: 'Branding', path: 'settings/branding', icon: 'Palette', permission: 'tenant.setting.update', group_label: 'CONFIGURATION', group_order: 70, order: 10, is_visible: true },
     { id: 'sso', key: 'sso', label: 'SSO & Security', path: 'sso', icon: 'Lock', permission: 'tenant.sso.read', group_label: 'CONFIGURATION', group_order: 70, order: 20, is_visible: true },
     { id: 'email_settings', key: 'email_settings', label: 'Email Settings', path: 'email-settings', icon: 'Mail', permission: 'tenant.setting.update', group_label: 'CONFIGURATION', group_order: 70, order: 30, is_visible: true },
     { id: 'email_logs', key: 'email_logs', label: 'Email Logs', path: 'email-logs', icon: 'MailOpen', permission: 'tenant.setting.read', group_label: 'CONFIGURATION', group_order: 70, order: 40, is_visible: true },
@@ -67,7 +65,7 @@ const MENUS = [
     { id: 'mobile_config', key: 'mobile_config', label: 'App Config', path: 'mobile/config', icon: 'Settings', permission: 'tenant.mobile.update', group_label: 'MOBILE', group_order: 85, order: 30, is_visible: true },
 
     // PLATFORM Group
-    { id: 'tenants', key: 'tenants', label: 'Tenant Management', path: 'tenants', icon: 'Building', permission: 'platform.tenant.read', group_label: 'PLATFORM', group_order: 100, order: 10, is_visible: true },
+    { id: 'tenants', key: 'tenants', label: 'Tenant Management', path: 'tenants', icon: 'Building', permission: 'platform.tenant.read', group_label: 'SYSTEM', group_order: 60, order: 10, is_visible: true },
 ];
 
 async function seed() {
@@ -103,9 +101,9 @@ async function seed() {
             // I will upsert on `key`.
 
             const query = `
-                INSERT INTO public.admin_menus (key, label, path, icon, permission, group_label, group_order, "order", is_visible, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-                ON CONFLICT (key) DO UPDATE SET
+                INSERT INTO public.admin_menus (key, label, path, icon, permission, group_label, group_order, "order", is_visible, tenant_id, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, NOW())
+                ON CONFLICT ON CONSTRAINT admin_menus_key_tenant_unique DO UPDATE SET
                     label = EXCLUDED.label,
                     path = EXCLUDED.path,
                     icon = EXCLUDED.icon,

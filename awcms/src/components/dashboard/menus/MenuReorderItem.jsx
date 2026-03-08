@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 
 function MenuReorderItem({
 	menu,
+	canReorder,
 	canEdit,
 	canDelete,
 	onEdit,
@@ -15,11 +16,12 @@ function MenuReorderItem({
 }) {
 	const hasChildren = menu.children && menu.children.length > 0;
 	const [isOpen, setIsOpen] = useState(true);
+  const Wrapper = canReorder ? Reorder.Item : 'div';
 
 	return (
-		<Reorder.Item value={menu} id={menu.id} className="overflow-hidden rounded-xl border border-border/60 bg-card/80 shadow-sm select-none">
+		<Wrapper {...(canReorder ? { value: menu, id: menu.id } : {})} className="overflow-hidden rounded-xl border border-border/60 bg-card/80 shadow-sm select-none">
 			<div className="flex items-center gap-3 p-3 transition-colors hover:bg-accent/30">
-				<GripVertical className="h-5 w-5 flex-shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing" />
+				<GripVertical className={`h-5 w-5 flex-shrink-0 text-muted-foreground ${canReorder ? 'cursor-grab active:cursor-grabbing' : 'opacity-40'}`} />
 
 				<div className="flex flex-1 flex-col gap-1 overflow-hidden sm:flex-row sm:items-center sm:gap-3">
 					{isPlatformAdmin && (
@@ -59,12 +61,13 @@ function MenuReorderItem({
 						size="sm"
 						onClick={() => onPerms(menu)}
 						title="Access Permissions"
+						aria-label={`Manage permissions for ${menu.label}`}
 						className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
 					>
 						<Lock className="h-4 w-4" />
 					</Button>
 					{canEdit && (
-						<Button variant="ghost" size="sm" onClick={() => onEdit(menu)} className="h-8 w-8 p-0 text-primary hover:bg-primary/10">
+						<Button variant="ghost" size="sm" onClick={() => onEdit(menu)} aria-label={`Edit ${menu.label}`} className="h-8 w-8 p-0 text-primary hover:bg-primary/10">
 							<Edit className="h-4 w-4" />
 						</Button>
 					)}
@@ -73,6 +76,7 @@ function MenuReorderItem({
 							variant="ghost"
 							size="sm"
 							onClick={() => onRequestDelete(menu)}
+							aria-label={`Delete ${menu.label}`}
 							className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
 						>
 							<Trash2 className="h-4 w-4" />
@@ -85,9 +89,9 @@ function MenuReorderItem({
 				<div className="border-t border-border/60 bg-muted/25 pb-3 pl-10 pr-3 pt-1">
 					<Reorder.Group axis="y" values={menu.children} onReorder={onChildReorder} className="space-y-2">
 						{menu.children.map((child) => (
-							<Reorder.Item key={child.id} value={child} id={child.id} className="flex items-center justify-between rounded-lg border border-border/60 bg-background/80 p-2 shadow-sm">
+							<Wrapper key={child.id} {...(canReorder ? { value: child, id: child.id } : {})} className="flex items-center justify-between rounded-lg border border-border/60 bg-background/80 p-2 shadow-sm">
 								<div className="flex items-center gap-3">
-									<GripVertical className="h-4 w-4 cursor-grab text-muted-foreground" />
+									<GripVertical className={`h-4 w-4 text-muted-foreground ${canReorder ? 'cursor-grab' : 'opacity-40'}`} />
 									<div className="flex flex-col">
 										<span className="text-sm font-medium text-foreground">{child.label}</span>
 										<div className="flex items-center gap-2">
@@ -99,22 +103,22 @@ function MenuReorderItem({
 									</div>
 								</div>
 								<div className="flex gap-1">
-									<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onPerms(child)}>
+									<Button variant="ghost" size="icon" aria-label={`Manage permissions for ${child.label}`} className="h-6 w-6" onClick={() => onPerms(child)}>
 										<Lock className="h-3 w-3 text-muted-foreground" />
 									</Button>
-									<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(child)}>
+									<Button variant="ghost" size="icon" aria-label={`Edit ${child.label}`} className="h-6 w-6" onClick={() => onEdit(child)}>
 										<Edit className="h-3 w-3 text-primary" />
 									</Button>
-									<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRequestDelete(child)}>
+									<Button variant="ghost" size="icon" aria-label={`Delete ${child.label}`} className="h-6 w-6" onClick={() => onRequestDelete(child)}>
 										<Trash2 className="h-3 w-3 text-destructive" />
 									</Button>
 								</div>
-							</Reorder.Item>
+							</Wrapper>
 						))}
 					</Reorder.Group>
 				</div>
 			)}
-		</Reorder.Item>
+		</Wrapper>
 	);
 }
 

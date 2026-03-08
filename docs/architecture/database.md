@@ -25,6 +25,7 @@ AWCMS uses PostgreSQL via Supabase. This document describes the core database sc
 > **Schema Accuracy Note:** SQL blocks in this document are representative snapshots for developer orientation.
 > Canonical executable schema truth is the migration history in `supabase/migrations/` (mirrored in `awcms/supabase/migrations/`).
 > Before relying on a specific column, constraint, or policy shape, verify against the latest migration files.
+> **2026-03-08 Baseline:** Migration inventory currently shows `118` root migrations and `118` mirrored migrations. Always run `scripts/verify_supabase_migration_consistency.sh` because matching counts alone do not guarantee filename/content parity.
 
 ---
 
@@ -617,12 +618,17 @@ CREATE TABLE categories (
   slug TEXT UNIQUE NOT NULL,
   description TEXT,
   parent_id UUID REFERENCES categories(id),
-  type TEXT NOT NULL, -- e.g. 'blog', 'page', 'product', 'portfolio', 'announcement'
+  type TEXT NOT NULL, -- canonical scopes include 'content', 'blog', 'page', 'product', 'portfolio', 'announcement', 'promotion', 'testimony', 'media', 'contact'
   sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ
 );
 ```
+
+Notes:
+
+- `content` categories are intentionally shared across blog and page selectors.
+- Legacy plural aliases may still exist in older tenant data, but admin/public selectors normalize them through the shared taxonomy map.
 
 ### tags
 
@@ -645,6 +651,11 @@ CREATE TABLE tags (
 CREATE INDEX idx_tags_tenant_id ON tags(tenant_id);
 CREATE INDEX idx_tags_is_active ON tags(is_active) WHERE deleted_at IS NULL;
 ```
+
+Notes:
+
+- Tags are tenant-scoped and reused across supported modules rather than owned by a single content type.
+- Public and admin tag pickers should filter `deleted_at IS NULL` and `is_active = true`.
 
 ### blog_tags
 
@@ -697,23 +708,58 @@ CREATE TABLE menu_permissions (
 
 ## Row Level Security (RLS)
 
-Enable RLS on all tables:
+AWCMS no longer treats generic role-only examples as the canonical policy model. Current policy guidance is:
+
+- enable RLS on every tenant-scoped table
+- scope rows with `tenant_id = public.current_tenant_id()`
+- enforce permissions with `public.has_permission(...)`
+- use `public.auth_is_admin()` only for recursion-safe administrative bypasses
+- keep `deleted_at IS NULL` explicit for business reads unless the table is intentionally write-only telemetry
+
+Representative current pattern:
 
 ```sql
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE blogs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
--- ... etc
+ALTER TABLE public.blogs ENABLE ROW LEVEL SECURITY;
 
--- Example policy
-CREATE POLICY "Public can view published blogs"
-ON blogs FOR SELECT
-USING (status = 'published' AND deleted_at IS NULL);
+CREATE POLICY blogs_select_abac ON public.blogs
+FOR SELECT USING (
+  tenant_id = public.current_tenant_id()
+  AND deleted_at IS NULL
+  AND (
+    public.has_permission('tenant.blog.read')
+    OR public.auth_is_admin()
+  )
+);
 
-CREATE POLICY "Authors can edit own blogs"
-ON blogs FOR UPDATE
-USING (auth.uid() = author_id);
+CREATE POLICY blogs_update_abac ON public.blogs
+FOR UPDATE USING (
+  tenant_id = public.current_tenant_id()
+  AND deleted_at IS NULL
+  AND (
+    public.has_permission('tenant.blog.update')
+    OR (
+      public.has_permission('tenant.blog.update_own')
+      AND author_id = auth.uid()
+    )
+    OR public.auth_is_admin()
+  )
+)
+WITH CHECK (tenant_id = public.current_tenant_id());
 ```
+
+Public write-only telemetry pattern:
+
+```sql
+CREATE POLICY analytics_events_public_insert ON public.analytics_events
+FOR INSERT TO anon, authenticated
+WITH CHECK (tenant_id = public.current_tenant_id());
+```
+
+Helper function source baselines:
+
+- `public.current_tenant_id()` -> `supabase/migrations/20260119230212_remote_schema.sql`
+- `public.has_permission()` -> `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
+- `public.auth_is_admin()` -> `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
 
 ---
 

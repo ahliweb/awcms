@@ -7,6 +7,7 @@ import {
 import { createClientFromEnv } from "~/lib/supabase";
 import { Icon } from "astro-icon/components";
 import { getPublicTenantId } from "~/lib/publicTenant";
+import { getLocale } from "~/utils/i18n";
 
 export interface Props {
   className?: string;
@@ -17,6 +18,7 @@ const { className = "", defaultConfig } = Astro.props;
 
 const tenantId = getPublicTenantId();
 const currentPath = Astro.url.pathname;
+const locale = getLocale(Astro.url);
 
 // Create Supabase client
 const supabase = createClientFromEnv(import.meta.env);
@@ -25,7 +27,7 @@ let config: SidebarConfig | null | undefined = defaultConfig;
 
 // Fetch config if not provided
 if (!config && supabase) {
-  config = await getSidebarConfig(supabase, "public_sidebar", tenantId);
+  config = await getSidebarConfig(supabase, "public_sidebar", tenantId, locale);
 }
 
 // Fallback config if nothing found
@@ -82,19 +84,6 @@ const { groups, show_icons } = config;
                       )}
 
                       <span class="flex-1">{item.title}</span>
-
-                      {item.badge && (
-                        <span
-                          class:list={[
-                            "px-2 py-0.5 ml-auto text-xs font-medium rounded-full",
-                            item.badge_color
-                              ? `bg-[${item.badge_color}]/10 text-[${item.badge_color}]`
-                              : "bg-primary/10 text-primary",
-                          ]}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
 
                       {hasChildren && (
                         <Icon

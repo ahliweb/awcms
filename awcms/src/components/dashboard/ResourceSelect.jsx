@@ -39,16 +39,28 @@ const ResourceSelect = ({
                 // Apply simple equality filters if provided
                 if (filter && typeof filter === 'object') {
                     Object.entries(filter).forEach(([key, val]) => {
-                        query = query.eq(key, val);
+                        if (Array.isArray(val)) {
+                            if (val.length > 0) {
+                                query = query.in(key, val);
+                            }
+                            return;
+                        }
+
+                        if (val === null) {
+                            query = query.is(key, null);
+                            return;
+                        }
+
+                        if (val !== undefined && val !== '') {
+                            query = query.eq(key, val);
+                        }
                     });
                 }
 
                 // Default limit to prevent massive loads in dropdowns
-                query = query.limit(100);
+                query = query.order(labelKey).limit(100);
 
-                console.log(`[ResourceSelect] Fetching ${table} with filter:`, filter);
                 const { data, error } = await query;
-                console.log(`[ResourceSelect] Fetched ${data?.length} items for ${table}`, data);
 
                 if (error) throw error;
                 setItems(data || []);

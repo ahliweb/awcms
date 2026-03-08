@@ -9,41 +9,41 @@ Document the Mailketing integration used for transactional email.
 ## Audience
 
 - Admin panel developers
-- Operators configuring Edge Functions
+- Operators configuring edge runtimes
 
 ## Prerequisites
 
 - [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for email integration patterns
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- Supabase Edge Functions enabled
+- Cloudflare Workers configured for the current mail pipeline
 - `docs/tenancy/supabase.md`
 
 ## Core Concepts
 
-- Mailketing is invoked via a Supabase Edge Function.
+- Mailketing is invoked via the Cloudflare Worker API in `awcms-edge/`.
 - Email logs are stored in `email_logs` with tenant scoping.
 
 ## How It Works
 
 ### Configuration
 
-Set secrets in Supabase (Edge Functions):
+Set secrets in the active edge runtime:
 
 ```shell
 MAILKETING_API_TOKEN=...
 MAILKETING_DEFAULT_LIST_ID=1
 ```
 
-Recommended:
+For legacy Supabase-function deployments:
 
 ```bash
 npx supabase secrets set MAILKETING_API_TOKEN=... MAILKETING_DEFAULT_LIST_ID=1
 ```
 
-### Deploy Function
+### Deploy Edge Handler
 
 ```bash
-npx supabase functions deploy mailketing
+npx wrangler deploy --cwd awcms-edge
 ```
 
 ## Implementation Patterns
@@ -66,7 +66,7 @@ await sendEmail({
 
 - Do not expose Mailketing secrets in client code.
 - Soft delete applies to `email_logs`.
-- Use `SUPABASE_SECRET_KEY` only inside Edge Functions.
+- Use `SUPABASE_SECRET_KEY` only inside approved server-side edge runtimes.
 
 ## References
 

@@ -42,7 +42,7 @@ function AnnouncementsManager() {
     const formFields = [
         { key: 'title', label: 'Title', required: true },
         { key: 'content', label: 'Content', type: 'richtext', required: true },
-        { key: 'category_id', label: 'Category', type: 'relation', table: 'categories', filter: { type: 'announcement' } },
+        { key: 'category_id', label: 'Category', type: 'relation', table: 'categories', filter: { type: ['announcement', 'announcements'] } },
         {
             key: 'status', label: 'Status', type: 'select', options: [
                 { value: 'draft', label: 'Draft' },

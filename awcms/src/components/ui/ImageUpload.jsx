@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import MediaLibrary from '@/components/dashboard/media/MediaLibrary';
-import { supabase } from '@/lib/customSupabaseClient';
+import { resolveMediaUrl } from '@/lib/media';
+
 
 // Enhanced ImageUpload that includes FilePicker
 const normalizeValue = (value) => {
@@ -31,13 +32,7 @@ export function ImageUpload({ value, onChange, disabled, className, hidePreview 
     }, [normalizedValue]);
 
     const handleSelect = (file) => {
-        let finalUrl = file.file_path;
-        // If file_path is already a full URL (new behavior), use it directly.
-        // Otherwise generate it from storage (legacy behavior).
-        if (!finalUrl?.startsWith('http')) {
-            const { data } = supabase.storage.from(file.bucket_name || 'cms-uploads').getPublicUrl(file.file_path);
-            finalUrl = data.publicUrl;
-        }
+        const finalUrl = resolveMediaUrl(file);
 
         if (finalUrl) {
             onChange(finalUrl);

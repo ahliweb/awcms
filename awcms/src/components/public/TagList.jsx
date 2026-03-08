@@ -3,41 +3,38 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Tag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useTenant } from '@/contexts/TenantContext';
 
 const TagList = ({ selectedTags = [], onSelectTag }) => {
   const [tags, setTags] = useState([]);
+  const { currentTenant } = useTenant();
 
   useEffect(() => {
     const fetchTags = async () => {
-      // Safely attempt to fetch tags with counts via RPC, fallback to simple select if RPC fails/missing
       try {
-        const { data, error } = await supabase.rpc('get_tags_with_counts');
-        if (!error && data) {
-          const activeTags = data
-            .filter(t => t.total_usage > 0 && t.is_active !== false)
-            .sort((a, b) => b.total_usage - a.total_usage)
-            .slice(0, 20);
-          setTags(activeTags);
-        } else {
-          // Fallback if RPC is missing or errors
-          const { data: simpleTags, error: fallbackError } = await supabase
-            .from('tags')
-            .select('id, name, slug, color')
-            .is('deleted_at', null)
-            .eq('is_active', true)
-            .limit(20);
-          if (fallbackError) {
-            console.error("Fallback tag fetch error:", fallbackError);
-            return;
-          }
-          if (simpleTags) setTags(simpleTags.map(t => ({ ...t, total_usage: 0 })));
+        if (!currentTenant?.id) return;
+
+        const { data, error } = await supabase
+          .from('tags')
+          .select('id, name, slug, color')
+          .eq('tenant_id', currentTenant.id)
+          .is('deleted_at', null)
+          .eq('is_active', true)
+          .order('name')
+          .limit(20);
+
+        if (error) {
+          console.error('Tag fetch error:', error);
+          return;
         }
+
+        if (data) setTags(data.map((tag) => ({ ...tag, total_usage: 0 })));
       } catch (e) {
         console.error("Error fetching tags", e);
       }
     };
     fetchTags();
-  }, []);
+  }, [currentTenant?.id]);
 
   if (tags.length === 0) return null;
 

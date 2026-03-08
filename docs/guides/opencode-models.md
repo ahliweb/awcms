@@ -1,8 +1,8 @@
 > **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
 
-# How to Choose and Use AI Models in OpenCode Zen
+# How to Choose and Use AI Models in OpenCode
 
-OpenCode Zen allows you to switch between various AI models (like Gemini, Claude, and OpenAI) directly within your development environment. This guide explains how to select and configure these models.
+OpenCode lets you switch between configured AI models directly in your development environment. This guide covers the current repo-level configuration points and the safest generic model-selection patterns.
 
 ## Prerequisites
 
@@ -11,17 +11,17 @@ OpenCode Zen allows you to switch between various AI models (like Gemini, Claude
 
 ## 1. Quick Switch via UI
 
-The easiest way to switch models is through the OpenCode Zen interface:
+The easiest way to switch models is through the OpenCode interface:
 
-- **Sidebar Header**: Click the model name displayed at the top of the OpenCode sidebar (e.g., "Gemini 3 Pro"). A dropdown menu will appear with available options.
+- **Sidebar Header**: Click the active model name shown in the OpenCode sidebar header to open the available model list.
 - **Agent Manager**: Switch to the **Agent Manager** view (usually via the gear icon or a specific tab) to see a comprehensive list of models and their capabilities.
 
 ## 2. Terminal Commands
 
 You can interact with model settings using the OpenCode Terminal User Interface (TUI):
 
-- **List Models**: Type `/models` in the OpenCode terminal to see all available AI models.
-- **Connect Providers**: Type `/connect` to add new API keys for different providers (OpenAI, Anthropic, Google, etc.).
+- **List Models**: Type `/models` in the OpenCode terminal to inspect currently available models.
+- **Connect Providers**: Type `/connect` if your local OpenCode install supports interactive provider setup.
 - **Select Model**: Use `/model <model-id>` to switch directly to a specific model.
 
 ## 3. Keyboard Shortcuts
@@ -33,42 +33,27 @@ Boost your efficiency with these shortcuts:
 
 ## 4. Configuration (`opencode.json`)
 
-For advanced users, you can set your default model in the configuration file:
+For advanced users, you can set your default model in the runtime configuration file:
 
-1. Locate your `opencode.json` file (usually in the root of your workspace or in your user configuration directory).
+1. Locate your `opencode.json` file (the repo documents `~/.config/opencode/opencode.json` as the standard runtime path).
 2. Set the `"model"` key:
 
    ```json
    {
-     "model": "google/gemini-pro"
-   }
-   ```
+      "model": "openai/gpt-5.4"
+    }
+    ```
 
-3. OpenCode will prioritize this setting on startup.
+3. Replace the example with any provider/model ID exposed by your configured runtime.
+4. OpenCode will prioritize this setting on startup.
 
-## 5. Premium Method: Antigravity Auth (Recommended)
+## 5. Repo-Specific Notes
 
-To leverage your **Antigravity** credentials and access **Gemini 3 Pro** without a separate API key:
-
-1. **Install Plugin**:
-
-   ```bash
-   opencode plugin add opencode-antigravity-auth
-   ```
-
-2. **Authenticate**:
-   Run `opencode auth login`, select **Google**, and choose **OAuth with Google (Antigravity)**.
-3. **Configure**:
-   Update your `~/.config/opencode/opencode.json`:
-
-   ```json
-   {
-     "plugin": ["opencode-antigravity-auth"],
-     "model": "google/gemini-3-pro-preview"
-   }
-   ```
+- Repo MCP topology lives in `mcp.json`.
+- Runtime client configuration lives in `~/.config/opencode/opencode.json`.
+- Use `opencode mcp list` to verify that the repo's documented MCP servers are connected before troubleshooting model or tool availability.
 
 ---
 
 > [!TIP]
-> **Gemini 1.5 Pro** and **Claude 3.5 Sonnet** are recommended for complex refactoring tasks due to their large context windows.
+> Prefer your team's default high-context reasoning model for cross-repo refactors, and switch to lighter/cheaper models only for narrow follow-up edits.

@@ -13,8 +13,7 @@ export async function getStaticPaths() {
 
   const tenantId = getPublicTenantId();
   if (!tenantId) {
-    console.warn("[Blog] No tenant ID configured, skipping static path generation");
-    return [];
+    throw new Error("[Blog] Missing PUBLIC_TENANT_ID for static path generation");
   }
 
   const { data } = await supabase

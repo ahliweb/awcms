@@ -1,7 +1,7 @@
 /**
  * supabaseAdmin.js
  * 
- * Admin Supabase client that bypasses RLS using the service role key.
+ * Admin Supabase client that bypasses RLS using the secret key.
  * 
  * ⚠️ SECURITY WARNING:
  * This client should ONLY be used in:
@@ -9,15 +9,14 @@
  * - Backend scripts
  * - Admin-only operations that require bypassing RLS
  * 
- * NEVER expose the service role key to the browser.
+ * NEVER expose the secret key to the browser.
  * For client-side operations, use `customSupabaseClient.js` instead.
  */
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-// Support both Vite (import.meta.env) and Node (process.env) for the secret key
-const supabaseSecretKey = import.meta.env.SUPABASE_SECRET_KEY || (typeof process !== 'undefined' ? process.env.SUPABASE_SECRET_KEY : undefined);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env.SUPABASE_URL : undefined);
+const supabaseSecretKey = typeof process !== 'undefined' ? process.env.SUPABASE_SECRET_KEY : undefined;
 
 if (!supabaseUrl || !supabaseSecretKey) {
     console.warn('[supabaseAdmin] Missing VITE_SUPABASE_URL or SUPABASE_SECRET_KEY. Admin client will not function.');

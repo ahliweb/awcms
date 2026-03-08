@@ -8,28 +8,23 @@ import { useTenant } from '@/contexts/TenantContext';
 import { useSearch } from '@/hooks/useSearch';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import useSplatSegments from '@/hooks/useSplatSegments';
+import { Card, CardContent } from '@/components/ui/card';
 import TagsHeaderActions from '@/components/dashboard/tags/TagsHeaderActions';
 import TagsFiltersBar from '@/components/dashboard/tags/TagsFiltersBar';
 import TagsTable from '@/components/dashboard/tags/TagsTable';
 import TagsPaginationBar from '@/components/dashboard/tags/TagsPaginationBar';
 import TagEditorDialog from '@/components/dashboard/tags/TagEditorDialog';
 import TagDeleteDialog from '@/components/dashboard/tags/TagDeleteDialog';
+import { TAG_MODULE_OPTIONS, getTagUsageMeta, matchesTagModuleFilter } from '@/lib/taxonomy';
+import { restoreTag, softDeleteTag } from '@/lib/taxonomyMutations';
 
-const MODULES = [
-  { value: 'all', label: 'All Modules' },
-  { value: 'blogs', label: 'Blogs' },
-  { value: 'pages', label: 'Pages' },
-  { value: 'products', label: 'Products' },
-  { value: 'portfolio', label: 'Portfolio' },
-  { value: 'announcements', label: 'Announcements' },
-  { value: 'promotions', label: 'Promotions' },
-  { value: 'testimonies', label: 'Testimonials' },
-  { value: 'photo_gallery', label: 'Photo Gallery' },
-  { value: 'video_gallery', label: 'Video Gallery' },
-  { value: 'contacts', label: 'Contacts' },
-  { value: 'contact_messages', label: 'Messages' },
-  { value: 'product_types', label: 'Product Types' },
-];
+function slugifyTag(value) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
 
 function TagsManager() {
   const { toast } = useToast();
@@ -76,8 +71,8 @@ function TagsManager() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const canCreate = hasPermission('tenant.tags.create');
-  const canEdit = hasPermission('tenant.tags.update');
+  const canCreate = hasPermission('tenant.tag.create');
+  const canEdit = hasPermission('tenant.tag.update');
   const canSoftDelete = hasPermission('tenant.tag.delete');
   const canRestore = hasPermission('tenant.tag.restore') || hasPermission('tenant.tag.delete');
 
@@ -167,11 +162,12 @@ function TagsManager() {
             if (mergedMap.has(usage.tag_id)) {
               const tag = mergedMap.get(usage.tag_id);
               tag.count += parseInt(usage.count, 10);
-              tag.modules.add(usage.module);
-              tag.breakdown[usage.module] = (tag.breakdown[usage.module] || 0) + parseInt(usage.count, 10);
-            }
-          });
-        }
+               const usageMeta = getTagUsageMeta(usage.module);
+               tag.modules.add(usageMeta.key);
+               tag.breakdown[usageMeta.label] = (tag.breakdown[usageMeta.label] || 0) + parseInt(usage.count, 10);
+             }
+           });
+         }
 
         data = Array.from(mergedMap.values()).map((tag) => ({
           ...tag,
@@ -209,7 +205,9 @@ function TagsManager() {
     }
 
     if (!showTrash && moduleFilter !== 'all') {
-      filtered = filtered.filter((tag) => tag.modules && tag.modules.includes(moduleFilter));
+      filtered = filtered.filter((tag) => (
+        tag.modules && tag.modules.some((moduleKey) => matchesTagModuleFilter(moduleKey, moduleFilter))
+      ));
     }
 
     if (activeFilter !== 'all') {
@@ -261,11 +259,7 @@ function TagsManager() {
     }
 
     try {
-      const { error } = await supabase
-        .from('tags')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
-      if (error) throw error;
+      await softDeleteTag(id);
 
       toast({ title: 'Success', description: 'Tag moved to trash.' });
       fetchTags();
@@ -296,12 +290,7 @@ function TagsManager() {
       return;
     }
     try {
-      const { error } = await supabase
-        .from('tags')
-        .update({ deleted_at: null })
-        .eq('id', id);
-
-      if (error) throw error;
+      await restoreTag(id);
       toast({ title: 'Success', description: 'Tag restored.' });
       fetchTags();
     } catch (error) {
@@ -362,7 +351,7 @@ function TagsManager() {
     try {
       const payload = {
         name: formData.name,
-        slug: formData.slug || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        slug: formData.slug || slugifyTag(formData.name),
         color: formData.color,
         description: formData.description,
         icon: formData.icon,
@@ -399,6 +388,9 @@ function TagsManager() {
 
   const totalPages = Math.ceil(displayedTags.length / itemsPerPage);
   const currentData = displayedTags.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const activeCount = rawTags.filter((tag) => tag.tag_is_active).length;
+  const inactiveCount = rawTags.filter((tag) => !tag.tag_is_active).length;
+  const totalUsage = rawTags.reduce((sum, tag) => sum + (tag.count || 0), 0);
 
   const breadcrumbs = [
     { label: 'Tags', icon: Tag },
@@ -409,7 +401,7 @@ function TagsManager() {
     <AdminPageLayout requiredPermission="tenant.tag.read">
       <PageHeader
         title={showTrash ? 'Tags - Trash' : 'Tags Manager'}
-        description="Manage content tags, colors, and view usage statistics across the system."
+        description="Manage tenant-scoped tags shared across content modules, with reuse visibility and safer cleanup from trash."
         icon={Tag}
         breadcrumbs={breadcrumbs}
         actions={(
@@ -426,6 +418,32 @@ function TagsManager() {
         )}
       />
 
+      {!showTrash && (
+        <div className="mb-6 grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reusable Tags</p>
+              <p className="mt-2 text-3xl font-semibold text-foreground">{rawTags.length}</p>
+              <p className="mt-1 text-sm text-muted-foreground">Tenant tags available in selectors and editors.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Usage Links</p>
+              <p className="mt-2 text-3xl font-semibold text-foreground">{totalUsage}</p>
+              <p className="mt-1 text-sm text-muted-foreground">Total active assignments across connected modules.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selector Health</p>
+              <p className="mt-2 text-3xl font-semibold text-foreground">{activeCount}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{inactiveCount} inactive tags hidden from autocomplete and pickers.</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <TagsFiltersBar
         query={query}
         setQuery={setQuery}
@@ -440,7 +458,7 @@ function TagsManager() {
         setModuleFilter={setModuleFilter}
         activeFilter={activeFilter}
         setActiveFilter={setActiveFilter}
-        modules={MODULES}
+        modules={TAG_MODULE_OPTIONS}
         fetchTags={fetchTags}
         setCurrentPage={setCurrentPage}
       />

@@ -35,7 +35,7 @@ function PortfolioManager() {
         { key: 'client', label: 'Client Name' },
         { key: 'description', label: 'Description', type: 'richtext' },
         { key: 'project_date', label: 'Project Date', type: 'date' },
-        { key: 'category_id', label: 'Category', type: 'relation', table: 'categories', filter: { type: 'portfolio' } },
+        { key: 'category_id', label: 'Category', type: 'relation', table: 'categories', filter: { type: ['portfolio'] } },
         { key: 'published_at', label: 'Publish Date', type: 'datetime' },
         {
             key: 'status',

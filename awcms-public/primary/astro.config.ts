@@ -9,7 +9,7 @@ import mdx from "@astrojs/mdx";
 import partytown from "@astrojs/partytown";
 import icon from "astro-icon";
 import compress from "astro-compress";
-import type { AstroIntegration } from "astro";
+import type { AstroIntegration, AstroUserConfig } from "astro";
 import cloudflare from "@astrojs/cloudflare";
 
 import astrowind from "./vendor/integration";
@@ -93,7 +93,7 @@ export default defineConfig({
   },
 
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss()] as NonNullable<AstroUserConfig["vite"]>["plugins"],
     resolve: {
       alias: {
         "~": path.resolve(__dirname, "./src"),

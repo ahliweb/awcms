@@ -1,123 +1,128 @@
-import GenericContentManager from '@/components/dashboard/GenericContentManager';
-import { Settings, SlidersHorizontal, ShieldCheck, Database } from 'lucide-react';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { useMemo } from 'react';
+import { Settings } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useToast } from '@/components/ui/use-toast';
+import SettingsFormRenderer from '@/components/dashboard/settings/SettingsFormRenderer';
+import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell';
+import { useSettingsRecord } from '@/components/dashboard/settings/useSettingsManager';
+
+const GENERAL_SETTINGS_SCHEMA = {
+  slots: {
+    before: [
+      {
+        type: 'alert',
+        title: 'General tenant defaults',
+        description: 'These settings define the default site identity and maintenance messaging used by the tenant experience.',
+      },
+    ],
+  },
+  fields: [
+    {
+      name: 'site_name',
+      label: 'Site Name',
+      placeholder: 'Enter the public site name',
+      description: 'Used as the default name across admin and public surfaces.',
+    },
+    {
+      name: 'site_tagline',
+      label: 'Tagline',
+      placeholder: 'Describe the tenant in a short phrase',
+    },
+    {
+      name: 'contact_email',
+      label: 'Contact Email',
+      inputType: 'email',
+      placeholder: 'admin@example.com',
+    },
+    {
+      name: 'contact_phone',
+      label: 'Contact Phone',
+      placeholder: '+62...',
+    },
+    {
+      name: 'maintenance_mode',
+      label: 'Maintenance Mode',
+      inputType: 'boolean',
+      toggleLabel: 'Enable maintenance mode',
+      helpText: 'When enabled, public clients can display a maintenance message.',
+      fullWidth: true,
+    },
+    {
+      name: 'maintenance_message',
+      label: 'Maintenance Message',
+      inputType: 'textarea',
+      placeholder: 'We are performing scheduled maintenance. Please check back soon.',
+      fullWidth: true,
+    },
+  ],
+};
 
 function SettingsManager() {
-	const columns = [
-		{ key: 'key', label: 'Setting Key', className: 'font-mono font-medium' },
-		{ key: 'value', label: 'Value', className: 'truncate max-w-[200px]' },
-		{
-			key: 'scope',
-			label: 'Scope',
-			className: 'w-[100px]',
-			render: (_, row) => (
-				<span className={`px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider ${row.scope === 'platform' ? 'bg-primary/10 text-primary' : 'bg-emerald-500/10 text-emerald-500'
-					}`}>
-					{row.scope || 'tenant'}
-				</span>
-			)
-		},
-		{ key: 'description', label: 'Description', className: 'text-muted-foreground text-xs' }
-	];
+  const { toast } = useToast();
+  const settings = useSettingsRecord({
+    settingKey: 'site_info',
+    initialValue: {
+      site_name: '',
+      site_tagline: '',
+      contact_email: '',
+      contact_phone: '',
+      maintenance_mode: false,
+      maintenance_message: '',
+    },
+  });
 
-	const formFields = [
-		{ key: 'key', label: 'Key', required: true, description: 'Unique identifier (e.g., site_name, maintenance_mode)' },
-		{ key: 'value', label: 'Value', type: 'textarea', required: true, description: 'The value for this setting' },
-		{ key: 'description', label: 'Description', type: 'textarea', description: 'What this setting controls' },
-		{
-			key: 'type',
-			label: 'Type',
-			type: 'select',
-			options: [
-				{ value: 'string', label: 'String' },
-				{ value: 'boolean', label: 'Boolean (true/false)' },
-				{ value: 'number', label: 'Number' },
-				{ value: 'json', label: 'JSON' }
-			]
-		}
-	];
+  const postSections = useMemo(
+    () => [
+      <Alert key="settings-general-note">
+        <AlertTitle>Canonical general-settings surface</AlertTitle>
+        <AlertDescription>
+          {'settings_general now edits the curated site_info record instead of exposing the raw settings key/value table.'}
+        </AlertDescription>
+      </Alert>,
+    ],
+    []
+  );
 
-	const typeCount = formFields.find((field) => field.key === 'type')?.options?.length || 0;
+  const handleSave = async () => {
+    try {
+      await settings.save();
+      toast({ title: 'Saved', description: 'General settings updated successfully.' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Save failed', description: error.message });
+    }
+  };
 
-	return (
-		<AdminPageLayout requiredPermission="tenant.setting.read">
-			<PageHeader
-				title="Settings"
-				description="Manage system configuration and preferences."
-				icon={Settings}
-				breadcrumbs={[{ label: 'Settings', icon: Settings }]}
-			/>
+  const handleReload = async () => {
+    try {
+      await settings.reload();
+      toast({ title: 'Refreshed', description: 'General settings reloaded.' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Reload failed', description: error.message });
+    }
+  };
 
-			<div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-				<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Scope</p>
-							<p className="mt-1 text-sm font-semibold text-foreground">Tenant Settings</p>
-							<p className="text-xs text-muted-foreground">Configurable by tenant access rules</p>
-						</div>
-						<span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
-							<ShieldCheck className="h-4 w-4" />
-						</span>
-					</div>
-				</div>
-
-				<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Supported Types</p>
-							<p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{typeCount}</p>
-							<p className="text-xs text-muted-foreground">String, boolean, number, and JSON</p>
-						</div>
-						<span className="rounded-xl border border-border/70 bg-background/70 p-2 text-primary">
-							<SlidersHorizontal className="h-4 w-4" />
-						</span>
-					</div>
-				</div>
-
-				<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Storage</p>
-							<p className="mt-1 text-sm font-semibold text-foreground">Table: settings</p>
-							<p className="text-xs text-muted-foreground">Central key/value configuration store</p>
-						</div>
-						<span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
-							<Database className="h-4 w-4" />
-						</span>
-					</div>
-				</div>
-
-				<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Conventions</p>
-							<p className="mt-1 text-sm font-semibold text-foreground">snake_case keys</p>
-							<p className="text-xs text-muted-foreground">Use stable keys for backward compatibility</p>
-						</div>
-						<span className="rounded-xl border border-border/70 bg-background/70 p-2 text-primary">
-							<Settings className="h-4 w-4" />
-						</span>
-					</div>
-				</div>
-			</div>
-
-			<GenericContentManager
-				tableName="settings"
-				resourceName="Setting"
-				columns={columns}
-				formFields={formFields}
-				permissionPrefix="setting"
-				viewPermission="tenant.setting.read"
-				createPermission="tenant.setting.create"
-				customSelect="*"
-				enableSoftDelete={false}
-				defaultSortColumn="key"
-				defaultFilters={{ scope: 'tenant' }}
-				showBreadcrumbs={false}
-			/>
-		</AdminPageLayout>
-	);
+  return (
+    <SettingsPageShell
+      requiredPermission="tenant.setting.read"
+      title="General Settings"
+      description="Manage tenant-wide identity, contact, and maintenance defaults."
+      icon={Settings}
+      breadcrumbs={[{ label: 'Settings' }, { label: 'General Settings', icon: Settings }]}
+      loading={settings.loading}
+      onReload={handleReload}
+      onSave={handleSave}
+      saving={settings.saving}
+      hasChanges={settings.hasChanges}
+    >
+      <SettingsFormRenderer
+        schema={GENERAL_SETTINGS_SCHEMA}
+        value={settings.value}
+        onChange={settings.setValue}
+        disabled={settings.saving}
+        postSections={postSections}
+      />
+    </SettingsPageShell>
+  );
 }
 
 export default SettingsManager;

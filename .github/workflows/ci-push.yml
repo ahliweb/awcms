@@ -103,11 +103,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run checks
+        run: npm run check
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
+          PUBLIC_TENANT_ID: ${{ secrets['PUBLIC_TENANT_ID'] || '00000000-0000-0000-0000-000000000000' }}
+
       - name: Build
         run: npm run build
         env:
           PUBLIC_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
           PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
+          PUBLIC_TENANT_ID: ${{ secrets['PUBLIC_TENANT_ID'] || '00000000-0000-0000-0000-000000000000' }}
 
   # ============================================
   # Flutter Build - Mobile App
@@ -244,6 +252,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run checks
+        run: npm run check && npm run lint
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
+          PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
 
       - name: Build
         run: npm run build

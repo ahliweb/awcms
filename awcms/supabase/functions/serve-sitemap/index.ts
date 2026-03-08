@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
     try {
         const supabase = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SECRET_KEY') ?? '' // Use service role for full access
+            Deno.env.get('SUPABASE_SECRET_KEY') ?? '' // Use secret key for privileged reads
         )
 
         // Get tenant from query params or hostname
@@ -177,4 +177,3 @@ Deno.serve(async (req: Request) => {
         )
     }
 })
-

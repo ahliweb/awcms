@@ -1,11 +1,14 @@
-import { LayoutTemplate, Lock, Menu, RefreshCw } from 'lucide-react';
+import { Copy, LayoutTemplate, Lock, Menu, ShieldCheck } from 'lucide-react';
 
 function MenusOverviewCards({
 	flatMenus,
 	rolesCount,
 	currentLocationLabel,
+	portalVariantLabel,
+	duplicateCount,
 }) {
-	const activeItemsCount = flatMenus.filter((item) => item.is_active).length;
+	const publicItemsCount = flatMenus.filter((item) => item.is_public).length;
+	const restrictedItemsCount = Math.max(0, flatMenus.length - publicItemsCount);
 	const childItemsCount = flatMenus.filter((item) => item.parent_id).length;
 
 	return (
@@ -26,12 +29,12 @@ function MenusOverviewCards({
 			<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
 				<div className="flex items-start justify-between gap-3">
 					<div>
-						<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Active Links</p>
-						<p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{activeItemsCount}</p>
-						<p className="text-xs text-muted-foreground">Enabled in current locale</p>
+						<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Public Default</p>
+						<p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{publicItemsCount}</p>
+						<p className="text-xs text-muted-foreground">Visible without signed-in role checks</p>
 					</div>
 					<span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
-						<RefreshCw className="h-4 w-4" />
+						<ShieldCheck className="h-4 w-4" />
 					</span>
 				</div>
 			</div>
@@ -52,12 +55,25 @@ function MenusOverviewCards({
 			<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
 				<div className="flex items-start justify-between gap-3">
 					<div>
-						<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Role Permissions</p>
-						<p className="mt-1 text-sm font-semibold text-foreground">{rolesCount} roles</p>
-						<p className="text-xs text-muted-foreground">Location: {currentLocationLabel}</p>
+						<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Access Rules</p>
+						<p className="mt-1 text-sm font-semibold text-foreground">{rolesCount} roles · {restrictedItemsCount} restricted</p>
+						<p className="text-xs text-muted-foreground">{portalVariantLabel} · {currentLocationLabel}</p>
 					</div>
 					<span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
 						<Lock className="h-4 w-4" />
+					</span>
+				</div>
+			</div>
+
+			<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm sm:col-span-2 xl:col-span-1">
+				<div className="flex items-start justify-between gap-3">
+					<div>
+						<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Duplicate Links</p>
+						<p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{duplicateCount}</p>
+						<p className="text-xs text-muted-foreground">Clean up repeated URLs per locale and location</p>
+					</div>
+					<span className="rounded-xl border border-amber-300/60 bg-amber-50 p-2 text-amber-700">
+						<Copy className="h-4 w-4" />
 					</span>
 				</div>
 			</div>

@@ -124,7 +124,7 @@ GitHub MCP uses `scripts/start_github_mcp.sh` and requires one of: `GITHUB_PERSO
 | --- | --- | --- |
 | `scripts/repair_supabase_migration_history.sh` | Repair migration history states (`applied`/`reverted`) from local timestamps | Local (`--local`) and linked (`--linked`) |
 | `scripts/verify_supabase_migration_consistency.sh` | Verify root/mirror migration parity and migration-list alignment | Local by default; add `--linked` for remote check |
-| `scripts/verify_supabase_function_consistency.sh` | Verify root/mirror Edge Function parity and optional linked function slug coverage | Local by default; add `--linked --project-ref <ref>` for remote check |
+| `scripts/verify_supabase_function_consistency.sh` | Verify root/mirror Edge Function parity and optional linked function slug coverage (local `supabase/functions/.env` is intentionally ignored) | Local by default; add `--linked --project-ref <ref>` for remote check |
 | `scripts/start_github_mcp.sh` | Start local Docker-backed GitHub MCP with token auto-discovery | MCP runtime |
 | `scripts/update_cloudflare_secrets.sh` | Interactive Cloudflare Pages secret sync from project `.env` files | Deployment ops |
 

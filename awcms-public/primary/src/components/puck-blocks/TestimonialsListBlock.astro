@@ -23,19 +23,20 @@ let testimonials: Testimonial[] = [];
 if (tenantId && supabase) {
     try {
         const { data: testData } = await supabase
-            .from("testimonials")
+            .from("testimonies")
             .select("*")
             .eq("tenant_id", tenantId)
             .eq("status", "published")
+            .is("deleted_at", null)
             .order("display_order", { ascending: true })
             .limit(count);
 
         if (testData) {
             testimonials = testData.map((t) => ({
-                name: t.name,
-                job: t.title,
-                testimonial: t.quote,
-                image: t.image,
+                name: t.author_name || t.name,
+                job: t.author_title || t.title,
+                testimonial: t.content || t.quote,
+                image: t.author_image || t.image,
             }));
         }
     } catch (e) {

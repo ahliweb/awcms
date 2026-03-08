@@ -32,6 +32,7 @@ if (tenantId && supabase) {
             .select("*")
             .eq("tenant_id", tenantId)
             .eq("status", "published")
+            .is("deleted_at", null)
             .order("display_order", { ascending: true })
             .limit(count);
 

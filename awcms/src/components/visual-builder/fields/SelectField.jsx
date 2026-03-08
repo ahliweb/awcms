@@ -37,8 +37,24 @@ export const SelectField = ({ field, value, onChange, name }) => {
 
                     // Apply filters if any
                     Object.entries(filter).forEach(([key, val]) => {
-                        query = query.eq(key, val);
+                        if (Array.isArray(val)) {
+                            if (val.length > 0) {
+                                query = query.in(key, val);
+                            }
+                            return;
+                        }
+
+                        if (val === null) {
+                            query = query.is(key, null);
+                            return;
+                        }
+
+                        if (val !== undefined && val !== '') {
+                            query = query.eq(key, val);
+                        }
                     });
+
+                    query = query.order(labelField);
 
                     const { data, error } = await query;
 

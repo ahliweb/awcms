@@ -7,7 +7,6 @@ const AdminPageLayout = ({
     requiredPermission,
     loading = false,
     children,
-    showTenantBadge = true,
     className = '',
 }) => {
     const { hasPermission, hasAnyPermission, isPlatformAdmin, loading: permLoading } = usePermissions();
@@ -63,13 +62,6 @@ const AdminPageLayout = ({
         >
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.12),_transparent_60%)] dark:bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.18),_transparent_55%)]" />
             <div className="relative z-10">
-                {showTenantBadge && isPlatformAdmin && currentTenant && (
-                    <div className="mb-4">
-                        <span className="mr-2 inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                            Tenant: {currentTenant.name}
-                        </span>
-                    </div>
-                )}
                 {children}
             </div>
         </div>

@@ -5,7 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import MediaLibrary from '@/components/dashboard/media/MediaLibrary';
 import { PageLinkField } from './PageLinkField';
-import { supabase } from '@/lib/customSupabaseClient';
+import { resolveMediaUrl } from '@/lib/media';
+
 
 /**
  * Rich Text Field for Puck Editor
@@ -34,12 +35,10 @@ export const RichTextField = ({ field, value, onChange, name }) => {
     const handleMediaSelect = (file) => {
         if (!editorInstance) return;
 
-        const { data } = supabase.storage
-            .from(file.bucket_name || 'cms-uploads')
-            .getPublicUrl(file.file_path);
+        const finalUrl = resolveMediaUrl(file);
 
-        if (data.publicUrl) {
-            editorInstance.chain().focus().setImage({ src: data.publicUrl }).run();
+        if (finalUrl) {
+            editorInstance.chain().focus().setImage({ src: finalUrl }).run();
             setMediaOpen(false);
             setEditorInstance(null);
 

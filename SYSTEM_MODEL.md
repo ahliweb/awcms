@@ -1,7 +1,7 @@
 # AWCMS System Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-02-27 (Audited against `package.json`, migration status, CI runtime, and MCP topology)
+> **Last Updated:** 2026-03-08 (Audited against `package.json`, migration status, scripts, MCP topology, and current documentation audit cycle)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -41,14 +41,14 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Administrative Regions (Indonesia):** Standard government hierarchy (`administrative_regions`, `cahyadsn/wilayah`) for legal/compliance.
 * **Extensions:** Custom PostgreSQL extensions (`pga_...`) handle complex logic.
 * **Constraints:**
-  * **NO** direct database access (Must use Supabase JS Client or Edge Functions).
+  * **NO** direct database access (Must use Supabase JS Client or approved server-side edge runtimes).
   * **NO** Puck Editor Runtime (Use `Render` from `@puckeditor/core` only).
 
 ### 1.3 Backend & Database
 
-* **Platform:** Supabase (PostgreSQL 17)
-* **Logic Layer:** PostgreSQL Functions (PL/pgSQL) + Edge Functions (Deno/TS).
-* **Node.js Servers:** **FORBIDDEN**. All backend logic must reside in Supabase.
+* **Platform:** Supabase (PostgreSQL 17), Cloudflare (Workers & R2)
+* **Logic Layer:** PostgreSQL Functions + Cloudflare Workers + optional Supabase Edge Functions during transition.
+* **Node.js Servers:** **FORBIDDEN**. Core authorization truth remains in Supabase; edge HTTP orchestration may run in Cloudflare Workers.
 
 ### 1.4 AI Gateway (OpenClaw)
 
@@ -78,7 +78,6 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **Connected Servers (authoritative baseline):**
   * `context7` (remote)
   * `supabase` (local `awcms-mcp` server)
-  * `stitch` (local proxy)
   * `github` (local Docker-backed `github/github-mcp-server`)
   * Cloudflare managed remote MCPs: `cloudflare-api`, `cloudflare-docs`, `cloudflare-bindings`, `cloudflare-observability`, `cloudflare-builds`, `cloudflare-radar`, `cloudflare-browser`
 * **GitHub Auth Pattern:** token-based local runtime via `GITHUB_PERSONAL_ACCESS_TOKEN` (or equivalent mapped vars).
@@ -96,7 +95,7 @@ Agents must respect these exact versions to ensure compatibility across the mono
   * **Public:** Static builds resolve tenant via build-time env (`PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID`); middleware resolution is reserved for SSR/runtime deployments.
 * **RLS (Row Level Security):**
   * **Strict Enforcement:** RLS must be enabled on ALL tables.
-  * **Bypass Rule:** NEVER bypass RLS in client code. Only server-side clients using `SUPABASE_SECRET_KEY` inside scoped Edge Functions may perform privileged operations, and only for explicit administrative tasks.
+  * **Bypass Rule:** NEVER bypass RLS in client code. Only approved server-side runtimes using `SUPABASE_SECRET_KEY` may perform privileged operations, and only for explicit administrative tasks.
 * **Resource Sharing:**
   * **Shared:** `settings`, `branding`, `modules` (Configurable inheritance).
   * **Isolated:** `users`, `content`, `media`, `commerce` (orders, products).
@@ -135,17 +134,11 @@ Agents must respect these exact versions to ensure compatibility across the mono
 * **System:** TailwindCSS v4 with CSS Variables.
 * **Constraint:** **NO** hardcoded hex values (e.g., `bg-[#123456]`) in components. Use semantic variables (`bg-primary`, `text-foreground`) to support white-labeling and dark mode.
 
-### 2.5 Content Import & Sanitization
+### 2.5 Content Sanitization
 
-* **Stitch Import Policy:** Tenant-controlled via `settings.key = 'stitch_import'`.
-* **Config Surface:** `enabled`, `mode`, `max_input_kb`, `allow_raw_html_fallback`.
-* **Import Modes:**
-  * `html`: single sanitized block import.
-  * `mapped`: structured block mapping with optional `RawHTML` fallback.
-* **Sanitization Enforcement:**
-  * Admin import sanitization in `awcms/src/lib/stitch/sanitizeStitchHtml.js`.
-  * Admin fallback rendering sanitization in `awcms/src/utils/sanitize.js`.
-  * Public fallback rendering sanitization in `awcms-public/primary/src/utils/sanitize.ts` via `PuckRenderer`.
+* **Admin Sanitization Enforcement:** Raw HTML rendered in admin-managed flows must pass through `awcms/src/utils/sanitize.js`.
+* **Public Sanitization Enforcement:** Public fallback HTML rendering must pass through `awcms-public/primary/src/utils/sanitize.ts` via `PuckRenderer`.
+* **Removed Capability:** Stitch import is no longer part of the canonical product surface or runtime.
 
 ---
 

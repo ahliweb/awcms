@@ -18,6 +18,7 @@ import { ImageUpload } from '@/components/ui/ImageUpload';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
 import TagInput from '@/components/ui/TagInput';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -115,7 +116,13 @@ function BlogEditor({ item, onClose, onSuccess }) {
             let query = supabase
                 .from('categories')
                 .select('id, name')
-                .eq('type', 'blog');
+                .in('type', getCategoryTypesForModule('blogs'))
+                .is('deleted_at', null)
+                .order('name');
+
+            if (currentTenant?.id) {
+                query = query.eq('tenant_id', currentTenant.id);
+            }
 
             const { data, error } = await query;
 
@@ -123,7 +130,9 @@ function BlogEditor({ item, onClose, onSuccess }) {
                 // Try without type filter
                 const { data: allData } = await supabase
                     .from('categories')
-                    .select('id, name');
+                    .select('id, name')
+                    .is('deleted_at', null)
+                    .order('name');
                 setCategories(allData || []);
             } else {
                 setCategories(data || []);

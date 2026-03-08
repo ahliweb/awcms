@@ -89,7 +89,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 1. **Context First**: Before generating code, read `README.md` and related component files to understand the existing patterns.
 
 2. **Multi-Tenancy Awareness**:
-   - **RLS is Sacred**: Never bypass RLS unless explicitly creating a Platform Admin feature (using `auth_is_admin()` or a server-side `SUPABASE_SECRET_KEY` path inside Edge Functions).
+   - **RLS is Sacred**: Never bypass RLS unless explicitly creating a Platform Admin feature (using `auth_is_admin()` or a server-side `SUPABASE_SECRET_KEY` path inside approved edge runtimes).
    - **Tenant Context**: Always use `useTenant()` or `usePermissions()` to get `tenantId`.
    - **Public Portal Tenant Context**: Static builds use `PUBLIC_TENANT_ID`/`VITE_PUBLIC_TENANT_ID`; avoid `Astro.locals` in build-time code.
    - **Tenancy**: Use `tenant_id` for all isolation. Respect the **5-level** hierarchy limit.
@@ -115,7 +115,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | **Admin Panel**   | React 19.2.4, Vite 7                                                      |
 | **Public Portal** | Astro 5.17.1 (static output), React 19.2.4                                  |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
-| Backend           | Supabase only (NO Node.js servers)                                        |
+| Backend           | Supabase (Auth, DB, RLS) + Cloudflare Workers (Edge Logic)                |
 
 1. **Environment Security**:
    - **Ignored Files**: Ensure `.env`, `.env.local`, `.env.production`, and `.env.remote` are always ignored by Git.
@@ -142,6 +142,7 @@ When updating docs or implementing library usage, **Context7 is the primary refe
 - `supabase/supabase-js` (Auth, Database)
 - `supabase/cli` (Migration/CLI workflows)
 - `vitejs/vite` (Build Tooling)
+- `cloudflare/cloudflare-docs` (Workers, R2, Platform guidance)
 - `withastro/docs` (Public Portal)
 - `remix-run/react-router` (Routing v7)
 - `websites/react_dev` (React 19)
@@ -451,7 +452,7 @@ While powerful, Agents operating in this environment have specific boundaries:
 
 1. **Shell Access Depends on Host**: In OpenCode, shell commands are available. In other agent hosts, shell access may be restricted or unavailable.
 
-2. **Backend Logic Placement**: Backend business logic must remain in Supabase (Edge Functions, Database Functions, SQL), not custom Node.js servers.
+2. **Backend Logic Placement**: Backend business logic must remain in Cloudflare Workers (Edge Logic) and Supabase (Database Functions, SQL), not custom Node.js servers. Supabase Edge Functions are deprecated in favor of Cloudflare Workers.
 
 3. **Binary Asset Generation**: Agents should not generate binary assets directly; reference existing assets or placeholders.
 
@@ -627,7 +628,7 @@ The local server provides project-scoped tools:
 - `supabase_gen_types`: Generate TypeScript types.
 
 > [!NOTE]
-> Ensure your `.env` uses `SUPABASE_SECRET_KEY` instead of `SUPABASE_SERVICE_ROLE_KEY` for these tools if applicable.
+> Ensure your `.env` uses the canonical `SUPABASE_SECRET_KEY` name for privileged server-side access.
 
 #### Context7 Tools (AI Documentation)
 
@@ -645,7 +646,6 @@ The local server provides project-scoped tools:
 AWCMS also runs external MCP servers for cloud and ecosystem tasks:
 
 - `context7` (remote): `https://mcp.context7.com/mcp`
-- `stitch` (local proxy): `npx @_davideast/stitch-mcp proxy`
 - `github` (local wrapper): `scripts/start_github_mcp.sh` -> Docker `ghcr.io/github/github-mcp-server`
 - Cloudflare managed remote servers:
   - `cloudflare-api`, `cloudflare-docs`, `cloudflare-bindings`, `cloudflare-observability`, `cloudflare-builds`, `cloudflare-radar`, `cloudflare-browser`
@@ -855,6 +855,7 @@ When updating documentation:
 3. Keep version numbers accurate (check `package.json`)
 4. Use relative links between docs files
 5. Update `CHANGELOG.md` for significant changes
+6. For repository-wide doc changes, update `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`
 
 ---
 
@@ -1734,7 +1735,7 @@ npx supabase secrets set \
 ##### Failure Modes and Guardrails
 
 - **Failure:** Missing CORS headers on error responses. **Guardrail:** include `corsHeaders` in every `new Response()` call, including errors.
-- **Failure:** Using `SUPABASE_SECRET_KEY` in client-side code. **Guardrail:** key only accessible via `Deno.env.get()` in Edge Functions.
+- **Failure:** Using `SUPABASE_SECRET_KEY` in client-side code. **Guardrail:** key must remain accessible only in approved server-side edge runtimes.
 - **Failure:** Mutating soft-deleted rows. **Guardrail:** always chain `.is("deleted_at", null)` on queries.
 - **Failure:** Missing permission check. **Guardrail:** add `has_permission` RPC call or restrict endpoint to admin routes.
 - **Failure:** Function not found after deploy. **Guardrail:** verify project ref and folder path match `supabase/functions/<name>/index.ts`.

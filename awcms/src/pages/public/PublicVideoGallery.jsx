@@ -1,30 +1,48 @@
 
-import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/customSupabaseClient';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { PlayCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { usePublicTenant } from '@/hooks/usePublicTenant';
+import { fetchPublicMediaItems } from '@/lib/publicMedia';
 
 function PublicVideoGallery() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const fetchVideos = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('video_gallery')
-      .select('*')
-      .eq('status', 'published')
-      .order('created_at', { ascending: false });
-    setItems(data || []);
-    setLoading(false);
-  }, []);
+  const { tenant } = usePublicTenant();
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchVideos();
-  }, [fetchVideos]);
+    let isCancelled = false;
+
+    const loadItems = async () => {
+      if (!isCancelled) {
+        setLoading(true);
+      }
+
+      try {
+        const data = await fetchPublicMediaItems({ mediaKind: 'video', tenantId: tenant?.id });
+        if (!isCancelled) {
+          setItems(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch public video gallery:', error);
+        if (!isCancelled) {
+          setItems([]);
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadItems();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [tenant]);
 
   return (
     <div className="min-h-screen bg-background py-16">
@@ -50,7 +68,7 @@ function PublicVideoGallery() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: i * 0.1 }}
               >
-                <Link to={`/video-gallery/${item.slug}`} className="group block">
+                <Link to={`/gallery/videos/${item.slug}`} className="group block">
                   <div className="aspect-video rounded-2xl overflow-hidden bg-muted relative mb-4 border border-border shadow-sm group-hover:shadow-md transition-all">
                     {/* Simple placeholder for thumbnail logic since we might not have actual thumbnails from youtube API directly stored always */}
                     <div className="w-full h-full bg-slate-900 flex items-center justify-center group-hover:bg-slate-800 transition-colors">
@@ -62,7 +80,7 @@ function PublicVideoGallery() {
                     </div>
                   </div>
                   <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-1">{item.description}</p>
+                  <p className="text-sm text-muted-foreground line-clamp-1">{item.description || item.category?.name || 'Media Library video'}</p>
                 </Link>
               </motion.div>
             ))}

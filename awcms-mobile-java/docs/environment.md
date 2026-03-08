@@ -8,14 +8,14 @@
 
 ## Required Keys
 
-```
+```properties
 SUPABASE_URL=https://<project>.supabase.co
 SUPABASE_PUBLISHABLE_KEY=...
 ```
 
 ## Optional Keys
 
-```
+```properties
 SUPABASE_PROJECT_ID=...
 SUPABASE_FUNCTIONS_URL=https://<project>.supabase.co/functions/v1
 TURNSTILE_SITE_KEY=... (only if a mobile form uses Turnstile)
@@ -24,7 +24,7 @@ TENANT_ID=... (dev override)
 
 ## Gradle Example
 
-```
+```groovy
 def secrets = new Properties()
 file("secrets.properties").withInputStream { secrets.load(it) }
 
@@ -39,4 +39,4 @@ android {
 ## Runtime Overrides
 
 - Use a debug-only settings screen to switch tenants.
-- Never expose service role keys or admin credentials on device.
+- Never expose secret keys or admin credentials on device.

@@ -81,11 +81,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run checks
+        run: npm run check
+        env:
+          PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: "mock-publishable-key"
+          PUBLIC_TENANT_ID: "00000000-0000-0000-0000-000000000000"
+
       - name: Build
         run: npm run build
         env:
           PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
           PUBLIC_SUPABASE_PUBLISHABLE_KEY: "mock-publishable-key"
+          PUBLIC_TENANT_ID: "00000000-0000-0000-0000-000000000000"
 
   # ============================================
   # Flutter Build - Mobile App
@@ -143,6 +151,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run checks
+        run: npm run check && npm run lint
+        env:
+          PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: "mock-publishable-key"
+          PUBLIC_TENANT_ID: "00000000-0000-0000-0000-000000000000"
 
       - name: Build
         run: npm run build

@@ -11,12 +11,11 @@ export interface MenuItem {
   id: string;
   title: string;
   url: string | null;
-  target?: string | null;
   icon?: string | null;
-  badge?: string | null;
-  badge_color?: string | null;
   children?: MenuItem[];
   is_active: boolean;
+  is_public: boolean;
+  role_id?: string | null;
   sort_order: number;
 }
 
@@ -32,13 +31,21 @@ interface MenuRow {
   id: string;
   label: string;
   url: string | null;
-  target?: string | null;
   icon?: string | null;
   order?: number | null;
   parent_id?: string | null;
   is_active?: boolean | null;
+  is_public?: boolean | null;
+  role_id?: string | null;
   location?: string | null;
   group_label?: string | null;
+}
+
+interface MenuLocationOptions {
+  tenantId?: string | null;
+  locale?: string;
+  roleIds?: string[];
+  includeRestricted?: boolean;
 }
 
 /**
@@ -47,9 +54,20 @@ interface MenuRow {
 export async function getMenuByLocation(
   supabase: SupabaseClient,
   location: string,
-  tenantId?: string | null,
-  locale?: string,
+  tenantIdOrOptions?: string | null | MenuLocationOptions,
+  localeArg?: string,
+  roleIdsArg?: string[],
 ): Promise<MenuItem[] | null> {
+  const options: MenuLocationOptions =
+    typeof tenantIdOrOptions === "object" && tenantIdOrOptions !== null
+      ? tenantIdOrOptions
+      : {
+          tenantId: tenantIdOrOptions,
+          locale: localeArg,
+          roleIds: roleIdsArg,
+        };
+  const { tenantId, locale, roleIds = [], includeRestricted = roleIds.length > 0 } = options;
+
   const runQuery = async (withLocale: boolean) => {
     let query = supabase
       .from("menus")
@@ -94,7 +112,47 @@ export async function getMenuByLocation(
     return null;
   }
 
-  const items = buildMenuTree((data || []) as MenuRow[]);
+  const rows = (data || []) as MenuRow[];
+  const publicRows = rows.filter((row) => row.is_public !== false);
+
+  let allowedMenuIds = new Set<string>();
+  if (includeRestricted && roleIds.length > 0) {
+    const directRoleMatches = rows
+      .filter((row) => row.role_id && roleIds.includes(row.role_id))
+      .map((row) => row.id);
+
+    if (directRoleMatches.length > 0) {
+      directRoleMatches.forEach((id) => allowedMenuIds.add(id));
+    }
+
+    const { data: permissionRows, error: permissionsError } = await supabase
+      .from("menu_permissions")
+      .select("menu_id, role_id, can_view")
+      .in("role_id", roleIds)
+      .eq("can_view", true)
+      .in("menu_id", rows.map((row) => row.id));
+
+    if (permissionsError) {
+      console.error(
+        `[Menu] Error fetching menu permissions for location "${location}":`,
+        permissionsError.message,
+      );
+    } else {
+      (permissionRows || []).forEach((permission) => {
+        if (permission.menu_id) {
+          allowedMenuIds.add(permission.menu_id);
+        }
+      });
+    }
+  }
+
+  const scopedRows = rows.filter((row) => {
+    if (row.is_public !== false) return true;
+    if (!includeRestricted) return false;
+    return allowedMenuIds.has(row.id);
+  });
+
+  const items = buildMenuTree(scopedRows.length > 0 ? scopedRows : publicRows);
   return filterActiveItems(items);
 }
 
@@ -133,7 +191,7 @@ export async function getAllMenus(
 
   return Object.entries(grouped).reduce(
     (acc, [location, rows]) => {
-      acc[location] = filterActiveItems(buildMenuTree(rows));
+      acc[location] = filterActiveItems(buildMenuTree(rows.filter((row) => row.is_public !== false)));
       return acc;
     },
     {} as Record<string, MenuItem[]>,
@@ -186,9 +244,10 @@ function buildMenuTree(rows: MenuRow[]): MenuItem[] {
       id: row.id,
       title: row.label,
       url: row.url ?? null,
-      target: row.target ?? null,
       icon: row.icon ?? null,
       is_active: row.is_active !== false,
+      is_public: row.is_public !== false,
+      role_id: row.role_id ?? null,
       sort_order: row.order ?? 0,
       children: [],
     };

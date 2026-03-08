@@ -21,7 +21,7 @@ const ThemesManager = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [themeToDelete, setThemeToDelete] = useState(null);
 
-  const canUpdate = hasPermission('tenant.setting.update');
+  const canUpdate = hasPermission('tenant.theme.update');
 
   const fetchThemes = useCallback(async () => {
     setLoading(true);
@@ -205,7 +205,7 @@ const ThemesManager = () => {
   );
 
   return (
-    <AdminPageLayout requiredPermission="tenant.setting.read">
+    <AdminPageLayout requiredPermission="tenant.theme.read">
       <PageHeader
         title="Theme Gallery"
         description="Manage, customize, and activate visual themes for your site."

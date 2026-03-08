@@ -1,0 +1,23 @@
+{
+  "name": "awcms-edge",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker Edge Service for AWCMS",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:local": "wrangler dev --ip 127.0.0.1 --port 8787 --env-file ../awcms/.env.local",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.883.0",
+    "@aws-sdk/s3-request-presigner": "^3.883.0",
+    "hono": "^4.6.0",
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240821.1",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.71.0"
+  }
+}

@@ -31,6 +31,7 @@ npm run dev
 ## Environment Notes
 
 - Configure Supabase and Context7 keys in your local env files before starting tools that require external APIs.
+- `mcp.json` is the repository source of truth for the active MCP server topology used by OpenCode.
 - Keep secret values out of Git-tracked files.
 
 ## References

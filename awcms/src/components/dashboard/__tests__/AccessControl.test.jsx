@@ -47,11 +47,24 @@ vi.mock('@/lib/customSupabaseClient', () => ({
 
 // Mock AdminPageLayout to capture props
 vi.mock('@/templates/flowbite-admin', () => ({
-    AdminPageLayout: ({ children, requiredPermission }) => (
-        <div data-testid="admin-layout" data-required-permission={requiredPermission}>
-            {children}
-        </div>
-    ),
+    AdminPageLayout: ({ children, requiredPermission }) => {
+        const permissions = usePermissions();
+        const required = Array.isArray(requiredPermission)
+            ? requiredPermission.filter(Boolean)
+            : [requiredPermission].filter(Boolean);
+        const allowed = required.length === 0
+            || required.some((permission) => permissions?.hasPermission?.(permission));
+
+        if (!allowed) {
+            return <div>common.access_denied</div>;
+        }
+
+        return (
+            <div data-testid="admin-layout" data-required-permission={requiredPermission}>
+                {children}
+            </div>
+        );
+    },
     PageHeader: ({ title }) => <h1>{title}</h1>,
 }));
 
@@ -84,7 +97,7 @@ describe('Access Control', () => {
 
             // Expect Access Denied UI
             await waitFor(() => {
-                expect(screen.getByText('seo_manager.access_denied')).toBeInTheDocument();
+                expect(screen.getByText('common.access_denied')).toBeInTheDocument();
             });
             // Expect AdminPageLayout NOT to be rendered
             expect(screen.queryByTestId('admin-layout')).not.toBeInTheDocument();

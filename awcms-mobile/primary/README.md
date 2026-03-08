@@ -1,6 +1,6 @@
-# AWCMS Mobile
+# AWCMS Mobile (Primary)
 
-Aplikasi mobile Flutter untuk AWCMS.
+Primary Flutter client for AWCMS end users.
 
 ## Prerequisites
 
@@ -16,20 +16,30 @@ cp .env.example .env
 flutter run
 ```
 
+## Common Commands
+
+- `flutter pub get` - install dependencies
+- `flutter analyze` - run static analysis
+- `flutter test` - run test suite
+- `flutter run` - launch on a device or emulator
+
 ## Environment Variables
 
 ```env
 SUPABASE_URL=...
 SUPABASE_PUBLISHABLE_KEY=...
+DEFAULT_TENANT_ID=...
 ```
 
 ## Key Concepts
 
-- Menggunakan Supabase yang sama dengan admin.
-- Tenant context disimpan lokal dan dipakai sebagai filter query.
-- Offline cache menggunakan Drift.
+- Uses the same Supabase project as the admin and public clients.
+- Stores tenant context locally and applies it as a query filter.
+- Uses Drift for offline cache support.
+- Never use `SUPABASE_SECRET_KEY` in the mobile app.
 
 ## References
 
 - `../../DOCS_INDEX.md`
 - `../../docs/dev/mobile.md`
+- `../../docs/tenancy/supabase.md`

@@ -6,11 +6,11 @@ import { Helmet } from 'react-helmet-async';
 import { Quote, Star } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
-function PublicTestimonies() {
+function PublicTestimonials() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchTestimonies = useCallback(async () => {
+  const fetchTestimonials = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from('testimonies')
@@ -23,8 +23,8 @@ function PublicTestimonies() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchTestimonies();
-  }, [fetchTestimonies]);
+    fetchTestimonials();
+  }, [fetchTestimonials]);
 
   return (
     <div className="min-h-screen bg-background py-16">
@@ -93,4 +93,4 @@ function PublicTestimonies() {
   );
 }
 
-export default PublicTestimonies;
+export default PublicTestimonials;

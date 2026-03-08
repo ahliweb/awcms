@@ -43,7 +43,7 @@ Provide common fixes for local development and deployment issues.
 ### Analytics Not Showing
 
 - Confirm `analytics_events` and `analytics_daily` migrations are applied.
-- Analytics logging requires SSR/runtime middleware; static builds do not log server-side events.
+- Canonical static builds do not log server-side analytics events; middleware-based logging applies only in non-canonical runtime experiments.
 - Ensure `x-tenant-id` is set for scoped public requests.
 
 ### Migration History Mismatch
@@ -57,7 +57,7 @@ Provide common fixes for local development and deployment issues.
 
 - CI lint runs from `awcms/supabase`, while local CLI defaults to root `supabase/`.
 - Run `scripts/verify_supabase_migration_consistency.sh` to detect missing or content-drifted migration files.
-- Run `scripts/verify_supabase_function_consistency.sh` to detect root/mirror Edge Function drift.
+- Run `scripts/verify_supabase_function_consistency.sh` to detect root/mirror Edge Function drift; the helper intentionally ignores local-only `supabase/functions/.env` secret files.
 - Mirror any changed files between `supabase/**` and `awcms/supabase/**`, then re-run verification.
 
 ### Invalid Migration Filename Warning

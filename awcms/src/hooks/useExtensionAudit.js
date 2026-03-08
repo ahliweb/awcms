@@ -111,7 +111,7 @@ export function useExtensionAudit() {
     /**
      * Check if user can view logs
      */
-    const canViewLogs = hasPermission('tenant.audit.read') || hasPermission('platform.module.read');
+    const canViewLogs = hasPermission('tenant.audit.read') || hasPermission('platform.extensions.read');
 
     return {
         fetchLogs,

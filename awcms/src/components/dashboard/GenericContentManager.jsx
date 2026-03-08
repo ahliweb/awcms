@@ -42,7 +42,11 @@ const GenericContentManager = ({
     omitCreatedBy = false,
     enableSoftDelete = true,
     enableTrashRoute = true,
-    trashRouteSegment = 'trash'
+    trashRouteSegment = 'trash',
+    onEditOverride, // Optional override function for the edit action
+    onCreateOverride, // Optional override function for the create action
+    onSoftDeleteOverride,
+    onRestoreOverride,
 }) => {
     const { t } = useTranslation();
     const { toast } = useToast();
@@ -142,6 +146,13 @@ const GenericContentManager = ({
             // Apply default filters (e.g., { type: 'blogs' } for categories)
             if (defaultFilters && Object.keys(defaultFilters).length > 0) {
                 Object.entries(defaultFilters).forEach(([key, value]) => {
+                    if (Array.isArray(value)) {
+                        if (value.length > 0) {
+                            q = q.in(key, value);
+                        }
+                        return;
+                    }
+
                     q = q.eq(key, value);
                 });
             }
@@ -185,13 +196,18 @@ const GenericContentManager = ({
             toast({ variant: 'destructive', title: 'Access Denied', description: 'You can only edit your own content.' });
             return;
         }
-        setSelectedItem(item);
-        setShowEditor(true);
+        
+        if (onEditOverride) {
+            onEditOverride(item);
+        } else {
+            setSelectedItem(item);
+            setShowEditor(true);
+        }
     };
 
     // Show delete confirmation dialog
     const handleDelete = (id, item) => {
-        if (!checkAccess('soft_delete', permissionPrefix, item)) {
+        if (!checkAccess('delete', permissionPrefix, item)) {
             toast({ variant: 'destructive', title: 'Access Denied', description: 'You do not have permission to delete this content.' });
             return;
         }
@@ -204,13 +220,18 @@ const GenericContentManager = ({
         if (!itemToDelete) return;
 
         try {
-            const deletedAt = new Date().toISOString();
+            if (onSoftDeleteOverride) {
+                await onSoftDeleteOverride(itemToDelete.id, itemToDelete.item);
+            } else {
+                const deletedAt = new Date().toISOString();
 
-            const { error } = await udm.from(tableName)
-                .update({ deleted_at: deletedAt })
-                .eq('id', itemToDelete.id);
+                const { error } = await udm.from(tableName)
+                    .update({ deleted_at: deletedAt })
+                    .eq('id', itemToDelete.id);
 
-            if (error) throw error;
+                if (error) throw error;
+            }
+
             toast({ title: 'Success', description: `${resourceName} moved to trash` });
 
             fetchItems();
@@ -224,12 +245,22 @@ const GenericContentManager = ({
     };
 
     const handleRestore = async (id) => {
-        try {
-            const { error } = await udm.from(tableName)
-                .update({ deleted_at: null })
-                .eq('id', id);
+        if (!canRestore) {
+            toast({ variant: 'destructive', title: 'Access Denied', description: 'You do not have permission to restore this content.' });
+            return;
+        }
 
-            if (error) throw error;
+        try {
+            if (onRestoreOverride) {
+                await onRestoreOverride(id);
+            } else {
+                const { error } = await udm.from(tableName)
+                    .update({ deleted_at: null })
+                    .eq('id', id);
+
+                if (error) throw error;
+            }
+
 
             toast({ title: 'Restored', description: `${resourceName} restored from trash.` });
             fetchItems();
@@ -417,7 +448,13 @@ const GenericContentManager = ({
                             })}
 
                             {canCreate && !showTrash && (
-                                <Button onClick={() => { setSelectedItem(null); setShowEditor(true); }} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                                <Button onClick={() => { 
+                                    if (onCreateOverride) {
+                                        onCreateOverride();
+                                    } else {
+                                        setSelectedItem(null); setShowEditor(true); 
+                                    }
+                                }} className="bg-primary text-primary-foreground hover:bg-primary/90">
                                     <Plus className="w-4 h-4 mr-2" /> {t('common.create_resource', { resource: resourceName })}
                                 </Button>
                             )}

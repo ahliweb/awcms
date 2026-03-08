@@ -130,7 +130,7 @@ function TagsTable({
                       <div className="flex max-w-[250px] flex-wrap gap-1">
                         {Object.entries(tag.breakdown || {}).slice(0, 4).map(([module, count]) => (
                           <span key={module} className="flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] uppercase text-secondary-foreground">
-                            {module.replace('_', ' ').slice(0, 8)}
+                            {module}
                             <span className="rounded-full bg-background px-1 text-[9px] font-bold">{count}</span>
                           </span>
                         ))}

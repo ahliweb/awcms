@@ -16,7 +16,6 @@ import useSplatSegments from '@/hooks/useSplatSegments';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { cn } from '@/lib/utils';
 import UsersDeleteDialog from '@/components/dashboard/users/UsersDeleteDialog';
-import UsersOverviewCards from '@/components/dashboard/users/UsersOverviewCards';
 import UsersSearchToolbar from '@/components/dashboard/users/UsersSearchToolbar';
 import UsersTableSection from '@/components/dashboard/users/UsersTableSection';
 
@@ -63,9 +62,6 @@ function UsersManager() {
   const [userToDelete, setUserToDelete] = useState(null);
 
   const visibleUsersOnPage = users.length;
-  const privilegedUsersOnPage = users.filter(
-    (item) => item.roles?.is_platform_admin || item.roles?.is_full_access
-  ).length;
   const searchActive = Boolean(debouncedQuery);
 
   useEffect(() => {
@@ -308,17 +304,6 @@ function UsersManager() {
         breadcrumbs={breadcrumbs}
         actions={activeTab === 'users' ? headerActions : null}
       />
-
-      {activeTab === 'users' && (
-        <UsersOverviewCards
-          t={t}
-          totalItems={totalItems}
-          visibleUsersOnPage={visibleUsersOnPage}
-          privilegedUsersOnPage={privilegedUsersOnPage}
-          searchActive={searchActive}
-          debouncedQuery={debouncedQuery}
-        />
-      )}
 
       {/* Tabs Navigation */}
       <PageTabs

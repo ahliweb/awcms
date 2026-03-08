@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { SelectField } from '../fields/SelectField';
 import { ColorPickerField } from '../fields/ColorPickerField';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
 export const LatestBlogsBlock = ({
     _count = 3,
@@ -201,8 +202,12 @@ export const LatestBlogsBlockFields = {
         label: 'Filter by Category',
         fetchConfig: {
             table: 'categories',
-            labelField: 'title',
-            valueField: 'id'
+            labelField: 'name',
+            valueField: 'id',
+            filter: {
+                type: getCategoryTypesForModule('blogs'),
+                deleted_at: null,
+            },
         },
         render: SelectField
     },

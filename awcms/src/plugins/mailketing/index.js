@@ -3,7 +3,6 @@
  * Email sending and subscriber management via Mailketing API
  */
 
-import React from 'react';
 import { CreditCard } from 'lucide-react';
 import MailketingCreditsWidget from './components/MailketingCreditsWidget';
 import manifest from './plugin.json';
@@ -19,40 +18,6 @@ export { manifest };
  * Called once when the plugin system initializes
  */
 export const register = ({ addFilter, pluginConfig }) => {
-    // Import components dynamically for routing
-    const EmailSettings = React.lazy(() => import('./components/EmailSettings'));
-    const EmailLogs = React.lazy(() => import('./components/EmailLogs'));
-
-    // Register admin routes for email settings
-    addFilter('admin_routes', 'mailketing_routes', (routes) => [
-        ...routes,
-        {
-            path: 'email-settings',
-            element: EmailSettings,
-            permission: 'tenant.setting.update',
-        },
-        {
-            path: 'email-logs',
-            element: EmailLogs,
-            permission: 'tenant.setting.read',
-        },
-    ]);
-
-    // Register sidebar menu items
-    addFilter('admin_menu_items', 'mailketing_menu', (items) => [
-        ...items,
-        {
-            id: 'mailketing-settings',
-            label: 'Mailketing',
-            path: 'email-settings',
-            icon: 'Mail',
-            group: 'CONFIGURATION',
-            order: 75,
-            permission: 'tenant.setting.update',
-            plugin_type: manifest.type,
-        },
-    ]);
-
     // Register email content filter for template injection
     addFilter('email_content', 'mailketing', (content, _context) => {
         // Add tracking pixel if enabled

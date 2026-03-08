@@ -1,6 +1,5 @@
-import React from 'react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
-import { Settings, SlidersHorizontal, ShieldCheck, Database, Globe } from 'lucide-react';
+import { SlidersHorizontal, ShieldCheck, Database, Globe } from 'lucide-react';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
 function PlatformSettingsManager() {

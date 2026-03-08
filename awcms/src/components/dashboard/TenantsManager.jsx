@@ -528,7 +528,7 @@ function TenantsManager() {
     );
 
     return (
-        <AdminPageLayout requiredPermission="platform.tenants.read">
+        <AdminPageLayout requiredPermission="platform.tenant.read">
             <PageHeader
                 title="Tenants"
                 description="Manage platform tenants, subscriptions, and domains."

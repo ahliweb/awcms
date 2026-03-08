@@ -4,7 +4,10 @@
 
 ## Overview
 
-This guide details the exact steps to implement a clean separation between **Platform-level** configuration and **Tenant-level** configuration in the AWCMS admin. Currently, all configurations are tenant-scoped, and platform-level settings leak into tenant views because the UI does not distinguish by scope.
+This guide details the exact steps to implement a clean separation between
+**Platform-level** configuration and **Tenant-level** configuration in the
+AWCMS admin. Currently, all configurations are tenant-scoped, and platform-level
+settings leak into tenant views because the UI does not distinguish by scope.
 
 The implementation is broken down into small, distinct execution phases to prevent monolithic PRs and integration timeouts.
 

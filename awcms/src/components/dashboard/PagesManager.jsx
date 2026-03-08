@@ -207,8 +207,8 @@ function PagesManager({ onlyVisual = false }) {
       defaultValue: onlyVisual ? 'visual' : 'richtext',
       description: t('pages.form.editor_desc'),
     },
-    { key: 'category_id', label: t('pages.form.category'), type: 'resource_select', resourceTable: 'categories', filter: { type: 'page' } },
-    { key: 'tags', label: t('pages.form.tags') || 'Tags', type: 'tag_input', description: t('pages.form.tags_desc') || 'Add tags to organize your content' },
+    { key: 'category_id', label: t('pages.form.category'), type: 'resource_select', resourceTable: 'categories', filter: { type: ['page', 'pages', 'content'] } },
+    { key: 'tags', label: t('pages.form.tags') || 'Tags', type: 'tags', description: t('pages.form.tags_desc') || 'Add tags to organize your content' },
     {
       key: 'content',
       label: t('pages.form.content'),
@@ -273,9 +273,9 @@ function PagesManager({ onlyVisual = false }) {
     { key: 'description', label: t('pages.category.form.description'), type: 'textarea' },
     {
       key: 'type', label: t('pages.category.form.type'), type: 'select', options: [
+        { value: 'content', label: 'Shared Content (Pages & Blogs)' },
         { value: 'page', label: t('pages.category.form.type_page') },
-        { value: 'blog', label: t('pages.category.form.type_blog') },
-        { value: 'product', label: t('pages.category.form.type_product') }
+        { value: 'blog', label: t('pages.category.form.type_blog') }
       ], defaultValue: 'page'
     }
   ], [t]);

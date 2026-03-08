@@ -118,8 +118,8 @@ export function Pagination({
                 className={cn(
                     "h-8 w-8 text-xs font-medium transition-colors", 
                     currentPage === page 
-                        ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm" 
-                        : "hover:bg-slate-100 hover:text-slate-900"
+                        ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm" 
+                        : "hover:bg-accent hover:text-accent-foreground"
                 )}
                 aria-current={currentPage === page ? "page" : undefined}
               >

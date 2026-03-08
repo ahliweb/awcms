@@ -7,7 +7,26 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Menu as MenuIcon } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { useTenant } from '@/contexts/TenantContext';
+import { SUPPORTED_LOCALES } from '@/lib/i18n';
 import { ColorPickerField } from '../fields/ColorPickerField';
+
+const MENU_LOCATIONS = [
+    { label: 'Primary Header', value: 'header' },
+    { label: 'Footer', value: 'footer' },
+    { label: 'Public Sidebar', value: 'public_sidebar' },
+    { label: 'Mobile Menu', value: 'mobile_menu' }
+];
+
+const isExternalUrl = (value = '') => /^(https?:|mailto:|tel:|#)/i.test(value);
+
+const NavigationLink = ({ to, className, children }) => {
+    if (isExternalUrl(to)) {
+        return <a href={to} className={className}>{children}</a>;
+    }
+
+    return <Link to={to} className={className}>{children}</Link>;
+};
 
 // Field definitions for the Puck editor
 export const NavigationBlockFields = {
@@ -45,6 +64,16 @@ export const NavigationBlockFields = {
             { label: 'Large', value: 'lg' }
         ]
     },
+    location: {
+        type: 'select',
+        label: 'Menu Location',
+        options: MENU_LOCATIONS
+    },
+    locale: {
+        type: 'select',
+        label: 'Locale',
+        options: SUPPORTED_LOCALES.map((locale) => ({ label: locale.name, value: locale.code }))
+    },
     gap: {
         type: 'select',
         label: 'Item Spacing',
@@ -63,25 +92,38 @@ export const NavigationBlock = ({
     alignment = 'left',
     showDropdowns = true,
     fontSize = 'base',
+    location = 'header',
+    locale = SUPPORTED_LOCALES[0]?.code || 'en',
     gap = 8,
     _linkColor,
     _hoverColor
 }) => {
+    const { currentTenant } = useTenant();
     const [menus, setMenus] = useState([]);
     const [loading, setLoading] = useState(true);
     const [openDropdown, setOpenDropdown] = useState(null);
 
     useEffect(() => {
         fetchMenus();
-    }, []);
+    }, [currentTenant?.id, location, locale]);
 
     const fetchMenus = async () => {
+        if (!currentTenant?.id) {
+            setMenus([]);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('menus')
                 .select('*')
+                .eq('tenant_id', currentTenant.id)
                 .eq('is_active', true)
                 .eq('is_public', true)
+                .eq('location', location)
+                .eq('locale', locale)
                 .is('deleted_at', null)
                 .order('order', { ascending: true });
 
@@ -107,6 +149,7 @@ export const NavigationBlock = ({
             }
         } catch (err) {
             console.error('Error fetching navigation menus:', err);
+            setMenus([]);
         } finally {
             setLoading(false);
         }
@@ -127,7 +170,7 @@ export const NavigationBlock = ({
     if (loading) {
         return (
             <nav className="py-4">
-                <div className={`flex ${alignmentClass[alignment]} gap-${gap}`}>
+                <div className={`flex ${alignmentClass[alignment]}`} style={{ gap: `${gap * 2}px` }}>
                     <div className="h-4 w-20 bg-slate-200 rounded animate-pulse"></div>
                     <div className="h-4 w-16 bg-slate-200 rounded animate-pulse"></div>
                     <div className="h-4 w-24 bg-slate-200 rounded animate-pulse"></div>
@@ -152,22 +195,22 @@ export const NavigationBlock = ({
                 <ul className={`flex flex-col ${fontSizeClass[fontSize]}`} style={{ gap: `${gap}px` }}>
                     {menus.map(menu => (
                         <li key={menu.id}>
-                            <Link
+                            <NavigationLink
                                 to={menu.url}
                                 className="block px-3 py-2 rounded-lg text-slate-700 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium"
                             >
                                 {menu.label}
-                            </Link>
+                            </NavigationLink>
                             {showDropdowns && menu.children && menu.children.length > 0 && (
                                 <ul className="pl-4 mt-1 space-y-1 border-l-2 border-slate-100 ml-3">
                                     {menu.children.map(child => (
                                         <li key={child.id}>
-                                            <Link
+                                            <NavigationLink
                                                 to={child.url}
                                                 className="block px-3 py-1.5 text-slate-500 hover:text-blue-600 transition-colors"
                                             >
                                                 {child.label}
-                                            </Link>
+                                            </NavigationLink>
                                         </li>
                                     ))}
                                 </ul>
@@ -206,24 +249,24 @@ export const NavigationBlock = ({
                                     >
                                         <div className="p-1">
                                             {menu.children.map(child => (
-                                                <Link
+                                                <NavigationLink
                                                     key={child.id}
                                                     to={child.url}
                                                     className="block px-3 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                 >
                                                     {child.label}
-                                                </Link>
+                                                </NavigationLink>
                                             ))}
                                         </div>
                                     </div>
                                 </>
                             ) : (
-                                <Link
+                                <NavigationLink
                                     to={menu.url}
                                     className="block px-3 py-2 rounded-lg text-slate-700 hover:text-blue-600 hover:bg-blue-50 transition-colors font-medium"
                                 >
                                     {menu.label}
-                                </Link>
+                                </NavigationLink>
                             )}
                         </li>
                     );

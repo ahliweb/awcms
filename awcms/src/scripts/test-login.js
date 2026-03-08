@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
-const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY; // Use anon key for login
+const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY; // Use publishable key for login
 
 if (!supabaseKey) {
     console.error('Missing VITE_SUPABASE_PUBLISHABLE_KEY');

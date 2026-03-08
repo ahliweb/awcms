@@ -67,7 +67,7 @@ const ThemeEditor = () => {
 
     // Permission Check
     const { hasPermission } = usePermissions();
-    const canEdit = hasPermission('tenant.setting.update');
+    const canEdit = hasPermission('tenant.theme.update');
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);

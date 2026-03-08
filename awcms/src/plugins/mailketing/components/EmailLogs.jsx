@@ -20,18 +20,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import {
-    Mail,
-    Search,
-    RefreshCw,
-    CheckCircle,
-    XCircle,
-    Eye,
-    MousePointer,
-    AlertTriangle,
-    Download,
-    ShieldAlert,
-} from 'lucide-react';
+import { Mail, Search, RefreshCw, CheckCircle, XCircle, Eye, MousePointer, AlertTriangle, Download, ShieldAlert } from 'lucide-react';
 import { getEmailLogs } from '../services/emailService';
 import { format } from 'date-fns';
 
@@ -85,12 +74,6 @@ function EmailLogs() {
         }
     }, [currentTenant?.id, page, filters, canViewLogs, loadLogs]);
 
-    useEffect(() => {
-        if (currentTenant?.id && canViewLogs) {
-            loadLogs();
-        }
-    }, [currentTenant?.id, page, filters, canViewLogs, loadLogs]);
-
 
     const handleExport = () => {
         const csv = [
@@ -126,27 +109,16 @@ function EmailLogs() {
     }
 
     return (
-        <div className="space-y-6 p-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <Mail className="w-6 h-6" />
-                        Email Logs
-                    </h1>
-                    <p className="text-slate-500 mt-1">
-                        View email sending history and events
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={handleExport} disabled={logs.length === 0}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Export CSV
-                    </Button>
-                    <Button variant="outline" onClick={loadLogs}>
-                        <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                        Refresh
-                    </Button>
-                </div>
+        <div className="space-y-6">
+            <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" onClick={handleExport} disabled={logs.length === 0}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                </Button>
+                <Button variant="outline" onClick={loadLogs}>
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </Button>
             </div>
 
             {/* Filters */}

@@ -17,7 +17,7 @@ export interface Props {
 const { locale } = Astro.props;
 const currentPath = Astro.url.pathname;
 const site = await getSiteData();
-const dynamicMenu = await getMenuTree("header");
+const dynamicMenu = await getMenuTree("header", locale);
 const menuItems = dynamicMenu.length > 0 ? dynamicMenu : navigation.mainMenu;
 
 function getLabel(item: any): string {

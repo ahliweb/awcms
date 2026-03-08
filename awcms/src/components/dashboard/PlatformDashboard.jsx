@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Building2, Users, HardDrive, ShieldCheck,
@@ -9,7 +8,7 @@ import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import { Button } from '@/components/ui/button';
 
 function PlatformDashboard() {
-    const { t } = useTranslation();
+    useTranslation();
 
     // In a real implementation, you would fetch these from an RPC or a platform-specific API
     const mockStats = [

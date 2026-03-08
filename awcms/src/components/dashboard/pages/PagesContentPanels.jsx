@@ -1,5 +1,6 @@
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
+import { restoreCategory, restoreTag, softDeleteCategory, softDeleteTag } from '@/lib/taxonomyMutations';
 
 function PagesContentPanels({
 	onlyVisual,
@@ -64,8 +65,11 @@ function PagesContentPanels({
 					formFields={categoryFormFields}
 					permissionPrefix="categories"
 					customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-					defaultFilters={{ type: 'page' }}
+					defaultFilters={{ type: ['page', 'pages', 'content'] }}
 					showBreadcrumbs={false}
+					restorePermission="tenant.categories.restore"
+					onSoftDeleteOverride={softDeleteCategory}
+					onRestoreOverride={restoreCategory}
 				/>
 			</TabsContent>
 
@@ -75,9 +79,12 @@ function PagesContentPanels({
 					resourceName={t('pages.tags.singular') || 'Tag'}
 					columns={tagColumns}
 					formFields={tagFormFields}
-					permissionPrefix="tags"
+					permissionPrefix="tag"
 					customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
 					showBreadcrumbs={false}
+					restorePermission="tenant.tag.restore"
+					onSoftDeleteOverride={softDeleteTag}
+					onRestoreOverride={restoreTag}
 				/>
 			</TabsContent>
 		</PageTabs>

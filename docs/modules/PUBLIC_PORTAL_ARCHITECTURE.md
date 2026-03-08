@@ -20,8 +20,8 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ## Core Concepts
 
-- Astro hybrid output (SSG default + SSR on-demand) on Cloudflare Pages.
-- Tenant resolution at build time via `PUBLIC_TENANT_ID` and `getStaticPaths`. Developers can opt-in to Server-Side Rendering per route with `export const prerender = false`.
+- Astro static output on Cloudflare Pages with React islands where interactivity is needed.
+- Tenant resolution at build time via `PUBLIC_TENANT_ID` and `getStaticPaths`.
 - `PuckRenderer` (wraps `@puckeditor/core` `<Render>`) for rendering Puck JSON with a server-side allow-list.
 - View transitions are enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
 
@@ -29,9 +29,9 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ### Tenant Resolution
 
-- Build-time tenant resolution uses `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
+- Build-time tenant resolution uses `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID` / `VITE_TENANT_ID` as fallbacks).
 - Tenant-specific routes use `getStaticPaths` to generate output.
-- Middleware-based resolution is only used in SSR/runtime deployments.
+- Middleware-based resolution is not part of the canonical static deployment path.
 
 ### Rendering Pipeline
 
@@ -62,7 +62,7 @@ Describe how the public portal renders tenant content and enforces security cons
 - Use `createClientFromEnv` with `import.meta.env` for static builds.
 - Use `createScopedClient` with `x-tenant-id` headers for tenant-scoped reads when needed.
 - Use `tenantUrl` from `src/lib/url.ts` for internal links.
-- Analytics logging is available only when middleware is enabled in SSR/runtime.
+- Canonical static deployments do not depend on middleware-based analytics logging.
 
 ## Permissions and Access
 
@@ -80,7 +80,7 @@ Describe how the public portal renders tenant content and enforces security cons
 ## Operational Concerns
 
 - Cloudflare Pages uses build-time env variables for static output.
-- Ensure `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `PUBLIC_TENANT_ID` are set.
+- Ensure `PUBLIC_TENANT_ID` is set and that either `VITE_SUPABASE_*` or `PUBLIC_SUPABASE_*` env pairs are available for the build.
 
 ## Tenant Variants
 

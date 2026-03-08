@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useSearch } from '@/hooks/useSearch';
 import { stripHtml } from '@/utils/textUtils';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
 function PublicBlogs() {
     const [blogs, setBlogs] = useState([]);
@@ -38,7 +39,7 @@ function PublicBlogs() {
             const { data } = await supabase
                 .from('categories')
                 .select('*')
-                .eq('type', 'blog')
+                .in('type', getCategoryTypesForModule('blogs'))
                 .is('deleted_at', null)
                 .order('name');
             if (data) setCategories(data);

@@ -4,5 +4,5 @@
 
 ## Supabase Keys
 
-- **Do not use** the Supabase "anon" key or "service role" key.
+- **Do not use** legacy Supabase key names or legacy admin/public key values.
 - **Only use** the Supabase **Publishable API key** (`VITE_SUPABASE_PUBLISHABLE_KEY`) and **Secret API key** (`SUPABASE_SECRET_KEY`).

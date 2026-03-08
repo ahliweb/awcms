@@ -21,16 +21,9 @@ const SitemapRedirect = () => {
                 const domain = window.location.hostname;
 
                 // Build Edge Function URL
-                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-                const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-                const edgeFunctionUrl = `${supabaseUrl}/functions/v1/serve-sitemap?domain=${domain}`;
+                const edgeFunctionUrl = `${import.meta.env.VITE_EDGE_URL}/public/sitemap?domain=${domain}`;
 
-                const response = await fetch(edgeFunctionUrl, {
-                    headers: {
-                        'Authorization': `Bearer ${supabaseAnonKey}`,
-                        'apikey': supabaseAnonKey,
-                    }
-                });
+                const response = await fetch(edgeFunctionUrl);
 
                 if (!response.ok) {
                     throw new Error(`Failed to fetch sitemap: ${response.statusText}`);

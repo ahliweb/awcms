@@ -60,6 +60,7 @@ if (!homePage && tenantId && supabase) {
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("status", "published")
+      .is("deleted_at", null)
       .order("display_order", { ascending: true })
       .limit(6);
 
@@ -72,10 +73,11 @@ if (!homePage && tenantId && supabase) {
     }
 
     const { data: projectsData } = await supabase
-      .from("projects")
+      .from("portfolio")
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("status", "published")
+      .is("deleted_at", null)
       .limit(6);
 
     if (projectsData) {
@@ -83,10 +85,10 @@ if (!homePage && tenantId && supabase) {
         id: p.id,
         slug: p.slug || "#",
         permalink: "#",
-        publishDate: new Date(p.date || Date.now()),
+        publishDate: new Date(p.created_at || Date.now()),
         title: p.title,
         excerpt: p.description,
-        image: p.image,
+        image: p.images?.[0] || p.featured_image || null,
       }));
     }
 
@@ -95,6 +97,7 @@ if (!homePage && tenantId && supabase) {
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("status", "published")
+      .is("deleted_at", null)
       .order("display_order", { ascending: true });
 
     if (teamData) {
@@ -107,18 +110,19 @@ if (!homePage && tenantId && supabase) {
     }
 
     const { data: testData } = await supabase
-      .from("testimonials")
+      .from("testimonies")
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("status", "published")
+      .is("deleted_at", null)
       .order("display_order", { ascending: true });
 
     if (testData) {
       testimonials = testData.map((t) => ({
-        name: t.name,
-        job: t.title,
-        testimonial: t.quote,
-        image: t.image,
+        name: t.author_name || t.name,
+        job: t.author_title || t.title,
+        testimonial: t.content || t.quote,
+        image: t.author_image || t.image,
       }));
     }
 
@@ -127,6 +131,7 @@ if (!homePage && tenantId && supabase) {
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("status", "published")
+      .is("deleted_at", null)
       .order("display_order", { ascending: true });
 
     if (statsData) {
@@ -142,6 +147,7 @@ if (!homePage && tenantId && supabase) {
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("status", "published")
+      .is("deleted_at", null)
       .order("display_order", { ascending: true });
 
     if (partnerData) {

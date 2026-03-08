@@ -7,12 +7,16 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { buildMediaPublicUrl, getEdgeBaseUrl, normalizeMediaKind } from '@/lib/media';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
+
+const EDGE_URL = getEdgeBaseUrl();
 
 export function useMedia() {
     const { toast } = useToast();
     const { currentTenant } = useTenant();
     const tenantId = currentTenant?.id;
-    const { isPlatformAdmin } = usePermissions();
+    const { isPlatformAdmin, isFullAccess, hasPermission } = usePermissions();
 
     const [uploading, setUploading] = useState(false);
     const [syncing, setSyncing] = useState(false);
@@ -29,6 +33,33 @@ export function useMedia() {
     });
     const [statsLoading, setStatsLoading] = useState(true);
 
+    // Helper: Map old 'files' format to 'media_objects' where needed for components
+    const formatMediaObject = (mo) => {
+        if (!mo) return null;
+
+        const publicUrl = buildMediaPublicUrl(mo.storage_key);
+
+        return {
+            ...mo,
+            // Map to old property names just in case some components rely on them
+            id: mo.id,
+            name: mo.title || mo.original_name || mo.file_name,
+            file_name: mo.original_name || mo.file_name,
+            file_path: mo.storage_key,
+            file_size: mo.size_bytes,
+            file_type: mo.mime_type,
+            uploaded_by: mo.uploader_id,
+            created_at: mo.created_at,
+            deleted_at: mo.deleted_at,
+            public_url: publicUrl,
+            url: publicUrl,
+            users: mo.uploader || null,
+            uploader: mo.uploader || null,
+            category: mo.category || null,
+            media_kind: mo.media_kind || normalizeMediaKind(mo.mime_type)
+        };
+    };
+
     // Fetch Files (Search/List)
     const fetchFiles = useCallback(async ({
         page = 1,
@@ -43,8 +74,13 @@ export function useMedia() {
         setLoading(true);
         try {
             let dbQuery = supabase
-                .from('files')
-                .select('*, users:uploaded_by(email, full_name), tenant:tenants(name)', { count: 'exact' })
+                .from('media_objects')
+                .select(`
+                    *,
+                    tenant:tenants(name),
+                    uploader:users!media_objects_uploader_id_fkey(id, email, full_name, avatar_url),
+                    category:categories(id, name, slug, type)
+                `, { count: 'exact' })
                 .order('created_at', { ascending: false });
 
             // Platform admins see all files, others are tenant-scoped
@@ -61,15 +97,16 @@ export function useMedia() {
 
             // Search Logic
             if (query) {
-                dbQuery = dbQuery.ilike('name', `%${query}%`);
+                dbQuery = dbQuery.ilike('original_name', `%${query}%`);
             }
 
             // Type Filter
             if (typeFilter) {
-                dbQuery = dbQuery.ilike('file_type', `${typeFilter}%`);
+                dbQuery = typeFilter.includes('/')
+                    ? dbQuery.eq('mime_type', typeFilter)
+                    : dbQuery.eq('media_kind', typeFilter);
             }
 
-            // Category Filter
             if (categoryId) {
                 dbQuery = dbQuery.eq('category_id', categoryId);
             }
@@ -82,7 +119,7 @@ export function useMedia() {
             const { data, count, error } = await dbQuery;
             if (error) throw error;
 
-            return { data: data || [], count: count || 0 };
+            return { data: (data || []).map(formatMediaObject), count: count || 0 };
         } catch (err) {
             console.error('Error fetching files:', err);
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to load files.' });
@@ -96,9 +133,7 @@ export function useMedia() {
     const softDeleteFile = useCallback(async (id) => {
         try {
             const { error } = await supabase
-                .from('files')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id);
+                .rpc('soft_delete_media_object', { p_media_id: id });
 
             if (error) throw error;
 
@@ -115,16 +150,14 @@ export function useMedia() {
     const bulkSoftDelete = useCallback(async (ids) => {
         if (!ids || ids.length === 0) return { success: 0, error: 0 };
         try {
-            const { error } = await supabase
-                .from('files')
-                .update({ deleted_at: new Date().toISOString() })
-                .in('id', ids)
-                .select('id', { count: 'exact' });
+            const { data, error } = await supabase
+                .rpc('bulk_soft_delete_media_objects', { p_media_ids: ids });
 
             if (error) throw error;
 
-            toast({ title: 'Files Moved to Trash', description: `${ids.length} files moved to trash bin.` });
-            return { success: ids.length, error: 0 };
+            const successCount = Number(data || 0);
+            toast({ title: 'Files Moved to Trash', description: `${successCount} files moved to trash bin.` });
+            return { success: successCount, error: Math.max(0, ids.length - successCount) };
         } catch (err) {
             console.error('Bulk delete failed:', err);
             toast({ variant: 'destructive', title: 'Bulk Delete Failed', description: err.message });
@@ -136,9 +169,7 @@ export function useMedia() {
     const restoreFile = useCallback(async (id) => {
         try {
             const { error } = await supabase
-                .from('files')
-                .update({ deleted_at: null })
-                .eq('id', id);
+                .rpc('restore_media_object', { p_media_id: id });
 
             if (error) throw error;
 
@@ -159,7 +190,7 @@ export function useMedia() {
             let query = supabase
                 .from('categories')
                 .select('*')
-                .eq('type', 'media')
+                .in('type', getCategoryTypesForModule('media'))
                 .order('name');
 
             if (!isPlatformAdmin && tenantId) {
@@ -206,35 +237,32 @@ export function useMedia() {
     // Helper: Get Public URL
     const getFileUrl = useCallback((file) => {
         if (!file) return '';
-        if (file.file_path?.startsWith('http')) return file.file_path;
-
-        const bucketName = file.bucket_name || 'cms-uploads';
-        const { data } = supabase.storage.from(bucketName).getPublicUrl(file.file_path);
-        return data?.publicUrl || file.file_path;
+        return buildMediaPublicUrl(file.file_path || file.storage_key || (typeof file === 'string' ? file : ''));
     }, []);
 
     // Fetch file stats
     const fetchStats = useCallback(async () => {
         setStatsLoading(true);
         try {
-            // Stats should implicitly filter by RLS, but we can rely on that.
-            const { data, error } = await supabase
-                .from('files')
-                .select('file_size, file_type')
+            let query = supabase
+                .from('media_objects')
+                .select('size_bytes, mime_type, media_kind')
                 .is('deleted_at', null);
+
+            if (!isPlatformAdmin && !isFullAccess && tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
 
             const statsData = {
                 total_files: data.length,
-                total_size: data.reduce((acc, f) => acc + (f.file_size || 0), 0),
-                image_count: data.filter(f => f.file_type?.startsWith('image/')).length,
-                doc_count: data.filter(f =>
-                    f.file_type?.includes('pdf') ||
-                    f.file_type?.includes('document') ||
-                    f.file_type?.includes('text')
-                ).length,
-                video_count: data.filter(f => f.file_type?.startsWith('video/')).length,
+                total_size: data.reduce((acc, f) => acc + (f.size_bytes || 0), 0),
+                image_count: data.filter(f => (f.media_kind || normalizeMediaKind(f.mime_type)) === 'image').length,
+                doc_count: data.filter(f => (f.media_kind || normalizeMediaKind(f.mime_type)) === 'document').length,
+                video_count: data.filter(f => (f.media_kind || normalizeMediaKind(f.mime_type)) === 'video').length,
                 other_count: 0
             };
             statsData.other_count = statsData.total_files - statsData.image_count - statsData.doc_count - statsData.video_count;
@@ -245,150 +273,107 @@ export function useMedia() {
         } finally {
             setStatsLoading(false);
         }
-    }, []);
+    }, [isFullAccess, isPlatformAdmin, tenantId]);
 
     // Initial fetch
     useEffect(() => {
         fetchStats();
     }, [fetchStats]);
 
-    // Upload a single file
+    // Upload a single file via Edge API
     const uploadFile = useCallback(async (file, folder = '', categoryId = null) => {
         setUploading(true);
         try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error("Not authenticated");
+            if (!tenantId && !isPlatformAdmin && !isFullAccess) {
+                throw new Error('Missing tenant context');
+            }
+            if (!(hasPermission('tenant.files.create') || hasPermission('tenant.files.manage') || isPlatformAdmin || isFullAccess)) {
+                throw new Error('Permission denied: Cannot upload files.');
+            }
 
-            // Construct path with tenant isolation
-            // If tenantId is present, prefix with it. Default to 'public' or root if none (legacy)
-            const tenantPrefix = tenantId ? `${tenantId}/` : '';
-            const filePath = `${tenantPrefix}${folder ? folder + '/' : ''}${fileName}`;
-
-            // 1. Upload to Storage
-            const { error: uploadError } = await supabase.storage
-                .from('cms-uploads')
-                .upload(filePath, file);
-
-            if (uploadError) throw uploadError;
-
-            // 2. Get Public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('cms-uploads')
-                .getPublicUrl(filePath);
-
-            // 3. Save to DB
-            const { data: userData } = await supabase.auth.getUser();
-            const { error: dbError } = await supabase.from('files').insert({
-                name: file.name,
-                file_path: publicUrl,
-                file_size: file.size,
-                file_type: file.type,
-                bucket_name: 'cms-uploads',
-                uploaded_by: userData.user?.id,
-                tenant_id: tenantId,
-                category_id: categoryId
+            // 1. Request Upload Session
+            const sessionRes = await fetch(`${EDGE_URL}/api/media/upload-session`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                    ...(tenantId ? { 'x-tenant-id': tenantId } : {})
+                },
+                body: JSON.stringify({
+                    fileName: file.name,
+                    mimeType: file.type,
+                    sizeBytes: file.size,
+                    accessControl: 'public',
+                    folder: folder,
+                    categoryId: categoryId || null
+                })
             });
 
-            if (dbError) throw dbError;
+            if (!sessionRes.ok) throw new Error("Failed to initialize upload session");
+            const sessionData = await sessionRes.json();
+            const { sessionId, uploadUrl, finalizeUrl } = sessionData;
+
+            // 2. Upload file directly to signed R2 URL
+            const uploadRes = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': file.type || 'application/octet-stream'
+                },
+                body: file
+            });
+
+            if (!uploadRes.ok) throw new Error("File upload failed");
+
+            // 3. Finalize upload and create canonical media_objects record
+            const finalizeRes = await fetch(finalizeUrl || `${EDGE_URL}/api/media/upload/${sessionId}/finalize`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                    ...(tenantId ? { 'x-tenant-id': tenantId } : {})
+                },
+                body: JSON.stringify({ sessionId })
+            });
+
+            if (!finalizeRes.ok) throw new Error('Failed to finalize upload');
+            const uploadResult = await finalizeRes.json();
 
             // Refresh stats after upload
             await fetchStats();
 
-            return { success: true, url: publicUrl };
+            return { 
+                success: true, 
+                url: buildMediaPublicUrl(uploadResult.mediaObject.storage_key),
+                mediaObject: uploadResult.mediaObject 
+            };
         } catch (err) {
             console.error('Upload error:', err);
             throw err;
         } finally {
             setUploading(false);
         }
-    }, [fetchStats, tenantId]);
+    }, [fetchStats, hasPermission, isFullAccess, isPlatformAdmin, tenantId]);
 
     // Sync files from storage bucket to database
-    // Updated to support tenant folders
     const syncFiles = useCallback(async () => {
         setSyncing(true);
         try {
-            // List files in storage bucket (scoped to tenant folder)
-            const searchFolder = tenantId ? `${tenantId}` : '';
-            const { data: storageFiles, error: listError } = await supabase.storage
-                .from('cms-uploads')
-                .list(searchFolder, { limit: 1000, offset: 0 });
-
-            if (listError) throw listError;
-
-            // Get existing files in DB
-            const { data: dbFiles, error: dbError } = await supabase
-                .from('files')
-                .select('file_path')
-                .is('deleted_at', null);
-
-            if (dbError) throw dbError;
-
-            // Normalize check derived from filename
-            const existingFilenames = new Set(dbFiles.map(f => {
-                // Public URL: .../cms-uploads/tenant-id/filename.ext
-                // We want just 'filename.ext' for comparison if we are searching inside 'tenant-id/'
-                return f.file_path.split('/').pop();
-            }));
-
-            const newFiles = storageFiles.filter(sf =>
-                !sf.id?.includes('/') && // Skip folders (though list shouldn't return subfolders in non-recursive mode usually)
-                sf.name &&
-                sf.name !== '.emptyFolderPlaceholder' &&
-                !existingFilenames.has(sf.name)
-            );
-
-            if (newFiles.length === 0) {
-                toast({ title: 'Sync Complete', description: 'No new files found in storage.' });
-                return true;
-            }
-
-            // Insert missing files to DB
-            const { data: userData } = await supabase.auth.getUser();
-            let syncedCount = 0;
-
-            for (const sf of newFiles) {
-                // Reconstruct full path for Public URL generation
-                const fullPath = searchFolder ? `${searchFolder}/${sf.name}` : sf.name;
-
-                const { data: { publicUrl } } = supabase.storage
-                    .from('cms-uploads')
-                    .getPublicUrl(fullPath);
-
-                const { error: insertError } = await supabase.from('files').insert({
-                    name: sf.name,
-                    file_path: publicUrl,
-                    file_size: sf.metadata?.size || 0,
-                    file_type: sf.metadata?.mimetype || 'application/octet-stream',
-                    bucket_name: 'cms-uploads',
-                    uploaded_by: userData.user?.id,
-                    tenant_id: tenantId
-                });
-
-                if (!insertError) syncedCount++;
-            }
-
+            // Disabled temporarily during cutover to Cloudflare architecture.
+            // Edge Worker doesn't expose a sync API yet.
             toast({
-                title: 'Sync Complete',
-                description: `${syncedCount} new files synced from storage.`
+                title: 'Sync Disabled',
+                description: 'Syncing from external source is temporarily disabled on the new media system.'
             });
-
-            // Refresh stats after sync
-            await fetchStats();
-
             return true;
         } catch (err) {
             console.error('Sync error:', err);
-            toast({
-                variant: 'destructive',
-                title: 'Sync Failed',
-                description: err.message
-            });
             return false;
         } finally {
             setSyncing(false);
         }
-    }, [toast, fetchStats, tenantId]);
+    }, [toast]);
 
     return {
         uploadFile,

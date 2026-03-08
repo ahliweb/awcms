@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useCart } from '@/contexts/CartContext';
 import { useTenant } from '@/contexts/TenantContext';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
 function ProductCatalog() {
     const { toast } = useToast();
@@ -64,8 +65,9 @@ function ProductCatalog() {
                 .from('categories')
                 .select('id, name')
                 .eq('tenant_id', currentTenant.id)
-                .eq('type', 'product')
-                .is('deleted_at', null);
+                .in('type', getCategoryTypesForModule('products'))
+                .is('deleted_at', null)
+                .order('name');
 
             setCategories(data || []);
         } catch (error) {

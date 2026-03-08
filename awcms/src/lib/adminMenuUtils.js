@@ -39,9 +39,32 @@ const FEATURE_KEY_MAP = {
   branding: 'settings_branding'
 };
 
+const RESOURCE_PATH_MAP = {
+  visual_builder: 'visual-pages',
+  testimonials: 'testimonials',
+  visitor_stats: 'visitor-stats',
+  sidebar_manager: 'admin-navigation',
+  settings_general: 'settings/general',
+  settings_branding: 'settings/branding',
+  school_pages: 'school-pages',
+  site_images: 'site-images',
+  email_settings: 'email-settings',
+  email_logs: 'email-logs',
+  mobile_config: 'mobile/config',
+  mobile_users: 'mobile/users',
+  push_notifications: 'mobile/push',
+  iot_devices: 'devices',
+  seo_manager: 'seo',
+};
+
 export const normalizeMenuPath = (value) => {
   if (!value) return '';
   return value.replace(/^\/?admin\/?/, '').replace(/^\/+/, '');
+};
+
+export const resolveResourcePath = (key, fallbackPath = '') => {
+  if (!key) return normalizeMenuPath(fallbackPath);
+  return RESOURCE_PATH_MAP[key] || normalizeMenuPath(fallbackPath) || key;
 };
 
 export const normalizeGroupLabel = (value) => {

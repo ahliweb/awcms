@@ -96,7 +96,7 @@ Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env value
 ## Troubleshooting
 
 - Build failures: verify root directory and Node version.
-- Tenant resolution issues: confirm `PUBLIC_TENANT_ID` (static) or middleware/host settings (SSR).
+- Tenant resolution issues: confirm `PUBLIC_TENANT_ID` for canonical static builds; only inspect middleware/host settings when working on non-canonical SSR/runtime experiments.
 
 ## References
 

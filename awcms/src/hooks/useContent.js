@@ -4,6 +4,7 @@ import { useTenant } from '@/contexts/TenantContext';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
+import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
 /**
  * Hook for managing Content (Pages, Blogs, etc.)
@@ -34,13 +35,17 @@ export function useContent(contentType = 'page') {
             // Logic: fetch categories that match the type (e.g. 'blog') OR are generic 'content'
             // and belong to the current tenant.
             // RLS should handle the tenant filter, but adding it explicitly is safer for the query planner.
-            const categoryType = contentType === 'blog' ? 'blog' : 'page';
+            const categoryTypes = contentType === 'blog'
+                ? getCategoryTypesForModule('blogs')
+                : getCategoryTypesForModule('pages');
             
             const { data, error } = await supabase
                 .from('categories')
                 .select('id, name')
                 .eq('tenant_id', currentTenant.id)
-                .or(`type.eq.${categoryType},type.eq.content`);
+                .in('type', categoryTypes)
+                .is('deleted_at', null)
+                .order('name');
 
             if (error) throw error;
             return data || [];

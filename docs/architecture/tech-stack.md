@@ -54,12 +54,14 @@ Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
 Tenant-specific public portals may pin different TypeScript minor versions (for example `awcms-public/smandapbun` uses 5.9.3).
 
-### Backend (Supabase)
+### Backend and Edge
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | Database | PostgreSQL | 17 | Primary data store |
-| Edge runtime | Deno | 2 | Supabase Edge Functions |
+| Backend Platform | Supabase | 2.x | Auth, PostgREST, storage, realtime |
+| Edge runtime | Cloudflare Workers | Current | Primary edge HTTP orchestration |
+| Transitional Edge Runtime | Deno | 2 | Existing Supabase Edge Functions |
 
 ### Mobile (awcms-mobile/primary)
 

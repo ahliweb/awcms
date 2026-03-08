@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Define how AWCMS integrates with Supabase for auth, data, storage, and edge functions.
+Define how AWCMS integrates with Supabase for auth, data, storage, and edge-facing workflows.
 
 ## Audience
 
@@ -21,7 +21,8 @@ Define how AWCMS integrates with Supabase for auth, data, storage, and edge func
 
 ## Core Concepts
 
-- Supabase is the only backend (no custom servers).
+- Supabase is the system of record for auth, data, storage, and RLS.
+- Cloudflare Workers provide the primary edge HTTP layer; existing Supabase Edge Functions remain supported during transition.
 - RLS is mandatory for all tenant-scoped tables.
 - Tenant context is passed via `x-tenant-id` header and resolved in SQL with `current_tenant_id()`.
 - Tenant hierarchy and resource sharing are enforced with `tenant_can_access_resource()`.
@@ -65,12 +66,13 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 
 - Static builds resolve tenant via `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
 - `awcms-public/primary/src/lib/supabase.ts` builds clients from `import.meta.env`; headers are set when scoped access is required.
-- Analytics logging uses `analytics_events` only when middleware is enabled in SSR/runtime deployments.
+- Canonical static deployments do not depend on middleware-based analytics logging.
 
-### Edge Functions
+### Edge Logic
 
-- Stored in `supabase/functions/*`.
-- Use `supabaseAdmin` (`SUPABASE_SECRET_KEY`) for cross-tenant operations and elevated workflows.
+- Primary edge HTTP handlers live in `awcms-edge/` (Cloudflare Workers).
+- Existing Supabase Edge Functions in `supabase/functions/*` remain supported for legacy or transitional flows.
+- Use `SUPABASE_SECRET_KEY` only in approved server-side runtimes for cross-tenant operations and elevated workflows.
 - Must enforce tenant context checks and resource sharing rules before mutating data.
 
 ### Tenant Provisioning RPC Signatures
@@ -104,7 +106,7 @@ import { createClientFromEnv } from "../lib/supabase";
 const supabase = createClientFromEnv(import.meta.env, { "x-tenant-id": tenantId });
 ```
 
-### Edge Function Invocation
+### Supabase Function Invocation (Compatibility)
 
 ```javascript
 const { data, error } = await supabase.functions.invoke('manage-users', {
@@ -117,6 +119,7 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
 - Never expose `SUPABASE_SECRET_KEY` in client code.
 - Every request must be scoped to the tenant and filtered for `deleted_at`.
 - All public reads must use `status = 'published'` where applicable.
+- Prefer Cloudflare Workers for new edge HTTP endpoints.
 
 ## Operational Concerns
 
@@ -145,6 +148,7 @@ Run from repo root.
 - `supabase/migrations/` is the canonical authoring source.
 - `awcms/supabase/migrations/` is a required mirror used by CI linting.
 - Every migration change must be mirrored with identical filename and content.
+- As of the 2026-03-08 audit baseline, both roots contain `117` migration files; use parity verification because matching counts alone do not guarantee filename/content alignment.
 - Validate parity before merge:
 
 ```bash

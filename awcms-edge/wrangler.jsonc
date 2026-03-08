@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "awcms-edge",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-04-03",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "r2_buckets": [
+    {
+      "binding": "STORAGE",
+      "bucket_name": "awcms-s3",
+      "preview_bucket_name": "awcms-s3-dev"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

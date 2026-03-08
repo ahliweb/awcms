@@ -167,7 +167,7 @@ AWCMS integration rules:
 
 - Resolve tenant context from AWCMS (`tenant_id`/`slug`) before calling OpenClaw.
 - Never route without explicit `agentId` for tenant-scoped events.
-- Keep service-role or database secrets out of OpenClaw config/workspaces.
+- Keep Supabase secret keys and database credentials out of OpenClaw config/workspaces.
 - Respect ABAC/RLS boundaries; OpenClaw is an orchestration layer, not a bypass layer.
 
 ## Operational Runbook

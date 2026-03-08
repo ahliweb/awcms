@@ -137,8 +137,8 @@ const ContentTable = ({
       </div>
 
       {pagination && (
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-2">
-          <div className="text-sm text-slate-500">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-4 py-4 border-t border-border mt-2">
+          <div className="text-sm text-muted-foreground">
             Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of {pagination.totalItems} entries
           </div>
           <div className="flex items-center gap-4">
@@ -146,7 +146,7 @@ const ContentTable = ({
               value={String(pagination.itemsPerPage)}
               onValueChange={(value) => pagination.onLimitChange(Number(value))}
             >
-              <SelectTrigger className="h-9 w-[110px] rounded-xl border gap-2 border-slate-200/70 bg-white/90 px-3 text-xs font-medium text-slate-700 shadow-sm focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-slate-200">
+              <SelectTrigger className="h-9 w-[110px] rounded-xl border gap-2 border-border bg-background px-3 text-xs font-medium text-foreground shadow-sm focus:ring-ring">
                 <span className="truncate">Page Size</span>
                 <SelectValue />
               </SelectTrigger>

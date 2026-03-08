@@ -84,6 +84,26 @@ export default defineConfig(({ mode }) => {
 		? env.VITE_CORS_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
 		: true; // Default to true (allow all) if not set
 
+	const edgeOrigin = env.VITE_EDGE_URL
+		? (() => {
+			try {
+				return new URL(env.VITE_EDGE_URL).origin;
+			} catch {
+				return null;
+			}
+		})()
+		: null;
+
+	const imgSrc = [
+		"img-src 'self' data: blob: https://*.supabase.co https://*.r2.cloudflarestorage.com http://127.0.0.1:54321 http://localhost:54321 http://127.0.0.1:8787 http://localhost:8787",
+		edgeOrigin,
+	].filter(Boolean).join(' ');
+
+	const connectSrc = [
+		"connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com http://127.0.0.1:54321 http://localhost:54321 http://127.0.0.1:8787 http://localhost:8787 ws://127.0.0.1:54321 ws://localhost:54321",
+		edgeOrigin,
+	].filter(Boolean).join(' ');
+
 	return {
 		plugins: [react(), tailwindcss()],
 
@@ -114,8 +134,8 @@ export default defineConfig(({ mode }) => {
 					"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com", // Required for React dev + Turnstile
 					"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://rsms.me",
 					"font-src 'self' https://fonts.gstatic.com https://rsms.me",
-					"img-src 'self' data: blob: https://*.supabase.co http://127.0.0.1:54321 http://localhost:54321",
-					"connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com http://127.0.0.1:54321 http://localhost:54321 ws://127.0.0.1:54321 ws://localhost:54321",
+					imgSrc,
+					connectSrc,
 					"frame-src https://challenges.cloudflare.com",
 					"frame-ancestors 'self'",
 				].join('; '),

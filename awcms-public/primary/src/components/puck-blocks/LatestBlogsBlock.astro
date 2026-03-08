@@ -1,5 +1,6 @@
 ---
 import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
 import { Calendar, ArrowRight, Image as ImageIcon } from "lucide-react";
 
 interface Props {
@@ -23,14 +24,17 @@ const {
 } = Astro.props;
 
 const supabase = createClientFromEnv(import.meta.env);
+const tenantId = getPublicTenantId();
 let blogs = [];
 
-if (supabase) {
+if (tenantId && supabase) {
   try {
     let query = supabase
       .from("blogs")
-      .select("*, categories(title, slug)")
+      .select("*, categories(name, slug)")
+      .eq("tenant_id", tenantId)
       .eq("status", "published")
+      .is("deleted_at", null)
       .order("published_at", { ascending: false })
       .limit(count);
 
@@ -63,7 +67,7 @@ if (supabase) {
       {layout === "grid" ? (
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 my-8">
           {blogs.map((blog) => (
-            <div class="group bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col h-full border border-slate-100 dark:border-slate-700">
+        <div class="group bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col h-full border border-slate-100 dark:border-slate-700">
               {showImage && (
                 <div class="aspect-video w-full overflow-hidden bg-slate-100 dark:bg-slate-900 relative">
                   {blog.featured_image ? (
@@ -80,9 +84,9 @@ if (supabase) {
                   )}
                   {blog.main_category && (
                     <div class="absolute top-4 left-4">
-                      <span class="bg-white/90 dark:bg-slate-800/90 backdrop-blur px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full shadow-sm text-slate-800 dark:text-slate-200">
-                        {blog.main_category.title}
-                      </span>
+                        <span class="bg-white/90 dark:bg-slate-800/90 backdrop-blur px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full shadow-sm text-slate-800 dark:text-slate-200">
+                        {blog.main_category.name}
+                       </span>
                     </div>
                   )}
                 </div>
@@ -103,7 +107,7 @@ if (supabase) {
                   style={{ color: titleColor }}
                 >
                   <a
-                    href={`/blog/${blog.slug}`}
+                    href={`/blogs/${blog.slug}`}
                     class="text-slate-900 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                   >
                     {blog.title}
@@ -117,7 +121,7 @@ if (supabase) {
                 </p>
                 <div class="mt-auto">
                   <a
-                    href={`/blog/${blog.slug}`}
+                    href={`/blogs/${blog.slug}`}
                     class="inline-flex items-center font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:no-underline group/btn"
                   >
                     Read More
@@ -180,7 +184,7 @@ if (supabase) {
                   style={{ color: titleColor }}
                 >
                   <a
-                    href={`/blog/${blog.slug}`}
+                    href={`/blogs/${blog.slug}`}
                     class="text-slate-900 dark:text-slate-100"
                   >
                     {blog.title}
@@ -193,7 +197,7 @@ if (supabase) {
                   {blog.summary || blog.meta_description}
                 </p>
                 <a
-                  href={`/blog/${blog.slug}`}
+                  href={`/blogs/${blog.slug}`}
                   class="inline-flex items-center font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:no-underline group/btn gap-1"
                 >
                   Read Blog <ArrowRight className="w-4 h-4" client:load />

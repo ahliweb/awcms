@@ -9,7 +9,7 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 ## Audience
 
 - Database maintainers
-- Backend and edge function authors
+- Backend and edge-runtime authors
 
 ## Prerequisites
 

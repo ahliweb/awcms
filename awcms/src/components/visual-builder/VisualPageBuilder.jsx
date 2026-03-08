@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { Puck, Render } from '@puckeditor/core';
 import '@puckeditor/core/puck.css';
 import './puck-theme.css';
-import { Save, Eye, EyeOff, ArrowLeft, Upload, Monitor, Tablet, Smartphone, Undo2, Redo2, Loader2, WifiOff, FileUp } from 'lucide-react';
+import { Save, Eye, EyeOff, ArrowLeft, Upload, Monitor, Tablet, Smartphone, Undo2, Redo2, Loader2, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { udm } from '@/lib/data/UnifiedDataManager';
@@ -30,15 +30,11 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext'; // Added TenantContext
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import useSecureRouteParam from '@/hooks/useSecureRouteParam';
-import { useStitchImportConfig } from '@/hooks/useStitchImportConfig';
-import ImportFromStitchDialog from '@/components/stitch/ImportFromStitchDialog';
-import { importToPuck } from '@/lib/stitch';
 
 const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess: _onSuccess }) => {
     // Permission Hook
     const { hasPermission, checkAccess, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant(); // Get current tenant
-    const { config: stitchImportConfig, loading: stitchImportConfigLoading } = useStitchImportConfig();
     const { toast } = useToast();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -141,13 +137,6 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('edit', 'pages', page);
     const canEdit = isEditorEnabled; // Alias for readability
     const canPublish = (mode === 'template' || mode === 'part') ? false : checkAccess('publish', 'pages', page);
-    const stitchImportEnabled = !stitchImportConfigLoading && !!stitchImportConfig?.enabled;
-    const stitchImportTitle = stitchImportConfigLoading
-        ? 'Loading Stitch import settings...'
-        : stitchImportEnabled
-            ? 'Import from Stitch'
-            : 'Stitch import disabled for this tenant';
-
     const [isSaving, setIsSaving] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [previewMode, setPreviewMode] = useState(false);
@@ -155,7 +144,6 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     const [editorKey, setEditorKey] = useState(0);
     const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [stitchDialogOpen, setStitchDialogOpen] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState(null);
     const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -317,57 +305,6 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             description: 'The template has been applied.'
         });
     };
-
-    const handleOpenStitchImport = useCallback(() => {
-        if (!canEdit) {
-            toast({ variant: 'destructive', title: 'Action Denied', description: 'You do not have permission to edit this content.' });
-            return;
-        }
-
-        if (!stitchImportEnabled) {
-            toast({ variant: 'destructive', title: 'Stitch Import Disabled', description: 'This feature is disabled for the current tenant.' });
-            return;
-        }
-
-        setStitchDialogOpen(true);
-    }, [canEdit, stitchImportEnabled, toast]);
-
-    const handleStitchImportSubmit = useCallback(async ({ html, css }) => {
-        const result = importToPuck({
-            html,
-            css,
-            config: stitchImportConfig,
-        });
-
-        const importedBlocks = result?.data?.content || [];
-        if (!importedBlocks.length) {
-            throw new Error('No supported content could be imported from Stitch output.');
-        }
-
-        const currentData = dataRef.current || { content: [], root: { props: {} } };
-        const nextData = {
-            ...currentData,
-            content: [
-                ...(currentData.content || []),
-                ...importedBlocks,
-            ],
-            zones: {
-                ...(currentData.zones || {}),
-                ...(result?.data?.zones || {}),
-            },
-        };
-
-        setData(nextData);
-        setHasUnsavedChanges(true);
-
-        const warningCount = result?.warnings?.length || 0;
-        toast({
-            title: warningCount ? 'Imported with warnings' : 'Imported',
-            description: warningCount
-                ? `Added ${importedBlocks.length} blocks with ${warningCount} warning(s).`
-                : `Added ${importedBlocks.length} block(s) from Stitch output.`,
-        });
-    }, [setData, stitchImportConfig, toast]);
 
     // Sanitize data (remove orphaned zones)
     const cleanPuckData = useCallback((currentData) => {
@@ -790,18 +727,6 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={handleOpenStitchImport}
-                            disabled={!canEdit || !stitchImportEnabled}
-                            title={stitchImportTitle}
-                            className="h-9 px-4 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm disabled:opacity-50"
-                        >
-                            <FileUp className="w-3.5 h-3.5 mr-2" />
-                            Import Stitch
-                        </Button>
-
-                        <Button
-                            variant="outline"
-                            size="sm"
                             onClick={() => setSettingsOpen(true)}
                             className="h-9 px-4 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
                         >
@@ -1004,15 +929,6 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-
-            <ImportFromStitchDialog
-                open={stitchDialogOpen}
-                onOpenChange={setStitchDialogOpen}
-                onImport={handleStitchImportSubmit}
-                maxInputKb={Number(stitchImportConfig?.max_input_kb) || 256}
-                title="Import Stitch Layout"
-                description="Paste Stitch HTML export. Supported content maps to native Puck blocks, with RawHTML fallback based on tenant settings."
-            />
 
             <TemplateSelector
                 open={templateSelectorOpen}

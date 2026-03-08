@@ -96,8 +96,8 @@ const Sidebar = ({ isOpen, onClose }) => {
 
         // Grouping
         const groups = {
-            platform: { label: '🏢 PLATFORM', order: 0, items: [] },
-            tenant: { label: currentTenant ? `🏠 TENANT: ${currentTenant.name}` : '🏠 TENANT', order: 1, items: [] }
+            tenant: { label: currentTenant ? `🏠 TENANT: ${currentTenant.name}` : '🏠 TENANT', order: 0, items: [] },
+            platform: { label: '🏢 PLATFORM', order: 1, items: [] }
         };
 
         filteredItems.forEach(item => {
@@ -141,7 +141,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             <aside
                 id="sidebar"
                 className={cn(
-                    "fixed top-0 left-0 z-30 h-full w-64 pt-16 transition-transform duration-200",
+                    "fixed top-0 left-0 z-30 h-full w-64 pt-[72px] transition-transform duration-200",
                     "border-r border-border/70 bg-card/85 text-foreground shadow-xl shadow-slate-900/5 backdrop-blur-xl dark:shadow-black/25",
                     isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
                 )}
@@ -150,29 +150,11 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <div className="pointer-events-none absolute inset-x-0 top-16 h-20 bg-[radial-gradient(240px_80px_at_10%_0%,rgba(59,130,246,0.16),transparent_70%)] dark:bg-[radial-gradient(240px_80px_at_10%_0%,rgba(37,99,235,0.26),transparent_70%)]" />
 
                 <div className="relative flex h-full min-h-0 flex-col">
-                    <div className="flex h-16 items-center justify-between border-b border-border/60 px-4">
-                        <Link
-                            to="/cmspanel"
-                            onClick={() => {
-                                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                                    onClose();
-                                }
-                            }}
-                            className="flex items-center gap-2.5"
-                        >
-                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-600 text-white shadow-sm shadow-blue-500/35">
-                                <LayoutGrid className="h-4 w-4" />
-                            </span>
-                            <span>
-                                <span className="block text-sm font-semibold tracking-tight">AWCMS</span>
-                                <span className="block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Admin</span>
-                            </span>
-                        </Link>
-
+                    <div className="flex h-12 items-center justify-end px-4 lg:hidden">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                             aria-label="Close sidebar"
                         >
                             <X className="h-4 w-4" />
@@ -272,16 +254,6 @@ const Sidebar = ({ isOpen, onClose }) => {
                         </ul>
                     </div>
 
-                    {isPlatformAdmin && currentTenant && (
-                        <div className="border-t border-border/60 px-3 py-3">
-                            <div className="rounded-xl border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-primary">
-                                <p className="font-semibold uppercase tracking-[0.1em]">Active Tenant</p>
-                                <p className="mt-0.5 truncate text-sm font-medium normal-case tracking-normal text-foreground">
-                                    {currentTenant.name || 'Primary Tenant'}
-                                </p>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </aside>
         </>

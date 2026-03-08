@@ -68,7 +68,7 @@ export const resolveTestimonialsData = async ({ props }) => {
     const { count = 3 } = props;
     try {
         const { data, error } = await supabase
-            .from('testimonials')
+            .from('testimonies')
             .select('*')
             .eq('status', 'published')
             .order('display_order', { ascending: true })

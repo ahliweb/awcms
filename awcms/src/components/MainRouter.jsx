@@ -52,8 +52,6 @@ const TeamManager = lazy(() => import('@/components/dashboard/TeamManager'));
 const PartnersManager = lazy(() => import('@/components/dashboard/PartnersManager'));
 const FunFactsManager = lazy(() => import('@/components/dashboard/FunFactsManager'));
 const TestimonyManager = lazy(() => import('@/components/dashboard/TestimonyManager'));
-const PhotoGalleryManager = lazy(() => import('@/components/dashboard/PhotoGalleryManager'));
-const VideoGalleryManager = lazy(() => import('@/components/dashboard/VideoGalleryManager'));
 const AnnouncementsManager = lazy(() => import('@/components/dashboard/AnnouncementsManager'));
 const ContactMessagesManager = lazy(() => import('@/components/dashboard/ContactMessagesManager'));
 const ContactsManager = lazy(() => import('@/components/dashboard/ContactsManager'));
@@ -78,12 +76,15 @@ const ModulesManager = lazy(() => import('@/pages/cmspanel/ModulesManager'));
 const SettingsManager = lazy(() => import('@/components/dashboard/SettingsManager'));
 const PlatformSettingsManager = lazy(() => import('@/components/dashboard/PlatformSettingsManager'));
 const PlatformDashboard = lazy(() => import('@/components/dashboard/PlatformDashboard'));
-const SchoolPagesManager = lazy(() => import('@/components/dashboard/SchoolPagesManager'));
+
 const SiteImagesManager = lazy(() => import('@/components/dashboard/SiteImagesManager'));
+const SchoolPagesManager = lazy(() => import('@/components/dashboard/SchoolPagesManager'));
 const AuditLogsManager = lazy(() => import('@/components/dashboard/AuditLogsManager'));
 const VisitorStatisticsManager = lazy(() => import('@/components/dashboard/VisitorStatisticsManager'));
 const TenantsManager = lazy(() => import('@/components/dashboard/TenantsManager'));
 const TenantSettings = lazy(() => import('@/components/dashboard/TenantSettings'));
+const EmailSettingsManager = lazy(() => import('@/components/dashboard/email/EmailSettingsManager'));
+const EmailLogsManager = lazy(() => import('@/components/dashboard/email/EmailLogsManager'));
 
 // ESP32 IoT (Lazy Loaded)
 const DevicesManager = lazy(() => import('@/pages/cmspanel/DevicesManager'));
@@ -228,12 +229,7 @@ const MainRouter = () => {
           <Route path="team/*" element={<TeamManager />} />
           <Route path="partners/*" element={<PartnersManager />} />
           <Route path="funfacts/*" element={<FunFactsManager />} />
-          <Route path="testimonies/*" element={<TestimonyManager />} />
-
-          <Route path="gallery/photos/*" element={<PhotoGalleryManager />} />
-          <Route path="gallery/videos/*" element={<VideoGalleryManager />} />
-          <Route path="photo-gallery/*" element={<PhotoGalleryManager />} />
-          <Route path="video-gallery/*" element={<VideoGalleryManager />} />
+          <Route path="testimonials/*" element={<TestimonyManager />} />
 
           <Route path="announcements/*" element={<AnnouncementsManager />} />
 
@@ -252,8 +248,9 @@ const MainRouter = () => {
           <Route path="seo" element={<SeoManager />} />
           <Route path="seo-manager" element={<SeoManager />} />
 
-          <Route path="school-pages/*" element={<SchoolPagesManager />} />
+
           <Route path="site-images" element={<SiteImagesManager />} />
+          <Route path="school-pages/*" element={<SchoolPagesManager />} />
 
           <Route path="extensions" element={<ExtensionsManager />} />
           <Route path="extensions/marketplace" element={<ExtensionMarketplace />} />
@@ -262,6 +259,8 @@ const MainRouter = () => {
 
           <Route path="settings/general/*" element={<SettingsManager />} />
           <Route path="settings/branding" element={<TenantSettings />} />
+          <Route path="email-settings" element={<EmailSettingsManager />} />
+          <Route path="email-logs" element={<EmailLogsManager />} />
 
           <Route path="platform" element={<PlatformDashboard />} />
           <Route path="platform/settings" element={<PlatformSettingsManager />} />

@@ -9,6 +9,22 @@ MIRROR_MIGRATIONS_DIR="$REPO_ROOT/awcms/supabase/migrations"
 
 CHECK_LINKED=false
 
+derive_db_password_from_urls() {
+  python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+
+for key in ("DATABASE_URL", "DATABASE_ADMIN_URL"):
+    url = os.environ.get(key, "")
+    if not url:
+        continue
+    parsed = urlparse(url)
+    if parsed.password:
+        print(parsed.password)
+        break
+PY
+}
+
 load_env_file() {
   local file_path="$1"
   [ -f "$file_path" ] || return 0
@@ -52,12 +68,12 @@ load_env_file() {
 }
 
 load_linked_env_defaults() {
+  load_env_file "$REPO_ROOT/awcms/.env.remote"
+  load_env_file "$REPO_ROOT/.env.remote"
   load_env_file "$REPO_ROOT/awcms/.env"
   load_env_file "$REPO_ROOT/awcms/.env.local"
-  load_env_file "$REPO_ROOT/awcms/.env.remote"
   load_env_file "$REPO_ROOT/.env"
   load_env_file "$REPO_ROOT/.env.local"
-  load_env_file "$REPO_ROOT/.env.remote"
 }
 
 usage() {
@@ -203,6 +219,24 @@ check_scope local
 
 if [ "$CHECK_LINKED" = true ]; then
   load_linked_env_defaults
+
+  if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+    echo "Error: --linked requires SUPABASE_ACCESS_TOKEN in a loaded env file or shell environment."
+    exit 1
+  fi
+
+  if [ -z "${SUPABASE_DB_PASSWORD:-}" ]; then
+    SUPABASE_DB_PASSWORD="$(derive_db_password_from_urls)"
+    if [ -n "$SUPABASE_DB_PASSWORD" ]; then
+      export SUPABASE_DB_PASSWORD
+    fi
+  fi
+
+  if [ -z "${SUPABASE_DB_PASSWORD:-}" ]; then
+    echo "Error: --linked requires SUPABASE_DB_PASSWORD in a loaded env file, shell environment, or derivable DATABASE_URL/DATABASE_ADMIN_URL."
+    exit 1
+  fi
+
   check_scope linked
 fi
 

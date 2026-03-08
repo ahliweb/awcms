@@ -46,7 +46,7 @@ function TestimonyManager() {
         { key: 'author_position', label: 'Position/Company' },
         { key: 'author_image', label: 'Author Photo', type: 'image', description: 'Upload or select from Media Library' },
         { key: 'content', label: 'Testimony', type: 'richtext', required: true },
-        { key: 'category_id', label: 'Category', type: 'resource_select', resourceTable: 'categories', filter: { type: 'testimony' } },
+        { key: 'category_id', label: 'Category', type: 'resource_select', resourceTable: 'categories', filter: { type: ['testimony', 'testimonies'] } },
         { key: 'rating', label: 'Rating (1-5)', type: 'number', required: true },
         { key: 'published_at', label: 'Publish Date', type: 'datetime' },
         {
@@ -60,10 +60,10 @@ function TestimonyManager() {
     return (
         <AdminPageLayout requiredPermission="tenant.testimonies.read">
             <PageHeader
-                title="Testimonies"
+                title="Testimonials"
                 description="Manage customer reviews and testimonials."
                 icon={MessageSquareQuote}
-                breadcrumbs={[{ label: 'Testimonies', icon: MessageSquareQuote }]}
+                breadcrumbs={[{ label: 'Testimonials', icon: MessageSquareQuote }]}
             />
 
             <GenericContentManager

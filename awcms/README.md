@@ -28,6 +28,13 @@ cp .env.example .env.local
 npm run dev
 ```
 
+## Common Commands
+
+* `npm run dev` - start the Vite development server
+* `npm run lint` - run ESLint
+* `npm run build` - create the production build in `dist/`
+* `npm run docs:check` - validate markdown links used by the docs workflow
+
 ## Environment Variables
 
 Required:
@@ -74,3 +81,4 @@ node src/scripts/seed-sidebar.js
 * `../DOCS_INDEX.md`
 * `../docs/security/abac.md`
 * `../docs/modules/MODULES_GUIDE.md`
+* `../docs/dev/admin.md`

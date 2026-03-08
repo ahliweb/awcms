@@ -12,7 +12,7 @@ BEGIN
         ('themes', 'Themes', 'themes', 'Palette', 'tenant.theme.read', 'CONTENT', 10, 40, true),
         ('widgets', 'Widgets', 'widgets', 'Layers', 'tenant.widgets.read', 'CONTENT', 10, 45, true),
         ('portfolio', 'Portfolio', 'portfolio', 'Briefcase', 'tenant.portfolio.read', 'CONTENT', 10, 50, true),
-        ('testimonials', 'Testimonials', 'testimonies', 'MessageSquareQuote', 'tenant.testimonies.read', 'CONTENT', 10, 60, true),
+        ('testimonials', 'Testimonials', 'testimonials', 'MessageSquareQuote', 'tenant.testimonies.read', 'CONTENT', 10, 60, true),
         ('announcements', 'Announcements', 'announcements', 'Megaphone', 'tenant.announcements.read', 'CONTENT', 10, 70, true),
         ('promotions', 'Promotions', 'promotions', 'Tag', 'tenant.promotions.read', 'CONTENT', 10, 80, true),
         ('contact_messages', 'Contact Messages', 'messages', 'Inbox', 'tenant.contact_messages.read', 'CONTENT', 10, 90, true),

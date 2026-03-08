@@ -339,6 +339,9 @@ export interface NavigationItem {
     is_active?: boolean;
 }
 
+const isMissingLocaleColumnError = (message: string): boolean =>
+    message.includes('.locale') && message.includes('does not exist');
+
 const buildMenuTree = (rows: any[]): NavigationItem[] => {
     const nodes: Record<string, NavigationItem> = {};
     const roots: NavigationItem[] = [];
@@ -372,19 +375,34 @@ const buildMenuTree = (rows: any[]): NavigationItem[] => {
     return roots;
 };
 
-export async function getMenuTree(location: string): Promise<NavigationItem[]> {
+export async function getMenuTree(location: string, locale?: string): Promise<NavigationItem[]> {
     const tenantId = await getTenantId();
     if (!tenantId) return [];
 
     const client = getTenantClient(tenantId);
-    const { data, error } = await client
-        .from('menus')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('is_active', true)
-        .is('deleted_at', null)
-        .or(`location.eq.${location},group_label.eq.${location}`)
-        .order('order', { ascending: true });
+    const runQuery = async (withLocale: boolean) => {
+        let query = client
+            .from('menus')
+            .select('*')
+            .eq('tenant_id', tenantId)
+            .eq('is_active', true)
+            .eq('is_public', true)
+            .is('deleted_at', null)
+            .or(`location.eq.${location},group_label.eq.${location}`)
+            .order('order', { ascending: true });
+
+        if (withLocale && locale) {
+            query = query.eq('locale', locale);
+        }
+
+        return query;
+    };
+
+    let { data, error } = await runQuery(Boolean(locale));
+
+    if (error && locale && isMissingLocaleColumnError(error.message || '')) {
+        ({ data, error } = await runQuery(false));
+    }
 
     if (error) {
         console.error('Error fetching menus:', error);

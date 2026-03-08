@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
-    Mail,
     Save,
     TestTube,
     RefreshCw,
@@ -152,27 +151,16 @@ function EmailSettings() {
     }
 
     return (
-        <div className="space-y-6 p-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <Mail className="w-6 h-6" />
-                        Email Settings
-                    </h1>
-                    <p className="text-slate-500 mt-1">
-                        Configure Mailketing email integration
-                    </p>
-                </div>
-                {credits !== null && (
-                    <Card className="px-4 py-2">
-                        <div className="flex items-center gap-2">
-                            <CreditCard className="w-4 h-4 text-blue-500" />
-                            <span className="text-sm text-slate-600">Credits:</span>
-                            <span className="font-bold text-lg">{credits}</span>
-                        </div>
-                    </Card>
-                )}
-            </div>
+        <div className="space-y-6">
+            {credits !== null && (
+                <Card className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                        <CreditCard className="w-4 h-4 text-blue-500" />
+                        <span className="text-sm text-slate-600">Credits:</span>
+                        <span className="font-bold text-lg">{credits}</span>
+                    </div>
+                </Card>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Configuration Card */}

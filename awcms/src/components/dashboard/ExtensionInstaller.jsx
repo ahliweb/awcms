@@ -19,9 +19,9 @@ function ExtensionInstaller({ onInstallComplete }) {
   const [preview, setPreview] = useState(null);
   const [installing, setInstalling] = useState(false);
 
-  // Permission check - only platform admins or platform.module.create can install
+  // Permission check - extension installs are platform-scoped
   const isSuperAdmin = isPlatformAdmin || isFullAccess;
-  const canInstall = isSuperAdmin || hasPermission('platform.module.create') || hasPermission('ext.manage');
+  const canInstall = isSuperAdmin || hasPermission('platform.extensions.create');
 
   const handleDrag = (e) => {
     e.preventDefault();

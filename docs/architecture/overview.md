@@ -23,7 +23,7 @@ Describe the runtime architecture and data flow across the AWCMS monorepo.
 AWCMS is a headless system with multiple clients sharing a Supabase backend:
 
 - Admin Panel: React 19 SPA (Vite)
-- Public Portal: Astro hybrid output (SSG default + SSR on-demand) + islands (Cloudflare Pages)
+- Public Portal: Astro static output + React islands (Cloudflare Pages)
 - Mobile: Flutter app
 - IoT: ESP32 firmware
 
@@ -37,7 +37,7 @@ graph TD
     Admin[Tenant Admin] -->|HTTPS| AdminPanel
     Owner[Platform Owner] -->|HTTPS| AdminPanel
 
-    subgraph "Public Portal (Hybrid Build)"
+    subgraph "Public Portal (Static Build)"
         PublicPortal[Astro App]
         Resolver[Build-Time Tenant Resolver]
         PublicPortal --> Resolver
@@ -77,17 +77,17 @@ graph TD
 
 ### Public Portal Flow
 
-1. Build-time tenant resolution uses `PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID` and `getStaticPaths` for tenant routes. **Dynamic Server-Side Rendering (SSR) is available on demand** via the Cloudflare Pages adapter.
+1. Build-time tenant resolution uses `PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID` and `getStaticPaths` for tenant routes.
 2. Supabase clients are created via `createClientFromEnv(import.meta.env)` (static builds).
 3. Pages render with `PuckRenderer` and a registry allow-list.
-4. Analytics logging runs only when SSR/runtime middleware is enabled.
+4. Static builds render published tenant content; middleware-based analytics logging applies only to non-canonical runtime experiments.
 5. Consent banner is rendered client-side via `ConsentNotice`.
 
 ## Implementation Patterns
 
 - Admin client: `awcms/src/lib/customSupabaseClient.js`
 - Public client: `awcms-public/primary/src/lib/supabase.ts`
-- Tenant resolution: `awcms/src/contexts/TenantContext.jsx` and `awcms-public/primary/src/lib/publicTenant.ts` (middleware is SSR-only)
+- Tenant resolution: `awcms/src/contexts/TenantContext.jsx` and `awcms-public/primary/src/lib/publicTenant.ts`
 
 ## Security and Compliance Notes
 

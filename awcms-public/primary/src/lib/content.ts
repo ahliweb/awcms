@@ -67,7 +67,8 @@ export async function getPageBySlug(
     .from("pages")
     .select("*")
     .eq("slug", slug)
-    .eq("status", "published");
+    .eq("status", "published")
+    .is("deleted_at", null);
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
@@ -99,6 +100,7 @@ export async function getAllPages(
     .from("pages")
     .select("*")
     .eq("status", "published")
+    .is("deleted_at", null)
     .eq("page_type", "regular")
     .order("published_at", { ascending: false })
     .limit(limit);
@@ -130,7 +132,8 @@ export async function getPageByType(
     .from("pages")
     .select("*")
     .eq("page_type", pageType)
-    .eq("status", "published");
+    .eq("status", "published")
+    .is("deleted_at", null);
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
@@ -162,7 +165,8 @@ export async function getBlogBySlug(
     .from("blogs")
     .select("*")
     .eq("slug", slug)
-    .eq("status", "published");
+    .eq("status", "published")
+    .is("deleted_at", null);
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
@@ -186,6 +190,7 @@ export async function getBlogBySlug(
       .from("categories")
       .select("id, name, slug")
       .eq("id", data.category_id)
+      .is("deleted_at", null)
       .maybeSingle();
     category = categoryData || null;
   }
@@ -214,6 +219,7 @@ export async function getBlogs(
     .from("blogs")
     .select("*", { count: "exact" })
     .eq("status", "published")
+    .is("deleted_at", null)
     .order("published_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -243,6 +249,7 @@ export async function getBlogs(
     const { data: categoriesData } = await supabase
       .from("categories")
       .select("id, name, slug")
+      .is("deleted_at", null)
       .in("id", categoryIds);
 
     const categoryMap = new Map(

@@ -4,7 +4,7 @@ This guide provides a practical blueprint for writing a Node.js script to migrat
 
 ## Prerequisites
 
-1. **Node.js**: Ensure Node.js (v18+) is installed.
+1. **Node.js**: Ensure Node.js `>=22.12.0` is installed.
 2. **Supabase Client**: You will need the `@supabase/supabase-js` package.
 3. **WordPress REST API**: Your source WordPress site must be accessible via the REST API (e.g., `https://your-wp-site.com/wp-json/wp/v2/`).
 
@@ -23,8 +23,8 @@ Create a `.env` file to hold your Supabase credentials:
 
 ```env
 SUPABASE_URL=https://your-project-id.supabase.co
-# Use Secret Key to bypass RLS during backend migration scripts
-SUPABASE_SECRET_KEY=your-service-role-key-here
+# Use the Secret API key only in this local/backend migration script
+SUPABASE_SECRET_KEY=your-secret-key-here
 WP_API_URL=https://your-wordpress-site.com/wp-json/wp/v2
 TARGET_TENANT_ID=your-awcms-tenant-uuid
 ```
@@ -66,9 +66,9 @@ async function migratePosts() {
         tenant_id: TENANT_ID, // CRITICAL: Assign to correct tenant
         title: post.title.rendered,
         slug: post.slug,
-        // WordPress provides raw HTML. For AWCMS (TipTap), you might need an HTML-to-JSON
-        // converter, or store as HTML if frontend uses dangerouslySetInnerHTML
-        content: post.content.rendered,
+         // WordPress provides raw HTML. Prefer converting this into TipTap-safe
+         // structured content or sanitizing it before later rendering.
+         content: post.content.rendered,
         // Strip tags for plain text excerpt
         excerpt: post.excerpt.rendered.replace(/(<([^>]+)>)/gi, ''),
         published_at: post.date,
@@ -80,8 +80,8 @@ async function migratePosts() {
     // 4. Insert into Supabase
     const { data, error } = await supabase
       .from('blogs')
-      // Use slug as unique identifier to prevent duplicates
-      .upsert(awcmsBlogs, { onConflict: 'slug' })
+      // Use tenant-scoped slug uniqueness to prevent duplicates
+      .upsert(awcmsBlogs, { onConflict: 'tenant_id,slug' })
       .select();
 
     if (error) throw error;
@@ -106,7 +106,7 @@ node migrate.js
 
 ## Advanced Considerations
 
-* **HTML to TipTap JSON:** AWCMS standardizes on TipTap JSON format. If your frontend expects JSON, use a library like `@tiptap/html` or an Edge Function to parse the raw WordPress HTML into structured JSON during the import phase.
+* **HTML to TipTap JSON:** AWCMS standardizes on TipTap JSON format. If your frontend expects JSON, use a library like `@tiptap/html` or an approved server-side edge workflow to parse the raw WordPress HTML into structured JSON during the import phase.
 * **Elementor Content:** If a post was built entirely in Elementor, the `content.rendered` field will contain massive amounts
   of Elementor-specific `<div>` enclosures and class names. You will need to write custom DOM parsers (using `cheerio`) to
   extract the actual text, or abandon the layout and move the content manually.

@@ -2,7 +2,7 @@
 
 ## Base Endpoints
 
-```
+```sh
 SUPABASE_URL=https://<project>.supabase.co
 REST_BASE=${SUPABASE_URL}/rest/v1
 AUTH_BASE=${SUPABASE_URL}/auth/v1
@@ -26,18 +26,18 @@ STORAGE_BASE=${SUPABASE_URL}/storage/v1
 ## Tenant Scoping
 
 - Always add `tenant_id=eq.<tenantId>` to PostgREST queries.
-- Use `x-tenant-id` for Edge Functions and analytics.
+- Use `x-tenant-id` for edge handlers and analytics.
 - Do not query across tenants; rely on RLS for enforcement.
 
 ## Example: Fetch Blogs
 
-```
+```http
 GET /rest/v1/blogs?tenant_id=eq.<tenantId>&select=*
 ```
 
-## Edge Functions
+## Edge Handlers
 
-```
+```http
 POST /functions/v1/verify-turnstile
 ```
 

@@ -6,9 +6,35 @@ SCRIPT_NAME="$(basename "$0")"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT_FUNCTIONS_DIR="$REPO_ROOT/supabase/functions"
 MIRROR_FUNCTIONS_DIR="$REPO_ROOT/awcms/supabase/functions"
+EXAMPLE_ONLY_REMOTE_SLUGS=("content-transform")
 
 CHECK_LINKED=false
 PROJECT_REF="${SUPABASE_PROJECT_REF:-}"
+
+run_remote_functions_list() {
+  npx supabase functions list --project-ref "$PROJECT_REF" -o json 2>&1
+}
+
+derive_project_ref_from_url() {
+  local url="${SUPABASE_URL:-}"
+  if [ -z "$url" ]; then
+    return 0
+  fi
+
+  python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+
+url = os.environ.get("SUPABASE_URL", "")
+if not url:
+    raise SystemExit(0)
+
+host = urlparse(url).hostname or ""
+parts = host.split(".")
+if len(parts) >= 3 and parts[-2:] == ["supabase", "co"] and parts[0]:
+    print(parts[0])
+PY
+}
 
 load_env_file() {
   local file_path="$1"
@@ -53,12 +79,12 @@ load_env_file() {
 }
 
 load_linked_env_defaults() {
+  load_env_file "$REPO_ROOT/awcms/.env.remote"
+  load_env_file "$REPO_ROOT/.env.remote"
   load_env_file "$REPO_ROOT/awcms/.env"
   load_env_file "$REPO_ROOT/awcms/.env.local"
-  load_env_file "$REPO_ROOT/awcms/.env.remote"
   load_env_file "$REPO_ROOT/.env"
   load_env_file "$REPO_ROOT/.env.local"
-  load_env_file "$REPO_ROOT/.env.remote"
 }
 
 usage() {
@@ -125,8 +151,18 @@ import sys
 root = Path(sys.argv[1])
 mirror = Path(sys.argv[2])
 
-root_files = {p.relative_to(root).as_posix(): p for p in root.rglob("*") if p.is_file()}
-mirror_files = {p.relative_to(mirror).as_posix(): p for p in mirror.rglob("*") if p.is_file()}
+ignored_files = {".env"}
+
+root_files = {
+    p.relative_to(root).as_posix(): p
+    for p in root.rglob("*")
+    if p.is_file() and p.relative_to(root).as_posix() not in ignored_files
+}
+mirror_files = {
+    p.relative_to(mirror).as_posix(): p
+    for p in mirror.rglob("*")
+    if p.is_file() and p.relative_to(mirror).as_posix() not in ignored_files
+}
 
 root_only = sorted(set(root_files) - set(mirror_files))
 mirror_only = sorted(set(mirror_files) - set(root_files))
@@ -178,19 +214,49 @@ if [ "$CHECK_LINKED" = true ]; then
   load_linked_env_defaults
 
   if [ -z "$PROJECT_REF" ]; then
-    echo "Error: --linked requires --project-ref (or SUPABASE_PROJECT_REF env)."
+    PROJECT_REF="$(derive_project_ref_from_url)"
+  fi
+
+  if [ -z "$PROJECT_REF" ]; then
+    echo "Error: --linked requires --project-ref, SUPABASE_PROJECT_REF, or a derivable SUPABASE_URL."
     exit 1
   fi
 
   echo "Checking remote function slugs for project: $PROJECT_REF"
 
-  remote_json="$(npx supabase functions list --project-ref "$PROJECT_REF" -o json 2>/dev/null || true)"
-  if [ -z "$remote_json" ]; then
+  remote_output="$(run_remote_functions_list || true)"
+
+  if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] && [[ "$remote_output" == *'unexpected list functions status 401'* ]]; then
+    echo "Linked function check received 401 with SUPABASE_ACCESS_TOKEN; retrying with local Supabase CLI profile..."
+    remote_output="$(env -u SUPABASE_ACCESS_TOKEN bash -lc '
+      set -euo pipefail
+      PROJECT_REF="$1"
+      npx supabase functions list --project-ref "$PROJECT_REF" -o json 2>&1
+    ' bash "$PROJECT_REF" || true)"
+  fi
+
+  if [ -z "$remote_output" ]; then
     echo "Failed: could not list remote functions."
     exit 1
   fi
 
-  ROOT_FUNCTIONS_DIR="$ROOT_FUNCTIONS_DIR" REMOTE_JSON="$remote_json" python3 - <<'PY'
+  if ! REMOTE_OUTPUT_VALIDATE="$remote_output" python3 - <<'PY'
+import json
+import os
+import sys
+
+try:
+    json.loads(os.environ["REMOTE_OUTPUT_VALIDATE"])
+except Exception:
+    raise SystemExit(1)
+PY
+  then
+    echo "$remote_output"
+    echo "Failed: could not list remote functions. Verify SUPABASE_ACCESS_TOKEN and project access."
+    exit 1
+  fi
+
+  ROOT_FUNCTIONS_DIR="$ROOT_FUNCTIONS_DIR" REMOTE_JSON="$remote_output" EXAMPLE_ONLY_REMOTE_SLUGS="${EXAMPLE_ONLY_REMOTE_SLUGS[*]}" python3 - <<'PY'
 from pathlib import Path
 import json
 import os
@@ -198,6 +264,7 @@ import sys
 
 root = Path(os.environ["ROOT_FUNCTIONS_DIR"])
 remote_json = os.environ["REMOTE_JSON"]
+ignored = {slug for slug in os.environ.get("EXAMPLE_ONLY_REMOTE_SLUGS", "").split() if slug}
 
 try:
     remote = json.loads(remote_json)
@@ -209,7 +276,7 @@ except json.JSONDecodeError:
 remote_slugs = sorted({item.get("slug") for item in remote if item.get("slug")})
 local_slugs = sorted([
     p.name for p in root.iterdir()
-    if p.is_dir() and p.name != "_shared"
+    if p.is_dir() and p.name != "_shared" and p.name not in ignored
 ])
 
 missing_remote = sorted(set(local_slugs) - set(remote_slugs))

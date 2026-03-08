@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 
+const TAG_INPUT_ID = 'tag-input-field';
+
 const TagInput = ({
   value = [],
   onChange,
@@ -115,10 +117,10 @@ const TagInput = ({
     <div ref={wrapperRef} className={cn("relative w-full", className)}>
       <div
         className={cn(
-          "flex flex-wrap gap-2 p-2 min-h-[42px] rounded-md border border-slate-300 bg-white transition-all w-full items-center focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent",
+          "flex min-h-[42px] w-full flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-white p-2 transition-all focus-within:border-transparent focus-within:ring-2 focus-within:ring-blue-500",
           disabled && "bg-slate-50 opacity-70 cursor-not-allowed"
         )}
-        onClick={() => !disabled && document.getElementById('tag-input-field')?.focus()}
+        onClick={() => !disabled && document.getElementById(TAG_INPUT_ID)?.focus()}
       >
         {safeValue.map((tag, index) => (
           <Badge
@@ -141,7 +143,7 @@ const TagInput = ({
         ))}
 
         <input
-          id="tag-input-field"
+          id={TAG_INPUT_ID}
           type="text"
           value={inputValue}
           onChange={(e) => {
@@ -160,21 +162,26 @@ const TagInput = ({
       {showSuggestions && inputValue.length > 0 && !disabled && (
         <div className="absolute z-50 w-full mt-1 bg-white rounded-md border border-slate-200 shadow-lg max-h-60 overflow-auto">
           {loading ? (
-            <div className="p-3 text-center text-slate-500 text-sm flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 p-3 text-center text-sm text-slate-500">
               <Loader2 className="w-3 h-3 animate-spin" /> Searching...
             </div>
           ) : suggestions.length > 0 ? (
             suggestions.map((suggestion) => (
               <div
                 key={suggestion.id}
-                className="px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer flex items-center gap-2 border-b border-slate-50 last:border-0"
+                className="flex cursor-pointer items-center gap-2 border-b border-slate-50 px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 last:border-0"
                 onClick={() => addTag(suggestion.name)}
               >
                 <div
                   className={cn("w-2 h-2 rounded-full", !suggestion.color && "bg-slate-300")}
                   style={suggestion.color ? { backgroundColor: suggestion.color } : undefined}
                 />
-                {suggestion.name}
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span className="truncate">{suggestion.name}</span>
+                  {suggestion.color && (
+                    <span className="font-mono text-[10px] uppercase text-slate-400">{suggestion.color}</span>
+                  )}
+                </div>
               </div>
             ))
           ) : (

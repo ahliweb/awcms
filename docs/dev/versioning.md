@@ -89,8 +89,8 @@ All packages follow **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 | Increment | When | Example |
 |-----------|------|---------|
 | `MAJOR` | Breaking API changes, DB schema incompatibilities | `3.0.0` |
-| `MINOR` | New features, backward-compatible | `2.33.0` |
-| `PATCH` | Bug fixes, hotfixes | `2.32.1` |
+| `MINOR` | New features, backward-compatible | `3.1.0` |
+| `PATCH` | Bug fixes, hotfixes | `3.0.1` |
 
 ---
 
@@ -100,7 +100,7 @@ All packages follow **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 main         ← Production. Tagged releases only.
 develop      ← Integration branch. All features merge here first.
 feature/*    ← One branch per feature/fix (e.g. feature/add-events-module)
-release/*    ← Release preparation (e.g. release/2.33.0)
+release/*    ← Release preparation (e.g. release/3.0.0)
 hotfix/*     ← Emergency production patches
 ```
 
@@ -149,7 +149,7 @@ Because each client app has its own `package.json` with an independent `version`
 ```bash
 # Bump only the Admin Panel (e.g., after a UI-only change)
 npm version minor --prefix awcms
-# → awcms/package.json: "version": "2.33.0"
+# → awcms/package.json: "version": "3.0.0"
 
 # Bump only the Public Portal
 npm version patch --prefix awcms-public/primary
@@ -164,10 +164,10 @@ The **root** `CHANGELOG.md` is the single source of truth for the overall projec
 ## [Unreleased]
 
 ### Changed
-- **Admin Panel 2.33.0**: Added Events module with calendar view.
+- **AWCMS 3.0.0 "Convergence"**: Landed the Supabase and Cloudflare validation/parity refresh, public-portal query hardening, and repository-wide release cleanup.
 
-## [2.33.0] "Events Launch" - 2026-03-01
-Applies to: `awcms@2.33.0`
+## [3.0.0] "Convergence" - 2026-03-08
+Applies to: `awcms@3.0.0`, `awcms-public-root@3.0.0`, `@onwidget/astrowind@3.0.0`, `smanda-pangkalan-bun@3.0.0`, `awcms-mcp@3.0.0`
 ```
 
 ---
@@ -238,12 +238,12 @@ If the remote config returns a higher `firmware_version`, the device triggers it
 
 ## 8. Dependency Management Across Clients
 
-Since AWCMS clients function independently, managing shared assumptions (like Supabase API schemas or Edge Function payloads) requires strict coordination to avoid breaking changes.
+Since AWCMS clients function independently, managing shared assumptions (like Supabase API schemas or edge API payloads) requires strict coordination to avoid breaking changes.
 
 ### Schema Versioning Strategy
 
 - **Additive Database Changes:** Never rename or delete columns used by existing clients. Always add new columns, make them nullable (or provide defaults), and write data to both old and new columns until all clients are updated.
-- **API Versioning (Edge Functions):** If a breaking change to an Edge Function cannot be avoided, create a new endpoint (e.g., `/functions/v1/device-config-v2`) rather than overwriting the existing one.
+- **API Versioning (Edge Logic):** If a breaking change to a Cloudflare Worker route or a legacy Supabase Edge Function cannot be avoided, create a new endpoint rather than overwriting the existing one.
 - **Client Fallbacks:** Mobile and IoT clients must gracefully handle missing new fields or unrecognized enum values from the API without crashing.
 
 ### Shared Node Packages
@@ -260,7 +260,7 @@ Deployments must be sequenced carefully when a feature spans the backend schema,
 
 When a major feature releases:
 
-1. **Database & Edge Functions (Backend):** Deploy via `npx supabase migration list --linked`, `npx supabase db push --linked`, and `npx supabase functions deploy --project-ref <project_ref>`. These must be non-breaking additive changes.
+1. **Database & Edge Logic (Backend):** Deploy additive migrations first, then deploy `awcms-edge/` (Cloudflare Workers), and deploy legacy Supabase functions only for features that still depend on them.
 2. **Admin Panel (`awcms`):** Deploy to Cloudflare Pages. Editors can begin creating data using the new schema.
 3. **Public Portal (`awcms-public`):** Deploy to Cloudflare Pages to render the new content for web users.
 4. **Mobile App (`awcms-mobile`):** Submit to App Stores. (Approval takes 1-3 days).
@@ -281,7 +281,7 @@ Production incidents require immediate, client-specific rollback strategies:
 
 ### Supabase Backend
 
-- **Edge Functions:** Re-deploy the previous commit via `supabase functions deploy`.
+- **Edge Logic:** Re-deploy the previous Cloudflare Worker or, for legacy flows, re-deploy the affected Supabase function.
 - **Database Schema:** Direct rollback of schema migrations is risky. Prefer "roll-forward" fixes by creating a new migration (`npx supabase migration new fix_bug`) that reverts the problematic objects, then push (`npx supabase db push --linked`).
 
 ### Mobile App
@@ -304,7 +304,7 @@ Production incidents require immediate, client-specific rollback strategies:
 - [ ] Bump version in relevant `package.json` / `pubspec.yaml`
 - [ ] Update `CHANGELOG.md` with release notes
 - [ ] Merge `develop` → `main` via PR
-- [ ] Tag release: `git tag v2.33.0 && git push --tags`
+- [ ] Tag release: `git tag v3.0.0 && git push --tags`
 - [ ] GitHub Actions deploys web portals automatically
 - [ ] Monitor error logs during deployment sequence
 ```

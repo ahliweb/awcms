@@ -10,7 +10,7 @@ Before beginning, it's crucial to understand how AWCMS differs from WordPress/El
 | :--- | :--- | :--- |
 | **Data Storage** | MySQL (wp_posts, wp_postmeta) | Supabase/PostgreSQL (structured JSON) |
 | **Page Building** | Shortcodes & raw HTML fragments | `PuckEditor` (Structured React components) |
-| **Frontend** | PHP/Server-rendered | Astro (Static & Islands) + React |
+| **Frontend** | PHP/Server-rendered | Astro static output + React islands |
 | **Styling** | Elementor CSS & Theme Styles | Tailwind CSS v4 & custom tokens |
 | **Plugins** | PHP WordPress Plugins | AWCMS Core Hooks & Extensions |
 
@@ -49,7 +49,7 @@ This is the most significant part of the migration. You must rebuild Elementor w
 To prevent traffic loss during the transition:
 
 1. **Map URLs:** Create a spreadsheet mapping old WordPress URLs (e.g., `example.com/about-us/`) to the new AWCMS URLs.
-2. **Configure Redirects:** In the Public Portal (Astro framework) or at the edge level (Cloudflare Pages `_redirects` file), implement 301 redirects from the old structures to the new ones.
+2. **Configure Redirects:** In the public portal deployment pipeline or at the edge level (for example Cloudflare Pages `_redirects`), implement 301 redirects from the old structures to the new ones.
 3. **Metadata:** Ensure all pages and posts in AWCMS have their SEO metadata (Title, Description, canonical URLs, OG images) migrated correctly from Yoast/RankMath into the AWCMS page settings.
 
 ## 4. Best Practices for the Transition
