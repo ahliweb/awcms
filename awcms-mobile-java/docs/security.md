@@ -2,7 +2,7 @@
 
 ## Storage
 - Store access/refresh tokens in `EncryptedSharedPreferences` or Keystore.
-- Do not store service role keys on device.
+- Do not store secret keys on device.
 - Clear tokens on logout or token revocation.
 
 ## Transport
@@ -13,7 +13,7 @@
 ## Auth and RLS
 - Always use user access tokens for API calls.
 - Rely on Supabase RLS to enforce tenant boundaries.
-- Use Edge Functions for privileged workflows.
+- Use server-side edge logic for privileged workflows.
 
 ## Permissions
 - Request runtime permissions only when needed.

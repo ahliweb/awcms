@@ -39,4 +39,4 @@ android {
 ## Runtime Overrides
 
 - Use a debug-only settings screen to switch tenants.
-- Never expose service role keys or admin credentials on device.
+- Never expose secret keys or admin credentials on device.

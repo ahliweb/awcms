@@ -70,13 +70,13 @@ scripts/repair_supabase_migration_history.sh
 scripts/repair_supabase_migration_history.sh --apply --linked
 ```
 
-If deploying Edge Functions to a linked project, verify local/remote slug coverage:
+If deploying legacy Supabase Edge Functions to a linked project, verify local/remote slug coverage:
 
 ```bash
 scripts/verify_supabase_function_consistency.sh --linked --project-ref <project_ref>
 ```
 
-- Deploy edge functions as needed:
+- Deploy legacy Supabase functions as needed:
 
 ```bash
 npx supabase functions deploy --project-ref <project_ref>

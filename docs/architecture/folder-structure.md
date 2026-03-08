@@ -32,7 +32,8 @@ awcms-dev/
 ├── awcms-esp32/                # ESP32 firmware
 │   └── primary/
 ├── awcms-ext/                  # External extensions
-├── supabase/                   # Migrations and edge functions
+├── awcms-edge/                 # Cloudflare Worker API and edge logic
+├── supabase/                   # Migrations and legacy/transitional Supabase functions
 ├── DOCS_INDEX.md               # Monorepo docs index
 └── AGENTS.md                   # AI agent rules (SSOT)
 ```

@@ -23,8 +23,8 @@ Create a `.env` file to hold your Supabase credentials:
 
 ```env
 SUPABASE_URL=https://your-project-id.supabase.co
-# Use Secret Key to bypass RLS during backend migration scripts
-SUPABASE_SECRET_KEY=your-service-role-key-here
+# Use the Secret API key for backend migration scripts that need privileged access
+SUPABASE_SECRET_KEY=your-secret-key-here
 WP_API_URL=https://your-wordpress-site.com/wp-json/wp/v2
 TARGET_TENANT_ID=your-awcms-tenant-uuid
 ```
@@ -106,7 +106,7 @@ node migrate.js
 
 ## Advanced Considerations
 
-* **HTML to TipTap JSON:** AWCMS standardizes on TipTap JSON format. If your frontend expects JSON, use a library like `@tiptap/html` or an Edge Function to parse the raw WordPress HTML into structured JSON during the import phase.
+* **HTML to TipTap JSON:** AWCMS standardizes on TipTap JSON format. If your frontend expects JSON, use a library like `@tiptap/html` or a server-side edge workflow to parse the raw WordPress HTML into structured JSON during the import phase.
 * **Elementor Content:** If a post was built entirely in Elementor, the `content.rendered` field will contain massive amounts
   of Elementor-specific `<div>` enclosures and class names. You will need to write custom DOM parsers (using `cheerio`) to
   extract the actual text, or abandon the layout and move the content manually.

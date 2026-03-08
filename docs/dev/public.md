@@ -14,7 +14,7 @@ The Public Portal (`awcms-public/`) handles the visitor-facing websites for each
 - **Rendering**: Static output (`output: "static"`) with React islands. SSR is optional if explicitly enabled.
 - **Styling**: Tailwind CSS 4.
 - **Data Source**: Supabase (via direct client).
-- **Analytics**: Server-side logging is available only when middleware runs (SSR/runtime). Static builds require client-side instrumentation or edge functions.
+- **Analytics**: Static builds require client-side instrumentation or dedicated edge services. Middleware-based server-side logging is non-canonical runtime behavior.
 - **View Transitions**: Enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
 
 ### Astro Config (Context7)

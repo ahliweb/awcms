@@ -237,13 +237,13 @@ $$;
 
 ### Public Portal Context
 
-- Renders statically or via Server-Side Rendering (SSR).
+- Uses static output by default; SSR/runtime behavior is non-canonical unless explicitly enabled.
 - Loads context via `PUBLIC_TENANT_ID`.
 - Passes the resolved identifier dynamically into Supabase client instantiation `createClientFromEnv()`.
 
 ### Data Layer Security Notes
 
-- Edge Functions are mandatory for cross-tenant data operations (Super Administrators managing global tenants).
+- Privileged server-side edge handlers are required for cross-tenant data operations (for example, Super Administrators managing global tenants).
 - Direct client SQL queries are automatically blocked or clipped to the scope of `current_tenant_id()`.
 - **Shared by default**: `settings`, `branding`, `modules` (descendants). Tenant admins and full-access roles have read/write access across levels based on `tenant_resource_rules`.
 - **Isolated by default**: `content` (blogs, pages), `media` (storage objects), `users`, and `orders`. These resources are strictly scoped to a single `tenant_id`.
@@ -254,7 +254,7 @@ $$;
 ### Row Level Security (RLS)
 
 - **Strict Enforcement**: RLS is mandatory for all tables.
-- **Bypass Prohibition**: Client-side code must NEVER bypass RLS. Elevation is restricted to server-side `SUPABASE_SECRET_KEY` paths in specific Edge Functions.
+- **Bypass Prohibition**: Client-side code must NEVER bypass RLS. Elevation is restricted to server-side `SUPABASE_SECRET_KEY` paths in Cloudflare Workers, approved Supabase Edge Functions, or trusted operational scripts.
 
 ### Data Lifecycle (Soft Delete)
 

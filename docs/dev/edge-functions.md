@@ -1,15 +1,15 @@
 > **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1.3 (Backend & Database)
 
-# Supabase Edge Functions
+# Edge Logic and Supabase Edge Functions
 
 ## Purpose
 
-Document the current Edge Function runtime layout, secret conventions, and deploy workflow.
+Document the current edge runtime layout, secret conventions, and deploy workflow across Cloudflare Workers and existing Supabase Edge Functions.
 
 ## Audience
 
 - Backend and integration developers
-- Operators deploying Supabase functions
+- Operators deploying Cloudflare Workers and Supabase functions
 
 ## Prerequisites
 
@@ -17,11 +17,17 @@ Document the current Edge Function runtime layout, secret conventions, and deplo
 - [AGENTS.md](../../AGENTS.md) - Supabase and security implementation rules
 - Supabase CLI v2.70+
 
-## Benchmark-Ready Edge Function Workflow
+## Current Edge Runtime Model
+
+- Cloudflare Workers in `awcms-edge/` are the primary edge HTTP layer.
+- Supabase Edge Functions in `supabase/functions/` remain supported for legacy or transitional flows.
+- `SUPABASE_SECRET_KEY` may be used only in approved server-side runtimes.
+
+## Benchmark-Ready Supabase Edge Function Workflow
 
 ### Objective
 
-Create and deploy a Supabase Edge Function that performs privileged business logic while enforcing tenant context and authentication.
+Create and deploy a Supabase Edge Function for a legacy or transitional workflow while enforcing tenant context and authentication.
 
 ### Required Inputs
 

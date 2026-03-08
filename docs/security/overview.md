@@ -96,10 +96,11 @@ Legacy tables may still use tenant-only select policies and rely on admin UI ABA
 - Storage paths are scoped to `{tenant_id}/...`.
 - Public static builds resolve tenant via `PUBLIC_TENANT_ID`, `VITE_PUBLIC_TENANT_ID`, or `VITE_TENANT_ID`.
 
-### Edge Functions
+### Edge Logic
 
-- All edge functions must validate tenant context and permissions.
-- Privileged access with `SUPABASE_SECRET_KEY` is allowed only in edge functions, migrations, and trusted operational scripts.
+- Cloudflare Workers are the primary edge HTTP layer and must validate tenant context and permissions.
+- Existing Supabase Edge Functions remain supported for legacy or transitional flows.
+- Privileged access with `SUPABASE_SECRET_KEY` is allowed only in approved server-side edge runtimes, migrations, and trusted operational scripts.
 
 ## Implementation Patterns
 
@@ -111,7 +112,7 @@ Legacy tables may still use tenant-only select policies and rely on admin UI ABA
 
 - Use `deleted_at` for deletions and filter it on reads.
 - Do not bypass RLS unless explicitly implementing platform admin features.
-- Supabase is the only backend.
+- Supabase is the system of record; Cloudflare Workers are the primary edge runtime.
 - Admin edit/detail routes use signed IDs (`{uuid}.{signature}`); use `encodeRouteParam` and `useSecureRouteParam` for non-guessable URLs.
 - Public telemetry (analytics events) must remain tenant-scoped and documented via consent notices.
 

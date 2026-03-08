@@ -247,7 +247,7 @@ class _ArticlesScreenState extends State<ArticlesScreen> {
 |------|--------|
 | Use `SUPABASE_PUBLISHABLE_KEY` only | Publishable key is safe to bundle; secret key is not |
 | Store session in `flutter_secure_storage` | Protects JWT from plain-text access |
-| All privileged operations via Edge Functions | Functions hold `SUPABASE_SECRET_KEY` server-side |
+| All privileged operations via server-side edge logic | Cloudflare Workers or approved Supabase functions hold `SUPABASE_SECRET_KEY` server-side |
 | RLS policies enforce tenant isolation | Guarantees users only see their own tenant's data |
 
 ---

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Document how AWCMS uses the Supabase client APIs for data, auth, storage, and edge functions.
+Document how AWCMS uses the Supabase client APIs for data, auth, storage, and edge-facing integrations.
 
 ## Audience
 
@@ -94,19 +94,28 @@ const { data, error } = await supabase.storage
   .upload(`images/${fileName}`, file, { cacheControl: '3600', upsert: false });
 ```
 
-### Edge Functions
+### Edge Logic
 
 ```javascript
-const { data, error } = await supabase.functions.invoke('manage-users', {
-  body: { action: 'delete', user_id: targetId }
+const { data: { session } } = await supabase.auth.getSession();
+
+const response = await fetch(`${import.meta.env.VITE_EDGE_URL}/api/mailketing`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session.access_token}`,
+  },
+  body: JSON.stringify({ action: 'send', recipient: 'user@example.com' })
 });
+
+const data = await response.json();
 ```
 
 ## Security and Compliance Notes
 
 - Always filter `deleted_at IS NULL` for reads.
 - Tenant-scoped tables must be filtered by tenant and RLS enforced.
-- Secret keys may be used only in Edge Functions and migrations.
+- Secret keys may be used only in Cloudflare Workers, approved Supabase Edge Functions, and migrations.
 - Admin client injects `x-tenant-id` automatically via `customSupabaseClient`.
 
 ## References

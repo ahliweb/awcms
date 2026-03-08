@@ -225,7 +225,7 @@ AWCMS relies on a robust set of PostgreSQL helper functions to execute ABAC logi
 
 #### 1. `current_tenant_id()`
 
-Resolves the active tenant ID with three fallbacks: JWT (Auth), User Record, or App Config (used in Edge Functions).
+Resolves the active tenant ID with three fallbacks: JWT (Auth), User Record, or App Config (used in server-side edge runtimes).
 
 ```sql
 CREATE OR REPLACE FUNCTION "public"."current_tenant_id"() RETURNS "uuid"
@@ -243,7 +243,7 @@ BEGIN
      RETURN (SELECT tenant_id FROM public.users WHERE id = auth.uid());
   END IF;
 
-  -- 3. Try Config (Anon / Pre-request hook setup by Edge Functions)
+  -- 3. Try Config (server-side pre-request hook setup by edge runtimes)
   config_tenant := current_setting('app.current_tenant_id', true);
   IF config_tenant IS NOT NULL AND config_tenant ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     RETURN config_tenant::uuid;

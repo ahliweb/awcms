@@ -46,7 +46,7 @@ VITE_TENANT_ID=...
 ## Analytics Logging
 
 - Server-side logging is available only when middleware runs (SSR/runtime).
-- Static builds require client-side instrumentation or edge functions.
+- Static builds require client-side instrumentation or dedicated edge services.
 
 ## Commands
 

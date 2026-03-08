@@ -85,7 +85,7 @@ await supabase.functions.invoke("manage-users", {
 
 ### Failure Modes and Guardrails
 
-- Direct client creation of privileged users: enforce invites via Edge Functions.
+- Direct client creation of privileged users: enforce invites via approved server-side edge handlers.
 - Missing default role flags: ensure `is_default_invite` and `is_default_public_registration` are set.
 - Approval bypass: restrict `account_requests` updates to admins via RLS.
 
@@ -267,7 +267,7 @@ if (count > 0) {
 ## Security and Compliance Notes
 
 - Soft delete applies to users.
-- Service role access is restricted to edge functions.
+- Secret-key access is restricted to approved server-side edge runtimes.
 
 ## References
 

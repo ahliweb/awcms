@@ -15,7 +15,8 @@ This document outlines the security threat model for the AWCMS platform, aligned
 
 AWCMS interacts with the following key components:
 
-- **Supabase**: Authentication, Database, Realtime, Storage, Edge Functions.
+- **Supabase**: Authentication, Database, Realtime, Storage, and legacy/transitional Supabase functions.
+- **Cloudflare**: Workers and edge-facing HTTP orchestration.
 - **Admin Panel**: React SPA for content management.
 - **Public Portal**: Astro static output with React islands.
 - **Mobile/IoT**: Specialized clients.
@@ -25,7 +26,7 @@ AWCMS interacts with the following key components:
 - **Public Internet vs. Edge**: Cloudflare WAF protection.
 - **Client vs. API**: Authenticated via JWT (Supabase Auth).
 - **API vs. Database**: Protected by Postgres RLS.
-- **Service-to-Service**: Validated via Supabase secret keys (`SUPABASE_SECRET_KEY`) limited to Edge Functions.
+- **Service-to-Service**: Validated via Supabase secret keys (`SUPABASE_SECRET_KEY`) limited to approved server-side edge runtimes.
 
 ## 4. Key Threats & Mitigations
 
