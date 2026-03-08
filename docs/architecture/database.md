@@ -618,12 +618,17 @@ CREATE TABLE categories (
   slug TEXT UNIQUE NOT NULL,
   description TEXT,
   parent_id UUID REFERENCES categories(id),
-  type TEXT NOT NULL, -- e.g. 'blog', 'page', 'product', 'portfolio', 'announcement'
+  type TEXT NOT NULL, -- canonical scopes include 'content', 'blog', 'page', 'product', 'portfolio', 'announcement', 'promotion', 'testimony', 'media', 'contact'
   sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ
 );
 ```
+
+Notes:
+
+- `content` categories are intentionally shared across blog and page selectors.
+- Legacy plural aliases may still exist in older tenant data, but admin/public selectors normalize them through the shared taxonomy map.
 
 ### tags
 
@@ -646,6 +651,11 @@ CREATE TABLE tags (
 CREATE INDEX idx_tags_tenant_id ON tags(tenant_id);
 CREATE INDEX idx_tags_is_active ON tags(is_active) WHERE deleted_at IS NULL;
 ```
+
+Notes:
+
+- Tags are tenant-scoped and reused across supported modules rather than owned by a single content type.
+- Public and admin tag pickers should filter `deleted_at IS NULL` and `is_active = true`.
 
 ### blog_tags
 

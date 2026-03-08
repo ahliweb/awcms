@@ -41,8 +41,8 @@ Provide a cleaned-up reference for the AWCMS `resources_registry` without repeat
 | `product_types` | Tenant | `tenant.product_types` | Product Types | `product_types` | Commerce taxonomy |
 | `orders` | Tenant | `tenant.orders` | Orders | `orders` | Commerce orders |
 | `menus` | Tenant | `tenant.menu` | Menu Manager | `menus` | Navigation menus |
-| `categories` | Tenant | `tenant.categories` | Categories | `categories` | Content taxonomy |
-| `tags` | Tenant | `tenant.tag` | Tags | `tags` | Content taxonomy |
+| `categories` | Tenant | `tenant.categories` | Categories | `categories` | Tenant taxonomy; `content` scope is shared across blogs and pages |
+| `tags` | Tenant | `tenant.tag` | Tags | `tags` | Tenant-scoped shared tags reused across supported modules |
 | `users` | Tenant | `tenant.user` | Users | `users` | Registry parity fixed from legacy `profiles` mapping |
 | `roles` | Tenant | `tenant.role` | Roles & Permissions | `roles` | Tenant role management |
 | `policies` | Tenant | `tenant.policy` | Policies | `policies` | Tenant policy rules |
