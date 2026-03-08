@@ -95,12 +95,12 @@ export default defineConfig(({ mode }) => {
 		: null;
 
 	const imgSrc = [
-		"img-src 'self' data: blob: https://*.supabase.co http://127.0.0.1:54321 http://localhost:54321",
+		"img-src 'self' data: blob: https://*.supabase.co http://127.0.0.1:54321 http://localhost:54321 http://127.0.0.1:8787 http://localhost:8787",
 		edgeOrigin,
 	].filter(Boolean).join(' ');
 
 	const connectSrc = [
-		"connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com http://127.0.0.1:54321 http://localhost:54321 ws://127.0.0.1:54321 ws://localhost:54321",
+		"connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cloudflareinsights.com http://127.0.0.1:54321 http://localhost:54321 http://127.0.0.1:8787 http://localhost:8787 ws://127.0.0.1:54321 ws://localhost:54321",
 		edgeOrigin,
 	].filter(Boolean).join(' ');
 

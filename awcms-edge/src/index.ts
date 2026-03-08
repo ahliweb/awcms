@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createClient } from '@supabase/supabase-js'
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { generateStorageKey, inferMediaKind, slugifyMediaValue, UploadSessionRequest } from './mediaContracts'
 
@@ -42,6 +42,22 @@ const getR2S3Client = (env: Bindings) => new S3Client({
     secretAccessKey: env.R2_SECRET_ACCESS_KEY,
   },
 })
+
+const headStoredObject = (env: Bindings, storageKey: string) => {
+  const client = getR2S3Client(env)
+  return client.send(new HeadObjectCommand({
+    Bucket: env.R2_BUCKET_NAME,
+    Key: storageKey,
+  }))
+}
+
+const getStoredObject = (env: Bindings, storageKey: string) => {
+  const client = getR2S3Client(env)
+  return client.send(new GetObjectCommand({
+    Bucket: env.R2_BUCKET_NAME,
+    Key: storageKey,
+  }))
+}
 
 const ensureR2SigningConfig = (env: Bindings) => {
   if (!env.R2_ACCOUNT_ID || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY || !env.R2_BUCKET_NAME) {
@@ -246,7 +262,13 @@ app.post('/api/media/upload/:sessionId/finalize', async (c) => {
       return c.json({ error: 'Session expired' }, 403);
     }
 
-    const object = await c.env.STORAGE.head(session.storage_key)
+    let object
+    try {
+      object = await headStoredObject(c.env, session.storage_key)
+    } catch {
+      object = null
+    }
+
     if (!object) {
       return c.json({ error: 'Uploaded file not found in storage' }, 404)
     }
@@ -263,7 +285,7 @@ app.post('/api/media/upload/:sessionId/finalize', async (c) => {
         alt_text: session.file_name,
         mime_type: session.mime_type,
         media_kind: inferMediaKind(session.mime_type),
-        size_bytes: object.size || session.size_bytes || 0,
+        size_bytes: object.ContentLength || session.size_bytes || 0,
         storage_key: session.storage_key,
         category_id: session.category_id || null,
         uploader_id: user.id,
@@ -271,7 +293,7 @@ app.post('/api/media/upload/:sessionId/finalize', async (c) => {
         access_control: session.access_control || 'public',
         meta_data: {
           ...(session.meta_data || {}),
-          etag: object.httpEtag,
+          etag: object.ETag,
           uploaded_via: 'cloudflare-r2',
         },
         updated_at: new Date().toISOString(),
@@ -314,16 +336,24 @@ app.get('/api/media/file/:id', async (c) => {
     return c.json({ error: 'File not found or access denied' }, 404);
   }
 
-  const object = await c.env.STORAGE.get(media.storage_key);
-  if (!object) {
+  let object
+  try {
+    object = await getStoredObject(c.env, media.storage_key)
+  } catch {
+    object = null
+  }
+
+  if (!object || !object.Body) {
     return c.json({ error: 'File not found in storage' }, 404);
   }
 
   const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set('etag', object.httpEtag);
-  
-  return new Response(object.body, { headers });
+  headers.set('Content-Type', media.mime_type || object.ContentType || 'application/octet-stream');
+  if (object.ETag) {
+    headers.set('etag', object.ETag);
+  }
+
+  return new Response(object.Body as ReadableStream, { headers });
 });
 
 // Public proxy for public images
@@ -341,7 +371,7 @@ app.get('/public/media/*', async (c) => {
   // Public policy allows anyone to read if status=uploaded and access_control=public
   const { data: media, error } = await supabase
     .from('media_objects')
-    .select('storage_key')
+    .select('storage_key, mime_type')
     .eq('storage_key', storageKey)
     .eq('status', 'uploaded')
     .eq('access_control', 'public')
@@ -352,17 +382,25 @@ app.get('/public/media/*', async (c) => {
     return c.json({ error: 'File not found or not public' }, 404);
   }
 
-  const object = await c.env.STORAGE.get(storageKey);
-  if (!object) {
+  let object
+  try {
+    object = await getStoredObject(c.env, storageKey)
+  } catch {
+    object = null
+  }
+
+  if (!object || !object.Body) {
     return c.json({ error: 'File not found in storage' }, 404);
   }
 
   const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set('etag', object.httpEtag);
+  headers.set('Content-Type', media.mime_type || object.ContentType || 'application/octet-stream');
+  if (object.ETag) {
+    headers.set('etag', object.ETag);
+  }
   headers.set('Cache-Control', 'public, max-age=31536000');
   
-  return new Response(object.body, { headers });
+  return new Response(object.Body as ReadableStream, { headers });
 });
 
 // ---- MIGRATED ENDPOINTS ----
