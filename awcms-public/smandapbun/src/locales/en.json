@@ -4,6 +4,8 @@
     "back": "Back",
     "read_more": "Read More",
     "view_all": "View All",
+    "categories": "Categories",
+    "close": "Close",
     "search": "Search...",
     "no_results": "No results found.",
     "share": "Share",
@@ -27,8 +29,14 @@
     "welcome": "Welcome to",
     "school_name": "SMAN 2 Pangkalan Bun",
     "tagline": "Excellence in Achievement, Noble Character",
+    "school_alt": "School",
     "about_title": "About Us",
     "about_desc": "SMA Negeri 2 Pangkalan Bun is a public high school located in Pangkalan Bun City, Kotawaringin Barat Regency, Central Kalimantan. With A accreditation, this school is committed to producing excellent and character-driven graduates.",
+    "accreditation": "Accreditation",
+    "established": "Established",
+    "years_of_experience": "Years of Experience",
+    "join_us": "Join Us",
+    "join_us_desc": "Become part of the SMAN 2 Pangkalan Bun community and build a brighter future with us.",
     "stats_students": "Students",
     "stats_teachers": "Teachers",
     "stats_staff": "Staff",
@@ -60,6 +68,7 @@
   "blogs": {
     "title": "Blogs",
     "latest": "Latest Blogs",
+    "related": "Related Blogs",
     "school_info": "School Info",
     "agenda": "Agenda",
     "gallery": "Gallery",
@@ -125,6 +134,14 @@
     "contact_info": "Contact Info",
     "follow_us": "Follow Us",
     "copyright": "Copyright",
+    "built_with": "Built with",
     "all_rights": "All rights reserved."
+  },
+  "a11y": {
+    "instagram_school": "School Instagram",
+    "instagram_osis": "Student Council Instagram",
+    "youtube_school": "School YouTube",
+    "toggle_menu": "Toggle menu",
+    "toggle_theme": "Toggle theme"
   }
 }

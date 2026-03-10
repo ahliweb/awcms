@@ -3,7 +3,14 @@ import "../assets/styles/global.css";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import ConsentNotice from "../components/ConsentNotice.astro";
-import { getLocale, type Locale } from "../utils/i18n";
+import {
+  defaultLocale,
+  getLocale,
+  getLocalizedPath,
+  getLocalizedValue,
+  supportedLocales,
+  type Locale,
+} from "../utils/i18n";
 
 export interface Props {
   title?: string;
@@ -25,13 +32,24 @@ const analyticsConsent =
   (await getAnalyticsConsent(locals.tenant_id ?? null));
 
 const {
-  title = siteData.site.name,
-  description = siteData.site.description,
+  title = getLocalizedValue(siteData.site.name, locale) || "SMAN 2 Pangkalan Bun",
+  description =
+    getLocalizedValue(siteData.site.description, locale) ||
+    "SMAN 2 Pangkalan Bun",
   image = "/images/og-image.jpg",
 } = Astro.props;
 
+const localizedSiteName =
+  getLocalizedValue<string>(siteData.site.name, locale) || "SMAN 2 Pangkalan Bun";
+const siteBase = Astro.site ?? new URL(Astro.url.origin);
+const canonicalUrl = new URL(getLocalizedPath(Astro.url.pathname, locale), siteBase);
+const defaultLocaleUrl = new URL(
+  getLocalizedPath(Astro.url.pathname, defaultLocale),
+  siteBase,
+);
+
 const siteTitle =
-  title === siteData.site.name ? title : `${title} | ${siteData.site.name}`;
+  title === localizedSiteName ? title : `${title} | ${localizedSiteName}`;
 ---
 
 <!doctype html>
@@ -41,12 +59,24 @@ const siteTitle =
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
+    <link rel="canonical" href={canonicalUrl.toString()} />
+    {
+      supportedLocales.map((lang) => (
+        <link
+          rel="alternate"
+          hreflang={lang}
+          href={new URL(getLocalizedPath(Astro.url.pathname, lang), siteBase).toString()}
+        />
+      ))
+    }
+    <link rel="alternate" hreflang="x-default" href={defaultLocaleUrl.toString()} />
 
     <!-- Open Graph -->
     <meta property="og:title" content={siteTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={image} />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalUrl.toString()} />
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />

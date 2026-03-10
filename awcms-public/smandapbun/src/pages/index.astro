@@ -12,10 +12,12 @@ import { getSiteData, getPosts, getProfilePageData } from "../lib/api";
 
 const locale = getLocale(Astro.url) as Locale;
 const site = await getSiteData();
-const posts = await getPosts();
+const posts = await getPosts(6, locale);
 const profileData = await getProfilePageData();
 const { principalMessage } = profileData;
 const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
+const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
+const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || t("home.tagline", locale);
 // Import assets
 import { HeroSlider } from "../components/HeroSlider";
 import { sanitizeHTML } from "~/utils/sanitize";
@@ -52,13 +54,13 @@ const heroImages = Object.values(images).map((img) => img.default);
           class="text-4xl md:text-5xl lg:text-6xl font-bold mb-4 font-heading animate-fade-in"
           style="animation-delay: 0.1s;"
         >
-          {site.site.name}
+          {siteName}
         </h1>
         <p
           class="text-xl md:text-2xl text-blue-100 mb-8 animate-fade-in"
           style="animation-delay: 0.2s;"
         >
-          {site.site.tagline}
+          {siteTagline}
         </p>
         <div
           class="flex flex-wrap gap-4 animate-fade-in"
@@ -155,7 +157,7 @@ const heroImages = Object.values(images).map((img) => img.default);
             {t("home.about_title", locale)}
           </p>
           <h2 class="section-title text-gray-900 dark:text-white">
-            {site.site.name}
+            {siteName}
           </h2>
           <p class="text-gray-600 dark:text-gray-300 mb-6">
             {t("home.about_desc", locale)}
@@ -168,7 +170,7 @@ const heroImages = Object.values(images).map((img) => img.default);
                 {site.accreditation}
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400">
-                Akreditasi
+                {t("home.accreditation", locale)}
               </div>
             </div>
             <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm">
@@ -178,7 +180,7 @@ const heroImages = Object.values(images).map((img) => img.default);
                 {site.established}
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400">
-                Berdiri
+                {t("home.established", locale)}
               </div>
             </div>
           </div>
@@ -197,7 +199,7 @@ const heroImages = Object.values(images).map((img) => img.default);
           >
             <img
               src="/images/staff/dewan-guru-2.webp"
-              alt="Sekolah"
+              alt={t("home.school_alt", locale)}
               class="w-full h-full object-cover"
             />
           </div>
@@ -207,7 +209,7 @@ const heroImages = Object.values(images).map((img) => img.default);
             <div class="text-3xl font-bold">
               {new Date().getFullYear() - parseInt(site.established)}+
             </div>
-            <div class="text-sm">Tahun Pengalaman</div>
+            <div class="text-sm">{t("home.years_of_experience", locale)}</div>
           </div>
         </div>
       </div>
@@ -472,14 +474,10 @@ const heroImages = Object.values(images).map((img) => img.default);
     <div class="absolute inset-0 bg-black/20"></div>
     <div class="container-custom relative z-10 text-center">
       <h2 class="text-3xl md:text-4xl font-bold mb-4">
-        {locale === "id" ? "Bergabunglah Bersama Kami" : "Join Us"}
+        {t("home.join_us", locale)}
       </h2>
       <p class="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-        {
-          locale === "id"
-            ? "Jadilah bagian dari keluarga besar SMAN 2 Pangkalan Bun dan raih masa depan gemilang bersama kami."
-            : "Become part of the SMAN 2 Pangkalan Bun family and achieve a bright future with us."
-        }
+        {t("home.join_us_desc", locale)}
       </p>
       <div class="flex flex-wrap justify-center gap-4">
         <a href="#" class="btn-secondary" data-testid="cta-ppdb">

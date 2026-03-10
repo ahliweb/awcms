@@ -1,12 +1,20 @@
 ---
 import { Icon } from "astro-icon/components";
+import { t, type Locale } from "../utils/i18n";
+
+export interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
 ---
 
 <button
   id="theme-toggle"
   type="button"
   class="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 rounded-lg text-sm p-2.5 inline-flex items-center justify-center transition-colors duration-200 border border-transparent hover:border-gray-300 dark:hover:border-gray-600"
-  aria-label="Toggle Dark Mode"
+  aria-label={t("a11y.toggle_theme", locale)}
+  title={t("a11y.toggle_theme", locale)}
 >
   <div id="theme-toggle-dark-icon" class="hidden">
     <Icon

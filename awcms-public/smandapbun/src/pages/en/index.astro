@@ -11,10 +11,13 @@ import { getSiteData, getPosts, getProfilePageData } from "../../lib/api";
 
 const locale: Locale = "en";
 const site = await getSiteData();
-const posts = await getPosts(3);
+const posts = await getPosts(3, locale);
 const profileData = await getProfilePageData();
 const { principalMessage } = profileData;
-const featuredBlogs = posts;
+const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
+const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
+const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || t("home.tagline", locale);
+const siteDescription = getLocalizedValue<string>(site.site.description, locale) || t("home.about_desc", locale);
 
 // Import assets
 import { HeroSlider } from "../../components/HeroSlider";
@@ -26,7 +29,7 @@ const images = import.meta.glob<{ default: ImageMetadata }>(
 const heroImages = Object.values(images).map((img) => img.default);
 ---
 
-<Layout title={site.site.name}>
+<Layout title={siteName}>
   <!-- Hero Section -->
   <section
     class="text-white relative overflow-hidden"
@@ -52,13 +55,13 @@ const heroImages = Object.values(images).map((img) => img.default);
           class="text-4xl md:text-5xl lg:text-6xl font-bold mb-4 font-heading animate-fade-in"
           style="animation-delay: 0.1s;"
         >
-          {site.site.name}
+          {siteName}
         </h1>
         <p
           class="text-xl md:text-2xl text-blue-100 mb-8 animate-fade-in"
           style="animation-delay: 0.2s;"
         >
-          {site.site.tagline}
+          {siteTagline}
         </p>
         <div
           class="flex flex-wrap gap-4 animate-fade-in"
@@ -149,10 +152,10 @@ const heroImages = Object.values(images).map((img) => img.default);
             {t("home.about_title", locale)}
           </p>
           <h2 class="section-title text-gray-900 dark:text-white">
-            {site.site.name}
+            {siteName}
           </h2>
           <p class="text-gray-600 dark:text-gray-300 mb-6">
-            {site.site.description}
+            {siteDescription}
           </p>
           <div class="grid grid-cols-2 gap-4 mb-6">
             <div
@@ -194,7 +197,7 @@ const heroImages = Object.values(images).map((img) => img.default);
           >
             <img
               src="/images/backgrounds/hero-profile.webp"
-              alt="School"
+              alt={t("home.school_alt", locale)}
               class="w-full h-full object-cover"
             />
           </div>
@@ -204,7 +207,7 @@ const heroImages = Object.values(images).map((img) => img.default);
             <div class="text-3xl font-bold">
               {new Date().getFullYear() - parseInt(site.established)}+
             </div>
-            <div class="text-sm">Years of Experience</div>
+            <div class="text-sm">{t("home.years_of_experience", locale)}</div>
           </div>
         </div>
       </div>
@@ -362,10 +365,11 @@ const heroImages = Object.values(images).map((img) => img.default);
   >
     <div class="absolute inset-0 bg-black/20"></div>
     <div class="container-custom relative z-10 text-center">
-      <h2 class="text-3xl md:text-4xl font-bold mb-4">Join Us</h2>
+      <h2 class="text-3xl md:text-4xl font-bold mb-4">
+        {t("home.join_us", locale)}
+      </h2>
       <p class="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-        Become part of the SMAN 2 Pangkalan Bun family and achieve a bright
-        future with us.
+        {t("home.join_us_desc", locale)}
       </p>
       <div class="flex flex-wrap justify-center gap-4">
         <a href="#" class="btn-secondary">

@@ -2,8 +2,14 @@
   "site": {
     "name": "SMAN 2 Pangkalan Bun",
     "shortName": "SMANDA",
-    "tagline": "Beriman, Cerdas, Berprestasi (BERDASI)",
-    "description": "SMA Negeri 2 Pangkalan Bun adalah sekolah menengah atas negeri yang berlokasi di Kota Pangkalan Bun, Kabupaten Kotawaringin Barat, Kalimantan Tengah.",
+    "tagline": {
+      "id": "Beriman, Cerdas, Berprestasi (BERDASI)",
+      "en": "Excellence in Achievement, Noble Character"
+    },
+    "description": {
+      "id": "SMA Negeri 2 Pangkalan Bun adalah sekolah menengah atas negeri yang berlokasi di Kota Pangkalan Bun, Kabupaten Kotawaringin Barat, Kalimantan Tengah.",
+      "en": "SMA Negeri 2 Pangkalan Bun is a public high school located in Pangkalan Bun City, Kotawaringin Barat Regency, Central Kalimantan."
+    },
     "logo": "/images/smanda-logo.png",
     "favicon": "/favicon.png",
     "address": "Jl. Pasanah No. 15, RT 24, Sidorejo, Arut Selatan, Kotawaringin Barat, Kalimantan Tengah, 74111",

@@ -11,6 +11,10 @@ const locales: Record<Locale, typeof idLocale> = {
 export const defaultLocale: Locale = 'id';
 export const supportedLocales: Locale[] = ['id', 'en'];
 
+const isLocalizedRecord = (value: unknown): value is Partial<Record<Locale, unknown>> => {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+};
+
 export function getLocale(urlOrRequest?: URL | Request | string): Locale {
   if (!urlOrRequest) return defaultLocale;
 
@@ -65,14 +69,32 @@ export function t(key: string, locale: Locale = defaultLocale): string {
 
 export function getLocalizedValue<T>(obj: any, locale: Locale): T | undefined {
   if (!obj) return undefined;
-  return obj[locale] ?? obj[defaultLocale];
+
+  if (!isLocalizedRecord(obj)) {
+    return obj as T;
+  }
+
+  return (obj[locale] ?? obj[defaultLocale]) as T | undefined;
 }
 
 export function getLocalizedPath(path: string, locale: Locale): string {
-  if (locale === defaultLocale) {
-    return path;
+  if (!path || path.startsWith('http') || path.startsWith('#')) {
+    return path || '#';
   }
-  return `/${locale}${path.startsWith('/') ? path : `/${path}`}`;
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const { cleanPath } = extractLocaleFromPath(normalizedPath);
+  const basePath = cleanPath || '/';
+
+  if (locale === defaultLocale) {
+    return basePath;
+  }
+
+  return basePath === '/' ? `/${locale}` : `/${locale}${basePath}`;
+}
+
+export function switchLocalePath(path: string, locale: Locale): string {
+  return getLocalizedPath(path, locale);
 }
 
 export function extractLocaleFromPath(path: string): { locale: Locale; cleanPath: string } {

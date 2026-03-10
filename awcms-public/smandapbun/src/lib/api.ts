@@ -1,5 +1,6 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { supabase, createScopedClient } from './supabase';
+import { type Locale } from '../utils/i18n';
 import contactDefault from '../data/pages/contact.json';
 import profileDefault from '../data/pages/profile.json';
 import organizationDefault from '../data/pages/organization.json';
@@ -10,6 +11,7 @@ import alumniDefault from '../data/pages/alumni.json';
 import staffDefault from '../data/pages/staff.json';
 import imagesDefault from '../data/images.json';
 import blogsDefault from '../data/blogs/blogs.json';
+import siteDefault from '../data/site.json';
 
 
 const TENANT_SLUG = 'smandapbun';
@@ -258,13 +260,13 @@ export interface ProfileData {
 
 export interface SiteData {
     site: {
-        name: string;
+        name: string | LocalizedString;
         shortName?: string;
-        tagline: string;
-        description: string;
+        tagline: string | LocalizedString;
+        description: string | LocalizedString;
         logo?: string;
         favicon?: string;
-        address?: string;
+        address?: string | LocalizedString;
         phone?: string;
         email?: string;
         website?: string;
@@ -420,40 +422,7 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
 export async function getSiteData(): Promise<SiteData> {
     const tenantId = await getTenantId();
 
-    // Default fallback data
-    const defaultData: SiteData = {
-        site: {
-            name: 'SMAN 2 Pangkalan Bun',
-            tagline: 'Beriman, Cerdas, Berprestasi (BERDASI)',
-            description: 'Sekolah Menengah Atas Negeri 2 Pangkalan Bun',
-            logo: '/images/smanda-logo.webp',
-            favicon: '/favicon.png',
-            address: 'Jl. Pasanah No. 15, RT 24, Sidorejo, Arut Selatan, Kotawaringin Barat, Kalimantan Tengah, 74111',
-            phone: '082254008080',
-            email: 'info@sman2pangkalanbun.sch.id',
-            website: 'https://sman2pangkalanbun.sch.id',
-            socialMedia: {
-                instagram: 'https://www.instagram.com/sman2_pangkalanbun',
-                instagramOsis: 'https://www.instagram.com/osis_smandapbun',
-                youtube: 'https://www.youtube.com/@smandapbun',
-            },
-        },
-        contact: {
-            address: 'Jl. Pasanah No. 15, RT 24, Sidorejo, Arut Selatan, Kotawaringin Barat, Kalimantan Tengah, 74111',
-            phone: '082254008080',
-            email: 'info@sman2pangkalanbun.sch.id',
-        },
-        stats: {
-            students: 1200,
-            teachers: 75,
-            staff: 25,
-            extracurriculars: 18,
-            alumni: 8500,
-            achievements: 100,
-        },
-        accreditation: 'A',
-        established: '1984',
-    };
+    const defaultData: SiteData = JSON.parse(JSON.stringify(siteDefault)) as SiteData;
 
     if (!tenantId) return defaultData;
 
@@ -1036,35 +1005,96 @@ export interface Post {
     tag: string;
 }
 
-export async function getPosts(limit = 6): Promise<Post[]> {
+const toLocalizedField = (value: unknown, fallback = ''): LocalizedString => {
+    const parseValue = (input: unknown): unknown => {
+        if (typeof input !== 'string') return input;
+
+        const trimmed = input.trim();
+        if (!trimmed.startsWith('{')) return input;
+
+        try {
+            return JSON.parse(trimmed);
+        } catch {
+            return input;
+        }
+    };
+
+    const parsed = parseValue(value);
+
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const candidate = parsed as Partial<Record<Locale, unknown>>;
+        const id = candidate.id;
+        const en = candidate.en;
+
+        if (typeof id === 'string' || typeof en === 'string') {
+            return {
+                id: typeof id === 'string' ? id : typeof en === 'string' ? en : fallback,
+                en: typeof en === 'string' ? en : typeof id === 'string' ? id : fallback,
+            };
+        }
+    }
+
+    const stringValue = typeof parsed === 'string' ? parsed : fallback;
+    return { id: stringValue, en: stringValue };
+};
+
+const normalizePost = (post: any): Post => ({
+    id: post.id,
+    title: toLocalizedField(post.title_translations ?? post.title_i18n ?? post.title),
+    excerpt: toLocalizedField(post.excerpt_translations ?? post.excerpt_i18n ?? post.excerpt),
+    content: toLocalizedField(post.content_translations ?? post.content_i18n ?? post.content),
+    slug: post.slug,
+    published_at: post.published_at ?? post.publishedAt ?? post.created_at ?? new Date().toISOString(),
+    featured: Boolean(post.is_featured ?? post.featured),
+    image: post.featured_image ?? post.image ?? '',
+    category: typeof (post.categories?.name ?? post.category?.name ?? post.category) === 'string'
+        ? (post.categories?.name ?? post.category?.name ?? post.category)
+        : toLocalizedField(post.categories?.name ?? post.category?.name ?? post.category, 'Umum').id,
+    author: post.author_name ?? post.author ?? 'Admin',
+    tag: Array.isArray(post.tags) ? post.tags.join(', ') : (post.tags || post.tag || ''),
+});
+
+const getDefaultPosts = (limit: number): Post[] => {
+    const fallbackPosts = (blogsDefault as any).blogs || [];
+    return fallbackPosts.slice(0, limit).map(normalizePost);
+};
+
+export async function getPosts(limit = 6, locale?: Locale): Promise<Post[]> {
     const tenantId = await getTenantId();
-    if (!tenantId) return [];
+    if (!tenantId) return getDefaultPosts(limit);
 
     const client = getTenantClient(tenantId);
-    const { data, error } = await client
-        .from('blogs')
-        .select('*, categories(name)') // Join categories
-        .eq('tenant_id', tenantId)
-        .eq('status', 'published')
-        .order('published_at', { ascending: false })
-        .limit(limit);
+    const runQuery = async (withLocale: boolean) => {
+        let query = client
+            .from('blogs')
+            .select('*, categories(name)')
+            .eq('tenant_id', tenantId)
+            .eq('status', 'published')
+            .is('deleted_at', null)
+            .order('published_at', { ascending: false })
+            .limit(limit);
+
+        if (withLocale && locale) {
+            query = query.eq('locale', locale);
+        }
+
+        return query;
+    };
+
+    let { data, error } = await runQuery(Boolean(locale));
+
+    if (locale && ((data && data.length === 0) || (error && isMissingLocaleColumnError(error.message || '')))) {
+        ({ data, error } = await runQuery(false));
+    }
 
     if (error) {
         console.error('Error fetching posts:', error);
-        return [];
+        return getDefaultPosts(limit);
     }
 
-    return data.map(post => ({
-        id: post.id,
-        title: { id: post.title, en: post.title },
-        excerpt: { id: post.excerpt || '', en: post.excerpt || '' },
-        content: { id: post.content || '', en: post.content || '' },
-        slug: post.slug,
-        published_at: post.published_at,
-        featured: post.is_featured,
-        image: post.featured_image,
-        category: post.categories?.name || 'Umum', // Handle join result
-        author: 'Admin', // Placeholder for now
-        tag: Array.isArray(post.tags) ? post.tags.join(', ') : (post.tags || ''),
-    }));
+    if (!data || data.length === 0) {
+        return getDefaultPosts(limit);
+    }
+
+    return data.map(normalizePost);
 }

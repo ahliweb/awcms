@@ -1,6 +1,6 @@
 ---
 import { Icon } from "astro-icon/components";
-import { t, getLocalizedPath, type Locale } from "../utils/i18n";
+import { t, getLocalizedPath, getLocalizedValue, type Locale } from "../utils/i18n";
 import navigation from "../data/navigation.json";
 import { getMenuTree, getSiteData } from "../lib/api";
 
@@ -13,6 +13,10 @@ const currentYear = new Date().getFullYear();
 const site = await getSiteData();
 const footerMenu = await getMenuTree("footer", locale);
 const menuItems = footerMenu.length > 0 ? footerMenu : navigation.mainMenu;
+const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
+const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || "";
+const siteDescription = getLocalizedValue<string>(site.site.description, locale) || "";
+const siteAddress = getLocalizedValue<string>(site.site.address, locale) || "";
 
 function getLabel(item: any): string {
   if (!item?.label) return "";
@@ -39,7 +43,7 @@ function resolveHref(href: string): string {
               <div class="w-12 h-12 rounded-full bg-white/90 ring-1 ring-primary-200/60 flex items-center justify-center overflow-hidden p-1">
                 <img
                   src={site.site.logo}
-                  alt={`Logo ${site.site.name}`}
+                  alt={`Logo ${siteName}`}
                   width="48"
                   height="48"
                   loading="lazy"
@@ -54,12 +58,12 @@ function resolveHref(href: string): string {
             )
           }
           <div>
-            <div class="font-bold text-lg">{site.site.name}</div>
-            <div class="text-xs text-gray-400">{site.site.tagline}</div>
+            <div class="font-bold text-lg">{siteName}</div>
+            <div class="text-xs text-gray-400">{siteTagline}</div>
           </div>
         </div>
         <p class="text-gray-400 text-sm mb-4">
-          {site.site.description}
+          {siteDescription}
         </p>
         <div class="flex items-center gap-3">
           {
@@ -68,7 +72,7 @@ function resolveHref(href: string): string {
                 href={site.site.socialMedia.instagram}
                 target="_blank"
                 rel="noopener"
-                aria-label="Instagram Sekolah"
+                aria-label={t("a11y.instagram_school", locale)}
                 class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors"
               >
                 <Icon name="tabler:brand-instagram" class="w-5 h-5" />
@@ -81,7 +85,7 @@ function resolveHref(href: string): string {
                 href={site.site.socialMedia.instagramOsis}
                 target="_blank"
                 rel="noopener"
-                aria-label="Instagram OSIS"
+                aria-label={t("a11y.instagram_osis", locale)}
                 class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors"
               >
                 <Icon name="tabler:brand-instagram" class="w-5 h-5" />
@@ -94,7 +98,7 @@ function resolveHref(href: string): string {
                 href={site.site.socialMedia.youtube}
                 target="_blank"
                 rel="noopener"
-                aria-label="YouTube Sekolah"
+                aria-label={t("a11y.youtube_school", locale)}
                 class="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-primary-500 transition-colors"
               >
                 <Icon name="tabler:brand-youtube" class="w-5 h-5" />
@@ -171,7 +175,7 @@ function resolveHref(href: string): string {
               name="tabler:map-pin"
               class="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5"
             />
-            <span class="text-gray-400 text-sm">{site.site.address}</span>
+            <span class="text-gray-400 text-sm">{siteAddress}</span>
           </li>
           <li class="flex items-center gap-3">
             <Icon
@@ -207,10 +211,10 @@ function resolveHref(href: string): string {
     >
       <p class="text-gray-500 text-sm">
         © {currentYear}
-        {site.site.name}. {t("footer.all_rights", locale)}
+        {siteName}. {t("footer.all_rights", locale)}
       </p>
       <p class="text-gray-500 text-sm">
-        Built with <a
+        {t("footer.built_with", locale)} <a
           href="https://github.com/ahliweb/awcms"
           target="_blank"
           rel="noopener"

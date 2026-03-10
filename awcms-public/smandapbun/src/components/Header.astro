@@ -2,6 +2,9 @@
 import { Icon } from "astro-icon/components";
 import {
   getLocalizedPath,
+  getLocalizedValue,
+  extractLocaleFromPath,
+  t,
   type Locale,
   supportedLocales,
   defaultLocale,
@@ -16,9 +19,12 @@ export interface Props {
 
 const { locale } = Astro.props;
 const currentPath = Astro.url.pathname;
+const activePath = extractLocaleFromPath(currentPath).cleanPath || "/";
 const site = await getSiteData();
 const dynamicMenu = await getMenuTree("header", locale);
 const menuItems = dynamicMenu.length > 0 ? dynamicMenu : navigation.mainMenu;
+const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
+const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || "";
 
 function getLabel(item: any): string {
   if (!item?.label) return "";
@@ -30,6 +36,12 @@ function resolveHref(href: string): string {
   if (!href || href.startsWith("http") || href.startsWith("#"))
     return href || "#";
   return getLocalizedPath(href, locale);
+}
+
+function isActiveLink(href: string): boolean {
+  if (!href || href.startsWith("http") || href.startsWith("#")) return false;
+  if (href === "/") return activePath === "/";
+  return activePath === href || activePath.startsWith(`${href}/`);
 }
 ---
 
@@ -66,7 +78,7 @@ function resolveHref(href: string): string {
                 href={site.site.socialMedia.instagram}
                 target="_blank"
                 rel="noopener"
-                aria-label="Instagram Sekolah"
+                aria-label={t("a11y.instagram_school", locale)}
                 class="hover:text-secondary-300 transition-colors"
               >
                 <Icon name="tabler:brand-instagram" class="w-4 h-4" />
@@ -79,7 +91,7 @@ function resolveHref(href: string): string {
                 href={site.site.socialMedia.instagramOsis}
                 target="_blank"
                 rel="noopener"
-                aria-label="Instagram OSIS"
+                aria-label={t("a11y.instagram_osis", locale)}
                 class="hover:text-secondary-300 transition-colors"
               >
                 <Icon name="tabler:brand-instagram" class="w-4 h-4" />
@@ -92,7 +104,7 @@ function resolveHref(href: string): string {
                 href={site.site.socialMedia.youtube}
                 target="_blank"
                 rel="noopener"
-                aria-label="YouTube Sekolah"
+                aria-label={t("a11y.youtube_school", locale)}
                 class="hover:text-secondary-300 transition-colors"
               >
                 <Icon name="tabler:brand-youtube" class="w-4 h-4" />
@@ -107,11 +119,10 @@ function resolveHref(href: string): string {
           {
             supportedLocales.map((lang) => (
               <a
-                href={
-                  lang === defaultLocale
-                    ? currentPath.replace(`/${locale}`, "") || "/"
-                    : `/${lang}${currentPath}`
-                }
+                href={getLocalizedPath(currentPath, lang)}
+                lang={lang}
+                hreflang={lang}
+                aria-current={locale === lang ? "page" : undefined}
                 class={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
                   locale === lang
                     ? "bg-white dark:bg-slate-800 text-primary-600 dark:text-primary-300"
@@ -124,7 +135,7 @@ function resolveHref(href: string): string {
           }
         </div>
         <!-- Theme Toggle -->
-        <ThemeToggle />
+        <ThemeToggle locale={locale} />
       </div>
     </div>
   </div>
@@ -139,7 +150,7 @@ function resolveHref(href: string): string {
             <div class="w-12 h-12 rounded-full bg-white/90 dark:bg-slate-800 ring-1 ring-primary-200/70 dark:ring-primary-900/60 shadow-sm flex items-center justify-center overflow-hidden p-1">
               <img
                 src={site.site.logo}
-                alt={`Logo ${site.site.name}`}
+                alt={`Logo ${siteName}`}
                 width="48"
                 height="48"
                 decoding="async"
@@ -156,10 +167,10 @@ function resolveHref(href: string): string {
           <div
             class="font-bold text-lg text-primary-600 dark:text-primary-300 leading-tight"
           >
-            {site.site.name}
+            {siteName}
           </div>
           <div class="text-xs text-gray-500 dark:text-gray-400">
-            {site.site.tagline}
+            {siteTagline}
           </div>
         </div>
       </a>
@@ -172,8 +183,7 @@ function resolveHref(href: string): string {
               <a
                 href={resolveHref(item.href)}
                 class={`nav-link px-3 py-2 rounded-lg flex items-center gap-1 ${
-                  currentPath === item.href ||
-                  currentPath.startsWith(item.href + "/")
+                  isActiveLink(item.href)
                     ? "nav-link-active bg-primary-50 dark:bg-slate-800 text-primary-600 dark:text-primary-300"
                     : "hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-gray-200"
                 }`}
@@ -224,7 +234,7 @@ function resolveHref(href: string): string {
       <button
         class="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
         id="mobile-menu-btn"
-        aria-label="Toggle menu"
+        aria-label={t("a11y.toggle_menu", locale)}
         data-testid="mobile-menu-btn"
       >
         <Icon
@@ -253,8 +263,7 @@ function resolveHref(href: string): string {
             <a
               href={resolveHref(item.href)}
               class={`block px-4 py-2 rounded-lg font-medium ${
-                currentPath === item.href ||
-                currentPath.startsWith(item.href + "/")
+                isActiveLink(item.href)
                   ? "bg-primary-50 dark:bg-slate-800 text-primary-600 dark:text-primary-300"
                   : "text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800"
               }`}

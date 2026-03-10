@@ -4,6 +4,8 @@
     "back": "Kembali",
     "read_more": "Baca Selengkapnya",
     "view_all": "Lihat Semua",
+    "categories": "Kategori",
+    "close": "Tutup",
     "search": "Cari...",
     "no_results": "Tidak ada hasil ditemukan.",
     "share": "Bagikan",
@@ -27,8 +29,14 @@
     "welcome": "Selamat Datang di",
     "school_name": "SMAN 2 Pangkalan Bun",
     "tagline": "Beriman, Cerdas, Berprestasi (BERDASI)",
+    "school_alt": "Sekolah",
     "about_title": "Tentang Kami",
     "about_desc": "SMA Negeri 2 Pangkalan Bun adalah sekolah menengah atas negeri yang berlokasi di Kota Pangkalan Bun, Kabupaten Kotawaringin Barat, Kalimantan Tengah. Dengan akreditasi A, sekolah ini berkomitmen menghasilkan lulusan yang unggul dan berkarakter.",
+    "accreditation": "Akreditasi",
+    "established": "Berdiri",
+    "years_of_experience": "Tahun Pengalaman",
+    "join_us": "Bergabunglah Bersama Kami",
+    "join_us_desc": "Mari menjadi bagian dari keluarga besar SMAN 2 Pangkalan Bun dan raih masa depan gemilang bersama kami.",
     "stats_students": "Siswa",
     "stats_teachers": "Guru",
     "stats_staff": "Staf",
@@ -60,6 +68,7 @@
   "blogs": {
     "title": "Blog",
     "latest": "Blog Terbaru",
+    "related": "Blog Terkait",
     "school_info": "Info Sekolah",
     "agenda": "Agenda",
     "gallery": "Galeri",
@@ -125,6 +134,14 @@
     "contact_info": "Info Kontak",
     "follow_us": "Ikuti Kami",
     "copyright": "Hak Cipta",
+    "built_with": "Dibangun dengan",
     "all_rights": "Seluruh hak cipta dilindungi."
+  },
+  "a11y": {
+    "instagram_school": "Instagram Sekolah",
+    "instagram_osis": "Instagram OSIS",
+    "youtube_school": "YouTube Sekolah",
+    "toggle_menu": "Buka menu",
+    "toggle_theme": "Ganti tema"
   }
 }
