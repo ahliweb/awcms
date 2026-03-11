@@ -643,11 +643,11 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
     // --- RENDER ---
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-background">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-slate-50">
             {/* Header / Toolbar */}
             {/* Header / Toolbar */}
             {/* Header / Toolbar */}
-            <header className="border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 h-16 flex items-center justify-between px-6 shrink-0 gap-6 z-50 shadow-sm transition-all duration-300">
+            <header className="border-b bg-white h-16 flex items-center justify-between px-6 shrink-0 gap-6 z-50 shadow-sm transition-all duration-300">
                 <div className="flex items-center gap-4">
                     <Button
                         variant="ghost"
@@ -745,6 +745,22 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         </Button>
 
                         <div className="flex items-center gap-1 ml-1">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    if (hasUnsavedChanges) {
+                                        if (window.confirm('You have unsaved changes. Are you sure you want to leave?')) {
+                                            handleClose();
+                                        }
+                                    } else {
+                                        handleClose();
+                                    }
+                                }}
+                                className="h-9 px-4 text-slate-500 hover:text-slate-700 hover:bg-slate-100 ring-0 focus:ring-0"
+                            >
+                                Cancel
+                            </Button>
                             <Button
                                 variant="ghost"
                                 size="sm"

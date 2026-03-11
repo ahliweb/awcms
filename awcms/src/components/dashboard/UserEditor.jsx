@@ -430,14 +430,14 @@ function UserEditor({ user, onClose, onSave }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
     >
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white/95 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col border border-slate-200/70 dark:bg-slate-950/90 dark:border-slate-800/70 h-[85vh]"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col border border-slate-200 dark:bg-slate-950 dark:border-slate-800 h-[85vh]"
       >
-        <div className="px-6 py-5 border-b border-slate-200/70 flex justify-between items-center bg-slate-50/70 dark:bg-slate-900/60 dark:border-slate-800/70 shrink-0">
+        <div className="px-6 py-5 border-b border-slate-200 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
           <div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white">
               {isEditing ? 'Edit User Details' : 'Create New User'}

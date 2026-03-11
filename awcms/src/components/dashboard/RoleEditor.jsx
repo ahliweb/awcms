@@ -351,15 +351,15 @@ const RoleEditor = ({ role, onClose, onSave }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-background z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
     >
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white/95 dark:bg-slate-950/90 rounded-2xl shadow-2xl w-full max-w-[95vw] xl:max-w-[1600px] h-[92vh] flex flex-col overflow-hidden border border-slate-200/70 dark:border-slate-800/70"
+        className="bg-white dark:bg-slate-950 rounded-2xl shadow-2xl w-full max-w-[95vw] xl:max-w-[1600px] h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200/70 dark:border-slate-800/70 flex justify-between items-center bg-slate-50/70 dark:bg-slate-900/60 shrink-0">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
           <div>
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <Shield className={`w-5 h-5 ${isFullAccessRole ? 'text-purple-600' : 'text-blue-600'}`} />
@@ -426,12 +426,12 @@ const RoleEditor = ({ role, onClose, onSave }) => {
 
         {/* Content */}
         <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar bg-white/95 dark:bg-slate-950/80">
+          <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar bg-white dark:bg-slate-950">
 
             {/* Role Details */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="space-y-4 lg:col-span-1">
-                <div className="bg-slate-50/80 dark:bg-slate-900/70 p-5 rounded-2xl border border-slate-200/70 dark:border-slate-800/70 space-y-4">
+                <div className="bg-slate-50 dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                   <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                     <Info className="w-4 h-4 text-blue-500" /> Role Details
                   </h3>
@@ -535,7 +535,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           </div>
 
           {/* Footer Actions */}
-          <div className="p-4 border-t border-slate-200/70 dark:border-slate-800/70 bg-slate-50/70 dark:bg-slate-900/60 flex justify-between items-center shrink-0">
+          <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex justify-between items-center shrink-0">
             <div className="text-xs text-slate-400 hidden sm:block">
               Last updated: {new Date().toLocaleDateString()}
             </div>

@@ -311,20 +311,19 @@ function BlogEditor({ item, onClose, onSuccess }) {
 
     // ... (rest of component logic)
 
-    // Helper to render in portal
     const renderEditor = () => (
         <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[100] flex flex-col bg-background"
+            className="fixed inset-0 z-[100] flex flex-col bg-slate-50"
         >
             {/* 1. Blur Overlay Background - Optional visual depth */}
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white/50 to-blue-50/50 -z-10" />
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white/50 to-blue-50/50 pointer-events-none" />
 
             {/* 2. Top Navigation / Header */}
-            <div className="h-16 px-6 border-b border-white/60 bg-white/80 backdrop-blur-xl flex items-center justify-between shadow-sm z-50">
+            <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between shadow-sm z-50">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" onClick={onClose} className="hover:bg-slate-100/50 gap-2 pr-4 text-slate-600 rounded-full">
                         <ChevronLeft className="w-5 h-5" />
@@ -466,8 +465,8 @@ function BlogEditor({ item, onClose, onSuccess }) {
                         </div>
                     </ScrollArea>
 
-                    {/* Right: Sidebar (Settings) - Glassy */}
-                    <div className={`w-full lg:w-[380px] border-l border-white/60 bg-white/60 backdrop-blur-md h-full overflow-y-auto ${showMobileSettings ? 'fixed inset-0 z-[110] bg-white' : 'hidden lg:block'}`}>
+                    {/* Right: Sidebar (Settings) - Solid */}
+                    <div className={`w-full lg:w-[380px] border-l border-slate-200 bg-slate-50 h-full overflow-y-auto ${showMobileSettings ? 'fixed inset-0 z-[110] bg-white' : 'hidden lg:block'}`}>
                         {/* Mobile Sidebar Header */}
                         {showMobileSettings && (
                             <div className="flex items-center justify-between p-4 border-b lg:hidden">
@@ -486,14 +485,14 @@ function BlogEditor({ item, onClose, onSuccess }) {
                                 <h4 className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
                                     <FolderOpen className="w-4 h-4 text-indigo-500" /> Organization
                                 </h4>
-                                <div className="space-y-4 bg-white/50 p-4 rounded-xl border border-white/60 shadow-sm">
+                                <div className="space-y-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                     <div className="space-y-2">
                                         <Label className="text-slate-500 uppercase tracking-widest text-[11px] font-semibold pl-1">Category</Label>
                                         <Select
                                             value={formData.category_id}
                                             onValueChange={(val) => setFormData({ ...formData, category_id: val })}
                                         >
-                                            <SelectTrigger className="w-full bg-white/80 border-slate-200">
+                                            <SelectTrigger className="w-full bg-white border-slate-200">
                                                 <SelectValue placeholder="Select Category..." />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -516,7 +515,7 @@ function BlogEditor({ item, onClose, onSuccess }) {
                                 <h4 className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
                                     <Globe className="w-4 h-4 text-emerald-500" /> Visibility
                                 </h4>
-                                <div className="space-y-4 bg-white/50 p-4 rounded-xl border border-white/60 shadow-sm">
+                                <div className="space-y-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
                                             <Label className="text-sm">Publicly Visible</Label>
@@ -554,7 +553,7 @@ function BlogEditor({ item, onClose, onSuccess }) {
                                 <h4 className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
                                     <Share2 className="w-4 h-4 text-sky-500" /> Social
                                 </h4>
-                                <div className="bg-white/50 p-4 rounded-xl border border-white/60 shadow-sm space-y-4">
+                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
                                     <div className="space-y-2">
                                         <Label className="text-xs text-slate-500">OG Title</Label>
                                         <Input
