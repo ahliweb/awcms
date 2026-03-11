@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { FileUploader } from '@/components/dashboard/media/FileUploader';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { FolderClosed, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
+import { AlertCircle, FolderClosed, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSecureMediaSessionMaxAgeSeconds } from '@/lib/media';
 
@@ -12,6 +12,9 @@ function FilesHeaderActions({
   selectedCategoryName,
   handleSync,
   syncing,
+  edgeApiAvailable,
+  edgeApiMessage,
+  refreshEdgeApiHealth,
   navigate,
   basePath,
   isUploadOpen,
@@ -39,6 +42,19 @@ function FilesHeaderActions({
         >
           <RefreshCw className={cn('mr-2 h-4 w-4', syncing && 'animate-spin')} />
           {syncing ? 'Syncing...' : 'Sync Storage'}
+        </Button>
+      )}
+
+      {!showTrash && !edgeApiAvailable && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={refreshEdgeApiHealth}
+          className="h-10 rounded-xl border-amber-300 bg-amber-50 px-3 text-amber-900 shadow-sm hover:bg-amber-100"
+          title={edgeApiMessage || 'Cloudflare Edge API is unavailable'}
+        >
+          <AlertCircle className="mr-2 h-4 w-4" />
+          Check Edge API
         </Button>
       )}
 
@@ -70,7 +86,11 @@ function FilesHeaderActions({
       {!showTrash && (
         <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
           <DialogTrigger asChild>
-            <Button className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-sm hover:opacity-95">
+            <Button
+              className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-sm hover:opacity-95"
+              disabled={!edgeApiAvailable}
+              title={!edgeApiAvailable ? edgeApiMessage : undefined}
+            >
               <UploadCloud className="mr-2 h-4 w-4" />
               Upload Files
             </Button>
@@ -88,6 +108,12 @@ function FilesHeaderActions({
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4 space-y-4">
+              {!edgeApiAvailable && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-medium">Cloudflare Edge API unavailable</p>
+                  <p className="mt-1">{edgeApiMessage}</p>
+                </div>
+              )}
               <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
@@ -105,7 +131,7 @@ function FilesHeaderActions({
                   />
                 </div>
               </div>
-              <FileUploader onUpload={handleUpload} uploading={uploading} />
+              <FileUploader onUpload={handleUpload} uploading={uploading || !edgeApiAvailable} />
             </div>
           </DialogContent>
         </Dialog>

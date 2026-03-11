@@ -37,7 +37,19 @@ const FilesManager = () => {
   );
 
   // Use new statsLoading prop
-  const { uploadFile, uploading, syncFiles, syncing, stats, statsLoading, fetchCategories, createCategory } = useMedia();
+  const {
+    uploadFile,
+    uploading,
+    syncFiles,
+    syncing,
+    stats,
+    statsLoading,
+    fetchCategories,
+    createCategory,
+    edgeApiAvailable,
+    edgeApiMessage,
+    refreshEdgeApiHealth,
+  } = useMedia();
   const { toast } = useToast();
 
   const loadCategories = React.useCallback(async () => {
@@ -111,6 +123,9 @@ const FilesManager = () => {
       selectedCategoryName={selectedCategoryName}
       handleSync={handleSync}
       syncing={syncing}
+      edgeApiAvailable={edgeApiAvailable}
+      edgeApiMessage={edgeApiMessage}
+      refreshEdgeApiHealth={refreshEdgeApiHealth}
       navigate={navigate}
       basePath={basePath}
       isUploadOpen={isUploadOpen}
@@ -175,6 +190,9 @@ const FilesManager = () => {
               refreshTrigger={refreshTrigger}
               isTrashView={showTrash}
               categoryId={selectedCategory}
+              edgeApiAvailable={edgeApiAvailable}
+              edgeApiMessage={edgeApiMessage}
+              refreshEdgeApiHealth={refreshEdgeApiHealth}
             />
           </div>
         </div>

@@ -35,6 +35,8 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 app.use('*', cors())
 
+app.get('/health', (c) => c.json({ ok: true, service: 'awcms-edge' }))
+
 const getAuthedSupabase = (env: Bindings, token: string) => createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, {
   global: { headers: { Authorization: `Bearer ${token}` } }
 })

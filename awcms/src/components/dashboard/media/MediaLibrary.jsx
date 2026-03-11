@@ -44,7 +44,7 @@ const isAccessUrlExpired = (entry) => {
     return expiresAtMs <= Date.now() + 5000;
 };
 
-const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isTrashView = false, categoryId = null }) => {
+const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isTrashView = false, categoryId = null, edgeApiAvailable = true, edgeApiMessage = '', refreshEdgeApiHealth }) => {
     const { toast } = useToast();
     const { checkAccess, isPlatformAdmin } = usePermissions();
 
@@ -268,6 +268,15 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
     }, [fetchFiles, refreshTrigger]);
 
     const onDrop = useCallback(async (acceptedFiles, fileRejections) => {
+        if (!edgeApiAvailable) {
+            toast({
+                variant: 'destructive',
+                title: 'Cloudflare Edge API unavailable',
+                description: edgeApiMessage || 'Uploads require the Cloudflare Edge API to be running.',
+            });
+            return;
+        }
+
         // Handle rejections
         if (fileRejections?.length > 0) {
             fileRejections.forEach(({ file, errors }) => {
@@ -297,7 +306,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                 successCount++;
             } catch (err) {
                 console.error(`Failed to upload ${file.name}: `, err);
-                toast({ variant: 'destructive', title: 'Upload Failed', description: `Could not upload ${file.name} ` });
+                toast({ variant: 'destructive', title: 'Upload Failed', description: err.message || `Could not upload ${file.name}.` });
             }
         }
 
@@ -306,12 +315,13 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
             setUploadSessionBoundAccess(false);
             fetchFiles();
         }
-    }, [categoryId, fetchFiles, toast, canUpload, uploadFile, uploadSessionBoundAccess]);
+    }, [categoryId, edgeApiAvailable, edgeApiMessage, fetchFiles, toast, canUpload, uploadFile, uploadSessionBoundAccess]);
 
     // ... dropzone ...
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
         noClick: selectionMode,
+        disabled: !edgeApiAvailable,
         maxSize: 50 * 1024 * 1024, // 50MB
         accept: {
             'image/*': [],
@@ -651,6 +661,20 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                     )}
                 >
                     <input {...getInputProps()} />
+                    {!edgeApiAvailable && (
+                        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900">
+                            <p className="font-medium">Cloudflare Edge API unavailable</p>
+                            <p className="mt-1">{edgeApiMessage}</p>
+                            {refreshEdgeApiHealth && (
+                                <Button type="button" variant="outline" className="mt-3" onClick={(event) => {
+                                    event.stopPropagation();
+                                    refreshEdgeApiHealth();
+                                }}>
+                                    Retry connection
+                                </Button>
+                            )}
+                        </div>
+                    )}
                     {uploading ? (
                         <div className="flex flex-col items-center gap-2 text-primary">
                             <Loader2 className="w-8 h-8 animate-spin" />

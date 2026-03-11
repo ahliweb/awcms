@@ -10,8 +10,12 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import {
     buildMediaAccessApiUrl,
     buildMediaPublicUrl,
+    createEdgeApiUnavailableError,
+    fetchEdgeApi,
     getEdgeBaseUrl,
+    getLocalEdgeStartupHint,
     getSecureMediaSessionMaxAgeSeconds,
+    isLocalEdgeRuntime,
     normalizeMediaKind,
 } from '@/lib/media';
 import { getCategoryTypesForModule } from '@/lib/taxonomy';
@@ -38,6 +42,8 @@ export function useMedia() {
         other_count: 0
     });
     const [statsLoading, setStatsLoading] = useState(true);
+    const [edgeApiAvailable, setEdgeApiAvailable] = useState(true);
+    const [edgeApiMessage, setEdgeApiMessage] = useState('');
 
     // Helper: Map old 'files' format to 'media_objects' where needed for components
     const formatMediaObject = (mo) => {
@@ -316,6 +322,29 @@ export function useMedia() {
         fetchStats();
     }, [fetchStats]);
 
+    const checkEdgeApiHealth = useCallback(async () => {
+        try {
+            const response = await fetchEdgeApi('/health', { method: 'GET' });
+            if (!response.ok) {
+                throw createEdgeApiUnavailableError('Media edge health check');
+            }
+            setEdgeApiAvailable(true);
+            setEdgeApiMessage('');
+            return true;
+        } catch (error) {
+            const message = isLocalEdgeRuntime()
+                ? getLocalEdgeStartupHint()
+                : (error.message || 'Cloudflare Edge API is unavailable.');
+            setEdgeApiAvailable(false);
+            setEdgeApiMessage(message);
+            return false;
+        }
+    }, []);
+
+    useEffect(() => {
+        checkEdgeApiHealth();
+    }, [checkEdgeApiHealth]);
+
     // Upload a single file via Edge API
     const uploadFile = useCallback(async (file, folder = '', categoryId = null, uploadOptions = {}) => {
         setUploading(true);
@@ -332,7 +361,7 @@ export function useMedia() {
             const sessionBoundAccess = Boolean(uploadOptions.sessionBoundAccess);
 
             // 1. Request Upload Session
-            const sessionRes = await fetch(`${EDGE_URL}/api/media/upload-session`, {
+            const sessionRes = await fetchEdgeApi('/api/media/upload-session', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -381,6 +410,8 @@ export function useMedia() {
 
             // Refresh stats after upload
             await fetchStats();
+            setEdgeApiAvailable(true);
+            setEdgeApiMessage('');
 
             return { 
                 success: true, 
@@ -389,6 +420,10 @@ export function useMedia() {
             };
         } catch (err) {
             console.error('Upload error:', err);
+            if (err?.name === 'EdgeApiUnavailableError') {
+                setEdgeApiAvailable(false);
+                setEdgeApiMessage(err.message);
+            }
             throw err;
         } finally {
             setUploading(false);
@@ -443,6 +478,9 @@ export function useMedia() {
     return {
         uploadFile,
         uploading,
+        edgeApiAvailable,
+        edgeApiMessage,
+        refreshEdgeApiHealth: checkEdgeApiHealth,
         syncFiles,
         syncing,
         stats,
