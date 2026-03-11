@@ -353,10 +353,14 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
         with:
           apiToken: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
           accountId: ${{ steps.cloudflare-account.outputs.account_id }}
           command: pages deploy awcms/dist --project-name=awcms-admin
+          packageManager: npm
+          wranglerVersion: '4.61.1'
 
   # ============================================
   # Lint & Build - SMANDAPBUN Portal (Astro)

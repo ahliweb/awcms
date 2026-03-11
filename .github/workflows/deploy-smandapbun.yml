@@ -61,11 +61,15 @@ jobs:
       - name: Deploy to Cloudflare Pages
         id: deploy
         uses: cloudflare/wrangler-action@v3
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
         with:
           apiToken: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           command: pages deploy dist --project-name=${{ env.SMANDAPBUN_PAGES_PROJECT }} --branch=main
+          packageManager: npm
+          wranglerVersion: '4.61.1'
 
       - name: Ensure production custom domains exist
         env:
