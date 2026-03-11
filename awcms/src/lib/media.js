@@ -8,16 +8,16 @@ const parsePositiveInt = (value, fallback) => {
 };
 
 export const getEdgeBaseUrl = () => {
+  const configuredUrl = import.meta.env.VITE_EDGE_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || '';
   const isLocalSupabase = supabaseUrl.includes('127.0.0.1') || supabaseUrl.includes('localhost');
 
   if (isLocalSupabase) {
     return LOCAL_EDGE_URL;
-  }
-
-  const configuredUrl = import.meta.env.VITE_EDGE_URL?.trim();
-  if (configuredUrl) {
-    return configuredUrl.replace(/\/$/, '');
   }
 
   return REMOTE_EDGE_URL;

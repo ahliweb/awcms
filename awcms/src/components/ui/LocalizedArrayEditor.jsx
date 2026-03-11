@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Plus, Trash2, GripVertical, Languages } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Languages, ChevronUp, ChevronDown } from 'lucide-react';
 
 /**
  * LocalizedArrayEditor - Editor for bilingual string arrays
@@ -49,6 +49,25 @@ export function LocalizedArrayEditor({
         });
     };
 
+    const handleMove = (index, direction) => {
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        const currentId = value.id || [];
+        const currentEn = value.en || [];
+        
+        if (newIndex < 0 || newIndex >= currentId.length) return;
+        
+        const newId = [...currentId];
+        const newEn = [...currentEn];
+        
+        [newId[index], newId[newIndex]] = [newId[newIndex], newId[index]];
+        [newEn[index], newEn[newIndex]] = [newEn[newIndex], newEn[index]];
+        
+        onChange({
+            id: newId,
+            en: newEn
+        });
+    };
+
     const items = value?.id || [];
     const itemCount = items.length;
 
@@ -88,23 +107,45 @@ export function LocalizedArrayEditor({
                     <TabsContent key={lang} value={lang} className="mt-2 space-y-2">
                         {items.map((_, index) => (
                             <div key={index} className="flex items-center gap-2">
-                                <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab" />
-                                <span className="text-xs text-muted-foreground w-6">{index + 1}.</span>
+                                <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab shrink-0" />
+                                <span className="text-xs text-muted-foreground w-6 shrink-0">{index + 1}.</span>
                                 <Input
                                     value={value[lang]?.[index] || ''}
                                     onChange={(e) => handleChange(lang, index, e.target.value)}
                                     placeholder={`${itemLabel} ${index + 1}`}
-                                    className="flex-1"
+                                    className="flex-1 min-w-0"
                                 />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleRemove(index)}
-                                    className="h-8 w-8 text-destructive hover:text-destructive"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={() => handleMove(index, 'up')}
+                                        disabled={index === 0}
+                                    >
+                                        <ChevronUp className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={() => handleMove(index, 'down')}
+                                        disabled={index === itemCount - 1}
+                                    >
+                                        <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleRemove(index)}
+                                        className="h-8 w-8 text-destructive hover:text-destructive"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         ))}
                         {itemCount === 0 && (

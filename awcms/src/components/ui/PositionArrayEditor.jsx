@@ -231,6 +231,17 @@ export function StaffArrayEditor({
         onChange(updated);
     };
 
+    const moveItem = (index, direction) => {
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= value.length) return;
+        const updated = [...value];
+        [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+        onChange(updated);
+        
+        if (expandedIndex === index) setExpandedIndex(newIndex);
+        else if (expandedIndex === newIndex) setExpandedIndex(index);
+    };
+
     return (
         <div className={`space-y-3 ${className}`}>
             <div className="flex items-center justify-between">
@@ -248,24 +259,45 @@ export function StaffArrayEditor({
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="space-y-2">
                     {value.map((item, index) => (
                         <Card key={index} className="overflow-hidden">
                             <div
-                                className="p-3 cursor-pointer hover:bg-muted/50"
+                                className="flex items-center gap-2 p-3 cursor-pointer hover:bg-muted/50"
                                 onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
                             >
-                                <div className="flex items-start gap-3">
-                                    <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center text-lg font-medium">
-                                        {item.name?.charAt(0) || '?'}
+                                <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center text-base font-medium shrink-0">
+                                    {item.name?.charAt(0) || '?'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-medium truncate">{item.name || '(No name)'}</div>
+                                    <div className="text-sm text-muted-foreground truncate">
+                                        {item.role && <span className="text-primary mr-2">{item.role}</span>}
+                                        {showSubject && item.subject && <span>{item.subject}</span>}
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="font-medium truncate">{item.name || '(No name)'}</div>
-                                        {item.role && <div className="text-sm text-primary truncate">{item.role}</div>}
-                                        {showSubject && item.subject && (
-                                            <div className="text-sm text-muted-foreground truncate">{item.subject}</div>
-                                        )}
-                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={(e) => { e.stopPropagation(); moveItem(index, 'up'); }}
+                                        disabled={index === 0}
+                                    >
+                                        <ChevronUp className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={(e) => { e.stopPropagation(); moveItem(index, 'down'); }}
+                                        disabled={index === value.length - 1}
+                                    >
+                                        <ChevronDown className="h-4 w-4" />
+                                    </Button>
                                     <Button
                                         type="button"
                                         variant="ghost"
@@ -279,12 +311,13 @@ export function StaffArrayEditor({
                             </div>
 
                             {expandedIndex === index && (
-                                <CardContent className="border-t pt-4 space-y-3">
+                                <CardContent className="border-t pt-4 space-y-4">
                                     <div>
                                         <Label>Name</Label>
                                         <Input
                                             value={item.name || ''}
                                             onChange={(e) => handleChange(index, 'name', e.target.value)}
+                                            placeholder="Full name"
                                         />
                                     </div>
                                     <div>

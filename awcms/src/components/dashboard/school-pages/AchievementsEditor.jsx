@@ -1,4 +1,5 @@
-import { Plus, Trash2, Trophy } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Trash2, Trophy, GripVertical, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ const ACHIEVEMENT_CATEGORIES = [
 
 function AchievementsEditor({ data = {}, updateField, updateTopLevel }) {
   const items = data?.items || [];
+  const [expandedIndex, setExpandedIndex] = useState(null);
 
   const handleItemsChange = (newItems) => {
     updateTopLevel('items', newItems);
@@ -45,6 +47,7 @@ function AchievementsEditor({ data = {}, updateField, updateTopLevel }) {
         image: '',
       },
     ]);
+    setExpandedIndex(items.length);
   };
 
   const updateItem = (index, field, value) => {
@@ -56,6 +59,18 @@ function AchievementsEditor({ data = {}, updateField, updateTopLevel }) {
 
   const removeItem = (index) => {
     handleItemsChange(items.filter((_, i) => i !== index));
+    if (expandedIndex === index) setExpandedIndex(null);
+  };
+
+  const moveItem = (index, direction) => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= items.length) return;
+    const updated = [...items];
+    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+    handleItemsChange(updated);
+    
+    if (expandedIndex === index) setExpandedIndex(newIndex);
+    else if (expandedIndex === newIndex) setExpandedIndex(index);
   };
 
   return (
@@ -94,30 +109,59 @@ function AchievementsEditor({ data = {}, updateField, updateTopLevel }) {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
+          <div className="space-y-2">
             {items.map((item, index) => (
-              <Card key={item.id || index}>
-                <CardHeader className="flex flex-row items-start justify-between pb-2">
-                  <div>
-                    <CardTitle className="text-base">
-                      {item.title?.id || item.title?.en || `Achievement ${index + 1}`}
-                    </CardTitle>
-                    <CardDescription>
-                      {item.year && `${item.year} · `}
-                      {ACHIEVEMENT_LEVELS.find((l) => l.value === item.level)?.label || ''}
-                      {item.category && ` · ${ACHIEVEMENT_CATEGORIES.find((c) => c.value === item.category)?.label || ''}`}
-                    </CardDescription>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-destructive"
-                    onClick={() => removeItem(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              <Card key={item.id || index} className="overflow-hidden">
+                <div
+                    className="flex items-center gap-2 p-3 cursor-pointer hover:bg-muted/50"
+                    onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                >
+                    <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">
+                            {item.title?.id || item.title?.en || `Achievement ${index + 1}`}
+                        </div>
+                        <div className="text-sm text-muted-foreground truncate">
+                            {item.year && `${item.year} · `}
+                            {ACHIEVEMENT_LEVELS.find((l) => l.value === item.level)?.label || ''}
+                            {item.category && ` · ${ACHIEVEMENT_CATEGORIES.find((c) => c.value === item.category)?.label || ''}`}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => { e.stopPropagation(); moveItem(index, 'up'); }}
+                            disabled={index === 0}
+                        >
+                            <ChevronUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => { e.stopPropagation(); moveItem(index, 'down'); }}
+                            disabled={index === items.length - 1}
+                        >
+                            <ChevronDown className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={(e) => { e.stopPropagation(); removeItem(index); }}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+
+                {expandedIndex === index && (
+                <CardContent className="border-t pt-4 space-y-4">
                   <LocalizedInput
                     label="Achievement Title"
                     value={item.title}
@@ -179,6 +223,7 @@ function AchievementsEditor({ data = {}, updateField, updateTopLevel }) {
                     onChange={(value) => updateItem(index, 'image', value)}
                   />
                 </CardContent>
+                )}
               </Card>
             ))}
           </div>

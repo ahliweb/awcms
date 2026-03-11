@@ -318,7 +318,7 @@ function BlogEditor({ item, onClose, onSuccess }) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[100] flex flex-col bg-slate-50/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex flex-col bg-background"
         >
             {/* 1. Blur Overlay Background - Optional visual depth */}
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white/50 to-blue-50/50 -z-10" />

@@ -6,6 +6,8 @@ import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell
 import { useSettingsCollection } from '@/components/dashboard/settings/useSettingsManager';
 import SchoolPagesTabs from '@/components/dashboard/school-pages/SchoolPagesTabs';
 import { SCHOOL_PAGE_TABS, SETTINGS_KEYS } from '@/components/dashboard/school-pages/constants';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
+import { useTenant } from '@/contexts/TenantContext';
 
 const DEFAULT_SCHOOL_PAGE_DATA = SCHOOL_PAGE_TABS.reduce((acc, tab) => {
   acc[tab.id] = {};
@@ -16,6 +18,7 @@ function SchoolPagesManager() {
   const navigate = useNavigate();
   const { '*': splat } = useParams();
   const { toast } = useToast();
+  const { currentTenant } = useTenant();
   const activeTab = SCHOOL_PAGE_TABS.some((tab) => tab.id === splat) ? splat : 'profile';
 
   const settings = useSettingsCollection({
@@ -27,6 +30,19 @@ function SchoolPagesManager() {
     try {
       await settings.save();
       toast({ title: 'Saved', description: 'School pages updated successfully.' });
+      
+      // Auto-deploy after saving
+      try {
+        if (currentTenant?.id) {
+          await triggerPublicRebuild({
+            tenantId: currentTenant.id,
+            resource: 'school_pages',
+            action: 'update',
+          });
+        }
+      } catch (rebuildError) {
+        console.warn('Public rebuild trigger failed:', rebuildError);
+      }
     } catch (error) {
       toast({ variant: 'destructive', title: 'Save failed', description: error.message });
     }
@@ -42,10 +58,23 @@ function SchoolPagesManager() {
   };
 
   const handleDeploy = async () => {
-    toast({ 
-      title: 'Deployment Triggered', 
-      description: 'The public site rebuild process has been initiated successfully.' 
-    });
+    try {
+      if (currentTenant?.id) {
+        await triggerPublicRebuild({
+          tenantId: currentTenant.id,
+          resource: 'school_pages',
+          action: 'deploy',
+        });
+        toast({ 
+          title: 'Deployment Triggered', 
+          description: 'The public site rebuild process has been initiated successfully.' 
+        });
+      } else {
+        throw new Error('No active tenant context found.');
+      }
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Deploy failed', description: error.message || 'Failed to trigger rebuild.' });
+    }
   };
 
   return (
