@@ -40,7 +40,7 @@ function TenantEditorDialog({
 }) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden border-border/60 bg-background/95 flex flex-col">
+			<DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden border-border/60 flex flex-col">
 				<DialogHeader>
 					<DialogTitle>{editingTenant ? 'Edit Tenant' : 'New Tenant'}</DialogTitle>
 					<DialogDescription>Configure tenant details and subscription.</DialogDescription>
@@ -80,7 +80,7 @@ function TenantEditorDialog({
 									value={formData.parent_tenant_id || 'none'}
 									onValueChange={(value) => setFormData({ ...formData, parent_tenant_id: value === 'none' ? '' : value })}
 								>
-									<SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+									<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="none">None (Top-Level)</SelectItem>
 										{tenants
@@ -97,7 +97,7 @@ function TenantEditorDialog({
 									value={formData.role_inheritance_mode}
 									onValueChange={(value) => setFormData({ ...formData, role_inheritance_mode: value })}
 								>
-									<SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+									<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="auto">Auto Inherit</SelectItem>
 										<SelectItem value="linked">Linked Only</SelectItem>
@@ -133,7 +133,7 @@ function TenantEditorDialog({
 							<div className="grid gap-2">
 								<Label>Status</Label>
 								<Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-									<SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+									<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="active">Active</SelectItem>
 										<SelectItem value="suspended">Suspended</SelectItem>
@@ -144,7 +144,7 @@ function TenantEditorDialog({
 							<div className="grid gap-2">
 								<Label>Subscription</Label>
 								<Select value={formData.subscription_tier} onValueChange={(value) => setFormData({ ...formData, subscription_tier: value })}>
-									<SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+									<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="free">Free</SelectItem>
 										<SelectItem value="pro">Pro</SelectItem>
@@ -179,7 +179,7 @@ function TenantEditorDialog({
 								<div className="grid gap-2">
 									<Label>Currency</Label>
 									<Select value={formData.currency} onValueChange={(value) => setFormData({ ...formData, currency: value })}>
-										<SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+										<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
 										<SelectContent>
 											<SelectItem value="IDR">IDR (Rupiah)</SelectItem>
 											<SelectItem value="USD">USD (Dollar)</SelectItem>
@@ -192,7 +192,7 @@ function TenantEditorDialog({
 								<div className="grid gap-2">
 									<Label>Cycle</Label>
 									<Select value={formData.billing_cycle} onValueChange={(value) => setFormData({ ...formData, billing_cycle: value })}>
-										<SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+										<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
 										<SelectContent>
 											<SelectItem value="monthly">Monthly</SelectItem>
 											<SelectItem value="yearly">Yearly</SelectItem>
@@ -205,7 +205,7 @@ function TenantEditorDialog({
 							<div className="grid gap-2 mt-4">
 								<Label className="flex items-center gap-1"><Globe className="w-3 h-3 text-muted-foreground" /> Default Language</Label>
 								<Select value={formData.locale} onValueChange={(value) => setFormData({ ...formData, locale: value })}>
-									<SelectTrigger className="max-w-[200px] bg-background border-input"><SelectValue /></SelectTrigger>
+									<SelectTrigger className="max-w-[200px] border-input"><SelectValue /></SelectTrigger>
 									<SelectContent>
 										<SelectItem value="id">🇮🇩 Bahasa Indonesia</SelectItem>
 										<SelectItem value="en">🇺🇸 English</SelectItem>
@@ -241,7 +241,7 @@ function TenantEditorDialog({
 												value={rule.share_mode}
 												onValueChange={(value) => setResourceRules((previous) => previous.map((item) => item.resource_key === rule.resource_key ? { ...item, share_mode: value } : item))}
 											>
-												<SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+												<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
 												<SelectContent>
 													<SelectItem value="isolated">Isolated</SelectItem>
 													<SelectItem value="shared_descendants">Share to Descendants</SelectItem>
@@ -253,7 +253,7 @@ function TenantEditorDialog({
 												value={rule.access_mode}
 												onValueChange={(value) => setResourceRules((previous) => previous.map((item) => item.resource_key === rule.resource_key ? { ...item, access_mode: value } : item))}
 											>
-												<SelectTrigger className="bg-background border-input"><SelectValue /></SelectTrigger>
+												<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
 												<SelectContent>
 													<SelectItem value="read">Read Only</SelectItem>
 													<SelectItem value="write">Write Only</SelectItem>
@@ -286,7 +286,7 @@ function TenantEditorDialog({
 										value={formData.notes}
 										onChange={(event) => setFormData({ ...formData, notes: event.target.value })}
 										placeholder="Internal notes about this tenant..."
-										className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+										className="flex min-h-[80px] w-full rounded-md border border-input px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
 									/>
 								</div>
 							</div>

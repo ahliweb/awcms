@@ -19,7 +19,7 @@ function MenuPermissionsDialog({
 }) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-md border-border/60 bg-background/95">
+			<DialogContent className="max-w-md border-border/60">
 				<DialogHeader>
 					<DialogTitle>Manage Access: {selectedMenu?.label}</DialogTitle>
 					<DialogDescription>

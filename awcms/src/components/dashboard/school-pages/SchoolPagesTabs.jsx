@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SCHOOL_PAGE_TABS } from '@/components/dashboard/school-pages/constants';
 import ProfileEditor from '@/components/dashboard/school-pages/ProfileEditor';
@@ -24,12 +25,62 @@ const EDITORS = {
   contact: ContactEditor,
 };
 
+/**
+ * ScopedEditorWrapper — wraps an editor component and provides
+ * scoped updateField / updateTopLevel helpers that automatically
+ * target the correct section within the settings collection.
+ *
+ * updateField(subKey, field, value)  →  settings.updateField(section, subKey, { ...prev[subKey], [field]: value })
+ *   Actually: rewrites the section so that section.subKey.field = value
+ *
+ * updateTopLevel(subKey, value)      →  settings.updateSection(section, { ...prev, [subKey]: value })
+ *   Replaces an entire sub-key within the section
+ */
+function ScopedEditorWrapper({ EditorComponent, section, data, updateField, updateSection }) {
+  const sectionData = data?.[section] || {};
+
+  // updateField(subKey, field, value) → sets sectionData[subKey][field] = value
+  const scopedUpdateField = useCallback(
+    (subKey, field, value) => {
+      const prev = data?.[section] || {};
+      updateSection(section, {
+        ...prev,
+        [subKey]: {
+          ...(prev[subKey] || {}),
+          [field]: value,
+        },
+      });
+    },
+    [data, section, updateSection]
+  );
+
+  // updateTopLevel(subKey, value) → sets sectionData[subKey] = value
+  const scopedUpdateTopLevel = useCallback(
+    (subKey, value) => {
+      const prev = data?.[section] || {};
+      updateSection(section, {
+        ...prev,
+        [subKey]: value,
+      });
+    },
+    [data, section, updateSection]
+  );
+
+  return (
+    <EditorComponent
+      data={sectionData}
+      updateField={scopedUpdateField}
+      updateTopLevel={scopedUpdateTopLevel}
+    />
+  );
+}
+
 function SchoolPagesTabs({
   activeTab,
   navigate,
   data,
   updateField,
-  updateTopLevel,
+  updateSection,
 }) {
   return (
     <Tabs
@@ -55,10 +106,12 @@ function SchoolPagesTabs({
         const EditorComponent = EDITORS[tab.id];
         return (
           <TabsContent key={tab.id} value={tab.id} className="mt-6 space-y-6">
-            <EditorComponent
-              data={data[tab.id]}
+            <ScopedEditorWrapper
+              EditorComponent={EditorComponent}
+              section={tab.id}
+              data={data}
               updateField={updateField}
-              updateTopLevel={updateTopLevel}
+              updateSection={updateSection}
             />
           </TabsContent>
         );

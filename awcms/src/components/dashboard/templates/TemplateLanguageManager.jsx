@@ -55,7 +55,7 @@ const TemplateLanguageManager = () => {
 									<Plus className="mr-2 h-4 w-4" /> Add Translation
 								</Button>
 							</DialogTrigger>
-							<DialogContent className="border-border/60 bg-background/95">
+							<DialogContent className="border-border/60">
 								<AddTranslationForm onClose={() => setIsAddOpen(false)} onSave={updateTemplateString} />
 							</DialogContent>
 						</Dialog>
@@ -69,7 +69,7 @@ const TemplateLanguageManager = () => {
 					placeholder="Search keys or values..."
 					value={searchQuery}
 					onChange={(event) => setSearchQuery(event.target.value)}
-					className="h-10 rounded-xl border-border/70 bg-background pl-9"
+					className="h-10 rounded-xl border-border/70 pl-9"
 				/>
 			</div>
 

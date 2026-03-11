@@ -1,7 +1,5 @@
-import { useMemo } from 'react';
 import { Building2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/components/ui/use-toast';
 import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell';
 import { useSettingsCollection } from '@/components/dashboard/settings/useSettingsManager';
@@ -24,18 +22,6 @@ function SchoolPagesManager() {
     initialValue: DEFAULT_SCHOOL_PAGE_DATA,
   });
 
-  const preSections = useMemo(
-    () => [
-      <Alert key="school-pages-warning">
-        <AlertTitle>Legacy storage warning</AlertTitle>
-        <AlertDescription>
-          The School Pages surface now uses the canonical `school_pages` route, but the stored section records still use legacy `page_*` keys during the current transition window.
-        </AlertDescription>
-      </Alert>,
-    ],
-    []
-  );
-
   const handleSave = async () => {
     try {
       await settings.save();
@@ -54,14 +40,6 @@ function SchoolPagesManager() {
     }
   };
 
-  const updateField = (section, field, value) => {
-    settings.updateField(section, field, value);
-  };
-
-  const updateTopLevel = (section, value) => {
-    settings.updateSection(section, value);
-  };
-
   return (
     <SettingsPageShell
       requiredPermission={['tenant.school_pages.read', 'platform.school_pages.read']}
@@ -75,18 +53,14 @@ function SchoolPagesManager() {
       saving={settings.saving}
       hasChanges={settings.hasChanges}
     >
-      <div className="space-y-6">
-        {preSections}
-
-        <div className="rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm">
-          <SchoolPagesTabs
-            activeTab={activeTab}
-            navigate={navigate}
-            data={settings.value || DEFAULT_SCHOOL_PAGE_DATA}
-            updateField={updateField}
-            updateTopLevel={updateTopLevel}
-          />
-        </div>
+      <div className="rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm">
+        <SchoolPagesTabs
+          activeTab={activeTab}
+          navigate={navigate}
+          data={settings.value || DEFAULT_SCHOOL_PAGE_DATA}
+          updateField={settings.updateField}
+          updateSection={settings.updateSection}
+        />
       </div>
     </SettingsPageShell>
   );

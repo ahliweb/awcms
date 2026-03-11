@@ -24,7 +24,7 @@ function FilesCategoriesPanel({
               <FolderPlus className="h-4 w-4" />
             </Button>
           </DialogTrigger>
-          <DialogContent className="border-border/60 bg-background/95">
+          <DialogContent className="border-border/60">
             <DialogHeader>
               <DialogTitle>Create Category</DialogTitle>
               <DialogDescription>Add a new category to organize your files.</DialogDescription>

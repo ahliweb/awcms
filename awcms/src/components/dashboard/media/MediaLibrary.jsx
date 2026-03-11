@@ -480,7 +480,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                     <div className="relative max-w-xl">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            className="h-10 rounded-xl border-border/70 bg-background pl-9"
+                            className="h-10 rounded-xl border-border/70 pl-9"
                             placeholder="Search files..."
                             value={query}
                             onChange={e => setQuery(e.target.value)}
@@ -881,7 +881,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                         <select
                             value={itemsPerPage}
                             onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                            className="h-9 rounded-lg border border-border/70 bg-background px-3 py-1 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+                            className="h-9 rounded-lg border border-border/70 px-3 py-1 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
                         >
                             <option value={12}>12 / page</option>
                             <option value={24}>24 / page</option>
@@ -941,7 +941,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
             </AlertDialog>
 
             <Dialog open={Boolean(detailsFile)} onOpenChange={closeDetails}>
-                <DialogContent className="max-w-3xl border-border/60 bg-background/95">
+                <DialogContent className="max-w-3xl border-border/60">
                     <DialogHeader>
                         <DialogTitle>{canUpdate && !isTrashView ? 'Edit file details' : 'File details'}</DialogTitle>
                         <DialogDescription>

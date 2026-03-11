@@ -29,7 +29,7 @@ function MenuItemDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-[500px] border-border/60 bg-background/95">
+			<DialogContent className="sm:max-w-[500px] border-border/60">
 				<DialogHeader>
 					<DialogTitle>{editingMenu ? 'Edit Menu Item' : 'Create Menu Item'}</DialogTitle>
 					<DialogDescription>
@@ -42,7 +42,7 @@ function MenuItemDialog({
 							<Label htmlFor="menu-quick-select">Quick Select (Optional)</Label>
 							<select
 								id="menu-quick-select"
-								className="flex h-10 w-full rounded-md border border-border/70 bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+								className="flex h-10 w-full rounded-md border border-border/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
 								value={selectedModule}
 								onChange={(event) => onModuleSelect(event.target.value)}
 							>
@@ -62,7 +62,7 @@ function MenuItemDialog({
 						<Label htmlFor="menu-page-link">Link to Page (Optional)</Label>
 						<select
 							id="menu-page-link"
-							className="flex h-10 w-full rounded-md border border-border/70 bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+							className="flex h-10 w-full rounded-md border border-border/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
 							value={menuFormData.page_id || ''}
 							onChange={(event) => onPageSelect(event.target.value)}
 						>
@@ -87,7 +87,7 @@ function MenuItemDialog({
 							<Label htmlFor="menu-location">Location</Label>
 							<select
 								id="menu-location"
-								className="flex h-10 w-full rounded-md border border-border/70 bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+								className="flex h-10 w-full rounded-md border border-border/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
 								value={menuFormData.location || currentLocation}
 								onChange={(event) => setMenuFormData({ ...menuFormData, location: event.target.value })}
 							>
@@ -135,7 +135,7 @@ function MenuItemDialog({
 						<Label htmlFor="menu-parent">Parent Menu</Label>
 						<select
 							id="menu-parent"
-							className="flex h-10 w-full rounded-md border border-border/70 bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+							className="flex h-10 w-full rounded-md border border-border/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
 							value={menuFormData.parent_id || ''}
 							onChange={(event) => setMenuFormData({ ...menuFormData, parent_id: event.target.value || null })}
 						>

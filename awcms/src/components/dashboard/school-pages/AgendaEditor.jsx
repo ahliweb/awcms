@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,10 +6,9 @@ import { Label } from '@/components/ui/label';
 import LocalizedInput from '@/components/ui/LocalizedInput';
 
 function AgendaEditor({ data = {}, updateTopLevel }) {
-  const [events, setEvents] = useState(data?.events || []);
+  const events = data?.events || [];
 
   const handleEventsChange = (newEvents) => {
-    setEvents(newEvents);
     updateTopLevel('events', newEvents);
   };
 
@@ -30,9 +28,9 @@ function AgendaEditor({ data = {}, updateTopLevel }) {
   };
 
   const updateEvent = (index, field, value) => {
-    const updated = events.map((event, eventIndex) => (
+    const updated = events.map((event, eventIndex) =>
       eventIndex === index ? { ...event, [field]: value } : event
-    ));
+    );
     handleEventsChange(updated);
   };
 

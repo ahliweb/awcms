@@ -75,7 +75,7 @@ function FilesHeaderActions({
               Upload Files
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-xl border-border/60 bg-background/95">
+          <DialogContent className="sm:max-w-xl border-border/60">
             <DialogHeader>
               <DialogTitle>Upload Files</DialogTitle>
               <DialogDescription>

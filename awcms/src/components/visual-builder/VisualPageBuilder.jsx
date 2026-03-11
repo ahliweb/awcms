@@ -806,7 +806,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             </div>
 
             <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-                <DialogContent className="sm:max-w-[500px] bg-background/95 backdrop-blur-xl border-border shadow-2xl">
+                <DialogContent className="sm:max-w-[500px] shadow-2xl">
                     <DialogHeader className="pb-4 border-b border-border">
                         <DialogTitle className="text-xl font-bold text-foreground tracking-tight">
                             {mode === 'blog' ? 'Blog Settings' : 'Page Settings'}

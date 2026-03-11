@@ -132,7 +132,7 @@ const TemplatePartsList = () => {
 										<Plus className="mr-2 h-4 w-4" /> New Part
 									</Button>
 								</DialogTrigger>
-								<DialogContent className="border-border/60 bg-background/95">
+								<DialogContent className="border-border/60">
 									<DialogHeader>
 										<DialogTitle>Create Template Part</DialogTitle>
 										<DialogDescription>

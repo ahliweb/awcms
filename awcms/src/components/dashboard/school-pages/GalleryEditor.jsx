@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,10 +5,9 @@ import LocalizedInput from '@/components/ui/LocalizedInput';
 import ImageUpload from '@/components/ui/ImageUpload';
 
 function GalleryEditor({ data = {}, updateTopLevel }) {
-  const [albums, setAlbums] = useState(data?.albums || []);
+  const albums = data?.albums || [];
 
   const handleAlbumsChange = (newAlbums) => {
-    setAlbums(newAlbums);
     updateTopLevel('albums', newAlbums);
   };
 
@@ -27,9 +25,9 @@ function GalleryEditor({ data = {}, updateTopLevel }) {
   };
 
   const updateAlbum = (index, field, value) => {
-    const updated = albums.map((album, albumIndex) => (
+    const updated = albums.map((album, albumIndex) =>
       albumIndex === index ? { ...album, [field]: value } : album
-    ));
+    );
     handleAlbumsChange(updated);
   };
 
