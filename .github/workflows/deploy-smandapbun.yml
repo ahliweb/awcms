@@ -68,6 +68,7 @@ jobs:
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           command: pages deploy dist --project-name=${{ env.SMANDAPBUN_PAGES_PROJECT }} --branch=main
+          workingDirectory: awcms-public/smandapbun
           packageManager: npm
           wranglerVersion: '4.61.1'
 
