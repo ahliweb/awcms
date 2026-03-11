@@ -1,26 +1,31 @@
-const LOCAL_EDGE_URL = 'http://127.0.0.1:8787';
-const REMOTE_EDGE_URL = 'https://awcms-edge.ahliweb.workers.dev';
-const DEFAULT_SECURE_MEDIA_SESSION_MAX_AGE_SECONDS = 900;
-
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
+const getEnvValue = (key) => {
+  const value = import.meta.env[key];
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const getConfiguredEdgeFallbackUrl = () => {
+  const supabaseUrl = getEnvValue('VITE_SUPABASE_URL');
+  const isLocalSupabase = supabaseUrl.includes('127.0.0.1') || supabaseUrl.includes('localhost');
+
+  if (isLocalSupabase) {
+    return getEnvValue('VITE_LOCAL_EDGE_URL');
+  }
+
+  return getEnvValue('VITE_REMOTE_EDGE_URL');
+};
+
 export const getEdgeBaseUrl = () => {
-  const configuredUrl = import.meta.env.VITE_EDGE_URL?.trim();
+  const configuredUrl = getEnvValue('VITE_EDGE_URL');
   if (configuredUrl) {
     return configuredUrl.replace(/\/$/, '');
   }
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || '';
-  const isLocalSupabase = supabaseUrl.includes('127.0.0.1') || supabaseUrl.includes('localhost');
-
-  if (isLocalSupabase) {
-    return LOCAL_EDGE_URL;
-  }
-
-  return REMOTE_EDGE_URL;
+  return getConfiguredEdgeFallbackUrl().replace(/\/$/, '');
 };
 
 export const buildMediaPublicUrl = (storageKey) => {
@@ -43,8 +48,8 @@ export const buildMediaAccessApiUrl = (mediaId) => {
 };
 
 export const getSecureMediaSessionMaxAgeSeconds = () => parsePositiveInt(
-  import.meta.env.VITE_MEDIA_SECURE_SESSION_MAX_AGE_SECONDS,
-  DEFAULT_SECURE_MEDIA_SESSION_MAX_AGE_SECONDS,
+  getEnvValue('VITE_MEDIA_SECURE_SESSION_MAX_AGE_SECONDS'),
+  parsePositiveInt(getEnvValue('VITE_DEFAULT_SECURE_MEDIA_SESSION_MAX_AGE_SECONDS'), 900),
 );
 
 export const isSessionBoundMedia = (file) => Boolean(file?.session_bound_access);
