@@ -70,6 +70,16 @@ export function createClientFromEnv<TClient>(
         (typeof import.meta !== 'undefined' ? (import.meta as any).env?.PUBLIC_EDGE_URL : '') ||
         (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_EDGE_URL : '') ||
         '';
+    const workerApiTimeoutMs = Number.parseInt(
+        String(
+            env.PUBLIC_EDGE_API_TIMEOUT_MS ||
+            env.VITE_EDGE_API_TIMEOUT_MS ||
+            (typeof import.meta !== 'undefined' ? (import.meta as any).env?.PUBLIC_EDGE_API_TIMEOUT_MS : '') ||
+            (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_EDGE_API_TIMEOUT_MS : '') ||
+            '',
+        ),
+        10,
+    ) || 8000;
 
     if ((client as any).functions) {
         const originalFunctions = (client as any).functions;
@@ -112,13 +122,23 @@ export function createClientFromEnv<TClient>(
                             error: new Error(`Missing fetch implementation for Worker API route: ${functionName}`),
                         };
                     }
-                    
+
+                    const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                    const timeoutId = abortController
+                        ? globalThis.setTimeout(() => abortController.abort(new Error(`Worker API timeout after ${workerApiTimeoutMs}ms`)), workerApiTimeoutMs)
+                        : null;
+                     
                     const response = await fetchFn(url, {
                         method: invokeOptions.method || 'POST',
                         headers: reqHeaders,
                         body: body,
+                        signal: abortController?.signal,
                     });
-                    
+
+                    if (timeoutId) {
+                        globalThis.clearTimeout(timeoutId);
+                    }
+                     
                     const isRelayError = response.headers.get('x-relay-error') === 'true';
                     if (isRelayError) {
                          throw new Error(await response.text());

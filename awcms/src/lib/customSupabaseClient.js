@@ -95,6 +95,7 @@ const customSupabaseClient = createClient(supabaseUrl, supabasePublishableKey, {
 // Route Supabase-style function calls to the Cloudflare Worker API.
 const originalFunctions = customSupabaseClient.functions;
 const edgeUrl = import.meta.env.VITE_EDGE_URL;
+const workerApiTimeoutMs = Number.parseInt(import.meta.env.VITE_EDGE_API_TIMEOUT_MS || '', 10) || 8000;
 console.log('[WorkerAPI] Initializing Cloudflare Worker API bridge. VITE_EDGE_URL:', edgeUrl);
 
 const edgeFunctionsProxy = {
@@ -126,11 +127,21 @@ const edgeFunctionsProxy = {
         }
 
         try {
+            const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timeoutId = abortController
+                ? window.setTimeout(() => abortController.abort(new Error(`Worker API timeout after ${workerApiTimeoutMs}ms`)), workerApiTimeoutMs)
+                : null;
+
             const response = await customFetch(url, {
                 method: invokeOptions.method || 'POST',
                 headers: headers,
                 body: body,
+                signal: abortController?.signal,
             });
+
+            if (timeoutId) {
+                window.clearTimeout(timeoutId);
+            }
             
             const isRelayError = response.headers.get('x-relay-error') === 'true';
             if (isRelayError) {
@@ -161,8 +172,11 @@ const edgeFunctionsProxy = {
                   console.error(`[WorkerAPI] Error from Worker route ${functionName}:`, error);
              }
 
-             return { data, error };
+              return { data, error };
         } catch (error) {
+            if (error?.name === 'AbortError') {
+                console.error(`[WorkerAPI] Request timeout for ${functionName} after ${workerApiTimeoutMs}ms`);
+            }
             console.error(`[WorkerAPI] Network/fetch error for ${functionName}:`, error);
             return { data: null, error };
         }

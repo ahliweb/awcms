@@ -183,8 +183,10 @@ const LoginPage = () => {
         // Check for hard errors vs. service unavailability
         const isNetworkFailure =
           verifyResponse.error instanceof TypeError ||
+          verifyResponse.error?.name === 'AbortError' ||
           verifyResponse.error?.message?.includes('Failed to fetch') ||
-          verifyResponse.error?.message?.includes('ERR_CONNECTION_REFUSED');
+          verifyResponse.error?.message?.includes('ERR_CONNECTION_REFUSED') ||
+          verifyResponse.error?.message?.includes('Worker API timeout');
         const is503 = verifyResponse.error?.message?.includes('503') ||
           verifyResponse.error?.status === 503 ||
           verifyResponse.error?.context?.status === 503;
