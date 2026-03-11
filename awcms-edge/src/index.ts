@@ -22,6 +22,7 @@ type Bindings = {
   GITHUB_REBUILD_REPO?: string
   GITHUB_REBUILD_EVENT_TYPE?: string
   SMANDAPBUN_REBUILD_WEBHOOK_SECRET?: string
+  TURNSTILE_SECRET_KEY?: string
 }
 
 type Variables = {
@@ -717,7 +718,7 @@ app.get('/public/sitemap', async (c) => {
 // Mailketing integration
 const MAILKETING_API = 'https://api.mailketing.co.id/api/v1';
 
-app.post('/api/mailketing', async (c) => {
+const handleMailketing = async (c: any) => {
   const apiToken = c.env.MAILKETING_API_TOKEN;
   if (!apiToken) {
     return c.json({ error: 'MAILKETING_API_TOKEN not configured' }, 500);
@@ -790,6 +791,333 @@ app.post('/api/mailketing', async (c) => {
   } catch (error: any) {
     return c.json({ error: error.message }, 500);
   }
+};
+
+app.post('/api/mailketing', handleMailketing);
+app.post('/functions/v1/mailketing', handleMailketing);
+
+// ---- SUPABASE EDGE FUNCTION MIGRATIONS ----
+
+app.post('/functions/v1/content-transform', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
+
+  const supabaseUrl = c.env.VITE_SUPABASE_URL;
+  const publishableKey = c.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  const callerClient = createClient(supabaseUrl, publishableKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const { data: authData, error: authError } = await callerClient.auth.getUser();
+  if (authError || !authData?.user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const tenantId = c.req.header('x-tenant-id');
+  if (!tenantId) return c.json({ error: 'Missing x-tenant-id header' }, 400);
+
+  const adminClient = getAdminSupabase(c.env);
+  const payload = await getJsonBody(c.req.raw);
+  if (!payload?.blog_id || !payload?.transformed) {
+    return c.json({ error: 'Missing blog_id or transformed content' }, 400);
+  }
+
+  const { data, error } = await adminClient
+    .from('blogs')
+    .update({
+      content: payload.transformed,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', payload.blog_id)
+    .eq('tenant_id', tenantId)
+    .is('deleted_at', null)
+    .select('id')
+    .single();
+
+  if (error) return c.json({ error: error.message }, 400);
+  if (!data) return c.json({ error: 'Blog not found or access denied' }, 404);
+
+  return c.json({ ok: true, id: data.id }, 200);
+});
+
+app.post('/functions/v1/mailketing-webhook', async (c) => {
+  try {
+    const supabase = getAdminSupabase(c.env);
+    const payload = await getJsonBody(c.req.raw) as any;
+    if (!payload) return c.json({ error: 'Invalid JSON' }, 400);
+
+    const type = String(payload.type);
+    const email = String(payload.email);
+
+    const eventTypeMap: Record<string, string> = {
+      'newsubscriber': 'subscribed',
+      'unsubscribe': 'unsubscribed',
+      'emailopen': 'opened',
+      'emailclick': 'clicked',
+      'bounce': 'bounced',
+    };
+    const eventType = eventTypeMap[type] || type;
+
+    const { error } = await supabase.from('email_logs').insert({
+      event_type: eventType,
+      recipient: email,
+      metadata: payload,
+    });
+
+    if (error) console.error('[Mailketing Webhook] DB Error:', error);
+
+    if (type === 'bounce' || type === 'unsubscribe') {
+      await supabase
+        .from('users')
+        .update({
+          email_verified: false,
+          metadata: {
+            email_status: type === 'bounce' ? 'bounced' : 'unsubscribed',
+            email_status_reason: payload.reason,
+            email_status_date: payload.date || new Date().toISOString(),
+          }
+        })
+        .eq('email', email);
+    }
+    return c.json({ status: 'success', event: eventType });
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+app.post('/functions/v1/verify-turnstile', async (c) => {
+  try {
+    const payload = await getJsonBody(c.req.raw) as any;
+    const token = payload?.token;
+    if (!token) return c.json({ success: false, error: 'Missing turnstile token' }, 400);
+
+    const secretKey = c.env.TURNSTILE_SECRET_KEY;
+    if (!secretKey) return c.json({ success: false, error: 'Server configuration error' }, 500);
+
+    const formData = new FormData();
+    formData.append('secret', secretKey);
+    formData.append('response', token);
+    const ip = c.req.header('cf-connecting-ip');
+    if (ip) formData.append('remoteip', ip);
+
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: formData,
+    });
+    const verifyResult = await res.json() as any;
+
+    if (verifyResult.success) {
+      return c.json({ success: true, ip });
+    } else {
+      return c.json({ success: false, error: 'Verification failed', codes: verifyResult['error-codes'] }, 400);
+    }
+  } catch (error: any) {
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+app.post('/functions/v1/manage-users', async (c) => {
+  try {
+    const supabaseAdmin = getAdminSupabase(c.env);
+    const body = await getJsonBody(c.req.raw) as any || {};
+    let { action, email, password, full_name, role_id, user_id, tenant_id, request_id, reason } = body;
+
+    // --- PUBLIC ACTIONS (No Auth Required) ---
+    if (action === 'submit_application') {
+      const turnstileToken = body.turnstileToken;
+      if (!turnstileToken) return c.json({ error: 'Security check required' }, 400);
+
+      const secretKey = c.env.TURNSTILE_SECRET_KEY;
+      if (!secretKey) return c.json({ error: 'Server configuration error' }, 500);
+
+      const formData = new FormData();
+      formData.append('secret', secretKey);
+      formData.append('response', turnstileToken);
+
+      const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        body: formData,
+      });
+      const verification = await res.json() as any;
+
+      if (!verification.success) return c.json({ error: 'Security check failed' }, 400);
+
+      if (!email || !full_name) return c.json({ error: 'Email and Full Name are required' }, 400);
+
+      const { data: existingUser } = await supabaseAdmin.from('users').select('id').eq('email', email).maybeSingle();
+      if (existingUser) return c.json({ error: 'Email already registered' }, 400);
+
+      const { data: existingRequest } = await supabaseAdmin.from('account_requests').select('status').eq('email', email).maybeSingle();
+      if (existingRequest && existingRequest.status !== 'rejected') return c.json({ error: 'Application already pending for this email' }, 400);
+
+      const { data: newRequest, error: insertError } = await supabaseAdmin
+        .from('account_requests')
+        .insert({
+          email,
+          full_name,
+          tenant_id: tenant_id || null,
+          status: 'pending_admin'
+        })
+        .select()
+        .single();
+      if (insertError) return c.json({ error: 'Failed to submit application' }, 500);
+
+      return c.json({ message: 'Application submitted successfully', id: newRequest.id }, 200);
+    }
+
+    // --- PROTECTED ACTIONS (Auth Required) ---
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader) return c.json({ error: 'Unauthorized: No authorization header provided' }, 401);
+
+    const token = authHeader.replace('Bearer ', '');
+    const hasServiceToken = token.startsWith('sb_secret_');
+    let requestingUser = null;
+
+    if (!hasServiceToken) {
+      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
+      if (authError || !authData?.user) return c.json({ error: 'Unauthorized: Invalid token' }, 401);
+      requestingUser = authData.user;
+    }
+
+    let roleName = 'service_key';
+    let requesterTenantId = tenant_id || null;
+    let isSuperAdmin = true;
+    let isAdmin = true;
+
+    if (requestingUser) {
+      const { data: userData, error: userDataError } = await supabaseAdmin
+        .from('users')
+        .select('role_id, tenant_id, role:roles!users_role_id_fkey(name, is_platform_admin, is_full_access, is_tenant_admin)')
+        .eq('id', requestingUser.id)
+        .single();
+
+      if (userDataError || !userData?.role) return c.json({ error: 'Failed to fetch user role' }, 500);
+
+      const r = Array.isArray(userData.role) ? userData.role[0] : userData.role as any;
+      roleName = r.name;
+      requesterTenantId = userData.tenant_id as string | null;
+      isSuperAdmin = Boolean(r.is_platform_admin || r.is_full_access);
+      isAdmin = isSuperAdmin || Boolean(r.is_tenant_admin);
+    }
+
+    if (!isAdmin) return c.json({ error: 'Forbidden: Insufficient privileges' }, 403);
+
+    let result = null;
+    switch (action) {
+      case 'approve_application_admin': {
+        if (!request_id) return c.json({ error: 'request_id required' }, 400);
+        const { data: reqData } = await supabaseAdmin.from('account_requests').select('*').eq('id', request_id).single();
+        if (!reqData) return c.json({ error: 'Request not found' }, 404);
+        if (!isSuperAdmin && reqData.tenant_id && reqData.tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+        const { error: updateError } = await supabaseAdmin
+          .from('account_requests')
+          .update({
+            status: 'pending_super_admin',
+            admin_approved_at: new Date().toISOString(),
+            admin_approved_by: requestingUser?.id ?? null
+          })
+          .eq('id', request_id);
+        if (updateError) throw updateError;
+        result = { message: 'Application approved by Admin' };
+        break;
+      }
+      case 'approve_application_super_admin': {
+        if (!isSuperAdmin) return c.json({ error: 'Forbidden: Platform admin only' }, 403);
+        if (!request_id) return c.json({ error: 'request_id required' }, 400);
+        const { data: reqData } = await supabaseAdmin.from('account_requests').select('*').eq('id', request_id).single();
+        if (!reqData) return c.json({ error: 'Request not found' }, 404);
+        const { data: invitedUser, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(reqData.email, {
+          data: { full_name: reqData.full_name, tenant_id: reqData.tenant_id }
+        });
+        if (inviteError) return c.json({ error: 'Failed to invite user' }, 500);
+        await supabaseAdmin.from('account_requests').update({
+          status: 'completed',
+          super_admin_approved_at: new Date().toISOString(),
+          super_admin_approved_by: requestingUser?.id ?? null
+        }).eq('id', request_id);
+        result = { message: 'Application approved and Invitation sent', user_id: invitedUser.user.id };
+        break;
+      }
+      case 'reject_application': {
+        if (!request_id) return c.json({ error: 'request_id required' }, 400);
+        const { data: reqData } = await supabaseAdmin.from('account_requests').select('tenant_id').eq('id', request_id).single();
+        if (!isSuperAdmin && reqData?.tenant_id && reqData.tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden' }, 403);
+        await supabaseAdmin.from('account_requests').update({
+          status: 'rejected',
+          rejection_reason: reason || 'No reason provided',
+          updated_at: new Date().toISOString()
+        }).eq('id', request_id);
+        result = { message: 'Application rejected' };
+        break;
+      }
+      case 'create': {
+        if (!email) return c.json({ error: 'Email is required' }, 400);
+        if (!password) return c.json({ error: 'Password is required' }, 400);
+        if (!isSuperAdmin) {
+          if (!requesterTenantId) return c.json({ error: 'Forbidden: no tenant context' }, 403);
+          if (tenant_id && tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden: Cannot create user for another tenant' }, 403);
+          tenant_id = requesterTenantId as any;
+        }
+        const { data: newAuthUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email, password, email_confirm: true, user_metadata: { full_name, tenant_id }
+        });
+        if (createError) return c.json({ error: 'Failed to create user: ' + createError.message }, 500);
+        result = { user: newAuthUser.user, message: 'User created successfully' };
+        break;
+      }
+      case 'invite': {
+        if (!email) return c.json({ error: 'Email is required' }, 400);
+        if (!isSuperAdmin) {
+          if (!requesterTenantId) return c.json({ error: 'Forbidden: no tenant context' }, 403);
+          if (tenant_id && tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden: Cannot invite user to another tenant' }, 403);
+          tenant_id = requesterTenantId as any;
+        }
+        const { data: invitedUser, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+          data: { full_name, tenant_id }
+        });
+        if (inviteError) return c.json({ error: 'Failed to invite user: ' + inviteError.message }, 500);
+        result = { user: invitedUser.user, message: 'User invited successfully' };
+        break;
+      }
+      case 'update': {
+        if (!user_id) return c.json({ error: 'user_id required' }, 400);
+        if (!isSuperAdmin) {
+          const { data: target } = await supabaseAdmin.from('users').select('tenant_id').eq('id', user_id).single();
+          if (target && target.tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden' }, 403);
+        }
+        const updates: any = { updated_at: new Date().toISOString() };
+        if (full_name) updates.full_name = full_name;
+        if (role_id) updates.role_id = role_id;
+        const { error: updateError } = await supabaseAdmin.from('users').update(updates).eq('id', user_id);
+        if (updateError) throw updateError;
+        result = { message: 'User updated successfully' };
+        break;
+      }
+      case 'delete': {
+        if (!user_id) return c.json({ error: 'user_id required' }, 400);
+        const { data: targetUser } = await supabaseAdmin.from('users').select('role_id, tenant_id').eq('id', user_id).single();
+        if (!isSuperAdmin && targetUser && targetUser.tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden' }, 403);
+        const { error: deleteError } = await supabaseAdmin.from('users').update({ deleted_at: new Date().toISOString() }).eq('id', user_id);
+        if (deleteError) throw deleteError;
+        result = { message: 'User deleted successfully' };
+        break;
+      }
+      default:
+        return c.json({ error: `Unknown action: ${action}` }, 400);
+    }
+    return c.json(result, 200);
+  } catch (error: any) {
+    return c.json({ error: error.message }, 400);
+  }
+});
+
+// redirect /functions/v1/serve-sitemap to /public/sitemap
+app.get('/functions/v1/serve-sitemap', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/public/sitemap';
+  return c.redirect(url.toString(), 301);
 });
 
 export default app

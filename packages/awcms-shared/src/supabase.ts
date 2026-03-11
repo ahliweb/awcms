@@ -58,11 +58,97 @@ export function createClientFromEnv<TClient>(
         return null;
     }
 
-    return createClient(credentials.url, credentials.key, {
+    const client = createClient(credentials.url, credentials.key, {
         global: {
             headers: { ...headers },
         },
     });
+
+    const edgeUrl =
+        env.PUBLIC_EDGE_URL ||
+        env.VITE_EDGE_URL ||
+        (typeof import.meta !== 'undefined' ? (import.meta as any).env?.PUBLIC_EDGE_URL : '') ||
+        (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_EDGE_URL : '') ||
+        '';
+
+    if (edgeUrl && (client as any).functions) {
+        const originalFunctions = (client as any).functions;
+        const originalInvoke = originalFunctions.invoke.bind(originalFunctions);
+        
+        const edgeFunctionsProxy = {
+            ...originalFunctions,
+            invoke: async (functionName: string, invokeOptions: any = {}) => {
+                const url = `${edgeUrl}/functions/v1/${functionName}`;
+                const reqHeaders = new Headers(invokeOptions.headers || {});
+                
+                Object.entries(headers).forEach(([k, v]) => reqHeaders.set(k, v));
+                
+                try {
+                    const { data: { session } } = await (client as any).auth.getSession();
+                    if (session?.access_token) {
+                        reqHeaders.set('Authorization', `Bearer ${session.access_token}`);
+                    }
+                } catch (e) {
+                    // Ignore auth errors here
+                }
+                
+                let body = invokeOptions.body;
+                if (body !== undefined && typeof body !== 'string') {
+                    body = JSON.stringify(body);
+                    reqHeaders.set('Content-Type', 'application/json');
+                }
+            
+                try {
+                    const fetchFn = (client as any).functions.fetch || (typeof fetch !== 'undefined' ? fetch : null);
+                    if (!fetchFn) return originalInvoke(functionName, invokeOptions);
+                    
+                    const response = await fetchFn(url, {
+                        method: invokeOptions.method || 'POST',
+                        headers: reqHeaders,
+                        body: body,
+                    });
+                    
+                    const isRelayError = response.headers.get('x-relay-error') === 'true';
+                    if (isRelayError) {
+                         throw new Error(await response.text());
+                    }
+            
+                    let responseType = invokeOptions.responseType || 'json';
+                    let data;
+                    let error = null;
+            
+                    if (response.ok) {
+                         if (responseType === 'json') {
+                              const contentType = response.headers.get('content-type');
+                              if (contentType && contentType.includes('application/json')) {
+                                   data = await response.json();
+                              } else {
+                                   data = await response.text();
+                              }
+                         } else if (responseType === 'arrayBuffer') {
+                              data = await response.arrayBuffer();
+                         } else if (responseType === 'blob') {
+                              data = await response.blob();
+                         } else {
+                              data = await response.text();
+                         }
+                    } else {
+                         error = await response.json().catch(() => ({ message: response.statusText }));
+                    }
+            
+                    return { data, error };
+                } catch (error) {
+                    return { data: null, error };
+                }
+            }
+        };
+
+        Object.defineProperty(client, 'functions', {
+            get: () => edgeFunctionsProxy
+        });
+    }
+
+    return client;
 }
 
 /**

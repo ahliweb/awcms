@@ -92,6 +92,89 @@ const customSupabaseClient = createClient(supabaseUrl, supabasePublishableKey, {
     },
 });
 
+// Proxy Edge Functions to Cloudflare Worker
+const originalFunctions = customSupabaseClient.functions;
+const originalInvoke = originalFunctions.invoke.bind(originalFunctions);
+const edgeUrl = import.meta.env.VITE_EDGE_URL;
+console.log('[SupabaseProxy] Initializing Edge Functions proxy. VITE_EDGE_URL:', edgeUrl);
+
+const edgeFunctionsProxy = {
+    ...originalFunctions,
+    invoke: async (functionName, invokeOptions = {}) => {
+        console.log(`[SupabaseProxy] Intercepted call to: ${functionName}`);
+        if (!edgeUrl) {
+            console.warn('[SupabaseProxy] VITE_EDGE_URL is missing! Falling back to legacy:', functionName);
+            return originalInvoke(functionName, invokeOptions);
+        }
+        
+        const url = `${edgeUrl}/functions/v1/${functionName}`;
+        console.log(`[SupabaseProxy] Redirecting to: ${url}`);
+        
+        const headers = new Headers(invokeOptions.headers || {});
+        
+        try {
+            const { data: { session } } = await customSupabaseClient.auth.getSession();
+            if (session?.access_token) {
+                headers.set('Authorization', `Bearer ${session.access_token}`);
+            }
+        } catch (e) {
+            // Ignore auth errors here
+        }
+        
+        let body = invokeOptions.body;
+        if (body !== undefined && typeof body !== 'string') {
+            body = JSON.stringify(body);
+            headers.set('Content-Type', 'application/json');
+        }
+
+        try {
+            const response = await customFetch(url, {
+                method: invokeOptions.method || 'POST',
+                headers: headers,
+                body: body,
+            });
+            
+            const isRelayError = response.headers.get('x-relay-error') === 'true';
+            if (isRelayError) {
+                 throw new Error(await response.text());
+            }
+
+            let responseType = invokeOptions.responseType || 'json';
+            let data;
+            let error = null;
+
+            if (response.ok) {
+                 if (responseType === 'json') {
+                      const contentType = response.headers.get('content-type');
+                      if (contentType && contentType.includes('application/json')) {
+                           data = await response.json();
+                      } else {
+                           data = await response.text();
+                      }
+                 } else if (responseType === 'arrayBuffer') {
+                      data = await response.arrayBuffer();
+                 } else if (responseType === 'blob') {
+                      data = await response.blob();
+                 } else {
+                      data = await response.text();
+                 }
+            } else {
+                 error = await response.json().catch(() => ({ message: response.statusText || `Edge HTTP Error: ${response.status}` }));
+                 console.error(`[SupabaseProxy] Error from edge function ${functionName}:`, error);
+            }
+
+            return { data, error };
+        } catch (error) {
+            console.error(`[SupabaseProxy] Network/Fetch error for ${functionName}:`, error);
+            return { data: null, error };
+        }
+    }
+};
+
+Object.defineProperty(customSupabaseClient, 'functions', {
+    get: () => edgeFunctionsProxy
+});
+
 export default customSupabaseClient;
 
 export {
