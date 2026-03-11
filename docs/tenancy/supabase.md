@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Define how AWCMS integrates with Supabase for auth, data, storage, and edge-facing workflows.
+Define how AWCMS integrates with Supabase for auth, PostgreSQL data, RLS, and ABAC while Cloudflare handles edge gateway and object storage responsibilities.
 
 ## Audience
 
@@ -21,8 +21,9 @@ Define how AWCMS integrates with Supabase for auth, data, storage, and edge-faci
 
 ## Core Concepts
 
-- Supabase is the system of record for auth, data, storage, and RLS.
-- Cloudflare Workers provide the primary edge HTTP layer; existing Supabase Edge Functions remain supported during transition.
+- Supabase is the system of record for Auth, PostgreSQL data, RLS, and ABAC.
+- Cloudflare Workers provide the primary edge HTTP layer for maintained client applications.
+- Cloudflare R2 is the canonical object storage layer for maintained file/media flows.
 - RLS is mandatory for all tenant-scoped tables.
 - Tenant context is passed via `x-tenant-id` header and resolved in SQL with `current_tenant_id()`.
 - Tenant hierarchy and resource sharing are enforced with `tenant_can_access_resource()`.
@@ -71,9 +72,14 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 ### Edge Logic
 
 - Primary edge HTTP handlers live in `awcms-edge/` (Cloudflare Workers).
-- Existing Supabase Edge Functions in `supabase/functions/*` remain supported for legacy or transitional flows.
 - Use `SUPABASE_SECRET_KEY` only in approved server-side runtimes for cross-tenant operations and elevated workflows.
 - Must enforce tenant context checks and resource sharing rules before mutating data.
+
+### Storage
+
+- Maintained file and media delivery flows should use Cloudflare R2 through `awcms-edge/`.
+- Supabase should not be used as the primary file storage surface for maintained client applications.
+- File metadata, tenant ownership, and authorization checks remain anchored in Supabase tables and policies.
 
 ### Tenant Provisioning RPC Signatures
 
@@ -105,7 +111,7 @@ import { createClientFromEnv } from "../lib/supabase";
 const supabase = createClientFromEnv(import.meta.env, { "x-tenant-id": tenantId });
 ```
 
-### Supabase Function Invocation (Compatibility)
+### Worker Invocation (Gateway Compatibility)
 
 ```javascript
 const { data, error } = await supabase.functions.invoke('manage-users', {

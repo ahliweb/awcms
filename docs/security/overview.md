@@ -98,7 +98,6 @@ Legacy tables may still use tenant-only select policies and rely on admin UI ABA
 ### Edge Logic
 
 - Cloudflare Workers are the primary edge HTTP layer and must validate tenant context and permissions.
-- Existing Supabase Edge Functions remain supported for legacy or transitional flows.
 - Privileged access with `SUPABASE_SECRET_KEY` is allowed only in approved server-side edge runtimes, migrations, and trusted operational scripts.
 
 ## Implementation Patterns

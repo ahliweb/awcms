@@ -47,8 +47,10 @@ Agents must respect these exact versions to ensure compatibility across the mono
 ### 1.3 Backend & Database
 
 * **Platform:** Supabase (PostgreSQL 17), Cloudflare (Workers & R2)
-* **Logic Layer:** PostgreSQL Functions + Cloudflare Workers + optional Supabase Edge Functions during transition.
+* **Logic Layer:** PostgreSQL Functions + Cloudflare Workers.
 * **Node.js Servers:** **FORBIDDEN**. Core authorization truth remains in Supabase; edge HTTP orchestration may run in Cloudflare Workers.
+* **Gateway Pattern:** Cloudflare Workers in `awcms-edge/` act as the server-side HTTP gateway for web, mobile, IoT, and other client applications when a request requires privileged orchestration, external integrations, storage signing, or edge-side request shaping.
+* **Supabase Authority:** Supabase remains the source of truth for Auth, PostgreSQL data, tenant isolation, Row Level Security (RLS), and ABAC permission enforcement. Cloudflare Workers must not replace or weaken those controls.
 
 ### 1.4 AI Gateway (OpenClaw)
 
@@ -129,12 +131,20 @@ Agents must respect these exact versions to ensure compatibility across the mono
   * **Platform:** Owner, Super Admin.
   * **Tenant:** Admin, Auditor (read-only), Editor, Author, Member, Subscriber, Public, No Access.
 
-### 2.4 Styling & Theming
+### 2.4 Edge Gateway Responsibilities
+
+* **Client Access Pattern:** Client applications should call Cloudflare Worker routes for privileged server-side flows, integration fan-out, signed storage access, webhook handling, and other edge-managed HTTP operations.
+* **Auth Preservation:** Workers must validate the caller through Supabase Auth context before performing protected work.
+* **Database Preservation:** Workers may read/write Supabase, but PostgreSQL remains the canonical data plane and all tenant/business data continue to live in Supabase.
+* **RLS / ABAC Preservation:** RLS and `public.has_permission(...)` remain the final enforcement layer for tenant isolation and authorization. Worker-side checks are additive guardrails, not replacements.
+* **Storage Pattern:** Cloudflare R2 is used for object storage and delivery workflows, while metadata, ownership, tenant scope, and permission checks remain anchored in Supabase.
+
+### 2.5 Styling & Theming
 
 * **System:** TailwindCSS v4 with CSS Variables.
 * **Constraint:** **NO** hardcoded hex values (e.g., `bg-[#123456]`) in components. Use semantic variables (`bg-primary`, `text-foreground`) to support white-labeling and dark mode.
 
-### 2.5 Content Sanitization
+### 2.6 Content Sanitization
 
 * **Admin Sanitization Enforcement:** Raw HTML rendered in admin-managed flows must pass through `awcms/src/utils/sanitize.js`.
 * **Public Sanitization Enforcement:** Public fallback HTML rendering must pass through `awcms-public/primary/src/utils/sanitize.ts` via `PuckRenderer`.

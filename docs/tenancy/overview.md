@@ -86,14 +86,16 @@ Provision a new tenant using a privileged, idempotent flow that seeds default ro
 6. Verify isolation: cross-tenant read denies, default roles/pages exist, headers resolve tenant correctly.
 7. Return idempotent response on retries (409 on duplicate slug or 202 on invite failure).
 
-#### Reference Blueprint (Example Edge Function)
+#### Reference Blueprint (Example Cloudflare Worker Route)
 
-> This is a benchmark-ready compatibility blueprint using a Supabase Edge Function shape. For new production endpoints, prefer Cloudflare Workers in `awcms-edge/`; use `supabase/functions/` only when a legacy or transitional flow still requires it.
+> This is a benchmark-ready compatibility blueprint for the maintained Cloudflare Worker gateway in `awcms-edge/`.
 
 ```ts
-// supabase/functions/platform-tenant-onboard/index.ts
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
+// awcms-edge/src/index.ts
+import { Hono } from "hono";
+import { createClient } from "@supabase/supabase-js";
+
+const app = new Hono();
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -101,13 +103,12 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+app.post("/functions/v1/platform-tenant-onboard", async (c) => {
+  const req = c.req.raw;
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const publishableKey = Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY") ?? "";
-  const secretKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
+  const supabaseUrl = c.env.VITE_SUPABASE_URL ?? "";
+  const publishableKey = c.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
+  const secretKey = c.env.SUPABASE_SECRET_KEY ?? "";
 
   const authHeader = req.headers.get("Authorization") ?? "";
   const caller = createClient(supabaseUrl, publishableKey, {
@@ -115,16 +116,16 @@ serve(async (req) => {
   });
 
   const { data: authData } = await caller.auth.getUser();
-  if (!authData?.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+  if (!authData?.user) return c.json({ error: "Unauthorized" }, 401);
 
   const { data: canCreate } = await caller.rpc("has_permission", {
     permission_name: "platform.tenant.create",
   });
-  if (!canCreate) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: corsHeaders });
+  if (!canCreate) return c.json({ error: "Forbidden" }, 403);
 
   const payload = await req.json();
   if (!payload?.name || !payload?.slug || !payload?.admin_email) {
-    return new Response(JSON.stringify({ error: "Missing required payload" }), { status: 400, headers: corsHeaders });
+    return c.json({ error: "Missing required payload" }, 400);
   }
 
   const admin = createClient(supabaseUrl, secretKey);
@@ -137,7 +138,7 @@ serve(async (req) => {
     .maybeSingle();
 
   if (existing?.id) {
-    return new Response(JSON.stringify({ error: "Slug already exists", tenant_id: existing.id }), { status: 409, headers: corsHeaders });
+    return c.json({ error: "Slug already exists", tenant_id: existing.id }, 409);
   }
 
   const { data: tenant, error: tenantError } = await admin.rpc("create_tenant_with_defaults", {
@@ -150,7 +151,7 @@ serve(async (req) => {
   });
 
   if (tenantError || !tenant?.tenant_id) {
-    return new Response(JSON.stringify({ error: tenantError?.message ?? "Create tenant failed" }), { status: 400, headers: corsHeaders });
+    return c.json({ error: tenantError?.message ?? "Create tenant failed" }, 400);
   }
 
   const invite = await admin.auth.admin.inviteUserByEmail(payload.admin_email, {
@@ -254,7 +255,7 @@ $$;
 ### Row Level Security (RLS)
 
 - **Strict Enforcement**: RLS is mandatory for all tables.
-- **Bypass Prohibition**: Client-side code must NEVER bypass RLS. Elevation is restricted to server-side `SUPABASE_SECRET_KEY` paths in Cloudflare Workers, approved Supabase Edge Functions, or trusted operational scripts.
+- **Bypass Prohibition**: Client-side code must NEVER bypass RLS. Elevation is restricted to server-side `SUPABASE_SECRET_KEY` paths in Cloudflare Workers or trusted operational scripts.
 
 ### Data Lifecycle (Soft Delete)
 

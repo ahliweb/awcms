@@ -53,7 +53,6 @@ BEGIN
                 rr.active
             FROM public.resources_registry rr
             WHERE rr.active = true
-              AND rr.key <> 'stitch_import'
               AND NOT EXISTS (
                 SELECT 1
                 FROM canonical_menus cm

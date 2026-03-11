@@ -115,7 +115,7 @@ const data = await response.json();
 
 - Always filter `deleted_at IS NULL` for reads.
 - Tenant-scoped tables must be filtered by tenant and RLS enforced.
-- Secret keys may be used only in Cloudflare Workers, approved Supabase Edge Functions, and migrations.
+- Secret keys may be used only in Cloudflare Workers, migrations, and trusted operational scripts.
 - Admin client injects `x-tenant-id` automatically via `customSupabaseClient`.
 
 ## References

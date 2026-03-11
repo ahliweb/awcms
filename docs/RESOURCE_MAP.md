@@ -79,7 +79,6 @@ These resource keys are valid, but they are grouped here because they reuse the 
 | Entry | Reason |
 | --- | --- |
 | `test_dynamic` | Test-only seed resource from `20260201133000_seed_test_schema.sql`; not a canonical product resource |
-| `stitch_import` | Stitch import surface and runtime were removed; keep only admin-facing transition notes in release/docs history |
 
 ## Dynamic UI Note
 

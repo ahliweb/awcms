@@ -5,7 +5,7 @@ import { normalizeMenuPath, resolveGroupMeta, resolveResourcePath } from '@/lib/
 import { usePermissions } from '@/contexts/PermissionContext';
 
 const DEFAULT_MENU_CONFIG = [];
-const REMOVED_RESOURCE_KEYS = new Set(['stitch_import']);
+const REMOVED_RESOURCE_KEYS = new Set();
 const LEGACY_MENU_KEY_MAP = new Map([
   ['modules_management', 'modules']
 ]);

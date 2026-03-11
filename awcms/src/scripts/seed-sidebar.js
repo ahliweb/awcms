@@ -441,7 +441,7 @@ async function seedModulesForTenants(tenantIds) {
     const menuKeys = new Set(menuItems.map(item => item.slug));
 
     const resourceItems = (resources || [])
-        .filter(item => item?.active && item?.key && item.key !== 'stitch_import' && !menuKeys.has(item.key))
+        .filter(item => item?.active && item?.key && !menuKeys.has(item.key))
         .map(item => ({
             name: item.label || item.key,
             slug: item.key,

@@ -1640,6 +1640,15 @@ CREATE OR REPLACE FUNCTION "public"."sync_storage_files"() RETURNS "jsonb"
 DECLARE
     inserted_count int;
 BEGIN
+    IF to_regclass('storage.objects') IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', true,
+            'synced_count', 0,
+            'skipped', true,
+            'reason', 'storage.objects unavailable'
+        );
+    END IF;
+
     WITH new_files AS (
         INSERT INTO public.files (
             name,
@@ -9586,48 +9595,57 @@ using (true);
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 
-  create policy "public_read_files"
-  on "storage"."objects"
-  as permissive
-  for select
-  to public
-using ((bucket_id = 'cms-uploads'::text));
+DO $$
+BEGIN
+  IF to_regclass('storage.objects') IS NULL THEN
+    RAISE NOTICE 'Skipping legacy storage.objects policies; relation is unavailable.';
+    RETURN;
+  END IF;
 
+  EXECUTE $policy$
+    create policy "public_read_files"
+    on "storage"."objects"
+    as permissive
+    for select
+    to public
+    using ((bucket_id = 'cms-uploads'::text))
+  $policy$;
 
+  EXECUTE $policy$
+    create policy "tenant_delete_isolation"
+    on "storage"."objects"
+    as permissive
+    for delete
+    to authenticated
+    using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())))
+  $policy$;
 
-  create policy "tenant_delete_isolation"
-  on "storage"."objects"
-  as permissive
-  for delete
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
+  EXECUTE $policy$
+    create policy "tenant_select_isolation"
+    on "storage"."objects"
+    as permissive
+    for select
+    to authenticated
+    using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())))
+  $policy$;
 
+  EXECUTE $policy$
+    create policy "tenant_update_isolation"
+    on "storage"."objects"
+    as permissive
+    for update
+    to authenticated
+    using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())))
+  $policy$;
 
-
-  create policy "tenant_select_isolation"
-  on "storage"."objects"
-  as permissive
-  for select
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
-
-
-
-  create policy "tenant_update_isolation"
-  on "storage"."objects"
-  as permissive
-  for update
-  to authenticated
-using (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
-
-
-
-  create policy "tenant_upload_isolation"
-  on "storage"."objects"
-  as permissive
-  for insert
-  to authenticated
-with check (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())));
-
+  EXECUTE $policy$
+    create policy "tenant_upload_isolation"
+    on "storage"."objects"
+    as permissive
+    for insert
+    to authenticated
+    with check (((bucket_id = 'cms-uploads'::text) AND ((name ~~ (public.current_tenant_id() || '/%'::text)) OR public.is_platform_admin())))
+  $policy$;
+END $$;
 
 

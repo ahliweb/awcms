@@ -59,17 +59,17 @@ npm run deploy
 ```
 
 - `awcms-edge/` is the primary edge HTTP layer for AWCMS.
-- Use Supabase Edge Functions only for legacy or transitional flows that still depend on them.
+- Treat `awcms-edge/` as the server-side gateway in front of Supabase for privileged HTTP workflows used by web, mobile, IoT, and other clients.
+- Keep Supabase as the authority for Auth, Postgres, RLS, and ABAC; Worker-side validation must complement, not replace, database enforcement.
 - Configure bindings and runtime settings in `awcms-edge/wrangler.jsonc`.
 
 ### 4. Supabase
 
-- Author migration/function changes in root `supabase/**` and mirror them to `awcms/supabase/**` before CI.
+- Author migration changes in root `supabase/**` and mirror them to `awcms/supabase/**` before CI.
 - Verify root/mirror parity from repo root:
 
 ```bash
 scripts/verify_supabase_migration_consistency.sh
-scripts/verify_supabase_function_consistency.sh
 ```
 
 - Apply migrations from repo root:
@@ -80,25 +80,11 @@ npx supabase db push --linked
 ```
 
 > Use `--local` for local dev stacks and `--linked` for remote projects.
-> The function parity helper ignores local-only `supabase/functions/.env` files so secrets stay out of mirrored source trees.
-
 If migration history is out of sync, repair before pushing:
 
 ```bash
 scripts/repair_supabase_migration_history.sh
 scripts/repair_supabase_migration_history.sh --apply --linked
-```
-
-If deploying legacy Supabase Edge Functions to a linked project, verify local/remote slug coverage:
-
-```bash
-scripts/verify_supabase_function_consistency.sh --linked --project-ref <project_ref>
-```
-
-- Deploy legacy Supabase functions as needed:
-
-```bash
-npx supabase functions deploy --project-ref <project_ref>
 ```
 
 ### 4.1 Supabase Auth URLs

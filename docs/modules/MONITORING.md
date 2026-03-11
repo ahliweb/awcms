@@ -30,7 +30,6 @@ Describe the monitoring tools and logging practices for AWCMS.
 - Extension logs are stored in `extension_logs`.
 - Visitor telemetry is stored in `analytics_events` (raw) and `analytics_daily` (aggregate).
 - All monitoring tables are tenant-scoped and should be filtered by `tenant_id`.
-- Supabase Edge Function logging is legacy/transitional only for flows that still run from `supabase/functions/`.
 
 ## Implementation Patterns
 

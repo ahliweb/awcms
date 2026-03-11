@@ -57,7 +57,6 @@ Provide common fixes for local development and deployment issues.
 
 - CI lint runs from `awcms/supabase`, while local CLI defaults to root `supabase/`.
 - Run `scripts/verify_supabase_migration_consistency.sh` to detect missing or content-drifted migration files.
-- Run `scripts/verify_supabase_function_consistency.sh` to detect root/mirror Edge Function drift; the helper intentionally ignores local-only `supabase/functions/.env` secret files.
 - Mirror any changed files between `supabase/**` and `awcms/supabase/**`, then re-run verification.
 
 ### Invalid Migration Filename Warning

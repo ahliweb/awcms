@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Provide Cloudflare Pages settings for the Admin Panel and Public Portal.
+Provide Cloudflare deployment settings for the Admin Panel, Public Portal, Worker gateway, and R2-backed storage model.
 
 ## Audience
 
@@ -18,6 +18,12 @@ Provide Cloudflare Pages settings for the Admin Panel and Public Portal.
 - Supabase project configured
 
 ## Steps
+
+### Architecture Note
+
+- Cloudflare Workers (`awcms-edge/`) are the maintained server-side edge gateway for AWCMS clients.
+- Cloudflare R2 is the maintained object storage layer for file/media delivery.
+- Supabase remains responsible for Auth, PostgreSQL, RLS, and ABAC.
 
 ### Admin Panel (awcms)
 

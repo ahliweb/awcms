@@ -71,13 +71,19 @@ export function createClientFromEnv<TClient>(
         (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_EDGE_URL : '') ||
         '';
 
-    if (edgeUrl && (client as any).functions) {
+    if ((client as any).functions) {
         const originalFunctions = (client as any).functions;
-        const originalInvoke = originalFunctions.invoke.bind(originalFunctions);
         
         const edgeFunctionsProxy = {
             ...originalFunctions,
             invoke: async (functionName: string, invokeOptions: any = {}) => {
+                if (!edgeUrl) {
+                    return {
+                        data: null,
+                        error: new Error(`Missing Worker API URL for route: ${functionName}`),
+                    };
+                }
+
                 const url = `${edgeUrl}/functions/v1/${functionName}`;
                 const reqHeaders = new Headers(invokeOptions.headers || {});
                 
@@ -100,7 +106,12 @@ export function createClientFromEnv<TClient>(
             
                 try {
                     const fetchFn = (client as any).functions.fetch || (typeof fetch !== 'undefined' ? fetch : null);
-                    if (!fetchFn) return originalInvoke(functionName, invokeOptions);
+                    if (!fetchFn) {
+                        return {
+                            data: null,
+                            error: new Error(`Missing fetch implementation for Worker API route: ${functionName}`),
+                        };
+                    }
                     
                     const response = await fetchFn(url, {
                         method: invokeOptions.method || 'POST',

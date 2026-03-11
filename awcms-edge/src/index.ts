@@ -120,6 +120,13 @@ const getJsonBody = async (request: Request) => {
   }
 }
 
+const getRequestIp = (request: Request) => {
+  return request.headers.get('cf-connecting-ip')
+    || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || request.headers.get('x-real-ip')
+    || null
+}
+
 const buildStorageKey = (tenantId: string, fileName: string, folder?: string, sessionBoundAccess = false) => {
   const baseKey = generateStorageKey(tenantId, fileName, sessionBoundAccess)
   const normalizedFolder = sanitizeFolder(folder)
@@ -898,7 +905,7 @@ app.post('/functions/v1/verify-turnstile', async (c) => {
     const formData = new FormData();
     formData.append('secret', secretKey);
     formData.append('response', token);
-    const ip = c.req.header('cf-connecting-ip');
+    const ip = getRequestIp(c.req.raw);
     if (ip) formData.append('remoteip', ip);
 
     const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
@@ -915,6 +922,42 @@ app.post('/functions/v1/verify-turnstile', async (c) => {
   } catch (error: any) {
     return c.json({ success: false, error: error.message }, 500);
   }
+});
+
+app.post('/functions/v1/get-client-ip', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
+
+  const token = authHeader.replace('Bearer ', '');
+  const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const { data: authData, error: authError } = await callerClient.auth.getUser();
+  if (authError || !authData?.user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  return c.json({ ip: getRequestIp(c.req.raw) });
+});
+
+app.post('/functions/v1/xendit-payment', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
+
+  const token = authHeader.replace('Bearer ', '');
+  const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const { data: authData, error: authError } = await callerClient.auth.getUser();
+  if (authError || !authData?.user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  return c.json({
+    error: 'Xendit payment route is not configured in the Cloudflare Edge API.',
+  }, 501);
 });
 
 app.post('/functions/v1/manage-users', async (c) => {

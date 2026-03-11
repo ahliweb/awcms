@@ -9,7 +9,7 @@ Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with adm
 - Public portal and edge-runtime docs are aligned to Astro static output plus Cloudflare Workers as the primary edge HTTP layer.
 - MCP topology from `mcp.json` currently includes `cloudflare`, `context7`, `github`, and `supabase`.
 - Supabase migration parity baseline is `127` root migrations and `127` mirrored admin/CI migrations.
-- Repair and verification workflows are scripted via `scripts/repair_supabase_migration_history.sh`, `scripts/verify_supabase_migration_consistency.sh`, and `scripts/verify_supabase_function_consistency.sh`.
+- Repair and verification workflows are scripted via `scripts/repair_supabase_migration_history.sh` and `scripts/verify_supabase_migration_consistency.sh`.
 
 ## Documentation Authority
 
@@ -34,7 +34,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 | `awcms-ext/` | External Extensions | JavaScript modules |
 | `awcms-edge/` | Worker API & Edge Logic | Cloudflare Workers, Hono |
 | `packages/awcms-shared/` | Shared public-portal utilities | TypeScript helpers |
-| `supabase/` | Migrations and transitional Supabase functions | Supabase CLI |
+| `supabase/` | Migrations and local Supabase project config | Supabase CLI |
 | `awcms-mcp/` | MCP Integration | Model Context Protocol tools |
 | `openclaw/` | AI Gateway | OpenClaw multi-tenant AI routing |
 
@@ -55,6 +55,14 @@ Notes:
 
 - Admin and public workspaces currently use `@supabase/supabase-js` `2.93.3`.
 - `awcms-edge/` currently pins `@supabase/supabase-js` `^2.45.0`; use `awcms-edge/package.json` as the source of truth for Worker-only dependency alignment until that workspace is upgraded deliberately.
+
+## Runtime Architecture
+
+- `awcms-edge/` is the server-side HTTP gateway for client applications when requests need privileged orchestration, external API calls, storage signing, webhook handling, or edge-managed request shaping.
+- Supabase remains the system of record for authentication, PostgreSQL data, tenant context, RLS, and ABAC permission enforcement.
+- Cloudflare Workers add an edge gateway layer; they do not replace Supabase Auth or move authorization truth out of PostgreSQL policies and permission functions.
+- Cloudflare R2 handles object storage flows, while metadata, ownership, tenant isolation, and policy enforcement remain in Supabase.
+- Client apps should continue to use Supabase Auth sessions, and Worker routes should validate those sessions before performing protected server-side work.
 
 ## Quick Start
 

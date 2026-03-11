@@ -59,9 +59,8 @@ Tenant-specific public portals may pin different TypeScript minor versions (for 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | Database | PostgreSQL | 17 | Primary data store |
-| Backend Platform | Supabase | 2.x | Auth, PostgREST, storage, realtime |
+| Backend Platform | Supabase | 2.x | Auth, PostgREST, RLS, ABAC, realtime |
 | Edge runtime | Cloudflare Workers | Current | Primary edge HTTP orchestration |
-| Transitional Edge Runtime | Deno | 2 | Existing Supabase Edge Functions |
 
 ### Mobile (awcms-mobile/primary)
 

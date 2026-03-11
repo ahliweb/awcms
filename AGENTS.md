@@ -454,11 +454,13 @@ While powerful, Agents operating in this environment have specific boundaries:
 
 2. **Backend Logic Placement**: Backend business logic must remain in Cloudflare Workers (Edge Logic) and Supabase (Database Functions, SQL), not custom Node.js servers. Supabase Edge Functions are deprecated in favor of Cloudflare Workers.
 
-3. **Binary Asset Generation**: Agents should not generate binary assets directly; reference existing assets or placeholders.
+3. **Edge API and Storage Ownership**: Supabase must not be used to manage the Edge API or file storage. Use the Cloudflare Edge API (`awcms-edge/`) for server-side HTTP workflows and Cloudflare R2 for object/file storage. Supabase is limited to Auth, Postgres, RLS, and ABAC.
 
-4. **Database Changes**: Always use timestamped Supabase migrations (`<timestamp>_name.sql`). Keep non-migration SQL outside migration folders (for example `supabase/manual/`). Never hardcode database credentials.
+4. **Binary Asset Generation**: Agents should not generate binary assets directly; reference existing assets or placeholders.
 
-5. **Process Monitoring**: The running model must continue and ensure no background processes are stuck by restarting the process.
+5. **Database Changes**: Always use timestamped Supabase migrations (`<timestamp>_name.sql`). Keep non-migration SQL outside migration folders (for example `supabase/manual/`). Never hardcode database credentials.
+
+6. **Process Monitoring**: The running model must continue and ensure no background processes are stuck by restarting the process.
    Monitor all processes to ensure none remain stuck for long periods; periodically enforce a maximum runtime,
    output status updates, and terminate any processes that exceed the limit.
 

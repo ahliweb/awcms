@@ -176,6 +176,7 @@ with check (((user_id = auth.uid()) OR public.is_platform_admin() OR ((tenant_id
 -- Storage triggers: only create if the internal storage functions exist (they exist on remote but not local)
 DO $$
 BEGIN
+  IF to_regclass('storage.objects') IS NOT NULL THEN
   -- objects_delete_delete_prefix
   IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'storage' AND p.proname = 'delete_prefix_hierarchy_trigger') THEN
     DROP TRIGGER IF EXISTS objects_delete_delete_prefix ON storage.objects;
@@ -197,6 +198,9 @@ BEGIN
   -- tr_sync_storage_to_files (public function, always available)
   DROP TRIGGER IF EXISTS tr_sync_storage_to_files ON storage.objects;
   CREATE TRIGGER tr_sync_storage_to_files AFTER INSERT OR DELETE OR UPDATE ON storage.objects FOR EACH ROW EXECUTE FUNCTION public.handle_storage_sync();
+  ELSE
+    RAISE NOTICE 'Skipping legacy storage.objects triggers; relation is unavailable.';
+  END IF;
 
   -- prefixes_create_hierarchy
   IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'storage' AND p.proname = 'prefixes_insert_trigger') THEN
@@ -214,7 +218,6 @@ BEGIN
     END IF;
   END IF;
 END $$;
-
 
 
 

@@ -24,14 +24,5 @@ BEGIN
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_user_profile_admin_created_by ON public.user_profile_admin (created_by)';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'stitch_import_jobs'
-      AND column_name = 'created_by'
-  ) THEN
-    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_stitch_import_jobs_created_by ON public.stitch_import_jobs (created_by)';
-  END IF;
 END;
 $$ LANGUAGE plpgsql;

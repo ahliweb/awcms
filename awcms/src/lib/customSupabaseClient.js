@@ -92,23 +92,21 @@ const customSupabaseClient = createClient(supabaseUrl, supabasePublishableKey, {
     },
 });
 
-// Proxy Edge Functions to Cloudflare Worker
+// Route Supabase-style function calls to the Cloudflare Worker API.
 const originalFunctions = customSupabaseClient.functions;
-const originalInvoke = originalFunctions.invoke.bind(originalFunctions);
 const edgeUrl = import.meta.env.VITE_EDGE_URL;
-console.log('[SupabaseProxy] Initializing Edge Functions proxy. VITE_EDGE_URL:', edgeUrl);
+console.log('[WorkerAPI] Initializing Cloudflare Worker API bridge. VITE_EDGE_URL:', edgeUrl);
 
 const edgeFunctionsProxy = {
     ...originalFunctions,
     invoke: async (functionName, invokeOptions = {}) => {
-        console.log(`[SupabaseProxy] Intercepted call to: ${functionName}`);
         if (!edgeUrl) {
-            console.warn('[SupabaseProxy] VITE_EDGE_URL is missing! Falling back to legacy:', functionName);
-            return originalInvoke(functionName, invokeOptions);
+            const error = new Error(`Missing VITE_EDGE_URL for Worker API route: ${functionName}`);
+            console.error('[WorkerAPI] Cloudflare Worker API is not configured.', error);
+            return { data: null, error };
         }
         
         const url = `${edgeUrl}/functions/v1/${functionName}`;
-        console.log(`[SupabaseProxy] Redirecting to: ${url}`);
         
         const headers = new Headers(invokeOptions.headers || {});
         
@@ -160,12 +158,12 @@ const edgeFunctionsProxy = {
                  }
             } else {
                  error = await response.json().catch(() => ({ message: response.statusText || `Edge HTTP Error: ${response.status}` }));
-                 console.error(`[SupabaseProxy] Error from edge function ${functionName}:`, error);
-            }
+                  console.error(`[WorkerAPI] Error from Worker route ${functionName}:`, error);
+             }
 
-            return { data, error };
+             return { data, error };
         } catch (error) {
-            console.error(`[SupabaseProxy] Network/Fetch error for ${functionName}:`, error);
+            console.error(`[WorkerAPI] Network/fetch error for ${functionName}:`, error);
             return { data: null, error };
         }
     }
