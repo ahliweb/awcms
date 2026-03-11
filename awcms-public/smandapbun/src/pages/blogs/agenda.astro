@@ -8,11 +8,13 @@ import {
   getLocalizedPath,
   type Locale,
 } from "../../utils/i18n";
-import { getAgendaData } from "../../lib/api";
+import { getAdminPageBySlug, getAgendaData } from "../../lib/api";
 import kalenderPdf from "../../assets/smandapbun-materi-web/smandapbun-kaldik.pdf";
+import { sanitizeHTML } from "../../utils/sanitize";
 
 const locale = getLocale(Astro.url) as Locale;
 const agendaData = await getAgendaData();
+const agendaPage = await getAdminPageBySlug("agenda", locale);
 const { agenda } = agendaData;
 
 // Sort events by date
@@ -25,7 +27,7 @@ const upcomingEvents = sortedEvents.filter(
 const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
 ---
 
-<Layout title={getLocalizedValue(agenda.title, locale)}>
+<Layout title={agendaPage?.title || getLocalizedValue(agenda.title, locale)}>
   <!-- Hero -->
   <section
     class="hero-gradient text-white py-16 md:py-20"
@@ -45,8 +47,13 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
         <span class="text-white">{t("blogs.agenda", locale)}</span>
       </nav>
       <h1 class="text-3xl md:text-4xl font-bold font-heading">
-        {getLocalizedValue(agenda.title, locale)}
+        {agendaPage?.title || getLocalizedValue(agenda.title, locale)}
       </h1>
+      {
+        agendaPage?.excerpt && (
+          <p class="text-xl text-blue-100 mt-4 max-w-3xl">{agendaPage.excerpt}</p>
+        )
+      }
     </div>
   </section>
 
@@ -58,6 +65,13 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
   >
     <div class="container-custom">
       <div class="max-w-4xl mx-auto">
+        {
+          agendaPage?.content && (
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 md:p-8 mb-10 border border-gray-100 dark:border-slate-700 prose dark:prose-invert max-w-none">
+              <div set:html={sanitizeHTML(agendaPage.content)} />
+            </div>
+          )
+        }
         <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 md:p-8 mb-10 border border-gray-100 dark:border-slate-700">
           <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div class="flex items-start gap-4">

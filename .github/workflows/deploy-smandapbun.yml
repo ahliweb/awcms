@@ -1,0 +1,110 @@
+name: Deploy Smandapbun
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'awcms-public/smandapbun/**'
+      - 'packages/awcms-shared/**'
+      - '.github/workflows/deploy-smandapbun.yml'
+  repository_dispatch:
+    types:
+      - smandapbun-content-changed
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: 22
+  CLOUDFLARE_ACCOUNT_ID: 5255727b7269584897c8c97ebdd3347f
+  SMANDAPBUN_PAGES_PROJECT: awcms-smandapangkalanbun-web
+
+jobs:
+  deploy:
+    name: Build and Deploy Smandapbun
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    defaults:
+      run:
+        working-directory: ./awcms-public/smandapbun
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ./awcms-public/smandapbun/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run checks
+        run: npm run check && npm run lint
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
+          PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+
+      - name: Build
+        run: npm run build
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
+          PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy dist --project-name=${{ env.SMANDAPBUN_PAGES_PROJECT }} --branch=main
+
+      - name: Ensure production custom domains exist
+        env:
+          CF_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          account_id = os.environ['CLOUDFLARE_ACCOUNT_ID']
+          project_name = os.environ['SMANDAPBUN_PAGES_PROJECT']
+          token = os.environ['CF_API_TOKEN']
+          domains = ['sman2pangkalanbun.sch.id', 'www.sman2pangkalanbun.sch.id']
+
+          for domain in domains:
+              req = urllib.request.Request(
+                  f'https://api.cloudflare.com/client/v4/accounts/{account_id}/pages/projects/{project_name}/domains',
+                  data=json.dumps({'domain': domain}).encode('utf-8'),
+                  headers={
+                      'Authorization': f'Bearer {token}',
+                      'Content-Type': 'application/json',
+                  },
+                  method='POST',
+              )
+
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      print(f'Ensured custom domain: {domain} ({response.status})')
+              except urllib.error.HTTPError as error:
+                  body = error.read().decode('utf-8', errors='ignore')
+                  if error.code == 409 or 'already exists' in body.lower() or 'already been taken' in body.lower():
+                      print(f'Custom domain already configured: {domain}')
+                      continue
+                  raise SystemExit(f'Failed to ensure custom domain {domain}: {error.code} {body}')
+          PY
+
+      - name: Deployment summary
+        run: |
+          echo "Deployed to ${{ steps.deploy.outputs.deployment-url }}"
+          echo "Alias URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}"

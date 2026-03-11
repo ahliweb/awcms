@@ -62,7 +62,7 @@ Environment variables:
 
 | Setting | Value |
 | --- | --- |
-| Project name | `awcms-public-smandapbun` (example) |
+| Project name | `awcms-smandapangkalanbun-web` |
 | Framework preset | Astro |
 | Root directory | `awcms-public/smandapbun` |
 | Build command | `npm run build` |
@@ -75,6 +75,17 @@ Environment variables:
 - `PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `PUBLIC_TURNSTILE_SITE_KEY`
 - `NODE_VERSION=22`
+
+Custom domains:
+
+- `sman2pangkalanbun.sch.id`
+- `www.sman2pangkalanbun.sch.id`
+
+Automated rebuild flow:
+
+- Cloudflare Pages deploy hook -> production rebuild for content-only changes.
+- Admin panel save/delete events -> `awcms-edge/api/public/rebuild` -> tenant deploy hook.
+- GitHub workflow `deploy-smandapbun.yml` remains available for repository-based deploys.
 
 KV bindings: none currently required by the maintained repo baseline.
 

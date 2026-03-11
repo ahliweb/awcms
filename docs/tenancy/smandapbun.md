@@ -54,6 +54,15 @@ The portal reads tenant settings and merges them with JSON defaults:
 
 - Primary source: `menus` table via `getMenuTree()`.
 - Fallback: `src/data/navigation.json`.
+- Locale fallback: English header/footer first load `locale = en` menu rows, then fall back to default-locale tenant menus before using JSON.
+
+### Pages
+
+- Admin-managed regular pages are read from the `pages` table.
+- Public routes are generated at build time from published tenant pages.
+- Top-level reserved school routes (`/profil`, `/blogs`, `/layanan`, etc.) stay tenant-template owned; non-reserved page slugs are rendered dynamically.
+- Localized page slugs/content can be overlaid from `content_translations` when available.
+- Reserved school routes now render Admin-managed `pages` records for the matching tenant slug (`profil`, `visi-misi`, `laboratorium`, `prestasi`, `alumni`, and related sections).
 
 ### Content Fallbacks
 
@@ -63,7 +72,23 @@ The portal reads tenant settings and merges them with JSON defaults:
 ### Blogs
 
 - Posts are fetched from the `blogs` table via `getPosts()`.
-- If Supabase is unavailable, the portal falls back to local JSON data.
+- Static blog detail routes are generated from published tenant blog rows.
+- Localized blog slugs/content can be overlaid from `content_translations` when available.
+- Local JSON blog fallback is now limited to local development when tenant data is unavailable.
+
+### Automatic Rebuilds
+
+- `pages`, `blogs`, and `menus` changes can trigger a public rebuild through the `public_rebuild_webhook_url` tenant setting.
+- The live rebuild target for tenant `smandapbun` is a Cloudflare Pages deploy hook for project `awcms-smandapangkalanbun-web`.
+- Admin save/delete flows in AWCMS also call `awcms-edge` at `/api/public/rebuild`, which looks up the tenant deploy hook and triggers a production rebuild.
+- Database-trigger rebuilds remain supported by the migration path when applied remotely.
+- The GitHub deployment workflow targets the Cloudflare Pages project `awcms-smandapangkalanbun-web`, which serves `sman2pangkalanbun.sch.id` and `www.sman2pangkalanbun.sch.id`.
+
+### File Storage
+
+- Tenant-managed files use Cloudflare R2 through the shared `awcms-edge` media service.
+- Storage keys are tenant-prefixed as `tenants/<tenant_id>/...` (or `tenants/<tenant_id>/protected/...` for session-bound/private media).
+- The maintained production bucket is `awcms-s3`; `awcms-s3-dev` remains available for local/dev workflows.
 
 ## Localization
 
@@ -74,7 +99,7 @@ The portal reads tenant settings and merges them with JSON defaults:
 ## Admin Management
 
 - Menus: `menus` table via Admin -> Menu Manager.
-- School pages: `page_*` settings keys via Admin -> School Website.
+- School pages: published `pages` rows for route-backed sections; legacy `page_*` settings remain as seed/fallback sources during transition.
 - Site images: `site_images` via Admin -> Site Images.
 - Blogs: `blogs` table via Admin -> Blogs.
 - SEO/Branding/Contact: `seo_global`, `site_info`, `contact_info` via Admin settings.
@@ -100,7 +125,7 @@ The portal reads tenant settings and merges them with JSON defaults:
 
 ## Migration Path (Future)
 
-- Replace JSON fallbacks with fully DB-driven content (`pages`, `settings`, `site_images`).
+- Replace remaining school-page JSON fallbacks with fully DB-driven content (`settings`, `site_images`, or `pages` where appropriate).
 - Add optional middleware only if SSR/runtime deployment is required.
 
 ## Migration Checklist (Analytics + Middleware)

@@ -1,6 +1,6 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { supabase, createScopedClient } from './supabase';
-import { type Locale } from '../utils/i18n';
+import { defaultLocale, type Locale } from '../utils/i18n';
 import contactDefault from '../data/pages/contact.json';
 import profileDefault from '../data/pages/profile.json';
 import organizationDefault from '../data/pages/organization.json';
@@ -14,7 +14,30 @@ import blogsDefault from '../data/blogs/blogs.json';
 import siteDefault from '../data/site.json';
 
 
-const TENANT_SLUG = 'smandapbun';
+const DEFAULT_TENANT_SLUG = 'smandapbun';
+const TENANT_SLUG = String(
+    import.meta.env.PUBLIC_TENANT_SLUG ||
+    import.meta.env.VITE_PUBLIC_TENANT_SLUG ||
+    DEFAULT_TENANT_SLUG,
+).trim();
+const TENANT_ID_FROM_ENV = String(
+    import.meta.env.PUBLIC_TENANT_ID ||
+    import.meta.env.VITE_PUBLIC_TENANT_ID ||
+    import.meta.env.VITE_TENANT_ID ||
+    '',
+).trim() || null;
+const RESERVED_PAGE_SLUGS = new Set([
+    '404',
+    'alumni',
+    'blogs',
+    'en',
+    'keuangan',
+    'kontak',
+    'layanan',
+    'p',
+    'prestasi',
+    'profil',
+]);
 
 const getTenantClient = (tenantId?: string | null): SupabaseClient => {
     if (!tenantId) return supabase as SupabaseClient;
@@ -296,6 +319,7 @@ export interface SiteData {
 
 export async function getTenantId(overrideTenantId?: string | null) {
     if (overrideTenantId) return overrideTenantId;
+    if (TENANT_ID_FROM_ENV) return TENANT_ID_FROM_ENV;
 
     if (!supabase) {
         return null;
@@ -335,6 +359,216 @@ export async function getAnalyticsConsent(overrideTenantId?: string | null) {
         console.error('Error parsing analytics consent settings:', e);
         return null;
     }
+}
+
+type ContentTranslationType = 'page' | 'article' | 'blog';
+
+interface ContentTranslationRow {
+    content_id: string;
+    locale: string;
+    title?: string | null;
+    slug?: string | null;
+    content?: string | null;
+    excerpt?: string | null;
+    meta_description?: string | null;
+}
+
+async function getContentTranslations(
+    client: SupabaseClient,
+    tenantId: string,
+    contentType: ContentTranslationType | ContentTranslationType[],
+    locale?: string,
+    contentIds: string[] = [],
+) {
+    if (!locale || contentIds.length === 0) {
+        return new Map<string, ContentTranslationRow>();
+    }
+
+    let query = client
+        .from('content_translations')
+        .select('content_id, locale, title, slug, content, excerpt, meta_description')
+        .eq('tenant_id', tenantId)
+        .eq('locale', locale)
+        .in('content_id', contentIds);
+
+    const contentTypes = Array.isArray(contentType) ? contentType : [contentType];
+    query = query.in('content_type', contentTypes);
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.warn('[Public] Error fetching content translations:', error.message);
+        return new Map<string, ContentTranslationRow>();
+    }
+
+    return new Map((data || []).map((row) => [row.content_id, row as ContentTranslationRow]));
+}
+
+const mergeLocalizedField = (
+    field: LocalizedString,
+    value: string | null | undefined,
+    locale?: Locale,
+): LocalizedString => {
+    if (!value || !locale) return field;
+
+    return {
+        ...field,
+        [locale]: value,
+    } as LocalizedString;
+};
+
+export interface AdminPage {
+    id: string;
+    title: string;
+    slug: string;
+    content: string | null;
+    excerpt: string | null;
+    featured_image: string | null;
+    status: string;
+    editor_type: string | null;
+    page_type: string | null;
+    published_at: string | null;
+    updated_at: string | null;
+    meta_title: string | null;
+    meta_description: string | null;
+    meta_keywords: string | null;
+    og_image: string | null;
+    canonical_url: string | null;
+    content_published?: Record<string, unknown> | null;
+    puck_layout_jsonb?: Record<string, unknown> | null;
+}
+
+async function getPageTranslationBySlug(
+    client: SupabaseClient,
+    tenantId: string,
+    slug: string,
+    locale?: Locale,
+) {
+    if (!locale) return null;
+
+    const { data, error } = await client
+        .from('content_translations')
+        .select('content_id, locale, title, slug, content, excerpt, meta_description')
+        .eq('tenant_id', tenantId)
+        .eq('locale', locale)
+        .eq('content_type', 'page')
+        .eq('slug', slug)
+        .maybeSingle();
+
+    if (error) {
+        console.warn('[Public] Error fetching page translation by slug:', error.message);
+        return null;
+    }
+
+    return (data as ContentTranslationRow | null) || null;
+}
+
+function mapAdminPage(
+    row: any,
+    translation?: ContentTranslationRow | null,
+): AdminPage {
+    return {
+        id: row.id,
+        title: translation?.title || row.title,
+        slug: translation?.slug || row.slug,
+        content: translation?.content || row.content || null,
+        excerpt: translation?.excerpt || row.excerpt || null,
+        featured_image: row.featured_image || null,
+        status: row.status,
+        editor_type: row.editor_type || null,
+        page_type: row.page_type || null,
+        published_at: row.published_at || null,
+        updated_at: row.updated_at || null,
+        meta_title: row.meta_title || null,
+        meta_description: translation?.meta_description || row.meta_description || null,
+        meta_keywords: row.meta_keywords || null,
+        og_image: row.og_image || null,
+        canonical_url: row.canonical_url || null,
+        content_published: row.content_published || null,
+        puck_layout_jsonb: row.puck_layout_jsonb || null,
+    };
+}
+
+export async function getAdminPageBySlug(
+    slug: string,
+    locale: Locale = defaultLocale,
+    overrideTenantId?: string | null,
+) {
+    const tenantId = await getTenantId(overrideTenantId);
+    if (!tenantId || !slug) return null;
+
+    const client = getTenantClient(tenantId);
+    const translationMatch = await getPageTranslationBySlug(client, tenantId, slug, locale);
+
+    let query = client
+        .from('pages')
+        .select('id, title, slug, content, excerpt, featured_image, status, editor_type, page_type, published_at, updated_at, meta_title, meta_description, meta_keywords, og_image, canonical_url, content_published, puck_layout_jsonb')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'published')
+        .is('deleted_at', null)
+        .eq('page_type', 'regular');
+
+    if (translationMatch?.content_id) {
+        query = query.eq('id', translationMatch.content_id);
+    } else {
+        query = query.eq('slug', slug);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+        console.error('[Public] Error fetching admin page:', error.message);
+        return null;
+    }
+
+    if (!data) return null;
+
+    let translation = translationMatch;
+    if (!translation && locale) {
+        const translations = await getContentTranslations(client, tenantId, 'page', locale, [data.id]);
+        translation = translations.get(data.id) || null;
+    }
+
+    return mapAdminPage(data, translation);
+}
+
+export async function getAdminPageSlugs(
+    locale: Locale = defaultLocale,
+    overrideTenantId?: string | null,
+) {
+    const tenantId = await getTenantId(overrideTenantId);
+    if (!tenantId) return [] as string[];
+
+    const client = getTenantClient(tenantId);
+    const { data, error } = await client
+        .from('pages')
+        .select('id, slug')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'published')
+        .eq('page_type', 'regular')
+        .is('deleted_at', null);
+
+    if (error) {
+        console.error('[Public] Error fetching admin page slugs:', error.message);
+        return [] as string[];
+    }
+
+    const basePages = data || [];
+    if (basePages.length === 0) return [] as string[];
+
+    const translations = await getContentTranslations(
+        client,
+        tenantId,
+        'page',
+        locale,
+        basePages.map((page) => page.id),
+    );
+
+    return basePages
+        .map((page) => translations.get(page.id)?.slug || page.slug)
+        .filter((slugValue): slugValue is string => Boolean(slugValue))
+        .filter((slugValue) => !slugValue.includes('/'))
+        .filter((slugValue) => !RESERVED_PAGE_SLUGS.has(slugValue));
 }
 
 export interface NavigationItem {
@@ -387,7 +621,7 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
     if (!tenantId) return [];
 
     const client = getTenantClient(tenantId);
-    const runQuery = async (withLocale: boolean) => {
+    const runQuery = async (localeFilter?: string | null) => {
         let query = client
             .from('menus')
             .select('*')
@@ -398,17 +632,19 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
             .or(`location.eq.${location},group_label.eq.${location}`)
             .order('order', { ascending: true });
 
-        if (withLocale && locale) {
-            query = query.eq('locale', locale);
+        if (localeFilter) {
+            query = query.eq('locale', localeFilter);
         }
 
         return query;
     };
 
-    let { data, error } = await runQuery(Boolean(locale));
+    let { data, error } = await runQuery(locale || null);
 
     if (error && locale && isMissingLocaleColumnError(error.message || '')) {
-        ({ data, error } = await runQuery(false));
+        ({ data, error } = await runQuery(null));
+    } else if ((!data || data.length === 0) && locale && locale !== defaultLocale) {
+        ({ data, error } = await runQuery(defaultLocale));
     }
 
     if (error) {
@@ -489,25 +725,36 @@ export async function getContactPageData(): Promise<ContactData> {
     const tenantId = await getTenantId();
     if (!tenantId) return contactDefault as ContactData;
 
-    const client = getTenantClient(tenantId);
-    const { data } = await client
-        .from('settings')
-        .select('value')
-        .eq('tenant_id', tenantId)
-        .eq('key', 'page_contact')
-        .maybeSingle();
+    const siteData = await getSiteData();
+    const defaultData = structuredClone(contactDefault) as ContactData;
+    const contact = siteData.contact || {};
+    const site = siteData.site || {};
+    const socialMedia = site.socialMedia || {};
 
-    if (data?.value) {
-        try {
-            const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-            // Merge with default to ensure all fields exist
-            return { ...contactDefault, ...parsed } as ContactData;
-        } catch (e) {
-            console.error('Error parsing contact page data:', e);
-        }
-    }
+    defaultData.contactInfo.address = toLocalizedField(contact.address, defaultData.contactInfo.address.id);
+    defaultData.contactInfo.phone = contact.phone || defaultData.contactInfo.phone;
+    defaultData.contactInfo.email = contact.email || defaultData.contactInfo.email;
+    defaultData.contactInfo.website = site.website || defaultData.contactInfo.website;
 
-    return contactDefault as ContactData;
+    defaultData.socialMedia = [
+        {
+            platform: 'Instagram (Sekolah)',
+            url: socialMedia.instagram || 'https://www.instagram.com/sman2_pangkalanbun',
+            icon: 'tabler:brand-instagram',
+        },
+        {
+            platform: 'Instagram (OSIS)',
+            url: socialMedia.instagramOsis || 'https://www.instagram.com/osis_smandapbun',
+            icon: 'tabler:brand-instagram',
+        },
+        {
+            platform: 'YouTube',
+            url: socialMedia.youtube || 'https://www.youtube.com/@smandapbun',
+            icon: 'tabler:brand-youtube',
+        },
+    ];
+
+    return defaultData;
 }
 
 export async function getProfilePageData(): Promise<ProfileData> {
@@ -899,25 +1146,6 @@ export interface AgendaData {
 }
 
 export async function getAgendaData(): Promise<AgendaData> {
-    const tenantId = await getTenantId();
-    if (!tenantId) return blogsDefault as unknown as AgendaData;
-
-    const client = getTenantClient(tenantId);
-    const { data } = await client
-        .from('settings')
-        .select('value')
-        .eq('tenant_id', tenantId)
-        .eq('key', 'page_agenda')
-        .maybeSingle();
-
-    if (data?.value) {
-        try {
-            const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-            return { ...blogsDefault, ...parsed } as unknown as AgendaData;
-        } catch (e) {
-            console.error('Error parsing agenda data:', e);
-        }
-    }
     return blogsDefault as unknown as AgendaData;
 }
 
@@ -935,25 +1163,6 @@ export interface GalleryData {
 }
 
 export async function getGalleryData(): Promise<GalleryData> {
-    const tenantId = await getTenantId();
-    if (!tenantId) return blogsDefault as unknown as GalleryData;
-
-    const client = getTenantClient(tenantId);
-    const { data } = await client
-        .from('settings')
-        .select('value')
-        .eq('tenant_id', tenantId)
-        .eq('key', 'page_gallery')
-        .maybeSingle();
-
-    if (data?.value) {
-        try {
-            const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-            return { ...blogsDefault, ...parsed } as unknown as GalleryData;
-        } catch (e) {
-            console.error('Error parsing gallery data:', e);
-        }
-    }
     return blogsDefault as unknown as GalleryData;
 }
 
@@ -1054,6 +1263,22 @@ const normalizePost = (post: any): Post => ({
     tag: Array.isArray(post.tags) ? post.tags.join(', ') : (post.tags || post.tag || ''),
 });
 
+const applyPostTranslation = (
+    post: Post,
+    translation: ContentTranslationRow | undefined,
+    locale?: Locale,
+): Post => {
+    if (!translation || !locale) return post;
+
+    return {
+        ...post,
+        title: mergeLocalizedField(post.title, translation.title, locale),
+        excerpt: mergeLocalizedField(post.excerpt, translation.excerpt, locale),
+        content: mergeLocalizedField(post.content, translation.content, locale),
+        slug: translation.slug || post.slug,
+    };
+};
+
 const getDefaultPosts = (limit: number): Post[] => {
     const fallbackPosts = (blogsDefault as any).blogs || [];
     return fallbackPosts.slice(0, limit).map(normalizePost);
@@ -1061,10 +1286,10 @@ const getDefaultPosts = (limit: number): Post[] => {
 
 export async function getPosts(limit = 6, locale?: Locale): Promise<Post[]> {
     const tenantId = await getTenantId();
-    if (!tenantId) return getDefaultPosts(limit);
+    if (!tenantId) return import.meta.env.DEV ? getDefaultPosts(limit) : [];
 
     const client = getTenantClient(tenantId);
-    const runQuery = async (withLocale: boolean) => {
+    const runQuery = async (localeFilter?: string | null) => {
         let query = client
             .from('blogs')
             .select('*, categories(name)')
@@ -1074,27 +1299,36 @@ export async function getPosts(limit = 6, locale?: Locale): Promise<Post[]> {
             .order('published_at', { ascending: false })
             .limit(limit);
 
-        if (withLocale && locale) {
-            query = query.eq('locale', locale);
+        if (localeFilter) {
+            query = query.eq('locale', localeFilter);
         }
 
         return query;
     };
 
-    let { data, error } = await runQuery(Boolean(locale));
+    let { data, error } = await runQuery(locale || null);
 
     if (locale && ((data && data.length === 0) || (error && isMissingLocaleColumnError(error.message || '')))) {
-        ({ data, error } = await runQuery(false));
+        ({ data, error } = await runQuery(null));
     }
 
     if (error) {
         console.error('Error fetching posts:', error);
-        return getDefaultPosts(limit);
+        return import.meta.env.DEV ? getDefaultPosts(limit) : [];
     }
 
     if (!data || data.length === 0) {
-        return getDefaultPosts(limit);
+        return [];
     }
 
-    return data.map(normalizePost);
+    const normalizedPosts = data.map(normalizePost);
+    const translations = await getContentTranslations(
+        client,
+        tenantId,
+        ['article', 'blog'],
+        locale,
+        normalizedPosts.map((post) => post.id),
+    );
+
+    return normalizedPosts.map((post) => applyPostTranslation(post, translations.get(post.id), locale));
 }

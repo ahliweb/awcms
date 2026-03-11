@@ -9,10 +9,12 @@ import {
   getLocalizedPath,
   type Locale,
 } from "../../utils/i18n";
-import { getGalleryData } from "../../lib/api";
+import { getAdminPageBySlug, getGalleryData } from "../../lib/api";
+import { sanitizeHTML } from "../../utils/sanitize";
 
 const locale = getLocale(Astro.url) as Locale;
 const galleryData = await getGalleryData();
+const galleryPage = await getAdminPageBySlug("galeri", locale);
 const { gallery } = galleryData;
 
 // Load local images
@@ -60,7 +62,7 @@ const albums: Album[] = [
 ];
 ---
 
-<Layout title={getLocalizedValue(gallery.title, locale)}>
+<Layout title={galleryPage?.title || getLocalizedValue(gallery.title, locale)}>
   <!-- Hero -->
   <section
     class="hero-gradient text-white py-16 md:py-20"
@@ -80,8 +82,13 @@ const albums: Album[] = [
         <span class="text-white">{t("blogs.gallery", locale)}</span>
       </nav>
       <h1 class="text-3xl md:text-4xl font-bold font-heading">
-        {getLocalizedValue(gallery.title, locale)}
+        {galleryPage?.title || getLocalizedValue(gallery.title, locale)}
       </h1>
+      {
+        galleryPage?.excerpt && (
+          <p class="text-xl text-blue-100 mt-4 max-w-3xl">{galleryPage.excerpt}</p>
+        )
+      }
     </div>
   </section>
 
@@ -92,6 +99,13 @@ const albums: Album[] = [
     data-testid="gallery-content"
   >
     <div class="container-custom">
+      {
+        galleryPage?.content && (
+          <div class="mb-10 rounded-2xl bg-white dark:bg-slate-800 shadow-sm p-8 prose dark:prose-invert max-w-none transition-colors duration-200">
+            <div set:html={sanitizeHTML(galleryPage.content)} />
+          </div>
+        )
+      }
       <!-- Category Filter -->
       <div
         class="flex flex-wrap justify-center gap-3 mb-10"

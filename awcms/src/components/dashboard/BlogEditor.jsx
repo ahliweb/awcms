@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -246,6 +247,16 @@ function BlogEditor({ item, onClose, onSuccess }) {
                     p_tags: formData.tags,
                     p_tenant_id: currentTenant.id
                 });
+            }
+
+            try {
+                await triggerPublicRebuild({
+                    tenantId: currentTenant.id,
+                    resource: 'blogs',
+                    action: item ? 'update' : 'create',
+                });
+            } catch (rebuildError) {
+                console.warn('Public rebuild trigger failed:', rebuildError);
             }
 
             if (workflowStateOverride) {

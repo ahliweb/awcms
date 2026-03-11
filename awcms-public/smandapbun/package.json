@@ -11,6 +11,7 @@
     "dev": "astro dev --port 3000 --host 0.0.0.0",
     "start": "astro dev --port 3000 --host 0.0.0.0",
     "build": "astro build",
+    "deploy:pages": "wrangler pages deploy dist --project-name awcms-smandapangkalanbun-web --branch main",
     "preview": "astro preview",
     "check": "astro check",
     "lint": "eslint .",

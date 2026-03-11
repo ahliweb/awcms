@@ -37,15 +37,15 @@ This checklist aligns `docs/security/abac.md`, `docs/RESOURCE_MAP.md`, and `docs
   - [x] Keep `/p/[slug].astro` as single source for DB pages.
   - [x] Replace hardcoded widget home in `src/pages/index.astro` with a visual page (`page_type = home`).
 - [ ] **Public (smandapbun)**:
-  - [ ] Decide: keep page data in `settings` JSON (`page_*`) or migrate to `pages`.
-  - [ ] If migrating, update `src/pages/**` to fetch `pages` by slug (similar to primary).
+  - [x] Decide: keep page data in `settings` JSON (`page_*`) or migrate to `pages`.
+  - [x] If migrating, update `src/pages/**` to fetch `pages` by slug (similar to primary).
 
 ## 3) Blogs / News / Announcements (tenant.blog.*, tenant.announcements.*, tenant.promotions.*)
 
 - [ ] **DB**: Ensure `blogs`, `announcements`, `promotions` tables are tenant-scoped and published.
 - [ ] **Admin**: Add `ui_configs` for list + form per resource; enable publish workflow.
 - [ ] **Public (primary)**: `src/lib/content.ts` already fetches `blogs`; add routes/widgets for announcements/promotions as needed.
-- [ ] **Public (smandapbun)**: replace `src/data/blogs/*.json` with DB-backed reads (blogs/announcements).
+- [x] **Public (smandapbun)**: replace `src/data/blogs/*.json` with DB-backed reads (blogs/announcements). Production reads are DB-backed; local JSON fallback is development-only.
 
 ## 4) Media & Galleries (tenant.files.*, tenant.photo_gallery.*, tenant.video_gallery.*, tenant.school_pages.*)
 
@@ -65,7 +65,7 @@ This checklist aligns `docs/security/abac.md`, `docs/RESOURCE_MAP.md`, and `docs
 
 - [ ] **DB**: add settings keys for `page_profile`, `page_services`, `page_finance`, `page_staff`, `page_achievements`, `page_alumni`, `page_gallery`, `page_agenda`, `page_contact`, `page_school_info`.
 - [ ] **Admin**: create `ui_configs` per `page_*` key and map to `settings` table.
-- [ ] **Public (smandapbun)**: ensure `src/lib/api.ts` reads all `page_*` keys (no JSON fallback).
+- [x] **Public (smandapbun)**: route-backed school pages now render from `pages` records, with legacy `page_*` keys kept only for transition/seed support.
 
 ## 7) Commerce (tenant.products.*, tenant.product_types.*, tenant.orders.*)
 

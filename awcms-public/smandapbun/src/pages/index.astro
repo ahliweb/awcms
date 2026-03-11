@@ -8,13 +8,30 @@ import {
   getLocalizedPath,
   type Locale,
 } from "../utils/i18n";
-import { getSiteData, getPosts, getProfilePageData } from "../lib/api";
+import { getAdminPageBySlug, getSiteData, getPosts, getProfilePageData } from "../lib/api";
 
 const locale = getLocale(Astro.url) as Locale;
 const site = await getSiteData();
 const posts = await getPosts(6, locale);
 const profileData = await getProfilePageData();
-const { principalMessage } = profileData;
+const { principalMessage: principalMessageFallback } = profileData;
+const principalMessagePage = await getAdminPageBySlug("sambutan-kepala-sekolah", locale);
+const principalMessage = principalMessagePage
+  ? {
+      title: { id: principalMessagePage.title, en: principalMessagePage.title },
+      content: {
+        id:
+          principalMessagePage.content ||
+          getLocalizedValue(principalMessageFallback.content, "id"),
+        en:
+          principalMessagePage.content ||
+          getLocalizedValue(principalMessageFallback.content, "en"),
+      },
+      author: principalMessageFallback.author,
+      position: principalMessageFallback.position,
+      image: principalMessagePage.featured_image || principalMessageFallback.image,
+    }
+  : principalMessageFallback;
 const featuredBlogs = posts.filter((a) => a.featured).slice(0, 3);
 const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
 const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || t("home.tagline", locale);

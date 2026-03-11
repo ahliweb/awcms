@@ -4,6 +4,7 @@ import { CopyX, Plus, Save, RefreshCw, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import {
@@ -400,6 +401,16 @@ function MenusManager() {
 
       if (error) throw error;
 
+      try {
+        await triggerPublicRebuild({
+          tenantId: currentTenant?.id,
+          resource: 'menus',
+          action: editingMenu ? 'update' : 'create',
+        });
+      } catch (rebuildError) {
+        console.warn('Public rebuild trigger failed:', rebuildError);
+      }
+
       toast({ title: 'Success', description: 'Menu item saved successfully' });
       setIsEditing(false);
       fetchMenus();
@@ -423,6 +434,11 @@ function MenusManager() {
     if (error) {
       toast({ variant: 'destructive', title: 'Error deleting menu' });
     } else {
+      try {
+        await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'menus', action: 'delete' });
+      } catch (rebuildError) {
+        console.warn('Public rebuild trigger failed:', rebuildError);
+      }
       toast({ title: 'Menu deleted' });
       fetchMenus();
     }
@@ -512,6 +528,12 @@ function MenusManager() {
       const { error } = await supabase.from('menus').insert(newItems);
       if (error) throw error;
 
+      try {
+        await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'menus', action: 'create' });
+      } catch (rebuildError) {
+        console.warn('Public rebuild trigger failed:', rebuildError);
+      }
+
       toast({ title: 'Sync complete', description: `Added ${newItems.length} menu items` });
       fetchMenus();
     } catch (err) {
@@ -548,6 +570,12 @@ function MenusManager() {
       await Promise.all(Array.from(duplicateMenuIds).map((id) => (
         supabase.rpc('soft_delete_menu', { p_menu_id: id })
       )));
+
+      try {
+        await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'menus', action: 'delete' });
+      } catch (rebuildError) {
+        console.warn('Public rebuild trigger failed:', rebuildError);
+      }
 
       toast({ title: 'Duplicates removed', description: 'Repeated links were moved out of the active menu scope.' });
       fetchMenus();

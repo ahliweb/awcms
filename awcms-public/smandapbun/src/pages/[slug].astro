@@ -1,0 +1,16 @@
+---
+import type { GetStaticPaths } from "astro";
+import AdminManagedPage from "../components/AdminManagedPage.astro";
+import { getAdminPageSlugs } from "../lib/api";
+
+export const prerender = true;
+
+export const getStaticPaths = (async () => {
+  const slugs = await getAdminPageSlugs("id");
+  return slugs.map((slug) => ({ params: { slug } }));
+}) satisfies GetStaticPaths;
+
+const { slug } = Astro.params;
+---
+
+<AdminManagedPage slug={slug || ""} locale="id" />

@@ -27,7 +27,24 @@ Required keys are defined in `.env.example`:
 PUBLIC_SUPABASE_URL=...
 PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 PUBLIC_TURNSTILE_SITE_KEY=...
+PUBLIC_TENANT_ID=...
 ```
+
+Optional tenant slug override:
+
+```env
+PUBLIC_TENANT_SLUG=smandapbun
+```
+
+For automatic public rebuilds after Admin content changes, configure these non-public tenant settings:
+
+- `public_rebuild_webhook_url=<Cloudflare Pages deploy hook URL>`
+- `public_rebuild_webhook_secret=` (optional; only needed for the DB-trigger -> Worker webhook variant)
+
+The maintained live setup uses the Cloudflare Pages deploy hook directly, while the Admin panel also triggers
+`awcms-edge` `/api/public/rebuild` after page/blog/menu updates.
+
+Tenant-managed files continue to use the shared Cloudflare R2 bucket `awcms-s3` with tenant-prefixed keys.
 
 Optional storage keys:
 
@@ -43,6 +60,7 @@ PUBLIC_SUPABASE_S3_BUCKET=...
 | --- | --- |
 | `npm run dev` | Start local Astro dev server |
 | `npm run build` | Build static output |
+| `npm run deploy:pages` | Direct-upload `dist/` to Cloudflare Pages |
 | `npm run preview` | Preview built output |
 
 ## References

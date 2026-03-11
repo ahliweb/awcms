@@ -59,3 +59,20 @@ npm run typecheck
 - `../docs/dev/edge-functions.md`
 - `../docs/dev/ci-cd.md`
 - `./wrangler.jsonc`
+
+## Public Rebuild Webhook
+
+`awcms-edge` also hosts rebuild endpoints for the SMANDAPBUN public portal:
+
+- Authenticated route used by the Admin panel: `/api/public/rebuild`
+- Optional secret-based route for database-trigger/webhook setups: `/webhooks/public-rebuild/smandapbun`
+- Expected header: `x-awcms-rebuild-secret`
+- Required Worker secrets:
+  - `SMANDAPBUN_REBUILD_WEBHOOK_SECRET`
+  - `GITHUB_REBUILD_TOKEN`
+  - `GITHUB_REBUILD_OWNER`
+  - `GITHUB_REBUILD_REPO`
+  - optional `GITHUB_REBUILD_EVENT_TYPE`
+
+The authenticated Admin route resolves the tenant's configured deploy hook from Supabase settings and triggers the
+Cloudflare Pages project rebuild directly.

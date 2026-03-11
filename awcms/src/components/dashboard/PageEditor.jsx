@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -199,6 +200,16 @@ function PageEditor({ page, onClose, onSuccess }) {
             } else {
                 const { error } = await supabase.from('pages').insert([payload]);
                 if (error) throw error;
+            }
+
+            try {
+                await triggerPublicRebuild({
+                    tenantId: currentTenant.id,
+                    resource: 'pages',
+                    action: page ? 'update' : 'create',
+                });
+            } catch (rebuildError) {
+                console.warn('Public rebuild trigger failed:', rebuildError);
             }
 
             // Sync Tags - REMOVED

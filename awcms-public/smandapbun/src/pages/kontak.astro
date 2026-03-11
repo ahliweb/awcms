@@ -2,17 +2,19 @@
 import Layout from "../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
 import { getLocale, t, getLocalizedValue, type Locale } from "../utils/i18n";
-import { getContactPageData, getTenantId } from "../lib/api";
+import { getAdminPageBySlug, getContactPageData, getTenantId } from "../lib/api";
 import Toast from "../components/ui/Toast.astro";
+import { sanitizeHTML } from "../utils/sanitize";
 
 const locale = getLocale(Astro.url) as Locale;
 
 const contactData = await getContactPageData();
 const tenantId = await getTenantId();
+const adminPage = await getAdminPageBySlug("kontak", locale, tenantId);
 const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
 ---
 
-<Layout title={t("contact.title", locale)}>
+<Layout title={adminPage?.title || t("contact.title", locale)}>
   <Toast />
   <!-- Hero -->
   <section
@@ -25,10 +27,10 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
         {t("nav.contact", locale)}
       </p>
       <h1 class="text-4xl md:text-5xl font-bold font-heading">
-        {getLocalizedValue(contactPage.title, locale)}
+        {adminPage?.title || getLocalizedValue(contactPage.title, locale)}
       </h1>
       <p class="text-xl text-blue-100 mt-4 max-w-2xl">
-        {getLocalizedValue(contactPage.description, locale)}
+        {adminPage?.excerpt || getLocalizedValue(contactPage.description, locale)}
       </p>
     </div>
   </section>
@@ -40,6 +42,13 @@ const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
     data-testid="contact-content"
   >
     <div class="container-custom">
+      {
+        adminPage?.content && (
+          <div class="mb-10 rounded-2xl bg-white dark:bg-slate-800 shadow-sm p-8 prose prose-lg dark:prose-invert max-w-none transition-colors duration-200">
+            <div set:html={sanitizeHTML(adminPage.content)} />
+          </div>
+        )
+      }
       <div class="grid lg:grid-cols-2 gap-12">
         <!-- Contact Info -->
         <div>

@@ -5,6 +5,7 @@ import GenericResourceEditor from '@/components/dashboard/GenericResourceEditor'
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { udm } from '@/lib/data/UnifiedDataManager'; // Changed from supabase
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, RefreshCw, RotateCcw, ShieldAlert, User, Home, ChevronRight } from 'lucide-react';
 import MinCharSearchInput from '@/components/common/MinCharSearchInput';
@@ -234,6 +235,14 @@ const GenericContentManager = ({
 
             toast({ title: 'Success', description: `${resourceName} moved to trash` });
 
+            if (['pages', 'blogs'].includes(tableName)) {
+                try {
+                    await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: tableName, action: 'delete' });
+                } catch (rebuildError) {
+                    console.warn('Public rebuild trigger failed:', rebuildError);
+                }
+            }
+
             fetchItems();
         } catch (err) {
             console.error('Delete error:', err);
@@ -263,6 +272,15 @@ const GenericContentManager = ({
 
 
             toast({ title: 'Restored', description: `${resourceName} restored from trash.` });
+
+            if (['pages', 'blogs'].includes(tableName)) {
+                try {
+                    await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: tableName, action: 'restore' });
+                } catch (rebuildError) {
+                    console.warn('Public rebuild trigger failed:', rebuildError);
+                }
+            }
+
             fetchItems();
         } catch (err) {
             console.error('Restore error:', err);
@@ -289,6 +307,14 @@ const GenericContentManager = ({
 
             if (error) throw error;
             toast({ title: 'Permanently Deleted', description: `${resourceName} has been permanently removed.` });
+
+            if (['pages', 'blogs'].includes(tableName)) {
+                try {
+                    await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: tableName, action: 'permanent_delete' });
+                } catch (rebuildError) {
+                    console.warn('Public rebuild trigger failed:', rebuildError);
+                }
+            }
 
             fetchItems();
         } catch (err) {

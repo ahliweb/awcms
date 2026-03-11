@@ -17,6 +17,11 @@ type Bindings = {
   MEDIA_SECURE_SESSION_MAX_AGE_SECONDS?: string
   MAILKETING_API_TOKEN: string
   MAILKETING_DEFAULT_LIST_ID?: string
+  GITHUB_REBUILD_TOKEN?: string
+  GITHUB_REBUILD_OWNER?: string
+  GITHUB_REBUILD_REPO?: string
+  GITHUB_REBUILD_EVENT_TYPE?: string
+  SMANDAPBUN_REBUILD_WEBHOOK_SECRET?: string
 }
 
 type Variables = {
@@ -103,6 +108,14 @@ const getSessionBoundAccessWindowSeconds = (env: Bindings, token: string, reques
   return {
     expiresIn,
     expiresAt: new Date((now + expiresIn) * 1000).toISOString(),
+  }
+}
+
+const getJsonBody = async (request: Request) => {
+  try {
+    return await request.json<Record<string, unknown>>()
+  } catch {
+    return null
   }
 }
 
@@ -509,6 +522,136 @@ app.get('/public/media/*', async (c) => {
 });
 
 // ---- MIGRATED ENDPOINTS ----
+
+app.post('/webhooks/public-rebuild/smandapbun', async (c) => {
+  const expectedSecret = c.env.SMANDAPBUN_REBUILD_WEBHOOK_SECRET?.trim()
+  const providedSecret = c.req.header('x-awcms-rebuild-secret')?.trim()
+
+  if (!expectedSecret) {
+    return c.json({ error: 'Webhook secret is not configured' }, 500)
+  }
+
+  if (!providedSecret || providedSecret !== expectedSecret) {
+    return c.json({ error: 'Unauthorized webhook request' }, 401)
+  }
+
+  const githubToken = c.env.GITHUB_REBUILD_TOKEN?.trim()
+  const githubOwner = c.env.GITHUB_REBUILD_OWNER?.trim()
+  const githubRepo = c.env.GITHUB_REBUILD_REPO?.trim()
+  const eventType = c.env.GITHUB_REBUILD_EVENT_TYPE?.trim() || 'smandapbun-content-changed'
+
+  if (!githubToken || !githubOwner || !githubRepo) {
+    return c.json({ error: 'GitHub rebuild integration is not configured' }, 500)
+  }
+
+  const payload = await getJsonBody(c.req.raw)
+  const dispatchResponse = await fetch(`https://api.github.com/repos/${githubOwner}/${githubRepo}/dispatches`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': `Bearer ${githubToken}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'awcms-edge-public-rebuild',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    body: JSON.stringify({
+      event_type: eventType,
+      client_payload: {
+        source: 'supabase-trigger',
+        tenant_slug: 'smandapbun',
+        tenant_id: payload?.tenant_id || null,
+        table: payload?.table || null,
+        operation: payload?.operation || null,
+        changed_at: payload?.changed_at || new Date().toISOString(),
+      },
+    }),
+  })
+
+  if (!dispatchResponse.ok) {
+    const responseText = await dispatchResponse.text()
+    return c.json({
+      error: 'Failed to dispatch GitHub deployment workflow',
+      details: responseText,
+      status: dispatchResponse.status,
+    }, 502)
+  }
+
+  return c.json({
+    ok: true,
+    eventType,
+    repository: `${githubOwner}/${githubRepo}`,
+  })
+})
+
+app.post('/api/public/rebuild', async (c) => {
+  const user = c.get('user')
+  const token = c.get('token')
+  const adminSupabase = getAdminSupabase(c.env)
+  const userSupabase = getAuthedSupabase(c.env, token)
+
+  let tenantId: string | null
+  try {
+    const userContext = await getUserContext(c.env, user.id)
+    tenantId = resolveTenantId(c.req.header('x-tenant-id') ?? null, userContext)
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Invalid tenant context' }, 403)
+  }
+
+  if (!tenantId) {
+    return c.json({ error: 'Missing tenant id header' }, 400)
+  }
+
+  const [{ data: canManagePages }, { data: canManageBlogs }, { data: canManageMenus }] = await Promise.all([
+    userSupabase.rpc('has_permission', { permission_name: 'tenant.page.update' }),
+    userSupabase.rpc('has_permission', { permission_name: 'tenant.blog.update' }),
+    userSupabase.rpc('has_permission', { permission_name: 'tenant.menu.update' }),
+  ])
+
+  if (!canManagePages && !canManageBlogs && !canManageMenus) {
+    return c.json({ error: 'Insufficient permissions to trigger a public rebuild' }, 403)
+  }
+
+  const body = await getJsonBody(c.req.raw)
+  const { data: setting, error: settingError } = await adminSupabase
+    .from('settings')
+    .select('value')
+    .eq('tenant_id', tenantId)
+    .eq('key', 'public_rebuild_webhook_url')
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (settingError) {
+    return c.json({ error: 'Failed to load rebuild webhook configuration', details: settingError.message }, 500)
+  }
+
+  const hookUrl = String(setting?.value || '').trim()
+  if (!hookUrl) {
+    return c.json({ error: 'Public rebuild webhook is not configured for this tenant' }, 404)
+  }
+
+  const response = await fetch(hookUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'awcms-edge-public-rebuild',
+    },
+    body: JSON.stringify({
+      tenant_id: tenantId,
+      source: 'admin-panel',
+      resource: body?.resource || null,
+      action: body?.action || 'update',
+      actor_id: user.id,
+      triggered_at: new Date().toISOString(),
+    }),
+  })
+
+  if (!response.ok) {
+    const details = await response.text()
+    return c.json({ error: 'Failed to trigger deploy hook', details, status: response.status }, 502)
+  }
+
+  return c.json({ ok: true, tenantId, hookUrlConfigured: true })
+})
 
 // Sitemap generation
 app.get('/public/sitemap', async (c) => {
