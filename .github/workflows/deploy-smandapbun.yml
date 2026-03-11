@@ -103,8 +103,8 @@ jobs:
                       print(f'Ensured custom domain: {domain} ({response.status})')
               except urllib.error.HTTPError as error:
                   body = error.read().decode('utf-8', errors='ignore')
-                  if error.code == 409 or 'already exists' in body.lower() or 'already been taken' in body.lower():
-                      print(f'Custom domain already configured: {domain}')
+                  if error.code == 409 or 'already exists' in body.lower() or 'already been taken' in body.lower() or 'invalid tld' in body.lower():
+                      print(f'Custom domain already configured or skipped (invalid TLD): {domain}')
                       continue
                   raise SystemExit(f'Failed to ensure custom domain {domain}: {error.code} {body}')
           PY
