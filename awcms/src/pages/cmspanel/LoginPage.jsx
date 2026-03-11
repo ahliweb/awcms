@@ -14,6 +14,8 @@ import AuthShell from '@/components/auth/AuthShell';
 import { Eye, EyeOff, Loader2, ShieldCheck, AlertCircle, LayoutGrid, Sparkles, Mail, Lock } from 'lucide-react';
 import * as OTPAuth from 'otpauth';
 
+const LOCALHOST_TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
+
 
 const LoginPage = () => {
   const { t } = useTranslation();
@@ -175,7 +177,11 @@ const LoginPage = () => {
       }
 
       // 1.5 Verify Turnstile token via Edge Function (server-side verification)
-      if (turnstileToken) {
+      const localhostTestSiteKey =
+        import.meta.env.VITE_TURNSTILE_TEST_SITE_KEY || LOCALHOST_TURNSTILE_TEST_SITE_KEY;
+      const shouldSkipLocalWorkerVerification = isLocalhost && Boolean(localhostTestSiteKey);
+
+      if (turnstileToken && !shouldSkipLocalWorkerVerification) {
         const verifyResponse = await supabase.functions.invoke('verify-turnstile', {
           body: { token: turnstileToken },
         });
@@ -205,6 +211,8 @@ const LoginPage = () => {
           }
           throw new Error(t('login_page.verification_failed'));
         }
+      } else if (turnstileToken && shouldSkipLocalWorkerVerification) {
+        console.warn('[Login] Skipping server-side Turnstile verification on localhost test-key flow.');
       }
 
       // 2. Authenticate with Supabase Auth (without passing token again)
@@ -256,17 +264,19 @@ const LoginPage = () => {
       // No 2FA -> Proceed to dashboard
       // Log successful login (get IP via edge function)
       let clientIP = null;
-      try {
-        const ipResponse = await supabase.functions.invoke('get-client-ip');
-        console.log('[Login] IP response:', ipResponse);
-        if (!ipResponse.error && ipResponse.data?.ip) {
-          clientIP = ipResponse.data.ip;
-          console.log('[Login] Got IP:', clientIP);
-        } else if (ipResponse.error) {
-          console.warn('[Login] IP error:', ipResponse.error);
+      if (!isLocalhost) {
+        try {
+          const ipResponse = await supabase.functions.invoke('get-client-ip');
+          console.log('[Login] IP response:', ipResponse);
+          if (!ipResponse.error && ipResponse.data?.ip) {
+            clientIP = ipResponse.data.ip;
+            console.log('[Login] Got IP:', clientIP);
+          } else if (ipResponse.error) {
+            console.warn('[Login] IP error:', ipResponse.error);
+          }
+        } catch (e) {
+          console.warn('[Login] IP fetch exception:', e);
         }
-      } catch (e) {
-        console.warn('[Login] IP fetch exception:', e);
       }
 
       await supabase.from('audit_logs').insert({
