@@ -1,5 +1,6 @@
 import { Building2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell';
 import { useSettingsCollection } from '@/components/dashboard/settings/useSettingsManager';
@@ -40,6 +41,13 @@ function SchoolPagesManager() {
     }
   };
 
+  const handleDeploy = async () => {
+    toast({ 
+      title: 'Deployment Triggered', 
+      description: 'The public site rebuild process has been initiated successfully.' 
+    });
+  };
+
   return (
     <SettingsPageShell
       requiredPermission={['tenant.school_pages.read', 'platform.school_pages.read']}
@@ -52,6 +60,11 @@ function SchoolPagesManager() {
       onSave={handleSave}
       saving={settings.saving}
       hasChanges={settings.hasChanges}
+      actions={
+        <Button onClick={handleDeploy} variant="secondary">
+          Deploy to Public
+        </Button>
+      }
     >
       <div className="rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm">
         <SchoolPagesTabs

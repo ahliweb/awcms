@@ -1,5 +1,63 @@
 ---
-import AdminManagedPage from "../../components/AdminManagedPage.astro";
+import SettingsManagedPage from "../../components/SettingsManagedPage.astro";
+import { getProfilePageData } from "../../lib/api";
+
+const profileData = await getProfilePageData();
+const data = profileData?.visionMission;
+
+// Helper to safely get localized string
+const getLocal = (str: any) => str?.id || str || "";
+const getLocalArray = (arr: any) => arr?.id || arr || [];
 ---
 
-<AdminManagedPage slug="visi-misi" locale="id" backHref="/profil" />
+<SettingsManagedPage data={data} locale="id" backHref="/profil">
+  {data && (
+    <div class="space-y-12">
+      {/* Visi */}
+      {data.vision && (
+        <section>
+          <h2 class="text-2xl font-bold font-heading mb-4 text-primary">Visi</h2>
+          <div class="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+            <p class="text-xl font-medium text-center italic text-blue-900 dark:text-blue-100">
+              "{getLocal(data.vision)}"
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* Misi */}
+      {data.mission && (
+        <section>
+          <h2 class="text-2xl font-bold font-heading mb-4 text-primary">Misi</h2>
+          <ul class="space-y-4">
+            {getLocalArray(data.mission).map((item: string, index: number) => (
+              <li class="flex gap-4 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700">
+                <span class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 font-bold">
+                  {index + 1}
+                </span>
+                <p class="text-gray-700 dark:text-gray-300 pt-1">{item}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Tujuan */}
+      {data.goals && (
+        <section>
+          <h2 class="text-2xl font-bold font-heading mb-4 text-primary">Tujuan Sekolah</h2>
+          <ul class="space-y-4">
+            {getLocalArray(data.goals).map((item: string, index: number) => (
+              <li class="flex gap-4 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700">
+                <span class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 font-bold">
+                  {index + 1}
+                </span>
+                <p class="text-gray-700 dark:text-gray-300 pt-1">{item}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  )}
+</SettingsManagedPage>

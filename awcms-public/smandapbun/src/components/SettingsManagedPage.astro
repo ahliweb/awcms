@@ -1,0 +1,134 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { Icon } from "astro-icon/components";
+import { t, getLocalizedPath, type Locale } from "../utils/i18n";
+import { sanitizeHTML } from "../utils/sanitize";
+
+export interface Props {
+  data: any;
+  locale: Locale;
+  heroImage?: string;
+  backHref?: string;
+  featuredImage?: string;
+}
+
+const {
+  data,
+  locale,
+  heroImage = "/images/backgrounds/hero-students.webp",
+  backHref,
+  featuredImage,
+} = Astro.props;
+
+if (!data) {
+  Astro.response.status = 404;
+}
+
+const title = data?.title?.[locale] || data?.title?.id || data?.title || "";
+const content = data?.content?.[locale] || data?.content?.id || data?.content || "";
+const excerpt = data?.subtitle?.[locale] || data?.subtitle?.id || data?.subtitle || "";
+const image = featuredImage || data?.image;
+
+const hasRenderableContent = Boolean(content?.trim());
+const resolvedBackHref = backHref || getLocalizedPath("/", locale);
+---
+
+<Layout
+  title={title || (locale === "id" ? "Halaman tidak ditemukan" : "Page not found")}
+  description={excerpt || ""}
+  image={image || "/images/og-image.jpg"}
+>
+  {
+    data ? (
+      <>
+        <section
+          class="hero-gradient text-white py-16 md:py-20"
+          style={`--hero-image: url('${heroImage}');`}
+        >
+          <div class="container-custom">
+            <nav class="text-sm text-blue-200 mb-4">
+              <a href={getLocalizedPath("/", locale)} class="hover:text-white"
+                >{t("nav.home", locale)}</a
+              >
+              <span class="mx-2">/</span>
+              <span class="text-white">{title}</span>
+            </nav>
+            <h1 class="text-3xl md:text-5xl font-bold font-heading max-w-4xl">
+              {title}
+            </h1>
+            {
+              excerpt && (
+                <p class="mt-4 max-w-3xl text-lg text-blue-100">{excerpt}</p>
+              )
+            }
+          </div>
+        </section>
+
+        <section class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200">
+          <div class="container-custom">
+            <article class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden transition-colors duration-200">
+              {
+                image && (
+                  <img
+                    src={image}
+                    alt={title}
+                    class="w-full aspect-[16/7] object-cover"
+                    loading="lazy"
+                  />
+                )
+              }
+
+              <div class="p-8 md:p-12">
+                {
+                  hasRenderableContent ? (
+                    <div
+                      class={`prose prose-lg dark:prose-invert max-w-none ${Astro.slots.has('default') ? 'mb-8' : ''}`}
+                      set:html={sanitizeHTML(content)}
+                    />
+                  ) : (
+                    !Astro.slots.has('default') && (
+                      <div class="rounded-xl border border-dashed border-gray-300 dark:border-slate-600 p-6 text-sm text-gray-600 dark:text-gray-300">
+                        {
+                          locale === "id"
+                            ? "Konten halaman ini belum tersedia untuk ditampilkan di portal publik."
+                            : "This page does not have public content available yet."
+                        }
+                      </div>
+                    )
+                  )
+                }
+                
+                <slot />
+              </div>
+            </article>
+
+            <div class="mt-8">
+              <a
+                href={resolvedBackHref}
+                class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800"
+              >
+                <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
+                {t("common.back", locale)}
+              </a>
+            </div>
+          </div>
+        </section>
+      </>
+    ) : (
+      <section class="py-20">
+        <div class="container-custom max-w-3xl">
+          <h1 class="text-3xl font-bold">
+            {locale === "id" ? "Halaman tidak ditemukan" : "Page not found"}
+          </h1>
+          <p class="mt-4 text-gray-600 dark:text-gray-300">
+            {
+              locale === "id"
+                ? "Halaman yang Anda cari belum tersedia atau sudah tidak dipublikasikan."
+                : "The page you requested is unavailable or no longer published."
+            }
+          </p>
+        </div>
+      </section>
+    )
+  }
+</Layout>

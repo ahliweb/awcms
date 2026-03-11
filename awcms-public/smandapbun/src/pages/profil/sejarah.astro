@@ -1,5 +1,32 @@
 ---
-import AdminManagedPage from "../../components/AdminManagedPage.astro";
+import SettingsManagedPage from "../../components/SettingsManagedPage.astro";
+import { getProfilePageData } from "../../lib/api";
+
+const profileData = await getProfilePageData();
+const data = profileData?.history;
+
+const getLocal = (str: any) => str?.id || str || "";
 ---
 
-<AdminManagedPage slug="sejarah" locale="id" backHref="/profil" />
+<SettingsManagedPage data={data} locale="id" backHref="/profil">
+  {data?.milestones && data.milestones.length > 0 && (
+    <div class="mt-12">
+      <h2 class="text-2xl font-bold font-heading mb-8 text-primary">Milestones</h2>
+      <div class="relative border-l-2 border-blue-200 dark:border-blue-800 ml-4 md:ml-6 space-y-12">
+        {data.milestones.map((milestone: any) => (
+          <div class="relative pl-8 md:pl-10">
+            <div class="absolute -left-[11px] top-1 w-5 h-5 rounded-full bg-white dark:bg-slate-800 border-4 border-blue-500 shadow-sm" />
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700">
+              <span class="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold rounded-full text-sm mb-3">
+                {milestone.year}
+              </span>
+              <p class="text-gray-700 dark:text-gray-300">
+                {getLocal(milestone.event)}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</SettingsManagedPage>

@@ -1,5 +1,9 @@
 ---
-import AdminManagedPage from "../../components/AdminManagedPage.astro";
+import SettingsManagedPage from "../../components/SettingsManagedPage.astro";
+import { getProfilePageData } from "../../lib/api";
+
+const profileData = await getProfilePageData();
+const data = profileData?.principalMessage;
 ---
 
-<AdminManagedPage slug="sambutan-kepala-sekolah" locale="id" backHref="/profil" />
+<SettingsManagedPage data={data} locale="id" backHref="/profil" />

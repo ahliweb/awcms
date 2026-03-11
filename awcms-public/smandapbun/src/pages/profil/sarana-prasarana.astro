@@ -1,5 +1,38 @@
 ---
-import AdminManagedPage from "../../components/AdminManagedPage.astro";
+import SettingsManagedPage from "../../components/SettingsManagedPage.astro";
+import { getProfilePageData } from "../../lib/api";
+
+const profileData = await getProfilePageData();
+const data = profileData?.facilities;
+
+const getLocal = (str: any) => str?.id || str || "";
 ---
 
-<AdminManagedPage slug="sarana-prasarana" locale="id" backHref="/profil" />
+<SettingsManagedPage data={data} locale="id" backHref="/profil">
+  {data?.items && data.items.length > 0 && (
+    <div class="mt-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {data.items.map((item: any) => (
+          <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex flex-col h-full">
+            <h3 class="text-xl font-bold font-heading mb-2 text-primary">
+              {getLocal(item.name)}
+            </h3>
+            <div class="flex items-center gap-4 mb-4 text-sm">
+              <span class="bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full font-medium">
+                Jumlah: {item.count}
+              </span>
+              <span class="bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-3 py-1 rounded-full font-medium">
+                Kondisi: {item.condition}
+              </span>
+            </div>
+            {item.description && (
+              <p class="text-gray-600 dark:text-gray-400 mt-auto">
+                {getLocal(item.description)}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</SettingsManagedPage>

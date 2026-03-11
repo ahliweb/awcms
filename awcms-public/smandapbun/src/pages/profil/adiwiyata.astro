@@ -1,5 +1,29 @@
 ---
-import AdminManagedPage from "../../components/AdminManagedPage.astro";
+import SettingsManagedPage from "../../components/SettingsManagedPage.astro";
+import { getProfilePageData } from "../../lib/api";
+
+const profileData = await getProfilePageData();
+const data = profileData?.adiwiyata;
+
+const getLocal = (str: any) => str?.id || str || "";
 ---
 
-<AdminManagedPage slug="adiwiyata" locale="id" backHref="/profil" />
+<SettingsManagedPage data={data} locale="id" backHref="/profil">
+  {data?.awards && data.awards.length > 0 && (
+    <div class="mt-8">
+      <h2 class="text-2xl font-bold font-heading mb-6 text-primary">Penghargaan</h2>
+      <div class="grid gap-4 md:grid-cols-2">
+        {data.awards.map((award: any) => (
+          <div class="flex items-center gap-4 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700">
+            <div class="bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 px-4 py-2 rounded-lg font-bold flex-shrink-0">
+              {award.year}
+            </div>
+            <div class="text-gray-800 dark:text-gray-200 font-medium">
+              {getLocal(award.title)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</SettingsManagedPage>

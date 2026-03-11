@@ -1,5 +1,41 @@
 ---
-import AdminManagedPage from "../../components/AdminManagedPage.astro";
+import SettingsManagedPage from "../../components/SettingsManagedPage.astro";
+import { getProfilePageData } from "../../lib/api";
+
+const profileData = await getProfilePageData();
+const data = profileData?.schoolCondition;
+
+const labels: Record<string, { id: string, en: string, icon: string }> = {
+  landArea: { id: "Luas Lahan", en: "Land Area", icon: "tabler:map-pin" },
+  buildingArea: { id: "Luas Bangunan", en: "Building Area", icon: "tabler:building" },
+  greenArea: { id: "Area Hijau", en: "Green Area", icon: "tabler:tree" },
+  parkingArea: { id: "Area Parkir", en: "Parking Area", icon: "tabler:car" }
+};
 ---
 
-<AdminManagedPage slug="profil" locale="id" backHref="/" />
+<SettingsManagedPage data={data} locale="id" backHref="/">
+  {data?.statistics && Object.keys(data.statistics).length > 0 && (
+    <div class="mt-8">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Object.entries(data.statistics).map(([key, value]) => {
+          const config = labels[key] || { id: key, en: key, icon: "tabler:info-circle" };
+          return (
+            <div class="bg-blue-50 dark:bg-slate-800 p-6 rounded-xl border border-blue-100 dark:border-slate-700 text-center flex flex-col items-center justify-center">
+              <div class="w-12 h-12 bg-white dark:bg-slate-700 rounded-full flex items-center justify-center mb-3 text-blue-600 dark:text-blue-400 shadow-sm">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                </svg>
+              </div>
+              <p class="text-sm text-gray-500 dark:text-gray-400 font-medium mb-1">
+                {config.id}
+              </p>
+              <p class="text-xl font-bold text-gray-900 dark:text-white">
+                {value as string}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  )}
+</SettingsManagedPage>

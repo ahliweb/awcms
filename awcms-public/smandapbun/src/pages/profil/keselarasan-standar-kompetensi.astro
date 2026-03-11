@@ -1,5 +1,47 @@
 ---
-import AdminManagedPage from "../../components/AdminManagedPage.astro";
+import SettingsManagedPage from "../../components/SettingsManagedPage.astro";
+import { getProfilePageData } from "../../lib/api";
+
+const profileData = await getProfilePageData();
+const data = profileData?.competencyAlignment;
+
+const getLocal = (str: any) => str?.id || str || "";
+const getLocalArray = (arr: any) => arr?.id || arr || [];
 ---
 
-<AdminManagedPage slug="keselarasan-standar-kompetensi" locale="id" backHref="/profil" />
+<SettingsManagedPage data={data} locale="id" backHref="/profil">
+  {data?.implementation?.items && (
+    <div class="mt-12 space-y-8">
+      <h2 class="text-2xl font-bold font-heading text-primary">
+        {getLocal(data.implementation.title) || "Implementasi"}
+      </h2>
+      
+      <div class="grid gap-6">
+        {data.implementation.items.map((item: any) => (
+          <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 relative overflow-hidden">
+            <div class="absolute top-0 right-0 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-4 py-1.5 rounded-bl-xl font-medium text-sm">
+              {getLocal(item.progress)}
+            </div>
+            
+            <h3 class="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">
+              {getLocal(item.category)}
+            </h3>
+            
+            <ul class="space-y-3">
+              {getLocalArray(item.activities).map((act: string) => (
+                <li class="flex gap-3 text-gray-700 dark:text-gray-300">
+                  <span class="text-blue-500 flex-shrink-0 mt-1.5">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                  </span>
+                  <span>{act}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</SettingsManagedPage>
