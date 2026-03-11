@@ -181,16 +181,20 @@ const LoginPage = () => {
         });
 
         // Check for hard errors vs. service unavailability
+        const isNetworkFailure =
+          verifyResponse.error instanceof TypeError ||
+          verifyResponse.error?.message?.includes('Failed to fetch') ||
+          verifyResponse.error?.message?.includes('ERR_CONNECTION_REFUSED');
         const is503 = verifyResponse.error?.message?.includes('503') ||
           verifyResponse.error?.status === 503 ||
           verifyResponse.error?.context?.status === 503;
 
-        if (is503 && isLocalhost) {
-          // Edge runtime not running locally — skip server-side verification.
+        if ((is503 || isNetworkFailure) && isLocalhost) {
+          // Worker API not running locally — skip server-side verification.
           // The Cloudflare test site key (1x00000000000000000000AA) already
-          // validates client-side. Run `supabase functions serve` to enable full verification.
-          console.warn('[Login] verify-turnstile edge function unavailable (503). ' +
-            'Run `npx supabase functions serve` in the project root to enable server-side verification.');
+          // validates client-side. Run the Worker alongside the admin app to enable full verification.
+          console.warn('[Login] verify-turnstile Worker route unavailable in localhost dev. ' +
+            'Run `npm run dev:full` in `awcms/` or `npm run dev:local` in `awcms-edge/` to enable server-side verification.');
         } else if (verifyResponse.error || !verifyResponse.data?.success) {
           // Reset Turnstile on genuine verification failure
           setTurnstileToken('');
@@ -284,25 +288,6 @@ const LoginPage = () => {
 
     } catch (error) {
       console.error('Login error:', error);
-
-      // Log failed login attempt
-      try {
-        await supabase.from('audit_logs').insert({
-          tenant_id: null,
-          user_id: null,
-          action: 'user.login',
-          resource: 'auth',
-          channel: 'web',
-          details: {
-            status: 'failed',
-            error: error.message || 'Unknown error',
-            user_agent: navigator.userAgent,
-            attempted_email: email
-          },
-        });
-      } catch (logErr) {
-        console.warn('Failed to log login failure:', logErr);
-      }
 
       toast({
         variant: "destructive",

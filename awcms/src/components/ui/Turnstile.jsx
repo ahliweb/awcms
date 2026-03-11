@@ -46,6 +46,16 @@ const Turnstile = ({
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
     const [scriptLoaded, setScriptLoaded] = useState(false);
+    const onVerifyRef = useRef(onVerify);
+    const onErrorRef = useRef(onError);
+    const onExpireRef = useRef(onExpire);
+
+    useEffect(() => {
+        onVerifyRef.current = onVerify;
+        onErrorRef.current = onError;
+        onExpireRef.current = onExpire;
+    }, [onVerify, onError, onExpire]);
+
     const resolvedSiteKey = useMemo(() => {
         if (typeof window === 'undefined') return siteKey;
         const host = window.location.hostname;
@@ -90,14 +100,18 @@ const Turnstile = ({
     useEffect(() => {
         const scriptId = 'turnstile-script';
         let loadInterval = null;
+        let timeout = null;
 
         // Function to handle script ready
         const onScriptReady = () => {
             if (window.turnstile) {
-                console.log('[Turnstile] Script ready');
+                if (!scriptLoaded) {
+                    console.log('[Turnstile] Script ready');
+                }
                 setScriptLoaded(true);
                 setIsLoading(false);
                 if (loadInterval) clearInterval(loadInterval);
+                if (timeout) clearTimeout(timeout);
             }
         };
 
@@ -122,13 +136,13 @@ const Turnstile = ({
         }
 
         // Timeout fallback
-        const timeout = setTimeout(() => {
+        timeout = setTimeout(() => {
             if (!window.turnstile) {
                 console.error('[Turnstile] Script load timeout');
                 if (loadInterval) clearInterval(loadInterval);
                 setIsLoading(false);
                 setHasError(true);
-                onError?.();
+                onErrorRef.current?.();
             }
         }, 15000); // 15 seconds
 
@@ -145,7 +159,7 @@ const Turnstile = ({
                 }
             }
         };
-    }, [onError]);
+    }, [scriptLoaded]);
 
     // Render widget when script is loaded
     useEffect(() => {
@@ -176,7 +190,7 @@ const Turnstile = ({
                 sitekey: resolvedSiteKey,
                 callback: (token) => {
                     console.log('[Turnstile] Verification successful', token ? '(Token received)' : '(No token)');
-                    onVerify?.(token);
+                    onVerifyRef.current?.(token);
                 },
                 'error-callback': (errorCode) => {
                     console.warn('[Turnstile] Error callback:', errorCode);
@@ -184,12 +198,12 @@ const Turnstile = ({
                     if (errorCode === '600010') {
                         console.error('[Turnstile] Critical: Invalid Site Key');
                         setHasError(true);
-                        onError?.();
+                        onErrorRef.current?.();
                     }
                 },
                 'expired-callback': () => {
                     console.log('[Turnstile] Token expired');
-                    onExpire?.();
+                    onExpireRef.current?.();
                     if (widgetIdRef.current && window.turnstile) window.turnstile.reset(widgetIdRef.current);
                 },
                 'timeout-callback': () => {
@@ -225,7 +239,7 @@ const Turnstile = ({
         } catch (e) {
             console.error('[Turnstile] Exception during render:', e);
             setHasError(true);
-            onError?.();
+            onErrorRef.current?.();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [scriptLoaded, hasError, resolvedSiteKey, theme, size, appearance]);
