@@ -34,16 +34,25 @@ MAILKETING_API_TOKEN=...
 MAILKETING_DEFAULT_LIST_ID=1
 ```
 
-For legacy Supabase-function deployments:
+Set Worker secrets through Wrangler for the maintained deployment path:
 
 ```bash
-npx supabase secrets set MAILKETING_API_TOKEN=... MAILKETING_DEFAULT_LIST_ID=1
+cd awcms-edge
+npx wrangler secret put MAILKETING_API_TOKEN
+npx wrangler secret put MAILKETING_DEFAULT_LIST_ID
 ```
 
 ### Deploy Edge Handler
 
 ```bash
 npx wrangler deploy --cwd awcms-edge
+```
+
+For local development, run the Worker with the admin env file:
+
+```bash
+cd awcms-edge
+npm run dev:local
 ```
 
 ## Implementation Patterns
