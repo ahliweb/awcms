@@ -37,7 +37,8 @@ Explain the Visual Page Builder architecture and integration with public renderi
 
 | Route | Purpose | Notes |
 | --- | --- | --- |
-| `/cmspanel/visual-editor/:mode/:id` | Edit a visual layout | `:mode` specifies the type of layout: `template`, `part`, `page`, or `blog`. `:id` uses signed route parameters (`{uuid}.{signature}`). Legacy links using `?templateId` or `?partId` will redirect here. |
+| `/cmspanel/visual-pages` | Visual page list | Canonical route for visual content pages; supports `pages` and `layouts` tab sub-slugs. |
+| `/cmspanel/visual-editor/:mode/:id/*` | Edit a visual layout | `:mode` specifies the type of layout: `template`, `part`, `page`, or `blog`. `:id` uses signed route parameters (`{uuid}.{signature}`), and the route supports editor sub-slugs. Legacy links using `?templateId` or `?partId` will redirect here. |
 
 Modes:
 
@@ -83,6 +84,8 @@ Current UI checks include:
 - Menu access: `tenant.page.read`
 - Visual list: `tenant.visual_pages.read`
 - Edit/publish: `checkAccess('edit', 'pages', page)` and `checkAccess('publish', 'pages', page)`
+
+Theme/template editing inside the visual builder currently gates on `tenant.theme.update` for `template` and `part` modes.
 
 Refer to `docs/security/abac.md` for key conventions.
 
