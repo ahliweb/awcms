@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { udm } from '@/lib/data/UnifiedDataManager';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Save, X, Loader2, Lock, Layout, Settings } from 'lucide-react';
+import { Save, X, Lock, Layout, Settings } from 'lucide-react';
 import { useTenant } from '@/contexts/TenantContext';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import {
@@ -81,6 +81,7 @@ const GenericResourceEditor = ({
             const hasTagsField = fields.some(f => f.key === 'tags' || f.type === 'tags');
             if (hasTagsField) {
                 if (Array.isArray(payload.tags)) {
+                    payload.tags = payload.tags.map(t => String(t).trim()).filter(Boolean);
                 } else if (typeof payload.tags === 'string' && payload.tags.trim()) {
                     payload.tags = payload.tags.split(',').map(t => t.trim()).filter(Boolean);
                 } else {

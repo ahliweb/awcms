@@ -419,10 +419,10 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
         if (success) fetchFiles();
     };
 
-    const copyToClipboard = (url) => {
+    const copyToClipboard = useCallback((url) => {
         navigator.clipboard.writeText(url);
         toast({ title: 'Copied', description: 'URL copied to clipboard' });
-    };
+    }, [toast]);
 
     const handleCopyUrl = useCallback(async (file) => {
         if (isTrashView) {
@@ -437,7 +437,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
         const url = await ensureAccessUrl(file);
         if (!url) return;
         copyToClipboard(url);
-    }, [ensureAccessUrl, isTrashView, toast]);
+    }, [copyToClipboard, ensureAccessUrl, isTrashView, toast]);
 
     const handleSelectFile = useCallback(async (file) => {
         if (!onSelect) return;

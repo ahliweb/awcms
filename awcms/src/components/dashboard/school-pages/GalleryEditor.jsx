@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, ImageIcon, GripVertical, ChevronDown, ChevronUp } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import LocalizedInput from '@/components/ui/LocalizedInput';
 import ImageUpload from '@/components/ui/ImageUpload';

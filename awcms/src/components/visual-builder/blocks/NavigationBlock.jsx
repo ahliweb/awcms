@@ -3,7 +3,7 @@
  * Fetches and displays public menus from the database
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Menu as MenuIcon } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -103,11 +103,7 @@ export const NavigationBlock = ({
     const [loading, setLoading] = useState(true);
     const [openDropdown, setOpenDropdown] = useState(null);
 
-    useEffect(() => {
-        fetchMenus();
-    }, [currentTenant?.id, location, locale]);
-
-    const fetchMenus = async () => {
+    const fetchMenus = useCallback(async () => {
         if (!currentTenant?.id) {
             setMenus([]);
             setLoading(false);
@@ -153,7 +149,11 @@ export const NavigationBlock = ({
         } finally {
             setLoading(false);
         }
-    };
+    }, [currentTenant?.id, locale, location]);
+
+    useEffect(() => {
+        fetchMenus();
+    }, [fetchMenus]);
 
     const alignmentClass = {
         left: 'justify-start',

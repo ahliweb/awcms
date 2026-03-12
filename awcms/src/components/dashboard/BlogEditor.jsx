@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
@@ -108,11 +108,7 @@ function BlogEditor({ item, onClose, onSuccess }) {
     const canEdit = hasPermission('tenant.blog.update') || (user?.id === item?.author_id);
     const canPublish = hasPermission('tenant.blog.publish');
 
-    useEffect(() => {
-        fetchCategories();
-    }, []);
-
-    const fetchCategories = async () => {
+    const fetchCategories = useCallback(async () => {
         try {
             let query = supabase
                 .from('categories')
@@ -141,7 +137,11 @@ function BlogEditor({ item, onClose, onSuccess }) {
         } catch (error) {
             console.error('Error fetching categories:', error);
         }
-    };
+    }, [currentTenant?.id]);
+
+    useEffect(() => {
+        fetchCategories();
+    }, [fetchCategories]);
 
     const handleWorkflowAction = async (newState) => {
         await saveItem(newState);

@@ -36,7 +36,7 @@ const EDITORS = {
  * updateTopLevel(subKey, value)      →  settings.updateSection(section, { ...prev, [subKey]: value })
  *   Replaces an entire sub-key within the section
  */
-function ScopedEditorWrapper({ EditorComponent, section, data, updateField, updateSection }) {
+function ScopedEditorWrapper({ EditorComponent, section, data, updateField: _updateField, updateSection }) {
   const sectionData = data?.[section] || {};
 
   // updateField(subKey, field, value) → sets sectionData[subKey][field] = value

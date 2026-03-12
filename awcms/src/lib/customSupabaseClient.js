@@ -116,7 +116,7 @@ const edgeFunctionsProxy = {
             if (session?.access_token) {
                 headers.set('Authorization', `Bearer ${session.access_token}`);
             }
-        } catch (e) {
+        } catch (_e) {
             // Ignore auth errors here
         }
         
