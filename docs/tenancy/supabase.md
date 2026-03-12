@@ -87,7 +87,7 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 
 - 6-argument signature: `(p_name, p_slug, p_domain, p_tier, p_parent_tenant_id, p_role_inheritance_mode)`
 
-The older 4-argument compatibility overload appears in migration history but was dropped by `supabase/migrations/20260303110000_fix_advisor_security_performance.sql`. Current seed migrations and onboarding flows should call the 6-argument signature only.
+Older compatibility overloads still appear in historical migration snapshots, but current seed migrations and onboarding flows should call the 6-argument hierarchy-aware signature only.
 
 ## Implementation Patterns
 
@@ -118,6 +118,8 @@ const { data, error } = await supabase.functions.invoke('manage-users', {
   body: { action: 'delete', user_id: targetId }
 });
 ```
+
+In maintained clients, `supabase.functions.invoke(...)` is a compatibility bridge that proxies to the Cloudflare Worker API configured by `VITE_EDGE_URL` / `PUBLIC_EDGE_URL`.
 
 ## Security and Compliance Notes
 
@@ -153,7 +155,7 @@ Run from repo root.
 - `supabase/migrations/` is the canonical authoring source.
 - `awcms/supabase/migrations/` is a required mirror used by CI linting.
 - Every migration change must be mirrored with identical filename and content.
-- As of the 2026-03-08 audit baseline refresh, both roots contain `127` migration files; use parity verification because matching counts alone do not guarantee filename/content alignment.
+- As of the 2026-03-12 planning refresh, both roots contain `131` migration files; use parity verification because matching counts alone do not guarantee filename/content alignment.
 - Validate parity before merge:
 
 ```bash

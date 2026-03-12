@@ -156,8 +156,14 @@ Notes:
 ### 3.5 Shared Package Note
 
 `packages/awcms-shared/` is a maintained source-first TypeScript package used by the public portals.
-It currently has no standalone build script; validation happens through consuming workspaces such as
-`awcms-public/primary` and `awcms-public/smandapbun`.
+It currently ships a standalone `npm run typecheck` script for direct validation, while runtime/build
+coverage still happens through consuming workspaces such as `awcms-public/primary` and `awcms-public/smandapbun`.
+
+```bash
+cd packages/awcms-shared
+npm install
+npm run typecheck
+```
 
 ## 4. Linting & Formatting
 

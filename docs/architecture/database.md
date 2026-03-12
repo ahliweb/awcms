@@ -25,7 +25,7 @@ AWCMS uses PostgreSQL via Supabase. This document describes the core database sc
 > **Schema Accuracy Note:** SQL blocks in this document are representative snapshots for developer orientation.
 > Canonical executable schema truth is the migration history in `supabase/migrations/` (mirrored in `awcms/supabase/migrations/`).
 > Before relying on a specific column, constraint, or policy shape, verify against the latest migration files.
-> **2026-03-08 Baseline:** Migration inventory currently shows `127` root migrations and `127` mirrored migrations. Always run `scripts/verify_supabase_migration_consistency.sh` because matching counts alone do not guarantee filename/content parity.
+> **2026-03-12 Baseline:** Migration inventory currently shows `131` root migrations and `131` mirrored migrations. Always run `scripts/verify_supabase_migration_consistency.sh` because matching counts alone do not guarantee filename/content parity.
 
 ---
 

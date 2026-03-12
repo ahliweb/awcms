@@ -21,9 +21,9 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | Phase | Status | Notes |
 | --- | --- | --- |
 | Phase 0 - Re-Baseline and Inventory Refresh | In Progress | Tracked markdown/migration counts refreshed to `136` markdown, `68` docs, and `131/131` migrations |
-| Phase 1 - Authority and Documentation Hub Reconciliation | Pending | Root snapshot wording and authority consistency need revalidation after the Cloudflare-first media/runtime changes |
-| Phase 2 - Schema, Security, and Tenancy Reconciliation | Pending | Need to reconcile against the `131/131` migration baseline, current resource map, and current Worker/R2 media implementation |
-| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | Pending | Need to remove stale deleted-script references and re-check package/workflow commands |
+| Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | Root snapshots, docs-hub wording, and AGENTS edge-runtime references were reconciled to the 2026-03-12 baseline; one pass of broader authority-link verification still remains |
+| Phase 2 - Schema, Security, and Tenancy Reconciliation | In Progress | Baseline counts, request-scoped tenant-resolution wording, and media/runtime terminology were refreshed; a deeper per-table/per-permission reconciliation still remains |
+| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | In Progress | Setup/shared-package validation wording and Cloudflare deploy-workflow wording were reconciled; a broader command/workflow pass still remains |
 | Phase 4 - Feature, Module, and Package Documentation Pass | Pending | Need a fresh pass across maintained feature docs and README surfaces |
 | Phase 5 - Conflict Resolution and Publication | Pending | Need current evidence for dependency drift, dead links, script health, and other standards gaps |
 
@@ -85,10 +85,14 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-026 | Medium | Remaining deploy/module docs still carried stale claims about primary edge deployment, public blog fetch paths, version-source authority, and default editor permissions | Resolved | Updated `docs/deploy/overview.md`, `docs/deploy/cloudflare.md`, `docs/modules/BLOGS_MODULE.md`, `docs/modules/VERSIONING.md`, and `docs/modules/ROLE_HIERARCHY.md` to match current workflows, public queries, and authority guidance |
 | DOCSYNC-027 | Medium | Additional module docs still carried stale runtime assumptions, source-path references, and manager-component inventory claims | Resolved | Updated `docs/modules/MONITORING.md`, `docs/modules/PERFORMANCE.md`, `docs/modules/EXTENSIONS.md`, `docs/modules/MODULES_GUIDE.md`, `docs/modules/MENU_SYSTEM.md`, and `docs/modules/THEMING.md` to match current Worker/runtime boundaries, router reality, extension workspace layout, and actual admin module inventory |
 | DOCSYNC-028 | Medium | Remaining dev/deploy/compliance docs still carried stale claims about mirrored function paths, CI branch/paths behavior, ESP32 version sources, SMANDAPBUN session wording, and privacy-policy configuration | Resolved | Updated `docs/dev/edge-functions.md`, `docs/dev/versioning.md`, `docs/deploy/overview.md`, `docs/deploy/cloudflare.md`, `docs/compliance/pdp-uu27-2022.md`, and `docs/compliance/indonesia.md` to match current repo structure and runtime behavior |
-| DOCSYNC-029 | High | Root planning/docs baseline drifted again after recent Worker/media/lint changes | Open | `README.md` still references an active 2026-03-08 cycle while this tracker closes it; tracked markdown/docs/migration counts are now `136` / `68` / `131/131` |
-| DOCSYNC-030 | High | Current audit plan still references removed Supabase-function validation workflow | Open | `docs/dev/documentation-audit-plan.md` still lists `scripts/verify_supabase_function_consistency.sh`, which no longer exists |
+| DOCSYNC-029 | High | Root planning/docs baseline drifted again after recent Worker/media/lint changes | Resolved | `README.md`, `DOCS_INDEX.md`, `docs/README.md`, `docs/dev/documentation-audit-plan.md`, and this tracker were rebased to the 2026-03-12 planning refresh and the current `136` / `68` / `131/131` baseline |
+| DOCSYNC-030 | High | Current audit plan still references removed Supabase-function validation workflow | Resolved | `docs/dev/documentation-audit-plan.md` now uses the current migration consistency plus Worker/runtime validation gates instead of the deleted function-consistency script |
 | DOCSYNC-031 | Medium | Resource-map and feature docs need a new execution pass against current manager/editor/runtime surfaces | Open | Recent code audit surfaced route/UI/runtime drift for several resources; docs have not yet been re-baselined to those findings |
 | DOCSYNC-032 | Medium | Conflict-resolution guidance needs a fresh execution queue for dependency drift, scripts, security, performance, and dead links | Open | The framework exists, but the current cycle needs updated commands, owners, and exit criteria tied to the 2026-03-12 baseline |
+| DOCSYNC-033 | Medium | `AGENTS.md` still carried benchmark/reference sections that described Supabase Edge Functions and stale local test/deploy commands as if they were active | Resolved | Rebased the benchmark/reference sections to Cloudflare Worker routes in `awcms-edge/`, refreshed local/deploy commands, and aligned route inventory wording to the maintained Worker model |
+| DOCSYNC-034 | Medium | Schema/tenancy docs still used stale migration baselines and legacy media wording after the 2026-03-12 re-baseline | Resolved | Updated `docs/architecture/database.md`, `docs/tenancy/overview.md`, and `docs/tenancy/supabase.md` to the `131/131` baseline and current Worker/R2 media model |
+| DOCSYNC-035 | Medium | Security docs still referenced outdated helper-function source migrations for `has_permission()` and `auth_is_admin()` | Resolved | Updated `docs/security/abac.md` and `docs/security/rls.md` so the helper baselines now point to `20260119230212_remote_schema.sql` while keeping `current_tenant_id()` and hierarchy helper references current |
+| DOCSYNC-036 | Medium | Script/deploy docs still carried stale shared-package validation wording and a reference to a non-existent SMANDAPBUN deploy workflow | Resolved | Updated `docs/dev/setup.md` to document the standalone `@awcms/shared` typecheck script and corrected `docs/deploy/cloudflare.md` to the current Cloudflare Pages/deploy-hook workflow reality |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -146,6 +150,26 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
   in the closure audit.
 - Reran docs validation, function consistency, migration consistency, and dependency review so the
   tracker reflects current evidence instead of historical-only results.
+
+## 2026-03-12 Phase 1 Progress Log
+
+- Refreshed the top-level status snapshot in `README.md` from the closed 2026-03-08 audit wording to the active 2026-03-12 planning refresh, including the current `131/131` migration parity baseline.
+- Updated `DOCS_INDEX.md` so the audit tracker entry now points to the 2026-03-12 baseline and the edge logic entry reflects the maintained Cloudflare Worker + R2 model.
+- Updated `docs/README.md` to the 2026-03-12 planning refresh wording so the docs hub no longer points to the previous closed cycle.
+- Updated `SYSTEM_MODEL.md` last-updated metadata to the 2026-03-12 planning refresh.
+- Updated `AGENTS.md` authority content so the public-portal constraints and benchmark/reference sections now describe approved edge runtimes and Cloudflare Worker routes instead of Supabase Edge Functions.
+
+## 2026-03-12 Phase 2 Progress Log
+
+- Updated `docs/architecture/database.md` to the current `131/131` migration baseline.
+- Updated `docs/tenancy/overview.md` so tenant-resolution wording matches the current `current_tenant_id()` behavior and Cloudflare Worker request-scoped flows.
+- Updated `docs/tenancy/supabase.md` so the migration baseline, Worker invocation wording, and media/storage ownership reflect the current Cloudflare Worker + R2 runtime.
+- Updated `docs/security/abac.md` and `docs/security/rls.md` so helper-function baseline references now match the current canonical migration source for `has_permission()` and `auth_is_admin()`.
+
+## 2026-03-12 Phase 3 Progress Log
+
+- Updated `docs/dev/setup.md` so the shared-package section now reflects the current standalone `npm run typecheck` validation path for `packages/awcms-shared`.
+- Updated `docs/deploy/cloudflare.md` so SMANDAPBUN deployment guidance no longer references a non-existent GitHub workflow and instead reflects the current Cloudflare Pages/deploy-hook model.
 
 ### Closure Outcome
 

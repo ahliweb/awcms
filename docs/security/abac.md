@@ -220,7 +220,7 @@ order by name;
 AWCMS relies on a robust set of PostgreSQL helper functions to execute ABAC logic at the Row-Level Security (RLS) layer. Below are the canonical definitions:
 
 - `current_tenant_id()` source baseline: `supabase/migrations/20260307070000_fix_users_rls_recursion.sql`
-- `has_permission()` and `auth_is_admin()` source baseline: `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
+- `has_permission()` and `auth_is_admin()` source baseline: `supabase/migrations/20260119230212_remote_schema.sql`
 - Hierarchical sharing helper source baseline: `supabase/migrations/20260127160000_tenant_hierarchy_resource_sharing.sql`
 
 #### 1. `current_tenant_id()`
@@ -372,6 +372,7 @@ $$;
 - New plugin permissions must be inserted into the `permissions` table before use.
 - Prefer tenant scope permissions unless the feature is truly platform-wide.
 - Extension lifecycle management in admin uses platform scope permissions (`platform.extensions.*`), while tenant-level extension settings should use tenant scope (`tenant.setting.*`).
+- Newer migrations also introduce `platform.extensions.manage` for global lifecycle operations; keep docs/examples aligned to the actual permission keys present in `public.permissions` before adding new extension rules.
 
 ### Context API (`usePermissions`)
 

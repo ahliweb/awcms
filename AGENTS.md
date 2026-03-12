@@ -45,7 +45,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
   - Implementing **Zod** schemas for component prop validation.
   - Optimizing for Cloudflare Pages static builds (cache headers, asset optimization).
 - **Constraints**:
-  - **NO** direct database access (must use Supabase JS Client or Functions).
+  - **NO** direct database access (must use Supabase JS Client or approved server-side edge runtimes).
   - **NO** Puck editor runtime in the public portal (use `Render` from `@puckeditor/core` only).
 
 ---
@@ -581,7 +581,7 @@ const { data, error } = await supabase.storage
 AWCMS implements a safety check before deleting users. Users cannot be deleted if their role has active permissions in the Permission Matrix.
 
 ```javascript
-// Edge Function pattern (supabase/functions/manage-users/index.ts)
+// Cloudflare Worker route pattern (awcms-edge/src/index.ts)
 case 'delete': {
   // 1. Get user's role_id
   const { data: targetUser } = await supabaseAdmin
@@ -896,7 +896,7 @@ Topics are ordered by priority (lowest score first).
 
 | # | Benchmark Topic | Score | Target | Status |
 | --- | --- | --- | --- | --- |
-| 8 | Supabase Edge Function for custom business logic | 46/100 | 92+ | Active — needs full lifecycle: create → test → deploy → verify |
+| 8 | Cloudflare Worker route for custom business logic | 46/100 | 92+ | Active — needs full lifecycle: create → test → deploy → verify |
 | 7 | User login and registration with Supabase Auth | 79/100 | 92+ | Active — needs dual-flow (register + login), 2FA, tenant assignment |
 | 6 | ESP32 IoT device configuration mechanism | 81/100 | 92+ | Active — needs full config push/apply/persist lifecycle |
 | 10 | Monorepo versioning and independent deployment | 81/100 | 92+ | Active — needs additive schema strategy, path-filtered CI |
@@ -938,9 +938,9 @@ Onboard a new tenant using a secure, idempotent, platform-admin flow that bootst
 ##### Reference Implementation
 
 ```typescript
-// supabase/functions/platform-tenant-onboard/index.ts
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
+// awcms-edge/src/index.ts
+import { Hono } from "hono";
+import { createClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -948,10 +948,10 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+const app = new Hono();
+
+app.post('/functions/v1/platform-tenant-onboard', async (c) => {
+  const req = c.req.raw;
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -1551,27 +1551,27 @@ if (!hasPermission("tenant.blog.update")) {
 - **Failure:** Frontend-only security assumptions. **Guardrail:** policy tests for API/database direct access.
 - **Failure:** Guessable route IDs for protected content. **Guardrail:** signed ID route params (`encodeRouteParam`, `useSecureRouteParam`).
 
-#### 6) Supabase Edge Function for Custom Business Logic (46/100)
+#### 6) Cloudflare Worker Route for Custom Business Logic (46/100)
 
 ##### Objective
 
-Create, test locally, deploy, and verify a Supabase Edge Function that performs tenant-scoped business logic with proper authentication, CORS handling, and secret management within the AWCMS architecture.
+Create, test locally, deploy, and verify a Cloudflare Worker route in `awcms-edge/` that performs tenant-scoped business logic with proper authentication, CORS handling, and secret management within the AWCMS architecture.
 
 ##### Required Inputs
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
-| Function name | Implementation spec | Yes | Becomes folder under `supabase/functions/` |
-| `SUPABASE_URL` | Supabase runtime env | Yes | Auto-provided in deployed functions |
-| `SUPABASE_SECRET_KEY` | `supabase secrets set` | Yes | Server-side only — never expose to clients |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase runtime env | Yes | Used for caller authentication via `auth.getUser()` |
+| Route name | Implementation spec | Yes | Becomes a route in `awcms-edge/src/index.ts` |
+| `VITE_SUPABASE_URL` | Worker env / Wrangler vars | Yes | Used to create caller/admin Supabase clients |
+| `SUPABASE_SECRET_KEY` | Worker secret binding | Yes | Server-side only — never expose to clients |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Worker env / Wrangler vars | Yes | Used for caller authentication via `auth.getUser()` |
 | `x-tenant-id` | Request header | Conditional | Required for tenant-scoped writes |
 | Caller `Authorization` | Request header | Yes | JWT bearer token from authenticated client |
 
 ##### Workflow
 
-1. Create the function folder: `supabase/functions/<name>/index.ts`.
-2. Import `serve` from Deno stdlib and `createClient` from `@supabase/supabase-js`.
+1. Add or extend the route in `awcms-edge/src/index.ts`.
+2. Import `Hono` handlers and `createClient` from `@supabase/supabase-js`.
 3. Handle CORS preflight (`OPTIONS` → return `ok` with CORS headers).
 4. Validate HTTP method (reject non-POST/GET as appropriate).
 5. Create a caller-context client using the publishable key and the request's `Authorization` header — call `auth.getUser()` to authenticate.
@@ -1579,16 +1579,16 @@ Create, test locally, deploy, and verify a Supabase Edge Function that performs 
 7. Extract and validate `x-tenant-id` header for tenant-scoped operations.
 8. Perform business logic (transform content, manage users, etc.) using the admin client with explicit `tenant_id` and `deleted_at IS NULL` filters.
 9. Return structured JSON responses with appropriate HTTP status codes.
-10. Test locally with `npx supabase functions serve --env-file awcms/.env.local`.
-11. Deploy with `npx supabase functions deploy <name> --project-ref <ref>`.
-12. Set secrets with `npx supabase secrets set SUPABASE_SECRET_KEY=<value> --project-ref <ref>`.
+10. Test locally with `cd awcms-edge && npm run dev:local`.
+11. Deploy with `cd awcms-edge && npm run deploy`.
+12. Set secrets with `npx wrangler secret put <SECRET_NAME>` or the configured Cloudflare secret workflow.
 
 ##### Reference Implementation
 
 ```typescript
-// supabase/functions/content-transform/index.ts
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
+// awcms-edge/src/index.ts
+import { Hono } from "hono";
+import { createClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1596,24 +1596,15 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
-serve(async (req) => {
-  // Step 1: CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+const app = new Hono();
 
-  // Step 2: Method validation
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: corsHeaders },
-    );
-  }
+app.post('/functions/v1/content-transform', async (c) => {
+  const req = c.req.raw;
 
   // Step 3: Environment setup
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const publishableKey = Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY") ?? "";
-  const secretKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
+  const supabaseUrl = c.env.VITE_SUPABASE_URL ?? "";
+  const publishableKey = c.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
+  const secretKey = c.env.SUPABASE_SECRET_KEY ?? "";
 
   // Step 4: Authenticate caller using publishable key client
   const authHeader = req.headers.get("Authorization") ?? "";
@@ -1623,19 +1614,13 @@ serve(async (req) => {
 
   const { data: authData, error: authError } = await callerClient.auth.getUser();
   if (authError || !authData?.user) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized" }),
-      { status: 401, headers: corsHeaders },
-    );
+    return c.json({ error: 'Unauthorized' }, 401);
   }
 
   // Step 5: Validate tenant context
   const tenantId = req.headers.get("x-tenant-id") ?? "";
   if (!tenantId) {
-    return new Response(
-      JSON.stringify({ error: "Missing x-tenant-id header" }),
-      { status: 400, headers: corsHeaders },
-    );
+    return c.json({ error: 'Missing x-tenant-id header' }, 400);
   }
 
   // Step 6: Create admin client for privileged operations
@@ -1644,10 +1629,7 @@ serve(async (req) => {
   // Step 7: Parse and validate request payload
   const payload = await req.json();
   if (!payload?.blog_id || !payload?.transformed) {
-    return new Response(
-      JSON.stringify({ error: "Missing blog_id or transformed content" }),
-      { status: 400, headers: corsHeaders },
-    );
+    return c.json({ error: 'Missing blog_id or transformed content' }, 400);
   }
 
   // Step 8: Perform tenant-scoped business logic
@@ -1664,35 +1646,25 @@ serve(async (req) => {
     .single();
 
   if (error) {
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 400, headers: corsHeaders },
-    );
+    return c.json({ error: error.message }, 400);
   }
 
   if (!data) {
-    return new Response(
-      JSON.stringify({ error: "Blog not found or access denied" }),
-      { status: 404, headers: corsHeaders },
-    );
+    return c.json({ error: 'Blog not found or access denied' }, 404);
   }
 
-  // Step 9: Return success
-  return new Response(
-    JSON.stringify({ ok: true, id: data.id }),
-    { status: 200, headers: corsHeaders },
-  );
+  return c.json({ ok: true, id: data.id });
 });
 ```
 
 **Local testing:**
 
 ```bash
-# Serve all functions locally
-npx supabase functions serve --env-file awcms/.env.local
+# Run the Worker locally
+cd awcms-edge && npm run dev:local
 
 # Test with curl
-curl -i http://127.0.0.1:54321/functions/v1/content-transform \
+curl -i http://127.0.0.1:8787/functions/v1/content-transform \
   -H "Authorization: Bearer <jwt_token>" \
   -H "x-tenant-id: <tenant_uuid>" \
   -H "Content-Type: application/json" \
@@ -1703,26 +1675,22 @@ curl -i http://127.0.0.1:54321/functions/v1/content-transform \
 
 ```bash
 # Deploy to production
-npx supabase functions deploy content-transform --project-ref <project_ref>
+cd awcms-edge && npm run deploy
 
 # Set required secrets
-npx supabase secrets set \
-  SUPABASE_SECRET_KEY=<secret> \
-  TURNSTILE_SECRET_KEY=<secret> \
-  --project-ref <project_ref>
+npx wrangler secret put SUPABASE_SECRET_KEY
+npx wrangler secret put TURNSTILE_SECRET_KEY
 ```
 
-**Current function inventory:**
+**Current Worker route inventory:**
 
 | Function | Purpose | Path |
 | --- | --- | --- |
-| `verify-turnstile` | Validate Turnstile tokens with host-aware secret | `supabase/functions/verify-turnstile/` |
-| `manage-users` | Account request workflow and admin user lifecycle | `supabase/functions/manage-users/` |
-| `mailketing` | Email send/subscribe/credits/list integrations | `supabase/functions/mailketing/` |
-| `mailketing-webhook` | Webhook ingestion and email log updates | `awcms/supabase/functions/mailketing-webhook/` |
-| `serve-sitemap` | Tenant-aware XML sitemap generation | `awcms/supabase/functions/serve-sitemap/` |
-
-**Shared helpers:** `supabase/functions/_shared/cors.ts`, `_shared/turnstile.ts`, `_shared/types.d.ts`.
+| `verify-turnstile` | Validate Turnstile tokens with host-aware secret | `awcms-edge/src/index.ts` |
+| `manage-users` | Account request workflow and admin user lifecycle | `awcms-edge/src/index.ts` |
+| `mailketing` | Email send/subscribe/credits/list integrations | `awcms-edge/src/index.ts` |
+| `mailketing-webhook` | Webhook ingestion and email log updates | `awcms-edge/src/index.ts` |
+| `serve-sitemap` | Tenant-aware XML sitemap generation | `awcms-edge/src/index.ts` |
 
 ##### Validation Checklist
 
@@ -1731,7 +1699,7 @@ npx supabase secrets set \
 - Tenant scope is enforced via `x-tenant-id` header validation and `.eq("tenant_id", tenantId)`.
 - Soft-deleted rows are excluded with `.is("deleted_at", null)`.
 - CORS headers are present on all responses including error responses.
-- Local `supabase functions serve` matches production behavior.
+- Local `awcms-edge` Worker behavior matches the deployed Worker route behavior.
 - Secrets are set via `supabase secrets set`, never hardcoded in function code.
 
 ##### Failure Modes and Guardrails
@@ -1740,7 +1708,7 @@ npx supabase secrets set \
 - **Failure:** Using `SUPABASE_SECRET_KEY` in client-side code. **Guardrail:** key must remain accessible only in approved server-side edge runtimes.
 - **Failure:** Mutating soft-deleted rows. **Guardrail:** always chain `.is("deleted_at", null)` on queries.
 - **Failure:** Missing permission check. **Guardrail:** add `has_permission` RPC call or restrict endpoint to admin routes.
-- **Failure:** Function not found after deploy. **Guardrail:** verify project ref and folder path match `supabase/functions/<name>/index.ts`.
+- **Failure:** Route not found after deploy. **Guardrail:** verify the deployed Worker URL and route path in `awcms-edge/src/index.ts` and the target client env config.
 
 #### 7) User Login and Registration with Supabase Auth (79/100)
 
@@ -2003,7 +1971,7 @@ const { blog } = Astro.props;
 
 ##### Objective
 
-Deliver device configuration updates securely via a Supabase Edge Function, apply settings on the ESP32 firmware, and persist a safe last-known configuration for offline boot recovery within the AWCMS IoT subsystem.
+Deliver device configuration updates securely via the Cloudflare Edge API, apply settings on the ESP32 firmware, and persist a safe last-known configuration for offline boot recovery within the AWCMS IoT subsystem.
 
 ##### Required Inputs
 
@@ -2259,7 +2227,7 @@ Use this subsection for historical reference only. Topics are ordered by the old
 | 3 | Login and registration flow | 71/100 | Missing complete two-flow design (register + login) and audit checks |
 | 4 | Fine-grained authorization | 71/100 | Missing ABAC-to-RLS bridge and ownership policy pattern |
 | 5 | Astro static content fetching | 79/100 | Missing build-time tenant env strategy and published-content constraints |
-| 6 | Supabase Edge Function deployment | 81/100 | Missing secure execution lifecycle (local test -> deploy -> verify) |
+| 6 | Cloudflare Worker route deployment | 81/100 | Missing secure execution lifecycle (local test -> deploy -> verify) |
 | 7 | Flutter real-time retrieval | 83/100 | Missing resilience, auth state handling, and tenant-scoped stream guidance |
 
 #### Archived Material Policy

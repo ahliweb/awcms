@@ -49,8 +49,8 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 
 ### Data Layer (Supabase)
 
-- `x-tenant-id` is injected into requests by the admin client and scoped public clients when needed.
-- SQL functions read `app.current_tenant_id` via `current_tenant_id()`.
+- `x-tenant-id` is injected into requests by the admin client, scoped public clients when needed, and Cloudflare Worker compatibility routes that need request-scoped tenant context.
+- SQL functions resolve tenant context through `current_tenant_id()`, which reads the authenticated `public.users` row first and falls back to `app.current_tenant_id` for request-scoped/public flows.
 - Hierarchy functions (`is_tenant_descendant`, `tenant_can_access_resource`) enforce shared vs isolated resources.
 - Public aggregates (e.g., `analytics_daily`) are readable only when scoped to the tenant id.
 - Build-time public tenant fallback order is implemented in `awcms-public/primary/src/lib/publicTenant.ts`.
@@ -247,7 +247,7 @@ $$;
 - Privileged server-side edge handlers are required for cross-tenant data operations (for example, Super Administrators managing global tenants).
 - Direct client SQL queries are automatically blocked or clipped to the scope of `current_tenant_id()`.
 - **Shared by default**: `settings`, `branding`, `modules` (descendants). Tenant admins and full-access roles have read/write access across levels based on `tenant_resource_rules`.
-- **Isolated by default**: `content` (blogs, pages), `media` (storage objects), `users`, and `orders`. These resources are strictly scoped to a single `tenant_id`.
+- **Isolated by default**: `content` (blogs, pages), `media` (`media_objects`, `media_upload_sessions`), `users`, and `orders`. These resources are strictly scoped to a single `tenant_id`.
 - **Rules Storage**: Configured in `tenant_resource_registry` and enforced via `tenant_resource_rules`.
 
 ## Security and Compliance Notes

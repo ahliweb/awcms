@@ -49,8 +49,8 @@ from the `x-tenant-id` request header.
 ### Helper Function Source Snapshot
 
 - `public.current_tenant_id()` -> `supabase/migrations/20260307070000_fix_users_rls_recursion.sql`
-- `public.auth_is_admin()` -> `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
-- `public.has_permission()` -> `supabase/migrations/20260127090000_role_flags_staff_hierarchy.sql`
+- `public.auth_is_admin()` -> `supabase/migrations/20260119230212_remote_schema.sql`
+- `public.has_permission()` -> `supabase/migrations/20260119230212_remote_schema.sql`
 - Hierarchy access helpers (`tenant_can_access_resource`, `is_tenant_descendant`) -> `supabase/migrations/20260127160000_tenant_hierarchy_resource_sharing.sql`
 
 ### Migration History Drift

@@ -91,7 +91,7 @@ Automated rebuild flow:
 
 - Cloudflare Pages deploy hook -> production rebuild for content-only changes.
 - Admin panel save/delete events -> `awcms-edge/api/public/rebuild` -> tenant deploy hook.
-- GitHub workflow `deploy-smandapbun.yml` remains available for repository-based deploys.
+- The maintained repository workflows currently include `CI/CD`, `CI (PR)`, and `Documentation Link Check`; SMANDAPBUN repository-based deploys should use the existing Cloudflare Pages project/deploy-hook path unless a dedicated workflow is reintroduced.
 
 KV bindings: none currently required by the maintained repo baseline.
 
