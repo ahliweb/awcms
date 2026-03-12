@@ -96,6 +96,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-037 | Medium | Module guide inventory drifted from the current router/resource-map reality for settings-backed views, mobile routes, and dynamic media/gallery surfaces | Resolved | Updated `docs/modules/MODULES_GUIDE.md` so the listed module surfaces and route notes now match `docs/RESOURCE_MAP.md` and `awcms/src/components/MainRouter.jsx` |
 | DOCSYNC-038 | Medium | Blogs/user/package docs still used transitional Worker wording or missed current route/runtime details | Resolved | Updated `docs/modules/BLOGS_MODULE.md`, `docs/modules/USER_MANAGEMENT.md`, `awcms-edge/README.md`, and `packages/awcms-shared/README.md` to reflect the current Worker-backed compatibility model and route/runtime behavior |
 | DOCSYNC-039 | Medium | Email integration docs still described legacy secret handling instead of the maintained Wrangler/Worker flow | Resolved | Updated `docs/modules/EMAIL_INTEGRATION.md` to use the current `wrangler secret put` and `npm run dev:local` Worker workflow |
+| DOCSYNC-040 | Medium | Public portal and user-management docs still missed current route shape details (`/` redirect, locale-prefixed blogs, user-editor splat tabs) | Resolved | Updated `docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md` and `docs/modules/USER_MANAGEMENT.md` to match the current Astro page layout and `MainRouter.jsx` route patterns |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -179,6 +180,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 - Updated `docs/modules/MODULES_GUIDE.md` so the module inventory now reflects the current route-backed managers, settings-backed views, mobile route paths, and dynamic-resource caveats present in `MainRouter.jsx` and `docs/RESOURCE_MAP.md`.
 - Updated `docs/modules/USER_MANAGEMENT.md`, `docs/modules/BLOGS_MODULE.md`, `awcms-edge/README.md`, and `packages/awcms-shared/README.md` so they reflect the current Worker-backed compatibility model, current blog route/workflow terminology, and direct Worker health/runtime validation notes.
 - Updated `docs/modules/EMAIL_INTEGRATION.md` so Mailketing secret/development instructions now match the maintained Wrangler + Cloudflare Worker workflow.
+- Updated `docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md` and `docs/modules/USER_MANAGEMENT.md` so route notes now reflect the actual Astro file layout and the current splat-backed user editor route.
 
 ### Closure Outcome
 

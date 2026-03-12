@@ -49,10 +49,11 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ### Routes
 
-- `/`: `src/pages/index.astro` (home page from `pages` table or widget fallback).
+- `/`: `src/pages/index.astro` redirects to the default locale.
 - `/en` and `/id`: locale-prefixed home routes.
 - `/p/[slug]`: dynamic pages from `pages` table.
-- `/blogs` and `/blogs/[slug]`: dynamic blog list and posts from Supabase.
+- `/blogs` and `/blogs/[slug]`: default-locale dynamic blog list and post routes from Supabase.
+- `/[locale]/blogs` and `/[locale]/blogs/[slug]`: locale-prefixed blog list and post routes.
 - `src/pages/[...blog]/*`: static AstroWind blog routes (content collections).
 - `src/pages/[tenant]/visitor-stats.astro` handles the public analytics page for path-based tenants.
 - `src/pages/visitor-stats.astro` handles host-based tenants.
@@ -81,6 +82,7 @@ Describe how the public portal renders tenant content and enforces security cons
 
 - Cloudflare Pages uses build-time env variables for static output.
 - Ensure `PUBLIC_TENANT_ID` is set and that either `VITE_SUPABASE_*` or `PUBLIC_SUPABASE_*` env pairs are available for the build.
+- `src/pages/index.astro` currently redirects immediately to the default locale, so root-path behavior should be documented as a redirect rather than a direct content page.
 
 ## Tenant Variants
 
