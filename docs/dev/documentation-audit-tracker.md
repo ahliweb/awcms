@@ -100,7 +100,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-041 | Medium | Visual builder docs still missed the canonical visual-pages list route and the splat-backed editor path used by the current router | Resolved | Updated `docs/modules/VISUAL_BUILDER.md` to match `MainRouter.jsx` route patterns and current mode-specific permission notes |
 | DOCSYNC-042 | Medium | Template and audit-trail docs still missed current route alias/splat details used by the router and manager tabs | Resolved | Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` to reflect tab-backed template routes, splat-backed visual-editor paths, and the canonical `/cmspanel/logs` audit route |
 | DOCSYNC-043 | High | Root/mirror migration content parity drift reappeared during the 2026-03-12 conflict-resolution pass | Resolved | Re-synced the five diverged mirror files to their root counterparts and reapplied the pending local migration so `scripts/verify_supabase_migration_consistency.sh` passes again |
-| DOCSYNC-044 | Medium | Dependency drift remains across maintained workspaces during the 2026-03-12 conflict-resolution pass | In Progress | The low-risk batch plus targeted admin/MCP/public major updates have been applied and validated; the held-major framework/toolchain backlog is cleared, and the remaining drift is now limited to the feature-specific `astro-embed` package in `awcms-public/primary` |
+| DOCSYNC-044 | Medium | Dependency drift remains across maintained workspaces during the 2026-03-12 conflict-resolution pass | Resolved | The low-risk batch plus targeted admin/MCP/public upgrades have been applied and validated; the previously held public major/toolchain backlog and the remaining `astro-embed` drift are now cleared |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -205,8 +205,9 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
   - `awcms-public/primary`: Astro 6, `@astrojs/cloudflare` 13, `@astrojs/react` 5, and `@astrojs/mdx` 5 now validate successfully with `npm run check && npm run build`.
   - `awcms-public/primary`: migrated the content config to `src/content.config.ts`, switched `wrangler.toml` from a Pages-style output dir to a Worker-style assets binding, and added `.prettierignore` entries for generated `.wrangler`, `.astro`, and `dist` output.
   - `awcms-public/primary`: Tailwind `4.2.1`, `@tailwindcss/vite` `4.2.1`, and `@tailwindcss/postcss` `4.2.1` now validate successfully with `npm run check && npm run build` on top of the Astro 6 upgrade.
-- `npm outdated` now shows only the held-major backlog:
-  - `awcms-public/primary`: `astro-embed` `0.9.2 -> 0.12.0`
+- Applied the final remaining public package drift update and revalidated:
+  - `awcms-public/primary`: `astro-embed` `0.12.0` now validates successfully with `npm run check && npm run build`.
+- `npm outdated` no longer reports remaining drift in the maintained workspaces touched by this pass.
 - Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` so route notes now match the current tab-backed template manager surface, splat-backed visual-editor paths, and the canonical audit-log route aliasing.
 
 ### Closure Outcome

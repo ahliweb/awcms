@@ -289,7 +289,7 @@ Deliverables:
 ### Held Major Upgrade Backlog
 
 - `awcms`: no held-major backlog remains. ESLint 10 now validates after removing the incompatible `eslint-plugin-react` dependency from the flat config and fixing the newly surfaced `no-useless-assignment` findings; `react-dropzone` 15, `react-helmet-async` 3, and `@types/node` 25 also validate successfully.
-- `awcms-public/primary`: the coupled Astro 6 / React integration batch and Tailwind `4.2.x` now validate successfully after migrating `src/content/config.ts` to `src/content.config.ts`, switching `wrangler.toml` to a Worker-style assets binding, and ignoring generated `.wrangler` output in Prettier. Remaining drift is limited to `astro-embed`, which should be reviewed as a feature-specific package update.
+- `awcms-public/primary`: no held-major backlog remains. The coupled Astro 6 / React integration batch, Tailwind `4.2.x`, and `astro-embed` `0.12.0` now validate successfully after migrating `src/content/config.ts` to `src/content.config.ts`, switching `wrangler.toml` to a Worker-style assets binding, and ignoring generated `.wrangler` output in Prettier.
 - `awcms-mcp`: no held-major backlog remains after validating `@types/node` 25.
 
 ### Exit Criteria
