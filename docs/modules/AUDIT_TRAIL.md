@@ -113,7 +113,7 @@ Legacy trigger names still use the `trg_articles_audit` prefix even though they 
 
 ### Audit Logs Page
 
-Access via Admin Panel: `/cmspanel/audit-logs`
+Access via Admin Panel: `/cmspanel/logs` (canonical) or `/cmspanel/audit-logs` (alias)
 
 Features:
 

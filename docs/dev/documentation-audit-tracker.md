@@ -98,6 +98,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-039 | Medium | Email integration docs still described legacy secret handling instead of the maintained Wrangler/Worker flow | Resolved | Updated `docs/modules/EMAIL_INTEGRATION.md` to use the current `wrangler secret put` and `npm run dev:local` Worker workflow |
 | DOCSYNC-040 | Medium | Public portal and user-management docs still missed current route shape details (`/` redirect, locale-prefixed blogs, user-editor splat tabs) | Resolved | Updated `docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md` and `docs/modules/USER_MANAGEMENT.md` to match the current Astro page layout and `MainRouter.jsx` route patterns |
 | DOCSYNC-041 | Medium | Visual builder docs still missed the canonical visual-pages list route and the splat-backed editor path used by the current router | Resolved | Updated `docs/modules/VISUAL_BUILDER.md` to match `MainRouter.jsx` route patterns and current mode-specific permission notes |
+| DOCSYNC-042 | Medium | Template and audit-trail docs still missed current route alias/splat details used by the router and manager tabs | Resolved | Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` to reflect tab-backed template routes, splat-backed visual-editor paths, and the canonical `/cmspanel/logs` audit route |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -183,6 +184,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 - Updated `docs/modules/EMAIL_INTEGRATION.md` so Mailketing secret/development instructions now match the maintained Wrangler + Cloudflare Worker workflow.
 - Updated `docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md` and `docs/modules/USER_MANAGEMENT.md` so route notes now reflect the actual Astro file layout and the current splat-backed user editor route.
 - Updated `docs/modules/VISUAL_BUILDER.md` so the route and permission notes now reflect the canonical visual-pages list route, splat-backed editor route, and theme-edit gating for template/part modes.
+- Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` so route notes now match the current tab-backed template manager surface, splat-backed visual-editor paths, and the canonical audit-log route aliasing.
 
 ### Closure Outcome
 
