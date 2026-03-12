@@ -100,7 +100,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-041 | Medium | Visual builder docs still missed the canonical visual-pages list route and the splat-backed editor path used by the current router | Resolved | Updated `docs/modules/VISUAL_BUILDER.md` to match `MainRouter.jsx` route patterns and current mode-specific permission notes |
 | DOCSYNC-042 | Medium | Template and audit-trail docs still missed current route alias/splat details used by the router and manager tabs | Resolved | Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` to reflect tab-backed template routes, splat-backed visual-editor paths, and the canonical `/cmspanel/logs` audit route |
 | DOCSYNC-043 | High | Root/mirror migration content parity drift reappeared during the 2026-03-12 conflict-resolution pass | Resolved | Re-synced the five diverged mirror files to their root counterparts and reapplied the pending local migration so `scripts/verify_supabase_migration_consistency.sh` passes again |
-| DOCSYNC-044 | Medium | Dependency drift remains across maintained workspaces during the 2026-03-12 conflict-resolution pass | In Progress | A low-risk batch plus targeted admin/MCP major updates have been applied and validated; remaining drift is now limited to the coupled Astro/Tailwind public-major track in `awcms-public/primary` |
+| DOCSYNC-044 | Medium | Dependency drift remains across maintained workspaces during the 2026-03-12 conflict-resolution pass | In Progress | A low-risk batch plus targeted admin/MCP/public major updates have been applied and validated; the remaining held-major drift is now limited to the intentionally deferred Tailwind `4.2.x` public track |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -201,8 +201,11 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
   - `awcms`: ESLint 10 now validates after removing the incompatible `eslint-plugin-react` dependency from the flat config and fixing the `no-useless-assignment` findings surfaced by the stricter rule set.
 - Applied the final held-major MCP update and revalidated:
   - `awcms-mcp`: `@types/node` 25 validated successfully with `npm run lint && npm run build`.
+- Applied the coupled public Astro major batch and revalidated:
+  - `awcms-public/primary`: Astro 6, `@astrojs/cloudflare` 13, `@astrojs/react` 5, and `@astrojs/mdx` 5 now validate successfully with `npm run check && npm run build`.
+  - `awcms-public/primary`: migrated the content config to `src/content.config.ts`, switched `wrangler.toml` from a Pages-style output dir to a Worker-style assets binding, and added `.prettierignore` entries for generated `.wrangler`, `.astro`, and `dist` output.
 - `npm outdated` now shows only the held-major backlog:
-  - `awcms-public/primary`: Astro 6 / React integration majors and Tailwind `4.2.x`
+  - `awcms-public/primary`: Tailwind `4.2.x`
 - Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` so route notes now match the current tab-backed template manager surface, splat-backed visual-editor paths, and the canonical audit-log route aliasing.
 
 ### Closure Outcome
