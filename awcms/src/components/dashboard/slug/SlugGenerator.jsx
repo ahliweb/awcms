@@ -36,7 +36,6 @@ const SlugGenerator = ({
     const generateSlug = React.useCallback((fmt = format, baseTitle = titleValue) => {
         if (!baseTitle && fmt !== 'custom') return '';
 
-        let newSlug = '';
         const date = new Date();
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -44,17 +43,14 @@ const SlugGenerator = ({
 
         switch (fmt) {
             case 'date-title':
-                newSlug = `${year}/${month}/${cleanTitle}`;
-                break;
+                return `${year}/${month}/${cleanTitle}`;
             case 'custom':
                 // Don't auto-change custom
                 return slug;
             case 'title':
             default:
-                newSlug = cleanTitle;
-                break;
+                return cleanTitle;
         }
-        return newSlug;
     }, [format, titleValue, slug]);
 
     // Use ref to keep latest onSlugChange without triggering effect

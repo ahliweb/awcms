@@ -23,12 +23,10 @@ export function hexToShadcnHsl(hex) {
   g /= 255;
   b /= 255;
 
-  let cmin = Math.min(r, g, b),
-    cmax = Math.max(r, g, b),
-    delta = cmax - cmin,
-    h = 0,
-    s = 0,
-    l = 0;
+  const cmin = Math.min(r, g, b);
+  const cmax = Math.max(r, g, b);
+  const delta = cmax - cmin;
+  let h;
 
   if (delta === 0)
     h = 0;
@@ -44,9 +42,9 @@ export function hexToShadcnHsl(hex) {
   if (h < 0)
     h += 360;
 
-  l = (cmax + cmin) / 2;
+  let l = (cmax + cmin) / 2;
 
-  s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+  let s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
 
   s = +(s * 100).toFixed(1);
   l = +(l * 100).toFixed(1);
