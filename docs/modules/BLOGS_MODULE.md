@@ -23,7 +23,7 @@ The Blogs module is a full-featured blogging and news management system designed
 ## Core Concepts
 
 1. **Rich Text Editor**: TipTap-based editor (`tiptap_doc_jsonb`) ensuring clean, XSS-safe JSON output.
-2. **Workflow State Machine**: `Draft` -> `Reviewed` -> `Approved` -> `Published`.
+2. **Workflow State Machine**: `draft` -> `reviewed` -> `approved` -> `published`.
 3. **SEO Management**: Custom Meta Title/Description and OpenGraph support.
 4. **Taxonomy**: Categorization and tagging for content.
 
@@ -44,13 +44,14 @@ Stored in `blogs` table:
 | `/cmspanel/blogs/categories` | Blog categories | Tabs map to sub-slugs. |
 | `/cmspanel/blogs/tags` | Blog tags | Tabs map to sub-slugs. |
 | `/cmspanel/blogs/queue` | Review queue | Filters `workflow_state = reviewed`. |
+| `/cmspanel/blogs/trash` | Trash view | Soft-deleted blogs only. |
 | `/cmspanel/blogs/edit/:id` | Edit blog | `:id` uses signed route params (`{uuid}.{signature}`). |
 
 ## Implementation Patterns
 
-1. **Draft**: Author creates content. Visible only to Author/Editor.
-2. **In Review**: Author submits for review. Editor receives notification.
-3. **Approved**: Editor approves content. Ready for scheduling.
+1. **Draft**: Author creates content. Visible only to authorized tenant users.
+2. **Reviewed**: Content enters the review queue (`/cmspanel/blogs/queue`).
+3. **Approved**: Content is approved and ready for publish/scheduling workflows.
 4. **Published**: Publicly visible through tenant-scoped `blogs` queries filtered to `status = 'published'` and `deleted_at IS NULL`.
 
 ## Operational Concerns

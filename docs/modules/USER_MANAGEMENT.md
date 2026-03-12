@@ -38,7 +38,7 @@ Implement a secure login and registration flow that respects tenant context, app
 | Email/Password | Login form | Yes | Turnstile validated in admin UI |
 | `tenant_id` | Tenant resolver | Yes | Required for registration requests |
 | `account_requests` | Public registration | Yes | Approval workflow table |
-| Admin invite | Approved server-side invite handler | Optional | `manage-users` remains the current transitional implementation |
+| Admin invite | Approved server-side Worker handler | Optional | `manage-users` is invoked through the maintained Cloudflare Worker compatibility route |
 
 ### Workflow
 
@@ -71,7 +71,7 @@ await supabase.from("account_requests").insert({
 ```
 
 ```javascript
-// Admin invite (current transitional server-side handler)
+// Admin invite (Worker-backed compatibility route)
 await supabase.functions.invoke("manage-users", {
   body: { action: "invite", email, role_id, tenant_id },
 });
@@ -85,7 +85,7 @@ await supabase.functions.invoke("manage-users", {
 
 ### Failure Modes and Guardrails
 
-- Direct client creation of privileged users: enforce invites via approved server-side edge handlers (currently `manage-users`).
+- Direct client creation of privileged users: enforce invites via approved server-side Worker handlers (currently `manage-users`).
 - Missing default role flags: ensure `is_default_invite` and `is_default_public_registration` are set.
 - Approval bypass: restrict `account_requests` updates to admins via RLS.
 
@@ -180,7 +180,7 @@ Users are strictly scoped to a single `tenant_id`. Platform admin/full-access ro
 ### Invitation Flow
 
 1. Admin enters email in **User Manager**.
-2. System triggers the approved server-side invite handler (`manage-users` in the current transitional path).
+2. System triggers the approved server-side invite handler (`manage-users` through the Cloudflare Worker compatibility route).
 3. New user is created in `auth.users` with `tenant_id` metadata.
 4. Invite email sent.
 
@@ -230,7 +230,7 @@ AWCMS implements a multi-stage approval process for new account requests (Option
 The login process (`/login`) includes:
 
 - Email/Password authentication via Supabase Auth.
-- Turnstile CAPTCHA verification (skipped on localhost).
+- Turnstile CAPTCHA verification (server-side Worker verification in normal environments; localhost test-key flow skips Worker verification when the local edge runtime is unavailable).
 - Two-Factor Authentication (2FA) support if enabled.
 - Checks for soft-deleted users (`deleted_at`).
 
@@ -247,7 +247,7 @@ The login process (`/login`) includes:
 ## Permissions and Access
 
 - User management requires `tenant.user.*` permissions.
-- User deletion is soft-delete only and validated via the approved server-side user-management handler (`manage-users` in the current transitional path).
+- User deletion is soft-delete only and validated via the approved server-side Worker-backed user-management handler (`manage-users`).
 
 ### Deletion Safety Check
 

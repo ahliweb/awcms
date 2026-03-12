@@ -24,7 +24,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | Root snapshots, docs-hub wording, and AGENTS edge-runtime references were reconciled to the 2026-03-12 baseline; one pass of broader authority-link verification still remains |
 | Phase 2 - Schema, Security, and Tenancy Reconciliation | In Progress | Baseline counts, request-scoped tenant-resolution wording, and media/runtime terminology were refreshed; a deeper per-table/per-permission reconciliation still remains |
 | Phase 3 - Scripts, Tooling, and Deployment Reconciliation | In Progress | Setup/shared-package validation wording and Cloudflare deploy-workflow wording were reconciled; a broader command/workflow pass still remains |
-| Phase 4 - Feature, Module, and Package Documentation Pass | Pending | Need a fresh pass across maintained feature docs and README surfaces |
+| Phase 4 - Feature, Module, and Package Documentation Pass | In Progress | Module inventory and route-backed surface mapping have been refreshed against `docs/RESOURCE_MAP.md` and `MainRouter.jsx`; broader per-module README review still remains |
 | Phase 5 - Conflict Resolution and Publication | Pending | Need current evidence for dependency drift, dead links, script health, and other standards gaps |
 
 ## Current Cycle Status
@@ -93,6 +93,8 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-034 | Medium | Schema/tenancy docs still used stale migration baselines and legacy media wording after the 2026-03-12 re-baseline | Resolved | Updated `docs/architecture/database.md`, `docs/tenancy/overview.md`, and `docs/tenancy/supabase.md` to the `131/131` baseline and current Worker/R2 media model |
 | DOCSYNC-035 | Medium | Security docs still referenced outdated helper-function source migrations for `has_permission()` and `auth_is_admin()` | Resolved | Updated `docs/security/abac.md` and `docs/security/rls.md` so the helper baselines now point to `20260119230212_remote_schema.sql` while keeping `current_tenant_id()` and hierarchy helper references current |
 | DOCSYNC-036 | Medium | Script/deploy docs still carried stale shared-package validation wording and a reference to a non-existent SMANDAPBUN deploy workflow | Resolved | Updated `docs/dev/setup.md` to document the standalone `@awcms/shared` typecheck script and corrected `docs/deploy/cloudflare.md` to the current Cloudflare Pages/deploy-hook workflow reality |
+| DOCSYNC-037 | Medium | Module guide inventory drifted from the current router/resource-map reality for settings-backed views, mobile routes, and dynamic media/gallery surfaces | Resolved | Updated `docs/modules/MODULES_GUIDE.md` so the listed module surfaces and route notes now match `docs/RESOURCE_MAP.md` and `awcms/src/components/MainRouter.jsx` |
+| DOCSYNC-038 | Medium | Blogs/user/package docs still used transitional Worker wording or missed current route/runtime details | Resolved | Updated `docs/modules/BLOGS_MODULE.md`, `docs/modules/USER_MANAGEMENT.md`, `awcms-edge/README.md`, and `packages/awcms-shared/README.md` to reflect the current Worker-backed compatibility model and route/runtime behavior |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -170,6 +172,11 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 
 - Updated `docs/dev/setup.md` so the shared-package section now reflects the current standalone `npm run typecheck` validation path for `packages/awcms-shared`.
 - Updated `docs/deploy/cloudflare.md` so SMANDAPBUN deployment guidance no longer references a non-existent GitHub workflow and instead reflects the current Cloudflare Pages/deploy-hook model.
+
+## 2026-03-12 Phase 4 Progress Log
+
+- Updated `docs/modules/MODULES_GUIDE.md` so the module inventory now reflects the current route-backed managers, settings-backed views, mobile route paths, and dynamic-resource caveats present in `MainRouter.jsx` and `docs/RESOURCE_MAP.md`.
+- Updated `docs/modules/USER_MANAGEMENT.md`, `docs/modules/BLOGS_MODULE.md`, `awcms-edge/README.md`, and `packages/awcms-shared/README.md` so they reflect the current Worker-backed compatibility model, current blog route/workflow terminology, and direct Worker health/runtime validation notes.
 
 ### Closure Outcome
 

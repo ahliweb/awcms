@@ -46,6 +46,7 @@ Use publishable keys only. Never inject `SUPABASE_SECRET_KEY` into public portal
 - This package is source-first TypeScript with a dedicated `npm run typecheck` validation script.
 - CI now runs the package directly in addition to consumer validation from `awcms-public/primary` and `awcms-public/smandapbun`.
 - It is intended for public-portal/shared-runtime code, not admin-only or server-secret flows.
+- Worker compatibility calls from `@awcms/shared/supabase` resolve against `PUBLIC_EDGE_URL` / `VITE_EDGE_URL`; missing Worker URLs should be treated as configuration errors rather than reasons to fall back to Supabase Edge Functions.
 
 ## References
 

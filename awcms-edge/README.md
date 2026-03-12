@@ -53,6 +53,14 @@ cd awcms-edge
 npm run typecheck
 ```
 
+Local runtime verification is still manual:
+
+```bash
+cd awcms-edge
+npm run dev:local
+curl http://127.0.0.1:8787/health
+```
+
 ## References
 
 - `../SYSTEM_MODEL.md`
