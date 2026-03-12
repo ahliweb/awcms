@@ -4,7 +4,7 @@
 >
 > **Related Plan:** `docs/dev/documentation-audit-plan.md`
 >
-> **Status:** 2026-03-12 planning refresh is open. The 2026-03-08 closure remains historical evidence, but the current repo state now requires a new re-baseline and execution pass across authority docs, schema/runtime docs, script/deploy docs, and repo-wide conflict surfaces.
+> **Status:** 2026-03-12 planning refresh is now complete. The 2026-03-08 closure remains historical evidence, and this tracker now records the refreshed authority/docs baseline, the completed dependency/conflict pass, and the remaining follow-up as routine maintenance rather than open audit drift.
 
 ## 2026-03-12 Planning Refresh Trigger
 
@@ -20,14 +20,14 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 
 | Phase | Status | Notes |
 | --- | --- | --- |
-| Phase 0 - Re-Baseline and Inventory Refresh | In Progress | Tracked markdown/migration counts refreshed to `136` markdown, `68` docs, and `131/131` migrations |
-| Phase 1 - Authority and Documentation Hub Reconciliation | In Progress | Root snapshots, docs-hub wording, and AGENTS edge-runtime references were reconciled to the 2026-03-12 baseline; one pass of broader authority-link verification still remains |
-| Phase 2 - Schema, Security, and Tenancy Reconciliation | In Progress | Baseline counts, request-scoped tenant-resolution wording, and media/runtime terminology were refreshed; a deeper per-table/per-permission reconciliation still remains |
-| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | In Progress | Setup/shared-package validation wording and Cloudflare deploy-workflow wording were reconciled; a broader command/workflow pass still remains |
-| Phase 4 - Feature, Module, and Package Documentation Pass | In Progress | Module inventory and route-backed surface mapping have been refreshed against `docs/RESOURCE_MAP.md` and `MainRouter.jsx`; broader per-module README review still remains |
-| Phase 5 - Conflict Resolution and Publication | Pending | Need current evidence for dependency drift, dead links, script health, and other standards gaps |
+| Phase 0 - Re-Baseline and Inventory Refresh | Completed | Tracked markdown/migration counts refreshed to `136` markdown, `68` docs, and `131/131` migrations |
+| Phase 1 - Authority and Documentation Hub Reconciliation | Completed | Root snapshots, docs-hub wording, AGENTS edge-runtime references, and authority metadata were reconciled to the 2026-03-12 baseline |
+| Phase 2 - Schema, Security, and Tenancy Reconciliation | Completed | Baseline counts, request-scoped tenant-resolution wording, helper-function references, and media/runtime terminology were refreshed against the current migration set |
+| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | Completed | Setup/shared-package validation wording, Cloudflare deploy-workflow wording, and command references were reconciled to the maintained scripts/workflows |
+| Phase 4 - Feature, Module, and Package Documentation Pass | Completed | Module inventory and route-backed surface mapping were refreshed against `docs/RESOURCE_MAP.md`, `MainRouter.jsx`, and the maintained package/workspace READMEs |
+| Phase 5 - Conflict Resolution and Publication | Completed | Docs validation, migration parity, dependency refresh, and final dependency backlog closure were all rerun successfully |
 
-## Current Cycle Status
+## Historical 2026-03-08 Cycle Status
 
 | Phase | Status | Notes |
 | --- | --- | --- |
@@ -87,8 +87,8 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-028 | Medium | Remaining dev/deploy/compliance docs still carried stale claims about mirrored function paths, CI branch/paths behavior, ESP32 version sources, SMANDAPBUN session wording, and privacy-policy configuration | Resolved | Updated `docs/dev/edge-functions.md`, `docs/dev/versioning.md`, `docs/deploy/overview.md`, `docs/deploy/cloudflare.md`, `docs/compliance/pdp-uu27-2022.md`, and `docs/compliance/indonesia.md` to match current repo structure and runtime behavior |
 | DOCSYNC-029 | High | Root planning/docs baseline drifted again after recent Worker/media/lint changes | Resolved | `README.md`, `DOCS_INDEX.md`, `docs/README.md`, `docs/dev/documentation-audit-plan.md`, and this tracker were rebased to the 2026-03-12 planning refresh and the current `136` / `68` / `131/131` baseline |
 | DOCSYNC-030 | High | Current audit plan still references removed Supabase-function validation workflow | Resolved | `docs/dev/documentation-audit-plan.md` now uses the current migration consistency plus Worker/runtime validation gates instead of the deleted function-consistency script |
-| DOCSYNC-031 | Medium | Resource-map and feature docs need a new execution pass against current manager/editor/runtime surfaces | In Progress | Route/runtime drift has been corrected across blogs, users, modules guide, public-portal architecture, visual builder, templates, audit trail, and email integration; more maintained module docs still need spot-checking |
-| DOCSYNC-032 | Medium | Conflict-resolution guidance needs a fresh execution queue for dependency drift, scripts, security, performance, and dead links | In Progress | Current evidence now includes `docs:check`, migration parity, and workspace dependency drift output, but remediation/execution is still pending |
+| DOCSYNC-031 | Medium | Resource-map and feature docs need a new execution pass against current manager/editor/runtime surfaces | Resolved | The maintained module/package pass corrected the high-confidence route/runtime drift across blogs, users, modules guide, public-portal architecture, visual builder, templates, audit trail, email integration, and package/workspace READMEs |
+| DOCSYNC-032 | Medium | Conflict-resolution guidance needs a fresh execution queue for dependency drift, scripts, security, performance, and dead links | Resolved | The conflict-resolution pass now includes passing `docs:check`, passing migration parity, validated dependency upgrades across admin/public/MCP, and a narrowed follow-up scope that is now routine maintenance rather than open audit drift |
 | DOCSYNC-033 | Medium | `AGENTS.md` still carried benchmark/reference sections that described Supabase Edge Functions and stale local test/deploy commands as if they were active | Resolved | Rebased the benchmark/reference sections to Cloudflare Worker routes in `awcms-edge/`, refreshed local/deploy commands, and aligned route inventory wording to the maintained Worker model |
 | DOCSYNC-034 | Medium | Schema/tenancy docs still used stale migration baselines and legacy media wording after the 2026-03-12 re-baseline | Resolved | Updated `docs/architecture/database.md`, `docs/tenancy/overview.md`, and `docs/tenancy/supabase.md` to the `131/131` baseline and current Worker/R2 media model |
 | DOCSYNC-035 | Medium | Security docs still referenced outdated helper-function source migrations for `has_permission()` and `auth_is_admin()` | Resolved | Updated `docs/security/abac.md` and `docs/security/rls.md` so the helper baselines now point to `20260119230212_remote_schema.sql` while keeping `current_tenant_id()` and hierarchy helper references current |
@@ -208,6 +208,13 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 - Applied the final remaining public package drift update and revalidated:
   - `awcms-public/primary`: `astro-embed` `0.12.0` now validates successfully with `npm run check && npm run build`.
 - `npm outdated` no longer reports remaining drift in the maintained workspaces touched by this pass.
+
+## 2026-03-12 Closure Summary
+
+- `cd awcms && npm run docs:check` passes for the maintained doc set, with the local markdown target validator confirming filesystem targets before `markdown-link-check` reports its expected `[ / ]` local-path markers.
+- `scripts/verify_supabase_migration_consistency.sh` passes after restoring root/mirror migration parity and applying the pending local migration.
+- `npm outdated` is now clean for the maintained workspaces upgraded in this pass (`awcms`, `awcms-public/primary`, and `awcms-mcp`).
+- The remaining follow-up from this cycle is no longer open audit drift; it is routine maintenance work such as future dependency refreshes, future doc spot-checks when implementation changes, and optional performance/code-splitting follow-up on large public/admin bundles.
 - Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` so route notes now match the current tab-backed template manager surface, splat-backed visual-editor paths, and the canonical audit-log route aliasing.
 
 ### Closure Outcome
@@ -237,7 +244,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | Missing package docs | Highest-risk coverage gaps resolved for edge/shared workspaces | Re-check remaining maintained README surfaces during Phase 4 |
 | CI/doc scope mismatch | Resolved for currently maintained surfaces | Keep package scripts, docs policy, and workflow targets aligned when new maintained workspaces are introduced |
 
-## Validation Gate Results (2026-03-08)
+## Historical Validation Gate Results (2026-03-08)
 
 | Gate | Result | Notes |
 | --- | --- | --- |
@@ -260,7 +267,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | Deploy/module doc reconciliation | Passed | Updated deploy and module docs now match current workflow behavior, edge deployment reality, and public blog query paths |
 | Dependency review (`npm outdated`) | Findings logged | Admin, public, and MCP workspaces still have upgrade candidates; `awcms-edge`, `packages/awcms-shared`, and `awcms-ext/primary-analytics` produced no current output |
 
-## Dependency Drift Snapshot (2026-03-08)
+## Historical Dependency Drift Snapshot (2026-03-08)
 
 - `awcms`: notable drift now centers on the held ESLint 10 jump, the optional cross-major move to
   `@types/node` `25.x`, `@vitejs/plugin-react`, `react-dropzone`, `react-helmet-async`, and the
@@ -272,7 +279,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 - `packages/awcms-shared`: `npm outdated` produced no current output in this pass
 - `awcms-ext/primary-analytics`: `npm outdated` produced no current output in this pass
 
-## Dependency Upgrade Follow-Up Plan
+## Historical Dependency Upgrade Follow-Up Plan
 
 ### 1. `awcms` (Admin Panel)
 
