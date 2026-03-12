@@ -2,13 +2,13 @@
 
 Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
-## Status Snapshot (2026-03-08)
+## Status Snapshot (2026-03-12)
 
 - Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
-- The 2026-03-08 documentation, repository-integrity, and conflict-resolution audit cycle is active via `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
+- The 2026-03-12 documentation and repository-conflict planning refresh is tracked in `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
 - Public portal and edge-runtime docs are aligned to Astro static output plus Cloudflare Workers as the primary edge HTTP layer.
 - MCP topology from `mcp.json` currently includes `cloudflare`, `context7`, `github`, and `supabase`.
-- Supabase migration parity baseline is `127` root migrations and `127` mirrored admin/CI migrations.
+- Supabase migration parity baseline is `131` root migrations and `131` mirrored admin/CI migrations.
 - Repair and verification workflows are scripted via `scripts/repair_supabase_migration_history.sh` and `scripts/verify_supabase_migration_consistency.sh`.
 
 ## Documentation Authority

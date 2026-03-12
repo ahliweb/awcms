@@ -96,7 +96,7 @@ All documentation follows this authority structure:
 | --- | --- | --- |
 | Setup Guide | [docs/dev/setup.md](docs/dev/setup.md) | **Start Here** |
 | Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Active full-repository audit, review, and conflict-resolution plan |
-| Documentation Audit Tracker | [docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md) | 2026-03-08 baseline, drift register, and execution status |
+| Documentation Audit Tracker | [docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md) | 2026-03-12 baseline, drift register, and execution status |
 | Context7 Benchmark Playbook | [docs/dev/context7-benchmark-playbook.md](docs/dev/context7-benchmark-playbook.md) | Canonical benchmark answer structure and topic playbooks |
 | Admin Panel | [docs/dev/admin.md](docs/dev/admin.md) | React Admin development |
 | Public Portal | [docs/dev/public.md](docs/dev/public.md) | Astro development |
@@ -108,7 +108,7 @@ All documentation follows this authority structure:
 | AI Gateway | [docs/architecture/openclaw-gateway.md](docs/architecture/openclaw-gateway.md) | OpenClaw per-tenant setup, routing, and security runbook |
 | Autonomous Brain | [docs/architecture/ollama-integration.md](docs/architecture/ollama-integration.md) | Local Ollama runtime and OpenClaw hand-off guidance |
 | Programmatic Content Types | [docs/architecture/schema-definition.md](docs/architecture/schema-definition.md) | Defining and migrating custom schemas |
-| Edge Logic | [docs/dev/edge-functions.md](docs/dev/edge-functions.md) | Cloudflare Worker gateway over Supabase and transitional functions |
+| Edge Logic | [docs/dev/edge-functions.md](docs/dev/edge-functions.md) | Cloudflare Worker gateway over Supabase and Cloudflare R2 |
 | Versioning Strategy | [docs/dev/versioning.md](docs/dev/versioning.md) | Monorepo versioning & release process |
 | WordPress Migration | [docs/guides/wp-to-awcms-migration.md](docs/guides/wp-to-awcms-migration.md) | Migrating from WordPress Elementor to AWCMS |
 | WP Migration Script | [docs/guides/wp-data-migration-script.md](docs/guides/wp-data-migration-script.md) | Node.js script to migrate WP posts to Supabase |

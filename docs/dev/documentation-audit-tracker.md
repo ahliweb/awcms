@@ -1,20 +1,31 @@
 # Documentation Audit Tracker - Context7 Re-Audit
 
-> **Date:** 2026-03-08
+> **Date:** 2026-03-12
 >
 > **Related Plan:** `docs/dev/documentation-audit-plan.md`
 >
-> **Status:** 2026-03-08 full-scope documentation, repository-integrity, and conflict-resolution cycle is now closed for the current maintained-doc baseline; remaining items are carry-forward environment or dependency-maintenance tasks rather than unresolved high-confidence doc contradictions.
+> **Status:** 2026-03-12 planning refresh is open. The 2026-03-08 closure remains historical evidence, but the current repo state now requires a new re-baseline and execution pass across authority docs, schema/runtime docs, script/deploy docs, and repo-wide conflict surfaces.
 
-## 2026-03-08 Cycle Trigger
+## 2026-03-12 Planning Refresh Trigger
 
 The previous 2026-02-27 / 2026-03-03 audit surfaces were no longer sufficient as the active planning baseline.
 Core authority docs still carried an outdated README status snapshot, incomplete top-level MCP wording,
 and no active plan for repository-wide conflict detection across dependencies, scripts, security, performance,
 dead links, and stale implementation guidance.
 
-This planning refresh also confirmed that repository inventory counts and a small set of maintained docs
-had drifted again after subsequent schema, media, and workflow changes.
+This planning refresh also confirmed that repository inventory counts and several maintained docs
+have drifted again after subsequent schema, Worker/media, lint, and validation changes.
+
+## Current Planning Refresh Status
+
+| Phase | Status | Notes |
+| --- | --- | --- |
+| Phase 0 - Re-Baseline and Inventory Refresh | In Progress | Tracked markdown/migration counts refreshed to `136` markdown, `68` docs, and `131/131` migrations |
+| Phase 1 - Authority and Documentation Hub Reconciliation | Pending | Root snapshot wording and authority consistency need revalidation after the Cloudflare-first media/runtime changes |
+| Phase 2 - Schema, Security, and Tenancy Reconciliation | Pending | Need to reconcile against the `131/131` migration baseline, current resource map, and current Worker/R2 media implementation |
+| Phase 3 - Scripts, Tooling, and Deployment Reconciliation | Pending | Need to remove stale deleted-script references and re-check package/workflow commands |
+| Phase 4 - Feature, Module, and Package Documentation Pass | Pending | Need a fresh pass across maintained feature docs and README surfaces |
+| Phase 5 - Conflict Resolution and Publication | Pending | Need current evidence for dependency drift, dead links, script health, and other standards gaps |
 
 ## Current Cycle Status
 
@@ -27,13 +38,13 @@ had drifted again after subsequent schema, media, and workflow changes.
 | Phase 4 - Feature, Module, and Package Documentation Pass | Completed | High-confidence module/package drift was corrected and maintained guides were spot-checked without new contradictions |
 | Phase 5 - Conflict Resolution and Publication | Completed | Validation gates were rerun, migration parity was restored locally, dependency drift was refreshed, and remaining items were triaged into carry-forward maintenance |
 
-## Baseline Snapshot (2026-03-08)
+## Baseline Snapshot (2026-03-12)
 
 | Surface | Evidence |
 | --- | --- |
-| Total markdown files in repository | `115` (current inventory count) |
-| `docs/**/*.md` | `71` (current docs inventory count) |
-| Migration parity | `127` root migrations and `127` mirrored migrations |
+| Total tracked markdown files in repository | `136` (via `git ls-files '*.md'`) |
+| Tracked `docs/**/*.md` | `68` (via `git ls-files 'docs/**/*.md'`) |
+| Migration parity | `131` root migrations and `131` mirrored migrations |
 | Maintained package README surfaces | `14` |
 | Package manifests (`package.json`) | `10` |
 | GitHub workflows | `3` |
@@ -74,6 +85,10 @@ had drifted again after subsequent schema, media, and workflow changes.
 | DOCSYNC-026 | Medium | Remaining deploy/module docs still carried stale claims about primary edge deployment, public blog fetch paths, version-source authority, and default editor permissions | Resolved | Updated `docs/deploy/overview.md`, `docs/deploy/cloudflare.md`, `docs/modules/BLOGS_MODULE.md`, `docs/modules/VERSIONING.md`, and `docs/modules/ROLE_HIERARCHY.md` to match current workflows, public queries, and authority guidance |
 | DOCSYNC-027 | Medium | Additional module docs still carried stale runtime assumptions, source-path references, and manager-component inventory claims | Resolved | Updated `docs/modules/MONITORING.md`, `docs/modules/PERFORMANCE.md`, `docs/modules/EXTENSIONS.md`, `docs/modules/MODULES_GUIDE.md`, `docs/modules/MENU_SYSTEM.md`, and `docs/modules/THEMING.md` to match current Worker/runtime boundaries, router reality, extension workspace layout, and actual admin module inventory |
 | DOCSYNC-028 | Medium | Remaining dev/deploy/compliance docs still carried stale claims about mirrored function paths, CI branch/paths behavior, ESP32 version sources, SMANDAPBUN session wording, and privacy-policy configuration | Resolved | Updated `docs/dev/edge-functions.md`, `docs/dev/versioning.md`, `docs/deploy/overview.md`, `docs/deploy/cloudflare.md`, `docs/compliance/pdp-uu27-2022.md`, and `docs/compliance/indonesia.md` to match current repo structure and runtime behavior |
+| DOCSYNC-029 | High | Root planning/docs baseline drifted again after recent Worker/media/lint changes | Open | `README.md` still references an active 2026-03-08 cycle while this tracker closes it; tracked markdown/docs/migration counts are now `136` / `68` / `131/131` |
+| DOCSYNC-030 | High | Current audit plan still references removed Supabase-function validation workflow | Open | `docs/dev/documentation-audit-plan.md` still lists `scripts/verify_supabase_function_consistency.sh`, which no longer exists |
+| DOCSYNC-031 | Medium | Resource-map and feature docs need a new execution pass against current manager/editor/runtime surfaces | Open | Recent code audit surfaced route/UI/runtime drift for several resources; docs have not yet been re-baselined to those findings |
+| DOCSYNC-032 | Medium | Conflict-resolution guidance needs a fresh execution queue for dependency drift, scripts, security, performance, and dead links | Open | The framework exists, but the current cycle needs updated commands, owners, and exit criteria tied to the 2026-03-12 baseline |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
