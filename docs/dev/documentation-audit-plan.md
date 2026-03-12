@@ -289,8 +289,8 @@ Deliverables:
 ### Held Major Upgrade Backlog
 
 - `awcms`: ESLint 10 remains deferred because the current `eslint-plugin-react` stack throws `contextOrFilename.getFilename is not a function` under ESLint 10; `react-dropzone` 15, `react-helmet-async` 3, and `@types/node` 25 have been validated successfully.
-- `awcms-public/primary`: Astro 6 / React integration majors and Tailwind `4.2.x` remain deferred until compatibility is intentionally reviewed.
-- `awcms-mcp`: `@types/node` 25 remains deferred.
+- `awcms-public/primary`: Astro 6 / React integration majors and Tailwind `4.2.x` remain deferred until compatibility is intentionally reviewed as a coupled batch.
+- `awcms-mcp`: no held-major backlog remains after validating `@types/node` 25.
 
 ### Exit Criteria
 

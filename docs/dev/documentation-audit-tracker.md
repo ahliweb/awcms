@@ -100,7 +100,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-041 | Medium | Visual builder docs still missed the canonical visual-pages list route and the splat-backed editor path used by the current router | Resolved | Updated `docs/modules/VISUAL_BUILDER.md` to match `MainRouter.jsx` route patterns and current mode-specific permission notes |
 | DOCSYNC-042 | Medium | Template and audit-trail docs still missed current route alias/splat details used by the router and manager tabs | Resolved | Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` to reflect tab-backed template routes, splat-backed visual-editor paths, and the canonical `/cmspanel/logs` audit route |
 | DOCSYNC-043 | High | Root/mirror migration content parity drift reappeared during the 2026-03-12 conflict-resolution pass | Resolved | Re-synced the five diverged mirror files to their root counterparts and reapplied the pending local migration so `scripts/verify_supabase_migration_consistency.sh` passes again |
-| DOCSYNC-044 | Medium | Dependency drift remains across maintained workspaces during the 2026-03-12 conflict-resolution pass | In Progress | A low-risk batch plus a targeted admin major batch have been applied and validated; remaining drift is now limited to ESLint 10 compatibility in `awcms`, Astro/Tailwind majors in `awcms-public/primary`, and `@types/node` 25 in `awcms-mcp` |
+| DOCSYNC-044 | Medium | Dependency drift remains across maintained workspaces during the 2026-03-12 conflict-resolution pass | In Progress | A low-risk batch plus targeted admin/MCP major updates have been applied and validated; remaining drift is now limited to ESLint 10 compatibility in `awcms` and the coupled Astro/Tailwind public-major track in `awcms-public/primary` |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -199,10 +199,11 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 - Applied a targeted admin major batch and revalidated:
   - `awcms`: `react-dropzone` 15, `react-helmet-async` 3, and `@types/node` 25 all validated successfully with `npm run lint`, `npm run test -- --run`, and `npm run build`.
   - `awcms`: ESLint 10 was attempted and then rolled back because the current `eslint-plugin-react` release fails under ESLint 10 with `contextOrFilename.getFilename is not a function`.
+- Applied the final held-major MCP update and revalidated:
+  - `awcms-mcp`: `@types/node` 25 validated successfully with `npm run lint && npm run build`.
 - `npm outdated` now shows only the held-major backlog:
   - `awcms`: ESLint 10
   - `awcms-public/primary`: Astro 6 / React integration majors and Tailwind `4.2.x`
-  - `awcms-mcp`: `@types/node` 25
 - Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` so route notes now match the current tab-backed template manager surface, splat-backed visual-editor paths, and the canonical audit-log route aliasing.
 
 ### Closure Outcome
