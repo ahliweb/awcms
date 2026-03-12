@@ -278,6 +278,25 @@ Deliverables:
 5. Execute a repository conflict review for dependency drift, broken scripts, dead links, security posture, performance guidance, and stale route/component references; log every high-severity finding in the tracker.
 6. Re-run validation gates, update the tracker with evidence, and only close the cycle when no unresolved high-severity documentation drift remains.
 
+## Dependency Upgrade Workstream (2026-03-12)
+
+### Completed Low-Risk Batch
+
+- `awcms`: upgraded patch/minor-safe packages (`@supabase/supabase-js`, `dompurify`, `framer-motion`, `i18next`, `react-i18next`, `@vitejs/plugin-react`) and revalidated with `npm run lint && npm run build`.
+- `awcms-public/primary`: upgraded patch/minor-safe Astro/Supabase/TypeScript-ESLint packages and revalidated with `npm run check && npm run build`.
+- `awcms-mcp`: upgraded the TypeScript-ESLint package family and revalidated with `npm run lint && npm run build`.
+
+### Held Major Upgrade Backlog
+
+- `awcms`: ESLint 10, `@types/node` 25, `react-dropzone` 15, `react-helmet-async` 3.
+- `awcms-public/primary`: Astro 6 / React integration majors and Tailwind `4.2.x` remain deferred until compatibility is intentionally reviewed.
+- `awcms-mcp`: `@types/node` 25 remains deferred.
+
+### Exit Criteria
+
+- Keep low-risk upgrades flowing only when validation passes cleanly in the owning workspace.
+- Treat held-major upgrades as separate targeted workstreams with explicit compatibility review.
+
 ## Validation Gates
 
 Run these before closing the cycle:

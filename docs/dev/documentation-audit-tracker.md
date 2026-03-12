@@ -100,7 +100,7 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 | DOCSYNC-041 | Medium | Visual builder docs still missed the canonical visual-pages list route and the splat-backed editor path used by the current router | Resolved | Updated `docs/modules/VISUAL_BUILDER.md` to match `MainRouter.jsx` route patterns and current mode-specific permission notes |
 | DOCSYNC-042 | Medium | Template and audit-trail docs still missed current route alias/splat details used by the router and manager tabs | Resolved | Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` to reflect tab-backed template routes, splat-backed visual-editor paths, and the canonical `/cmspanel/logs` audit route |
 | DOCSYNC-043 | High | Root/mirror migration content parity drift reappeared during the 2026-03-12 conflict-resolution pass | Resolved | Re-synced the five diverged mirror files to their root counterparts and reapplied the pending local migration so `scripts/verify_supabase_migration_consistency.sh` passes again |
-| DOCSYNC-044 | Medium | Dependency drift remains across maintained workspaces during the 2026-03-12 conflict-resolution pass | Open | `npm outdated` still reports upgrade candidates in `awcms`, `awcms-public/primary`, and `awcms-mcp`; no current output appeared for `awcms-edge`, `packages/awcms-shared`, or the extension workspace in the current pass |
+| DOCSYNC-044 | Medium | Dependency drift remains across maintained workspaces during the 2026-03-12 conflict-resolution pass | In Progress | A low-risk patch/minor batch has been applied and validated in `awcms`, `awcms-public/primary`, and `awcms-mcp`; the remaining drift is now limited to held major-version upgrades and deliberate Tailwind/Astro deferrals |
 
 ## Context7 Verification Log (2026-03-08 Planning Refresh)
 
@@ -192,7 +192,14 @@ have drifted again after subsequent schema, Worker/media, lint, and validation c
 
 - `cd awcms && npm run docs:check` still passes for maintained docs; the local target validator proves the local markdown targets exist before `markdown-link-check` reports its expected `[ / ]` filesystem markers.
 - `scripts/verify_supabase_migration_consistency.sh` now passes again after re-syncing the five diverged mirror files and applying the pending local migration `20260311160000_remove_stitch_import_surface.sql`.
-- `npm outdated` still reports dependency drift in `awcms`, `awcms-public/primary`, and `awcms-mcp`, while `awcms-edge` and `packages/awcms-shared` produced no current output in this pass.
+- Applied a low-risk dependency batch and revalidated:
+  - `awcms`: `npm run lint && npm run build` passed after upgrading `@supabase/supabase-js`, `dompurify`, `framer-motion`, `i18next`, `react-i18next`, and `@vitejs/plugin-react`.
+  - `awcms-public/primary`: `npm run check && npm run build` passed after upgrading the current patch/minor Astro/Supabase/TypeScript-ESLint packages.
+  - `awcms-mcp`: `npm run lint && npm run build` passed after upgrading the TypeScript-ESLint package family.
+- `npm outdated` now shows only the held-major backlog:
+  - `awcms`: ESLint 10, `@types/node` 25, `react-dropzone` 15, `react-helmet-async` 3
+  - `awcms-public/primary`: Astro 6 / React integration majors and Tailwind `4.2.x`
+  - `awcms-mcp`: `@types/node` 25
 - Updated `docs/modules/TEMPLATE_SYSTEM.md` and `docs/modules/AUDIT_TRAIL.md` so route notes now match the current tab-backed template manager surface, splat-backed visual-editor paths, and the canonical audit-log route aliasing.
 
 ### Closure Outcome
