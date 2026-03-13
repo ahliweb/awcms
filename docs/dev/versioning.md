@@ -123,9 +123,9 @@ All packages follow **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 
 | Increment | When | Example |
 |-----------|------|---------|
-| `MAJOR` | Breaking API changes, DB schema incompatibilities | `3.0.0` |
-| `MINOR` | New features, backward-compatible | `3.1.0` |
-| `PATCH` | Bug fixes, hotfixes | `3.0.1` |
+| `MAJOR` | Breaking API changes, DB schema incompatibilities | `4.0.0` |
+| `MINOR` | New features, backward-compatible | `4.1.0` |
+| `PATCH` | Bug fixes, hotfixes | `4.0.1` |
 
 ---
 
@@ -184,7 +184,7 @@ Because each client app has its own `package.json` with an independent `version`
 ```bash
 # Bump only the Admin Panel (e.g., after a UI-only change)
 npm version minor --prefix awcms
-# → awcms/package.json: "version": "3.1.0"
+# → awcms/package.json: "version": "4.0.0"
 
 # Bump only the Public Portal
 npm version patch --prefix awcms-public/primary
@@ -199,10 +199,10 @@ The **root** `CHANGELOG.md` is the single source of truth for the overall projec
 ## [Unreleased]
 
 ### Changed
-- **AWCMS 3.1.0**: Landed the documentation/CI hardening sweep, release-baseline cleanup, and Batch A dependency maintenance updates.
+- **AWCMS 4.0.0 "Cellular"**: Landed the deployment-cell control plane, Worker-first runtime standardization, migration parity restoration, and the 2026-03-13 documentation re-baseline.
 
-## [3.1.0] - 2026-03-09
-Applies to: `awcms@3.1.0`, `awcms-public-root@3.1.0`, `@onwidget/astrowind@3.1.0`, `smanda-pangkalan-bun@3.1.0`, `awcms-mcp@3.1.0`
+## [4.0.0] "Cellular" - 2026-03-13
+Applies to: `awcms@4.0.0`, `awcms-public-root@4.0.0`, `@onwidget/astrowind@4.0.0`, `smanda-pangkalan-bun@4.0.0`, `awcms-mcp@4.0.0`
 ```
 
 ---
@@ -339,7 +339,7 @@ Production incidents require immediate, client-specific rollback strategies:
 - [ ] Bump version in relevant `package.json` / `pubspec.yaml`
 - [ ] Update `CHANGELOG.md` with release notes
 - [ ] Merge `develop` → `main` via PR
-- [ ] Tag release: `git tag v3.1.0 && git push --tags`
+- [ ] Tag release: `git tag v4.0.0 && git push --tags`
 - [ ] GitHub Actions deploys web portals automatically
 - [ ] Monitor error logs during deployment sequence
 ```

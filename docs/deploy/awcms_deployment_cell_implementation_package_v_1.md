@@ -249,6 +249,10 @@ create index if not exists idx_deployment_cells_project_env
 
 ## 7.3 `tenants_control`
 
+Implementation note: keep the `_control` suffix. It is important because this table is the
+deployment-cell control-plane tenant registry and must stay distinct from tenant-scoped application
+tables that may already use the `tenants` name.
+
 ```sql
 create table if not exists public.tenants_control (
   id uuid primary key default gen_random_uuid(),
@@ -270,7 +274,7 @@ create table if not exists public.tenants_control (
 ```sql
 create table if not exists public.tenant_domains (
   id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  tenant_id uuid not null references public.tenants_control(id) on delete cascade,
   cell_id uuid not null references public.deployment_cells(id),
   hostname text not null,
   domain_kind text not null check (
@@ -310,7 +314,7 @@ create index if not exists idx_tenant_domains_cell
 ```sql
 create table if not exists public.tenant_service_contracts (
   id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  tenant_id uuid not null references public.tenants_control(id) on delete cascade,
   service_profile text not null,
   runtime_isolation_level text not null,
   data_isolation_level text not null,
@@ -327,7 +331,7 @@ create table if not exists public.tenant_service_contracts (
 ```sql
 create table if not exists public.tenant_migrations (
   id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  tenant_id uuid not null references public.tenants_control(id) on delete cascade,
   source_cell_id uuid references public.deployment_cells(id),
   target_cell_id uuid references public.deployment_cells(id),
   migration_kind text not null,
@@ -343,8 +347,8 @@ create table if not exists public.tenant_migrations (
 ## 7.7 Relationship fix-up for `primary_domain_id`
 
 ```sql
-alter table public.tenants
-  add constraint tenants_primary_domain_fk
+alter table public.tenants_control
+  add constraint tenants_control_primary_domain_fk
   foreign key (primary_domain_id)
   references public.tenant_domains(id)
   deferrable initially deferred;
@@ -371,11 +375,11 @@ A domain must not be considered active unless:
 - `active_from <= now()`
 - `active_to is null or active_to > now()`
 - linked `deployment_cells.status = 'active'`
-- linked `tenants.status = 'active'`
+- linked `tenants_control.status = 'active'`
 
 ## 8.3 Migration lock rule
 
-When `tenants.status = 'migrating'`, mutation operations affecting routing, primary-domain assignment, or service-profile assignment should require elevated workflow checks.
+When `tenants_control.status = 'migrating'`, mutation operations affecting routing, primary-domain assignment, or service-profile assignment should require elevated workflow checks.
 
 ---
 
@@ -705,7 +709,7 @@ Public/admin apps should be Git-driven. Workers, cron, and background jobs may b
 
 ## 15.3 Workflow C — Create tenant
 
-1. create `tenants` row in `draft`
+1. create `tenants_control` row in `draft`
 2. assign `current_cell_id`
 3. create `tenant_service_contracts` row
 4. initialize tenant-scoped app data
@@ -726,7 +730,7 @@ Public/admin apps should be Git-driven. Workers, cron, and background jobs may b
 2. validate domain is active and verified
 3. demote previous primary public domain
 4. set `is_primary = true`
-5. update `tenants.primary_domain_id`
+5. update `tenants_control.primary_domain_id`
 6. invalidate related caches as needed
 
 ## 15.6 Workflow F — Assign or change service profile

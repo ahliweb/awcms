@@ -5,6 +5,24 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.0.0] "Cellular" - 2026-03-13
+
+### Added
+
+- Control Plane: Added the canonical root Supabase migrations for `platform_projects`, `deployment_cells`, `tenants_control`, `tenant_domains`, `tenant_service_contracts`, and `tenant_migrations`, plus deployment-cell helper functions and cross-table RLS policies to restore root/mirror migration parity at `139/139`.
+- Edge Runtime: Added `awcms-edge/.dev.vars.example` and standardized local Worker secret bootstrapping around Wrangler's `.dev.vars` workflow.
+
+### Changed
+
+- Tenancy: Implemented the new control-plane tenant resolution model across the repo, including deployment-cell-aware tenant context, hostname resolution support, and frontend integration aligned with the deployment-cell architecture.
+- Documentation: Re-baselined the full documentation audit to the 2026-03-13 repository state, refreshed authority docs (`README.md`, `SYSTEM_MODEL.md`, `AGENTS.md`, `DOCS_INDEX.md`), and updated the audit plan/tracker to reflect the current validation status and resolved drift.
+- Documentation: Aligned deployment, public, ESP32, versioning, and benchmark docs with the current Cloudflare Worker-first runtime model, Astro 6 public portals, current package versions, and the implemented `tenants_control` deployment-cell schema.
+
+### Fixed
+
+- Tooling: Restored `scripts/verify_supabase_migration_consistency.sh` to a passing state by backfilling the missing root control-plane migrations and reconciling content differences between root and mirrored migration files.
+- Worker Docs: Replaced stale `--env-file ../awcms/.env.local` guidance with the maintained `.dev.vars` workflow and clarified that deployed Worker secrets must be managed with `wrangler secret put`.
+
 ## [3.1.0] - 2026-03-09
 
 ### Changed
