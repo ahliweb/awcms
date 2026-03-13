@@ -1,94 +1,132 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, setGlobalTenantId } from '@/lib/customSupabaseClient';
+import { setGlobalTenantId } from '@/lib/customSupabaseClient';
+import { resolveTenantByHostname, resolveDevTenant } from '@/lib/tenancy/resolveTenant';
 
 const TenantContext = createContext(undefined);
 
+/**
+ * TenantProvider
+ *
+ * Resolves the current tenant from the hostname using the deployment-cell
+ * resolution contract (spec §10). Exposes the full TenantResolutionResult
+ * including cellId, routeClass, and serviceProfile — not just tenant ID.
+ *
+ * Failure policy:
+ *   - null resolution → show "Tenant Not Found" error page
+ *   - suspended tenant → show "Suspended" page
+ *   - other error      → show generic error
+ */
 export const TenantProvider = ({ children }) => {
     const [currentTenant, setCurrentTenant] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [errorKind, setErrorKind] = useState(null); // 'not_found' | 'suspended' | 'maintenance' | 'error'
 
     useEffect(() => {
         let mounted = true;
 
-        const resolveTenant = async () => {
+        const resolve = async () => {
             try {
                 const hostname = window.location.hostname;
-                let lookupDomain = hostname;
+                const isDev = hostname === 'localhost' || hostname === '127.0.0.1';
 
-                // Dev mode handling: Use VITE_DEV_TENANT_SLUG or fall back to 'primary'
-                if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                    lookupDomain = import.meta.env.VITE_DEV_TENANT_SLUG || 'primary';
-                    console.log('[TenantContext] Dev mode detected. Using slug:', lookupDomain);
+                const result = isDev
+                    ? await resolveDevTenant()
+                    : await resolveTenantByHostname(hostname);
+
+                if (!mounted) return;
+
+                if (!result) {
+                    setError('Tenant not found for this domain.');
+                    setErrorKind('not_found');
+                    return;
                 }
 
-                // Call RPC logic
-                const { data, error } = await supabase
-                    .rpc('get_tenant_by_domain', { lookup_domain: lookupDomain });
-
-                if (error) {
-                    throw error;
+                if (result.tenantStatus === 'suspended') {
+                    setError('This account has been suspended.');
+                    setErrorKind('suspended');
+                    return;
                 }
 
-                if (mounted) {
-                    if (data) {
-                        console.log('[TenantContext] Resolved Tenant:', data.name, data.id);
-                        if (data.status !== 'active') {
-                            console.warn('[TenantContext] Tenant is not active:', data.status);
-                            setError('Tenant is suspended or inactive');
-                        }
-                        // CRITICAL: Set the global tenant ID for the Supabase Client (RLS)
-                        setGlobalTenantId(data.id);
-                        setCurrentTenant(data);
-                    } else {
-                        console.warn('[TenantContext] No tenant found for domain:', lookupDomain);
-                        setError('Tenant not found');
-                    }
+                if (result.tenantStatus !== 'active' && result.tenantStatus !== 'migrating') {
+                    setError(`Tenant is not available (status: ${result.tenantStatus}).`);
+                    setErrorKind('not_found');
+                    return;
                 }
+
+                console.log(
+                    '[TenantContext] Resolved:',
+                    result.tenantCode,
+                    '| profile:', result.serviceProfile,
+                    '| routeClass:', result.routeClass,
+                    '| cell:', result.cellId
+                );
+
+                // Set global tenant ID so Supabase RLS headers are correct
+                setGlobalTenantId(result.tenantId);
+                setCurrentTenant(result);
 
             } catch (err) {
                 console.error('[TenantContext] Resolution error:', err);
-                if (mounted) setError(err.message);
+                if (mounted) {
+                    setError(err.message || 'Unexpected tenant resolution error.');
+                    setErrorKind('error');
+                }
             } finally {
                 if (mounted) setLoading(false);
             }
         };
 
-        resolveTenant();
-
-        return () => {
-            mounted = false;
-        };
+        resolve();
+        return () => { mounted = false; };
     }, []);
 
-    const value = React.useMemo(() => ({ currentTenant, loading, error }), [currentTenant, loading, error]);
+    const value = React.useMemo(
+        () => ({ currentTenant, loading, error, errorKind }),
+        [currentTenant, loading, error, errorKind]
+    );
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen gap-2">
+                <h1 className="text-2xl font-bold">
+                    {errorKind === 'suspended' ? 'Account Suspended' : 'Tenant Not Found'}
+                </h1>
+                <p className="text-muted-foreground">
+                    {errorKind === 'suspended'
+                        ? 'This account has been suspended. Please contact support.'
+                        : 'The requested domain is not configured or is no longer active.'}
+                </p>
+                {import.meta.env.DEV && (
+                    <pre className="mt-4 p-2 bg-muted rounded text-xs max-w-md overflow-auto">{error}</pre>
+                )}
+            </div>
+        );
+    }
 
     return (
         <TenantContext.Provider value={value}>
-            {/* 
-        Blocking render strategy:
-        We don't want to show ANY app UI until we know which tenant we are on.
-        Unless it's a critical error we might want to show a custom 404 page here.
-      */}
-            {loading ? (
-                <div className="flex items-center justify-center min-h-screen">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-                </div>
-            ) : error ? (
-                <div className="flex flex-col items-center justify-center min-h-screen">
-                    <h1 className="text-2xl font-bold mb-2">Tenant Not Found</h1>
-                    <p className="text-gray-600">The requested domain is not configured.</p>
-                    {/* Debug info for dev */}
-                    {import.meta.env.DEV && <pre className="mt-4 p-2 bg-gray-100 rounded text-xs">{error}</pre>}
-                </div>
-            ) : (
-                children
-            )}
+            {children}
         </TenantContext.Provider>
     );
 };
 
+/**
+ * useTenant()
+ *
+ * Returns the resolved TenantResolutionResult plus loading/error state.
+ * currentTenant includes: projectId, tenantId, tenantCode, cellId,
+ * serviceProfile, routeClass, domainId, hostname, isPrimary.
+ */
 export const useTenant = () => {
     const context = useContext(TenantContext);
     if (context === undefined) {

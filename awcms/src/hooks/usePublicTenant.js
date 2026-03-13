@@ -1,15 +1,22 @@
 
 import { useState, useEffect } from 'react';
-import { supabase, setGlobalTenantId } from '@/lib/customSupabaseClient';
+import { resolveTenantByHostname, resolveDevTenant } from '@/lib/tenancy/resolveTenant';
 
 /**
- * Hook to resolve and manage public tenant context based on hostname/subdomain.
- * 
- * Logic:
- * 1. Checks hostname.
- * 2. Parses slug from subdomain (e.g., "demo.awcms.com" -> "demo").
- * 3. Fetches tenant details from Supabase.
- * 4. Sets Global Tenant ID for RLS.
+ * usePublicTenant
+ *
+ * Resolves the current tenant for public-facing Astro island components
+ * and any public portal React components that don't use TenantContext.
+ *
+ * This hook uses the same canonical resolver as TenantContext (spec §10),
+ * so all public routes benefit from the deployment-cell resolution contract:
+ *   - hostname → tenant_domains → tenants_control → deployment_cells
+ *   - Returns routeClass, cellId, serviceProfile alongside tenant identity
+ *
+ * If you are already inside a TenantProvider, prefer useTenant() instead
+ * to avoid duplicate DB calls.
+ *
+ * @returns {{ tenant: TenantResolutionResult|null, loading: boolean, error: string|null }}
  */
 export function usePublicTenant() {
     const [tenant, setTenant] = useState(null);
@@ -17,74 +24,36 @@ export function usePublicTenant() {
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        const resolveTenant = async () => {
-            setLoading(true);
+        let mounted = true;
+
+        const resolve = async () => {
             try {
                 const hostname = window.location.hostname;
-                let slug = '';
+                const isDev = hostname === 'localhost' || hostname === '127.0.0.1';
 
-                // Logic to extract slug from hostname
-                // Adjust this matching based on your actual domain structure
-                // e.g., localhost:3000 -> default or none? 
-                // e.g., tenant.localhost -> tenant
-                // e.g., tenant.site.com -> tenant
+                const result = isDev
+                    ? await resolveDevTenant()
+                    : await resolveTenantByHostname(hostname);
 
-                const parts = hostname.split('.');
+                if (!mounted) return;
 
-                // Development/Localhost handling
-                if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-                    if (parts.length > 1 && parts[0] !== 'www') {
-                        slug = parts[0];
-                    } else {
-                        // Fallback for strict localhost development - maybe hardcoded or first tenant?
-                        // For now, let's look for a 'default' tenant or specific env var? 
-                        // Or just ignore and let it be null (Platform/Root site).
-                        slug = 'default'; // Assumption for dev
-                    }
-                } else {
-                    // Production
-                    // If custom domain, we search by domain column
-                    // If subdomain, we search by slug
-                    if (parts.length > 2) {
-                        slug = parts[0];
-                    }
+                if (!result) {
+                    setError('Public tenant not found for this domain.');
+                    return;
                 }
 
-                // Query Tenant
-                let query = supabase.from('tenants').select('id, name, slug, config, subscription_tier');
-
-                // If it looks like a custom domain (not our base domain)
-                // This logic depends on knowing the base domain. 
-                // For this refactor, we'll stick to slug/subdomain primarily.
-
-                if (slug) {
-                    query = query.eq('slug', slug);
-                } else {
-                    // Try domain match?
-                    query = query.eq('domain', hostname);
-                }
-
-                const { data, error } = await query.maybeSingle();
-
-                if (error) throw error;
-
-                if (data) {
-                    setTenant(data);
-                    // CRITICAL: Set Global ID for RLS policies
-                    setGlobalTenantId(data.id);
-                } else {
-                    console.warn(`No tenant found for hostname: ${hostname} (slug: ${slug})`);
-                }
+                setTenant(result);
 
             } catch (err) {
-                console.error('Error resolving public tenant:', err);
-                setError(err);
+                console.error('[usePublicTenant] Resolution error:', err);
+                if (mounted) setError(err.message || 'Unexpected error resolving public tenant.');
             } finally {
-                setLoading(false);
+                if (mounted) setLoading(false);
             }
         };
 
-        resolveTenant();
+        resolve();
+        return () => { mounted = false; };
     }, []);
 
     return { tenant, loading, error };
