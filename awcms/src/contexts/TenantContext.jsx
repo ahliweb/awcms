@@ -43,6 +43,14 @@ export const TenantProvider = ({ children }) => {
                     return;
                 }
 
+                // Legacy dev fallback: control-plane tables empty, resolved via old tenants table
+                if (result.isLegacyResolution) {
+                    console.warn(
+                        '[TenantContext] ⚠️  Using legacy tenants table fallback (dev mode). ' +
+                        'Seed tenants_control + tenant_domains to use the full resolution contract.'
+                    );
+                }
+
                 if (result.tenantStatus === 'suspended') {
                     setError('This account has been suspended.');
                     setErrorKind('suspended');

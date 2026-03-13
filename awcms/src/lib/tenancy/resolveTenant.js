@@ -12,7 +12,7 @@
  */
 
 import { supabase } from '@/lib/customSupabaseClient';
-import { deriveRouteClass } from '@/lib/tenancy/routeClass';
+import { deriveRouteClass, RouteClass } from '@/lib/tenancy/routeClass';
 
 /**
  * @typedef {Object} TenantResolutionResult
@@ -20,13 +20,14 @@ import { deriveRouteClass } from '@/lib/tenancy/routeClass';
  * @property {string} tenantId
  * @property {string} tenantCode
  * @property {string} tenantStatus      - e.g. 'active', 'migrating', 'suspended'
- * @property {string} cellId
- * @property {string} serviceProfile    - e.g. 'shared_managed'
- * @property {string} domainId
+ * @property {string|null} cellId
+ * @property {string|null} serviceProfile    - e.g. 'shared_managed'
+ * @property {string|null} domainId
  * @property {string} hostname          - normalized input hostname
- * @property {string} domainKind        - raw domain_kind from DB
+ * @property {string|null} domainKind   - raw domain_kind from DB
  * @property {string} routeClass        - derived from domainKind via RouteClass enum
  * @property {boolean} isPrimary
+ * @property {boolean} isLegacyResolution - true when resolved via legacy tenants table (dev only)
  */
 
 /**
@@ -92,6 +93,8 @@ export async function resolveTenantByHostname(hostname) {
       domainKind:     data.domainKind,
       routeClass,
       isPrimary:      data.isPrimary,
+      name:           data.name,
+      isLegacyResolution: false,
     };
   } catch (err) {
     console.error('[resolveTenant] Unexpected error:', err);
@@ -101,16 +104,72 @@ export async function resolveTenantByHostname(hostname) {
 
 /**
  * Dev-mode tenant resolver.
- * In development (localhost / 127.0.0.1), the hostname-based lookup is
- * replaced by a slug-keyed lookup so engineers can work without DNS.
  *
- * Falls back to `resolveTenantByHostname` using VITE_DEV_TENANT_SLUG
- * if the env var is set, otherwise uses 'primary'.
+ * In development (localhost / 127.0.0.1), uses 'localhost' as the hostname
+ * so it resolves through the full control-plane stack — giving you a real
+ * cellId, serviceProfile, and domainId in development.
+ *
+ * Run `supabase/seeds/dev_control_plane.sql` once to seed the control-plane
+ * tables so this works. See docs/architecture/deployment-cells/overview.md.
+ *
+ * Falls back with a warning to the legacy `tenants` table if the seed
+ * has not been applied yet (e.g. a fresh checkout).
  *
  * @returns {Promise<TenantResolutionResult|null>}
  */
 export async function resolveDevTenant() {
+  console.log('[resolveTenant] Dev mode. Resolving via hostname: localhost');
+
+  // Step 1: Try full control-plane resolution via localhost
+  const rpcResult = await resolveTenantByHostname('localhost');
+  if (rpcResult) {
+    return rpcResult;
+  }
+
+  // Step 2: Seed not applied yet — warn and fall back to legacy tenants table
+  console.warn(
+    '[resolveTenant] ⚠️  localhost not found in tenant_domains. ' +
+    'Run supabase/seeds/dev_control_plane.sql to enable full control-plane dev mode. ' +
+    'Falling back to legacy tenants table.'
+  );
+
   const slug = import.meta.env.VITE_DEV_TENANT_SLUG || 'primary';
-  console.log('[resolveTenant] Dev mode. Resolving via slug:', slug);
-  return resolveTenantByHostname(slug);
+
+  try {
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('id, slug, name, status, subscription_tier')
+      .eq('slug', slug)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[resolveTenant] Dev legacy fallback error:', error.message);
+      return null;
+    }
+
+    if (!data) {
+      console.warn('[resolveTenant] Dev: no tenant found in legacy table for slug:', slug);
+      return null;
+    }
+
+    return {
+      projectId:          null,
+      tenantId:           data.id,
+      tenantCode:         data.slug,
+      tenantStatus:       data.status ?? 'active',
+      cellId:             null,
+      serviceProfile:     data.subscription_tier ?? null,
+      domainId:           null,
+      hostname:           'localhost',
+      domainKind:         'platform_subdomain',
+      routeClass:         RouteClass.PUBLIC,
+      isPrimary:          true,
+      name:               data.name,
+      isLegacyResolution: true,
+    };
+  } catch (err) {
+    console.error('[resolveTenant] Dev legacy fallback unexpected error:', err);
+    return null;
+  }
 }

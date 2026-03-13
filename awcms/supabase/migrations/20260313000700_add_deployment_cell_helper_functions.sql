@@ -126,7 +126,8 @@ BEGIN
     'domainId',       td.id,
     'hostname',       td.hostname,
     'domainKind',     td.domain_kind,
-    'isPrimary',      td.is_primary
+    'isPrimary',      td.is_primary,
+    'name',           tc.display_name
   ) INTO v_result
   FROM public.tenant_domains td
   JOIN public.tenants_control tc ON tc.id = td.tenant_id
