@@ -84,7 +84,7 @@ tenant isolation from first use.
 #### Reference Implementation (Tenant onboarding and isolation)
 
 ```ts
-// Edge Function pattern (condensed)
+// Worker route pattern (condensed)
 const { data: canCreate } = await caller.rpc("has_permission", {
   permission_name: "platform.tenant.create",
 });
@@ -226,7 +226,7 @@ Receive, apply, and persist tenant-scoped device configuration safely, with OTA 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
 | Device token | Provisioning | Yes | Publishable, per-device |
-| Config endpoint | Edge Function URL | Yes | `/functions/v1/device-config` |
+| Config endpoint | Worker route URL | Yes | `/functions/v1/device-config` |
 | Poll interval | Config payload | Yes | Runtime refresh cadence |
 | Persistent store | Device firmware | Yes | Last-known-good fallback |
 
@@ -274,7 +274,7 @@ Implement secure user sign-in and gated account onboarding with tenant-aware app
 | Credentials | Login form | Yes | Email/password for admin login |
 | `account_requests` | Public registration | Yes | Approval workflow storage |
 | Role defaults | Roles metadata | Yes | `is_default_invite` / registration defaults |
-| Invite path | Edge Function | Yes | Controlled user provisioning |
+| Invite path | Worker route | Yes | Controlled user provisioning |
 
 #### Workflow (Login and registration flow)
 
@@ -307,45 +307,47 @@ await supabase.from("account_requests").insert({
 - Missing role defaults can create assignment drift.
 - Status update paths require strict RLS.
 
-### 6) Supabase Edge Function deployment (91/100)
+### 6) Cloudflare Worker deployment (91/100)
 
-#### Objective (Supabase Edge Function deployment)
+#### Objective (Cloudflare Worker deployment)
 
 Build and deploy secure server-side logic with strict key separation and tenant enforcement.
 
-#### Required Inputs (Supabase Edge Function deployment)
+#### Required Inputs (Cloudflare Worker deployment)
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
-| Function source | `supabase/functions/*` | Yes | Canonical location |
+| Function source | `awcms-edge/src/index.ts` | Yes | Canonical Worker route location |
 | `SUPABASE_URL` | Runtime env | Yes | Supabase project URL |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Runtime env | Yes | Caller auth validation |
 | `SUPABASE_SECRET_KEY` | Runtime env | Yes | Privileged mutations only |
 
-#### Workflow (Supabase Edge Function deployment)
+#### Workflow (Cloudflare Worker deployment)
 
 1. Implement function with CORS and method checks.
 2. Authenticate caller with publishable-key client.
 3. Run privileged writes with secret-key admin client.
 4. Validate tenant context for tenant-scoped operations.
-5. Serve locally and test.
-6. Deploy function and set secrets.
+5. Run the Worker locally and test the route.
+6. Deploy the Worker and set secrets through Wrangler.
 
-#### Reference Implementation (Supabase Edge Function deployment)
+#### Reference Implementation (Cloudflare Worker deployment)
 
 ```bash
-npx supabase functions serve --env-file awcms/.env.local
-npx supabase functions deploy <function_name> --project-ref <project_ref>
-npx supabase secrets set SUPABASE_SECRET_KEY=<secret> --project-ref <project_ref>
+cd awcms-edge
+cp .dev.vars.example .dev.vars
+npm run dev:local
+npx wrangler secret put SUPABASE_SECRET_KEY
+npm run deploy
 ```
 
-#### Validation Checklist (Supabase Edge Function deployment)
+#### Validation Checklist (Cloudflare Worker deployment)
 
 - Unauthorized calls are rejected.
 - Secret key is never exposed to client runtime.
 - Tenant checks are enforced before data mutation.
 
-#### Failure Modes and Guardrails (Supabase Edge Function deployment)
+#### Failure Modes and Guardrails (Cloudflare Worker deployment)
 
 - Missing CORS breaks browser invocation.
 - Mixed key usage causes privilege escalation risk.

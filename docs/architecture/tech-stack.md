@@ -28,12 +28,12 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
 | Visual editor | @puckeditor/core | 0.21.0 | Visual builder |
 | Rich text | TipTap | 3.13.0 | WYSIWYG editor |
-| Animations | Framer Motion | 12.23.26 | UI motion |
+| Animations | Framer Motion | 12.35.2 | UI motion |
 | Routing | React Router DOM | 7.10.1 | Client routing |
-| Supabase JS | @supabase/supabase-js | 2.93.3 | API client |
+| Supabase JS | @supabase/supabase-js | 2.99.1 | API client |
 | Maps | Leaflet + react-leaflet | 1.9.4 | Geolocation maps |
-| File upload | react-dropzone | 14.3.8 | Drag-and-drop file uploads |
-| Sanitization | DOMPurify | 3.3.1 | XSS sanitization |
+| File upload | react-dropzone | 15.0.0 | Drag-and-drop file uploads |
+| Sanitization | DOMPurify | 3.3.3 | XSS sanitization |
 | 2FA | otpauth | 9.4.1 | TOTP authentication |
 | QR Codes | qrcode | 1.5.4 | QR code generation |
 
@@ -43,16 +43,16 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
-| Meta-framework | Astro | 5.17.1 | Static output + islands |
+| Meta-framework | Astro | 6.0.3 | Static output + islands |
 | UI library | React | 19.2.4 | Island rendering |
 | Language | TypeScript | 5.8.3 (primary), 5.9.3 (smandapbun) | Typed components |
-| Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
-| Supabase JS | @supabase/supabase-js | 2.93.3 | Public API client |
+| Styling | TailwindCSS | 4.2.1 | Utility-first CSS |
+| Supabase JS | @supabase/supabase-js | 2.99.1 | Public API client |
 | Node.js | Node.js | >=22.12.0 | Runtime (OpenClaw requires v22+) |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
-Tenant-specific public portals may pin different TypeScript minor versions (for example `awcms-public/smandapbun` uses 5.9.3).
+Tenant-specific public portals may pin compatible but different versions (for example `awcms-public/smandapbun` currently uses Astro `6.0.2`, Tailwind `4.1.18`, and `@supabase/supabase-js` `^2.93.3`).
 
 ### Backend and Edge
 

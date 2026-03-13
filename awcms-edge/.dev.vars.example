@@ -1,0 +1,16 @@
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+SUPABASE_SECRET_KEY=your-secret-key
+R2_ACCOUNT_ID=your-cloudflare-account-id
+R2_ACCESS_KEY_ID=your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+R2_BUCKET_NAME=awcms-s3-dev
+MEDIA_SECURE_SESSION_MAX_AGE_SECONDS=900
+MAILKETING_API_TOKEN=your-mailketing-token
+MAILKETING_DEFAULT_LIST_ID=1
+GITHUB_REBUILD_TOKEN=your-github-token
+GITHUB_REBUILD_OWNER=your-github-owner
+GITHUB_REBUILD_REPO=your-github-repo
+GITHUB_REBUILD_EVENT_TYPE=smandapbun-content-changed
+SMANDAPBUN_REBUILD_WEBHOOK_SECRET=your-rebuild-secret
+TURNSTILE_SECRET_KEY=your-turnstile-secret

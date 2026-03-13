@@ -8,9 +8,9 @@ The Public Portal (`awcms-public/`) handles the visitor-facing websites for each
 
 ## 2. Architecture
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal tech stack (Astro 5.17.1, React 19.2.4, static output)
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal tech stack (Astro 6.0.3, React 19.2.4, static output)
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- **Framework**: Astro 5.17.1
+- **Framework**: Astro 6.0.3 in `awcms-public/primary` (`awcms-public/smandapbun` currently uses 6.0.2)
 - **Rendering**: Static output (`output: "static"`) with React islands. SSR is optional if explicitly enabled.
 - **Styling**: Tailwind CSS 4.
 - **Data Source**: Supabase (via direct client).

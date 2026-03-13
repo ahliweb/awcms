@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-AWCMS manages ESP32 devices remotely via Cloudflare Workers, existing Supabase functions where still required, and REST APIs. The firmware:
+AWCMS manages ESP32 devices remotely via Cloudflare Workers and REST APIs. The firmware:
 
 - Connects to WiFi.
 - Polls or subscribes to AWCMS configuration endpoints to receive pushed settings.
@@ -44,14 +44,14 @@ awcms-esp32/primary/
 
 ### Objective
 
-Deliver device configuration updates securely via a Supabase Edge Function, apply settings locally, and persist a safe last-known configuration for offline boot.
+Deliver device configuration updates securely via a Cloudflare Worker route, apply settings locally, and persist a safe last-known configuration for offline boot.
 
 ### Required Inputs
 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
 | `device_token` | Device provisioning | Yes | Publishable per-device token |
-| `device-config` URL | Admin config | Yes | Supabase Functions URL |
+| `device-config` URL | Admin config | Yes | Worker compatibility route URL |
 | `polling_interval_sec` | Config payload | Yes | Device checks interval |
 | Config schema | Server response | Yes | JSON payload with known keys |
 
@@ -59,13 +59,13 @@ Deliver device configuration updates securely via a Supabase Edge Function, appl
 
 1. Device boots, connects to WiFi, and loads last-known config from `Preferences`.
 2. Device polls `/functions/v1/device-config` with `Authorization: Bearer <device_token>`.
-3. Edge Function validates token, resolves tenant/device, and returns scoped config.
+3. Worker route validates token, resolves tenant/device, and returns scoped config.
 4. Firmware applies config and persists it for offline recovery.
 5. When `firmware_version` increases, device triggers OTA update.
 
 ### Reference Implementation
 
-AWCMS pushes configuration to devices via a Supabase Edge Function endpoint (`/functions/v1/device-config`). The firmware's `ConfigManager` polls this endpoint on a configurable interval and applies any changes immediately.
+AWCMS pushes configuration to devices via a Cloudflare Worker compatibility endpoint (`/functions/v1/device-config`). The firmware's `ConfigManager` polls this endpoint on a configurable interval and applies any changes immediately.
 
 ### 4.1 `ConfigManager.h`
 
@@ -191,9 +191,9 @@ void loop() {
 ```cpp
 #pragma once
 
-// Supabase Edge Function URL for device configuration
-// Replace {FUNCTION_BASE_URL} with your project's functions URL
-#define CONFIG_ENDPOINT "https://<project>.supabase.co/functions/v1/device-config"
+// Cloudflare Worker compatibility route for device configuration
+// Replace {EDGE_BASE_URL} with your deployed Worker base URL
+#define CONFIG_ENDPOINT "https://edge.example.com/functions/v1/device-config"
 ```
 
 ### 4.4 `secrets.h` (gitignored)
@@ -218,7 +218,7 @@ void loop() {
 
 ### Failure Modes and Guardrails
 
-- Token leaked: revoke token in AWCMS, block requests in Edge Function.
+- Token leaked: revoke token in AWCMS, block requests in the Worker route.
 - Invalid JSON payload: fall back to last-known settings and log parse error.
 - WiFi failures: keep device in safe mode and retry connection.
 - Breaking config changes: use versioned endpoints (for example `device-config-v2`).
@@ -255,7 +255,7 @@ void reportTelemetry(float temperature, float humidity) {
 |------|--------|
 | Only publishable keys on device | Secret keys must never leave the server |
 | `secrets.h` in `.gitignore` | Prevents credential exposure |
-| Edge Function validates device token | Server-side control; revoke compromised tokens via AWCMS Admin |
+| Worker route validates device token | Server-side control; revoke compromised tokens via AWCMS Admin |
 | No plaintext WiFi fallback | Prefer WPA2 networks; log WiFi errors and halt |
 
 ---
@@ -276,4 +276,4 @@ Or use **PlatformIO → Project Tasks** in VS Code.
 
 ## 8. OTA (Over-The-Air) Updates
 
-For firmware updates pushed via AWCMS, use the `Update.h` ESP32 Arduino library. The Edge Function serves the binary and the device calls `Update.begin()` → `Update.write()` → `Update.end()` after verifying the new version against `activeConfig.firmwareVersion`.
+For firmware updates pushed via AWCMS, use the `Update.h` ESP32 Arduino library. The Worker route serves the binary and the device calls `Update.begin()` -> `Update.write()` -> `Update.end()` after verifying the new version against `activeConfig.firmwareVersion`.

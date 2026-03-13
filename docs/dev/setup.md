@@ -134,14 +134,16 @@ The Cloudflare Worker layer lives in `awcms-edge/` and is the primary edge HTTP 
 ```bash
 cd awcms-edge
 npm install
+cp .dev.vars.example .dev.vars
 npm run dev:local
 ```
 
 Notes:
 
-- `npm run dev:local` loads `../awcms/.env.local`.
+- `npm run dev:local` loads local Worker secrets from `awcms-edge/.dev.vars`.
 - Worker bindings are defined in `awcms-edge/wrangler.jsonc`.
 - The current Worker workspace pins `@supabase/supabase-js` separately from the admin/public workspaces; use `awcms-edge/package.json` as the source of truth before upgrading.
+- Production-only secrets should be set with `npx wrangler secret put <SECRET_NAME>`.
 
 ### 3.4 Operational Script Quick Reference
 

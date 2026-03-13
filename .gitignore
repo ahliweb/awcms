@@ -25,6 +25,9 @@ temp_supabase/
 **/.env.production
 **/.env.production.local
 **/.env.remote
+**/.dev.vars
+**/.dev.vars.*
+!**/.dev.vars.example
 awcms/.agent/
 .agents/
 

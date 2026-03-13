@@ -278,7 +278,7 @@ Since AWCMS clients function independently, managing shared assumptions (like Su
 ### Schema Versioning Strategy
 
 - **Additive Database Changes:** Never rename or delete columns used by existing clients. Always add new columns, make them nullable (or provide defaults), and write data to both old and new columns until all clients are updated.
-- **API Versioning (Edge Logic):** If a breaking change to a Cloudflare Worker route or a legacy Supabase Edge Function cannot be avoided, create a new endpoint rather than overwriting the existing one.
+- **API Versioning (Edge Logic):** If a breaking change to a Cloudflare Worker route cannot be avoided, create a new endpoint rather than overwriting the existing one.
 - **Client Fallbacks:** Mobile and IoT clients must gracefully handle missing new fields or unrecognized enum values from the API without crashing.
 
 ### Shared Node Packages
@@ -295,7 +295,7 @@ Deployments must be sequenced carefully when a feature spans the backend schema,
 
 When a major feature releases:
 
-1. **Database & Edge Logic (Backend):** Deploy additive migrations first, then deploy `awcms-edge/` (Cloudflare Workers), and deploy legacy Supabase functions only for features that still depend on them.
+1. **Database & Edge Logic (Backend):** Deploy additive migrations first, then deploy `awcms-edge/` (Cloudflare Workers).
 2. **Admin Panel (`awcms`):** Deploy to Cloudflare Pages. Editors can begin creating data using the new schema.
 3. **Public Portal (`awcms-public`):** Deploy to Cloudflare Pages to render the new content for web users.
 4. **Mobile App (`awcms-mobile`):** Submit to App Stores. (Approval takes 1-3 days).
@@ -316,13 +316,13 @@ Production incidents require immediate, client-specific rollback strategies:
 
 ### Supabase Backend
 
-- **Edge Logic:** Re-deploy the previous Cloudflare Worker or, for legacy flows, re-deploy the affected Supabase function.
+- **Edge Logic:** Re-deploy the previous Cloudflare Worker.
 - **Database Schema:** Direct rollback of schema migrations is risky. Prefer "roll-forward" fixes by creating a new migration (`npx supabase migration new fix_bug`) that reverts the problematic objects, then push (`npx supabase db push --linked`).
 
 ### Mobile App
 
 - **OTA Patch:** Revert the breaking commit, bump the `PATCH` version, rebuild, and push the OTA update manifest.
-- **App Store Rejection:** Mobile apps cannot be instantly rolled back on user devices. If an app release ships with a critical bug, immediately release a hotfix to the App Store and use an in-app "Force Update Required" wall (controlled via a Supabase Edge Function) to block broken clients.
+- **App Store Rejection:** Mobile apps cannot be instantly rolled back on user devices. If an app release ships with a critical bug, immediately release a hotfix to the App Store and use an in-app "Force Update Required" wall (controlled via a Cloudflare Worker route) to block broken clients.
 
 ### IoT Devices
 

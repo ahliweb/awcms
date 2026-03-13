@@ -115,7 +115,7 @@ The portal reads tenant settings and merges them with JSON defaults:
 ## Contact Form
 
 - Page: `src/pages/kontak.astro`.
-- Uses `verify-turnstile` Edge Function before inserting `contact_messages`.
+- Uses the `verify-turnstile` Cloudflare Worker route before inserting `contact_messages`.
 
 ## Analytics + Consent
 

@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "dev:local": "wrangler dev --ip 127.0.0.1 --port 8787 --env-file ../awcms/.env.local",
+    "dev:local": "wrangler dev --ip 127.0.0.1 --port 8787",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit"
   },

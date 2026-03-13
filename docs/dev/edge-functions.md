@@ -47,14 +47,16 @@ Run from the Worker workspace:
 ```bash
 cd awcms-edge
 npm install
+cp .dev.vars.example .dev.vars
 npm run dev:local
 ```
 
 Notes:
 
-- `dev:local` loads env values from `../awcms/.env.local`.
+- `dev:local` loads local secrets from `awcms-edge/.dev.vars`.
 - Worker bindings and runtime settings live in `awcms-edge/wrangler.jsonc`.
 - Local validation should exercise Worker routes directly, not `supabase functions serve`.
+- Production secrets belong in Cloudflare via `npx wrangler secret put <SECRET_NAME>`.
 
 ## Deployment
 

@@ -83,7 +83,7 @@ Add the canonical platform metadata tables:
 
 - `platform_projects`
 - `deployment_cells`
-- `tenants`
+- `tenants_control`
 - `tenant_domains`
 - `tenant_service_contracts`
 - `tenant_migrations`
@@ -189,7 +189,7 @@ supabase/
   migrations/
     <timestamp>_create_platform_projects.sql
     <timestamp>_create_deployment_cells.sql
-    <timestamp>_create_tenants.sql
+    <timestamp>_create_tenants_control.sql
     <timestamp>_create_tenant_domains.sql
     <timestamp>_create_tenant_service_contracts.sql
     <timestamp>_create_tenant_migrations.sql
@@ -247,10 +247,10 @@ create index if not exists idx_deployment_cells_project_env
   on public.deployment_cells(project_id, environment, status);
 ```
 
-## 7.3 `tenants`
+## 7.3 `tenants_control`
 
 ```sql
-create table if not exists public.tenants (
+create table if not exists public.tenants_control (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.platform_projects(id) on delete cascade,
   tenant_code text not null,
@@ -439,7 +439,7 @@ export async function resolveTenantByHostname(hostname: string): Promise<TenantR
 
 1. normalize hostname
 2. find exact active domain in `tenant_domains`
-3. join `tenants` and `deployment_cells`
+3. join `tenants_control` and `deployment_cells`
 4. reject if tenant or cell is not active
 5. derive `routeClass` from `domain_kind`
 6. return a canonical context object for downstream rendering or API logic
@@ -1011,4 +1011,3 @@ The best immediate next artifact after this package is a **code-oriented executi
 - exact TypeScript module skeletons
 - exact table policies and helper functions
 - exact route middleware points in the AWCMS app
-

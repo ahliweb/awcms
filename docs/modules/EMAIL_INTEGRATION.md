@@ -48,10 +48,11 @@ npx wrangler secret put MAILKETING_DEFAULT_LIST_ID
 npx wrangler deploy --cwd awcms-edge
 ```
 
-For local development, run the Worker with the admin env file:
+For local development, run the Worker with `awcms-edge/.dev.vars`:
 
 ```bash
 cd awcms-edge
+cp .dev.vars.example .dev.vars
 npm run dev:local
 ```
 

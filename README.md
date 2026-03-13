@@ -2,14 +2,14 @@
 
 Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
-## Status Snapshot (2026-03-12)
+## Status Snapshot (2026-03-13)
 
 - Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
-- The 2026-03-12 documentation and repository-conflict planning refresh is tracked in `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
-- Public portal and edge-runtime docs are aligned to Astro static output plus Cloudflare Workers as the primary edge HTTP layer.
+- The active documentation and repository-conflict audit cycle is tracked in `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
+- Public portal runtime has moved to Astro 6 while Cloudflare Workers remain the primary edge HTTP layer.
 - MCP topology from `mcp.json` currently includes `cloudflare`, `context7`, `github`, and `supabase`.
-- Supabase migration parity baseline is `131` root migrations and `131` mirrored admin/CI migrations.
-- Repair and verification workflows are scripted via `scripts/repair_supabase_migration_history.sh` and `scripts/verify_supabase_migration_consistency.sh`.
+- Repository inventory currently shows `145` tracked Markdown files, `77` docs files, and `139` root/mirrored Supabase migrations.
+- `scripts/verify_supabase_migration_consistency.sh` now passes after restoring root/mirror migration parity.
 
 ## Documentation Authority
 
@@ -28,7 +28,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 | Directory | Description | Tech Stack |
 | --- | --- | --- |
 | `awcms/` | Admin Panel | React 19.2.4, Vite 7.2.7, Supabase |
-| `awcms-public/primary/` | Public Portal | Astro 5.17.1 (static), React 19.2.4 |
+| `awcms-public/primary/` | Public Portal | Astro 6.0.3 (static), React 19.2.4 |
 | `awcms-mobile/primary/` | Mobile App | Flutter 3.38.5 |
 | `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
 | `awcms-ext/` | External Extensions | JavaScript modules |
@@ -42,9 +42,9 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 - **React**: 19.2.4 (Admin + Public)
 - **Vite**: 7.2.7 (Admin)
-- **Astro**: 5.17.1 (Public) - *Requires Node.js >=22.12.0*
-- **TailwindCSS**: 4.1.18
-- **Supabase JS**: 2.93.3 (Admin + Public)
+- **Astro**: 6.0.3 (Primary Public), 6.0.2 (SMANDAPBUN) - *Requires Node.js >=22.12.0*
+- **TailwindCSS**: 4.1.18 (Admin), 4.2.1 (Primary Public)
+- **Supabase JS**: 2.99.1 (Admin + Primary Public)
 - **React Router DOM**: 7.10.1
 - **TipTap**: 3.13.0
 - **Puck**: 0.21.0
@@ -53,7 +53,8 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 Notes:
 
-- Admin and public workspaces currently use `@supabase/supabase-js` `2.93.3`.
+- `awcms/` and `awcms-public/primary/` currently use `@supabase/supabase-js` `^2.99.1`.
+- `awcms-public/smandapbun/` still pins `@supabase/supabase-js` `^2.93.3`.
 - `awcms-edge/` currently pins `@supabase/supabase-js` `^2.45.0`; use `awcms-edge/package.json` as the source of truth for Worker-only dependency alignment until that workspace is upgraded deliberately.
 
 ## Runtime Architecture
@@ -92,6 +93,7 @@ Notes:
 ## Database & Migrations
 
 - Canonical timestamped migrations live in `supabase/migrations/` and are mirrored in `awcms/supabase/migrations/` for CI/Admin tooling compatibility.
+- Current observed state: `139` root migrations and `139` mirrored migrations, with parity verified by `scripts/verify_supabase_migration_consistency.sh`.
 - Non-migration SQL files must be kept outside migration folders (for example `supabase/manual/`).
 - Local workflow:
   - `npx supabase migration list --local`

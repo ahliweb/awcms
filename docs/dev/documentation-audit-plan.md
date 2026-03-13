@@ -1,339 +1,143 @@
-# Repository Documentation Audit and Revision Plan (Context7-First)
+# Repository Documentation Audit and Remediation Plan (Context7-First)
 
-> **Owner:** Documentation Steward (AI + Maintainers)
+> Owner: Documentation Steward (AI + Maintainers)
 >
-> **Audit Cycle:** 2026-03-12 Documentation, Integrity, and Conflict-Resolution Planning Refresh
+> Audit Cycle: 2026-03-13 full-repository re-baseline
 >
-> **Last Updated:** 2026-03-12
+> Last Updated: 2026-03-13
 >
-> **Primary Authority Chain:** `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md` -> implementation and package docs
+> Primary Authority Chain: `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md` -> implementation/package docs
 
 ## Mission
 
-Run a full-repository documentation audit so every maintained doc is accurate, evidence-backed,
-and aligned with the current implementation, database schema, scripts, CI/CD flows, edge-runtime
-model, and dependency baseline, using Context7 as the primary external reference for library
-best practices.
+Audit every maintained documentation surface in the repository, reconcile each claim against the live
+codebase, database migrations, scripts, workflows, and package manifests, and use Context7 as the
+primary external reference for library-specific best practices.
 
-This cycle explicitly includes conflict detection and resolution planning for:
+This cycle explicitly covers:
 
-- outdated dependencies and version drift
-- broken or nonfunctional scripts and commands
-- security risks and bad secret-handling guidance
-- performance guidance drift
-- dead links and stale navigation
-- stale or contradictory feature and architecture claims
+- stale authority docs and contradictory version claims
+- database schema and migration drift
+- broken, missing, or misleading scripts and commands
+- security guidance drift around secrets, auth, RLS, and edge runtimes
+- performance guidance drift across admin, public, and Worker surfaces
+- dead links, missing canonical targets, and stale navigation
+- package README drift and workspace-level setup inaccuracies
 
-## Current Cycle Status
+## Current Baseline (Verified 2026-03-13)
 
-| Phase | Status | Notes |
+| Surface | Verified State | Evidence Source |
 | --- | --- | --- |
-| Phase 0 - Re-Baseline and Inventory Refresh | Planned | Refresh tracked markdown, docs, migration, README, package, and workflow baselines against the current repo state |
-| Phase 1 - Authority and Documentation Hub Reconciliation | Planned | Re-check `SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, `DOCS_INDEX.md`, and `docs/README.md` for contradictions or stale claims |
-| Phase 2 - Schema, Security, and Tenancy Reconciliation | Planned | Reconcile docs against the `131/131` migration baseline, current helper functions, Worker/R2 architecture, and current resource map |
-| Phase 3 - Scripts, Tooling, Deployment, and Workflow Reconciliation | Planned | Audit documented commands against actual package scripts, CI workflows, and Cloudflare-first deploy/runtime paths |
-| Phase 4 - Feature, Module, Client, and Package README Pass | Planned | Audit per-feature and per-workspace docs against current implementation and route/UI reality |
-| Phase 5 - Conflict Resolution, Validation, and Publication | Planned | Execute validation gates, log evidence, triage dependency/security/performance gaps, and close or carry forward all high-severity drift |
+| Tracked Markdown files | `145` | `git ls-files '*.md'` |
+| Tracked docs files | `77` | `git ls-files 'docs/**/*.md'` |
+| Root Supabase migrations | `139` | `supabase/migrations/*.sql` |
+| Mirrored admin/CI migrations | `139` | `awcms/supabase/migrations/*.sql` |
+| Package manifests | `10` | `git ls-files '**/package.json'` |
+| GitHub workflows | `4` | `.github/workflows/*` |
+| MCP servers in `mcp.json` | `cloudflare`, `context7`, `github`, `supabase` | `mcp.json` |
+| Docs validation | Passes | `cd awcms && npm run docs:check` |
+| Migration parity | Passes | `scripts/verify_supabase_migration_consistency.sh` |
 
-See `docs/dev/documentation-audit-tracker.md` for the live drift register and evidence log.
+## Critical Findings Driving This Cycle
 
-## Required Outcomes
+| ID | Severity | Finding | Evidence | Required Action |
+| --- | --- | --- | --- | --- |
+| PLAN-201 | High | Authority docs used stale runtime versions (Astro 5, older Supabase JS, older Framer/Lucide/i18next versions) | Resolved against workspace manifests | Completed |
+| PLAN-202 | High | Audit plan/tracker previously presented the prior cycle as closed and fully reconciled | Resolved by reopening the cycle with current evidence | Completed |
+| PLAN-203 | High | Supabase migration mirror parity was broken by 8 mirror-only files | Resolved by backfilling the canonical root migrations and restoring filename/content parity | Completed |
+| PLAN-204 | Medium | Top-level snapshots previously claimed stale inventory and parity counts | Resolved with current `145` / `77` / `139/139` baseline | Completed |
+| PLAN-205 | Medium | Public portal docs still referenced Astro 5 while active workspaces ran Astro 6 | Resolved in authority/public/package docs | Completed |
+| PLAN-206 | Medium | Cloudflare Worker secret guidance needed alignment with Wrangler `.dev.vars` and `wrangler secret put` practices | Resolved by standardizing local docs and Worker scripts around `.dev.vars` and production secrets via Wrangler | Completed |
 
-1. Authority docs (`SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, `DOCS_INDEX.md`) are synchronized and contradiction-free.
-2. Documentation claims about database schema, RLS/ABAC, migration workflows, and edge runtimes match active code and SQL.
-3. All command snippets in maintained docs are valid for the current repository layout.
-4. Library-specific guidance is verified with Context7 and logged in the tracker.
-5. Top-level repo docs reflect the current MCP topology, edge-runtime model, and script inventory.
-6. Potential conflict areas (dependencies, scripts, security, performance, dead links, stale roadmap/checklists) are identified and triaged.
-7. Stitch is no longer used as a top-level repository status signal in `README.md`; feature-specific Stitch docs remain explicitly scoped where implementation still exists.
-8. Missing or broken canonical references are either repaired, rerouted, or explicitly tracked with an owner and next action.
+## Context7 Validation Matrix
+
+| Surface | Library ID | Current Guidance Used In This Cycle |
+| --- | --- | --- |
+| Supabase JS client usage | `/supabase/supabase-js` | Use `createClient(...)` with PKCE/session options, `getSession()` / `onAuthStateChange()`, and keep secret keys server-side only |
+| Astro static builds | `/withastro/docs` | Keep static output build-time data fetching centered on `getStaticPaths()` and build env values |
+| Cloudflare Workers | `/cloudflare/cloudflare-docs` | Use `wrangler dev`, `wrangler deploy`, and `wrangler secret put`; local-only secrets should be documented clearly |
 
 ## Scope
 
 ### In Scope
 
-| Tier | Purpose | Paths |
+| Tier | Paths | Purpose |
 | --- | --- | --- |
-| Tier 0 (Authority) | Governance and canonical references | `SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, `DOCS_INDEX.md`, `docs/README.md` |
-| Tier 1 (Architecture/Security/Tenancy) | Core system behavior and constraints | `docs/architecture/**`, `docs/security/**`, `docs/tenancy/**`, `docs/deploy/**`, `docs/compliance/**` |
-| Tier 1 (Dev/Modules/Guides) | Operational runbooks and feature docs | `docs/dev/**`, `docs/modules/**`, `docs/guides/**` |
-| Tier 2 (Package READMEs) | Package-level setup and usage docs | `awcms/**/README*.md`, `awcms-public/**/README*.md`, `awcms-mcp/**/README*.md`, `awcms-mobile*/**/README*.md`, `awcms-esp32/**/README*.md`, `awcms-ext/**/README*.md`, `packages/**/README*.md` |
-| Tier 2 (Truth Sources) | Implementation evidence used for reconciliation | `supabase/**`, `awcms/supabase/**`, `awcms-edge/**`, `scripts/**`, `.github/workflows/**`, `package.json` files, `mcp.json`, `openclaw/**`, `.agents/**` |
+| Tier 0 - Authority | `SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, `DOCS_INDEX.md`, `docs/README.md` | Canonical architecture, operational baseline, and routing |
+| Tier 1 - Core docs | `docs/architecture/**`, `docs/security/**`, `docs/tenancy/**`, `docs/deploy/**`, `docs/dev/**`, `docs/modules/**`, `docs/product/**`, `docs/guides/**`, `docs/compliance/**` | Implementation, runbooks, and product docs |
+| Tier 2 - Package docs | `**/README.md` for maintained workspaces/packages | Workspace setup and runtime notes |
+| Tier 3 - Truth sources | `supabase/**`, `awcms/supabase/**`, `awcms-edge/**`, `scripts/**`, `.github/workflows/**`, `package.json` files, `pubspec.yaml`, `mcp.json` | Evidence used for reconciliation |
 
 ### Out of Scope
 
-- Third-party/vendor/generated docs that are not project-authoritative.
-- Binary assets and non-markdown content.
-- Historical changelog entries except where current authority docs contradict them.
+- Vendored, generated, or upstream template docs that are not part of the maintained canonical surface.
+- Binary assets and non-Markdown deliverables.
 
-## 2026-03-12 Baseline Snapshot
+## Audit Workflow
 
-| Surface | Baseline |
-| --- | --- |
-| Total tracked markdown files in repository | `136` |
-| Tracked `docs/**/*.md` count | `68` |
-| Root migrations | `131` SQL files in `supabase/migrations/` |
-| Mirrored migrations | `131` SQL files in `awcms/supabase/migrations/` |
-| Maintained package README surfaces | `14` |
-| Package manifests (`package.json`) | `10` |
-| GitHub workflow files | `3` |
-| MCP servers from `mcp.json` | `cloudflare`, `context7`, `github`, `supabase` |
-| Node baseline | `>=22.12.0` (validated runtime currently `v22.22.0`) |
-| Public runtime model | Astro static output with React islands |
-| Primary edge HTTP layer | Cloudflare Workers (`awcms-edge/`) |
+### Phase 0 - Inventory and Authority Re-baseline
 
-## Immediate Blocker Queue
+1. Refresh repository metrics and active status snapshots.
+2. Correct authority docs before editing downstream docs.
+3. Record contradictions, missing docs, and unresolved structural drift in the tracker.
 
-These issues should be addressed before broader doc polishing because they break trust in the documentation surface:
+### Phase 1 - Schema, Security, and Tenancy Reconciliation
 
-| ID | Severity | Blocker | Evidence | Planned Resolution |
-| --- | --- | --- | --- | --- |
-| PLAN-101 | High | Root planning docs are stale after recent migration, Worker, media, and lint-cleanup changes | `README.md` still references an active 2026-03-08 cycle while the tracker marks that cycle closed; migration baseline increased to `131/131`; edge/runtime docs changed materially | Refresh the planning docs, root snapshot, and tracker to the 2026-03-12 baseline before the next broad doc pass |
-| PLAN-102 | High | Current audit plan still references removed Supabase-function validation workflow | `docs/dev/documentation-audit-plan.md` still lists `scripts/verify_supabase_function_consistency.sh`, which was removed during the Cloudflare-first migration | Replace that gate with current Worker/R2/runtime validation steps and log the migration in the tracker |
-| PLAN-103 | Medium | Conflict-resolution plan needs explicit execution steps for resource-map reality, dependency drift, dead links, and broken scripts | Current plan has a good framework but does not yet turn recent repo findings into an ordered next execution queue | Add a 2026-03-12 execution queue with workstreams, detection commands, and exit criteria |
+1. Treat `supabase/migrations/` as the canonical schema source until parity is restored.
+2. Reconcile database, tenancy, and security docs against current migrations and helper functions.
+3. Verify soft-delete, `tenant_id`, RLS, ABAC, and secret-naming guidance.
 
-## Context7 Protocol (Mandatory)
+### Phase 2 - Scripts, Tooling, and CI/CD Reconciliation
 
-### Library Matrix
+1. Validate every documented command against actual scripts and workflow jobs.
+2. Reconcile docs with the current four-workflow GitHub Actions setup.
+3. Document known intentional divergences, not just the happy path.
 
-| Surface | Context7 ID | Validation Focus |
+### Phase 3 - Public, Admin, Worker, Mobile, IoT, and Package README Pass
+
+1. Verify workspace-specific versions and commands from local manifests.
+2. Update package READMEs to link back to canonical docs.
+3. Remove stale claims copied from previous stack baselines.
+
+### Phase 4 - Conflict Review and Risk Closure
+
+1. Triage dependency drift, dead links, script failures, security concerns, and performance guidance drift.
+2. Mark each finding as `resolved`, `accepted divergence`, `follow-up required`, or `blocked`.
+3. Do not close the cycle while any high-severity drift remains unresolved or undocumented.
+
+## Conflict Review Matrix
+
+| Conflict Class | Detection Method | Exit Criteria |
 | --- | --- | --- |
-| Supabase platform | `/supabase/supabase` | tenancy, RLS, auth, schema patterns |
-| Supabase JS | `/supabase/supabase-js` | client init, auth, queries, session handling |
-| Supabase CLI | `/supabase/cli` | migration, repair, deploy, local vs linked workflows |
-| Astro | `/withastro/docs` | static builds, `getStaticPaths`, env usage |
-| Vite | `/vitejs/vite` | env exposure, `loadEnv`, build config |
-| Cloudflare | `/cloudflare/cloudflare-docs` | Workers deploys, secrets, bindings, runtime boundaries |
-| React | `/websites/react_dev` | React 19 patterns in examples |
-| React Router | `/remix-run/react-router` | route/data-loading references |
-| Tailwind CSS | `/websites/tailwindcss` | v4 utility and token guidance |
-| Puck | `/puckeditor/puck` | render/config behavior |
-| TipTap | `/ueberdosis/tiptap-docs` | content handling and editor safety |
-| OpenClaw | `/openclaw/openclaw` | AI gateway and tenant routing docs |
+| Version drift | Compare docs to `package.json` / `pubspec.yaml` / lockfiles | Authority and package docs match active manifests |
+| Migration drift | Run `scripts/verify_supabase_migration_consistency.sh` | Root/mirror parity restored or divergence explicitly documented and approved |
+| Script drift | Compare docs to `scripts/**` and workspace scripts | Every documented command exists and reflects current behavior |
+| Security drift | Review env naming, key handling, auth, RLS, Worker docs | No doc instructs unsafe secret handling or RLS bypass |
+| Performance drift | Compare docs to current public/admin architecture | Performance guidance matches the current static-first and Worker-backed model |
+| Dead links | Run `npm run docs:check` and review local target validator output | Canonical docs link only to valid maintained targets |
 
-### Verification Workflow
+## Execution Queue
 
-For each library-facing doc section:
-
-1. Map the doc claim to the relevant library or runtime.
-2. Query Context7 for current best practice and version-sensitive guidance.
-3. Compare the guidance with the repository implementation.
-4. Apply one decision: keep, revise, deprecate, or archive.
-5. Log evidence in `docs/dev/documentation-audit-tracker.md`.
-
-## Audit Method
-
-### Step 1 - Inventory and Classification
-
-- Inventory all markdown files and maintained package README surfaces.
-- Classify each doc as `Authority`, `Architecture`, `Operational`, `Feature`, `Package`, or `Historical`.
-- Mark whether the doc is `canonical`, `supporting`, `backlog/checklist`, or `historical`.
-
-### Step 2 - Truth-Source Reconciliation
-
-Validate each maintained doc against implementation evidence:
-
-- database schema and migrations
-- Supabase and edge functions/workers
-- build/dev/deploy scripts
-- CI workflows and Node/runtime constraints
-- admin/public/mobile/device code paths
-
-Any claim without evidence must be corrected, explicitly scoped as backlog, or removed.
-
-### Step 3 - Security and Tenancy Integrity Pass
-
-Confirm all docs preserve canonical rules:
-
-- tenant isolation and RLS are mandatory
-- `deleted_at` soft delete lifecycle is explicit
-- permission keys use `scope.resource.action`
-- secret naming uses `VITE_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY`
-- client docs never advise exposing secrets or bypassing RLS
-
-### Step 4 - Conflict Identification Pass
-
-Review and triage the following repository-wide conflict classes:
-
-| Conflict Class | Detection Surface | Expected Action |
-| --- | --- | --- |
-| Outdated dependencies | `package.json`, lockfiles, changelog, Context7 guidance | Update docs, create upgrade backlog, or revise stale version claims |
-| Broken/nonfunctional scripts | `scripts/**`, package scripts, deploy docs | Fix docs or flag script issue with owner and evidence |
-| Security risks | env examples, auth docs, RLS/ABAC docs, secret naming | Correct guidance immediately and add tracker entry |
-| Performance drift | public/admin best-practice docs vs current build/runtime model | Update docs and log required code follow-up if needed |
-| Dead links/navigation | `README.md`, `DOCS_INDEX.md`, package READMEs, relative links | Repair links and update canonical routing |
-| Stale roadmap/checklists | execution-plan docs, backlog docs, historical runbooks | Mark as backlog/historical or remove from canonical guidance |
-| Missing package docs | workspace/package manifests without maintained README surfaces | Add README or explicitly mark the workspace as internal-only |
-| CI/documentation scope mismatch | workflow filters vs documented guarantees | Align docs to the actual guarantee or broaden automation |
-| Incomplete link validation | current link checker treats many local file links as pending | Add a filesystem-aware validation step and rerun before closure |
-| Resource map implementation drift | `docs/RESOURCE_MAP.md` vs current routes/components/hooks | Reconcile doc claims against the actual manager/editor/runtime surfaces before declaring docs current |
-
-### Step 5 - Consistency and Publication Pass
-
-- Reconcile terminology across authority and implementation docs.
-- Ensure top-level status docs do not over-emphasize feature-specific surfaces that are no longer canonical repo baselines.
-- Update `CHANGELOG.md`, `DOCS_INDEX.md`, and `docs/README.md` where needed.
-
-## Workstreams and Deliverables
-
-### Workstream A - Authority Docs
-
-Targets:
-
-- `SYSTEM_MODEL.md`
-- `AGENTS.md`
-- `README.md`
-- `DOCS_INDEX.md`
-- `docs/README.md`
-
-Deliverables:
-
-- current stack/runtime baseline
-- contradiction-free terminology and env naming
-- current status snapshot without stale Stitch/MCP references
-- repaired or intentionally rerouted canonical links for missing authority-level references
-
-### Workstream B - Schema, Security, and Tenancy Docs
-
-Targets:
-
-- `docs/security/**`
-- `docs/tenancy/**`
-- `docs/architecture/database.md`
-- `docs/dev/edge-functions.md`
-
-Deliverables:
-
-- migration-backed schema and RLS guidance
-- current Cloudflare Workers / transitional Supabase function framing
-- explicit secret-handling rules
-
-### Workstream C - Scripts, Tooling, and Deploy Docs
-
-Targets:
-
-- `docs/dev/setup.md`
-- `docs/dev/troubleshooting.md`
-- `docs/dev/ci-cd.md`
-- `docs/deploy/**`
-- package README command sections
-
-Deliverables:
-
-- executable commands
-- accurate script and MCP topology references
-- correct deploy/runtime expectations
-- documented CI/workflow coverage boundaries per maintained workspace
-
-### Workstream D - Feature, Module, and Client Docs
-
-Targets:
-
-- `docs/dev/admin.md`
-- `docs/dev/public.md`
-- `docs/dev/mobile.md`
-- `docs/dev/esp32.md`
-- `docs/modules/**`
-- `docs/guides/**`
-
-Deliverables:
-
-- feature docs that match current UI, routes, and workflows
-- clear separation between shipped behavior and backlog/checklist content
-
-### Workstream E - Package README Surfaces
-
-Targets:
-
-- maintained `README*.md` files across admin/public/mobile/mcp/esp32/ext workspaces
-
-Deliverables:
-
-- correct setup commands and env names
-- working links back to canonical docs
-- accurate runtime/dependency notes
-
-### Workstream F - Conflict Resolution and Standards Hardening
-
-Targets:
-
-- dependency/version drift
-- security/documentation drift
-- dead links and stale references
-- performance guidance drift
-- resource-map/UI/runtime drift
-
-Deliverables:
-
-- active drift register in tracker
-- triage decisions (`resolved`, `planned`, `archive`, `issue follow-up`)
-- explicit owner/evidence for high-severity findings
-
-## 2026-03-12 Execution Queue
-
-1. Re-baseline the authority docs and inventory counts (`README.md`, `SYSTEM_MODEL.md`, `AGENTS.md`, `DOCS_INDEX.md`, `docs/README.md`).
-2. Reconcile schema/security/tenancy docs against the current `131/131` migration baseline, `docs/RESOURCE_MAP.md`, and Cloudflare Worker + R2 implementation paths.
-3. Re-audit script, MCP, and deployment docs against live package scripts, `.github/workflows/**`, `mcp.json`, `awcms-edge/wrangler.jsonc`, and current local validation commands.
-4. Re-run package and client doc passes for `awcms/`, `awcms-edge/`, `awcms-public/**`, `awcms-mcp/`, `packages/**`, and maintained extension/mobile/ESP32 README surfaces.
-5. Execute a repository conflict review for dependency drift, broken scripts, dead links, security posture, performance guidance, and stale route/component references; log every high-severity finding in the tracker.
-6. Re-run validation gates, update the tracker with evidence, and only close the cycle when no unresolved high-severity documentation drift remains.
-
-## Dependency Upgrade Workstream (2026-03-12)
-
-### Completed Low-Risk Batch
-
-- `awcms`: upgraded patch/minor-safe packages (`@supabase/supabase-js`, `dompurify`, `framer-motion`, `i18next`, `react-i18next`, `@vitejs/plugin-react`) and revalidated with `npm run lint && npm run build`.
-- `awcms-public/primary`: upgraded patch/minor-safe Astro/Supabase/TypeScript-ESLint packages and revalidated with `npm run check && npm run build`.
-- `awcms-mcp`: upgraded the TypeScript-ESLint package family and revalidated with `npm run lint && npm run build`.
-
-### Held Major Upgrade Backlog
-
-- `awcms`: no held-major backlog remains. ESLint 10 now validates after removing the incompatible `eslint-plugin-react` dependency from the flat config and fixing the newly surfaced `no-useless-assignment` findings; `react-dropzone` 15, `react-helmet-async` 3, and `@types/node` 25 also validate successfully.
-- `awcms-public/primary`: no held-major backlog remains. The coupled Astro 6 / React integration batch, Tailwind `4.2.x`, and `astro-embed` `0.12.0` now validate successfully after migrating `src/content/config.ts` to `src/content.config.ts`, switching `wrangler.toml` to a Worker-style assets binding, and ignoring generated `.wrangler` output in Prettier.
-- `awcms-mcp`: no held-major backlog remains after validating `@types/node` 25.
-
-### Exit Criteria
-
-- Keep low-risk upgrades flowing only when validation passes cleanly in the owning workspace.
-- Treat held-major upgrades as separate targeted workstreams with explicit compatibility review.
+1. Re-baseline the authority docs and package/version references.
+2. Re-open the tracker with current evidence and unresolved blockers.
+3. Keep root/mirror migration parity intact as new migrations are added.
+4. Reconcile public portal docs against Astro 6 and current per-workspace dependency versions.
+5. Re-run docs validation and migration consistency after each remediation batch.
+6. Close the cycle only after all high-severity findings are resolved or explicitly accepted with owner and rationale.
 
 ## Validation Gates
 
-Run these before closing the cycle:
+| Gate | Command | Expected Result |
+| --- | --- | --- |
+| Docs links | `cd awcms && npm run docs:check` | Pass |
+| Migration parity | `scripts/verify_supabase_migration_consistency.sh` | Pass after remediation |
+| Admin sanity | `cd awcms && npm run lint && npm run build` | Pass when admin-facing docs or scripts change materially |
+| Public sanity | `cd awcms-public/primary && npm run check && npm run build` | Pass when public docs or env guidance change materially |
+| Worker sanity | `cd awcms-edge && npm run typecheck` | Pass when Worker docs or runtime guidance change materially |
 
-- Markdown lint:
-  - `npx markdownlint-cli --config .markdownlint.json "**/*.md"`
-- Link validation:
-  - `cd awcms && npm run docs:check`
-- Migration consistency:
-  - `scripts/verify_supabase_migration_consistency.sh`
-- Worker/runtime sanity for Cloudflare-first edge flows:
-  - `cd awcms-edge && npm run typecheck`
-  - confirm the configured Worker URL/route health (`/health`, `/functions/v1/*`, `/api/media/*`) for the active environment
-- Package sanity for touched areas:
-  - `cd awcms && npm run lint && npm run build`
-  - `cd awcms-public/primary && npm run check && npm run build`
-  - `cd awcms-mcp && npm run lint && npm run build`
-- Dependency review:
-  - `npm outdated --prefix awcms`
-  - `npm outdated --prefix awcms-public/primary`
-  - `npm outdated --prefix awcms-mcp`
+## Deliverables
 
-## Artifacts
-
-Required outputs for this cycle:
-
-1. Updated docs across all in-scope tiers.
-2. Evidence log and drift register in `docs/dev/documentation-audit-tracker.md`.
-3. Updated navigation in `DOCS_INDEX.md` and `docs/README.md` where needed.
-4. Changelog entry summarizing documentation and planning updates.
-5. Resolution plan for every open high-severity drift item, including missing docs, broken links, and version/script mismatches.
-
-## Definition of Done
-
-- Tier 0 and Tier 1 docs are reconciled and internally consistent.
-- Package docs are updated for touched workspaces.
-- Context7 verification evidence exists for revised library-facing sections.
-- Validation gates pass for lint/link and relevant package checks.
-- No unresolved high-severity drift items remain open in the tracker without an owner and next action.
-- Canonical documentation links resolve successfully or are replaced with clearly scoped backlog references.
+- Updated authority docs that match the live repository state.
+- A live tracker with evidence-backed findings and owners.
+- Corrected package/public docs for current versions and commands.
+- A clear remediation path for migration parity, dependency drift, security wording, and script accuracy.

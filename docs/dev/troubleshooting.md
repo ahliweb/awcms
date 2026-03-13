@@ -23,6 +23,7 @@ Provide common fixes for local development and deployment issues.
 
 - Confirm `awcms/.env.local` exists for the admin panel.
 - Confirm `awcms-public/primary/.env` exists for the public portal, including `PUBLIC_TENANT_ID`.
+- Confirm `awcms-edge/.dev.vars` exists for local Worker development.
 
 ### Tenant Not Found (Admin)
 
@@ -81,7 +82,7 @@ Provide common fixes for local development and deployment issues.
 - Set `VITE_TURNSTILE_SITE_KEY` in the admin environment.
 - Optionally set `VITE_TURNSTILE_TEST_SITE_KEY` to force the test key in local dev.
 - For multi-domain setups, use `VITE_TURNSTILE_SITE_KEY_MAP` to map hostnames to keys.
-- Ensure `TURNSTILE_SECRET_KEY` is set in Supabase secrets for `verify-turnstile`.
+- Ensure `TURNSTILE_SECRET_KEY` is set as a Cloudflare Worker secret for `verify-turnstile`.
 - For multi-domain secrets, set `TURNSTILE_SECRET_KEY_MAP` (JSON) and optionally `TURNSTILE_TEST_SECRET_KEY`.
 
 ### Cloudflare Runtime Env Missing
