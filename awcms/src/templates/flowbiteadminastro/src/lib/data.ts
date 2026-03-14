@@ -2,9 +2,19 @@
 // GraphQL, Databases, REST APIs, CDNs, proxies, S3, Matrix, IPFS, you name it…
 
 import { API_URL, REMOTE_ASSETS_BASE_URL } from '../app/constants.js';
+import * as operations from '../services/index.js';
 import type { Endpoint, EndpointsToOperations } from '../types/entities.js';
 
+const localOperations: EndpointsToOperations = {
+	products: operations.getProducts,
+	users: operations.getUsers,
+};
+
 export async function fetchData<Selected extends Endpoint>(endpoint: Selected) {
+	if (import.meta.env.SSR) {
+		return localOperations[endpoint]() as ReturnType<EndpointsToOperations[Selected]>;
+	}
+
 	const apiEndpoint = `${API_URL}${endpoint}`;
 
 	console.info(`Fetching ${apiEndpoint}…`);
