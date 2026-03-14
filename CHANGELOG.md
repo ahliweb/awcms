@@ -16,6 +16,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Docs: Restored `cd awcms && npm run docs:check` by removing the dead deployment-cell specification link in `docs/architecture/deployment-cells/overview.md`.
 - Public Portal: Restored `cd awcms-public/primary && npm run check` after the Astro upgrade by replacing the removed `@astrojs/markdown-remark` type import with unified/mdast/hast-compatible plugin typing in `awcms-public/primary/src/utils/frontmatter.ts`.
 - Tooling Security: Eliminated the remaining dev-time audit findings by overriding `flatted` in the admin and MCP workspaces and `yauzl` in the public workspaces, while keeping Astro/public build validation green.
+- Legacy Template: Restored `awcms/src/templates/flowbiteadminastro` static builds by fixing the `SideBar.astro` client script guard and routing SSR/static data loading through local service operations instead of a localhost-only API fetch.
 
 ## [4.0.0] "Cellular" - 2026-03-13
 

@@ -577,35 +577,33 @@ const renderIcon = (name, className = navIconClass) => {
 			'toggleSidebarMobileSearch',
 		);
 
-		if (!sidebarBackdrop || !toggleSidebarMobileHamburger || !toggleSidebarMobileClose) {
-			return;
+		if (sidebarBackdrop && toggleSidebarMobileHamburger && toggleSidebarMobileClose) {
+			toggleSidebarMobileSearch?.addEventListener('click', () => {
+				toggleSidebarMobile(
+					sidebar,
+					sidebarBackdrop,
+					toggleSidebarMobileHamburger,
+					toggleSidebarMobileClose,
+				);
+			});
+
+			toggleSidebarMobileEl?.addEventListener('click', () => {
+				toggleSidebarMobile(
+					sidebar,
+					sidebarBackdrop,
+					toggleSidebarMobileHamburger,
+					toggleSidebarMobileClose,
+				);
+			});
+
+			sidebarBackdrop.addEventListener('click', () => {
+				toggleSidebarMobile(
+					sidebar,
+					sidebarBackdrop,
+					toggleSidebarMobileHamburger,
+					toggleSidebarMobileClose,
+				);
+			});
 		}
-
-		toggleSidebarMobileSearch?.addEventListener('click', () => {
-			toggleSidebarMobile(
-				sidebar,
-				sidebarBackdrop,
-				toggleSidebarMobileHamburger,
-				toggleSidebarMobileClose,
-			);
-		});
-
-		toggleSidebarMobileEl?.addEventListener('click', () => {
-			toggleSidebarMobile(
-				sidebar,
-				sidebarBackdrop,
-				toggleSidebarMobileHamburger,
-				toggleSidebarMobileClose,
-			);
-		});
-
-		sidebarBackdrop?.addEventListener('click', () => {
-			toggleSidebarMobile(
-				sidebar,
-				sidebarBackdrop,
-				toggleSidebarMobileHamburger,
-				toggleSidebarMobileClose,
-			);
-		});
 	}
 </script>
