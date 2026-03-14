@@ -15,6 +15,7 @@ dist
 .output
 
 # Misc
+.wrangler
 .DS_Store
 temp_debug_files/
 temp_supabase/
