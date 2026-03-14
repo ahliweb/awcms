@@ -87,6 +87,9 @@
     "minimatch": ">=10.2.1",
     "svgo": "^4.0.1",
     "yauzl": "^3.2.1",
-    "flatted": "^3.4.0"
+    "flatted": "^3.4.0",
+    "@astrolib/analytics": {
+      "astro": "^6.0.4"
+    }
   }
 }
