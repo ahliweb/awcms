@@ -90,6 +90,12 @@
     "flatted": "^3.4.0",
     "@astrolib/analytics": {
       "astro": "^6.0.4"
+    },
+    "@astrolib/seo": {
+      "astro": "^6.0.4"
+    },
+    "@astro-community/astro-embed-integration": {
+      "astro": "^6.0.4"
     }
   }
 }
