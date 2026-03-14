@@ -8,10 +8,10 @@ The Admin Panel (`awcms/`) is a React SPA built with Vite. It serves as the cent
 
 ## 2. Key Technologies
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Admin Panel tech stack (React 19.2.4, Vite 7.2.7, TailwindCSS 4)
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Admin Panel tech stack (React 19.2.4, Vite 7.3.1, TailwindCSS 4)
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns, Context7 references, and multi-tenancy guidelines
 - **Framework**: React 19.2.4
-- **Build Tool**: Vite 7.2.7
+- **Build Tool**: Vite 7.3.1
 - **Styling**: Tailwind CSS 4, shadcn/ui
 - **State Management**: React Context (Tenant, Permissions, Auth)
 - **Icons**: Lucide React

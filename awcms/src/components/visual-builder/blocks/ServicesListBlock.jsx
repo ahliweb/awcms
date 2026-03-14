@@ -1,7 +1,7 @@
 
 import { supabase } from '@/lib/customSupabaseClient';
-import * as LucideIcons from 'lucide-react';
-import { Settings } from 'lucide-react';
+import { CheckCircle, Settings } from 'lucide-react';
+import { getIconComponent } from '@/lib/adminIcons';
 
 export const ServicesListBlock = ({
     columns = 3,
@@ -27,7 +27,7 @@ export const ServicesListBlock = ({
         <div className={`grid ${gridCols[columns] || 'grid-cols-3'} gap-8`}>
             {services.map((service, index) => {
                 const IconComponent = showIcon && service.icon
-                    ? (LucideIcons[service.icon] || LucideIcons.CheckCircle)
+                    ? getIconComponent(service.icon) || CheckCircle
                     : null;
 
                 return (

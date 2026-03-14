@@ -5,7 +5,8 @@ import AdminPageLayout from '@/templates/flowbite-admin/layouts/AdminPageLayout'
 import { PageHeader } from '@/templates/flowbite-admin';
 import SchemaForm from './SchemaForm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import * as Icons from 'lucide-react';
+import { Box, Loader2 } from 'lucide-react';
+import { getIconComponent } from '@/lib/adminIcons';
 
 const DynamicResourceManager = () => {
     const { resourceKey } = useParams();
@@ -108,7 +109,7 @@ const DynamicResourceManager = () => {
         return (
             <AdminPageLayout>
                 <div className="flex justify-center p-12">
-                    <Icons.Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
             </AdminPageLayout>
         );
@@ -126,7 +127,7 @@ const DynamicResourceManager = () => {
     }
 
     // Dynamic Icon
-    const IconComponent = Icons[resource?.icon] || Icons.Box;
+    const IconComponent = resource?.icon ? getIconComponent(resource.icon) : Box;
     const permissionPrefix = resource?.permission_prefix || `${resource.scope}.${resource.key}`;
 
     return (

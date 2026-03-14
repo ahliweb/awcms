@@ -14,7 +14,7 @@ Agents must respect these exact versions to ensure compatibility across the mono
 ### 1.1 Admin Panel (`awcms`)
 
 * **Framework:** React 19.2.4 (Functional Components Only)
-* **Build Tool:** Vite 7.2.7
+* **Build Tool:** Vite 7.3.1
 * **Language:** JavaScript (ES2022+)
 * **Styling:** TailwindCSS 4.1.18 (CSS-based config)
 * **State Management:** React Context + Hooks (No Redux/Zustand unless specified)
@@ -29,11 +29,11 @@ Agents must respect these exact versions to ensure compatibility across the mono
 
 ### 1.2 Public Portal (`awcms-public`)
 
-* **Meta-Framework:** Astro 6.0.3
+* **Meta-Framework:** Astro 6.0.4
 * **Interactive Islands:** React 19.2.4
 * **Language:** TypeScript 5.x / TSX
 * **Styling:** TailwindCSS 4.2.1 in `awcms-public/primary` (tenant portals may pin compatible 4.1.x lines)
-* **Backend Interface:** `@supabase/supabase-js` v2.99.1 in `awcms-public/primary` (`awcms-public/smandapbun` currently pins `^2.93.3`)
+* **Backend Interface:** `@supabase/supabase-js` v2.99.1 in both `awcms-public/primary` and `awcms-public/smandapbun`
 * **Node.js Requirement:** >= 22.12.0 (required by OpenClaw CLI)
 * **Rendering Model:** Static output (`output: "static"`) with React islands
 * **Sovereign Instances (Level 0):** For multi-national scale, distinct Supabase projects are used per region/country to ensure data sovereignty.

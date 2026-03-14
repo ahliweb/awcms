@@ -1,13 +1,13 @@
 # AWCMS Public Portal (Smanda Pangkalan Bun)
 
-Tenant-specific public portal package for SMAN 2 Pangkalan Bun, built with Astro 5 and React islands.
+Tenant-specific public portal package for SMAN 2 Pangkalan Bun, built with Astro 6 and React islands.
 
 ## Stack
 
-- Astro 6.0.2
+- Astro 6.0.4
 - React 19.2.4
-- Tailwind CSS 4.1.18
-- Supabase JS 2.93.3
+- Tailwind CSS 4.2.1
+- Supabase JS 2.99.1
 - Node.js >= 22.12.0
 
 ## Quick Start
