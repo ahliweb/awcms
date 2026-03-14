@@ -351,6 +351,93 @@ jobs:
               output.write(f"account_id={account_id}\n")
           PY
 
+      - name: Validate Cloudflare deploy credentials
+        env:
+          CF_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
+          CF_ACCOUNT_ID: ${{ steps.cloudflare-account.outputs.account_id }}
+          CF_PAGES_PROJECT: awcms-admin
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          token = os.environ.get('CF_API_TOKEN', '').strip()
+          account_id = os.environ.get('CF_ACCOUNT_ID', '').strip()
+          project_name = os.environ.get('CF_PAGES_PROJECT', '').strip()
+
+          missing = []
+          if not token:
+              missing.append('CLOUDFLARE_API_TOKEN')
+          if not account_id:
+              missing.append('cloudflare-account.outputs.account_id')
+          if not project_name:
+              missing.append('CF_PAGES_PROJECT')
+
+          if missing:
+              raise SystemExit(
+                  'Missing required Cloudflare deploy settings: ' + ', '.join(missing)
+              )
+
+          def request_json(url):
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      'Authorization': f'Bearer {token}',
+                      'Content-Type': 'application/json',
+                  },
+              )
+              with urllib.request.urlopen(req) as response:
+                  return json.loads(response.read().decode('utf-8'))
+
+          try:
+              memberships = request_json('https://api.cloudflare.com/client/v4/memberships')
+          except urllib.error.HTTPError as error:
+              body = error.read().decode('utf-8', errors='ignore')
+              raise SystemExit(
+                  'Cloudflare token validation failed while calling /memberships. '
+                  'Confirm the token is valid and has at least Account Settings:Read and Cloudflare Pages:Edit permissions. '
+                  f'Response: {error.code} {body}'
+              )
+
+          if not memberships.get('success'):
+              raise SystemExit(
+                  'Cloudflare memberships lookup failed: ' + json.dumps(memberships.get('errors') or memberships)
+              )
+
+          allowed_accounts = {
+              item.get('account', {}).get('id')
+              for item in memberships.get('result') or []
+              if item.get('account', {}).get('id')
+          }
+
+          if account_id not in allowed_accounts:
+              raise SystemExit(
+                  'Configured Cloudflare account is not accessible by the provided token. '
+                  f'Expected {account_id}, token can access: {sorted(allowed_accounts)}'
+              )
+
+          try:
+              project = request_json(
+                  f'https://api.cloudflare.com/client/v4/accounts/{account_id}/pages/projects/{project_name}'
+              )
+          except urllib.error.HTTPError as error:
+              body = error.read().decode('utf-8', errors='ignore')
+              raise SystemExit(
+                  'Cloudflare Pages project validation failed. '
+                  'Confirm the token has Cloudflare Pages:Edit permission and the project name/account ID are correct. '
+                  f'Response: {error.code} {body}'
+              )
+
+          if not project.get('success'):
+              raise SystemExit(
+                  'Cloudflare Pages project lookup failed: ' + json.dumps(project.get('errors') or project)
+              )
+
+          print(f'Cloudflare deploy preflight passed for project {project_name} in account {account_id}.')
+          PY
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         env:
