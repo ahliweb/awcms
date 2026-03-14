@@ -44,15 +44,13 @@ For automatic public rebuilds after Admin content changes, configure these non-p
 The maintained live setup uses the Cloudflare Pages deploy hook directly, while the Admin panel also triggers
 `awcms-edge` `/api/public/rebuild` after page/blog/menu updates.
 
-Tenant-managed files continue to use the shared Cloudflare R2 bucket `awcms-s3` with tenant-prefixed keys.
+Tenant-managed files use the shared Cloudflare R2 bucket `awcms-s3` with tenant-prefixed keys.
 
-Optional storage keys:
+Storage pattern:
 
-```env
-PUBLIC_SUPABASE_S3_ENDPOINT=...
-PUBLIC_SUPABASE_S3_REGION=...
-PUBLIC_SUPABASE_S3_BUCKET=...
-```
+- Cloudflare R2 stores the file objects.
+- Postgres stores canonical media metadata.
+- The application or `awcms-edge` Worker handles authorization, signed access, and post-upload bookkeeping.
 
 ## Commands
 

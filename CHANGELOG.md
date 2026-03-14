@@ -277,7 +277,7 @@ Applies to: `awcms@4.1.0`, `@onwidget/astrowind@4.1.0`, `smanda-pangkalan-bun@4.
 
 - Public Portal Static Helpers: Added build-time tenant and settings helpers (`publicTenant`, `publicSettings`) for static Astro builds.
 - DB Tooling: Added `20260207123000_fix_index_advisor_text_array_init.sql` and `awcms/scripts/apply_index_advisor_fix.sh` to resolve index_advisor lint warnings after resets.
-- Storage Config: Added Supabase S3 endpoint/region/bucket env entries for server and public metadata.
+- Storage Config: Standardized object storage on Cloudflare R2 only, with canonical metadata in Postgres and application/Worker-managed authorization plus post-upload bookkeeping.
 
 ### Changed
 

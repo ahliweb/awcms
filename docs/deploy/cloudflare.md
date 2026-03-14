@@ -24,6 +24,7 @@ Provide Cloudflare deployment settings for the Admin Panel, Public Portal, Worke
 - Cloudflare Workers (`awcms-edge/`) are the maintained server-side edge gateway for AWCMS clients.
 - Cloudflare R2 is the maintained object storage layer for file/media delivery.
 - Supabase remains responsible for Auth, PostgreSQL, RLS, and ABAC.
+- Production storage pattern: R2 stores the file objects, Postgres stores the canonical metadata, and the application or Worker layer handles authorization, signed access, and post-upload bookkeeping.
 
 ### Admin Panel (awcms)
 

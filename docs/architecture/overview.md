@@ -58,7 +58,7 @@ graph TD
         RPC
         DB[(PostgreSQL)]
         Auth[GoTrue Auth]
-        Storage[S3 Storage]
+        Storage[Cloudflare R2]
         RLS{RLS Policies}
         DB --- RLS
     end

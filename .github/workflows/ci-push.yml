@@ -628,6 +628,10 @@ jobs:
                   values['account_id'] = secret_account_id
                   values['account_source'] = 'github_secret'
 
+          if not values['account_id']:
+              values['account_id'] = '5255727b7269584897c8c97ebdd3347f'
+              values['account_source'] = 'workflow_default'
+
           output_path = os.environ['GITHUB_OUTPUT']
           with open(output_path, 'a', encoding='utf-8') as output:
               output.write(f"api_token={values['token']}\n")

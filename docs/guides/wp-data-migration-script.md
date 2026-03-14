@@ -110,4 +110,4 @@ node migrate.js
 * **Elementor Content:** If a post was built entirely in Elementor, the `content.rendered` field will contain massive amounts
   of Elementor-specific `<div>` enclosures and class names. You will need to write custom DOM parsers (using `cheerio`) to
   extract the actual text, or abandon the layout and move the content manually.
-* **Media and Images:** The script above does not migrate images. To fully migrate, you must parse the WordPress content for `<img>` tags, download the images to Supabase Storage, and rewrite the URLs in the post content to point to your new Supabase Storage buckets.
+* **Media and Images:** The script above does not migrate images. To fully migrate, parse the WordPress content for `<img>` tags, upload the files to Cloudflare R2, persist canonical file metadata in Postgres, and rewrite the URLs or media references through the application/Worker delivery path.

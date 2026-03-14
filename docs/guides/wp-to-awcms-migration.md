@@ -55,7 +55,7 @@ To prevent traffic loss during the transition:
 ## 4. Best Practices for the Transition
 
 * **Avoid Inline Styles:** In Elementor, users easily add margin/padding via the "Advanced" tab. In AWCMS, prefer baking these into the React component or providing controlled, predefined spacing options in the Puck config to ensure consistent design.
-* **Media Migration:** Download all `wp-content/uploads` and re-upload them to your Supabase Storage bucket. Update database references in your migration script to point to the new Supabase URLs.
+* **Media Migration:** Download all `wp-content/uploads` and re-upload them to Cloudflare R2. Store the canonical media metadata in Postgres and update database references or derived URLs through the application/Worker media pipeline rather than pointing directly at the object store.
 * **Islands Architecture:** If an Elementor widget was highly interactive (e.g., a complex filtering gallery), remember to implement it as an Astro Island (`client:load` or `client:idle`) in the AWCMS Public Portal so the JavaScript runs on the client side.
 
 ## 5. Next Steps

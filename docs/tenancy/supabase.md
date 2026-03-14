@@ -77,9 +77,11 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 
 ### Storage
 
-- Maintained file and media delivery flows should use Cloudflare R2 through `awcms-edge/`.
-- Supabase should not be used as the primary file storage surface for maintained client applications.
-- File metadata, tenant ownership, and authorization checks remain anchored in Supabase tables and policies.
+- Maintained file and media delivery flows must use Cloudflare R2 through `awcms-edge/`.
+- Supabase must not be used as the primary file storage surface for maintained client applications.
+- Postgres stores the canonical media metadata, tenant ownership, and authorization state.
+- The application or Worker layer handles authorization, signed access, and post-upload bookkeeping.
+- Do not add new `storage/v1`-based media flows for maintained AWCMS features.
 
 ### Tenant Provisioning RPC Signatures
 

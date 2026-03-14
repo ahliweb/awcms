@@ -7,8 +7,9 @@ SUPABASE_URL=https://<project>.supabase.co
 REST_BASE=${SUPABASE_URL}/rest/v1
 AUTH_BASE=${SUPABASE_URL}/auth/v1
 FUNCTIONS_BASE=${SUPABASE_URL}/functions/v1
-STORAGE_BASE=${SUPABASE_URL}/storage/v1
 ```
+
+Media flows are not configured through a direct `storage/v1` base anymore. Use application or Worker-managed R2 media endpoints for upload, signed access, and metadata retrieval.
 
 ## Required Headers
 

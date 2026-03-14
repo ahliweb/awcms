@@ -37,5 +37,5 @@ integration isolated:
 
 - **Auth**: Supabase GoTrue REST endpoints.
 - **Data**: PostgREST queries against tenant-scoped tables.
-- **Media**: Supabase Storage buckets (`/storage/v1`).
+- **Media**: Cloudflare R2 for object storage, with canonical metadata in Postgres and access/signing handled by the application or Worker layer.
 - **Audit**: Server-side edge handlers for sensitive actions.
