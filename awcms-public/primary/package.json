@@ -1,6 +1,6 @@
 {
   "name": "@onwidget/astrowind",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "AWCMS Primary Public Portal (Astro 6 + React 19)",
   "type": "module",
   "private": true,

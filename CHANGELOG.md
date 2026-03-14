@@ -5,6 +5,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-03-14
+
+Applies to: `awcms@4.1.0`, `@onwidget/astrowind@4.1.0`, `smanda-pangkalan-bun@4.1.0`, `awcms-mcp@4.1.0`
+
 ### Changed
 
 - Documentation: Fixed the broken deployment-cell spec link, refreshed authority docs and workspace READMEs for the current Astro 6.0.4, Vite 7.3.1, Supabase JS 2.99.1, and aligned public/edge runtime versions.
