@@ -1,10 +1,16 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const configPath = resolve(process.cwd(), "dist/server/wrangler.json");
+const deployRedirectPath = resolve(
+  process.cwd(),
+  ".wrangler/deploy/config.json",
+);
 
 if (!existsSync(configPath)) {
-  console.warn(`[AWCMS Public] Skipping Wrangler sanitize; file not found: ${configPath}`);
+  console.warn(
+    `[AWCMS Public] Skipping Wrangler sanitize; file not found: ${configPath}`,
+  );
   process.exit(0);
 }
 
@@ -33,4 +39,13 @@ if (config.dev) {
 
 writeFileSync(configPath, `${JSON.stringify(config)}\n`);
 
-console.log(`[AWCMS Public] Sanitized generated Wrangler config: ${configPath}`);
+console.log(
+  `[AWCMS Public] Sanitized generated Wrangler config: ${configPath}`,
+);
+
+if (existsSync(deployRedirectPath)) {
+  rmSync(deployRedirectPath, { force: true });
+  console.log(
+    `[AWCMS Public] Removed Pages deploy redirect config: ${deployRedirectPath}`,
+  );
+}

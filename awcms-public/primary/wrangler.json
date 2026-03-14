@@ -2,7 +2,7 @@
   "name": "awcms-public",
   "compatibility_date": "2026-03-08",
   "compatibility_flags": ["nodejs_compat", "disable_nodejs_process_v2"],
-  "pages_build_output_dir": "dist",
+  "pages_build_output_dir": "dist/client",
   "kv_namespaces": [
     {
       "binding": "SESSION",
