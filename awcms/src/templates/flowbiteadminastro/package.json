@@ -62,10 +62,12 @@
 		"eslint-plugin-astro": "^0.23.0",
 		"eslint-plugin-import": "^2.27.5",
 		"eslint-plugin-prettier": "^4.2.1",
-		"eslint-plugin-tsdoc": "^0.2.17",
+		"eslint-plugin-tsdoc": "^0.5.2",
 		"postcss": "^8.5.6"
 	},
 	"overrides": {
-		"diff": "^8.0.3"
+		"diff": "^8.0.3",
+		"flatted": "^3.4.0",
+		"ajv": "^6.14.0"
 	}
 }
