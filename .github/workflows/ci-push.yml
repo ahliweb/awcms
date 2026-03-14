@@ -74,20 +74,91 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve admin app env from env or secrets
+        id: admin-env
+        env:
+          SECRET_VITE_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
+          SECRET_VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          candidates = [
+              Path('awcms/.env.production'),
+              Path('awcms/.env.remote'),
+              Path('awcms/.env.local'),
+              Path('awcms/.env'),
+          ]
+
+          values = {'url': '', 'key': '', 'url_source': '', 'key_source': ''}
+
+          def parse_env(path):
+              parsed = {}
+              for raw in path.read_text(encoding='utf-8').splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith('#') or '=' not in line:
+                      continue
+                  key, value = line.split('=', 1)
+                  parsed[key.strip()] = value.strip().strip('"').strip("'")
+              return parsed
+
+          for candidate in candidates:
+              if not candidate.exists():
+                  continue
+              parsed = parse_env(candidate)
+              if not values['url']:
+                  value = parsed.get('VITE_SUPABASE_URL', '').strip() or parsed.get('SUPABASE_URL', '').strip()
+                  if value:
+                      values['url'] = value
+                      values['url_source'] = str(candidate)
+              if not values['key']:
+                  value = parsed.get('VITE_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY', '').strip()
+                  if value:
+                      values['key'] = value
+                      values['key_source'] = str(candidate)
+
+          if not values['url']:
+              value = (os.environ.get('SECRET_VITE_SUPABASE_URL') or '').strip()
+              if value:
+                  values['url'] = value
+                  values['url_source'] = 'github_secret'
+          if not values['key']:
+              value = (os.environ.get('SECRET_VITE_SUPABASE_PUBLISHABLE_KEY') or '').strip()
+              if value:
+                  values['key'] = value
+                  values['key_source'] = 'github_secret'
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"vite_supabase_url={values['url']}\n")
+              output.write(f"vite_supabase_key={values['key']}\n")
+              output.write(f"url_source={values['url_source']}\n")
+              output.write(f"key_source={values['key_source']}\n")
+
+          for field in ('url', 'key'):
+              if values[field]:
+                  print(f"::add-mask::{values[field]}")
+          PY
+
+      - name: Show admin app env source
+        run: |
+          echo "VITE_SUPABASE_URL source: ${{ steps.admin-env.outputs.url_source || 'unresolved' }}"
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY source: ${{ steps.admin-env.outputs.key_source || 'unresolved' }}"
+
       - name: Run ESLint
         run: npm run lint
 
       - name: Run Tests
         run: npm run test -- --run
         env:
-          VITE_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
+          VITE_SUPABASE_URL: ${{ steps.admin-env.outputs.vite_supabase_url }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ steps.admin-env.outputs.vite_supabase_key }}
 
       - name: Build
         run: npm run build
         env:
-          VITE_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
+          VITE_SUPABASE_URL: ${{ steps.admin-env.outputs.vite_supabase_url }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ steps.admin-env.outputs.vite_supabase_key }}
 
   # ============================================
   # Lint & Build - Public Portal (Astro)
@@ -115,19 +186,108 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve primary public env from env or secrets
+        id: public-env
+        env:
+          SECRET_PUBLIC_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
+          SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
+          SECRET_PUBLIC_TENANT_ID: ${{ secrets['PUBLIC_TENANT_ID'] }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          candidates = [
+              Path('awcms-public/primary/.env.production'),
+              Path('awcms-public/primary/.env.remote'),
+              Path('awcms-public/primary/.env.local'),
+              Path('awcms-public/primary/.env'),
+              Path('awcms/.env.production'),
+              Path('awcms/.env.remote'),
+              Path('awcms/.env.local'),
+              Path('awcms/.env'),
+          ]
+
+          values = {'url': '', 'key': '', 'tenant_id': '', 'url_source': '', 'key_source': '', 'tenant_source': ''}
+
+          def parse_env(path):
+              parsed = {}
+              for raw in path.read_text(encoding='utf-8').splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith('#') or '=' not in line:
+                      continue
+                  key, value = line.split('=', 1)
+                  parsed[key.strip()] = value.strip().strip('"').strip("'")
+              return parsed
+
+          for candidate in candidates:
+              if not candidate.exists():
+                  continue
+              parsed = parse_env(candidate)
+              if not values['url']:
+                  value = parsed.get('PUBLIC_SUPABASE_URL', '').strip() or parsed.get('VITE_SUPABASE_URL', '').strip()
+                  if value:
+                      values['url'] = value
+                      values['url_source'] = str(candidate)
+              if not values['key']:
+                  value = parsed.get('PUBLIC_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY', '').strip()
+                  if value:
+                      values['key'] = value
+                      values['key_source'] = str(candidate)
+              if not values['tenant_id']:
+                  value = parsed.get('PUBLIC_TENANT_ID', '').strip()
+                  if value:
+                      values['tenant_id'] = value
+                      values['tenant_source'] = str(candidate)
+
+          if not values['url']:
+              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_URL') or '').strip()
+              if value:
+                  values['url'] = value
+                  values['url_source'] = 'github_secret'
+          if not values['key']:
+              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_KEY') or '').strip()
+              if value:
+                  values['key'] = value
+                  values['key_source'] = 'github_secret'
+          if not values['tenant_id']:
+              value = (os.environ.get('SECRET_PUBLIC_TENANT_ID') or '').strip() or '00000000-0000-0000-0000-000000000000'
+              if value:
+                  values['tenant_id'] = value
+                  values['tenant_source'] = 'github_secret_or_default'
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"public_supabase_url={values['url']}\n")
+              output.write(f"public_supabase_key={values['key']}\n")
+              output.write(f"public_tenant_id={values['tenant_id']}\n")
+              output.write(f"url_source={values['url_source']}\n")
+              output.write(f"key_source={values['key_source']}\n")
+              output.write(f"tenant_source={values['tenant_source']}\n")
+
+          for field in ('url', 'key', 'tenant_id'):
+              if values[field]:
+                  print(f"::add-mask::{values[field]}")
+          PY
+
+      - name: Show primary public env source
+        run: |
+          echo "PUBLIC_SUPABASE_URL source: ${{ steps.public-env.outputs.url_source || 'unresolved' }}"
+          echo "PUBLIC_SUPABASE_PUBLISHABLE_KEY source: ${{ steps.public-env.outputs.key_source || 'unresolved' }}"
+          echo "PUBLIC_TENANT_ID source: ${{ steps.public-env.outputs.tenant_source || 'unresolved' }}"
+
       - name: Run checks
         run: npm run check
         env:
-          PUBLIC_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
-          PUBLIC_TENANT_ID: ${{ secrets['PUBLIC_TENANT_ID'] || '00000000-0000-0000-0000-000000000000' }}
+          PUBLIC_SUPABASE_URL: ${{ steps.public-env.outputs.public_supabase_url }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ steps.public-env.outputs.public_supabase_key }}
+          PUBLIC_TENANT_ID: ${{ steps.public-env.outputs.public_tenant_id }}
 
       - name: Build
         run: npm run build
         env:
-          PUBLIC_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
-          PUBLIC_TENANT_ID: ${{ secrets['PUBLIC_TENANT_ID'] || '00000000-0000-0000-0000-000000000000' }}
+          PUBLIC_SUPABASE_URL: ${{ steps.public-env.outputs.public_supabase_url }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ steps.public-env.outputs.public_supabase_key }}
+          PUBLIC_TENANT_ID: ${{ steps.public-env.outputs.public_tenant_id }}
 
   # ============================================
   # Flutter Build - Mobile App
@@ -189,6 +349,95 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Resolve smandapbun public env from env or secrets
+        id: smandapbun-env
+        env:
+          SECRET_PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
+          SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
+          SECRET_PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          candidates = [
+              Path('awcms-public/smandapbun/.env.production'),
+              Path('awcms-public/smandapbun/.env.remote'),
+              Path('awcms-public/smandapbun/.env.local'),
+              Path('awcms-public/smandapbun/.env'),
+              Path('awcms/.env.production'),
+              Path('awcms/.env.remote'),
+              Path('awcms/.env.local'),
+              Path('awcms/.env'),
+          ]
+
+          values = {'url': '', 'key': '', 'tenant_id': '', 'url_source': '', 'key_source': '', 'tenant_source': ''}
+
+          def parse_env(path):
+              parsed = {}
+              for raw in path.read_text(encoding='utf-8').splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith('#') or '=' not in line:
+                      continue
+                  key, value = line.split('=', 1)
+                  parsed[key.strip()] = value.strip().strip('"').strip("'")
+              return parsed
+
+          for candidate in candidates:
+              if not candidate.exists():
+                  continue
+              parsed = parse_env(candidate)
+              if not values['url']:
+                  value = parsed.get('PUBLIC_SUPABASE_URL', '').strip() or parsed.get('VITE_SUPABASE_URL', '').strip()
+                  if value:
+                      values['url'] = value
+                      values['url_source'] = str(candidate)
+              if not values['key']:
+                  value = parsed.get('PUBLIC_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY', '').strip()
+                  if value:
+                      values['key'] = value
+                      values['key_source'] = str(candidate)
+              if not values['tenant_id']:
+                  value = parsed.get('PUBLIC_TENANT_ID', '').strip()
+                  if value:
+                      values['tenant_id'] = value
+                      values['tenant_source'] = str(candidate)
+
+          if not values['url']:
+              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_URL') or '').strip()
+              if value:
+                  values['url'] = value
+                  values['url_source'] = 'github_secret'
+          if not values['key']:
+              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_KEY') or '').strip()
+              if value:
+                  values['key'] = value
+                  values['key_source'] = 'github_secret'
+          if not values['tenant_id']:
+              value = (os.environ.get('SECRET_PUBLIC_TENANT_ID') or '').strip()
+              if value:
+                  values['tenant_id'] = value
+                  values['tenant_source'] = 'github_secret'
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"public_supabase_url={values['url']}\n")
+              output.write(f"public_supabase_key={values['key']}\n")
+              output.write(f"public_tenant_id={values['tenant_id']}\n")
+              output.write(f"url_source={values['url_source']}\n")
+              output.write(f"key_source={values['key_source']}\n")
+              output.write(f"tenant_source={values['tenant_source']}\n")
+
+          for field in ('url', 'key', 'tenant_id'):
+              if values[field]:
+                  print(f"::add-mask::{values[field]}")
+          PY
+
+      - name: Show smandapbun public env source
+        run: |
+          echo "PUBLIC_SUPABASE_URL source: ${{ steps.smandapbun-env.outputs.url_source || 'unresolved' }}"
+          echo "PUBLIC_SUPABASE_PUBLISHABLE_KEY source: ${{ steps.smandapbun-env.outputs.key_source || 'unresolved' }}"
+          echo "PUBLIC_TENANT_ID source: ${{ steps.smandapbun-env.outputs.tenant_source || 'unresolved' }}"
 
       - name: Run typecheck
         run: npm run typecheck
@@ -330,10 +579,10 @@ jobs:
           ]
 
           values = {
-              'token': (os.environ.get('SECRET_CF_API_TOKEN') or '').strip(),
-              'account_id': (os.environ.get('SECRET_CF_ACCOUNT_ID') or '').strip(),
-              'token_source': 'github_secret' if (os.environ.get('SECRET_CF_API_TOKEN') or '').strip() else '',
-              'account_source': 'github_secret' if (os.environ.get('SECRET_CF_ACCOUNT_ID') or '').strip() else '',
+              'token': '',
+              'account_id': '',
+              'token_source': '',
+              'account_source': '',
           }
 
           def parse_env(path):
@@ -366,6 +615,18 @@ jobs:
                   if match:
                       values['account_id'] = match.group(1)
                       values['account_source'] = f'{candidate} (derived from R2_S3_API_ENDPOINT)'
+
+          if not values['token']:
+              secret_token = (os.environ.get('SECRET_CF_API_TOKEN') or '').strip()
+              if secret_token:
+                  values['token'] = secret_token
+                  values['token_source'] = 'github_secret'
+
+          if not values['account_id']:
+              secret_account_id = (os.environ.get('SECRET_CF_ACCOUNT_ID') or '').strip()
+              if secret_account_id:
+                  values['account_id'] = secret_account_id
+                  values['account_source'] = 'github_secret'
 
           output_path = os.environ['GITHUB_OUTPUT']
           with open(output_path, 'a', encoding='utf-8') as output:
@@ -528,13 +789,13 @@ jobs:
       - name: Run checks
         run: npm run check && npm run lint
         env:
-          PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
-          PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+          PUBLIC_SUPABASE_URL: ${{ steps.smandapbun-env.outputs.public_supabase_url }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ steps.smandapbun-env.outputs.public_supabase_key }}
+          PUBLIC_TENANT_ID: ${{ steps.smandapbun-env.outputs.public_tenant_id }}
 
       - name: Build
         run: npm run build
         env:
-          PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
-          PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+          PUBLIC_SUPABASE_URL: ${{ steps.smandapbun-env.outputs.public_supabase_url }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ steps.smandapbun-env.outputs.public_supabase_key }}
+          PUBLIC_TENANT_ID: ${{ steps.smandapbun-env.outputs.public_tenant_id }}

@@ -44,19 +44,118 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve public app env from env or secrets
+        id: public-env
+        env:
+          SECRET_PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
+          SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
+          SECRET_PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          candidates = [
+              Path('awcms-public/smandapbun/.env.production'),
+              Path('awcms-public/smandapbun/.env.remote'),
+              Path('awcms-public/smandapbun/.env.local'),
+              Path('awcms-public/smandapbun/.env'),
+              Path('awcms/.env.production'),
+              Path('awcms/.env.remote'),
+              Path('awcms/.env.local'),
+              Path('awcms/.env'),
+          ]
+
+          values = {
+              'url': '',
+              'key': '',
+              'tenant_id': '',
+              'url_source': '',
+              'key_source': '',
+              'tenant_source': '',
+          }
+
+          def parse_env(path):
+              parsed = {}
+              for raw in path.read_text(encoding='utf-8').splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith('#') or '=' not in line:
+                      continue
+                  key, value = line.split('=', 1)
+                  parsed[key.strip()] = value.strip().strip('"').strip("'")
+              return parsed
+
+          for candidate in candidates:
+              if not candidate.exists():
+                  continue
+              parsed = parse_env(candidate)
+              if not values['url']:
+                  value = parsed.get('PUBLIC_SUPABASE_URL', '').strip() or parsed.get('VITE_SUPABASE_URL', '').strip()
+                  if value:
+                      values['url'] = value
+                      values['url_source'] = str(candidate)
+              if not values['key']:
+                  value = parsed.get('PUBLIC_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY', '').strip()
+                  if value:
+                      values['key'] = value
+                      values['key_source'] = str(candidate)
+              if not values['tenant_id']:
+                  value = parsed.get('PUBLIC_TENANT_ID', '').strip()
+                  if value:
+                      values['tenant_id'] = value
+                      values['tenant_source'] = str(candidate)
+
+          if not values['url']:
+              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_URL') or '').strip()
+              if value:
+                  values['url'] = value
+                  values['url_source'] = 'github_secret'
+          if not values['key']:
+              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_KEY') or '').strip()
+              if value:
+                  values['key'] = value
+                  values['key_source'] = 'github_secret'
+          if not values['tenant_id']:
+              value = (os.environ.get('SECRET_PUBLIC_TENANT_ID') or '').strip()
+              if value:
+                  values['tenant_id'] = value
+                  values['tenant_source'] = 'github_secret'
+
+          output_path = os.environ['GITHUB_OUTPUT']
+          with open(output_path, 'a', encoding='utf-8') as output:
+              output.write(f"public_supabase_url={values['url']}\n")
+              output.write(f"public_supabase_key={values['key']}\n")
+              output.write(f"public_tenant_id={values['tenant_id']}\n")
+              output.write(f"url_source={values['url_source']}\n")
+              output.write(f"key_source={values['key_source']}\n")
+              output.write(f"tenant_source={values['tenant_source']}\n")
+
+          for field, label in [('url', 'PUBLIC_SUPABASE_URL'), ('key', 'PUBLIC_SUPABASE_PUBLISHABLE_KEY'), ('tenant_id', 'PUBLIC_TENANT_ID')]:
+              if values[field]:
+                  print(f'::add-mask::{values[field]}')
+              else:
+                  print(f'{label} not resolved from env files or secrets.')
+          PY
+
+      - name: Show public app env source
+        run: |
+          echo "PUBLIC_SUPABASE_URL source: ${{ steps.public-env.outputs.url_source || 'unresolved' }}"
+          echo "PUBLIC_SUPABASE_PUBLISHABLE_KEY source: ${{ steps.public-env.outputs.key_source || 'unresolved' }}"
+          echo "PUBLIC_TENANT_ID source: ${{ steps.public-env.outputs.tenant_source || 'unresolved' }}"
+
       - name: Run checks
         run: npm run check && npm run lint
         env:
-          PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
-          PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+          PUBLIC_SUPABASE_URL: ${{ steps.public-env.outputs.public_supabase_url }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ steps.public-env.outputs.public_supabase_key }}
+          PUBLIC_TENANT_ID: ${{ steps.public-env.outputs.public_tenant_id }}
 
       - name: Build
         run: npm run build
         env:
-          PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
-          PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+          PUBLIC_SUPABASE_URL: ${{ steps.public-env.outputs.public_supabase_url }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ steps.public-env.outputs.public_supabase_key }}
+          PUBLIC_TENANT_ID: ${{ steps.public-env.outputs.public_tenant_id }}
 
       - name: Resolve Cloudflare credentials from env or secrets
         id: cloudflare-env
@@ -81,10 +180,10 @@ jobs:
           ]
 
           values = {
-              'token': (os.environ.get('SECRET_CF_API_TOKEN') or '').strip(),
-              'account_id': (os.environ.get('SECRET_CF_ACCOUNT_ID') or '').strip(),
-              'token_source': 'github_secret' if (os.environ.get('SECRET_CF_API_TOKEN') or '').strip() else '',
-              'account_source': 'github_secret_or_var' if (os.environ.get('SECRET_CF_ACCOUNT_ID') or '').strip() else '',
+              'token': '',
+              'account_id': '',
+              'token_source': '',
+              'account_source': '',
           }
 
           def parse_env(path):
@@ -117,6 +216,18 @@ jobs:
                   if match:
                       values['account_id'] = match.group(1)
                       values['account_source'] = f'{candidate} (derived from R2_S3_API_ENDPOINT)'
+
+          if not values['token']:
+              secret_token = (os.environ.get('SECRET_CF_API_TOKEN') or '').strip()
+              if secret_token:
+                  values['token'] = secret_token
+                  values['token_source'] = 'github_secret'
+
+          if not values['account_id']:
+              secret_account_id = (os.environ.get('SECRET_CF_ACCOUNT_ID') or '').strip()
+              if secret_account_id:
+                  values['account_id'] = secret_account_id
+                  values['account_source'] = 'github_secret_or_var'
 
           output_path = os.environ['GITHUB_OUTPUT']
           with open(output_path, 'a', encoding='utf-8') as output:
