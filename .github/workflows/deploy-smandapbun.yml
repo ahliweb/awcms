@@ -59,6 +59,7 @@ jobs:
           PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
 
       - name: Validate Cloudflare deploy credentials
+        id: cloudflare-preflight
         env:
           CF_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
           CF_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
@@ -78,8 +79,6 @@ jobs:
           missing = []
           if not token:
               missing.append('CLOUDFLARE_API_TOKEN')
-          if not account_id:
-              missing.append('CLOUDFLARE_ACCOUNT_ID')
           if not project_name:
               missing.append('SMANDAPBUN_PAGES_PROJECT')
 
@@ -120,6 +119,18 @@ jobs:
               if item.get('account', {}).get('id')
           }
 
+          if not allowed_accounts:
+              raise SystemExit('The provided token does not have access to any Cloudflare accounts.')
+
+          if not account_id:
+              if len(allowed_accounts) == 1:
+                  account_id = next(iter(allowed_accounts))
+              else:
+                  raise SystemExit(
+                      'CLOUDFLARE_ACCOUNT_ID is not set and the token can access multiple accounts. '
+                      f'Please set CLOUDFLARE_ACCOUNT_ID explicitly. Token can access: {sorted(allowed_accounts)}'
+                  )
+
           if account_id not in allowed_accounts:
               raise SystemExit(
                   'Configured CLOUDFLARE_ACCOUNT_ID is not accessible by the provided token. '
@@ -143,6 +154,9 @@ jobs:
                   'Cloudflare Pages project lookup failed: ' + json.dumps(project.get('errors') or project)
               )
 
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'account_id={account_id}\n')
+
           print(f'Cloudflare deploy preflight passed for project {project_name} in account {account_id}.')
           PY
 
@@ -151,10 +165,10 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare-preflight.outputs.account_id }}
         with:
           apiToken: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
-          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          accountId: ${{ steps.cloudflare-preflight.outputs.account_id }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           command: pages deploy dist --project-name=${{ env.SMANDAPBUN_PAGES_PROJECT }} --branch=main
           workingDirectory: awcms-public/smandapbun
@@ -164,6 +178,7 @@ jobs:
       - name: Ensure production custom domains exist
         env:
           CF_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare-preflight.outputs.account_id }}
         run: |
           python - <<'PY'
           import json

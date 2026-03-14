@@ -1,6 +1,6 @@
-# AWCMS Monorepo
+# AWCMS Ecosystem
 
-Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
+Welcome to the AWCMS Ecosystem. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
 ## Status Snapshot (2026-03-14)
 
@@ -17,7 +17,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 1. **[SYSTEM_MODEL.md](SYSTEM_MODEL.md)** - **Single Source of Truth**: stack versions, architecture constraints, security mandates
 2. **[AGENTS.md](AGENTS.md)** - agent execution rules, Context7 references, implementation patterns
-3. **[README.md](README.md)** - canonical monorepo entrypoint and operational overview
+3. **[README.md](README.md)** - canonical AWCMS Ecosystem entrypoint and operational overview
 4. **[DOCS_INDEX.md](DOCS_INDEX.md)** - canonical documentation map and topic routing
 5. **Implementation Guides** - specific how-to documentation in `docs/`
 

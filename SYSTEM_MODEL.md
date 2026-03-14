@@ -1,4 +1,4 @@
-# AWCMS System Model (Authoritative Source of Truth)
+# AWCMS Ecosystem Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
 > **Last Updated:** 2026-03-13 (Audited against `package.json`, migration status, scripts, MCP topology, Context7 guidance, and the active documentation audit)
@@ -9,7 +9,7 @@ This document serves as the single source of truth for the AWCMS architecture, t
 
 ## 1. Technology Stack Mandates
 
-Agents must respect these exact versions to ensure compatibility across the monorepo.
+Agents must respect these exact versions to ensure compatibility across the AWCMS Ecosystem.
 
 ### 1.1 Admin Panel (`awcms`)
 

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Provide a single entry point for all AWCMS documentation across the monorepo and identify the canonical doc for each topic.
+Provide a single entry point for all AWCMS documentation across the AWCMS Ecosystem and identify the canonical doc for each topic.
 
 ## Documentation Hierarchy (Context7 MCP Aligned)
 
@@ -12,7 +12,7 @@ All documentation follows this authority structure:
 
 1. **[SYSTEM_MODEL.md](SYSTEM_MODEL.md)** - **Single Source of Truth** for architecture, tech stack, and security mandates
 2. **[AGENTS.md](AGENTS.md)** - AI agent guidelines and coding standards
-3. **[README.md](README.md)** - Canonical monorepo overview and operational baseline
+3. **[README.md](README.md)** - Canonical AWCMS Ecosystem overview and operational baseline
 4. **[DOCS_INDEX.md](DOCS_INDEX.md)** - This file: navigation and canonical references
 5. **Implementation Guides** - Specific how-to documentation
 
@@ -33,7 +33,7 @@ All documentation follows this authority structure:
 |----------|----------|---------|-------------------|
 | **1** | [SYSTEM_MODEL.md](SYSTEM_MODEL.md) | Tech stack versions, architectural pillars, security mandates | Primary authority |
 | **2** | [AGENTS.md](AGENTS.md) | AI coding guidelines, Context7 library IDs, permission patterns | Agent operations |
-| **3** | [README.md](README.md) | Canonical monorepo overview and baseline commands | Runtime entrypoint |
+| **3** | [README.md](README.md) | Canonical AWCMS Ecosystem overview and baseline commands | Runtime entrypoint |
 | **4** | [DOCS_INDEX.md](DOCS_INDEX.md) | Navigation and canonical references | This document |
 
 ### General

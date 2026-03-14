@@ -15,7 +15,7 @@ It routes readers to canonical documents and implementation-backed runbooks.
 
 - System constraints and mandatory versions: `SYSTEM_MODEL.md`
 - Agent and implementation rules: `AGENTS.md`
-- Monorepo operations and baseline commands: `README.md`
+- AWCMS Ecosystem operations and baseline commands: `README.md`
 - Canonical docs routing: `DOCS_INDEX.md`
 
 ## Documentation Domains

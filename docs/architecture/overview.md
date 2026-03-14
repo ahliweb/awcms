@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Describe the runtime architecture and data flow across the AWCMS monorepo.
+Describe the runtime architecture and data flow across the AWCMS Ecosystem.
 
 ## Audience
 

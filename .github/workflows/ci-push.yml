@@ -311,50 +311,11 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
 
-      - name: Resolve Cloudflare Account
-        id: cloudflare-account
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          token = os.environ.get("CLOUDFLARE_API_TOKEN")
-          if not token:
-              raise SystemExit("CLOUDFLARE_API_TOKEN is not set")
-
-          request = urllib.request.Request(
-              "https://api.cloudflare.com/client/v4/accounts",
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Content-Type": "application/json",
-              },
-          )
-
-          with urllib.request.urlopen(request) as response:
-              payload = json.load(response)
-
-          if not payload.get("success"):
-              raise SystemExit(f"Failed to list Cloudflare accounts: {payload.get('errors')}")
-
-          accounts = payload.get("result") or []
-          if not accounts:
-              raise SystemExit("No Cloudflare accounts available for token")
-
-          account_id = accounts[0].get("id")
-          if not account_id:
-              raise SystemExit("Cloudflare account ID missing from response")
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"account_id={account_id}\n")
-          PY
-
       - name: Validate Cloudflare deploy credentials
+        id: cloudflare-preflight
         env:
           CF_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
-          CF_ACCOUNT_ID: ${{ steps.cloudflare-account.outputs.account_id }}
+          CF_ACCOUNT_ID: ${{ secrets['CLOUDFLARE_ACCOUNT_ID'] }}
           CF_PAGES_PROJECT: awcms-admin
         run: |
           python3 - <<'PY'
@@ -370,8 +331,6 @@ jobs:
           missing = []
           if not token:
               missing.append('CLOUDFLARE_API_TOKEN')
-          if not account_id:
-              missing.append('cloudflare-account.outputs.account_id')
           if not project_name:
               missing.append('CF_PAGES_PROJECT')
 
@@ -412,6 +371,18 @@ jobs:
               if item.get('account', {}).get('id')
           }
 
+          if not allowed_accounts:
+              raise SystemExit('The provided token does not have access to any Cloudflare accounts.')
+
+          if not account_id:
+              if len(allowed_accounts) == 1:
+                  account_id = next(iter(allowed_accounts))
+              else:
+                  raise SystemExit(
+                      'CLOUDFLARE_ACCOUNT_ID is not set and the token can access multiple accounts. '
+                      f'Please set CLOUDFLARE_ACCOUNT_ID explicitly. Token can access: {sorted(allowed_accounts)}'
+                  )
+
           if account_id not in allowed_accounts:
               raise SystemExit(
                   'Configured Cloudflare account is not accessible by the provided token. '
@@ -435,6 +406,9 @@ jobs:
                   'Cloudflare Pages project lookup failed: ' + json.dumps(project.get('errors') or project)
               )
 
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'account_id={account_id}\n')
+
           print(f'Cloudflare deploy preflight passed for project {project_name} in account {account_id}.')
           PY
 
@@ -444,7 +418,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
         with:
           apiToken: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
-          accountId: ${{ steps.cloudflare-account.outputs.account_id }}
+          accountId: ${{ steps.cloudflare-preflight.outputs.account_id }}
           command: pages deploy awcms/dist --project-name=awcms-admin
           packageManager: npm
           wranglerVersion: '4.73.0'
