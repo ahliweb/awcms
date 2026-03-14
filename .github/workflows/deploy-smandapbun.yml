@@ -70,7 +70,7 @@ jobs:
           command: pages deploy dist --project-name=${{ env.SMANDAPBUN_PAGES_PROJECT }} --branch=main
           workingDirectory: awcms-public/smandapbun
           packageManager: npm
-          wranglerVersion: '4.61.1'
+          wranglerVersion: '4.73.0'
 
       - name: Ensure production custom domains exist
         env:

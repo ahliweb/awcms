@@ -360,7 +360,7 @@ jobs:
           accountId: ${{ steps.cloudflare-account.outputs.account_id }}
           command: pages deploy awcms/dist --project-name=awcms-admin
           packageManager: npm
-          wranglerVersion: '4.61.1'
+          wranglerVersion: '4.73.0'
 
   # ============================================
   # Lint & Build - SMANDAPBUN Portal (Astro)
