@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "node ./scripts/run-with-deployment-env.mjs astro build",
+    "build": "node ./scripts/run-with-deployment-env.mjs astro build && node ./scripts/sanitize-generated-wrangler.mjs",
     "preview": "astro preview",
     "astro": "astro",
     "check": "npm run check:astro && npm run check:eslint && npm run check:prettier",
