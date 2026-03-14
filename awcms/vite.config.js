@@ -14,20 +14,23 @@ const MANUAL_CHUNK_GROUPS = [
 		packages: ['react', 'react-dom', 'react-router-dom'],
 	},
 	{
-		name: 'vendor-ui',
+		name: 'vendor-radix',
 		packages: [
 			'@radix-ui/',
 			'@floating-ui/',
-			'lucide-react',
-			'framer-motion',
-			'class-variance-authority',
-			'clsx',
-			'tailwind-merge',
 		],
 	},
 	{
-		name: 'vendor-editor',
-		packages: ['@tiptap/', '@puckeditor/'],
+		name: 'vendor-motion',
+		packages: ['framer-motion'],
+	},
+	{
+		name: 'vendor-tiptap',
+		packages: ['@tiptap/'],
+	},
+	{
+		name: 'vendor-puck',
+		packages: ['@puckeditor/'],
 	},
 	{
 		name: 'vendor-charts',

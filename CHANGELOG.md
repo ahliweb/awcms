@@ -5,6 +5,17 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation: Fixed the broken deployment-cell spec link, refreshed authority docs and workspace READMEs for the current Astro 6.0.4, Vite 7.3.1, Supabase JS 2.99.1, and aligned public/edge runtime versions.
+- Dependencies: Applied safe patch/minor upgrades across `awcms`, `awcms-public/primary`, `awcms-public/smandapbun`, `awcms-edge`, and `awcms-mcp`, including the public/tenant `undici` security override and the Worker/tooling alignment on newer Wrangler and Supabase packages.
+- Performance: Refined admin Vite manual chunking to split the previous shared UI/editor monoliths into targeted `vendor-radix`, `vendor-motion`, `vendor-puck`, and `vendor-tiptap` chunks, and captured a fresh CPU build profile for follow-up tuning.
+
+### Fixed
+
+- Docs: Restored `cd awcms && npm run docs:check` by removing the dead deployment-cell specification link in `docs/architecture/deployment-cells/overview.md`.
+- Public Portal: Restored `cd awcms-public/primary && npm run check` after the Astro upgrade by replacing the removed `@astrojs/markdown-remark` type import with unified/mdast/hast-compatible plugin typing in `awcms-public/primary/src/utils/frontmatter.ts`.
+
 ## [4.0.0] "Cellular" - 2026-03-13
 
 ### Added

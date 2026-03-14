@@ -12,7 +12,7 @@ R2-backed media flows, and other request/response orchestration that should not 
 - Cloudflare Workers
 - Hono
 - Wrangler
-- `@supabase/supabase-js` (currently pinned in this workspace to `^2.45.0`)
+- `@supabase/supabase-js` `^2.99.1`
 
 ## Commands
 
@@ -40,10 +40,9 @@ Notes:
 
 ## Dependency Scope Note
 
-`awcms/` and `awcms-public/primary/` currently use `@supabase/supabase-js` `^2.99.1`, while
-`awcms-public/smandapbun/` still uses `^2.93.3` and this Worker workspace still pins `^2.45.0`.
-Treat `awcms-edge/package.json` as the source of truth for Worker-only
-dependency alignment until that package is upgraded deliberately and validated.
+`awcms/`, `awcms-public/primary/`, `awcms-public/smandapbun/`, and `awcms-edge/` now align on
+`@supabase/supabase-js` `^2.99.1`. Treat `awcms-edge/package.json` as the source of truth for
+Worker-only dependency alignment if the Worker runtime needs to diverge again in the future.
 
 ## CI / Validation Reality
 

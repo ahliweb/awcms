@@ -23,7 +23,7 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | Framework | React | 19.2.4 | UI framework |
-| Build tool | Vite | 7.2.7 | SPA build and dev server |
+| Build tool | Vite | 7.3.1 | SPA build and dev server |
 | Language | JavaScript | ES2022+ | Functional components |
 | Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
 | Visual editor | @puckeditor/core | 0.21.0 | Visual builder |
@@ -43,7 +43,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
-| Meta-framework | Astro | 6.0.3 | Static output + islands |
+| Meta-framework | Astro | 6.0.4 | Static output + islands |
 | UI library | React | 19.2.4 | Island rendering |
 | Language | TypeScript | 5.8.3 (primary), 5.9.3 (smandapbun) | Typed components |
 | Styling | TailwindCSS | 4.2.1 | Utility-first CSS |
@@ -52,7 +52,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
-Tenant-specific public portals may pin compatible but different versions (for example `awcms-public/smandapbun` currently uses Astro `6.0.2`, Tailwind `4.1.18`, and `@supabase/supabase-js` `^2.93.3`).
+`awcms-public/smandapbun` now aligns on Astro `6.0.4`, Tailwind `4.2.1`, and `@supabase/supabase-js` `^2.99.1`.
 
 ### Backend and Edge
 

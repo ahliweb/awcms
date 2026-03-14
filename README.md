@@ -27,8 +27,8 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 | Directory | Description | Tech Stack |
 | --- | --- | --- |
-| `awcms/` | Admin Panel | React 19.2.4, Vite 7.2.7, Supabase |
-| `awcms-public/primary/` | Public Portal | Astro 6.0.3 (static), React 19.2.4 |
+| `awcms/` | Admin Panel | React 19.2.4, Vite 7.3.1, Supabase |
+| `awcms-public/primary/` | Public Portal | Astro 6.0.4 (static), React 19.2.4 |
 | `awcms-mobile/primary/` | Mobile App | Flutter 3.38.5 |
 | `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
 | `awcms-ext/` | External Extensions | JavaScript modules |
@@ -41,8 +41,8 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 ## Current Stack Versions (Core)
 
 - **React**: 19.2.4 (Admin + Public)
-- **Vite**: 7.2.7 (Admin)
-- **Astro**: 6.0.3 (Primary Public), 6.0.2 (SMANDAPBUN) - *Requires Node.js >=22.12.0*
+- **Vite**: 7.3.1 (Admin)
+- **Astro**: 6.0.4 (Primary Public + SMANDAPBUN) - *Requires Node.js >=22.12.0*
 - **TailwindCSS**: 4.1.18 (Admin), 4.2.1 (Primary Public)
 - **Supabase JS**: 2.99.1 (Admin + Primary Public)
 - **React Router DOM**: 7.10.1
@@ -54,8 +54,8 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 Notes:
 
 - `awcms/` and `awcms-public/primary/` currently use `@supabase/supabase-js` `^2.99.1`.
-- `awcms-public/smandapbun/` still pins `@supabase/supabase-js` `^2.93.3`.
-- `awcms-edge/` currently pins `@supabase/supabase-js` `^2.45.0`; use `awcms-edge/package.json` as the source of truth for Worker-only dependency alignment until that workspace is upgraded deliberately.
+- `awcms-public/smandapbun/` now aligns on `@supabase/supabase-js` `^2.99.1`.
+- `awcms-edge/` now aligns on `@supabase/supabase-js` `^2.99.1`.
 
 ## Runtime Architecture
 

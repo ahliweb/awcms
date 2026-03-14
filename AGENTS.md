@@ -41,7 +41,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 - **Capabilities**:
-  - Working with **Astro 6.0.3** and **React 19.2.4** (Static output + Islands).
+  - Working with **Astro 6.0.4** and **React 19.2.4** (Static output + Islands).
   - Implementing **Zod** schemas for component prop validation.
   - Optimizing for Cloudflare Pages static builds (cache headers, asset optimization).
 - **Constraints**:
@@ -57,25 +57,25 @@ Agents must be aware of the exact versions in use:
 | Technology       | Version  | Notes                            |
 | ---------------- | -------- | -------------------------------- |
 | React            | 19.2.4   | Functional components only       |
-| Vite             | 7.2.7    | Build tool & dev server          |
+| Vite             | 7.3.1    | Build tool & dev server          |
 | TailwindCSS      | 4.1.18 / 4.2.1 | Admin / Primary public      |
 | Supabase JS      | 2.99.1 / 2.99.1 | Admin / Primary public clients |
 | React Router DOM | 7.10.1   | Client-side routing              |
 | Puck             | 0.21.0   | Visual Editor (`@puckeditor/core`) |
 | TipTap           | 3.13.0   | Rich text editor (XSS-safe)      |
-| Framer Motion    | 12.35.2 | Animations                       |
+| Framer Motion    | 12.36.0 | Animations                       |
 | Radix UI         | Latest   | Accessible UI primitives         |
 | Lucide React     | 0.577.0  | Admin / Public icon library      |
 | i18next          | 25.8.18  | Internationalization             |
 | Recharts         | 3.5.1    | Charts & Data Visualization      |
 | Leaflet          | 1.9.4    | Maps                             |
 | React Leaflet    | 5.0.0    | React bindings for Leaflet       |
-| Vitest           | 4.0.16   | Unit/Integration testing         |
-| Astro            | 6.0.3    | Primary public portal            |
+| Vitest           | 4.1.0    | Unit/Integration testing         |
+| Astro            | 6.0.4    | Primary public portal            |
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
-> **Vite 7**: This project uses Vite 7.2.7. Be aware of deprecation warnings for `ViteDevServer` APIs in `future` config.
+> **Vite 7**: This project uses Vite 7.3.1. Be aware of deprecation warnings for `ViteDevServer` APIs in `future` config.
 > **Node.js**: Minimum required version is **22.12.0** (OpenClaw CLI dependency). Managed via `nvm`.
 
 ---
@@ -113,7 +113,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | ----------------- | ------------------------------------------------------------------------- |
 | Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
 | **Admin Panel**   | React 19.2.4, Vite 7                                                      |
-| **Public Portal** | Astro 6.0.3 (static output), React 19.2.4                                    |
+| **Public Portal** | Astro 6.0.4 (static output), React 19.2.4                                    |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase (Auth, DB, RLS) + Cloudflare Workers (Edge Logic)                |
 

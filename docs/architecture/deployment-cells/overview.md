@@ -2,7 +2,13 @@
 
 This document describes the deployment cell model that AWCMS uses to support multi-project, multi-tenant deployments across Coolify, Cloudflare, and Supabase.
 
-See the full specification: [`awcms_deployment_cell_implementation_package_v_1.md`](../../deploy/awcms_deployment_cell_implementation_package_v_1.md)
+See the maintained deployment-cell documentation set:
+
+- [`schema.md`](./schema.md)
+- [`service-profiles.md`](./service-profiles.md)
+- [`provisioning-workflow.md`](./provisioning-workflow.md)
+- [`migration-runbooks.md`](./migration-runbooks.md)
+- [`validation-checklist.md`](./validation-checklist.md)
 
 ---
 
