@@ -645,12 +645,12 @@ The local server provides project-scoped tools:
 
 ### 2. Additional MCP Servers (`mcp.json`)
 
-AWCMS also runs external MCP servers for cloud and ecosystem tasks:
+AWCMS also runs external MCP servers for cloud and ecosystem tasks (authoritative list matches `mcp.json`):
 
 - `context7` (remote): `https://mcp.context7.com/mcp`
 - `github` (local wrapper): `scripts/start_github_mcp.sh` -> Docker `ghcr.io/github/github-mcp-server`
-- Cloudflare managed remote servers:
-  - `cloudflare-api`, `cloudflare-docs`, `cloudflare-bindings`, `cloudflare-observability`, `cloudflare-builds`, `cloudflare-radar`, `cloudflare-browser`
+- `cloudflare` (local npx): `@cloudflare/mcp-server-cloudflare` — unified Cloudflare tooling (Workers, KV, R2, D1, analytics, Pages, and more)
+- `paper` (local remote): `http://127.0.0.1:29979/mcp` — local Paper MCP service
 
 ### Setup
 

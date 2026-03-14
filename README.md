@@ -2,13 +2,13 @@
 
 Welcome to the AWCMS monorepo. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
-## Status Snapshot (2026-03-13)
+## Status Snapshot (2026-03-14)
 
 - Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
 - The active documentation and repository-conflict audit cycle is tracked in `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
 - Public portal runtime has moved to Astro 6 while Cloudflare Workers remain the primary edge HTTP layer.
-- MCP topology from `mcp.json` currently includes `cloudflare`, `context7`, `github`, and `supabase`.
-- Repository inventory currently shows `145` tracked Markdown files, `77` docs files, and `139` root/mirrored Supabase migrations.
+- MCP topology from `mcp.json` currently includes `cloudflare`, `context7`, `github`, `supabase`, and `paper`.
+- Repository inventory currently shows `144` tracked Markdown files, `76` docs files, and `139` root/mirrored Supabase migrations.
 - `scripts/verify_supabase_migration_consistency.sh` now passes after restoring root/mirror migration parity.
 
 ## Documentation Authority
@@ -122,8 +122,9 @@ This repository uses Context7 for AI-assisted development. Key library IDs:
 - Active servers:
   - Context7: `https://mcp.context7.com/mcp`
   - Supabase (local): `node awcms-mcp/dist/index.js`
-  - Cloudflare (remote): api/docs/bindings/observability/builds/radar/browser endpoints
+  - Cloudflare (local npx): `@cloudflare/mcp-server-cloudflare`
   - GitHub (local): `scripts/start_github_mcp.sh` (Docker-based `github/github-mcp-server`)
+  - Paper (local remote): `http://127.0.0.1:29979/mcp`
 
 ## Contributing
 

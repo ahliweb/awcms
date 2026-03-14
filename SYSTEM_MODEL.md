@@ -77,11 +77,12 @@ Agents must respect these exact versions to ensure compatibility across the mono
 
 * **Primary Config (Repo):** `mcp.json`
 * **Runtime Config (OpenCode):** `~/.config/opencode/opencode.json`
-* **Connected Servers (authoritative baseline):**
-  * `context7` (remote)
-  * `supabase` (local `awcms-mcp` server)
-  * `github` (local Docker-backed `github/github-mcp-server`)
-  * Cloudflare managed remote MCPs: `cloudflare-api`, `cloudflare-docs`, `cloudflare-bindings`, `cloudflare-observability`, `cloudflare-builds`, `cloudflare-radar`, `cloudflare-browser`
+* **Connected Servers (authoritative baseline — matches `mcp.json`):**
+  * `context7` (remote: `https://mcp.context7.com/mcp`)
+  * `supabase` (local `awcms-mcp` server: `node awcms-mcp/dist/index.js`)
+  * `github` (local Docker-backed `github/github-mcp-server` via `scripts/start_github_mcp.sh`)
+  * `cloudflare` (local npx: `@cloudflare/mcp-server-cloudflare`)
+  * `paper` (local remote: `http://127.0.0.1:29979/mcp`)
 * **GitHub Auth Pattern:** token-based local runtime via `GITHUB_PERSONAL_ACCESS_TOKEN` (or equivalent mapped vars).
 
 ---

@@ -209,29 +209,42 @@ Applies to: `awcms@4.0.0`, `awcms-public-root@4.0.0`, `@onwidget/astrowind@4.0.0
 
 ## 5. CI/CD Pipeline per App
 
-GitHub Actions triggers different deploy jobs depending on which paths changed:
+GitHub Actions triggers different deploy jobs depending on which paths changed using `dorny/paths-filter`:
 
 ```yaml
-# .github/workflows/ci-push.yml (excerpt)
+# .github/workflows/ci-push.yml (excerpt — current pattern)
 jobs:
-  deploy-admin:
-    if: contains(github.event.commits[0].modified, 'awcms/')
+  paths-filter:
+    runs-on: ubuntu-latest
+    outputs:
+      admin: ${{ steps.filter.outputs.admin }}
+      public: ${{ steps.filter.outputs.public }}
+      smandapbun: ${{ steps.filter.outputs.smandapbun }}
+      edge: ${{ steps.filter.outputs.edge }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            admin:
+              - 'awcms/**'
+            public:
+              - 'awcms-public/primary/**'
+            smandapbun:
+              - 'awcms-public/smandapbun/**'
+            edge:
+              - 'awcms-edge/**'
+
+  lint-test-admin:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.admin == 'true' }}
     steps:
       - run: npm run build
         working-directory: awcms/
-      - uses: cloudflare/pages-action@v1
-        with:
-          projectName: awcms-admin
-
-  deploy-public:
-    if: contains(github.event.commits[0].modified, 'awcms-public/')
-    steps:
-      - run: npm run build
-        working-directory: awcms-public/primary/
-      - uses: cloudflare/pages-action@v1
-        with:
-          projectName: awcms-public
 ```
+
+> **Note:** The SMANDAPBUN portal has its own dedicated `deploy-smandapbun.yml` workflow that also responds to `repository_dispatch` (content-triggered rebuilds) and `workflow_dispatch` (manual runs).
 
 This means merging a Flutter-only change won't trigger a web rebuild, and vice versa.
 

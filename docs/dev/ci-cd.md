@@ -25,6 +25,7 @@ Describe the GitHub Actions workflows used for AWCMS.
 - `.github/workflows/ci-push.yml` (pushes to `main`/`develop`, deploys)
 - `.github/workflows/ci-pr.yml` (pull requests to `main`)
 - `.github/workflows/docs-link-check.yml` (docs link checks on markdown changes)
+- `.github/workflows/deploy-smandapbun.yml` (push to `main` on `awcms-public/smandapbun/**` or `packages/awcms-shared/**` paths, plus `repository_dispatch` for content-triggered rebuilds)
 
 ### Trigger Events
 
@@ -47,11 +48,13 @@ Describe the GitHub Actions workflows used for AWCMS.
 | `db-check` | Supabase migration lint | `awcms/supabase` | ci-pr |
 | `deploy-production` | Cloudflare Pages deploy (admin panel artifact) | `awcms/` | ci-push |
 | `link-check` | Markdown link validation | repo root | docs-link-check |
+| `deploy` | Build and deploy SMANDAPBUN portal to Cloudflare Pages; also ensures custom domains | `awcms-public/smandapbun/` | deploy-smandapbun |
 
 Current workflow coverage boundaries:
 
 - `ci-push` path filters now cover `awcms/`, `awcms-public/primary/`, `awcms-mobile/`, `awcms-public/smandapbun/`, `awcms-edge/`, `awcms-mcp/`, `awcms-ext/`, and `packages/awcms-shared/`.
 - `ci-pr` now includes dedicated jobs for `awcms-edge/`, `awcms-mcp/`, `awcms-ext/primary-analytics/`, and `packages/awcms-shared/`.
+- `deploy-smandapbun` is a separate, dedicated deploy workflow for the SMANDAPBUN portal. It triggers on push to `main` when `awcms-public/smandapbun/**` or `packages/awcms-shared/**` changes, on `repository_dispatch` (for content-triggered rebuilds from the edge), and on `workflow_dispatch` (manual). It uses `CLOUDFLARE_ACCOUNT_ID` from GitHub secrets/variables — the account ID must **not** be hardcoded in the workflow file.
 - The current extension coverage is package-specific: only `awcms-ext/primary-analytics/` has a dedicated job. Add new jobs or a matrix when more maintained extension packages appear.
 
 ### Runtime Notes
