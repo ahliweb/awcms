@@ -1,0 +1,12 @@
+diff --git a/node_modules/@astrojs/cloudflare/dist/wrangler.js b/node_modules/@astrojs/cloudflare/dist/wrangler.js
+index 86d4311..9b88da3 100644
+--- a/node_modules/@astrojs/cloudflare/dist/wrangler.js
++++ b/node_modules/@astrojs/cloudflare/dist/wrangler.js
+@@ -1,6 +1,6 @@
+ const DEFAULT_SESSION_KV_BINDING_NAME = "SESSION";
+ const DEFAULT_IMAGES_BINDING_NAME = "IMAGES";
+-const DEFAULT_ASSETS_BINDING_NAME = "ASSETS";
++const DEFAULT_ASSETS_BINDING_NAME = "__CF_ASSETS__";
+ function cloudflareConfigCustomizer(options) {
+   const sessionKVBindingName = options?.sessionKVBindingName ?? DEFAULT_SESSION_KV_BINDING_NAME;
+   const needsSessionKVBinding = options?.needsSessionKVBinding ?? true;
