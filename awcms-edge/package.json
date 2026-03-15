@@ -7,7 +7,8 @@
     "dev": "wrangler dev",
     "dev:local": "wrangler dev --ip 127.0.0.1 --port 8787",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:manage-users": "node tests/manage-users.smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1009.0",

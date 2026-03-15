@@ -83,15 +83,21 @@ function Header({ toggleSidebar, _onNavigate }) {
 
           {/* Tenant Context Badge for Platform Admins */}
           {isPlatformAdmin && currentTenant && (
-            <div className="hidden lg:flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-2 py-1.5 text-primary shadow-sm dark:bg-primary/20">
-              <Building2 className="ml-1 h-4 w-4" />
+            <div className="hidden lg:flex items-center gap-3 rounded-2xl border border-primary/25 bg-primary/10 px-3 py-2 text-primary shadow-sm dark:bg-primary/20">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                <div className="leading-tight">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/75">Tenant Scope</p>
+                  <p className="text-xs font-semibold text-primary">{currentTenant.name || currentTenant.slug || 'Tenant'}</p>
+                </div>
+              </div>
               <Select
                 value={currentTenant.id}
                 onValueChange={(value) => {
                   switchTenantScope(value);
                 }}
               >
-                <SelectTrigger className="h-8 min-w-[220px] border-0 bg-transparent px-2 text-xs font-semibold uppercase tracking-[0.08em] text-primary shadow-none focus:ring-0">
+                <SelectTrigger className="h-9 min-w-[240px] rounded-xl border-primary/20 bg-background/70 px-3 text-xs font-medium text-foreground shadow-none focus:ring-1 focus:ring-primary/40">
                   <SelectValue placeholder="Select tenant scope" />
                 </SelectTrigger>
                 <SelectContent align="start">
