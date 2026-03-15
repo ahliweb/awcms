@@ -1,6 +1,6 @@
 
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import TenantGuard from '@/components/auth/TenantGuard';
 import AuthShell from '@/components/auth/AuthShell';
@@ -10,6 +10,7 @@ import UpdatePasswordPage from '@/pages/cmspanel/UpdatePasswordPage';
 
 // Plugin Dynamic Routes
 import { usePluginRoutes } from '@/components/routing/PluginRoutes';
+import { usePlugins } from '@/contexts/PluginContext';
 import ExtensionErrorBoundary from '@/components/ui/ExtensionErrorBoundary';
 
 import PublicRegisterPage from '@/pages/public/PublicRegisterPage';
@@ -105,6 +106,39 @@ const PageLoader = () => (
     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
   </div>
 );
+
+const PluginRouteFallback = () => {
+  const location = useLocation();
+  const { isLoading } = usePlugins();
+  const { routes: pluginRoutes } = usePluginRoutes();
+
+  const currentPath = location.pathname.replace(/^\/cmspanel\/?/, '');
+  const matchedRoute = pluginRoutes.find((route) => {
+    const normalizedRoute = (route.path || '').replace(/^\/+|\/+$/g, '');
+    return normalizedRoute && (currentPath === normalizedRoute || currentPath.startsWith(`${normalizedRoute}/`));
+  });
+
+  if (matchedRoute) {
+    const Element = matchedRoute.element;
+    return (
+      <ExtensionErrorBoundary extensionName={`Route: ${matchedRoute.path}`}>
+        {matchedRoute.lazy ? (
+          <Suspense fallback={<PageLoader />}>
+            <Element />
+          </Suspense>
+        ) : (
+          <Element />
+        )}
+      </ExtensionErrorBoundary>
+    );
+  }
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  return <Navigate to="/cmspanel" replace />;
+};
 
 const ProtectedRoute = ({ children }) => {
   const { session, loading, twoFactorEnabled } = useAuth();
@@ -322,6 +356,7 @@ const MainRouter = () => {
           {/* Dynamic Resources */}
           <Route path="resources/:resourceKey" element={<DynamicResourceManager />} />
           <Route path="res/:resourceKey" element={<DynamicResourceManager />} />
+          <Route path="*" element={<PluginRouteFallback />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

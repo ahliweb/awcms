@@ -13,7 +13,7 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: 'VITE_DEV_TENANT_SLUG=primary npm run dev -- --host 127.0.0.1 --port 4173',
+    command: 'VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH VITE_DEV_TENANT_SLUG=primary npm run dev -- --host 127.0.0.1 --port 4173',
     port: 4173,
     reuseExistingServer: true,
     timeout: 120000,

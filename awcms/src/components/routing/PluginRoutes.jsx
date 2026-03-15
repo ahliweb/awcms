@@ -9,6 +9,8 @@ import { Suspense, useMemo } from 'react';
 import { Route } from 'react-router-dom';
 import { usePlugins } from '@/contexts/PluginContext';
 import SecureRouteGate from '@/components/routing/SecureRouteGate';
+import { getPlugin } from '@/lib/pluginRegistry';
+import { getManifestRoutes } from '@/lib/extensionRuntime';
 
 // Loading fallback
 const RouteLoader = () => (
@@ -21,13 +23,22 @@ const RouteLoader = () => (
  * Get plugin routes from the filter system
  */
 export const usePluginRoutes = () => {
-    const { applyFilters, isLoading } = usePlugins();
+    const { applyFilters, isLoading, activePlugins } = usePlugins();
 
     const routes = useMemo(() => {
         if (isLoading) return [];
 
         // Get routes registered by plugins via 'admin_routes' filter
-        const pluginRoutes = applyFilters('admin_routes', []);
+        const filteredRoutes = applyFilters('admin_routes', []);
+        const manifestRoutes = (activePlugins || []).flatMap((extensionRecord) => {
+            const bundledEntry = extensionRecord?.manifest?.resources?.admin?.entry;
+            const pluginKey = bundledEntry?.startsWith('bundled:')
+                ? bundledEntry.replace('bundled:', '')
+                : extensionRecord?.slug;
+            const pluginModule = pluginKey ? getPlugin(pluginKey) : null;
+            return getManifestRoutes({ pluginKey, extensionRecord, pluginModule });
+        });
+        const pluginRoutes = [...filteredRoutes, ...manifestRoutes];
 
         // Validate and normalize routes
         return pluginRoutes
@@ -41,7 +52,7 @@ export const usePluginRoutes = () => {
                 secureScope: route.secureScope || route.secure_scope || null,
                 secureFallback: route.secureFallback || route.secure_fallback || '/cmspanel'
             }));
-    }, [applyFilters, isLoading]);
+    }, [activePlugins, applyFilters, isLoading]);
 
     return { routes, isLoading };
 };

@@ -80,3 +80,24 @@ export const registerManifestArtifacts = ({ addFilter, pluginKey, extensionRecor
     ]);
   }
 };
+
+export const getManifestRoutes = ({ pluginKey, extensionRecord, pluginModule }) => {
+  const manifest = extensionRecord?.manifest;
+  if (!manifest || !Array.isArray(manifest.adminRoutes)) {
+    return [];
+  }
+
+  return manifest.adminRoutes
+    .map((route) => {
+      const component = resolveManifestComponent(pluginKey, pluginModule, route.component);
+      if (!component) return null;
+      return {
+        path: route.path,
+        element: component,
+        permission: route.permission,
+        secureParams: route.secureParams,
+        secureScope: route.secureScope,
+      };
+    })
+    .filter(Boolean);
+};
