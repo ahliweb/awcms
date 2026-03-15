@@ -89,6 +89,8 @@ All documentation follows this authority structure:
 | User Management | [docs/modules/USER_MANAGEMENT.md](docs/modules/USER_MANAGEMENT.md) | User lifecycle, profiles, and roles |
 | Theme System | [docs/modules/THEMING.md](docs/modules/THEMING.md) | Theme engine details |
 | Extension System | [docs/modules/EXTENSIONS.md](docs/modules/EXTENSIONS.md) | Plugin and extension architecture |
+| Extension Specification | [docs/extensions/EXTENSION_SPEC.md](docs/extensions/EXTENSION_SPEC.md) | Manifest, catalog, activation, lifecycle |
+| Extension Authoring | [docs/extensions/EXTENSION_AUTHORING_GUIDE.md](docs/extensions/EXTENSION_AUTHORING_GUIDE.md) | Package author workflow |
 
 ### Developer Guides
 

@@ -3,6 +3,8 @@ import { hooks } from '@/lib/hooks';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getAllPlugins, getPlugin, getPluginComponent } from '@/lib/pluginRegistry';
 import { loadExternalExtension } from '@/lib/externalExtensionLoader';
+import { listActiveTenantExtensions } from '@/lib/extensionCatalog';
+import { registerManifestArtifacts } from '@/lib/extensionRuntime';
 import ExtensionErrorBoundary from '@/components/ui/ExtensionErrorBoundary';
 import { useTenant } from '@/contexts/TenantContext';
 
@@ -57,27 +59,13 @@ export const PluginProvider = ({ children }) => {
             setIsLoading(true);
             try {
                 // 1. Fetch active plugins from database
-                let query = supabase
-                    .from('extensions')
-                    .select('*')
-                    .eq('is_active', true)
-                    .is('deleted_at', null);
-
-                if (currentTenant?.id) {
-                    query = query.eq('tenant_id', currentTenant.id);
-                } else {
-                    query = query.eq('tenant_id', null);
-                }
-
-                const { data: dbPlugins, error } = await query;
-
-                if (error) throw error;
+                const dbPlugins = await listActiveTenantExtensions(currentTenant?.id || null);
 
                 setActivePlugins(dbPlugins || []);
 
-                // 2. Separate core and external plugins
-                const corePlugins = (dbPlugins || []).filter(p => p.extension_type !== 'external');
-                const extPlugins = (dbPlugins || []).filter(p => p.extension_type === 'external');
+                // 2. Separate bundled and external plugins
+                const corePlugins = (dbPlugins || []).filter((plugin) => plugin.kind !== 'external');
+                const extPlugins = (dbPlugins || []).filter((plugin) => plugin.kind === 'external');
 
                 const allBundledPlugins = getAllPlugins();
                 const registered = [];
@@ -86,11 +74,19 @@ export const PluginProvider = ({ children }) => {
                 // 3. Register core plugins
                 for (const dbPlugin of corePlugins) {
                     try {
-                        const pluginModule = allBundledPlugins[dbPlugin.slug] || getPlugin(dbPlugin.slug);
+                        const bundledEntry = dbPlugin.manifest?.resources?.admin?.entry;
+                        const pluginKey = bundledEntry?.startsWith('bundled:')
+                            ? bundledEntry.replace('bundled:', '')
+                            : dbPlugin.slug;
+                        const pluginModule = allBundledPlugins[pluginKey] || getPlugin(pluginKey);
 
                         if (!pluginModule) {
-                            console.warn(`[Core Plugin] "${dbPlugin.slug}" not found in registry`);
+                            console.warn(`[Core Plugin] "${pluginKey}" not found in registry`);
                             continue;
+                        }
+
+                        if (typeof pluginModule.register !== 'function') {
+                            registerManifestArtifacts({ addFilter, pluginKey, extensionRecord: dbPlugin, pluginModule });
                         }
 
                         if (typeof pluginModule.register === 'function') {
@@ -98,9 +94,11 @@ export const PluginProvider = ({ children }) => {
                                 addAction,
                                 addFilter,
                                 supabase,
-                                pluginConfig: dbPlugin.config || {}
+                                pluginConfig: dbPlugin.config || {},
+                                tenantId: dbPlugin.tenant_id || null,
+                                manifest: dbPlugin.manifest,
                             });
-                            registered.push(dbPlugin.slug);
+                            registered.push(pluginKey);
                             console.log(`[Core Plugin] Registered: ${dbPlugin.name}`);
                         }
                     } catch (err) {
@@ -111,17 +109,15 @@ export const PluginProvider = ({ children }) => {
                 // 4. Load external plugins (async)
                 for (const extPlugin of extPlugins) {
                     try {
-                        // Build manifest from DB data
-                        const manifest = extPlugin.manifest || {
-                            name: extPlugin.name,
-                            slug: extPlugin.slug,
-                            vendor: extPlugin.slug.split('-')[0] || 'unknown',
-                            version: extPlugin.version || '1.0.0',
-                            entry: extPlugin.external_path || 'src/index.js'
-                        };
+                        const manifest = extPlugin.manifest;
+                        const pluginKey = `${manifest.vendor}-${manifest.slug}`;
 
                         // Pass tenant_id for multi-tenant context
                         const loadedModule = await loadExternalExtension(manifest, extPlugin.tenant_id);
+
+                        if (typeof loadedModule.register !== 'function') {
+                            registerManifestArtifacts({ addFilter, pluginKey, extensionRecord: extPlugin, pluginModule: loadedModule });
+                        }
 
                         if (loadedModule.loaded && typeof loadedModule.register === 'function') {
                             loadedModule.register({
@@ -129,9 +125,10 @@ export const PluginProvider = ({ children }) => {
                                 addFilter,
                                 supabase,
                                 tenantId: extPlugin.tenant_id, // Pass tenant context
-                                pluginConfig: extPlugin.config || {}
+                                pluginConfig: extPlugin.config || {},
+                                manifest,
                             });
-                            registered.push(extPlugin.slug);
+                            registered.push(pluginKey);
                             loadedExternal.push({ ...extPlugin, module: loadedModule });
                             console.log(`[External Plugin] Registered: ${extPlugin.name}`);
                         } else if (!loadedModule.loaded) {

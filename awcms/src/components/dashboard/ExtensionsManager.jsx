@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
@@ -21,7 +20,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { activateExtensionRegistry, deactivateExtensionRegistry, syncExtensionToRegistry } from '@/utils/extensionLifecycle';
+import { listTenantExtensions } from '@/lib/extensionCatalog';
+import { activateTenantExtension, deactivateTenantExtension, uninstallTenantExtension } from '@/lib/extensionLifecycleApi';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import { cn } from '@/lib/utils';
 
@@ -63,19 +63,7 @@ function ExtensionsManager() {
   const fetchExtensions = useCallback(async () => {
     try {
       setLoading(true);
-      let query = supabase
-        .from('extensions')
-        .select('*')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-
-      if (!isPlatformAdmin && currentTenant?.id) {
-        query = query.eq('tenant_id', currentTenant.id);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
+      const data = await listTenantExtensions({ tenantId: currentTenant?.id || null });
       setExtensions(data || []);
     } catch (error) {
       console.error('Error fetching extensions:', error);
@@ -83,7 +71,7 @@ function ExtensionsManager() {
     } finally {
       setLoading(false);
     }
-  }, [currentTenant?.id, isPlatformAdmin, t, toast]);
+  }, [currentTenant?.id, t, toast]);
 
   useEffect(() => {
     if (canView) {
@@ -103,14 +91,10 @@ function ExtensionsManager() {
     try {
       const newStatus = !ext.is_active;
 
-      const { error } = await supabase.from('extensions').update({ is_active: newStatus, updated_at: new Date().toISOString() }).eq('id', ext.id);
-      if (error) throw error;
-
       if (newStatus) {
-        await activateExtensionRegistry(ext.id);
-        await syncExtensionToRegistry(ext.id, ext.config);
+        await activateTenantExtension({ tenantExtensionId: ext.id, tenantId: ext.tenant_id || currentTenant?.id || null });
       } else {
-        await deactivateExtensionRegistry(ext.id);
+        await deactivateTenantExtension({ tenantExtensionId: ext.id, tenantId: ext.tenant_id || currentTenant?.id || null });
       }
 
       toast({ title: newStatus ? t('extensions.activate') : t('extensions.deactivate'), description: `${ext.name} is now ${newStatus ? 'active' : 'inactive'}.` });
@@ -133,9 +117,7 @@ function ExtensionsManager() {
   const handleConfirmDelete = async () => {
     if (!extensionToDelete) return;
     try {
-      // Soft delete
-      await supabase.from('extensions').update({ deleted_at: new Date().toISOString() }).eq('id', extensionToDelete.id);
-      await deactivateExtensionRegistry(extensionToDelete.id);
+      await uninstallTenantExtension({ tenantExtensionId: extensionToDelete.id, tenantId: extensionToDelete.tenant_id || currentTenant?.id || null });
 
       toast({ title: t('common.success'), description: "Extension deleted" });
       fetchExtensions();

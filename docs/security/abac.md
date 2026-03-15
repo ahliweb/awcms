@@ -119,6 +119,7 @@ order by name;
 | `platform.setting`    | read, update                 | web     |
 | `platform.module`     | read, create, update         | web     |
 | `platform.extensions` | read, create, update, delete | web     |
+| `platform.extensions.manage` | manage | web |
 | `platform.sidebar`    | read, update                 | web     |
 | `platform.billing`    | read, update                 | web     |
 | `platform.user`       | read, create, update, delete | web     |
@@ -202,6 +203,7 @@ order by name;
 | IoT Devices        | `tenant.iot.*`                | read, create, update, delete |
 | Platform Extensions | `platform.extensions.*`      | read, create, update, delete  |
 | Analytics          | `tenant.analytics.*`          | read                         |
+| Events             | `tenant.events.*`             | read, create, update, delete, publish |
 
 ---
 

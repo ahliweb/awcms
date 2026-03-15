@@ -4,11 +4,11 @@ import { Upload, FileJson } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
-import { syncExtensionToRegistry } from '@/utils/extensionLifecycle';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
+import { validateExtensionManifest } from '@/lib/extensionManifest';
+import { installTenantExtension, registerCatalogManifest } from '@/lib/extensionLifecycleApi';
 
 function ExtensionInstaller({ onInstallComplete }) {
   const { toast } = useToast();
@@ -56,12 +56,16 @@ function ExtensionInstaller({ onInstallComplete }) {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const json = JSON.parse(e.target.result);
-        setPreview(json);
-      } catch {
-        toast({ variant: "destructive", title: "Parse Error", description: "Could not parse JSON." });
-        setPreview(null);
-      }
+         const json = JSON.parse(e.target.result);
+         const validation = validateExtensionManifest(json, { allowLegacy: true });
+         if (!validation.valid) {
+           throw new Error(validation.errors.join(', '));
+         }
+         setPreview(validation.manifest);
+       } catch {
+         toast({ variant: "destructive", title: "Manifest Error", description: "Could not parse a valid extension manifest." });
+         setPreview(null);
+       }
     };
     reader.readAsText(file);
   };
@@ -75,29 +79,23 @@ function ExtensionInstaller({ onInstallComplete }) {
     setInstalling(true);
 
     try {
-      // 1. Create Extension Record
-      const payload = {
-        name: preview.name || 'Untitled Extension',
-        slug: preview.slug || `ext-${Date.now()}`,
-        description: preview.description,
-        version: preview.version || '1.0.0',
-        author: preview.author || user.email,
-        icon: preview.icon || '🧩',
-        is_active: true,
-        config: preview,
-        created_by: user.id,
-        tenant_id: currentTenant?.id || null
-      };
+      const registerResult = await registerCatalogManifest(preview, {
+        packagePath: `awcms-ext/${preview.vendor}/${preview.slug}/extension.json`,
+        source: preview.kind === 'bundled' ? 'bundled' : 'workspace',
+      });
 
-      const { data, error } = await supabase.from('extensions').insert([payload]).select().single();
-      if (error) throw error;
-
-      // 2. Run Lifecycle Sync
-      await syncExtensionToRegistry(data.id, preview);
+      await installTenantExtension({
+        catalogId: registerResult.catalog?.id,
+        tenantId: currentTenant?.id || null,
+        config: {
+          installedBy: user.id,
+        },
+        autoActivate: true,
+      });
 
       toast({
         title: "Extension Installed",
-        description: `${payload.name} has been successfully added to the system.`
+        description: `${preview.name} has been registered in the platform catalog and installed for this tenant.`
       });
 
       setPreview(null);
@@ -138,13 +136,13 @@ function ExtensionInstaller({ onInstallComplete }) {
               <FileJson className="h-5 w-5 text-primary" />
               {preview.name || 'Unknown Name'}
             </CardTitle>
-            <CardDescription>Version {preview.version} • by {preview.author}</CardDescription>
+              <CardDescription>Version {preview.version} • vendor {preview.vendor}</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="mb-4 text-sm text-muted-foreground">{preview.description}</p>
             <div className="space-y-2">
               <div className="flex gap-2 text-xs font-mono">
-                <span className="rounded-full border border-border/70 bg-background px-2 py-1">Routes: {preview.routes?.length || 0}</span>
+                <span className="rounded-full border border-border/70 bg-background px-2 py-1">Routes: {preview.adminRoutes?.length || 0}</span>
                 <span className="rounded-full border border-border/70 bg-background px-2 py-1">Menus: {preview.menus?.length || 0}</span>
                 <span className="rounded-full border border-border/70 bg-background px-2 py-1">Permissions: {preview.permissions?.length || 0}</span>
               </div>

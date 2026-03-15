@@ -12,10 +12,11 @@ import { createClientFromEnv } from "~/lib/supabase";
 import {
   getFooterMenu,
   getHeaderMenu,
+  type HeaderLink,
   mapMenuItemsToFooterLinks,
   mapMenuItemsToHeaderLinks,
 } from "~/lib/menu";
-import type { HeaderLink } from "~/lib/menu";
+import { getActivePublicModules } from "~/lib/extension_registry";
 import { getPublicTenantId } from "~/lib/publicTenant";
 
 import type { MetaData } from "~/types";
@@ -44,6 +45,30 @@ if (supabase && tenantId) {
 
   if (footerItems.length > 0) {
     footerLinks = mapMenuItemsToFooterLinks(footerItems);
+  }
+
+  const publicModules = await getActivePublicModules(supabase, tenantId);
+  type PublicModuleLink = { label: string; url: string };
+  const moduleLinks = publicModules
+    .filter((module: Partial<PublicModuleLink> | null | undefined): module is PublicModuleLink => Boolean(module?.url && module?.label))
+    .map((module: PublicModuleLink) => ({
+      text: module.label,
+      href: module.url,
+    }));
+
+  if (moduleLinks.length > 0) {
+    const moduleGroup = {
+      text: locale === "id" ? "Ekstensi" : "Extensions",
+      links: moduleLinks,
+    };
+    headerLinks = [...headerLinks, moduleGroup];
+    footerLinks = [
+      ...footerLinks,
+      {
+        title: locale === "id" ? "Ekstensi" : "Extensions",
+        links: moduleLinks.map((link: HeaderLink) => ({ text: link.text || "", href: link.href || "#" })),
+      },
+    ];
   }
 }
 ---

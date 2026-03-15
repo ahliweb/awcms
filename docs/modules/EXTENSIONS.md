@@ -18,7 +18,7 @@ Describe the plugin and extension architecture for AWCMS.
 - [AGENTS.md](../../AGENTS.md) - Extension implementation patterns
 - [docs/architecture/standards.md](../architecture/standards.md) - Core standards
 
-AWCMS uses a dual extension system combining WordPress-style hooks with modern ES module architecture.
+AWCMS now uses Extension Specification v1 with a normalized split between platform catalog ownership and tenant activation ownership.
 
 > [!IMPORTANT]
 > **Terminology**: "Plugin" = Core bundled modules. "Extension" = External dynamic modules.
@@ -27,8 +27,12 @@ AWCMS uses a dual extension system combining WordPress-style hooks with modern E
 
 | Type | Location | Loading | Use Case |
 | ---- | -------- | ------- | -------- |
-| **Core Plugin** | `src/plugins/` | Bundled at build | Essential features |
-| **External Extension** | `awcms-ext/` workspaces in-repo; runtime bundles served from `/ext/awcms-ext-{vendor}-{slug}/...` by default | Dynamic at runtime | Third-party modules |
+| **Platform Catalog Entry** | `platform_extension_catalog` + `awcms-ext/` | Platform-owned | Installable package metadata |
+| **Tenant Activation** | `tenant_extensions` | Tenant-owned | Per-tenant state and config |
+| **Bundled Runtime** | `awcms/src/plugins/`, `awcms/src/extensions/` | Bundled at build | First-party/admin-safe modules |
+| **External Runtime** | `awcms-ext/` workspaces served from `/ext/...` | Dynamic at runtime | Third-party modules |
+
+See `docs/extensions/EXTENSION_SPEC.md` for the canonical v1 contract and `docs/extensions/EXTENSION_AUTHORING_GUIDE.md` for authoring steps.
 
 ---
 
@@ -255,27 +259,24 @@ Use `header` for finer control:
 
 ## Database Tables
 
-### `extensions`
+### Legacy `extensions`
 
-| Column | Type | Description |
-| ------ | ---- | ----------- |
-| id | UUID | Primary key |
-| tenant_id | UUID | Tenant isolation |
-| slug | TEXT | Unique identifier |
-| extension_type | TEXT | 'core' or 'external' |
-| external_path | TEXT | Path for external extensions |
-| manifest | JSONB | Extension manifest |
-| config | JSONB | Runtime configuration |
-| is_active | BOOLEAN | Activation status |
+`public.extensions` remains a compatibility surface for historical rows only. New production flows must use:
+
+- `public.platform_extension_catalog`
+- `public.tenant_extensions`
+- `public.extension_lifecycle_audit`
 
 ### Registry Tables
 
 | Table | Notes |
 | ----- | ----- |
-| `extension_menu_items` | Admin menu items per tenant (`tenant_id`) |
-| `extension_routes_registry` | Dynamic admin routes per tenant (`tenant_id`) |
-| `extension_permissions` | Extension permissions metadata per tenant (`tenant_id`) |
-| `extension_rbac_integration` | **DEPRECATED**: Role-permission mapping per tenant (Use `role_permissions`) |
+| `platform_extension_catalog` | Canonical package catalog |
+| `tenant_extensions` | Canonical tenant activation/config store |
+| `extension_lifecycle_audit` | Canonical lifecycle audit store |
+| `extension_menu_items` | Legacy compatibility only |
+| `extension_routes_registry` | Legacy compatibility only |
+| `extension_permissions` | Legacy compatibility only |
 
 ### External Path Overrides
 
@@ -326,7 +327,7 @@ Tenant-level plugin pages and extension settings should use `tenant.setting.*` p
 ## Quick Start: External Extension
 
 1. Create a workspace under `awcms-ext/` (for example `awcms-ext/my-extension/`)
-2. Create `manifest.json` with required fields
+2. Create `extension.json` with the v1 manifest fields
 3. Create `src/index.js` with `register()` export
 4. Register in database with `extension_type: 'external'`
 
@@ -403,10 +404,13 @@ These APIs use the WordPress-style hooks system internally. Registered blocks wi
 
 ## Security and Compliance Notes
 
-- External extensions are sandboxed and loaded per tenant.
-- Public portal does not support runtime extension loading.
+- Platform manages package registration; tenants manage activation/configuration.
+- Public runtime only consumes manifest-declared `publicModules` through the approved registry helper.
+- Worker lifecycle routes are the privileged orchestration boundary.
 
 ## References
 
 - `docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md`
 - `docs/architecture/standards.md`
+- `docs/extensions/EXTENSION_SPEC.md`
+- `docs/extensions/EXTENSION_AUTHORING_GUIDE.md`

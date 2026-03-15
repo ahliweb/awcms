@@ -140,6 +140,13 @@ Agents must respect these exact versions to ensure compatibility across the AWCM
 * **RLS / ABAC Preservation:** RLS and `public.has_permission(...)` remain the final enforcement layer for tenant isolation and authorization. Worker-side checks are additive guardrails, not replacements.
 * **Storage Pattern:** Cloudflare R2 is used for object storage and delivery workflows, while metadata, ownership, tenant scope, and permission checks remain anchored in Supabase.
 
+### 2.4.1 Extension Platform Ownership Model
+
+* **Platform Catalog:** Installable extension packages are stored in `platform_extension_catalog` and managed only by platform-authorized roles.
+* **Tenant Activation:** Per-tenant activation and configuration are stored in `tenant_extensions` and remain tenant-bounded by RLS.
+* **Manifest Contract:** `extension.json` is mandatory and must validate before runtime registration or lifecycle changes.
+* **Lifecycle Audit:** Extension lifecycle events are recorded in `extension_lifecycle_audit`.
+
 ### 2.5 Styling & Theming
 
 * **System:** TailwindCSS v4 with CSS Variables.

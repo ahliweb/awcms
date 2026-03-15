@@ -6,12 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useTranslation } from 'react-i18next';
-import { syncExtensionToRegistry } from '@/utils/extensionLifecycle';
+import { validateExtensionManifest } from '@/lib/extensionManifest';
+import { installTenantExtension, registerCatalogManifest, updateTenantExtensionConfig } from '@/lib/extensionLifecycleApi';
 
 function ExtensionEditor({ extension = {}, onClose, onSave }) {
   const { toast } = useToast();
@@ -55,46 +55,45 @@ function ExtensionEditor({ extension = {}, onClose, onSave }) {
         throw new Error("Invalid JSON configuration. Please check format.");
       }
 
-      const payload = {
-        name: formData.name,
+      const manifestPayload = {
+        ...parsedConfig,
+        schemaVersion: 1,
         slug: formData.slug.toLowerCase().replace(/\s+/g, '-'),
+        name: formData.name,
+        vendor: parsedConfig.vendor || 'awcms',
         version: formData.version,
-        description: formData.description,
-        author: formData.author,
-        icon: formData.icon,
-        config: parsedConfig,
-        updated_at: new Date().toISOString()
       };
 
-      let extensionId;
-
-      if (extension.id) {
-        // Update existing
-        const { error: updateError } = await supabase
-          .from('extensions')
-          .update(payload)
-          .eq('id', extension.id);
-
-        if (updateError) throw updateError;
-        extensionId = extension.id;
-
-      } else {
-        // Create new
-        payload.created_by = user.id;
-        payload.is_active = true; // Default active on creation
-        payload.tenant_id = currentTenant?.id || null;
-        const { data, error: insertError } = await supabase
-          .from('extensions')
-          .insert([payload])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-        extensionId = data.id;
+      const validation = validateExtensionManifest(manifestPayload, { allowLegacy: true });
+      if (!validation.valid) {
+        throw new Error(validation.errors.join(', '));
       }
 
-      // Sync lifecycle
-      await syncExtensionToRegistry(extensionId, parsedConfig);
+      if (extension.id) {
+        await registerCatalogManifest(validation.manifest, {
+          packagePath: extension.package_path || `awcms-ext/${validation.manifest.vendor}/${validation.manifest.slug}/extension.json`,
+          source: extension.source || 'workspace',
+        });
+        await updateTenantExtensionConfig({
+          tenantExtensionId: extension.id,
+          tenantId: extension.tenant_id || currentTenant?.id || null,
+          config: {
+            ...extension.config,
+            settings: parsedConfig.settings || parsedConfig.settingsSchema || {},
+          },
+        });
+
+      } else {
+        const registerResult = await registerCatalogManifest(validation.manifest, {
+          packagePath: `awcms-ext/${validation.manifest.vendor}/${validation.manifest.slug}/extension.json`,
+        });
+        await installTenantExtension({
+          catalogId: registerResult.catalog.id,
+          tenantId: currentTenant?.id || null,
+          config: { requested_by: user.id },
+          autoActivate: true,
+        });
+      }
 
       toast({
         title: t('common.success'),

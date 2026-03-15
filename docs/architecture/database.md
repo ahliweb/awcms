@@ -127,6 +127,70 @@ CREATE TABLE resources_registry (
 );
 ```
 
+### platform_extension_catalog
+
+Platform-owned extension package catalog.
+
+```sql
+CREATE TABLE platform_extension_catalog (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vendor TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  manifest JSONB NOT NULL DEFAULT '{}'::jsonb,
+  compatibility JSONB NOT NULL DEFAULT '{}'::jsonb,
+  capabilities JSONB NOT NULL DEFAULT '[]'::jsonb,
+  package_path TEXT,
+  checksum TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(vendor, slug)
+);
+```
+
+### tenant_extensions
+
+Tenant-owned activation/configuration state for catalog entries.
+
+```sql
+CREATE TABLE tenant_extensions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  catalog_id UUID NOT NULL REFERENCES platform_extension_catalog(id),
+  activation_state TEXT NOT NULL DEFAULT 'installed',
+  installed_version TEXT NOT NULL,
+  config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  rollout JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_health_status TEXT NOT NULL DEFAULT 'unknown',
+  deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, catalog_id)
+);
+```
+
+### extension_lifecycle_audit
+
+Immutable lifecycle audit log for catalog and tenant activation actions.
+
+```sql
+CREATE TABLE extension_lifecycle_audit (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  catalog_id UUID REFERENCES platform_extension_catalog(id) ON DELETE SET NULL,
+  tenant_extension_id UUID REFERENCES tenant_extensions(id) ON DELETE SET NULL,
+  actor_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'succeeded',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
 ### ui_configs
 
 Stores JSON schemas for admin tables/forms per resource.

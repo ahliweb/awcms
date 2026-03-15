@@ -1,19 +1,34 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Terminal } from 'lucide-react';
+import { useTenant } from '@/contexts/TenantContext';
+import { listExtensionLifecycleLogs } from '@/lib/extensionCatalog';
 
-// Mock logs for demonstration as we don't have a real log stream
-const MOCK_LOGS = [
-  { id: 1, timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), level: 'info', message: 'System initialized' },
-  { id: 2, timestamp: new Date(Date.now() - 1000 * 60 * 2).toISOString(), level: 'success', message: 'Extension "SEO Pro" loaded successfully' },
-  { id: 3, timestamp: new Date(Date.now() - 1000 * 30).toISOString(), level: 'warning', message: 'High memory usage detected in background job' },
-  { id: 4, timestamp: new Date().toISOString(), level: 'info', message: 'Checking for extension updates...' },
-];
+const levelByStatus = {
+  succeeded: 'success',
+  failed: 'error',
+  warning: 'warning',
+};
 
 function ExtensionLogs() {
-  const [logs] = useState(MOCK_LOGS);
+  const { currentTenant } = useTenant();
+  const [logs, setLogs] = useState([]);
+
+  useEffect(() => {
+    const loadLogs = async () => {
+      const data = await listExtensionLifecycleLogs({ tenantId: currentTenant?.id || null });
+      setLogs((data || []).map((entry) => ({
+        id: entry.id,
+        timestamp: entry.created_at,
+        level: levelByStatus[entry.status] || 'info',
+        message: `${entry.action} • ${entry.metadata?.extensionKey || entry.metadata?.slug || 'extension'}`,
+      })));
+    };
+
+    loadLogs();
+  }, [currentTenant?.id]);
 
   return (
     <Card className="h-full border-border/60 bg-card/75">

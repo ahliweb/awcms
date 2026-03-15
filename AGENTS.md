@@ -107,6 +107,13 @@ To ensure successful code generation and integration, Agents must adhere to the 
    - Component Implementation
    - Documentation Updates
 
+4. **Extension Model**:
+   - Platform-managed package metadata belongs in `platform_extension_catalog`.
+   - Tenant activation/configuration belongs in `tenant_extensions`.
+   - `extension.json` is the only supported extension manifest contract.
+   - Lifecycle actions must be auditable in `extension_lifecycle_audit`.
+   - Admin/public/edge runtime behavior must compose through registries, not direct router mutations.
+
 4. **Strict Technology Constraints**:
 
 | Rule              | Requirement                                                               |

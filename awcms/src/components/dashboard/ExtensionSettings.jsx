@@ -6,11 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import useSecureRouteParam from '@/hooks/useSecureRouteParam';
+import { listTenantExtensions } from '@/lib/extensionCatalog';
+import { updateTenantExtensionConfig } from '@/lib/extensionLifecycleApi';
 
 function ExtensionSettings() {
   const { toast } = useToast();
@@ -44,20 +45,7 @@ function ExtensionSettings() {
   useEffect(() => {
     const fetchActiveExtensions = async () => {
       try {
-        let query = supabase
-          .from('extensions')
-          .select('id, name, config')
-          .eq('is_active', true)
-          .is('deleted_at', null);
-
-        if (currentTenant?.id) {
-          query = query.eq('tenant_id', currentTenant.id);
-        } else if (!isPlatformAdmin) {
-          query = query.eq('tenant_id', null);
-        }
-
-        const { data, error } = await query;
-        if (error) throw error;
+        const data = await listTenantExtensions({ tenantId: currentTenant?.id || null, onlyActive: true });
 
         setExtensions(data || []);
         if (data && data.length > 0) {
@@ -85,12 +73,11 @@ function ExtensionSettings() {
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('extensions')
-        .update({ config: settings, updated_at: new Date().toISOString() })
-        .eq('id', selectedExtension);
-
-      if (error) throw error;
+      await updateTenantExtensionConfig({
+        tenantExtensionId: selectedExtension,
+        tenantId: currentTenant?.id || null,
+        config: settings,
+      });
 
       toast({
         title: 'Settings Saved',

@@ -16,6 +16,7 @@ import * as MailketingPlugin from '@/plugins/mailketing/index.js';
 import * as RegionsPlugin from '@/plugins/regions/index.js';
 // Import Analytics Extension (Local Integration)
 import * as AnalyticsExtension from '@/extensions/ahliweb-analytics/src/index.js';
+import * as EventsExtension from '@/extensions/ahliweb-events/index.js';
 
 // Plugin Registry Map
 const PLUGIN_REGISTRY = {
@@ -23,7 +24,8 @@ const PLUGIN_REGISTRY = {
     'helloworld': HelloWorldPlugin,
     'mailketing': MailketingPlugin,
     'regions': RegionsPlugin,
-    'awcms-ext-ahliweb-analytics': AnalyticsExtension
+    'awcms-ext-ahliweb-analytics': AnalyticsExtension,
+    'awcms-ext-ahliweb-events': EventsExtension
 };
 
 /**

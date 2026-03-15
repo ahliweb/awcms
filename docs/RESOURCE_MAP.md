@@ -31,6 +31,7 @@ Provide a cleaned-up reference for the AWCMS `resources_registry` without repeat
 | `portfolio` | Tenant | `tenant.portfolio` | Portfolio | `portfolio` | Public portfolio content |
 | `testimonials` | Tenant | `tenant.testimonies` | Testimonials | `testimonies` | Resource key remains `testimonials`; backing content uses `testimonies` |
 | `announcements` | Tenant | `tenant.announcements` | Announcements | `announcements` | Tenant-scoped notice content |
+| `events` | Tenant | `tenant.events` | Events | `events` | Reference extension resource registered through Extension Specification v1 |
 | `promotions` | Tenant | `tenant.promotions` | Promotions | `promotions` | Commerce/content promotions |
 | `contact_messages` | Tenant | `tenant.contact_messages` | Contact Messages | `contact_messages` | Inbound public contact submissions |
 | `contacts` | Tenant | `tenant.contacts` | Contacts CRM | `contacts` | Tenant CRM contacts |
@@ -55,7 +56,7 @@ Provide a cleaned-up reference for the AWCMS `resources_registry` without repeat
 | `iot_devices` | Tenant | `tenant.iot` | IoT Devices | `devices` | Registry parity fixed from legacy `iot_devices` mapping |
 | `mobile_users` | Tenant | `tenant.mobile_users` | Mobile Users | `mobile_users` | Mobile account management |
 | `push_notifications` | Tenant | `tenant.push_notifications` | Push Notifications | `push_notifications` | Mobile notification surface |
-| `extensions` | Platform | `platform.extensions` | Extensions | `extensions` | Platform extension lifecycle |
+| `extensions` | Platform | `platform.extensions` | Extensions | `platform_extension_catalog`, `tenant_extensions` | Platform catalog + tenant activation lifecycle |
 | `modules` | Platform | `platform.module` | Modules | `modules` | Platform module lifecycle |
 | `sidebar_manager` | Platform | `platform.sidebar` | Sidebar Manager | `admin_menus` | Platform navigation configuration |
 | `tenants` | Platform | `platform.tenant` | Tenant Management | `tenants` | Platform tenant administration |

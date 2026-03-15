@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { isManifestCompatible, validateExtensionManifest } from '@/lib/extensionManifest';
 
 // Cache for loaded external extensions
 const loadedExtensions = new Map();
@@ -16,23 +17,7 @@ const loadedExtensions = new Map();
  * @returns {Object} { valid: boolean, errors: string[] }
  */
 export const validateManifest = (manifest) => {
-    const errors = [];
-
-    if (!manifest.name) errors.push('Missing required field: name');
-    if (!manifest.slug) errors.push('Missing required field: slug');
-    if (!manifest.vendor) errors.push('Missing required field: vendor');
-    if (!manifest.version) errors.push('Missing required field: version');
-    if (!manifest.entry) errors.push('Missing required field: entry');
-
-    // Validate version format (semver)
-    if (manifest.version && !/^\d+\.\d+\.\d+/.test(manifest.version)) {
-        errors.push('Invalid version format (expected semver: x.y.z)');
-    }
-
-    return {
-        valid: errors.length === 0,
-        errors
-    };
+    return validateExtensionManifest(manifest, { allowLegacy: true });
 };
 
 /**
@@ -53,7 +38,7 @@ export const getExternalExtensionBasePath = () => {
 export const getExtensionPath = (manifest) => {
     const basePath = getExternalExtensionBasePath();
     const folderName = `awcms-ext-${manifest.vendor}-${manifest.slug}`;
-    const entryPath = manifest.entry || 'dist/index.js';
+    const entryPath = manifest.resources?.admin?.entry || manifest.entry || 'dist/index.js';
     return `${basePath}/${folderName}/${entryPath}`;
 };
 
@@ -78,8 +63,14 @@ export const loadExternalExtension = async (manifest, tenantId = null) => {
             throw new Error(`Invalid manifest: ${validation.errors.join(', ')}`);
         }
 
+        const normalizedManifest = validation.manifest;
+
+        if (!isManifestCompatible(normalizedManifest)) {
+            throw new Error(`Extension ${normalizedManifest.name} is not compatible with this AWCMS version`);
+        }
+
         // Build path
-        const extensionPath = manifest.external_path || getExtensionPath(manifest);
+        const extensionPath = manifest.external_path || getExtensionPath(normalizedManifest);
 
         // Dynamic import
         // Note: Vite requires @vite-ignore for dynamic imports with variables
@@ -93,18 +84,18 @@ export const loadExternalExtension = async (manifest, tenantId = null) => {
         // Cache the loaded module with tenant context
         const extensionModule = {
             ...module,
-            manifest,
+            manifest: normalizedManifest,
             tenantId,
             loaded: true,
             loadedAt: new Date().toISOString()
         };
 
         loadedExtensions.set(cacheKey, extensionModule);
-        console.log(`[External Extension] Loaded: ${manifest.name} v${manifest.version}`);
+            console.log(`[External Extension] Loaded: ${normalizedManifest.name} v${normalizedManifest.version}`);
 
         return extensionModule;
     } catch (error) {
-        console.error(`[External Extension] Failed to load ${manifest.name}:`, error);
+            console.error(`[External Extension] Failed to load ${manifest?.name || 'unknown extension'}:`, error);
 
         // Return error placeholder
         return {
@@ -112,7 +103,7 @@ export const loadExternalExtension = async (manifest, tenantId = null) => {
                 className: 'p-4 border border-red-300 bg-red-50 rounded-lg text-red-700'
             }, [
                 React.createElement('h3', { key: 'title', className: 'font-semibold' },
-                    `Failed to load extension: ${manifest.name}`
+                    `Failed to load extension: ${manifest?.name || 'Unknown extension'}`
                 ),
                 React.createElement('p', { key: 'error', className: 'text-sm mt-1' },
                     error.message
@@ -157,33 +148,9 @@ export const clearExtensionCache = () => {
  * @returns {boolean} Whether extension is compatible
  */
 export const isCompatible = (manifest, awcmsVersion = '2.0.0') => {
-    if (!manifest.awcms_version) return true; // No requirement = compatible
-
-    const requirement = manifest.awcms_version;
-
-    // Simple semver comparison for >= requirement
-    if (requirement.startsWith('>=')) {
-        const minVersion = requirement.slice(2);
-        return compareVersions(awcmsVersion, minVersion) >= 0;
-    }
-
-    // Exact match
-    return awcmsVersion === requirement;
-};
-
-/**
- * Simple semver comparison
- * @returns {number} -1 if a < b, 0 if a = b, 1 if a > b
- */
-const compareVersions = (a, b) => {
-    const aParts = a.split('.').map(Number);
-    const bParts = b.split('.').map(Number);
-
-    for (let i = 0; i < 3; i++) {
-        if (aParts[i] > bParts[i]) return 1;
-        if (aParts[i] < bParts[i]) return -1;
-    }
-    return 0;
+    const validation = validateManifest(manifest);
+    if (!validation.valid) return false;
+    return isManifestCompatible(validation.manifest, awcmsVersion);
 };
 
 const externalExtensionLoader = {

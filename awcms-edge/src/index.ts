@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { generateStorageKey, inferMediaKind, slugifyMediaValue, UploadSessionRequest } from './mediaContracts'
+import { compareVersions, getExtensionKey, validateExtensionManifest } from './extensions'
 
 type Bindings = {
   STORAGE: R2Bucket
@@ -189,6 +190,34 @@ const resolveTenantId = (requestedTenantId: string | null, userContext: { tenant
   }
 
   return userContext.tenantId
+}
+
+const hasAnyPermission = async (userSupabase: any, permissionNames: string[]) => {
+  for (const permissionName of permissionNames) {
+    const { data, error } = await userSupabase.rpc('has_permission', { permission_name: permissionName })
+    if (!error && data) return true
+  }
+  return false
+}
+
+const writeExtensionAudit = async (adminSupabase: any, payload: {
+  tenantId?: string | null
+  catalogId?: string | null
+  tenantExtensionId?: string | null
+  actorUserId: string
+  action: string
+  status: string
+  metadata?: Record<string, unknown>
+}) => {
+  await adminSupabase.from('extension_lifecycle_audit').insert({
+    tenant_id: payload.tenantId || null,
+    catalog_id: payload.catalogId || null,
+    tenant_extension_id: payload.tenantExtensionId || null,
+    actor_user_id: payload.actorUserId,
+    action: payload.action,
+    status: payload.status,
+    metadata: payload.metadata || {},
+  })
 }
 
 // Middleware to verify Supabase JWT
@@ -1157,6 +1186,475 @@ app.post('/functions/v1/manage-users', async (c) => {
     return c.json({ error: error.message }, 400);
   }
 });
+
+app.post('/functions/v1/extensions-lifecycle', async (c) => {
+  const authHeader = c.req.header('Authorization')
+  const token = authHeader?.replace(/^Bearer\s+/i, '') || ''
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  })
+  const adminSupabase = getAdminSupabase(c.env)
+  const { data: authData, error: authError } = await callerClient.auth.getUser(token)
+
+  if (authError || !authData?.user) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const body = await getJsonBody(c.req.raw)
+  if (!body?.action || typeof body.action !== 'string') {
+    return c.json({ error: 'Missing lifecycle action' }, 400)
+  }
+
+  const userContext = await getUserContext(c.env, authData.user.id)
+  const action = body.action
+
+  try {
+    switch (action) {
+      case 'catalog-register': {
+        const canManageCatalog = userContext.isPlatformAdmin
+          || userContext.isFullAccess
+          || await hasAnyPermission(callerClient, ['platform.extensions.create', 'platform.extensions.manage'])
+        if (!canManageCatalog) {
+          return c.json({ error: 'Forbidden' }, 403)
+        }
+
+        const validation = validateExtensionManifest(body.manifest)
+        if (!validation.valid || !validation.manifest) {
+          await writeExtensionAudit(adminSupabase, {
+            actorUserId: authData.user.id,
+            action: 'catalog-register',
+            status: 'failed',
+            metadata: { errors: validation.errors },
+          })
+          return c.json({ error: validation.errors.join(', ') }, 400)
+        }
+
+        const manifest = validation.manifest
+        const payload = {
+          slug: manifest.slug,
+          vendor: manifest.vendor,
+          name: manifest.name,
+          description: typeof body.description === 'string' ? body.description : null,
+          version: manifest.version,
+          kind: manifest.kind,
+          scope: manifest.scope,
+          source: typeof body.source === 'string' ? body.source : 'workspace',
+          package_path: typeof body.packagePath === 'string' ? body.packagePath : null,
+          checksum: typeof body.checksum === 'string' ? body.checksum : null,
+          status: typeof body.status === 'string' ? body.status : 'active',
+          compatibility: manifest.compatibility || {},
+          capabilities: manifest.capabilities || [],
+          manifest,
+          created_by: authData.user.id,
+          updated_at: new Date().toISOString(),
+        }
+
+        const { data, error } = await adminSupabase
+          .from('platform_extension_catalog')
+          .upsert(payload, { onConflict: 'vendor,slug' })
+          .select('*')
+          .single()
+
+        if (error || !data) {
+          await writeExtensionAudit(adminSupabase, {
+            actorUserId: authData.user.id,
+            action: 'catalog-register',
+            status: 'failed',
+            metadata: { message: error?.message || 'Catalog upsert failed', extensionKey: getExtensionKey(manifest) },
+          })
+          return c.json({ error: error?.message || 'Catalog upsert failed' }, 400)
+        }
+
+        await writeExtensionAudit(adminSupabase, {
+          actorUserId: authData.user.id,
+          catalogId: data.id,
+          action: 'catalog-register',
+          status: 'succeeded',
+          metadata: { extensionKey: getExtensionKey(manifest) },
+        })
+
+        return c.json({ ok: true, catalog: data })
+      }
+
+      case 'install': {
+        const tenantId = resolveTenantId(typeof body.tenantId === 'string' ? body.tenantId : null, userContext)
+        if (!tenantId) return c.json({ error: 'Missing tenant context' }, 400)
+
+        const canInstall = userContext.isPlatformAdmin
+          || userContext.isFullAccess
+          || await hasAnyPermission(callerClient, ['platform.extensions.update', 'platform.extensions.manage', 'tenant.setting.update'])
+        if (!canInstall) {
+          return c.json({ error: 'Forbidden' }, 403)
+        }
+
+        const { data: catalog, error: catalogError } = await adminSupabase
+          .from('platform_extension_catalog')
+          .select('*')
+          .eq('id', body.catalogId)
+          .is('deleted_at', null)
+          .single()
+        if (catalogError || !catalog) {
+          return c.json({ error: 'Extension catalog entry not found' }, 404)
+        }
+
+        const validation = validateExtensionManifest(catalog.manifest)
+        if (!validation.valid || !validation.manifest) {
+          return c.json({ error: 'Catalog manifest is invalid' }, 400)
+        }
+
+        const now = new Date().toISOString()
+        const activationState = body.autoActivate === false ? 'installed' : 'active'
+
+        const { data: tenantExtension, error } = await adminSupabase
+          .from('tenant_extensions')
+          .upsert({
+            tenant_id: tenantId,
+            catalog_id: catalog.id,
+            installed_version: catalog.version,
+            activation_state: activationState,
+            config: typeof body.config === 'object' && body.config ? body.config : {},
+            installed_at: now,
+            activated_at: activationState === 'active' ? now : null,
+            deactivated_at: activationState === 'active' ? null : now,
+            created_by: authData.user.id,
+            updated_by: authData.user.id,
+            deleted_at: null,
+            updated_at: now,
+          }, { onConflict: 'tenant_id,catalog_id' })
+          .select('*')
+          .single()
+
+        if (error || !tenantExtension) {
+          await writeExtensionAudit(adminSupabase, {
+            tenantId,
+            catalogId: catalog.id,
+            actorUserId: authData.user.id,
+            action: 'install',
+            status: 'failed',
+            metadata: { extensionKey: getExtensionKey(validation.manifest), message: error?.message || 'Install failed' },
+          })
+          return c.json({ error: error?.message || 'Install failed' }, 400)
+        }
+
+        const permissions = Array.isArray(validation.manifest.permissions) ? validation.manifest.permissions : []
+        for (const permission of permissions) {
+          const key = typeof permission === 'string' ? permission : permission.key
+          if (!key) continue
+          const parts = key.split('.')
+          const resource = parts.length >= 2 ? parts[1] : validation.manifest.slug
+          const actionName = parts.length >= 3 ? parts[2] : 'read'
+          await adminSupabase.from('permissions').upsert({
+            name: key,
+            resource,
+            action: actionName,
+            description: typeof permission === 'string' ? `Registered by ${getExtensionKey(validation.manifest)}` : permission.description || `Registered by ${getExtensionKey(validation.manifest)}`,
+            deleted_at: null,
+          }, { onConflict: 'name' })
+        }
+
+        await writeExtensionAudit(adminSupabase, {
+          tenantId,
+          catalogId: catalog.id,
+          tenantExtensionId: tenantExtension.id,
+          actorUserId: authData.user.id,
+          action: 'install',
+          status: 'succeeded',
+          metadata: { extensionKey: getExtensionKey(validation.manifest), activationState },
+        })
+
+        return c.json({ ok: true, tenantExtension })
+      }
+
+      case 'activate':
+      case 'deactivate':
+      case 'config-update':
+      case 'uninstall':
+      case 'upgrade': {
+        const { data: tenantExtension, error: tenantExtensionError } = await adminSupabase
+          .from('tenant_extensions')
+          .select('*, catalog:platform_extension_catalog(*)')
+          .eq('id', body.tenantExtensionId)
+          .is('deleted_at', null)
+          .single()
+
+        if (tenantExtensionError || !tenantExtension) {
+          return c.json({ error: 'Tenant extension not found' }, 404)
+        }
+
+        const catalog = Array.isArray(tenantExtension.catalog) ? tenantExtension.catalog[0] : tenantExtension.catalog
+        const tenantId = resolveTenantId(typeof body.tenantId === 'string' ? body.tenantId : tenantExtension.tenant_id, userContext)
+        if (!tenantId || tenantId !== tenantExtension.tenant_id) {
+          return c.json({ error: 'Tenant mismatch' }, 403)
+        }
+
+        const canManageTenantExtension = userContext.isPlatformAdmin
+          || userContext.isFullAccess
+          || await hasAnyPermission(callerClient, ['platform.extensions.update', 'platform.extensions.manage', 'tenant.setting.update'])
+        if (!canManageTenantExtension) {
+          return c.json({ error: 'Forbidden' }, 403)
+        }
+
+        const now = new Date().toISOString()
+        let updates: Record<string, unknown> = { updated_at: now, updated_by: authData.user.id }
+
+        if (action === 'activate') {
+          updates = { ...updates, activation_state: 'active', activated_at: now, deactivated_at: null, deleted_at: null }
+        }
+        if (action === 'deactivate') {
+          updates = { ...updates, activation_state: 'inactive', deactivated_at: now }
+        }
+        if (action === 'config-update') {
+          updates = { ...updates, config: typeof body.config === 'object' && body.config ? body.config : {} }
+        }
+        if (action === 'uninstall') {
+          updates = { ...updates, activation_state: 'uninstall_requested', deactivated_at: now, deleted_at: now }
+        }
+        if (action === 'upgrade') {
+          if (compareVersions(String(catalog.version), String(tenantExtension.installed_version)) < 0) {
+            return c.json({ error: 'Upgrade must be forward-only' }, 400)
+          }
+          updates = { ...updates, installed_version: catalog.version, activation_state: 'active', activated_at: now, deleted_at: null }
+        }
+
+        const { data, error } = await adminSupabase
+          .from('tenant_extensions')
+          .update(updates)
+          .eq('id', tenantExtension.id)
+          .select('*')
+          .single()
+
+        if (error || !data) {
+          await writeExtensionAudit(adminSupabase, {
+            tenantId,
+            catalogId: catalog?.id,
+            tenantExtensionId: tenantExtension.id,
+            actorUserId: authData.user.id,
+            action,
+            status: 'failed',
+            metadata: { message: error?.message || `${action} failed` },
+          })
+          return c.json({ error: error?.message || `${action} failed` }, 400)
+        }
+
+        await writeExtensionAudit(adminSupabase, {
+          tenantId,
+          catalogId: catalog?.id,
+          tenantExtensionId: tenantExtension.id,
+          actorUserId: authData.user.id,
+          action,
+          status: 'succeeded',
+          metadata: { extensionKey: catalog ? `${catalog.vendor}/${catalog.slug}` : tenantExtension.id },
+        })
+
+        return c.json({ ok: true, tenantExtension: data })
+      }
+
+      case 'health-check': {
+        const tenantId = resolveTenantId(typeof body.tenantId === 'string' ? body.tenantId : null, userContext)
+        const canViewHealth = userContext.isPlatformAdmin
+          || userContext.isFullAccess
+          || await hasAnyPermission(callerClient, ['platform.extensions.read', 'tenant.setting.read'])
+        if (!canViewHealth) {
+          return c.json({ error: 'Forbidden' }, 403)
+        }
+        const { data: activeExtensions, error } = await adminSupabase
+          .from('tenant_extensions')
+          .select('id, catalog:platform_extension_catalog(slug, vendor, manifest)')
+          .eq('tenant_id', tenantId)
+          .eq('activation_state', 'active')
+          .is('deleted_at', null)
+
+        if (error) {
+          return c.json({ error: error.message }, 400)
+        }
+
+        const extensionKeys = (activeExtensions || []).map((row: any) => {
+          const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+          return catalog ? `${catalog.vendor}/${catalog.slug}` : row.id
+        })
+        const collisions = new Set(extensionKeys).size === extensionKeys.length ? 'ok' : 'error'
+        const permissions = canViewHealth ? 'ok' : 'error'
+        const registry = (activeExtensions || []).every((row: any) => {
+          const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+          return validateExtensionManifest(catalog?.manifest).valid
+        }) ? 'ok' : 'error'
+        const checks = {
+          database: 'ok',
+          registry,
+          collisions,
+          permissions,
+        }
+        const score = Object.values(checks).every((status) => status === 'ok') ? 100 : 50
+
+        return c.json({ ok: true, checks, score })
+      }
+
+      default:
+        return c.json({ error: `Unknown action: ${action}` }, 400)
+    }
+  } catch (error: any) {
+    return c.json({ error: error.message || 'Unhandled extension lifecycle error' }, 400)
+  }
+})
+
+app.get('/functions/v1/extensions/events/health', async (c) => {
+  const authHeader = c.req.header('Authorization')
+  const token = authHeader?.replace(/^Bearer\s+/i, '') || ''
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  })
+  const { data: authData, error: authError } = await callerClient.auth.getUser(token)
+  if (authError || !authData?.user) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const userContext = await getUserContext(c.env, authData.user.id)
+  const tenantId = resolveTenantId(c.req.query('tenantId') || null, userContext)
+  if (!tenantId) {
+    return c.json({ error: 'Missing tenant context' }, 400)
+  }
+
+  const canReadEvents = userContext.isPlatformAdmin
+    || userContext.isFullAccess
+    || await hasAnyPermission(callerClient, ['tenant.events.read'])
+  if (!canReadEvents) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const adminSupabase = getAdminSupabase(c.env)
+  const { data: eventsExtension } = await adminSupabase
+    .from('tenant_extensions')
+    .select('id, catalog:platform_extension_catalog(slug, vendor)')
+    .eq('tenant_id', tenantId)
+    .eq('activation_state', 'active')
+    .is('deleted_at', null)
+
+  const isInstalled = (eventsExtension || []).some((row: any) => {
+    const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+    return catalog?.slug === 'events' && catalog?.vendor === 'ahliweb'
+  })
+  if (!isInstalled) {
+    return c.json({ error: 'Events extension is not active for this tenant' }, 404)
+  }
+
+  const [{ count: upcomingCount }, { count: publishedCount }] = await Promise.all([
+    adminSupabase
+      .from('events')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('status', 'published')
+      .gte('start_at', new Date().toISOString())
+      .is('deleted_at', null),
+    adminSupabase
+      .from('events')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('status', 'published')
+      .is('deleted_at', null),
+  ])
+
+  return c.json({
+    ok: true,
+    tenantId,
+    capability: 'events:health',
+    counts: {
+      published: publishedCount || 0,
+      upcoming: upcomingCount || 0,
+    },
+  })
+})
+
+app.get('/functions/v1/extensions/events/public', async (c) => {
+  const tenantId = c.req.query('tenantId') || ''
+  const limit = Number.parseInt(c.req.query('limit') || '12', 10)
+  const slug = c.req.query('slug') || ''
+
+  if (!tenantId) {
+    return c.json({ error: 'Missing tenantId' }, 400)
+  }
+
+  const adminSupabase = getAdminSupabase(c.env)
+  const { data: extensionRows, error: extensionError } = await adminSupabase
+    .from('tenant_extensions')
+    .select('id, catalog:platform_extension_catalog(slug, vendor)')
+    .eq('tenant_id', tenantId)
+    .eq('activation_state', 'active')
+    .is('deleted_at', null)
+
+  if (extensionError) {
+    return c.json({ error: extensionError.message }, 400)
+  }
+
+  const hasEventsExtension = (extensionRows || []).some((row: any) => {
+    const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+    return catalog?.slug === 'events' && catalog?.vendor === 'ahliweb'
+  })
+
+  if (!hasEventsExtension) {
+    return c.json({ ok: true, events: [] })
+  }
+
+  let query = adminSupabase
+    .from('events')
+    .select('id, title, slug, summary, location, start_at, end_at, published_at, status')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'published')
+    .is('deleted_at', null)
+
+  if (slug) {
+    query = query.eq('slug', slug)
+  } else {
+    query = query.order('start_at', { ascending: true })
+      .limit(Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 48) : 12)
+  }
+
+  const { data: events, error } = await query
+
+  if (error) {
+    return c.json({ error: error.message }, 400)
+  }
+
+  if (slug) {
+    return c.json({ ok: true, event: Array.isArray(events) ? (events[0] || null) : null })
+  }
+
+  return c.json({ ok: true, events: events || [] })
+})
+
+app.get('/functions/v1/extensions/public-modules', async (c) => {
+  const tenantId = c.req.query('tenantId') || ''
+  if (!tenantId) {
+    return c.json({ error: 'Missing tenantId' }, 400)
+  }
+
+  const adminSupabase = getAdminSupabase(c.env)
+  const { data, error } = await adminSupabase
+    .from('tenant_extensions')
+    .select('catalog:platform_extension_catalog(manifest)')
+    .eq('tenant_id', tenantId)
+    .eq('activation_state', 'active')
+    .is('deleted_at', null)
+
+  if (error) {
+    return c.json({ error: error.message }, 400)
+  }
+
+  const modules = (data || []).flatMap((row: any) => {
+    const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+    const manifest = catalog?.manifest
+    return Array.isArray(manifest?.publicModules) ? manifest.publicModules : []
+  })
+
+  return c.json({ ok: true, modules })
+})
 
 // redirect /functions/v1/serve-sitemap to /public/sitemap
 app.get('/functions/v1/serve-sitemap', (c) => {

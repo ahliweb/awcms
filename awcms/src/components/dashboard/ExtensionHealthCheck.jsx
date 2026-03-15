@@ -4,9 +4,9 @@ import { Activity, CheckCircle, XCircle, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
+import { runExtensionHealthCheck } from '@/lib/extensionLifecycleApi';
 
 const initialChecks = [
    { name: 'Database Connection', status: 'pending' },
@@ -16,7 +16,7 @@ const initialChecks = [
 ];
 
 function ExtensionHealthCheck() {
-   const { isPlatformAdmin } = usePermissions();
+   usePermissions();
    const { currentTenant } = useTenant();
    const [checking, setChecking] = useState(false);
    const [healthScore, setHealthScore] = useState(100);
@@ -33,37 +33,32 @@ function ExtensionHealthCheck() {
       newChecks[0].status = 'running';
       setChecks([...newChecks]);
       await new Promise(r => setTimeout(r, 800));
-      let query = supabase.from('extensions').select('count').single();
-      if (currentTenant?.id) {
-         query = query.eq('tenant_id', currentTenant.id);
-      } else if (!isPlatformAdmin) {
-         query = query.eq('tenant_id', null);
-      }
-      const { error } = await query;
-      newChecks[0].status = error ? 'error' : 'ok';
+      const result = await runExtensionHealthCheck({ tenantId: currentTenant?.id || null });
+      newChecks[0].status = result?.checks?.database === 'ok' ? 'ok' : 'error';
       setChecks([...newChecks]);
 
       // Check 2: Registry
       newChecks[1].status = 'running';
       setChecks([...newChecks]);
       await new Promise(r => setTimeout(r, 600));
-      newChecks[1].status = 'ok';
+      newChecks[1].status = result?.checks?.registry === 'ok' ? 'ok' : 'error';
       setChecks([...newChecks]);
 
       // Check 3: Conflicts
       newChecks[2].status = 'running';
       setChecks([...newChecks]);
       await new Promise(r => setTimeout(r, 1000));
-      newChecks[2].status = 'ok'; // Simulate OK
+      newChecks[2].status = result?.checks?.collisions === 'ok' ? 'ok' : 'error';
       setChecks([...newChecks]);
 
       // Check 4: Permissions
       newChecks[3].status = 'running';
       setChecks([...newChecks]);
       await new Promise(r => setTimeout(r, 500));
-      newChecks[3].status = 'ok';
+      newChecks[3].status = result?.checks?.permissions === 'ok' ? 'ok' : 'error';
       setChecks([...newChecks]);
 
+      setHealthScore(result?.score || 0);
       setChecking(false);
    };
 

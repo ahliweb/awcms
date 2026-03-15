@@ -1,0 +1,121 @@
+---
+import Layout from "~/layouts/PageLayout.astro";
+import { Icon } from "astro-icon/components";
+import { supportedLocales, type Locale } from "~/utils/i18n";
+import { getPublicTenantId } from "~/lib/publicTenant";
+import { getPublicEvents } from "~/lib/events";
+
+export const prerender = true;
+
+export function getStaticPaths() {
+  return supportedLocales.map((locale) => ({ params: { locale } }));
+}
+
+const { locale } = Astro.params as { locale: Locale };
+const tenantId = getPublicTenantId();
+const events = tenantId ? await getPublicEvents(tenantId, { limit: 18 }) : [];
+
+const copy = {
+  en: {
+    title: "Events",
+    subtitle: "Published upcoming and recent events from this tenant.",
+    emptyTitle: "No events yet",
+    emptyBody: "Check back soon for the next published event.",
+    location: "Location",
+    starts: "Starts",
+    ends: "Ends",
+  },
+  id: {
+    title: "Agenda",
+    subtitle: "Daftar agenda terbit terbaru dari tenant ini.",
+    emptyTitle: "Belum ada agenda",
+    emptyBody: "Silakan kembali lagi saat agenda berikutnya sudah diterbitkan.",
+    location: "Lokasi",
+    starts: "Mulai",
+    ends: "Selesai",
+  },
+}[locale === "id" ? "id" : "en"];
+
+const metadata = {
+  title: copy.title,
+  description: copy.subtitle,
+};
+---
+
+<Layout metadata={metadata}>
+  <section class="py-12 sm:py-16 lg:py-20">
+    <div class="mx-auto max-w-6xl px-6 sm:px-8">
+      <header class="mb-12 text-center">
+        <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+          <Icon name="tabler:calendar-event" class="h-7 w-7" />
+        </div>
+        <h1 class="text-4xl font-bold tracking-tight dark:text-slate-200 md:text-5xl">{copy.title}</h1>
+        <p class="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">{copy.subtitle}</p>
+      </header>
+
+      {events.length > 0 ? (
+        <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {events.map((eventItem) => (
+            <article class="flex h-full flex-col rounded-2xl border border-border bg-card/90 p-6 shadow-sm transition-shadow hover:shadow-md">
+              <div class="mb-4 flex items-center justify-between gap-4">
+                <span class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                  <Icon name="tabler:calendar-event" class="h-3.5 w-3.5" />
+                  {new Date(eventItem.start_at).toLocaleDateString(locale, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+                <span class="text-xs uppercase tracking-wide text-muted-foreground">{eventItem.status}</span>
+              </div>
+              <h2 class="text-xl font-semibold text-foreground">{eventItem.title}</h2>
+              <a href={`/${locale}/events/${eventItem.slug}`} class="mt-1 inline-flex text-sm font-medium text-primary hover:underline">
+                {locale === "id" ? "Lihat detail" : "View details"}
+              </a>
+              {eventItem.summary ? (
+                <p class="mt-3 flex-1 text-sm leading-6 text-muted-foreground">{eventItem.summary}</p>
+              ) : (
+                <p class="mt-3 flex-1 text-sm leading-6 text-muted-foreground">&nbsp;</p>
+              )}
+              <dl class="mt-6 space-y-3 border-t border-border pt-4 text-sm text-muted-foreground">
+                <div class="flex items-start gap-3">
+                  <Icon name="tabler:clock" class="mt-0.5 h-4 w-4 text-primary" />
+                  <div>
+                    <dt class="font-medium text-foreground">{copy.starts}</dt>
+                    <dd>{new Date(eventItem.start_at).toLocaleString(locale)}</dd>
+                  </div>
+                </div>
+                {eventItem.end_at ? (
+                  <div class="flex items-start gap-3">
+                    <Icon name="tabler:clock-hour-4" class="mt-0.5 h-4 w-4 text-primary" />
+                    <div>
+                      <dt class="font-medium text-foreground">{copy.ends}</dt>
+                      <dd>{new Date(eventItem.end_at).toLocaleString(locale)}</dd>
+                    </div>
+                  </div>
+                ) : null}
+                {eventItem.location ? (
+                  <div class="flex items-start gap-3">
+                    <Icon name="tabler:map-pin" class="mt-0.5 h-4 w-4 text-primary" />
+                    <div>
+                      <dt class="font-medium text-foreground">{copy.location}</dt>
+                      <dd>{eventItem.location}</dd>
+                    </div>
+                  </div>
+                ) : null}
+              </dl>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div class="rounded-3xl border border-dashed border-border/80 bg-card/70 px-8 py-16 text-center">
+          <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+            <Icon name="tabler:calendar-off" class="h-7 w-7" />
+          </div>
+          <h2 class="text-2xl font-semibold text-foreground">{copy.emptyTitle}</h2>
+          <p class="mx-auto mt-3 max-w-xl text-muted-foreground">{copy.emptyBody}</p>
+        </div>
+      )}
+    </div>
+  </section>
+</Layout>

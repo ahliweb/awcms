@@ -1,0 +1,9 @@
+---
+import { defaultLocale } from "~/utils/i18n";
+export const prerender = true;
+---
+
+<meta http-equiv="refresh" content={`0;url=/${defaultLocale}/events`} />
+<script is:inline define:vars={{ defaultLocale }}>
+  window.location.href = `/${defaultLocale}/events` + window.location.search;
+</script>

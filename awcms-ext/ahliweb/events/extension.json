@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "slug": "events",
+  "name": "Events Manager",
+  "vendor": "ahliweb",
+  "version": "1.0.0",
+  "kind": "bundled",
+  "scope": "tenant",
+  "compatibility": {
+    "awcms": ">=4.1.1"
+  },
+  "capabilities": ["events:content", "events:public-listing", "events:health"],
+  "resources": {
+    "admin": {
+      "entry": "bundled:awcms-ext-ahliweb-events"
+    },
+    "public": {
+      "entry": "events-list"
+    },
+    "edge": {
+      "entry": "events-health"
+    }
+  },
+  "permissions": [
+    { "key": "tenant.events.read", "description": "Read tenant events" },
+    { "key": "tenant.events.create", "description": "Create tenant events" },
+    { "key": "tenant.events.update", "description": "Update tenant events" },
+    { "key": "tenant.events.delete", "description": "Soft delete tenant events" },
+    { "key": "tenant.events.publish", "description": "Publish tenant events" }
+  ],
+  "adminRoutes": [
+    { "path": "events", "component": "EventsDashboard", "permission": "tenant.events.read" }
+  ],
+  "menus": [
+    { "key": "events", "label": "Events", "path": "events", "icon": "CalendarDays", "permission": "tenant.events.read", "group": "CONTENT", "order": 115 }
+  ],
+  "publicModules": [
+    { "key": "events", "label": "Events", "url": "/events", "icon": "CalendarDays", "order": 310 }
+  ],
+  "settingsSchema": {
+    "type": "object",
+    "properties": {
+      "showUpcomingOnly": { "type": "boolean", "default": true },
+      "featuredLimit": { "type": "number", "default": 6 }
+    }
+  },
+  "edgeRoutes": [
+    { "path": "/functions/v1/extensions/events/health", "method": "GET", "capability": "events:health", "permission": "tenant.events.read" },
+    { "path": "/functions/v1/extensions/events/public", "method": "GET", "capability": "events:public-listing" }
+  ],
+  "dependencies": {},
+  "widgets": [
+    { "key": "events-overview", "component": "EventsOverviewWidget", "title": "Upcoming Events", "icon": "CalendarDays", "position": "sidebar", "order": 120 }
+  ],
+  "hooks": {}
+}

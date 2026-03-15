@@ -6,6 +6,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useTranslation } from 'react-i18next';
+import { listTenantExtensions } from '@/lib/extensionCatalog';
 
 function ExtensionABACIntegration({ extensionId }) {
    const { toast } = useToast();
@@ -19,12 +20,9 @@ function ExtensionABACIntegration({ extensionId }) {
       setLoading(true);
       try {
          // 1. Fetch Extension Config to get defined Permissions + tenant scope
-         const { data: extData } = await supabase
-            .from('extensions')
-            .select('config, tenant_id')
-            .eq('id', extensionId)
-            .single();
-         const definedPermNames = extData?.config?.permissions || [];
+         const extensions = await listTenantExtensions();
+         const extData = extensions.find((extension) => extension.id === extensionId);
+         const definedPermNames = (extData?.manifest?.permissions || []).map((permission) => permission.key || permission);
          const extensionTenantId = extData?.tenant_id || null;
 
          // 2. Fetch Roles scoped to the extension's tenant
