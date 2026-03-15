@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Image, Trash2 } from 'lucide-react';
@@ -31,9 +31,11 @@ const FilesManager = () => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [uploadSessionBoundAccess, setUploadSessionBoundAccess] = useState(false);
 
+  const effectiveSelectedCategory = showTrash ? null : selectedCategory;
+
   const selectedCategoryName = useMemo(
-    () => categories.find((category) => category.id === selectedCategory)?.name || null,
-    [categories, selectedCategory]
+    () => categories.find((category) => category.id === effectiveSelectedCategory)?.name || null,
+    [categories, effectiveSelectedCategory]
   );
 
   // Use new statsLoading prop
@@ -52,15 +54,23 @@ const FilesManager = () => {
   } = useMedia();
   const { toast } = useToast();
 
-  const loadCategories = React.useCallback(async () => {
-    const data = await fetchCategories();
-    setCategories(data);
-  }, [fetchCategories]);
-
   // Load categories on mount
-  React.useEffect(() => {
-    loadCategories();
-  }, [loadCategories]);
+  useEffect(() => {
+    let active = true;
+
+    const loadCategories = async () => {
+      const data = await fetchCategories();
+      if (active) {
+        setCategories(data);
+      }
+    };
+
+    void loadCategories();
+
+    return () => {
+      active = false;
+    };
+  }, [fetchCategories]);
 
   useEffect(() => {
     if (segments.length > 0 && segments[0] !== 'trash') {
@@ -73,18 +83,14 @@ const FilesManager = () => {
     }
   }, [segments, basePath, navigate]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (showTrash) setSelectedCategory(null);
-  }, [showTrash]);
-
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) return;
     const newCat = await createCategory(newCategoryName);
     if (newCat) {
       setNewCategoryName('');
       setIsCreateCategoryOpen(false);
-      loadCategories();
+      const refreshedCategories = await fetchCategories();
+      setCategories(refreshedCategories);
     }
   };
 
@@ -93,7 +99,7 @@ const FilesManager = () => {
     for (const file of acceptedFiles) {
       try {
         // Pass selectedCategory to uploadFile
-        await uploadFile(file, '', selectedCategory, { sessionBoundAccess: uploadSessionBoundAccess });
+        await uploadFile(file, '', effectiveSelectedCategory, { sessionBoundAccess: uploadSessionBoundAccess });
         successCount++;
       } catch (err) {
         toast({ variant: 'destructive', title: `Failed to upload ${file.name}`, description: err.message });
@@ -173,8 +179,8 @@ const FilesManager = () => {
             <div className="w-full md:w-64 flex-shrink-0 space-y-4">
               <FilesCategoriesPanel
                 categories={categories}
-                selectedCategory={selectedCategory}
-                setSelectedCategory={setSelectedCategory}
+                 selectedCategory={effectiveSelectedCategory}
+                 setSelectedCategory={setSelectedCategory}
                 isCreateCategoryOpen={isCreateCategoryOpen}
                 setIsCreateCategoryOpen={setIsCreateCategoryOpen}
                 newCategoryName={newCategoryName}
@@ -189,7 +195,7 @@ const FilesManager = () => {
             <MediaLibrary
               refreshTrigger={refreshTrigger}
               isTrashView={showTrash}
-              categoryId={selectedCategory}
+              categoryId={effectiveSelectedCategory}
               edgeApiAvailable={edgeApiAvailable}
               edgeApiMessage={edgeApiMessage}
               refreshEdgeApiHealth={refreshEdgeApiHealth}

@@ -1,6 +1,6 @@
 
 import { supabase } from '@/lib/customSupabaseClient';
-import { CheckCircle, Settings } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { getIconComponent } from '@/lib/adminIcons';
 
 export const ServicesListBlock = ({
@@ -34,7 +34,7 @@ export const ServicesListBlock = ({
                     <div key={service.id || index} className="p-6 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                         {showIcon && (
                             <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 mb-4">
-                                {IconComponent ? <IconComponent className="w-6 h-6" /> : <Settings className="w-6 h-6" />}
+                                {IconComponent ? <IconComponent className="w-6 h-6" /> : <CheckCircle className="w-6 h-6" />}
                             </div>
                         )}
                         <h3 className="text-lg font-bold text-slate-900 mb-2">{service.title}</h3>

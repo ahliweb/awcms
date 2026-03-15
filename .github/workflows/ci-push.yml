@@ -350,6 +350,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run typecheck
+        run: npm run typecheck
+
+  # ============================================
+  # Lint & Build - MCP Server
+  # ============================================
+  lint-build-mcp:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.mcp == 'true' }}
+    name: Lint & Build (MCP)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./awcms-mcp
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './awcms-mcp/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Resolve smandapbun public env from env or secrets
         id: smandapbun-env
         env:
@@ -438,35 +467,6 @@ jobs:
           echo "PUBLIC_SUPABASE_URL source: ${{ steps.smandapbun-env.outputs.url_source || 'unresolved' }}"
           echo "PUBLIC_SUPABASE_PUBLISHABLE_KEY source: ${{ steps.smandapbun-env.outputs.key_source || 'unresolved' }}"
           echo "PUBLIC_TENANT_ID source: ${{ steps.smandapbun-env.outputs.tenant_source || 'unresolved' }}"
-
-      - name: Run typecheck
-        run: npm run typecheck
-
-  # ============================================
-  # Lint & Build - MCP Server
-  # ============================================
-  lint-build-mcp:
-    needs: paths-filter
-    if: ${{ needs.paths-filter.outputs.mcp == 'true' }}
-    name: Lint & Build (MCP)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./awcms-mcp
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: './awcms-mcp/package-lock.json'
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Run lint
         run: npm run lint

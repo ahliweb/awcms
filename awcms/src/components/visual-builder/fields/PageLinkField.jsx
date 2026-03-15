@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -8,26 +7,23 @@ import { udm } from '@/lib/data/UnifiedDataManager';
 import { Loader2, Link as LinkIcon, ExternalLink } from 'lucide-react';
 
 export const PageLinkField = ({ name, value, onChange, field }) => {
+    const initialIsInternal = Boolean(value) && value.startsWith('/') && !value.startsWith('//');
     const [activeTab, setActiveTab] = useState('internal');
     const [pages, setPages] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [customUrl, setCustomUrl] = useState('');
+    const [customUrl, setCustomUrl] = useState(initialIsInternal ? '' : (value || ''));
 
-    // Initialize state based on incoming value
     useEffect(() => {
-        if (value) {
-            // Check if it looks like an internal link (starts with / and not //)
-            const isInternal = value.startsWith('/') && !value.startsWith('//');
-
-            if (isInternal) {
-                setActiveTab('internal');
-            } else {
-                setActiveTab('custom');
-                setCustomUrl(value);
-            }
+        if (!value) {
+            setActiveTab('internal');
+            setCustomUrl('');
+            return;
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Only run on mount to set initial tab
+
+        const isInternal = value.startsWith('/') && !value.startsWith('//');
+        setActiveTab(isInternal ? 'internal' : 'custom');
+        setCustomUrl(isInternal ? '' : value);
+    }, [value]);
 
     // Fetch available pages and blogs
     useEffect(() => {

@@ -172,7 +172,7 @@ function PagesManager({ onlyVisual = false }) {
     { key: 'updated_at', label: t('pages.columns.updated'), type: 'date' }
   ], [t]);
 
-  const pageFormFields = useMemo(() => [
+  const pageFormFields = [
     { key: 'title', label: t('pages.form.title'), required: true },
     {
       key: 'page_type',
@@ -225,7 +225,7 @@ function PagesManager({ onlyVisual = false }) {
     { key: 'og_image', label: t('pages.form.og_image') || 'OG Image', type: 'image', description: 'Social sharing image (1200x630 recommended)' },
     { key: 'canonical_url', label: t('pages.form.canonical_url') || 'Canonical URL', type: 'text', description: 'Full URL if this content exists elsewhere' },
     { key: 'is_active', label: t('pages.form.active'), type: 'boolean' }
-  ], [onlyVisual, t, languages, selectedLanguage]);
+  ];
 
   // Custom row actions for Visual Builder
   const customRowActions = useCallback((page) => {

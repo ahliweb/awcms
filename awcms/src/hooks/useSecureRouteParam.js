@@ -1,11 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { decodeRouteParam, isLikelyUuid } from '@/lib/routeSecurity';
 
 const useSecureRouteParam = (encodedValue, scope) => {
   const hasValue = Boolean(encodedValue);
-  const [value, setValue] = useState(null);
-  const [loading, setLoading] = useState(hasValue);
-  const [isLegacy, setIsLegacy] = useState(false);
+  const resolutionKey = `${scope || ''}:${encodedValue || ''}`;
+  const [resolution, setResolution] = useState(() => ({
+    key: resolutionKey,
+    value: null,
+    loading: hasValue,
+    isLegacy: false,
+  }));
+
+  const { value, loading, isLegacy } = useMemo(() => {
+    if (!hasValue) {
+      return { value: null, loading: false, isLegacy: false };
+    }
+
+    if (resolution.key !== resolutionKey) {
+      return { value: null, loading: true, isLegacy: false };
+    }
+
+    return resolution;
+  }, [hasValue, resolution, resolutionKey]);
 
   useEffect(() => {
     let active = true;
@@ -17,17 +33,23 @@ const useSecureRouteParam = (encodedValue, scope) => {
     const resolveValue = async () => {
       const decoded = await decodeRouteParam({ value: encodedValue, scope });
       if (!active) return;
+
+      let nextValue = null;
+      let nextIsLegacy = false;
+
       if (decoded) {
-        setValue(decoded);
-        setIsLegacy(false);
+        nextValue = decoded;
       } else if (isLikelyUuid(encodedValue)) {
-        setValue(encodedValue);
-        setIsLegacy(true);
-      } else {
-        setValue(null);
-        setIsLegacy(false);
+        nextValue = encodedValue;
+        nextIsLegacy = true;
       }
-      setLoading(false);
+
+      setResolution({
+        key: resolutionKey,
+        value: nextValue,
+        loading: false,
+        isLegacy: nextIsLegacy,
+      });
     };
 
     resolveValue();
@@ -35,7 +57,7 @@ const useSecureRouteParam = (encodedValue, scope) => {
     return () => {
       active = false;
     };
-  }, [encodedValue, hasValue, scope]);
+  }, [encodedValue, hasValue, scope, resolutionKey]);
 
   return {
     value,

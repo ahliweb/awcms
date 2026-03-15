@@ -51,7 +51,7 @@ jobs:
           SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
           SECRET_PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           import os
 
@@ -163,7 +163,7 @@ jobs:
           SECRET_CF_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
           SECRET_CF_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           import os
           import re
           from pathlib import Path
@@ -260,7 +260,7 @@ jobs:
           CF_ACCOUNT_ID: ${{ steps.cloudflare-env.outputs.account_id }}
           CF_PAGES_PROJECT: ${{ env.SMANDAPBUN_PAGES_PROJECT }}
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           import json
           import os
           import sys
@@ -375,7 +375,7 @@ jobs:
           CF_API_TOKEN: ${{ steps.cloudflare-env.outputs.api_token }}
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare-preflight.outputs.account_id }}
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           import json
           import os
           import urllib.error

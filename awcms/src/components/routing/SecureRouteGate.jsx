@@ -23,13 +23,34 @@ const SecureRouteGate = ({
   const params = useParams();
   const navigate = useNavigate();
   const hasSecureParams = secureParams.length > 0;
-  const [decodedParams, setDecodedParams] = useState(hasSecureParams ? undefined : null);
-  const [loading, setLoading] = useState(hasSecureParams);
 
   const scopePrefix = useMemo(() => {
     if (scopeBase) return scopeBase;
     return `plugin:${routePath.replace(/\//g, '.')}`;
   }, [routePath, scopeBase]);
+
+  const resolutionKey = useMemo(() => {
+    if (!hasSecureParams) return 'open';
+    return secureParams.map((key) => `${key}:${params[key] || ''}`).join('|');
+  }, [hasSecureParams, params, secureParams]);
+
+  const [resolution, setResolution] = useState(() => ({
+    key: resolutionKey,
+    decodedParams: null,
+    loading: hasSecureParams,
+  }));
+
+  const { decodedParams, loading } = useMemo(() => {
+    if (!hasSecureParams) {
+      return { decodedParams: null, loading: false };
+    }
+
+    if (resolution.key !== resolutionKey) {
+      return { decodedParams: null, loading: true };
+    }
+
+    return resolution;
+  }, [hasSecureParams, resolution, resolutionKey]);
 
   useEffect(() => {
     let active = true;
@@ -83,8 +104,11 @@ const SecureRouteGate = ({
         return;
       }
 
-      setDecodedParams(decoded);
-      setLoading(false);
+      setResolution({
+        key: resolutionKey,
+        decodedParams: decoded,
+        loading: false,
+      });
     };
 
     resolveParams();
@@ -92,7 +116,7 @@ const SecureRouteGate = ({
     return () => {
       active = false;
     };
-  }, [params, secureParams, hasSecureParams, scopePrefix, routePath, fallback, navigate]);
+  }, [params, secureParams, hasSecureParams, scopePrefix, routePath, fallback, navigate, resolutionKey]);
 
   if (loading) return loadingFallback;
 
