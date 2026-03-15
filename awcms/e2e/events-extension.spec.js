@@ -58,7 +58,7 @@ const ensureEventsExtensionForTenant = async (tenantSlug) => {
   }
 };
 
-test('events extension admin menu entry renders for admin', async ({ page }) => {
+test('events extension menu, route, and dashboard widget render for admin', async ({ page }) => {
   await ensureEventsExtensionForTenant('smandapbun');
 
   await page.goto('/login');
@@ -74,4 +74,8 @@ test('events extension admin menu entry renders for admin', async ({ page }) => 
   const eventsLink = page.locator("a[href='/cmspanel/events']");
   await expect(eventsLink).toBeVisible({ timeout: 30000 });
   await expect(eventsLink).toContainText('Events');
+
+  await eventsLink.click();
+  await page.waitForURL('**/cmspanel/events', { timeout: 30000 });
+  await expect(page).toHaveURL(/\/cmspanel\/events$/);
 });
