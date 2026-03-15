@@ -74,6 +74,8 @@ test('events extension menu, route, and dashboard widget render for admin', asyn
   const eventsLink = page.locator("a[href='/cmspanel/events']");
   await expect(eventsLink).toBeVisible({ timeout: 30000 });
   await expect(eventsLink).toContainText('Events');
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(1500);
 
   await eventsLink.click();
   await page.waitForURL('**/cmspanel/events', { timeout: 30000 });
