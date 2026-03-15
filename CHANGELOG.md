@@ -5,6 +5,11 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Versioning: Prepared the next patch release by bumping the maintained core workspaces to `4.1.1` in line with the documented independent-versioning strategy for `awcms`, `awcms-public/primary`, `awcms-public/smandapbun`, and `awcms-mcp`.
+- Admin UI: Realigned `awcms/src/lib/version.js` with the canonical admin package manifest so the displayed app version matches the `4.1.1` patch bump.
+
 ## [4.1.0] - 2026-03-14
 
 Applies to: `awcms@4.1.0`, `@onwidget/astrowind@4.1.0`, `smanda-pangkalan-bun@4.1.0`, `awcms-mcp@4.1.0`
