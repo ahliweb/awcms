@@ -1,7 +1,13 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { setGlobalTenantId } from '@/lib/customSupabaseClient';
+import { supabase } from '@/lib/customSupabaseClient';
 import { resolveTenantByHostname, resolveDevTenant } from '@/lib/tenancy/resolveTenant';
+import {
+    clearStoredPlatformTenantScope,
+    getStoredPlatformTenantScope,
+    setStoredPlatformTenantScope,
+} from '@/lib/tenancy/platformTenantScope';
 
 const TenantContext = createContext(undefined);
 
@@ -18,10 +24,100 @@ const TenantContext = createContext(undefined);
  *   - other error      → show generic error
  */
 export const TenantProvider = ({ children }) => {
+    const [resolvedTenant, setResolvedTenant] = useState(null);
     const [currentTenant, setCurrentTenant] = useState(null);
+    const [platformTenantScopeId, setPlatformTenantScopeId] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [errorKind, setErrorKind] = useState(null); // 'not_found' | 'suspended' | 'maintenance' | 'error'
+
+    const hydrateTenantContext = React.useCallback(async (tenantResolution) => {
+        if (!tenantResolution?.tenantId) {
+            return tenantResolution;
+        }
+
+        try {
+            const { data } = await supabase
+                .from('tenants')
+                .select('id, slug, name, status, subscription_tier, domain, locale')
+                .eq('id', tenantResolution.tenantId)
+                .is('deleted_at', null)
+                .maybeSingle();
+
+            return {
+                ...tenantResolution,
+                id: tenantResolution.tenantId,
+                slug: tenantResolution.tenantCode,
+                status: tenantResolution.tenantStatus,
+                subscription_tier: data?.subscription_tier ?? tenantResolution.serviceProfile ?? null,
+                domain: data?.domain ?? null,
+                locale: data?.locale ?? 'en',
+                name: data?.name ?? tenantResolution.name,
+            };
+        } catch (tenantErr) {
+            console.warn('[TenantContext] Failed to hydrate tenant record:', tenantErr);
+            return {
+                ...tenantResolution,
+                id: tenantResolution.tenantId,
+                slug: tenantResolution.tenantCode,
+                status: tenantResolution.tenantStatus,
+                subscription_tier: tenantResolution.serviceProfile ?? null,
+            };
+        }
+    }, []);
+
+    const applyTenantScope = React.useCallback(async (baseTenant, overrideTenantId = null) => {
+        const nextTenantId = overrideTenantId || baseTenant?.tenantId || null;
+        if (!nextTenantId) {
+            setGlobalTenantId(null);
+            setCurrentTenant(baseTenant);
+            return;
+        }
+
+        if (overrideTenantId && overrideTenantId !== baseTenant?.tenantId) {
+            const { data: overrideTenant } = await supabase
+                .from('tenants')
+                .select('id, slug, name, status, subscription_tier, domain, locale')
+                .eq('id', overrideTenantId)
+                .is('deleted_at', null)
+                .maybeSingle();
+
+            if (overrideTenant) {
+                setGlobalTenantId(overrideTenant.id);
+                setCurrentTenant({
+                    ...baseTenant,
+                    ...overrideTenant,
+                    tenantId: overrideTenant.id,
+                    tenantCode: overrideTenant.slug,
+                    tenantStatus: overrideTenant.status,
+                    serviceProfile: overrideTenant.subscription_tier,
+                    isScopedOverride: true,
+                });
+                return;
+            }
+        }
+
+        setGlobalTenantId(baseTenant.tenantId);
+        setCurrentTenant({
+            ...baseTenant,
+            isScopedOverride: false,
+        });
+    }, []);
+
+    const switchTenantScope = React.useCallback(async (tenantId) => {
+        if (!resolvedTenant) return;
+
+        if (!tenantId || tenantId === resolvedTenant.tenantId) {
+            clearStoredPlatformTenantScope();
+            setPlatformTenantScopeId(null);
+            await applyTenantScope(resolvedTenant, null);
+            return;
+        }
+
+        setStoredPlatformTenantScope(tenantId);
+        setPlatformTenantScopeId(tenantId);
+        await applyTenantScope(resolvedTenant, tenantId);
+    }, [applyTenantScope, resolvedTenant]);
 
     useEffect(() => {
         let mounted = true;
@@ -71,9 +167,14 @@ export const TenantProvider = ({ children }) => {
                     '| cell:', result.cellId
                 );
 
-                // Set global tenant ID so Supabase RLS headers are correct
-                setGlobalTenantId(result.tenantId);
-                setCurrentTenant(result);
+                const hydratedTenant = await hydrateTenantContext(result);
+                if (!mounted) return;
+
+                setResolvedTenant(hydratedTenant);
+
+                const storedTenantScope = getStoredPlatformTenantScope();
+                setPlatformTenantScopeId(storedTenantScope || null);
+                await applyTenantScope(hydratedTenant, storedTenantScope);
 
             } catch (err) {
                 console.error('[TenantContext] Resolution error:', err);
@@ -88,11 +189,19 @@ export const TenantProvider = ({ children }) => {
 
         resolve();
         return () => { mounted = false; };
-    }, []);
+    }, [applyTenantScope, hydrateTenantContext]);
 
     const value = React.useMemo(
-        () => ({ currentTenant, loading, error, errorKind }),
-        [currentTenant, loading, error, errorKind]
+        () => ({
+            currentTenant,
+            resolvedTenant,
+            platformTenantScopeId,
+            switchTenantScope,
+            loading,
+            error,
+            errorKind,
+        }),
+        [currentTenant, error, errorKind, loading, platformTenantScopeId, resolvedTenant, switchTenantScope]
     );
 
     if (loading) {

@@ -25,12 +25,12 @@ The Public Portal (`awcms-public/`) handles the visitor-facing websites for each
 
 ## 3. Multi-Tenancy Strategy
 
-Each tenant has a dedicated directory under `awcms-public/`. We currently use a "primary" template that can be cloned.
+Each tenant has a dedicated directory under `awcms-public/`. The ecosystem currently includes the reusable `primary` portal and the dedicated `smandapbun` portal.
 
-- `awcms-public/primary/`: The reference implementation.
-- `awcms-public/{tenant_slug}/`: Dedicated implementations (future).
+- `awcms-public/primary/`: The reference implementation for tenant slug `primary`.
+- `awcms-public/smandapbun/`: Dedicated tenant implementation for tenant slug `smandapbun`.
 
-Static builds scope content by build-time tenant ID (`PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID`) and use `getStaticPaths` for tenant-specific routes. Middleware-based tenant resolution is reserved for SSR/runtime deployments.
+Static builds scope content by build-time tenant ID (`PUBLIC_TENANT_ID` or `VITE_PUBLIC_TENANT_ID`) and should also set the corresponding tenant slug (`PUBLIC_TENANT_SLUG`) for deployment clarity. Middleware-based tenant resolution is reserved for SSR/runtime deployments.
 
 ## 3.1 Static Content Fetching (Benchmark-Ready)
 

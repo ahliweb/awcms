@@ -200,6 +200,84 @@ const hasAnyPermission = async (userSupabase: any, permissionNames: string[]) =>
   return false
 }
 
+const resolveAssignableRole = async (adminSupabase: any, params: {
+  roleId?: string | null
+  tenantId?: string | null
+  allowPlatformRole: boolean
+}) => {
+  const { roleId, tenantId, allowPlatformRole } = params
+
+  let query = adminSupabase
+    .from('roles')
+    .select('id, name, tenant_id, scope, is_platform_admin, is_full_access, is_tenant_admin')
+    .is('deleted_at', null)
+
+  if (roleId) {
+    query = query.eq('id', roleId)
+  } else if (tenantId) {
+    query = query.eq('tenant_id', tenantId).eq('name', 'admin')
+  } else {
+    query = query.is('tenant_id', null).eq('name', 'platform_admin')
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: true }).limit(1).maybeSingle()
+  if (error || !data) {
+    throw new Error('Assignable role not found')
+  }
+
+  const isPlatformRole = Boolean(data.is_platform_admin || data.is_full_access || data.scope === 'platform' || data.tenant_id === null)
+  if (isPlatformRole && !allowPlatformRole) {
+    throw new Error('Platform roles can only be assigned by platform admins')
+  }
+
+  if (!isPlatformRole && tenantId && data.tenant_id !== tenantId) {
+    throw new Error('Role does not belong to the target tenant')
+  }
+
+  return data
+}
+
+const ensureManagedUserProfile = async (adminSupabase: any, payload: {
+  authUserId: string
+  email: string
+  fullName?: string | null
+  tenantId?: string | null
+  roleId?: string | null
+}) => {
+  const { data: existingUser } = await adminSupabase
+    .from('users')
+    .select('id')
+    .eq('id', payload.authUserId)
+    .maybeSingle()
+
+  const nextPayload: Record<string, unknown> = {
+    id: payload.authUserId,
+    email: payload.email,
+    full_name: payload.fullName || null,
+    tenant_id: payload.tenantId || null,
+    role_id: payload.roleId || null,
+    deleted_at: null,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (existingUser?.id) {
+    const { error } = await adminSupabase
+      .from('users')
+      .update(nextPayload)
+      .eq('id', payload.authUserId)
+    if (error) throw error
+    return
+  }
+
+  const { error } = await adminSupabase
+    .from('users')
+    .insert({
+      ...nextPayload,
+      created_at: new Date().toISOString(),
+    })
+  if (error) throw error
+}
+
 const writeExtensionAudit = async (adminSupabase: any, payload: {
   tenantId?: string | null
   catalogId?: string | null
@@ -1102,10 +1180,21 @@ app.post('/functions/v1/manage-users', async (c) => {
         if (!request_id) return c.json({ error: 'request_id required' }, 400);
         const { data: reqData } = await supabaseAdmin.from('account_requests').select('*').eq('id', request_id).single();
         if (!reqData) return c.json({ error: 'Request not found' }, 404);
+        const defaultTenantRole = await resolveAssignableRole(supabaseAdmin, {
+          tenantId: reqData.tenant_id || null,
+          allowPlatformRole: true,
+        });
         const { data: invitedUser, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(reqData.email, {
-          data: { full_name: reqData.full_name, tenant_id: reqData.tenant_id }
+          data: { full_name: reqData.full_name, tenant_id: reqData.tenant_id, role_id: defaultTenantRole.id }
         });
         if (inviteError) return c.json({ error: 'Failed to invite user' }, 500);
+        await ensureManagedUserProfile(supabaseAdmin, {
+          authUserId: invitedUser.user.id,
+          email: reqData.email,
+          fullName: reqData.full_name,
+          tenantId: reqData.tenant_id || null,
+          roleId: defaultTenantRole.id,
+        });
         await supabaseAdmin.from('account_requests').update({
           status: 'completed',
           super_admin_approved_at: new Date().toISOString(),
@@ -1134,10 +1223,22 @@ app.post('/functions/v1/manage-users', async (c) => {
           if (tenant_id && tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden: Cannot create user for another tenant' }, 403);
           tenant_id = requesterTenantId as any;
         }
+        const assignableRole = await resolveAssignableRole(supabaseAdmin, {
+          roleId: role_id || null,
+          tenantId: tenant_id || null,
+          allowPlatformRole: isSuperAdmin,
+        });
         const { data: newAuthUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-          email, password, email_confirm: true, user_metadata: { full_name, tenant_id }
+          email, password, email_confirm: true, user_metadata: { full_name, tenant_id, role_id: assignableRole.id }
         });
         if (createError) return c.json({ error: 'Failed to create user: ' + createError.message }, 500);
+        await ensureManagedUserProfile(supabaseAdmin, {
+          authUserId: newAuthUser.user.id,
+          email,
+          fullName: full_name,
+          tenantId: tenant_id || null,
+          roleId: assignableRole.id,
+        });
         result = { user: newAuthUser.user, message: 'User created successfully' };
         break;
       }
@@ -1148,10 +1249,22 @@ app.post('/functions/v1/manage-users', async (c) => {
           if (tenant_id && tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden: Cannot invite user to another tenant' }, 403);
           tenant_id = requesterTenantId as any;
         }
+        const assignableRole = await resolveAssignableRole(supabaseAdmin, {
+          roleId: role_id || null,
+          tenantId: tenant_id || null,
+          allowPlatformRole: isSuperAdmin,
+        });
         const { data: invitedUser, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-          data: { full_name, tenant_id }
+          data: { full_name, tenant_id, role_id: assignableRole.id }
         });
         if (inviteError) return c.json({ error: 'Failed to invite user: ' + inviteError.message }, 500);
+        await ensureManagedUserProfile(supabaseAdmin, {
+          authUserId: invitedUser.user.id,
+          email,
+          fullName: full_name,
+          tenantId: tenant_id || null,
+          roleId: assignableRole.id,
+        });
         result = { user: invitedUser.user, message: 'User invited successfully' };
         break;
       }
@@ -1163,7 +1276,15 @@ app.post('/functions/v1/manage-users', async (c) => {
         }
         const updates: any = { updated_at: new Date().toISOString() };
         if (full_name) updates.full_name = full_name;
-        if (role_id) updates.role_id = role_id;
+        if (role_id) {
+          const { data: target } = await supabaseAdmin.from('users').select('tenant_id').eq('id', user_id).single();
+          const assignableRole = await resolveAssignableRole(supabaseAdmin, {
+            roleId: role_id,
+            tenantId: target?.tenant_id || null,
+            allowPlatformRole: isSuperAdmin,
+          });
+          updates.role_id = assignableRole.id;
+        }
         const { error: updateError } = await supabaseAdmin.from('users').update(updates).eq('id', user_id);
         if (updateError) throw updateError;
         result = { message: 'User updated successfully' };

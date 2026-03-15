@@ -120,6 +120,40 @@ export async function resolveTenantByHostname(hostname) {
 export async function resolveDevTenant() {
   console.log('[resolveTenant] Dev mode. Resolving via hostname: localhost');
 
+  const preferredSlug = import.meta.env.VITE_DEV_TENANT_SLUG || 'primary';
+
+  if (preferredSlug) {
+    try {
+      const { data: preferredTenant, error: preferredTenantError } = await supabase
+        .from('tenants')
+        .select('id, slug, name, status, subscription_tier')
+        .eq('slug', preferredSlug)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (!preferredTenantError && preferredTenant) {
+        console.log('[resolveTenant] Dev override matched tenant slug:', preferredSlug);
+        return {
+          projectId: null,
+          tenantId: preferredTenant.id,
+          tenantCode: preferredTenant.slug,
+          tenantStatus: preferredTenant.status ?? 'active',
+          cellId: null,
+          serviceProfile: preferredTenant.subscription_tier ?? null,
+          domainId: null,
+          hostname: 'localhost',
+          domainKind: 'platform_subdomain',
+          routeClass: RouteClass.PUBLIC,
+          isPrimary: preferredTenant.slug === 'primary',
+          name: preferredTenant.name,
+          isLegacyResolution: true,
+        };
+      }
+    } catch (preferredTenantErr) {
+      console.warn('[resolveTenant] Dev override lookup failed:', preferredTenantErr);
+    }
+  }
+
   // Step 1: Try full control-plane resolution via localhost
   const rpcResult = await resolveTenantByHostname('localhost');
   if (rpcResult) {
@@ -133,7 +167,7 @@ export async function resolveDevTenant() {
     'Falling back to legacy tenants table.'
   );
 
-  const slug = import.meta.env.VITE_DEV_TENANT_SLUG || 'primary';
+  const slug = preferredSlug;
 
   try {
     const { data, error } = await supabase

@@ -1,11 +1,14 @@
 
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Menu, LogOut, User, Building2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
+import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +26,31 @@ function Header({ toggleSidebar, _onNavigate }) {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
   const { isPlatformAdmin } = usePermissions();
-  const { currentTenant } = useTenant();
+  const { currentTenant, resolvedTenant, switchTenantScope } = useTenant();
+  const [tenantOptions, setTenantOptions] = useState([]);
+
+  useEffect(() => {
+    if (!isPlatformAdmin) return;
+
+    let ignore = false;
+
+    const loadTenants = async () => {
+      const { data } = await supabase
+        .from('tenants')
+        .select('id, slug, name, status')
+        .is('deleted_at', null)
+        .order('name', { ascending: true });
+
+      if (!ignore) {
+        setTenantOptions(data || []);
+      }
+    };
+
+    loadTenants();
+    return () => {
+      ignore = true;
+    };
+  }, [isPlatformAdmin]);
 
   const getInitials = (email) => {
     return email ? email.substring(0, 2).toUpperCase() : 'U';
@@ -56,11 +83,32 @@ function Header({ toggleSidebar, _onNavigate }) {
 
           {/* Tenant Context Badge for Platform Admins */}
           {isPlatformAdmin && currentTenant && (
-            <div className="hidden lg:flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-primary shadow-sm dark:bg-primary/20">
-              <Building2 className="w-4 h-4" />
-              <span className="max-w-[220px] truncate text-xs font-semibold uppercase tracking-[0.08em]">
-                {currentTenant.name || 'Primary Tenant'}
-              </span>
+            <div className="hidden lg:flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-2 py-1.5 text-primary shadow-sm dark:bg-primary/20">
+              <Building2 className="ml-1 h-4 w-4" />
+              <Select
+                value={currentTenant.id}
+                onValueChange={(value) => {
+                  switchTenantScope(value);
+                }}
+              >
+                <SelectTrigger className="h-8 min-w-[220px] border-0 bg-transparent px-2 text-xs font-semibold uppercase tracking-[0.08em] text-primary shadow-none focus:ring-0">
+                  <SelectValue placeholder="Select tenant scope" />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  {resolvedTenant?.id ? (
+                    <SelectItem value={resolvedTenant.id}>
+                      {resolvedTenant.name || resolvedTenant.slug || 'Resolved Tenant'}
+                    </SelectItem>
+                  ) : null}
+                  {tenantOptions
+                    .filter((tenant) => tenant.id !== resolvedTenant?.id)
+                    .map((tenant) => (
+                      <SelectItem key={tenant.id} value={tenant.id}>
+                        {tenant.name} ({tenant.slug})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
         </div>

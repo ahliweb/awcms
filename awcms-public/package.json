@@ -4,7 +4,12 @@
     "private": true,
     "scripts": {
         "dev": "pnpm -C primary dev",
-        "build": "cd primary && npm install && npm run build"
+        "dev:primary": "pnpm -C primary dev",
+        "dev:smandapbun": "pnpm -C smandapbun dev",
+        "build": "pnpm run build:all",
+        "build:primary": "pnpm -C primary build",
+        "build:smandapbun": "pnpm -C smandapbun build",
+        "build:all": "pnpm run build:primary && pnpm run build:smandapbun"
     },
     "engines": {
         "node": ">=22.12.0"
