@@ -2,13 +2,13 @@
 
 Welcome to the AWCMS Ecosystem. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
-## Status Snapshot (2026-03-14)
+## Status Snapshot (2026-03-16)
 
 - Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
 - The active documentation and repository-conflict audit cycle is tracked in `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
 - Public portal runtime has moved to Astro 6 while Cloudflare Workers remain the primary edge HTTP layer.
 - MCP topology from `mcp.json` currently includes `cloudflare`, `context7`, `github`, `supabase`, and `paper`.
-- Repository inventory currently shows `144` tracked Markdown files, `76` docs files, and `139` root/mirrored Supabase migrations.
+- Repository inventory currently shows `153` tracked Markdown files, `81` docs files, `144` root/mirrored Supabase migrations, and `4` GitHub workflows.
 - `scripts/verify_supabase_migration_consistency.sh` now passes after restoring root/mirror migration parity.
 
 ## Documentation Authority
@@ -114,7 +114,7 @@ See also:
 ## Database & Migrations
 
 - Canonical timestamped migrations live in `supabase/migrations/` and are mirrored in `awcms/supabase/migrations/` for CI/Admin tooling compatibility.
-- Current observed state: `139` root migrations and `139` mirrored migrations, with parity verified by `scripts/verify_supabase_migration_consistency.sh`.
+- Current observed state: `144` root migrations and `144` mirrored migrations, with parity verified by `scripts/verify_supabase_migration_consistency.sh`.
 - Non-migration SQL files must be kept outside migration folders (for example `supabase/manual/`).
 - Local workflow:
   - `npx supabase migration list --local`

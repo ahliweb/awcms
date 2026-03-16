@@ -2,9 +2,9 @@
 
 > Owner: Documentation Steward (AI + Maintainers)
 >
-> Audit Cycle: 2026-03-14 full-repository conflict-resolution and plan update
+> Audit Cycle: 2026-03-16 full-repository conflict-resolution and plan update
 >
-> Last Updated: 2026-03-14
+> Last Updated: 2026-03-16
 >
 > Primary Authority Chain: `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md` -> implementation/package docs
 
@@ -24,16 +24,16 @@ This cycle explicitly covers:
 - dead links, missing canonical targets, and stale navigation
 - package README drift and workspace-level setup inaccuracies
 
-## Current Baseline (Verified 2026-03-14)
+## Current Baseline (Verified 2026-03-16)
 
 | Surface | Verified State | Evidence Source |
 | --- | --- | --- |
-| Tracked Markdown files | `144` | `git ls-files '*.md'` |
-| Tracked docs files | `76` | `git ls-files 'docs/**/*.md'` |
-| Root Supabase migrations | `139` | `supabase/migrations/*.sql` |
-| Mirrored admin/CI migrations | `139` | `awcms/supabase/migrations/*.sql` |
+| Tracked Markdown files | `153` | `git ls-files '*.md'` |
+| Tracked docs files | `81` | `git ls-files 'docs/**/*.md'` |
+| Root Supabase migrations | `144` | `supabase/migrations/*.sql` |
+| Mirrored admin/CI migrations | `144` | `awcms/supabase/migrations/*.sql` |
 | Package manifests | `10` | `git ls-files '**/package.json'` |
-| GitHub workflows | `5` | `.github/workflows/*` |
+| GitHub workflows | `4` | `.github/workflows/*` |
 | MCP servers in `mcp.json` | `cloudflare`, `context7`, `github`, `supabase`, `paper` | `mcp.json` |
 | Docs validation | Passes | `cd awcms && npm run docs:check` |
 | Migration parity | Passes | `scripts/verify_supabase_migration_consistency.sh` |
@@ -45,14 +45,15 @@ This cycle explicitly covers:
 | PLAN-201 | High | Authority docs used stale runtime versions (Astro 5, older Supabase JS, older Framer/Lucide/i18next versions) | Resolved against workspace manifests | Completed |
 | PLAN-202 | High | Audit plan/tracker previously presented the prior cycle as closed and fully reconciled | Resolved by reopening the cycle with current evidence | Completed |
 | PLAN-203 | High | Supabase migration mirror parity was broken by 8 mirror-only files | Resolved by backfilling the canonical root migrations and restoring filename/content parity | Completed |
-| PLAN-204 | Medium | Top-level snapshots previously claimed stale inventory and parity counts | Resolved with current `144` / `76` / `139/139` baseline | Completed |
+| PLAN-204 | Medium | Top-level snapshots previously claimed stale inventory and parity counts | Resolved with current `153` / `81` / `144/144` baseline | Completed |
 | PLAN-205 | Medium | Public portal docs still referenced Astro 5 while active workspaces ran Astro 6 | Resolved in authority/public/package docs | Completed |
 | PLAN-206 | Medium | Cloudflare Worker secret guidance needed alignment with Wrangler `.dev.vars` and `wrangler secret put` practices | Resolved by standardizing local docs and Worker scripts around `.dev.vars` and production secrets via Wrangler | Completed |
 | PLAN-207 | High | `deploy-smandapbun.yml` hardcoded a real Cloudflare account ID (`5255727b...`) in `env:` — a security risk exposing account-level identifiers in public CI logs | Replaced hardcoded value with `${{ secrets.CLOUDFLARE_ACCOUNT_ID \|\| vars.CLOUDFLARE_ACCOUNT_ID }}` | Completed |
 | PLAN-208 | High | MCP topology in `SYSTEM_MODEL.md`, `AGENTS.md`, and `README.md` did not match `mcp.json`: `paper` server omitted; `cloudflare` entry incorrectly listed as 7 separate granular servers instead of the single `@cloudflare/mcp-server-cloudflare` package | Reconciled all authority docs against `mcp.json` | Completed |
-| PLAN-209 | Medium | Repository inventory snapshot counts were stale: `145` Markdown files (actual `144`), `77` docs (actual `76`), `4` GitHub workflows (actual `5` including `deploy-smandapbun.yml`) | Updated all snapshot references in `README.md`, `docs/dev/documentation-audit-plan.md`, and `docs/dev/documentation-audit-tracker.md` | Completed |
-| PLAN-210 | Medium | `docs/dev/ci-cd.md` did not document the `deploy-smandapbun.yml` workflow and stated `4` workflows | Added `deploy-smandapbun` entry and corrected count to `5` | Completed |
+| PLAN-209 | Medium | Repository inventory snapshot counts were stale: `145` Markdown files (actual `153`), `77` docs (actual `81`), `5` GitHub workflows (current `4`) | Updated all snapshot references in authority docs and audit docs | Completed |
+| PLAN-210 | Medium | `docs/dev/ci-cd.md` needed to reflect the current workflow inventory accurately after the latest CI cleanup | Reconciled the workflow inventory to the current 4-workflow baseline | Completed |
 | PLAN-211 | Low | `docs/dev/versioning.md` section 5 CI excerpt still used the obsolete `contains(github.event.commits[0].modified, ...)` condition instead of the current `dorny/paths-filter` pattern | Updated excerpt to reflect current `paths-filter` architecture | Completed |
+| PLAN-212 | Low | `scripts/detect_legacy_storage.sh` became obsolete once Worker compatibility proxies and client storage guards became the canonical runtime checks; its legacy-pattern checks now produced false positives | Removed the obsolete script and retained validation through runtime tests and Worker smoke checks | Completed |
 
 ## Context7 Validation Matrix
 

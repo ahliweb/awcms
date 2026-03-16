@@ -1,7 +1,7 @@
 # AWCMS Ecosystem Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-03-13 (Audited against `package.json`, migration status, scripts, MCP topology, Context7 guidance, and the active documentation audit)
+> **Last Updated:** 2026-03-16 (Audited against `package.json`, migration status, scripts, MCP topology, Context7 guidance, and the active documentation audit)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -167,7 +167,7 @@ Agents must respect these exact versions to ensure compatibility across the AWCM
 * `src/hooks/`: Custom React hooks for data fetching and state.
 * `src/lib/`: Stateless utilities and configuration.
 * `supabase/migrations/`: canonical SQL migration files (timestamped).
-* `awcms/supabase/migrations/`: mirrored migration path used by CI/admin tooling; must remain synchronized with root migrations. Current audit evidence shows `139` root files and `139` mirrored files with parity restored.
+* `awcms/supabase/migrations/`: mirrored migration path used by CI/admin tooling; must remain synchronized with root migrations. Current audit evidence shows `144` root files and `144` mirrored files with parity restored.
 
 ---
 
