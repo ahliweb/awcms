@@ -77,6 +77,11 @@ function PlatformDashboard() {
                                 Global Modules <ArrowRight className="w-4 h-4 ml-2" />
                             </Link>
                         </Button>
+                        <Button asChild variant="outline" className="justify-between">
+                            <Link to="/cmspanel/platform/diagnostics">
+                                Platform Diagnostics <ArrowRight className="w-4 h-4 ml-2" />
+                            </Link>
+                        </Button>
                     </div>
                 </div>
 
