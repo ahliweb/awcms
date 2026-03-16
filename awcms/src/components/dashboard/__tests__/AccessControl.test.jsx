@@ -14,9 +14,14 @@ vi.mock('@/contexts/SupabaseAuthContext', () => ({
     useAuth: vi.fn(() => ({ user: { id: '123' } })),
 }));
 
-vi.mock('@/contexts/TenantContext', () => ({
-    useTenant: vi.fn(() => ({ currentTenant: { id: 'tenant-1' } })),
-}));
+vi.mock('@/contexts/TenantContext', async (importOriginal) => {
+    const actual = await importOriginal();
+
+    return {
+        ...actual,
+        useTenant: vi.fn(() => ({ currentTenant: { id: 'tenant-1' } })),
+    };
+});
 
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({ t: (key) => key }),
