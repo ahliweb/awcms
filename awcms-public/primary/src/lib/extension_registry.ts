@@ -51,29 +51,43 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const normalizeManifest = (input: unknown): ExtensionManifest | null => {
   if (!isObject(input)) return null;
   if (input.schemaVersion !== 1) return null;
-  if (typeof input.slug !== "string" || typeof input.name !== "string" || typeof input.vendor !== "string") return null;
+  if (
+    typeof input.slug !== "string" ||
+    typeof input.name !== "string" ||
+    typeof input.vendor !== "string"
+  )
+    return null;
 
   const permissions = Array.isArray(input.permissions)
-    ? input.permissions
+    ? (input.permissions
         .map((permission) => {
           if (typeof permission === "string") {
             return { key: permission, description: null };
           }
           if (isObject(permission) && typeof permission.key === "string") {
-            return { key: permission.key, description: typeof permission.description === "string" ? permission.description : null };
+            return {
+              key: permission.key,
+              description:
+                typeof permission.description === "string"
+                  ? permission.description
+                  : null,
+            };
           }
           return null;
         })
-        .filter(Boolean) as ExtensionPermission[]
+        .filter(Boolean) as ExtensionPermission[])
     : [];
 
   const publicModules = Array.isArray(input.publicModules)
-    ? input.publicModules.filter((moduleEntry): moduleEntry is ExtensionManifest["publicModules"][number] => (
-        isObject(moduleEntry)
-        && typeof moduleEntry.key === "string"
-        && typeof moduleEntry.label === "string"
-        && typeof moduleEntry.url === "string"
-      ))
+    ? input.publicModules.filter(
+        (
+          moduleEntry,
+        ): moduleEntry is ExtensionManifest["publicModules"][number] =>
+          isObject(moduleEntry) &&
+          typeof moduleEntry.key === "string" &&
+          typeof moduleEntry.label === "string" &&
+          typeof moduleEntry.url === "string",
+      )
     : [];
 
   return {
@@ -84,16 +98,30 @@ const normalizeManifest = (input: unknown): ExtensionManifest | null => {
     version: typeof input.version === "string" ? input.version : "1.0.0",
     kind: input.kind === "bundled" ? "bundled" : "external",
     scope: input.scope === "platform" ? "platform" : "tenant",
-    compatibility: isObject(input.compatibility) ? (input.compatibility as { awcms?: string }) : {},
-    capabilities: Array.isArray(input.capabilities) ? input.capabilities.filter((value): value is string => typeof value === "string") : [],
-    resources: isObject(input.resources) ? (input.resources as Record<string, Record<string, unknown>>) : {},
+    compatibility: isObject(input.compatibility)
+      ? (input.compatibility as { awcms?: string })
+      : {},
+    capabilities: Array.isArray(input.capabilities)
+      ? input.capabilities.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+    resources: isObject(input.resources)
+      ? (input.resources as Record<string, Record<string, unknown>>)
+      : {},
     permissions,
     adminRoutes: Array.isArray(input.adminRoutes) ? input.adminRoutes : [],
     menus: Array.isArray(input.menus) ? input.menus : [],
     publicModules,
     settingsSchema: isObject(input.settingsSchema) ? input.settingsSchema : {},
     edgeRoutes: Array.isArray(input.edgeRoutes) ? input.edgeRoutes : [],
-    dependencies: isObject(input.dependencies) ? (Object.fromEntries(Object.entries(input.dependencies).filter(([, value]) => typeof value === "string")) as Record<string, string>) : {},
+    dependencies: isObject(input.dependencies)
+      ? (Object.fromEntries(
+          Object.entries(input.dependencies).filter(
+            ([, value]) => typeof value === "string",
+          ),
+        ) as Record<string, string>)
+      : {},
     widgets: Array.isArray(input.widgets) ? input.widgets : [],
     hooks: isObject(input.hooks) ? input.hooks : {},
   };
@@ -105,7 +133,9 @@ export async function getActiveTenantExtensions(
 ): Promise<TenantExtensionRecord[]> {
   let query = supabase
     .from("tenant_extensions")
-    .select(`id, tenant_id, catalog_id, activation_state, installed_version, config, catalog:platform_extension_catalog(manifest)`)
+    .select(
+      `id, tenant_id, catalog_id, activation_state, installed_version, config, catalog:platform_extension_catalog(manifest)`,
+    )
     .eq("activation_state", "active")
     .is("deleted_at", null);
 
@@ -141,7 +171,8 @@ export async function getActivePublicModules(
   supabase: SupabaseClient,
   tenantId?: string | null,
 ) {
-  const edgeUrl = import.meta.env.PUBLIC_EDGE_URL || import.meta.env.VITE_EDGE_URL || "";
+  const edgeUrl =
+    import.meta.env.PUBLIC_EDGE_URL || import.meta.env.VITE_EDGE_URL || "";
 
   if (edgeUrl && tenantId) {
     try {
