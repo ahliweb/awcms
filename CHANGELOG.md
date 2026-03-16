@@ -7,6 +7,18 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Changed
 
+- _No entries yet._
+
+### Fixed
+
+- _No entries yet._
+
+## [4.3.1] - 2026-03-16
+
+Applies to: `awcms@4.3.1`, `@onwidget/astrowind@4.3.1`, `smanda-pangkalan-bun@4.3.1`, `awcms-mcp@4.3.1`
+
+### Changed
+
 - Platform Diagnostics: Added the platform diagnostics admin route and dashboard surface, seeded the matching menu permission migration in both root and mirrored Supabase migration trees, and added Worker compatibility smoke coverage plus Playwright coverage for the new route.
 - Runtime Validation: Added the shared runtime boundaries guide, the extension-runtime hardening release summary, and a consolidated `scripts/ci-validate-runtime.sh` validation entrypoint, then wired the new runtime validation steps into both PR and push CI workflows.
 - Environment Bootstrap: Added the new `docs/dev/environment-bootstrap.md` guide and `scripts/setup_awcms_environment.py` helper, extended the helper with additional automation modes plus `scripts/setup_awcms_environment.sample.json`, and documented the generated-output ignore rule for bootstrap artifacts.
