@@ -83,7 +83,7 @@ BEGIN
   -- -------------------------------------------------------
   INSERT INTO public.deployment_cells (
     id, project_id, environment, service_profile,
-    coolify_mode, supabase_mode,
+    supabase_mode,
     status, notes
   )
   VALUES (
@@ -91,7 +91,6 @@ BEGIN
     v_project_id,
     'development',
     'shared_managed',
-    'self_hosted',
     'managed',
     'active',
     'Local development cell. Seeded automatically by dev_control_plane.sql.'

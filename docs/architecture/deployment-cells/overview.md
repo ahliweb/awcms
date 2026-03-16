@@ -1,6 +1,6 @@
 # Deployment Cells — Overview
 
-This document describes the deployment cell model that AWCMS uses to support multi-project, multi-tenant deployments across Coolify, Cloudflare, and Supabase.
+This document describes the deployment cell model that AWCMS uses to support multi-project, multi-tenant deployments across Cloudflare and Supabase.
 
 See the maintained deployment-cell documentation set:
 
@@ -14,13 +14,12 @@ See the maintained deployment-cell documentation set:
 
 ## What is a Deployment Cell?
 
-A **deployment cell** is a named bundle of infrastructure references — a Coolify runtime, a Cloudflare zone, and a Supabase project — that hosts a specific set of tenants for a given environment.
+A **deployment cell** is a named bundle of infrastructure references — a Cloudflare runtime/zone and a Supabase project — that hosts a specific set of tenants for a given environment.
 
 ```
 Platform Project
 └── Deployment Cell (e.g. production / shared-managed)
-    ├── Coolify runtime (Admin + Public apps, Workers, Cron)
-    ├── Cloudflare zone (DNS, WAF, CDN, Custom Hostnames)
+    ├── Cloudflare runtime + zone (Pages, Workers, DNS, WAF, CDN, Custom Hostnames)
     └── Supabase project (Auth, DB/RLS, Storage metadata)
         └── Tenant A
         └── Tenant B

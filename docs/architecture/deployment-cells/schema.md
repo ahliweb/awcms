@@ -36,7 +36,6 @@ platform_projects
 | `project_id` | UUID FK | `platform_projects` |
 | `environment` | TEXT | `production`, `staging`, `preview`, `development` |
 | `service_profile` | TEXT | See ServiceProfile enum |
-| `coolify_mode` | TEXT | `self_hosted`, `coolify_cloud` |
 | `supabase_mode` | TEXT | `managed`, `self_hosted` |
 | `status` | TEXT | `draft` → `active` → `maintenance` → `decommissioned` |
 

@@ -4,7 +4,7 @@
 -- ============================================================
 -- TABLE: deployment_cells
 -- Represents a specific runtime environment instance within a
--- project. Combines Coolify topology, Cloudflare zone, and
+-- project. Combines Cloudflare runtime/zone and
 -- Supabase project reference into a single auditable record.
 -- ============================================================
 
@@ -22,10 +22,6 @@ CREATE TABLE IF NOT EXISTS public.deployment_cells (
                               'dedicated_self_hosted',
                               'vanity_domain_saas'
                             )),
-  -- Coolify
-  coolify_mode            TEXT NOT NULL
-                            CHECK (coolify_mode IN ('self_hosted', 'coolify_cloud')),
-  coolify_server_ref      TEXT,
   -- Cloudflare
   cloudflare_account_ref  TEXT,
   cloudflare_zone_ref     TEXT,
@@ -50,7 +46,7 @@ CREATE TABLE IF NOT EXISTS public.deployment_cells (
 );
 
 COMMENT ON TABLE public.deployment_cells IS
-  'A specific runtime environment instance within a project. Binds Coolify, Cloudflare, and Supabase references together. A tenant is always associated with exactly one active cell.';
+  'A specific runtime environment instance within a project. Binds Cloudflare and Supabase references together. A tenant is always associated with exactly one active cell.';
 
 -- Index for efficient cell queries per project+environment
 CREATE INDEX IF NOT EXISTS idx_deployment_cells_project_env

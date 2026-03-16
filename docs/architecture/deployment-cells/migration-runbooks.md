@@ -37,7 +37,7 @@ The JS state machine helpers in `src/lib/migrations/deploymentCellRunbooks.js` m
 | Step | Action |
 |---|---|
 | 1 | `startMigration(migrationId)` |
-| 2 | Provision Linode server via Coolify |
+| 2 | Provision Linode runtime host |
 | 3 | Deploy app containers on Linode |
 | 4 | Point Supabase connection strings to new containers |
 | 5 | Run read-traffic canary (Cloudflare Traffic Splitting) |
