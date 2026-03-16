@@ -23,7 +23,6 @@ const maintainedReadmes = [
   'awcms-public/smandapbun/README.md',
   'awcms-mobile/README.md',
   'awcms-mobile/primary/README.md',
-  'awcms-mobile-java/README.md',
   'awcms-esp32/README.md',
   'awcms-mcp/README.md',
   'awcms-ext/README.md',
