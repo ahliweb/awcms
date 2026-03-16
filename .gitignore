@@ -19,6 +19,7 @@ dist
 .DS_Store
 temp_debug_files/
 temp_supabase/
+setup-output/
 **/.env
 **/.env.local
 **/.env.development.local

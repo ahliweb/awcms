@@ -131,6 +131,7 @@ Behavior:
 - writes only local developer configuration files
 - optionally prepares MCP and mobile env files too
 - generates `setup-output/deployment-checklist.md` after a successful run
+- `setup-output/` is local-only and should not be committed
 
 Example JSON shape:
 
