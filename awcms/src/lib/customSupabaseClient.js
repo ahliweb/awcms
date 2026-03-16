@@ -9,8 +9,12 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Load from environment variables (Vite uses import.meta.env)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const fallbackSupabaseUrl = 'https://example.supabase.co';
+const fallbackSupabasePublishableKey = 'sb_publishable_test_key';
+const hasSupabaseEnv = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+const isVitestRuntime = typeof globalThis !== 'undefined' && Boolean(globalThis.__vitest_worker__);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (isVitestRuntime ? fallbackSupabaseUrl : undefined);
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || (isVitestRuntime ? fallbackSupabasePublishableKey : undefined);
 export const LEGACY_AUTH_STORAGE_KEY = 'awcms-auth-token';
 
 const getAuthStorageKey = () => {
@@ -25,7 +29,7 @@ const getAuthStorageKey = () => {
 export const AUTH_STORAGE_KEY = getAuthStorageKey();
 
 // Validate environment variables
-if (!supabaseUrl || !supabasePublishableKey) {
+if (!hasSupabaseEnv) {
     console.error(
         '❌ Missing Supabase environment variables!\n' +
         'Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are set in your .env.local file.\n' +
