@@ -90,6 +90,8 @@ See also:
 1. Read **[SYSTEM_MODEL.md](SYSTEM_MODEL.md)** - Understand the architecture (5 min)
 2. Follow **[Developer Setup Guide](docs/dev/setup.md)** - Get running (10 min)
 3. Reference **[AGENTS.md](AGENTS.md)** - Coding standards and patterns
+4. Use **[Environment Bootstrap Guide](docs/dev/environment-bootstrap.md)** for new environment + deployment configuration
+5. Optionally run `python3 scripts/setup_awcms_environment.py` to generate local env files and a deployment checklist
 
 ### Per-Component Guides
 
@@ -107,6 +109,7 @@ See also:
 - **[docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md)**: Context7-driven doc audit workflow
 - **[docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md)**: Phase progress, drift register, and reconciliation backlog
 - **[docs/dev/context7-benchmark-playbook.md](docs/dev/context7-benchmark-playbook.md)**: Structured benchmark response playbook and reusable templates
+- **[docs/dev/environment-bootstrap.md](docs/dev/environment-bootstrap.md)**: Clone/bootstrap and deployment configuration guide
 
 ## Database & Migrations
 

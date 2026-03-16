@@ -25,6 +25,11 @@ cd <repo-root>
 
 Refer to `.env.example` in each directory. Public portal static builds require `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
 
+For a full clone/bootstrap + deployment-oriented walkthrough, use:
+
+- `docs/dev/environment-bootstrap.md`
+- `python3 scripts/setup_awcms_environment.py`
+
 When syncing linked/remote schema snapshots, prefer:
 
 ```sh
