@@ -10,6 +10,7 @@
     "dev:full": "node scripts/check_secrets.js && (cd ../awcms-edge && npm run dev:local &) && vite",
     "test": "vitest",
     "test:e2e": "playwright test",
+    "test:platform-routes": "playwright test platform-tenant-switcher.spec.js platform-diagnostics.spec.js",
     "docs:check": "node ../scripts/check_markdown_local_links.mjs && npx markdown-link-check --config ../.mlc_config.json ../SYSTEM_MODEL.md ../README.md ../AGENTS.md README.md ../DOCS_INDEX.md ../CHANGELOG.md ../CONTRIBUTING.md ../SECURITY.md ../CODE_OF_CONDUCT.md ../docs/**/*.md ../awcms/README.md ../awcms-public/README.md ../awcms-public/primary/README.md ../awcms-public/smandapbun/README.md ../awcms-mobile/README.md ../awcms-mobile/primary/README.md ../awcms-mobile-java/README.md ../awcms-esp32/README.md ../awcms-mcp/README.md ../awcms-ext/README.md ../awcms-edge/README.md ../packages/awcms-shared/README.md",
     "db:pull": "npx supabase db pull --schema public",
     "build": "vite build",

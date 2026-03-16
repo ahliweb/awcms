@@ -54,6 +54,7 @@ All documentation follows this authority structure:
 | Core Standards | [docs/architecture/standards.md](docs/architecture/standards.md) | UI, coding, and quality standards |
 | Folder Structure | [docs/architecture/folder-structure.md](docs/architecture/folder-structure.md) | Monorepo layout |
 | Database Schema | [docs/architecture/database.md](docs/architecture/database.md) | Tables and relations |
+| Runtime Boundaries | [docs/architecture/runtime-boundaries.md](docs/architecture/runtime-boundaries.md) | Cloudflare-only runtime and scope guarantees |
 
 ### Product & Specs
 
@@ -100,6 +101,7 @@ All documentation follows this authority structure:
 | Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Active 2026-03-13 full-repository audit, review, and conflict-resolution plan |
 | Documentation Audit Tracker | [docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md) | Live 2026-03-13 baseline, drift register, and execution status |
 | Context7 Benchmark Playbook | [docs/dev/context7-benchmark-playbook.md](docs/dev/context7-benchmark-playbook.md) | Canonical benchmark answer structure and topic playbooks |
+| Release Summary (2026-03) | [docs/dev/release-summary-2026-03-extension-runtime-hardening.md](docs/dev/release-summary-2026-03-extension-runtime-hardening.md) | Extension platform + tenant scope + Cloudflare runtime summary |
 | Admin Panel | [docs/dev/admin.md](docs/dev/admin.md) | React Admin development |
 | Public Portal | [docs/dev/public.md](docs/dev/public.md) | Astro development |
 | Mobile App | [docs/dev/mobile.md](docs/dev/mobile.md) | Flutter development |
