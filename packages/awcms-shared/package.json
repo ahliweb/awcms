@@ -4,7 +4,8 @@
     "description": "Shared utilities for AWCMS public portals",
     "type": "module",
     "scripts": {
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "test:storage-guard": "node tests/storage-guard.mjs"
     },
     "main": "src/index.ts",
     "types": "src/index.ts",
