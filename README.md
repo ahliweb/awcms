@@ -65,6 +65,24 @@ Notes:
 - Cloudflare R2 handles object storage flows, while metadata, ownership, tenant isolation, and policy enforcement remain in Supabase.
 - Client apps should continue to use Supabase Auth sessions, and Worker routes should validate those sessions before performing protected server-side work.
 
+See also:
+
+- `docs/architecture/runtime-boundaries.md`
+- `docs/dev/release-summary-2026-03-extension-runtime-hardening.md`
+
+## Runtime Validation
+
+- Run the consolidated runtime validation script with:
+  - `bash scripts/ci-validate-runtime.sh`
+- This validates:
+  - admin lint/build
+  - client storage guards
+  - shared storage guards
+  - edge typecheck
+  - migration parity
+- Platform browser checks can also be run directly with:
+  - `cd awcms && npm run test:platform-routes`
+
 ## Quick Start
 
 ### For Developers

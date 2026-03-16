@@ -57,6 +57,34 @@ jobs:
           VITE_SUPABASE_URL: "https://mock.supabase.co"
           VITE_SUPABASE_PUBLISHABLE_KEY: "mock-publishable-key"
 
+  runtime-validation:
+    name: Runtime Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install admin dependencies
+        run: npm ci
+        working-directory: ./awcms
+
+      - name: Install shared dependencies
+        run: npm ci
+        working-directory: ./packages/awcms-shared
+
+      - name: Install edge dependencies
+        run: npm ci
+        working-directory: ./awcms-edge
+
+      - name: Run runtime validation
+        run: bash ./scripts/ci-validate-runtime.sh
+
   # ============================================
   # Lint & Build - Public Portal (Astro)
   # ============================================

@@ -47,6 +47,15 @@ jobs:
               - 'awcms-ext/**'
             shared:
               - 'packages/awcms-shared/**'
+            runtime:
+              - 'awcms/**'
+              - 'awcms-edge/**'
+              - 'packages/awcms-shared/**'
+              - 'supabase/migrations/**'
+              - 'awcms/supabase/migrations/**'
+              - 'scripts/ci-validate-runtime.sh'
+              - 'scripts/verify_supabase_migration_consistency.sh'
+              - 'docs/architecture/runtime-boundaries.md'
 
   # ============================================
   # Lint & Test - Admin Panel
@@ -153,6 +162,36 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ steps.admin-env.outputs.vite_supabase_url }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ steps.admin-env.outputs.vite_supabase_key }}
+
+  runtime-validation:
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.runtime == 'true' }}
+    name: Runtime Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install admin dependencies
+        run: npm ci
+        working-directory: ./awcms
+
+      - name: Install shared dependencies
+        run: npm ci
+        working-directory: ./packages/awcms-shared
+
+      - name: Install edge dependencies
+        run: npm ci
+        working-directory: ./awcms-edge
+
+      - name: Run runtime validation
+        run: bash ./scripts/ci-validate-runtime.sh
 
       - name: Build
         run: npm run build
