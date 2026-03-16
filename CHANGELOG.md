@@ -7,8 +7,18 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Changed
 
-- Versioning: Prepared the next minor release by bumping the maintained core workspaces to `4.2.0` in line with the documented independent-versioning strategy for `awcms`, `awcms-public/primary`, `awcms-public/smandapbun`, and `awcms-mcp`.
-- Admin UI: Realigned `awcms/src/lib/version.js` with the canonical admin package manifest so the displayed app version matches the `4.2.0` minor bump.
+- Platform Diagnostics: Added the platform diagnostics admin route and dashboard surface, seeded the matching menu permission migration in both root and mirrored Supabase migration trees, and added Worker compatibility smoke coverage plus Playwright coverage for the new route.
+- Runtime Validation: Added the shared runtime boundaries guide, the extension-runtime hardening release summary, and a consolidated `scripts/ci-validate-runtime.sh` validation entrypoint, then wired the new runtime validation steps into both PR and push CI workflows.
+- Environment Bootstrap: Added the new `docs/dev/environment-bootstrap.md` guide and `scripts/setup_awcms_environment.py` helper, extended the helper with additional automation modes plus `scripts/setup_awcms_environment.sample.json`, and documented the generated-output ignore rule for bootstrap artifacts.
+- Versioning: Prepared the next minor release by bumping the maintained core workspaces to `4.3.0` in line with the documented independent-versioning strategy for `awcms`, `awcms-public/primary`, `awcms-public/smandapbun`, and `awcms-mcp`.
+- Admin UI: Realigned `awcms/src/lib/version.js` with the canonical admin package manifest so the displayed app version matches the `4.3.0` minor bump.
+- Public Portal: Reformatted the primary public portal extension registry and events E2E spec so the workspace passes its Prettier gate again.
+- Documentation: Removed the obsolete legacy storage cleanup script and refreshed the README, system model, and documentation audit docs to point at the current runtime/storage validation surfaces.
+
+### Fixed
+
+- Tests: Preserved `TenantContext` named exports in the access-control test mock so Vitest no longer fails when the dashboard suite imports modules that rely on `useTenant`.
+- Tests: Added a Vitest-only fallback Supabase URL and publishable key in `awcms/src/lib/customSupabaseClient.js` so import-time client initialization no longer crashes suites when CI omits Vite env injection.
 
 ## [4.1.0] - 2026-03-14
 
