@@ -6,10 +6,12 @@ import argparse
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKLIST_PATH = REPO_ROOT / "setup-output" / "deployment-checklist.md"
+LOCAL_DB_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 
 
 class SetupCancelled(Exception):
@@ -54,6 +56,11 @@ def parse_args() -> argparse.Namespace:
         "--config-json",
         type=Path,
         help="Path to a JSON file containing all required setup values for non-interactive mode",
+    )
+    parser.add_argument(
+        "--force-fresh-check-skip",
+        action="store_true",
+        help="Skip the local tenant-data safety check. Use only for controlled automation on disposable environments.",
     )
     return parser.parse_args()
 
@@ -159,10 +166,45 @@ bash scripts/ci-validate-runtime.sh
     CHECKLIST_PATH.write_text(checklist, encoding="utf-8")
 
 
+def check_existing_local_tenants() -> None:
+    try:
+        result = subprocess.run(
+            [
+                "psql",
+                LOCAL_DB_URL,
+                "-At",
+                "-c",
+                "select slug from public.tenants where deleted_at is null limit 1;",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return
+
+    if result.returncode != 0:
+        return
+
+    if result.stdout.strip():
+        raise SetupCancelled(
+            "Existing local tenant data was detected. This bootstrap helper is for a fresh clone/local environment only and will not modify or remove existing tenant data. Reset your local data manually before running setup."
+        )
+
+
 def main() -> int:
     args = parse_args()
     print("AWCMS environment bootstrap")
-    print("This script writes local env files only. If any required value is blank, setup stops without writing partial config.")
+    print("This script is intended for a fresh clone/local environment. If any required value is blank, setup stops without writing partial config.")
+
+    if not args.force_fresh_check_skip:
+        try:
+            check_existing_local_tenants()
+        except SetupCancelled as exc:
+            print(exc)
+            return 1
+    else:
+        print("Warning: skipping local tenant-data safety check (--force-fresh-check-skip).")
 
     fields = [
         PromptField("VITE_SUPABASE_URL", "Supabase URL"),
@@ -190,7 +232,9 @@ def main() -> int:
         PromptField("GITHUB_REBUILD_EVENT_TYPE", "GitHub rebuild event type"),
         PromptField("SMANDAPBUN_REBUILD_WEBHOOK_SECRET", "SMANDAPBUN rebuild webhook secret"),
         PromptField("PRIMARY_TENANT_ID", "Primary tenant UUID"),
-        PromptField("SMANDAPBUN_TENANT_ID", "SMANDAPBUN tenant UUID"),
+        PromptField("PRIMARY_TENANT_SLUG", "Primary tenant slug"),
+        PromptField("SMANDAPBUN_TENANT_ID", "SMANDAPBUN tenant UUID", required=False),
+        PromptField("SMANDAPBUN_TENANT_SLUG", "SMANDAPBUN tenant slug", required=False),
         PromptField("PUBLIC_TURNSTILE_SITE_KEY", "Public Turnstile site key"),
         PromptField("MCP_SUPABASE_DB_URL", "Supabase DB URL for awcms-mcp"),
     ]
@@ -241,7 +285,7 @@ def main() -> int:
         "VITE_SUPABASE_PUBLISHABLE_KEY": values["VITE_SUPABASE_PUBLISHABLE_KEY"],
         "PUBLIC_TURNSTILE_SITE_KEY": values["PUBLIC_TURNSTILE_SITE_KEY"],
         "PUBLIC_TENANT_ID": values["PRIMARY_TENANT_ID"],
-        "PUBLIC_TENANT_SLUG": "primary",
+        "PUBLIC_TENANT_SLUG": values["PRIMARY_TENANT_SLUG"],
         "VITE_PUBLIC_TENANT_ID": values["PRIMARY_TENANT_ID"],
     }
 
@@ -249,8 +293,8 @@ def main() -> int:
         "PUBLIC_SUPABASE_URL": values["VITE_SUPABASE_URL"],
         "PUBLIC_SUPABASE_PUBLISHABLE_KEY": values["VITE_SUPABASE_PUBLISHABLE_KEY"],
         "PUBLIC_TURNSTILE_SITE_KEY": values["PUBLIC_TURNSTILE_SITE_KEY"],
-        "PUBLIC_TENANT_ID": values["SMANDAPBUN_TENANT_ID"],
-        "PUBLIC_TENANT_SLUG": "smandapbun",
+        "PUBLIC_TENANT_ID": values["SMANDAPBUN_TENANT_ID"] or values["PRIMARY_TENANT_ID"],
+        "PUBLIC_TENANT_SLUG": values["SMANDAPBUN_TENANT_SLUG"] or values["PRIMARY_TENANT_SLUG"],
         "CLOUDFLARE_ACCOUNT_ID": values["CLOUDFLARE_ACCOUNT_ID"],
     }
 

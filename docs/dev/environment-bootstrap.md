@@ -6,6 +6,8 @@
 
 Explain how to clone the AWCMS ecosystem, prepare a new development configuration, and align automated deployment inputs for the maintained admin, public, edge, and MCP surfaces.
 
+This guide is intended for a fresh clone/local environment. The setup helper will not remove or mutate existing local tenant data.
+
 ## Clone the Ecosystem
 
 ```bash
@@ -72,10 +74,10 @@ These values are required for a usable local/dev + deployment-aligned setup:
 
 ### Tenant Build-Time Inputs
 
-- `PUBLIC_TENANT_ID` for `primary`
-- `PUBLIC_TENANT_ID` for `smandapbun`
-- `PUBLIC_TENANT_SLUG=primary`
-- `PUBLIC_TENANT_SLUG=smandapbun`
+- at least one tenant is required
+- `PUBLIC_TENANT_ID` for the first tenant/public app
+- `PUBLIC_TENANT_SLUG` for the first tenant/public app
+- optional second tenant/public app values can also be provided
 
 ## Automated Deployment Inputs
 
@@ -114,10 +116,18 @@ Or run it in non-interactive mode with a JSON file:
 python3 scripts/setup_awcms_environment.py --config-json path/to/setup.json
 ```
 
+Advanced disposable-environment automation can skip the existing-tenant safety check:
+
+```bash
+python3 scripts/setup_awcms_environment.py --config-json path/to/setup.json --force-fresh-check-skip
+```
+
 Behavior:
 
 - prompts for all required values before writing anything
 - aborts the entire setup if any required field is left blank
+- aborts if existing local tenant data is detected in the local cloned AWCMS database
+- `--force-fresh-check-skip` bypasses that tenant-data safety check and should only be used in disposable/controlled automation environments
 - writes only local developer configuration files
 - optionally prepares MCP and mobile env files too
 - generates `setup-output/deployment-checklist.md` after a successful run
@@ -151,12 +161,20 @@ Example JSON shape:
   "GITHUB_REBUILD_EVENT_TYPE": "smandapbun-content-changed",
   "SMANDAPBUN_REBUILD_WEBHOOK_SECRET": "your-rebuild-secret",
   "PRIMARY_TENANT_ID": "tenant-uuid-primary",
+  "PRIMARY_TENANT_SLUG": "primary",
   "SMANDAPBUN_TENANT_ID": "tenant-uuid-smandapbun",
+  "SMANDAPBUN_TENANT_SLUG": "smandapbun",
   "PUBLIC_TURNSTILE_SITE_KEY": "your-public-turnstile-key",
   "MCP_SUPABASE_DB_URL": "postgresql://postgres:password@db.project.supabase.co:5432/postgres",
   "CONFIGURE_MOBILE": true
 }
 ```
+
+A ready-to-edit template is included at:
+
+- `scripts/setup_awcms_environment.sample.json`
+
+If you only want a minimum one-tenant bootstrap, provide the primary tenant fields and leave the optional secondary tenant fields blank.
 
 ## Post-Setup Validation
 

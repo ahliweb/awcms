@@ -91,7 +91,7 @@ See also:
 2. Follow **[Developer Setup Guide](docs/dev/setup.md)** - Get running (10 min)
 3. Reference **[AGENTS.md](AGENTS.md)** - Coding standards and patterns
 4. Use **[Environment Bootstrap Guide](docs/dev/environment-bootstrap.md)** for new environment + deployment configuration
-5. Optionally run `python3 scripts/setup_awcms_environment.py` to generate local env files and a deployment checklist
+5. Optionally run `python3 scripts/setup_awcms_environment.py` to generate local env files and a deployment checklist for a fresh clone (the script stops if local tenant data already exists; see `scripts/setup_awcms_environment.sample.json` for non-interactive mode)
 
 ### Per-Component Guides
 
