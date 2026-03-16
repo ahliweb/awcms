@@ -325,25 +325,6 @@ function UserEditor({ user, onClose, onSave }) {
           }
         });
 
-        const isUnauthorized = edgeResponse?.error?.context?.status === 401;
-        const hasLocalSecret = Boolean(import.meta.env.DEV && import.meta.env.VITE_SUPABASE_SECRET_KEY);
-
-        if (isUnauthorized && hasLocalSecret) {
-          edgeResponse = await supabase.functions.invoke('manage-users', {
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_SECRET_KEY}`,
-            },
-            body: {
-              action: inviteUser ? 'invite' : 'create',
-              email: formData.email,
-              password: inviteUser ? undefined : formData.password,
-              full_name: formData.full_name,
-              role_id: formData.role_id,
-              tenant_id: formData.tenant_id || null
-            }
-          });
-        }
-
         const { data, error: edgeError } = edgeResponse;
 
         if (edgeError || (data && data.error)) {

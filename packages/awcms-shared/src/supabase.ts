@@ -64,6 +64,14 @@ export function createClientFromEnv<TClient>(
         },
     });
 
+    Object.defineProperty(client as object, 'storage', {
+        get: () => ({
+            from: () => {
+                throw new Error('Supabase Storage is disabled in AWCMS. Use Cloudflare R2 through the Cloudflare Edge API.');
+            },
+        }),
+    });
+
     const edgeUrl =
         env.PUBLIC_EDGE_URL ||
         env.VITE_EDGE_URL ||

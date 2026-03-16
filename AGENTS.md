@@ -575,12 +575,15 @@ export default function Dashboard() {
 ### File Upload
 
 ```javascript
-const { data, error } = await supabase.storage
-  .from("blogs")
-  .upload(`images/${fileName}`, file, {
-    cacheControl: "3600",
-    upsert: false,
-  });
+const response = await fetch(`${import.meta.env.VITE_EDGE_URL}/api/media/upload`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${session.access_token}`,
+  },
+  body: formData,
+});
+
+const data = await response.json();
 ```
 
 ### User Deletion with Permission Check

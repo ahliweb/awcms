@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 /**
  * SitemapRedirect Component
  * 
- * This component fetches the dynamic sitemap from Supabase Edge Function
- * and renders it directly OR redirects to the Edge Function URL.
+ * This component fetches the dynamic sitemap from the Cloudflare Edge API
+ * and renders it directly OR redirects to the Worker compatibility URL.
  * 
- * For SEO purposes, it's better to serve the XML directly or redirect to the Edge Function.
+ * For SEO purposes, it's better to serve the XML directly or redirect to the Worker route.
  */
 const SitemapRedirect = () => {
     const [sitemapXml, setSitemapXml] = useState(null);
@@ -20,7 +20,7 @@ const SitemapRedirect = () => {
                 // Get current domain for the sitemap
                 const domain = window.location.hostname;
 
-                // Build Edge Function URL
+                // Build Cloudflare Worker sitemap URL
                 const edgeFunctionUrl = `${import.meta.env.VITE_EDGE_URL}/public/sitemap?domain=${domain}`;
 
                 const response = await fetch(edgeFunctionUrl);

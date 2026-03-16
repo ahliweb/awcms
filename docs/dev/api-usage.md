@@ -86,12 +86,18 @@ const { error } = await supabase
   .eq('id', blogId);
 ```
 
-### Storage Upload
+### Media Upload via Cloudflare R2
 
 ```javascript
-const { data, error } = await supabase.storage
-  .from('cms-uploads')
-  .upload(`images/${fileName}`, file, { cacheControl: '3600', upsert: false });
+const response = await fetch(`${import.meta.env.VITE_EDGE_URL}/api/media/upload`, {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${session.access_token}`,
+  },
+  body: formData,
+});
+
+const data = await response.json();
 ```
 
 ### Edge Logic
@@ -117,6 +123,7 @@ const data = await response.json();
 - Tenant-scoped tables must be filtered by tenant and RLS enforced.
 - Secret keys may be used only in Cloudflare Workers, migrations, and trusted operational scripts.
 - Admin client injects `x-tenant-id` automatically via `customSupabaseClient`.
+- Supabase Storage is disabled; object storage must use Cloudflare R2.
 
 ## References
 

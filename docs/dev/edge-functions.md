@@ -55,7 +55,7 @@ Notes:
 
 - `dev:local` loads local secrets from `awcms-edge/.dev.vars`.
 - Worker bindings and runtime settings live in `awcms-edge/wrangler.jsonc`.
-- Local validation should exercise Worker routes directly, not `supabase functions serve`.
+- Local validation should exercise Worker routes directly. Supabase Edge Function tooling/config is not part of the supported runtime.
 - Production secrets belong in Cloudflare via `npx wrangler secret put <SECRET_NAME>`.
 
 ## Deployment

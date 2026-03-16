@@ -92,7 +92,17 @@ const customSupabaseClient = createClient(supabaseUrl, supabasePublishableKey, {
     },
 });
 
-// Route Supabase-style function calls to the Cloudflare Worker API.
+const storageGuard = {
+    from: () => {
+        throw new Error('Supabase Storage is disabled in AWCMS. Use Cloudflare R2 through the Cloudflare Edge API.');
+    }
+};
+
+Object.defineProperty(customSupabaseClient, 'storage', {
+    get: () => storageGuard
+});
+
+// Route compatibility function calls to the Cloudflare Worker API.
 const originalFunctions = customSupabaseClient.functions;
 const edgeUrl = import.meta.env.VITE_EDGE_URL;
 const workerApiTimeoutMs = Number.parseInt(import.meta.env.VITE_EDGE_API_TIMEOUT_MS || '', 10) || 8000;
