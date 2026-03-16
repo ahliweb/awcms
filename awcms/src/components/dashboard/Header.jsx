@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Menu, LogOut, User, Building2, ShieldCheck } from 'lucide-react';
+import { Menu, LogOut, User, Building2, ShieldCheck, CloudCog } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
@@ -168,6 +168,15 @@ function Header({ toggleSidebar, _onNavigate }) {
                 <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2">
                   {t('menu.account', 'Account')}
                 </DropdownMenuLabel>
+
+                {isPlatformAdmin && (
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-3 py-2.5 transition-colors focus:bg-primary/10 focus:text-primary">
+                    <Link to="/cmspanel/platform/diagnostics" className="flex items-center w-full font-medium">
+                      <CloudCog className="w-4 h-4 mr-3" />
+                      {t('menu.platform_diagnostics', 'Platform Diagnostics')}
+                    </Link>
+                  </DropdownMenuItem>
+                )}
 
                 <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-3 py-2.5 transition-colors focus:bg-primary/10 focus:text-primary">
                   <Link to="/cmspanel/profile" className="flex items-center w-full font-medium">
