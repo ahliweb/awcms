@@ -7,8 +7,8 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Changed
 
-- Versioning: Prepared the next patch release by bumping the maintained core workspaces to `4.1.1` in line with the documented independent-versioning strategy for `awcms`, `awcms-public/primary`, `awcms-public/smandapbun`, and `awcms-mcp`.
-- Admin UI: Realigned `awcms/src/lib/version.js` with the canonical admin package manifest so the displayed app version matches the `4.1.1` patch bump.
+- Versioning: Prepared the next minor release by bumping the maintained core workspaces to `4.2.0` in line with the documented independent-versioning strategy for `awcms`, `awcms-public/primary`, `awcms-public/smandapbun`, and `awcms-mcp`.
+- Admin UI: Realigned `awcms/src/lib/version.js` with the canonical admin package manifest so the displayed app version matches the `4.2.0` minor bump.
 
 ## [4.1.0] - 2026-03-14
 
