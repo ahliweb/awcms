@@ -55,6 +55,7 @@ All documentation follows this authority structure:
 | Folder Structure | [docs/architecture/folder-structure.md](docs/architecture/folder-structure.md) | Monorepo layout |
 | Database Schema | [docs/architecture/database.md](docs/architecture/database.md) | Tables and relations |
 | Runtime Boundaries | [docs/architecture/runtime-boundaries.md](docs/architecture/runtime-boundaries.md) | Cloudflare-only runtime and scope guarantees |
+| Queue Topology | [docs/architecture/queue-topology.md](docs/architecture/queue-topology.md) | Cloudflare Queues: topology, message contracts, consumer patterns |
 
 ### Product & Specs
 

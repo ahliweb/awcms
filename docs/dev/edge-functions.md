@@ -23,13 +23,14 @@ Document the maintained edge runtime for AWCMS: Cloudflare Workers in `awcms-edg
 - Client applications may keep using Supabase Auth sessions, but protected server-side workflows should execute through Worker routes.
 - Supabase remains the authority for Auth, PostgreSQL, RLS, and ABAC.
 - Cloudflare R2 is the maintained object storage layer for file/media delivery.
+- Cloudflare Queues (`awcms-media-events` and planned queues) are used to offload long-tail background work from the synchronous HTTP path. Queue consumers re-read authoritative state from Supabase before writing. See [docs/architecture/queue-topology.md](../architecture/queue-topology.md).
 - Supabase Edge Functions are not part of the maintained runtime or repo layout.
 
 ## Runtime Coverage
 
 The Worker currently provides maintained routes for:
 
-- media upload, finalize, access, and public delivery
+- media upload, finalize (async via `awcms-media-events` queue), access, and public delivery
 - `verify-turnstile`
 - `get-client-ip`
 - `manage-users`
@@ -72,6 +73,8 @@ npm run deploy
 - Worker routes validate Supabase Auth context before protected operations.
 - Privileged operations use `SUPABASE_SECRET_KEY` only inside approved Worker code.
 - Media flows use Cloudflare R2 and `media_objects` / `media_upload_sessions` metadata tables.
+- Finalize route returns `202 Accepted` and a `job_id`; finalization completes asynchronously via the `awcms-media-events` queue consumer.
+- Queue consumer does not trust message payload as authoritative; it re-reads from Supabase before writing.
 
 ## Troubleshooting
 
@@ -85,4 +88,5 @@ npm run deploy
 - `docs/deploy/overview.md`
 - `docs/deploy/cloudflare.md`
 - `docs/tenancy/supabase.md`
+- `docs/architecture/queue-topology.md`
 - `awcms-edge/README.md`

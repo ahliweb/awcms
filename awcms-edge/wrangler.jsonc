@@ -13,6 +13,52 @@
       "preview_bucket_name": "awcms-s3-dev"
     }
   ],
+  // Queue bindings for async workflows.
+  // Run these once per environment before first deploy:
+  //   npx wrangler queues create awcms-media-events
+  //   npx wrangler queues create awcms-media-events-dlq
+  //   npx wrangler queues create awcms-notifications
+  //   npx wrangler queues create awcms-notifications-dlq
+  "queues": {
+    "producers": [
+      {
+        "binding": "MEDIA_EVENTS_QUEUE",
+        "queue": "awcms-media-events"
+      },
+      {
+        "binding": "NOTIFICATIONS_QUEUE",
+        "queue": "awcms-notifications"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "awcms-media-events",
+        "max_batch_size": 10,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "dead_letter_queue": "awcms-media-events-dlq"
+      },
+      {
+        "queue": "awcms-notifications",
+        "max_batch_size": 10,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "dead_letter_queue": "awcms-notifications-dlq"
+      },
+      {
+        "queue": "awcms-media-events-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 30,
+        "max_retries": 0
+      },
+      {
+        "queue": "awcms-notifications-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 30,
+        "max_retries": 0
+      }
+    ]
+  },
   "observability": {
     "enabled": true
   }

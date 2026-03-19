@@ -5,6 +5,11 @@ import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from 
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { generateStorageKey, inferMediaKind, slugifyMediaValue, UploadSessionRequest } from './mediaContracts'
 import { compareVersions, getExtensionKey, validateExtensionManifest } from './extensions'
+import { AnyQueueMessage, buildEmailSendMessage, buildMediaFinalizeMessage, buildSiteRebuildMessage, isValidEnvelope, MEDIA_FINALIZE_EVENT, MEDIA_FINALIZE_SCHEMA } from './queues/contracts'
+import { handleMediaFinalizeMessage, mediaQueueHandler } from './queues/mediaConsumer'
+import { notificationsQueueHandler } from './queues/notificationsConsumer'
+import { dlqQueueHandler } from './queues/dlqConsumer'
+import { logReplay } from './queues/observability'
 
 type Bindings = {
   STORAGE: R2Bucket
@@ -24,6 +29,10 @@ type Bindings = {
   GITHUB_REBUILD_EVENT_TYPE?: string
   SMANDAPBUN_REBUILD_WEBHOOK_SECRET?: string
   TURNSTILE_SECRET_KEY?: string
+  /** Cloudflare Queue binding — producer + consumer for async media finalization */
+  MEDIA_EVENTS_QUEUE: Queue<AnyQueueMessage>
+  /** Cloudflare Queue binding — producer + consumer for async notifications/integrations */
+  NOTIFICATIONS_QUEUE: Queue<AnyQueueMessage>
 }
 
 type Variables = {
@@ -409,16 +418,27 @@ app.post('/api/media/upload-session', async (c) => {
   }
 });
 
-// Finalize upload after the client PUTs directly to signed R2 URL
+// Finalize upload after the client PUTs directly to the signed R2 URL.
+//
+// This route now returns 202 Accepted immediately and enqueues a
+// `media.upload.finalize` message for async processing by mediaConsumer.ts.
+//
+// The consumer re-reads authoritative session state from Supabase, verifies
+// the R2 object, upserts media_objects, and marks the session completed.
+// Clients should poll GET /api/media/upload/:sessionId/status to check
+// completion, or subscribe to Supabase Realtime on media_objects.
 app.post('/api/media/upload/:sessionId/finalize', async (c) => {
   const sessionId = c.req.param('sessionId');
   const user = c.get('user');
   const adminSupabase = getAdminSupabase(c.env)
 
   try {
+    // Validate the session belongs to this user and is still pending.
+    // We do a lightweight check here so the queue consumer doesn't need to
+    // trust the caller — the consumer will re-validate independently.
     const { data: session, error: sessionError } = await adminSupabase
       .from('media_upload_sessions')
-      .select('*')
+      .select('id, tenant_id, uploader_id, status, expires_at, file_name')
       .eq('id', sessionId)
       .single();
 
@@ -430,62 +450,50 @@ app.post('/api/media/upload/:sessionId/finalize', async (c) => {
       return c.json({ error: 'Session expired' }, 403);
     }
 
-    let object
-    try {
-      object = await headStoredObject(c.env, session.storage_key)
-    } catch {
-      object = null
-    }
+    // Build and enqueue the finalize message.
+    const traceId = c.req.header('x-request-id') ?? crypto.randomUUID()
+    const message = buildMediaFinalizeMessage({
+      session_id: sessionId,
+      tenant_id: session.tenant_id,
+      original_filename: session.file_name,
+      trace_id: traceId,
+    })
 
-    if (!object) {
-      return c.json({ error: 'Uploaded file not found in storage' }, 404)
-    }
+    await c.env.MEDIA_EVENTS_QUEUE.send(message)
 
-    const { data: mediaObject, error: insertError } = await adminSupabase
-      .from('media_objects')
-      .upsert({
-        tenant_id: session.tenant_id,
-        title: slugifyMediaValue(session.file_name).replace(/-/g, ' ').trim() || session.file_name,
-        file_name: session.file_name,
-        original_name: session.file_name,
-        slug: buildMediaSlug(session.file_name, session.id),
-        description: null,
-        alt_text: session.file_name,
-        mime_type: session.mime_type,
-        media_kind: inferMediaKind(session.mime_type),
-        size_bytes: object.ContentLength || session.size_bytes || 0,
-        storage_key: session.storage_key,
-        category_id: session.category_id || null,
-        uploader_id: user.id,
-        status: 'uploaded',
-        access_control: session.access_control || 'public',
-        session_bound_access: Boolean(session.session_bound_access),
-        meta_data: {
-          ...(session.meta_data || {}),
-          etag: object.ETag,
-          uploaded_via: 'cloudflare-r2',
-        },
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'storage_key' })
-      .select('*')
-      .single();
-
-    if (insertError) {
-      return c.json({ error: 'Failed to create media object', details: insertError }, 500);
-    }
-
-    await adminSupabase
-      .from('media_upload_sessions')
-      .update({ status: 'completed', completed_at: new Date().toISOString() })
-      .eq('id', sessionId);
-
-    return c.json({
-      mediaObject,
-      publicUrl: buildPublicMediaUrl(c.req.url, session.storage_key),
-    });
+    return c.json(
+      {
+        ok: true,
+        job_id: message.job_id,
+        status: 'processing',
+        message: 'Upload finalization queued. Poll /api/media/upload/:sessionId/status for completion.',
+      },
+      202,
+    );
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : 'Failed to finalize upload' }, 500)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to queue finalization' }, 500)
   }
+});
+
+// Poll the status of an upload finalization job.
+// Returns the current session status so clients know when async processing
+// has completed (status === "completed") or failed (status === "failed").
+app.get('/api/media/upload/:sessionId/status', async (c) => {
+  const sessionId = c.req.param('sessionId');
+  const user = c.get('user');
+  const adminSupabase = getAdminSupabase(c.env);
+
+  const { data: session, error } = await adminSupabase
+    .from('media_upload_sessions')
+    .select('id, status, completed_at, uploader_id')
+    .eq('id', sessionId)
+    .single();
+
+  if (error || !session || session.uploader_id !== user.id) {
+    return c.json({ error: 'Session not found' }, 404);
+  }
+
+  return c.json({ sessionId: session.id, status: session.status, completedAt: session.completed_at ?? null });
 });
 
 app.get('/api/media/file/:id/access', async (c) => {
@@ -652,52 +660,34 @@ app.post('/webhooks/public-rebuild/smandapbun', async (c) => {
     return c.json({ error: 'Unauthorized webhook request' }, 401)
   }
 
-  const githubToken = c.env.GITHUB_REBUILD_TOKEN?.trim()
   const githubOwner = c.env.GITHUB_REBUILD_OWNER?.trim()
   const githubRepo = c.env.GITHUB_REBUILD_REPO?.trim()
   const eventType = c.env.GITHUB_REBUILD_EVENT_TYPE?.trim() || 'smandapbun-content-changed'
 
-  if (!githubToken || !githubOwner || !githubRepo) {
+  if (!githubOwner || !githubRepo) {
     return c.json({ error: 'GitHub rebuild integration is not configured' }, 500)
   }
 
-  const payload = await getJsonBody(c.req.raw)
-  const dispatchResponse = await fetch(`https://api.github.com/repos/${githubOwner}/${githubRepo}/dispatches`, {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/vnd.github+json',
-      'Authorization': `Bearer ${githubToken}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'awcms-edge-public-rebuild',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-    body: JSON.stringify({
-      event_type: eventType,
-      client_payload: {
-        source: 'supabase-trigger',
-        tenant_slug: 'smandapbun',
-        tenant_id: payload?.tenant_id || null,
-        table: payload?.table || null,
-        operation: payload?.operation || null,
-        changed_at: payload?.changed_at || new Date().toISOString(),
-      },
-    }),
+  const payload = await getJsonBody(c.req.raw) as any
+  const traceId = c.req.header('x-trace-id') || crypto.randomUUID()
+
+  const msg = buildSiteRebuildMessage({
+    // smandapbun has no authenticated tenant — use tenant_id from payload or a sentinel
+    tenant_id: payload?.tenant_id || 'smandapbun',
+    trace_id: traceId,
+    backend: 'github_dispatch',
+    github_owner: githubOwner,
+    github_repo: githubRepo,
+    github_event_type: eventType,
+    source: 'supabase-trigger',
+    tenant_slug: 'smandapbun',
+    table: payload?.table || null,
+    operation: payload?.operation || null,
   })
 
-  if (!dispatchResponse.ok) {
-    const responseText = await dispatchResponse.text()
-    return c.json({
-      error: 'Failed to dispatch GitHub deployment workflow',
-      details: responseText,
-      status: dispatchResponse.status,
-    }, 502)
-  }
+  await c.env.NOTIFICATIONS_QUEUE.send(msg)
 
-  return c.json({
-    ok: true,
-    eventType,
-    repository: `${githubOwner}/${githubRepo}`,
-  })
+  return c.json({ ok: true, job_id: msg.job_id, queued: true }, 202)
 })
 
 app.post('/api/public/rebuild', async (c) => {
@@ -728,7 +718,9 @@ app.post('/api/public/rebuild', async (c) => {
     return c.json({ error: 'Insufficient permissions to trigger a public rebuild' }, 403)
   }
 
-  const body = await getJsonBody(c.req.raw)
+  const body = await getJsonBody(c.req.raw) as any
+
+  // Resolve hook URL at enqueue time — consumer has no Supabase access
   const { data: setting, error: settingError } = await adminSupabase
     .from('settings')
     .select('value')
@@ -746,28 +738,22 @@ app.post('/api/public/rebuild', async (c) => {
     return c.json({ error: 'Public rebuild webhook is not configured for this tenant' }, 404)
   }
 
-  const response = await fetch(hookUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'awcms-edge-public-rebuild',
-    },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      source: 'admin-panel',
-      resource: body?.resource || null,
-      action: body?.action || 'update',
-      actor_id: user.id,
-      triggered_at: new Date().toISOString(),
-    }),
+  const traceId = c.req.header('x-trace-id') || crypto.randomUUID()
+
+  const msg = buildSiteRebuildMessage({
+    tenant_id: tenantId,
+    trace_id: traceId,
+    backend: 'webhook',
+    hook_url: hookUrl,
+    source: 'admin-panel',
+    resource: body?.resource || null,
+    action: body?.action || 'update',
+    actor_id: user.id,
   })
 
-  if (!response.ok) {
-    const details = await response.text()
-    return c.json({ error: 'Failed to trigger deploy hook', details, status: response.status }, 502)
-  }
+  await c.env.NOTIFICATIONS_QUEUE.send(msg)
 
-  return c.json({ ok: true, tenantId, hookUrlConfigured: true })
+  return c.json({ ok: true, job_id: msg.job_id, queued: true, tenantId }, 202)
 })
 
 // Sitemap generation
@@ -843,24 +829,33 @@ const handleMailketing = async (c: any) => {
   const body = await c.req.json();
   const { action } = body;
 
+  // For "send" action: enqueue asynchronously and return 202
+  if (action === 'send') {
+    const traceId = c.req.header('x-trace-id') || crypto.randomUUID()
+    const tenantId = c.req.header('x-tenant-id') || 'platform'
+
+    const msg = buildEmailSendMessage({
+      tenant_id: tenantId,
+      trace_id: traceId,
+      from_name: body.from_name || 'AWCMS',
+      from_email: body.from_email || 'noreply@awcms.com',
+      recipient: body.recipient || '',
+      subject: body.subject || '',
+      content: body.content || '',
+      attach1: body.attach1,
+      attach2: body.attach2,
+      attach3: body.attach3,
+    })
+
+    await (c.env as Bindings).NOTIFICATIONS_QUEUE.send(msg)
+    return c.json({ ok: true, job_id: msg.job_id, queued: true }, 202)
+  }
+
+  // All other actions (subscribe, credits, lists) remain synchronous
   let endpoint = '';
   let params: Record<string, string | number> = {};
 
   switch (action) {
-    case 'send':
-      endpoint = '/send';
-      params = {
-        api_token: apiToken,
-        from_name: body.from_name || 'AWCMS',
-        from_email: body.from_email || 'noreply@awcms.com',
-        recipient: body.recipient || '',
-        subject: body.subject || '',
-        content: body.content || '',
-      };
-      if (body.attach1) params.attach1 = body.attach1;
-      if (body.attach2) params.attach2 = body.attach2;
-      if (body.attach3) params.attach3 = body.attach3;
-      break;
     case 'subscribe':
       endpoint = '/addsubtolist';
       params = {
@@ -1784,4 +1779,129 @@ app.get('/functions/v1/serve-sitemap', (c) => {
   return c.redirect(url.toString(), 301);
 });
 
-export default app
+// ---------------------------------------------------------------------------
+// Queue Dead-Letter Replay — POST /api/admin/queue/replay
+// Superadmin-only. Re-enqueues a dead-letter row onto its originating live
+// queue and marks the row as replayed.
+// ---------------------------------------------------------------------------
+
+app.post('/api/admin/queue/replay', async (c) => {
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  let userContext: Awaited<ReturnType<typeof getUserContext>>
+  try {
+    userContext = await getUserContext(c.env, user.id)
+  } catch {
+    return c.json({ error: 'Unable to resolve user context' }, 403)
+  }
+
+  if (!userContext.isPlatformAdmin && !userContext.isFullAccess) {
+    return c.json({ error: 'Forbidden: superadmin required' }, 403)
+  }
+
+  const body = await getJsonBody(c.req.raw)
+  const id = (body as any)?.id
+  if (!id || typeof id !== 'string') {
+    return c.json({ error: 'Missing required field: id' }, 400)
+  }
+
+  const adminSupabase = getAdminSupabase(c.env)
+
+  const { data: row, error: fetchError } = await adminSupabase
+    .from('queue_dead_letters')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (fetchError) {
+    return c.json({ error: fetchError.message }, 400)
+  }
+  if (!row) {
+    return c.json({ error: 'Dead-letter record not found' }, 404)
+  }
+  if (row.replayed_at !== null) {
+    return c.json({ error: 'Message has already been replayed', replayed_at: row.replayed_at }, 409)
+  }
+
+  // Determine the live target queue from the DLQ queue name
+  let targetQueue: Queue<AnyQueueMessage> | null = null
+  if (row.queue_name === 'awcms-media-events-dlq') {
+    targetQueue = (c.env as any).MEDIA_EVENTS_QUEUE
+  } else if (row.queue_name === 'awcms-notifications-dlq') {
+    targetQueue = (c.env as any).NOTIFICATIONS_QUEUE
+  }
+
+  if (!targetQueue) {
+    return c.json({ error: `Unknown or unroutable queue: ${row.queue_name}` }, 400)
+  }
+
+  const replayed_job_id = crypto.randomUUID()
+
+  // Re-enqueue the original payload onto the live queue
+  await targetQueue.send(row.payload as AnyQueueMessage)
+
+  // Mark the dead-letter row as replayed
+  const { error: updateError } = await adminSupabase
+    .from('queue_dead_letters')
+    .update({
+      replayed_at: new Date().toISOString(),
+      replayed_by: userContext.id,
+      replayed_job_id,
+    })
+    .eq('id', id)
+
+  if (updateError) {
+    // Enqueue succeeded — log the update failure but still return success
+    console.error('[queue/replay] Failed to mark dead-letter row as replayed:', updateError.message)
+  }
+
+  logReplay(
+    {
+      queue: row.queue_name,
+      event_type: row.event_type,
+      job_id: row.job_id,
+      tenant_id: row.tenant_id ?? '',
+    },
+    { extra: { replayed_job_id, replayed_by: userContext.id, dead_letter_id: id } },
+  )
+
+  return c.json({ ok: true, replayed_job_id })
+})
+
+export default {
+  /**
+   * HTTP request handler — all Hono routes.
+   */
+  fetch: app.fetch,
+
+  /**
+   * Cloudflare Queue consumer — routes incoming message batches to the
+   * appropriate consumer by queue name.
+   *
+   * Registered queues (wrangler.jsonc):
+   *   - awcms-media-events         → mediaQueueHandler
+   *   - awcms-notifications        → notificationsQueueHandler
+   *   - awcms-media-events-dlq     → dlqQueueHandler (DLQ sink → queue_dead_letters)
+   *   - awcms-notifications-dlq    → dlqQueueHandler (DLQ sink → queue_dead_letters)
+   */
+  async queue(batch: MessageBatch<AnyQueueMessage>, env: Bindings): Promise<void> {
+    try {
+      if (batch.queue === 'awcms-media-events') {
+        await mediaQueueHandler(batch, env)
+      } else if (batch.queue === 'awcms-notifications') {
+        await notificationsQueueHandler(batch, env)
+      } else if (batch.queue === 'awcms-media-events-dlq') {
+        await dlqQueueHandler(batch, env, 'awcms-media-events-dlq')
+      } else if (batch.queue === 'awcms-notifications-dlq') {
+        await dlqQueueHandler(batch, env, 'awcms-notifications-dlq')
+      } else {
+        console.warn(`[queue] unknown queue: ${batch.queue} — ${batch.messages.length} message(s) dropped`)
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      console.error(`[queue] unhandled dispatcher error on queue "${batch.queue}": ${errMsg}`)
+      batch.retryAll()
+    }
+  },
+}

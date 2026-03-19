@@ -10,6 +10,7 @@ Define the hard runtime boundaries for AWCMS across storage, edge logic, admin s
 
 - Cloudflare Workers in `awcms-edge/` are the only maintained function runtime.
 - Cloudflare R2 is the only maintained object storage runtime.
+- Cloudflare Queues (producer + consumer bound to `awcms-edge/`) are the maintained async offload layer for background processing. See [queue-topology.md](./queue-topology.md).
 - Supabase is limited to Auth, Postgres, RLS, ABAC, and SQL/database functions.
 - Supabase Storage is disabled in maintained clients.
 - Supabase-hosted Edge Functions are not part of the supported runtime.
@@ -21,6 +22,7 @@ Define the hard runtime boundaries for AWCMS across storage, edge logic, admin s
 | Public/server HTTP workflows | Cloudflare Workers | Supabase Edge Functions |
 | Privileged orchestration | Cloudflare Workers + `SUPABASE_SECRET_KEY` | Browser clients |
 | Tenant/public compatibility routes | Cloudflare Worker compatibility routes (`/functions/v1/*`) | Supabase-hosted function URLs |
+| Async background processing | Cloudflare Queues (producer + consumer in `awcms-edge/`) | Custom Node.js servers, Supabase Edge Functions |
 
 ## Storage Boundary
 
@@ -65,5 +67,6 @@ cd awcms-edge && npm run test:compat-routes
 
 - `docs/dev/edge-functions.md`
 - `docs/dev/api-usage.md`
+- `docs/architecture/queue-topology.md`
 - `docs/architecture/deployment-cells/schema.md`
 - `docs/modules/ROLE_HIERARCHY.md`
