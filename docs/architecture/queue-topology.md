@@ -33,7 +33,7 @@ Cloudflare Queues run entirely within the Cloudflare Workers runtime (`awcms-edg
 
 | Queue Name | Binding Constant | Purpose | Phase |
 |---|---|---|---|
-| `awcms-audit-export` | `AUDIT_EXPORT_QUEUE` | Batch audit log archival to R2 | Phase 5 |
+| `awcms-audit-export` | `AUDIT_EXPORT_QUEUE` | Batch audit log archival to R2 | Phase 6+ |
 
 ## Message Contract
 

@@ -1,10 +1,10 @@
-# Documentation Audit Tracker - 2026-03-16 Re-Baseline
+# Documentation Audit Tracker - 2026-03-19 Re-Baseline
 
 > Related Plan: `docs/dev/documentation-audit-plan.md`
 >
-> Status: Completed for the 2026-03-16 remediation scope; continue with routine maintenance for future drift.
+> Status: Active — Phase 5 queue integration drift remediated; routine maintenance continues.
 >
-> Last Updated: 2026-03-16
+> Last Updated: 2026-03-19
 
 ## Current Phase Status
 
@@ -20,10 +20,10 @@
 
 | Surface | Current State | Evidence |
 | --- | --- | --- |
-| Tracked Markdown files | `153` | `git ls-files '*.md'` |
-| Tracked docs files | `81` | `git ls-files 'docs/**/*.md'` |
-| Root migrations | `144` | `supabase/migrations/*.sql` |
-| Mirrored migrations | `144` | `awcms/supabase/migrations/*.sql` |
+| Tracked Markdown files | `144` | `git ls-files '*.md'` (2026-03-19 count; decreased from 153 after doc cleanup) |
+| Tracked docs files | `82` | `git ls-files 'docs/**/*.md'` |
+| Root migrations | `145` | `supabase/migrations/*.sql` |
+| Mirrored migrations | `145` | `awcms/supabase/migrations/*.sql` |
 | Package manifests | `10` | `git ls-files '**/package.json'` |
 | GitHub workflows | `4` | `.github/workflows/*` |
 | Docs validation | Pass | `cd awcms && npm run docs:check` |
@@ -45,6 +45,9 @@
 | DOCSYNC-110 | Medium | `docs/dev/ci-cd.md` workflow inventory needed re-baselining after the latest CI cleanup | Resolved | Reconciled `docs/dev/ci-cd.md` and audit docs to the current 4-workflow inventory | Keep `ci-cd.md` workflow table in sync as workflows change |
 | DOCSYNC-111 | Low | `docs/dev/versioning.md` section 5 still showed the obsolete `contains(github.event.commits[0].modified, ...)` CI condition rather than the `dorny/paths-filter` pattern currently used | Resolved | Updated section 5 excerpt to reflect the current `paths-filter` pattern | No further action required unless CI architecture changes |
 | DOCSYNC-112 | Low | `scripts/detect_legacy_storage.sh` no longer matched the supported runtime model after Worker compatibility proxies and client storage guards were added; the script reported false positives for supported compatibility calls | Resolved | Removed the obsolete script and retained runtime validation in `scripts/ci-validate-runtime.sh`, storage guard tests, and Worker smoke tests | Keep future cleanup scripts aligned with the canonical runtime model |
+| DOCSYNC-113 | High | Migration mirror parity broken by Phase 5: `20260319120000_create_queue_dead_letters.sql` existed in `supabase/migrations/` but was not copied to `awcms/supabase/migrations/` | Resolved 2026-03-19 | Copied missing file; `verify_supabase_migration_consistency.sh` now reports `145` files mirrored at parity | Keep adding new migrations to both roots and rerun parity check |
+| DOCSYNC-114 | Medium | `docs/architecture/queue-topology.md` "Planned Queues" table listed `awcms-audit-export` as "Phase 5", but Phase 5 (DLQ, observability, replay) was already fully delivered | Resolved 2026-03-19 | Updated label from "Phase 5" to "Phase 6+" | Re-check planned queue labels whenever a phase ships |
+| DOCSYNC-115 | Medium | `docs/dev/edge-functions.md` line 26 referenced only `awcms-media-events`; `awcms-notifications` and both DLQs were omitted. Runtime Coverage and Validation Checklist also missing notifications consumer, DLQ consumers, and admin replay route | Resolved 2026-03-19 | Updated queue list, Runtime Coverage, and Validation Checklist to include all four queues plus DLQ consumer and replay route | Keep edge-functions.md queue references in sync after future queue additions |
 
 ## Commands Run During This Cycle
 
@@ -71,8 +74,20 @@
 | `ls supabase/migrations/*.sql \| wc -l` | `144` | Updated after the latest runtime and tenant-scope migrations |
 | `cat mcp.json` | `supabase`, `context7`, `github`, `cloudflare`, `paper` | Corrected from stale list that omitted `paper` and misrepresented `cloudflare` |
 
+## Commands Run During This Cycle (2026-03-19)
+
+| Command | Result | Notes |
+| --- | --- | --- |
+| `scripts/verify_supabase_migration_consistency.sh` | Passed (145/145) | After copying `20260319120000_create_queue_dead_letters.sql` to mirror |
+| `cd awcms && npm run docs:check` | Passed | No broken doc targets introduced by Phase 5 changes |
+| `cd awcms-edge && npx tsc --noEmit` | 0 errors | TypeScript clean after Phase 5 queue additions |
+| `git ls-files '*.md' \| wc -l` | `144` | Down from 153 (2026-03-16) — reflects doc cleanup during Phase 5 |
+| `git ls-files 'docs/**/*.md' \| wc -l` | `82` | Up from 81 — `queue-topology.md` added in Phase 3/4 |
+| `ls supabase/migrations/*.sql \| wc -l` | `145` | Added `20260319120000_create_queue_dead_letters.sql` |
+
 ## Remaining Closure Criteria
 
 - Add `CLOUDFLARE_ACCOUNT_ID` to GitHub repository secrets or variables before the next `deploy-smandapbun` run.
 - Rerun docs validation and migration parity after future authority-doc, migration, or Worker-runtime changes.
 - Keep `.dev.vars` local-only and continue using `wrangler secret put` for deployed Worker secrets.
+- When the next queue phase ships, update `queue-topology.md` Planned Queues table and re-run DOCSYNC baseline counts.

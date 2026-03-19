@@ -23,7 +23,7 @@ Document the maintained edge runtime for AWCMS: Cloudflare Workers in `awcms-edg
 - Client applications may keep using Supabase Auth sessions, but protected server-side workflows should execute through Worker routes.
 - Supabase remains the authority for Auth, PostgreSQL, RLS, and ABAC.
 - Cloudflare R2 is the maintained object storage layer for file/media delivery.
-- Cloudflare Queues (`awcms-media-events` and planned queues) are used to offload long-tail background work from the synchronous HTTP path. Queue consumers re-read authoritative state from Supabase before writing. See [docs/architecture/queue-topology.md](../architecture/queue-topology.md).
+- Cloudflare Queues (`awcms-media-events`, `awcms-notifications`, `awcms-media-events-dlq`, `awcms-notifications-dlq`) are used to offload long-tail background work from the synchronous HTTP path. Queue consumers re-read authoritative state from Supabase before writing. See [docs/architecture/queue-topology.md](../architecture/queue-topology.md).
 - Supabase Edge Functions are not part of the maintained runtime or repo layout.
 
 ## Runtime Coverage
@@ -31,6 +31,9 @@ Document the maintained edge runtime for AWCMS: Cloudflare Workers in `awcms-edg
 The Worker currently provides maintained routes for:
 
 - media upload, finalize (async via `awcms-media-events` queue), access, and public delivery
+- site rebuild and email fan-out (async via `awcms-notifications` queue)
+- dead letter queue processing (via `awcms-media-events-dlq` and `awcms-notifications-dlq` consumers)
+- admin dead-letter replay (`POST /api/admin/queue/replay`)
 - `verify-turnstile`
 - `get-client-ip`
 - `manage-users`
@@ -75,6 +78,9 @@ npm run deploy
 - Media flows use Cloudflare R2 and `media_objects` / `media_upload_sessions` metadata tables.
 - Finalize route returns `202 Accepted` and a `job_id`; finalization completes asynchronously via the `awcms-media-events` queue consumer.
 - Queue consumer does not trust message payload as authoritative; it re-reads from Supabase before writing.
+- Notifications consumer handles `site.rebuild.requested` and `email.send.requested` events from `awcms-notifications` queue.
+- Failed messages exhaust retries and route to the DLQ (`awcms-media-events-dlq` / `awcms-notifications-dlq`); the DLQ consumer persists entries to `queue_dead_letters` in Supabase.
+- Platform admins can replay a dead-letter entry via `POST /api/admin/queue/replay`.
 
 ## Troubleshooting
 

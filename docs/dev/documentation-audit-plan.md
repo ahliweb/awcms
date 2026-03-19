@@ -2,9 +2,9 @@
 
 > Owner: Documentation Steward (AI + Maintainers)
 >
-> Audit Cycle: 2026-03-16 full-repository conflict-resolution and plan update
+> Audit Cycle: 2026-03-19 Phase 5 queue integration drift remediation
 >
-> Last Updated: 2026-03-16
+> Last Updated: 2026-03-19
 >
 > Primary Authority Chain: `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md` -> implementation/package docs
 
@@ -24,14 +24,14 @@ This cycle explicitly covers:
 - dead links, missing canonical targets, and stale navigation
 - package README drift and workspace-level setup inaccuracies
 
-## Current Baseline (Verified 2026-03-16)
+## Current Baseline (Verified 2026-03-19)
 
 | Surface | Verified State | Evidence Source |
 | --- | --- | --- |
-| Tracked Markdown files | `153` | `git ls-files '*.md'` |
-| Tracked docs files | `81` | `git ls-files 'docs/**/*.md'` |
-| Root Supabase migrations | `144` | `supabase/migrations/*.sql` |
-| Mirrored admin/CI migrations | `144` | `awcms/supabase/migrations/*.sql` |
+| Tracked Markdown files | `144` | `git ls-files '*.md'` (decreased from 153 after doc cleanup during Phase 5) |
+| Tracked docs files | `82` | `git ls-files 'docs/**/*.md'` |
+| Root Supabase migrations | `145` | `supabase/migrations/*.sql` |
+| Mirrored admin/CI migrations | `145` | `awcms/supabase/migrations/*.sql` |
 | Package manifests | `10` | `git ls-files '**/package.json'` |
 | GitHub workflows | `4` | `.github/workflows/*` |
 | MCP servers in `mcp.json` | `cloudflare`, `context7`, `github`, `supabase`, `paper` | `mcp.json` |
@@ -54,6 +54,9 @@ This cycle explicitly covers:
 | PLAN-210 | Medium | `docs/dev/ci-cd.md` needed to reflect the current workflow inventory accurately after the latest CI cleanup | Reconciled the workflow inventory to the current 4-workflow baseline | Completed |
 | PLAN-211 | Low | `docs/dev/versioning.md` section 5 CI excerpt still used the obsolete `contains(github.event.commits[0].modified, ...)` condition instead of the current `dorny/paths-filter` pattern | Updated excerpt to reflect current `paths-filter` architecture | Completed |
 | PLAN-212 | Low | `scripts/detect_legacy_storage.sh` became obsolete once Worker compatibility proxies and client storage guards became the canonical runtime checks; its legacy-pattern checks now produced false positives | Removed the obsolete script and retained validation through runtime tests and Worker smoke checks | Completed |
+| PLAN-213 | High | Migration mirror parity broken by Phase 5: `20260319120000_create_queue_dead_letters.sql` was not copied to `awcms/supabase/migrations/` | Copied missing migration; parity restored at 145/145 | Completed 2026-03-19 |
+| PLAN-214 | Medium | `docs/architecture/queue-topology.md` "Planned Queues" table mislabeled delivered Phase 5 work: listed `awcms-audit-export` as "Phase 5" when Phase 5 (DLQ + observability + replay) was already shipped | Relabeled to "Phase 6+" | Completed 2026-03-19 |
+| PLAN-215 | Medium | `docs/dev/edge-functions.md` omitted `awcms-notifications` queue, both DLQ queues, the DLQ consumer, and the admin replay route from the queue reference, Runtime Coverage list, and Validation Checklist | Updated all three sections to reflect current four-queue + DLQ consumer + replay route architecture | Completed 2026-03-19 |
 
 ## Context7 Validation Matrix
 
