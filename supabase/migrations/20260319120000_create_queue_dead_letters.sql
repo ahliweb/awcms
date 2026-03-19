@@ -56,19 +56,12 @@ create index if not exists queue_dead_letters_job_id_idx
 -- the admin client.  Direct user-facing read is blocked for now.
 alter table public.queue_dead_letters enable row level security;
 
--- Platform admin select policy (uses auth_is_admin() or the is_platform_admin flag)
+-- Platform admin select policy (delegates to auth_is_platform_admin() which
+-- joins public.users → public.roles and checks is_platform_admin / is_full_access)
 create policy queue_dead_letters_platform_admin_select
   on public.queue_dead_letters
   for select
-  using (
-    exists (
-      select 1
-      from public.users u
-      where u.id = auth.uid()
-        and u.deleted_at is null
-        and (u.is_platform_admin = true or u.is_full_access = true)
-    )
-  );
+  using (public.auth_is_platform_admin());
 
 -- No insert/update/delete via user JWT — admin client only.
 -- (Service-role key bypasses RLS entirely.)
