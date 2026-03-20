@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import UserApprovalManager from '@/components/dashboard/UserApprovalManager';
 import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/flowbite-admin';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -29,6 +29,7 @@ function UsersManager() {
   const { hasPermission, isPlatformAdmin } = usePermissions();
   const { currentTenant } = useTenant();
   const navigate = useNavigate();
+  const location = useLocation();
   const segments = useSplatSegments();
   const tabValues = ['users', 'approvals'];
   const hasTabSegment = tabValues.includes(segments[0]);
@@ -101,15 +102,18 @@ function UsersManager() {
   const fetchUsers = useCallback(async () => {
     if (!canView) return;
     setLoading(true);
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 12000);
     try {
-      let q = udm.from('users')
+      let q = supabase.from('users')
         .select(`
           *, 
           roles:roles!users_role_id_fkey(name, is_platform_admin, is_full_access), 
           tenant:tenants(name),
           profile:user_profiles!user_profiles_user_id_fkey(job_title, department)
         `, { count: 'exact' })
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .abortSignal(controller.signal);
 
       // Strict Multi-Tenancy
       if (!isPlatformAdmin && currentTenant?.id) {
@@ -131,9 +135,14 @@ function UsersManager() {
       setUsers(data || []);
       setTotalItems(count || 0);
     } catch (err) {
-      console.error(err);
-      toast({ variant: 'destructive', title: t('common.error'), description: t('common.no_data') }); // Fallback error msg
+      if (err.name === 'AbortError') {
+        toast({ variant: 'destructive', title: t('common.error'), description: 'Request timed out. Please refresh and try again.' });
+      } else {
+        console.error(err);
+        toast({ variant: 'destructive', title: t('common.error'), description: t('common.no_data') });
+      }
     } finally {
+      clearTimeout(fetchTimeout);
       setLoading(false);
     }
   }, [canView, isPlatformAdmin, currentTenant, debouncedQuery, currentPage, itemsPerPage, toast, t]);
@@ -162,6 +171,15 @@ function UsersManager() {
       ) : null}
     </div>
   );
+
+  // Re-fetch when navigating back from editor (state.refreshed set by UserEditor on save)
+  useEffect(() => {
+    if (location.state?.refreshed && activeTab === 'users') {
+      fetchUsers();
+      // Replace state to avoid re-triggering on back/forward navigation
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [location.state?.refreshed, activeTab, fetchUsers]);
 
   useEffect(() => {
     if (activeTab === 'users') {

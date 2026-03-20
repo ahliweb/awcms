@@ -56,7 +56,7 @@ const AdminPageLayout = ({
     return (
         <div
             className={cn(
-                "relative space-y-6 overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm backdrop-blur-sm sm:p-8",
+                "relative space-y-8 overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm backdrop-blur-sm sm:p-8",
                 className
             )}
         >

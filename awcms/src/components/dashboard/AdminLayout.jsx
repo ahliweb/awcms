@@ -22,8 +22,8 @@ const AdminLayout = () => {
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <main className="relative pb-6 pt-[var(--header-h)] md:ml-64">
-        <div className="mx-auto flex min-h-[calc(100vh-var(--header-h))] w-full max-w-[1720px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="relative pb-8 pt-[var(--header-h)] md:ml-64">
+        <div className="mx-auto flex min-h-[calc(100vh-var(--header-h))] w-full max-w-[1720px] flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex-1">
             <Outlet />
           </div>

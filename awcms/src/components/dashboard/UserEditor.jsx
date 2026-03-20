@@ -77,7 +77,7 @@ function UserEditor({ user, onClose, onSave }) {
       onClose();
       return;
     }
-    navigate('/cmspanel/users');
+    navigate('/cmspanel/users', { state: { refreshed: Date.now() } });
   };
 
   useEffect(() => {
@@ -89,17 +89,25 @@ function UserEditor({ user, onClose, onSave }) {
       if (!routeUserId) return;
       try {
         setFetching(true);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
         const { data, error } = await supabase
           .from('users')
           .select('*')
           .eq('id', routeUserId)
+          .abortSignal(controller.signal)
           .single();
+        clearTimeout(timeout);
 
         if (error) throw error;
         setResolvedUser(data || null);
       } catch (error) {
-        console.error('Error loading user:', error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to load user details.' });
+        if (error.name === 'AbortError') {
+          toast({ variant: 'destructive', title: 'Timeout', description: 'Loading user details timed out. Please try again.' });
+        } else {
+          console.error('Error loading user:', error);
+          toast({ variant: 'destructive', title: 'Error', description: 'Failed to load user details.' });
+        }
         navigate('/cmspanel/users');
       } finally {
         setFetching(false);
@@ -392,7 +400,7 @@ function UserEditor({ user, onClose, onSave }) {
       if (onSave) {
         onSave();
       } else {
-        navigate('/cmspanel/users');
+        navigate('/cmspanel/users', { state: { refreshed: Date.now() } });
       }
     } catch (error) {
       console.error('Error saving user:', error);
