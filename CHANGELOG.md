@@ -7,9 +7,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Added
 
-- Module Management: Introduced `useModules` hook (`src/hooks/useModules.js`) providing per-tenant module data, `toggleModuleStatus` (active ↔ inactive), `syncModules` (RPC call to `sync_modules_from_sidebar`), and `isModuleEnabled` (slug-based gating, fail-open). Scoped reads for regular users; platform admins see all tenants.
-- Module Management: Rewrote `ModulesManager.jsx` to use `AdminPageLayout` with `requiredPermission` array, the new `useModules` hook, shadcn/ui `Switch` per-row toggle, semantic-token-only styling, and a "Sync from Sidebar" action visible to platform admins with `platform.module.manage`.
-- Sidebar Gating: Extended `useAdminMenu.js` to query inactive module slugs from the `modules` table and filter matching sidebar items on each menu load. Platform-scoped items are never filtered; the filter is fail-open (unknown slug → item shown). `fetchMenu` dependency array updated to re-run when `currentTenant?.id` changes.
+- _No entries yet._
 
 ### Changed
 
@@ -18,6 +16,23 @@ All notable changes to the **AWCMS** project will be documented in this file.
 ### Fixed
 
 - _No entries yet._
+
+## [4.4.0] - 2026-03-20
+
+Applies to: `awcms@4.4.0`
+
+### Added
+
+- Module Management: Introduced `useModules` hook (`src/hooks/useModules.js`) providing per-tenant module data, `toggleModuleStatus`
+  (active ↔ inactive), `syncModules` (RPC call to `sync_modules_from_sidebar`), and `isModuleEnabled` (slug-based gating, fail-open).
+  Scoped reads for regular users; platform admins see all tenants.
+- Module Management: Rewrote `ModulesManager.jsx` to use `AdminPageLayout` with `requiredPermission` array, the new `useModules` hook, shadcn/ui `Switch` per-row toggle, semantic-token-only styling, and a "Sync from Sidebar" action visible to platform admins with `platform.module.manage`.
+- Sidebar Gating: Extended `useAdminMenu.js` to query inactive module slugs from the `modules` table and filter matching sidebar items on
+  each menu load. Platform-scoped items are never filtered; the filter is fail-open (unknown slug → item shown). `fetchMenu` dependency
+  array updated to re-run when `currentTenant?.id` changes.
+- Admin Panel UI: Improved header layout with fixed `--header-h` CSS custom property for sidebar/main alignment consistency;
+  redesigned tenant switcher for platform admins into a centered pill with "Viewing Tenant" label, vertical divider, and wider
+  select dropdown (`max-w-[480px]`).
 
 ## [4.3.1] - 2026-03-16
 
@@ -55,7 +70,8 @@ Applies to: `awcms@4.1.0`, `@onwidget/astrowind@4.1.0`, `smanda-pangkalan-bun@4.
 - Docs: Restored `cd awcms && npm run docs:check` by removing the dead deployment-cell specification link in `docs/architecture/deployment-cells/overview.md`.
 - Public Portal: Restored `cd awcms-public/primary && npm run check` after the Astro upgrade by replacing the removed `@astrojs/markdown-remark` type import with unified/mdast/hast-compatible plugin typing in `awcms-public/primary/src/utils/frontmatter.ts`.
 - Tooling Security: Eliminated the remaining dev-time audit findings by overriding `flatted` in the admin and MCP workspaces and `yauzl` in the public workspaces, while keeping Astro/public build validation green.
-- Legacy Template: Restored `awcms/src/templates/flowbiteadminastro` static builds by fixing the `SideBar.astro` client script guard and routing SSR/static data loading through local service operations instead of a localhost-only API fetch.
+- Legacy Template: Restored `awcms/src/templates/flowbiteadminastro` static builds by fixing the `SideBar.astro` client script guard
+  and routing SSR/static data loading through local service operations instead of a localhost-only API fetch.
 
 ## [4.0.0] "Cellular" - 2026-03-13
 
@@ -949,7 +965,7 @@ Applies to: `awcms@4.1.0`, `@onwidget/astrowind@4.1.0`, `smanda-pangkalan-bun@4.
 - Visual Page Builder Error: Resolved `no such table: _sync_queue` error by ensuring `SyncEngine` tables are auto-initialized before any mutations are queued.
 - UserProfile: Improved error handling to catch and display user-friendly messages for `504 Gateway Timeout` and network failures during password updates.
 - TenantsManager: Fixed form overflow issues on smaller screens by making the modal content scrollable.
-- TenantsManager: Added "Channel Domains" configuration inputs to the *Create Tenant* form (previously only available in Edit).
+- TenantsManager: Added "Channel Domains" configuration inputs to the _Create Tenant_ form (previously only available in Edit).
 
 ## [2.9.2] "Clarity" - 2026-01-09
 
