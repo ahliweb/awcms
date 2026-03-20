@@ -2,7 +2,7 @@ import { format } from 'date-fns';
 import { Activity, ChevronLeft, ChevronRight, Clock, RefreshCw, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TabsContent } from '@/components/ui/tabs';
+import { TabsContent } from '@/templates/flowbite-admin';
 
 function SSOActivityTab({
   loading,

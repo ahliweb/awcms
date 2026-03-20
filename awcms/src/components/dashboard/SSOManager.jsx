@@ -2,9 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Shield } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslation } from 'react-i18next';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader, PageTabs } from '@/templates/flowbite-admin';
 import SSOHeaderActions from '@/components/dashboard/sso/SSOHeaderActions';
 import SSOOverviewTab from '@/components/dashboard/sso/SSOOverviewTab';
 import SSOProvidersTab from '@/components/dashboard/sso/SSOProvidersTab';
@@ -18,6 +17,7 @@ function SSOManager() {
   const { t } = useTranslation();
 
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
   const [currentPage, setCurrentPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [securityInfo, setSecurityInfo] = useState({
@@ -92,7 +92,7 @@ function SSOManager() {
       toast({
         variant: 'destructive',
         title: t('common.error'),
-        description: 'Failed to load security data',
+        description: t('sso.errors.load_failed'),
       });
     } finally {
       setLoading(false);
@@ -109,7 +109,7 @@ function SSOManager() {
         title={t('sso.title')}
         description={t('sso.subtitle')}
         icon={Shield}
-        breadcrumbs={[{ label: 'SSO & Security', icon: Shield }]}
+        breadcrumbs={[{ label: t('sso.title'), icon: Shield }]}
         actions={(
           <SSOHeaderActions
             loading={loading}
@@ -122,12 +122,15 @@ function SSOManager() {
         )}
       />
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="mb-6 grid w-full grid-cols-3">
-          <TabsTrigger value="overview">Security Overview</TabsTrigger>
-          <TabsTrigger value="providers">Auth Providers</TabsTrigger>
-          <TabsTrigger value="activity">Login Activity</TabsTrigger>
-        </TabsList>
+      <PageTabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        tabs={[
+          { value: 'overview', label: t('sso.tabs.overview') },
+          { value: 'providers', label: t('sso.tabs.providers') },
+          { value: 'activity', label: t('sso.tabs.activity') },
+        ]}
+      >
 
         <SSOOverviewTab securityInfo={securityInfo} />
         <SSOProvidersTab securityInfo={securityInfo} />
@@ -148,7 +151,7 @@ function SSOManager() {
             fetchSecurityData(nextPage);
           }}
         />
-      </Tabs>
+      </PageTabs>
     </AdminPageLayout>
   );
 }

@@ -260,7 +260,7 @@ function UsersManager() {
     },
     {
       key: 'profile',
-      label: 'Job / Dept',
+      label: t('users.columns.job_dept'),
       className: 'min-w-[140px]',
       render: (_, item) => (
         <div className="space-y-0.5">

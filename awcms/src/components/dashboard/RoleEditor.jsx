@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { Shield, Save, X, Loader2, Lock, Info, CheckCircle2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useTenant } from '@/contexts/TenantContext';
 
 const RoleEditor = ({ role, onClose, onSave }) => {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { currentTenant } = useTenant();
   const navigate = useNavigate();
@@ -188,7 +190,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
 
     setSelectedPermissions(new Set(targetIds));
     setActiveTemplate(templateName);
-    toast({ title: "Template Applied", description: `Applied permissions for ${templateName}` });
+      toast({ title: t('roles.editor.toast_template_applied'), description: t('roles.editor.toast_template_desc', { template: templateName }) });
   };
 
   // Bulk action: Select All
@@ -197,7 +199,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     const allIds = new Set(permissions.map(p => p.id));
     setSelectedPermissions(allIds);
     setActiveTemplate('');
-    toast({ title: "All Selected", description: `${permissions.length} permissions selected.` });
+    toast({ title: t('roles.select_all'), description: t('roles.editor.toast_all_selected', { count: permissions.length }) });
   };
 
   // Bulk action: Deselect All
@@ -205,7 +207,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     if (isFullAccessRole) return;
     setSelectedPermissions(new Set());
     setActiveTemplate('');
-    toast({ title: "All Cleared", description: "All permissions deselected." });
+    toast({ title: t('roles.deselect_all'), description: t('roles.editor.toast_all_cleared') });
   };
 
   // Sync Full Access: Persist all permissions for full-access roles to database
@@ -236,10 +238,10 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         if (error) throw error;
       }
 
-      toast({ title: "Full Access Synced", description: `${permissions.length} permissions activated for ${resolvedRole?.name || formData.name}.` });
+      toast({ title: t('roles.editor.toast_sync_success'), description: t('roles.editor.toast_sync_desc', { count: permissions.length, name: resolvedRole?.name || formData.name }) });
     } catch (err) {
       console.error('Sync error:', err);
-      toast({ variant: 'destructive', title: 'Sync Failed', description: err.message });
+      toast({ variant: 'destructive', title: t('common.error'), description: t('roles.editor.toast_sync_failed') });
     } finally {
       setSyncingFullAccess(false);
     }
@@ -262,7 +264,6 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     }
 
     setSaving(true);
-    console.log('Starting save for role:', resolvedRole?.name || formData.name);
 
     try {
       let currentRoleId = roleId;
@@ -293,8 +294,6 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         currentRoleId = data.id;
       }
 
-      console.log('Role ID secured:', currentRoleId);
-
       // 2. Update Permissions (Matrix)
       // Standard pattern: Soft-delete all current permissions, then re-insert active ones.
 
@@ -318,8 +317,6 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           deleted_at: null
         }));
 
-        console.log(`Saving ${newPerms.length} permissions...`);
-
         // Use upsert to handle potential race conditions or re-activation
         const { error: permInsertError } = await supabase
           .from('role_permissions')
@@ -331,7 +328,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         }
       }
 
-      toast({ title: 'Success', description: 'Role and permissions saved successfully.' });
+      toast({ title: t('common.success'), description: t('roles.editor.toast_save_success') });
       if (onSave) {
         onSave();
       } else {
@@ -340,7 +337,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
 
     } catch (err) {
       console.error('Save failed:', err);
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
+      toast({ variant: 'destructive', title: t('common.error'), description: err.message });
     } finally {
       setSaving(false);
     }
@@ -412,9 +409,9 @@ const RoleEditor = ({ role, onClose, onSave }) => {
                 className="bg-purple-600 hover:bg-purple-700 text-white mr-2 shadow-sm"
               >
                 {syncingFullAccess ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Syncing...</>
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('roles.editor.syncing')}</>
                 ) : (
-                  <><Zap className="w-4 h-4 mr-2" /> Sync Full Access</>
+                  <><Zap className="w-4 h-4 mr-2" /> {t('roles.editor.sync_btn')}</>
                 )}
               </Button>
             )}
@@ -537,16 +534,18 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           {/* Footer Actions */}
           <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex justify-between items-center shrink-0">
             <div className="text-xs text-slate-400 hidden sm:block">
-              Last updated: {new Date().toLocaleDateString()}
+              {resolvedRole?.updated_at
+                ? t('roles.editor.last_updated', { date: new Date(resolvedRole.updated_at).toLocaleDateString() })
+                : null}
             </div>
             <div className="flex gap-3 w-full sm:w-auto justify-end">
-              <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={handleClose}>{t('common.cancel')}</Button>
               {!isFullAccessRole && (
                 <Button type="submit" disabled={saving || loading} className="bg-indigo-600 hover:bg-indigo-700 text-white min-w-[120px]">
                   {saving ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('common.saving')}</>
                   ) : (
-                    <><Save className="w-4 h-4 mr-2" /> Save Configuration</>
+                    <><Save className="w-4 h-4 mr-2" /> {t('roles.editor.save_btn')}</>
                   )}
                 </Button>
               )}

@@ -23,6 +23,7 @@ export default function PolicyManager() {
     // Editor State
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingPolicy, setEditingPolicy] = useState(null);
+    const [policyToDelete, setPolicyToDelete] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
         description: '',
@@ -132,9 +133,10 @@ export default function PolicyManager() {
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm(t('policies.toasts.delete_confirm'))) return;
-
+    const handleDelete = async () => {
+        if (!policyToDelete) return;
+        const id = policyToDelete.id;
+        setPolicyToDelete(null);
         try {
             const { error } = await supabase
                 .from('policies')
@@ -162,29 +164,29 @@ export default function PolicyManager() {
                 )}
             />
 
-            <div className="bg-white rounded-md border shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium border-b">
+                        <thead className="border-b bg-muted/50 font-medium text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3">{t('policies.table.name')}</th>
                                 <th className="px-4 py-3">{t('policies.table.effect')}</th>
                                 <th className="px-4 py-3">{t('policies.table.actions')}</th>
                                 <th className="px-4 py-3">{t('policies.table.conditions')}</th>
-                                <th className="px-4 py-3 text-right">{t('policies.table.actions')}</th>
+                                <th className="px-4 py-3 text-right">{t('common.actions')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {loading ? (
-                                <tr><td colSpan="5" className="p-8 text-center text-slate-400">{t('policies.table.loading')}</td></tr>
+                                <tr><td colSpan="5" className="p-8 text-center text-muted-foreground">{t('policies.table.loading')}</td></tr>
                             ) : policies.length === 0 ? (
-                                <tr><td colSpan="5" className="p-8 text-center text-slate-400">{t('policies.table.empty')}</td></tr>
+                                <tr><td colSpan="5" className="p-8 text-center text-muted-foreground">{t('policies.table.empty')}</td></tr>
                             ) : (
                                 policies.map(policy => (
-                                    <tr key={policy.id} className="hover:bg-slate-50/50">
+                                    <tr key={policy.id} className="hover:bg-accent/50">
                                         <td className="px-4 py-3 font-medium">
                                             {policy.name}
-                                            {policy.description && <p className="text-xs text-slate-400 font-normal">{policy.description}</p>}
+                                            {policy.description && <p className="text-xs text-muted-foreground font-normal">{policy.description}</p>}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${policy.definition?.effect === 'deny'
@@ -194,19 +196,19 @@ export default function PolicyManager() {
                                                 {policy.definition?.effect === 'deny' ? t('policies.effects.deny') : t('policies.effects.allow')}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                                        <td className="px-4 py-3 font-mono text-xs text-foreground">
                                             {policy.definition?.actions?.join(', ') || '*'}
                                         </td>
-                                        <td className="px-4 py-3 font-mono text-xs text-slate-500 max-w-xs truncate">
+                                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground max-w-xs truncate">
                                             {JSON.stringify(policy.definition?.conditions)}
                                         </td>
                                         <td className="px-4 py-3 text-right space-x-2">
                                             {canManage && (
                                                 <>
                                                     <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(policy)}>
-                                                        <Edit2 className="w-4 h-4 text-slate-500" />
+                                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
                                                     </Button>
-                                                    <Button variant="ghost" size="sm" onClick={() => handleDelete(policy.id)}>
+                                                    <Button variant="ghost" size="sm" onClick={() => setPolicyToDelete(policy)}>
                                                         <Trash2 className="w-4 h-4 text-red-500" />
                                                     </Button>
                                                 </>
@@ -219,6 +221,21 @@ export default function PolicyManager() {
                     </table>
                 </div>
             </div>
+
+            <Dialog open={!!policyToDelete} onOpenChange={(open) => { if (!open) setPolicyToDelete(null); }}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>{t('policies.dialog.delete_title')}</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground py-2">
+                        {t('policies.dialog.delete_confirm', { name: policyToDelete?.name })}
+                    </p>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPolicyToDelete(null)}>{t('policies.dialog.cancel')}</Button>
+                        <Button variant="destructive" onClick={handleDelete}>{t('common.delete')}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="max-w-md">

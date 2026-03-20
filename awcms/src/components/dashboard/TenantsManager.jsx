@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import ContentTable from '@/components/dashboard/ContentTable';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -16,6 +17,7 @@ import TenantEditorDialog from '@/components/dashboard/tenants/TenantEditorDialo
 import TenantDeleteDialog from '@/components/dashboard/tenants/TenantDeleteDialog';
 
 function TenantsManager() {
+    const { t } = useTranslation();
     const { toast } = useToast();
     const { isPlatformAdmin } = usePermissions();
 
@@ -86,7 +88,7 @@ function TenantsManager() {
             setTenants(data || []);
         } catch (err) {
             console.error(err);
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load tenants' });
+            toast({ variant: 'destructive', title: t('common.error'), description: t('tenants.errors.load_failed') });
         } finally {
             setLoading(false);
         }
@@ -190,7 +192,7 @@ function TenantsManager() {
             setResourceRules(rules);
         } catch (err) {
             console.error('Failed to load resource rules:', err);
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load resource sharing rules.' });
+            toast({ variant: 'destructive', title: t('common.error'), description: t('tenants.errors.load_rules_failed') });
         } finally {
             setRulesLoading(false);
         }
@@ -239,7 +241,7 @@ function TenantsManager() {
             setRoleLinks(merged);
         } catch (err) {
             console.error('Failed to load role links:', err);
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load role links.' });
+            toast({ variant: 'destructive', title: t('common.error'), description: t('tenants.errors.load_role_links_failed') });
         } finally {
             setRoleLinksLoading(false);
         }
@@ -258,7 +260,7 @@ function TenantsManager() {
 
     const handleSave = async () => {
         if (!formData.name || !formData.slug) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Name and Slug are required' });
+            toast({ variant: 'destructive', title: t('common.error'), description: t('tenants.errors.name_slug_required') });
             return;
         }
 
@@ -388,12 +390,12 @@ function TenantsManager() {
                 await supabase.rpc('apply_tenant_role_inheritance', { p_tenant_id: tenantId });
             }
 
-            toast({ title: 'Success', description: `Tenant ${editingTenant ? 'updated' : 'created'} successfully` });
+            toast({ title: t('common.success'), description: editingTenant ? t('tenants.toast_updated') : t('tenants.toast_created') });
             setShowEditor(false);
             fetchTenants();
         } catch (err) {
             console.error(err);
-            toast({ variant: 'destructive', title: 'Error', description: err.message });
+            toast({ variant: 'destructive', title: t('common.error'), description: err.message });
         } finally {
             setLoading(false);
         }
@@ -414,13 +416,13 @@ function TenantsManager() {
 
             if (error) throw error;
 
-            toast({ title: 'Success', description: 'Tenant deleted successfully (Soft Delete)' });
+            toast({ title: t('common.success'), description: t('tenants.toast_deleted') });
             setDeleteDialogOpen(false);
             setTenantToDelete(null);
             fetchTenants();
         } catch (err) {
             console.error(err);
-            toast({ variant: 'destructive', title: 'Error', description: `Failed to delete: ${err.message}` });
+            toast({ variant: 'destructive', title: t('common.error'), description: t('tenants.errors.delete_failed', { message: err.message }) });
         } finally {
             setLoading(false);
         }
@@ -447,12 +449,12 @@ function TenantsManager() {
     const hasRegistry = resourceRegistry.length > 0;
 
     const columns = [
-        { key: 'name', label: 'Name', className: 'font-semibold' },
-        { key: 'slug', label: 'Slug', className: 'text-muted-foreground font-mono text-xs' },
-        { key: 'level', label: 'Level', className: 'text-xs text-muted-foreground text-center w-[80px]' },
+        { key: 'name', label: t('tenants.columns.name'), className: 'font-semibold' },
+        { key: 'slug', label: t('tenants.columns.slug'), className: 'text-muted-foreground font-mono text-xs' },
+        { key: 'level', label: t('tenants.columns.level'), className: 'text-xs text-muted-foreground text-center w-[80px]' },
         {
             key: 'status',
-            label: 'Status',
+            label: t('tenants.columns.status'),
             render: (status) => (
                 <span className={`px-2 py-1 rounded-full text-xs font-bold ${status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
                     status === 'suspended' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
@@ -463,7 +465,7 @@ function TenantsManager() {
         },
         {
             key: 'subscription_tier',
-            label: 'Plan',
+            label: t('tenants.columns.plan'),
             render: (tier) => (
                 <span className="uppercase text-xs font-bold text-primary border border-primary/20 px-2 py-0.5 rounded bg-primary/10">
                     {tier}
@@ -472,14 +474,14 @@ function TenantsManager() {
         },
         {
             key: 'created_at',
-            label: 'Created',
+            label: t('tenants.columns.created'),
             render: (date) => date ? (
                 <span className="text-xs text-muted-foreground">{format(new Date(date), 'dd MMM yyyy')}</span>
             ) : '-'
         },
         {
             key: 'subscription_expires_at',
-            label: 'Expires',
+            label: t('tenants.columns.expires'),
             render: (date, _row) => {
                 if (!date) return <span className="text-xs text-muted-foreground">-</span>;
                 const expDate = new Date(date);
@@ -494,7 +496,7 @@ function TenantsManager() {
         },
         {
             key: 'billing_amount',
-            label: 'Billing',
+            label: t('tenants.columns.billing'),
             render: (amount, row) => {
                 if (!amount) return <span className="text-xs text-muted-foreground">-</span>;
                 const currencySymbols = { IDR: 'Rp', USD: '$', EUR: '€', SGD: 'S$', MYR: 'RM' };
@@ -522,25 +524,25 @@ function TenantsManager() {
     if (!isPlatformAdmin) return (
         <div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-border/60 bg-card/70 p-12 text-center shadow-sm">
             <Building className="mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="text-xl font-bold text-foreground">Access Denied</h3>
-            <p className="text-muted-foreground">Platform Admins Only</p>
+            <h3 className="text-xl font-bold text-foreground">{t('tenants.access_denied_title')}</h3>
+            <p className="text-muted-foreground">{t('tenants.access_denied_desc')}</p>
         </div>
     );
 
     return (
         <AdminPageLayout requiredPermission="platform.tenant.read">
             <PageHeader
-                title="Tenants"
-                description="Manage platform tenants, subscriptions, and domains."
+                title={t('tenants.page_title')}
+                description={t('tenants.page_description')}
                 icon={Building}
-                breadcrumbs={[{ label: 'Tenants', icon: Building }]}
+                breadcrumbs={[{ label: t('tenants.page_title'), icon: Building }]}
                 actions={(
                     <div className="flex gap-2">
                         <Button variant="ghost" onClick={fetchTenants} title="Refresh" className="text-muted-foreground hover:text-foreground">
                             <RefreshCw className="w-4 h-4" />
                         </Button>
                         <Button onClick={handleCreate} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                            <Plus className="w-4 h-4 mr-2" /> New Tenant
+                            <Plus className="w-4 h-4 mr-2" /> {t('tenants.new_tenant')}
                         </Button>
                     </div>
                 )}
@@ -555,14 +557,14 @@ function TenantsManager() {
             <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/75 shadow-sm backdrop-blur-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-background/35 px-4 py-3 text-xs sm:px-5">
                     <span className="font-medium text-muted-foreground">
-                        Tenant registry snapshot - {filteredTenants.length} visible
+                        {t('tenants.registry_snapshot', { count: filteredTenants.length })}
                     </span>
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                            {activeTenantCount} active
+                            {t('tenants.badge_active', { count: activeTenantCount })}
                         </span>
                         <span className="inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                            {suspendedTenantCount} suspended
+                            {t('tenants.badge_suspended', { count: suspendedTenantCount })}
                         </span>
                     </div>
                 </div>

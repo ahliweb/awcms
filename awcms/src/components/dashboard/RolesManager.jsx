@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Shield, Crown } from 'lucide-react';
-import { AdminPageLayout } from '@/templates/flowbite-admin';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { useToast } from '@/components/ui/use-toast';
@@ -66,24 +65,22 @@ function RolesManager() {
   }
 
   return (
-    <AdminPageLayout requiredPermission="tenant.role.read">
-      <GenericContentManager
-        tableName="roles"
-        resourceName={t('roles.title')}
-        columns={columns}
-        permissionPrefix="role"
-        customSelect="*, tenant:tenants(name), owner:users!roles_created_by_fkey(email), role_permissions(count)"
-        onCreateOverride={() => navigate('/cmspanel/roles/new')}
-        onEditOverride={async (role) => {
-          const routeId = await encodeRouteParam({ value: role.id, scope: 'roles.edit' });
-          if (!routeId) {
-            toast({ variant: 'destructive', title: t('common.error'), description: t('roles.errors.load_failed', 'Unable to open role editor.') });
-            return;
-          }
-          navigate(`/cmspanel/roles/edit/${routeId}`);
-        }}
-      />
-    </AdminPageLayout>
+    <GenericContentManager
+      tableName="roles"
+      resourceName={t('roles.title')}
+      columns={columns}
+      permissionPrefix="role"
+      customSelect="*, tenant:tenants(name), owner:users!roles_created_by_fkey(email), role_permissions(count)"
+      onCreateOverride={() => navigate('/cmspanel/roles/new')}
+      onEditOverride={async (role) => {
+        const routeId = await encodeRouteParam({ value: role.id, scope: 'roles.edit' });
+        if (!routeId) {
+          toast({ variant: 'destructive', title: t('common.error'), description: t('roles.errors.load_failed', 'Unable to open role editor.') });
+          return;
+        }
+        navigate(`/cmspanel/roles/edit/${routeId}`);
+      }}
+    />
   );
 }
 

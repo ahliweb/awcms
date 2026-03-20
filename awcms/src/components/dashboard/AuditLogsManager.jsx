@@ -4,7 +4,6 @@ import { ClipboardList } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import AuditLogsHeaderActions from '@/components/dashboard/audit-logs/AuditLogsHeaderActions';
 import AuditLogsSearchBar from '@/components/dashboard/audit-logs/AuditLogsSearchBar';
@@ -100,12 +99,12 @@ function AuditLogsManager() {
         t={t}
       />
 
-      <Card className="border-border">
-        <CardHeader>
-          <CardTitle>{t('audit.activity_history')}</CardTitle>
-          <CardDescription>{t('audit.activity_desc')}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+        <div className="border-b border-border/60 px-5 py-4">
+          <h3 className="text-sm font-semibold text-foreground">{t('audit.activity_history')}</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t('audit.activity_desc')}</p>
+        </div>
+        <div>
           <AuditLogsTable
             loading={loading}
             logs={logs}
@@ -121,8 +120,8 @@ function AuditLogsManager() {
             setPage={setPage}
             t={t}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <AuditLogDiffDialog
         selectedLog={selectedLog}

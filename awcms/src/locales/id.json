@@ -447,11 +447,12 @@
       "users": "Pengguna",
       "approvals": "Persetujuan Pendaftaran"
     },
-    "columns": {
+     "columns": {
       "email": "Email",
       "full_name": "Nama Lengkap",
       "role": "Peran",
-      "tenant": "Tenant"
+      "tenant": "Tenant",
+      "job_dept": "Jabatan"
     },
     "delete": {
       "title": "Hapus Pengguna",
@@ -490,6 +491,20 @@
     "errors": {
       "protected_role": "Peran sistem tidak dapat dihapus.",
       "assigned_users": "Ada {{count}} pengguna yang ditugaskan ke peran ini. Tetapkan ulang mereka terlebih dahulu."
+    },
+    "editor": {
+      "toast_template_applied": "Template Diterapkan",
+      "toast_template_desc": "Set izin {{template}} diterapkan",
+      "toast_all_selected": "{{count}} izin dipilih",
+      "toast_all_cleared": "Semua izin dihapus",
+      "toast_sync_success": "Akses Penuh Disinkronkan",
+      "toast_sync_desc": "{{count}} izin diaktifkan untuk {{name}}",
+      "toast_sync_failed": "Sinkronisasi gagal. Silakan coba lagi.",
+      "toast_save_success": "Peran dan izin berhasil disimpan",
+      "last_updated": "Terakhir diperbarui: {{date}}",
+      "save_btn": "Simpan Konfigurasi",
+      "syncing": "Menyinkronkan…",
+      "sync_btn": "Sinkronkan Akses Penuh"
     }
   },
   "sso": {
@@ -510,7 +525,15 @@
     "internal_role": "Peran Internal",
     "save_mapping": "Simpan Pemetaan",
     "active_mappings": "Pemetaan Aktif",
-    "no_mappings": "Tidak ada pemetaan peran aktif ditemukan."
+    "no_mappings": "Tidak ada pemetaan peran aktif ditemukan.",
+    "tabs": {
+      "overview": "Ikhtisar Keamanan",
+      "providers": "Penyedia Autentikasi",
+      "activity": "Aktivitas Login"
+    },
+    "errors": {
+      "load_failed": "Gagal memuat data keamanan"
+    }
   },
   "extensions": {
     "title": "Manajer Ekstensi",
@@ -642,6 +665,34 @@
     "link": "URL Tautan"
   },
   "tenants": {
+    "page_title": "Tenant",
+    "page_description": "Kelola tenant platform, langganan, dan domain",
+    "new_tenant": "Tenant Baru",
+    "registry_snapshot": "Registri tenant — {{count}} terlihat",
+    "badge_active": "{{count}} aktif",
+    "badge_suspended": "{{count}} ditangguhkan",
+    "access_denied_title": "Akses Ditolak",
+    "access_denied_desc": "Khusus Admin Platform",
+    "toast_created": "Tenant berhasil dibuat",
+    "toast_updated": "Tenant berhasil diperbarui",
+    "toast_deleted": "Tenant berhasil diarsipkan",
+    "errors": {
+      "load_failed": "Gagal memuat tenant",
+      "load_rules_failed": "Gagal memuat aturan berbagi sumber daya",
+      "load_role_links_failed": "Gagal memuat tautan peran",
+      "name_slug_required": "Nama dan Slug wajib diisi",
+      "delete_failed": "Gagal menghapus: {{message}}"
+    },
+    "columns": {
+      "name": "Nama",
+      "slug": "Slug",
+      "level": "Level",
+      "status": "Status",
+      "plan": "Paket",
+      "created": "Dibuat",
+      "expires": "Kedaluwarsa",
+      "billing": "Tagihan"
+    },
     "title": "Manajemen Tenant",
     "subtitle": "Kelola konfigurasi multi-tenant.",
     "domain": "Domain",
@@ -972,7 +1023,9 @@
       "conditions": "Kondisi (JSON)",
       "context_help": "Konteks yang tersedia: channel, time, ip_address",
       "cancel": "Batal",
-      "save": "Simpan Kebijakan"
+      "save": "Simpan Kebijakan",
+      "delete_title": "Hapus Kebijakan",
+      "delete_confirm": "Apakah Anda yakin ingin menghapus \"{{name}}\"?"
     },
     "toasts": {
       "load_error": "Gagal memuat kebijakan.",

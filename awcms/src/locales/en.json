@@ -451,7 +451,8 @@
       "email": "Email",
       "full_name": "Full Name",
       "role": "Role",
-      "tenant": "Tenant"
+      "tenant": "Tenant",
+      "job_dept": "Job Title"
     },
     "delete": {
       "title": "Delete User",
@@ -490,6 +491,20 @@
     "errors": {
       "protected_role": "System roles cannot be deleted.",
       "assigned_users": "There are {{count}} users assigned to this role. Reassign them first."
+    },
+    "editor": {
+      "toast_template_applied": "Template Applied",
+      "toast_template_desc": "Applied {{template}} permission set",
+      "toast_all_selected": "{{count}} permissions selected",
+      "toast_all_cleared": "All permissions cleared",
+      "toast_sync_success": "Full Access Synced",
+      "toast_sync_desc": "{{count}} permissions activated for {{name}}",
+      "toast_sync_failed": "Sync failed. Please try again.",
+      "toast_save_success": "Role and permissions saved successfully",
+      "last_updated": "Last updated: {{date}}",
+      "save_btn": "Save Configuration",
+      "syncing": "Syncing…",
+      "sync_btn": "Sync Full Access"
     }
   },
   "sso": {
@@ -510,7 +525,15 @@
     "internal_role": "Internal Role",
     "save_mapping": "Save Mapping",
     "active_mappings": "Active Mappings",
-    "no_mappings": "No active role mappings found."
+    "no_mappings": "No active role mappings found.",
+    "tabs": {
+      "overview": "Security Overview",
+      "providers": "Auth Providers",
+      "activity": "Login Activity"
+    },
+    "errors": {
+      "load_failed": "Failed to load security data"
+    }
   },
   "extensions": {
     "title": "Extensions Manager",
@@ -646,7 +669,35 @@
     "subtitle": "Manage multi-tenant configurations.",
     "domain": "Domain",
     "channels": "Channels",
-    "usage": "Usage Statistics"
+    "usage": "Usage Statistics",
+    "page_title": "Tenants",
+    "page_description": "Manage platform tenants, subscriptions, and domains",
+    "new_tenant": "New Tenant",
+    "registry_snapshot": "Tenant registry — {{count}} visible",
+    "badge_active": "{{count}} active",
+    "badge_suspended": "{{count}} suspended",
+    "access_denied_title": "Access Denied",
+    "access_denied_desc": "Platform Admins Only",
+    "toast_created": "Tenant created successfully",
+    "toast_updated": "Tenant updated successfully",
+    "toast_deleted": "Tenant archived successfully",
+    "errors": {
+      "load_failed": "Failed to load tenants",
+      "load_rules_failed": "Failed to load resource sharing rules",
+      "load_role_links_failed": "Failed to load role links",
+      "name_slug_required": "Name and Slug are required",
+      "delete_failed": "Failed to delete: {{message}}"
+    },
+    "columns": {
+      "name": "Name",
+      "slug": "Slug",
+      "level": "Level",
+      "status": "Status",
+      "plan": "Plan",
+      "created": "Created",
+      "expires": "Expires",
+      "billing": "Billing"
+    }
   },
   "themes": {
     "title": "Theme Editor",
@@ -972,7 +1023,9 @@
       "conditions": "Conditions (JSON)",
       "context_help": "Available context: channel, time, ip_address",
       "cancel": "Cancel",
-      "save": "Save Policy"
+      "save": "Save Policy",
+      "delete_title": "Delete Policy",
+      "delete_confirm": "Are you sure you want to delete \"{{name}}\"?"
     },
     "toasts": {
       "load_error": "Failed to load policies.",
