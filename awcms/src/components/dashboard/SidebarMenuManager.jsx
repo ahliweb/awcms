@@ -427,7 +427,7 @@ function SidebarMenuManager() {
   }
 
   return (
-    <AdminPageLayout requiredPermission="platform.sidebar.read">
+		<AdminPageLayout requiredPermission="platform.sidebar.read" className="space-y-6">
       <Helmet>
         <title>{t('sidebar_manager.title')} - CMS</title>
       </Helmet>
@@ -449,17 +449,17 @@ function SidebarMenuManager() {
         )}
       />
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) => {
-          navigate(value === 'items' ? '/cmspanel/admin-navigation' : `/cmspanel/admin-navigation/${value}`);
-        }}
-        className="w-full"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="items">{t('sidebar_manager.tabs.items')}</TabsTrigger>
-            <TabsTrigger value="groups">{t('sidebar_manager.tabs.groups')}</TabsTrigger>
+			<Tabs
+				value={activeTab}
+				onValueChange={(value) => {
+					navigate(value === 'items' ? '/cmspanel/admin-navigation' : `/cmspanel/admin-navigation/${value}`);
+				}}
+				className="w-full"
+			>
+				<div className="flex items-center justify-between">
+					<TabsList>
+						<TabsTrigger value="items">{t('sidebar_manager.tabs.items')}</TabsTrigger>
+						<TabsTrigger value="groups">{t('sidebar_manager.tabs.groups')}</TabsTrigger>
           </TabsList>
         </div>
 

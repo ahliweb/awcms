@@ -67,9 +67,9 @@ function ExtensionMarketplace({ onInstall }) {
         <div className="absolute right-0 top-0 p-12 opacity-10">
           <div className="h-64 w-64 rounded-full bg-primary/30 blur-3xl"></div>
         </div>
-        <h2 className="text-3xl font-bold mb-2 text-foreground">Extension Marketplace</h2>
+        <h2 className="mb-2 text-3xl font-bold text-foreground">Extension Marketplace</h2>
         <p className="text-muted-foreground max-w-2xl text-lg">
-          Discover and install plugins to supercharge your CMS. From analytics to SEO,
+          Discover and install extensions to expand your CMS. From analytics to SEO,
           find the tools you need to grow.
         </p>
       </div>

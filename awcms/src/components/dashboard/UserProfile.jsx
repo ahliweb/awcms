@@ -351,10 +351,10 @@ function UserProfile() {
 	};
 
 	return (
-		<AdminPageLayout>
+		<AdminPageLayout className="space-y-6">
 			<PageHeader
 				title="My Profile"
-				description="Manage your account settings and security preferences"
+				description="Manage your account settings and security preferences."
 				icon={User}
 				breadcrumbs={[{ label: 'Profile', icon: User }]}
 			/>
