@@ -19,11 +19,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Changed
 
-- _No entries yet._
+- Module Management: Added `20260320113000_fix_module_management_consistency.sql` to grant `UPDATE` access on `public.modules` for platform module management and rebuild `sync_modules_from_sidebar()` so every tenant receives the same canonical module inventory while preserving each tenant's active/inactive state.
+- Sidebar Reactivity: Updated `awcms/src/hooks/useModules.js` and `awcms/src/hooks/useAdminMenu.js` to subscribe to `public.modules` realtime changes and a shared browser event bridge (`awcms/src/lib/moduleEvents.js`), so sidebar menus and other module-gated UI refresh automatically after module toggles or sync operations.
+- Module Management UI: Updated `awcms/src/pages/cmspanel/ModulesManager.jsx` to display canonical module totals more clearly during filtered searches.
 
 ### Fixed
 
-- _No entries yet._
+- Module Management: Fixed module toggles not persisting by adding a proper database update path and verified the module total is now consistent across tenants.
+- Tests: Added `awcms/src/hooks/__tests__/moduleRefresh.test.jsx` to cover module toggle event dispatch and admin menu refresh behavior, then verified it alongside a broader admin-focused Vitest batch (`17 passed`).
 
 ## [4.4.0] - 2026-03-20
 

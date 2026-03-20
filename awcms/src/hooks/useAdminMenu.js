@@ -4,6 +4,7 @@ import { hooks } from '@/lib/hooks';
 import { normalizeMenuPath, resolveGroupMeta, resolveResourcePath } from '@/lib/adminMenuUtils';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
+import { subscribeToModulesChanged } from '@/lib/moduleEvents';
 
 const DEFAULT_MENU_CONFIG = [];
 const REMOVED_RESOURCE_KEYS = new Set();
@@ -370,6 +371,38 @@ export function useAdminMenu() {
   useEffect(() => {
     fetchMenu();
   }, [fetchMenu]);
+
+  useEffect(() => {
+    if (!currentTenant?.id) return undefined;
+
+    const channel = supabase
+      .channel(`public:admin-menu-modules:${currentTenant.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'modules',
+          filter: `tenant_id=eq.${currentTenant.id}`,
+        },
+        () => {
+          fetchMenu();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentTenant?.id, fetchMenu]);
+
+  useEffect(() => {
+    return subscribeToModulesChanged(({ tenantId }) => {
+      if (!currentTenant?.id || !tenantId || tenantId === currentTenant.id) {
+        fetchMenu();
+      }
+    });
+  }, [currentTenant?.id, fetchMenu]);
 
   const updateMenuOrder = async (newOrderItems) => {
     try {

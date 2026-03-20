@@ -17,6 +17,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { dispatchModulesChanged, subscribeToModulesChanged } from '@/lib/moduleEvents';
 
 export function useModules() {
   const { toast } = useToast();
@@ -79,6 +80,7 @@ export function useModules() {
       if (syncError) throw syncError;
 
       toast({ title: 'Synced', description: 'Modules synced from sidebar successfully.' });
+      dispatchModulesChanged({ tenantId, source: 'sync' });
       await fetchModules();
     } catch (err) {
       console.error('[useModules] syncModules error:', err);
@@ -113,6 +115,8 @@ export function useModules() {
         prev.map((m) => (m.id === moduleId ? { ...m, status: nextStatus } : m))
       );
 
+      dispatchModulesChanged({ tenantId, moduleId, slug: modules.find((m) => m.id === moduleId)?.slug, status: nextStatus, source: 'toggle' });
+
       toast({
         title: nextStatus === 'active' ? 'Module enabled' : 'Module disabled',
         description: `Module is now ${nextStatus}.`,
@@ -123,7 +127,7 @@ export function useModules() {
     } finally {
       setToggling(null);
     }
-  }, [canManage, toast]);
+  }, [canManage, toast, tenantId, modules]);
 
   // ─── Helper ───────────────────────────────────────────────────────────────
   /**
@@ -141,6 +145,38 @@ export function useModules() {
   useEffect(() => {
     fetchModules();
   }, [fetchModules]);
+
+  useEffect(() => {
+    if (!tenantId) return undefined;
+
+    const channel = supabase
+      .channel(`public:modules:${tenantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'modules',
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        () => {
+          fetchModules();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId, fetchModules]);
+
+  useEffect(() => {
+    return subscribeToModulesChanged(({ tenantId: changedTenantId }) => {
+      if (!tenantId || !changedTenantId || changedTenantId === tenantId) {
+        fetchModules();
+      }
+    });
+  }, [tenantId, fetchModules]);
 
   return {
     modules,

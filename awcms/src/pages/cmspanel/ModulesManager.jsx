@@ -245,8 +245,10 @@ const ModulesManager = () => {
           {/* ── Module count ── */}
           {!loading && displayModules.length > 0 && (
             <p className="mt-3 text-xs text-muted-foreground text-right">
-              {displayModules.length} module{displayModules.length !== 1 ? 's' : ''}
-              {searchQuery ? ' matching search' : ''}
+              {searchQuery
+                ? `${displayModules.length} of ${modules.length} modules matching search`
+                : `${modules.length} modules`
+              }
             </p>
           )}
         </Card>
