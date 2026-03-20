@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import StatusBadge from '@/components/ui/StatusBadge';
 import { Package, Layers, FolderOpen } from 'lucide-react';
 import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/flowbite-admin';
 import useSplatSegments from '@/hooks/useSplatSegments';
@@ -53,7 +54,7 @@ function ProductsManager() {
         <div className="flex flex-col">
           {row.discount_price && row.discount_price < val ? (
             <>
-              <span className="text-green-600 font-semibold dark:text-green-400">
+              <span className="text-primary font-semibold">
                 {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(row.discount_price)}
               </span>
               <span className="text-xs text-muted-foreground line-through">
@@ -71,26 +72,17 @@ function ProductsManager() {
     {
       key: 'stock',
       label: t('products.stock'),
-      render: (val) => (
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${val > 10 ? 'bg-green-100 text-green-700' :
-          val > 0 ? 'bg-amber-100 text-amber-700' :
-            'bg-red-100 text-red-700'
-          }`}>
-          {val > 0 ? val : t('products.out_of_stock')}
-        </span>
-      )
+      render: (val) => {
+        const status = val > 10 ? 'active' : val > 0 ? 'pending' : 'out_of_stock';
+        const label = val > 0 ? String(val) : t('products.out_of_stock');
+        return <StatusBadge status={status} label={label} />;
+      }
     },
     {
       key: 'status',
       label: t('common.status'),
       render: (value) => (
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${value === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-          value === 'out_of_stock' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-            value === 'draft' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-              'bg-muted text-muted-foreground'
-          }`}>
-          {value ? t(`products.status_options.${value}`) : t('common.draft')}
-        </span>
+        <StatusBadge status={value || 'draft'} label={value ? t(`products.status_options.${value}`) : t('common.draft')} />
       )
     }
   ];
@@ -213,6 +205,7 @@ function ProductsManager() {
             permissionPrefix="products"
             customSelect="*, category:categories(name), product_type:product_types(name), owner:users!created_by(email, full_name), tenant:tenants(name)"
             showBreadcrumbs={false}
+            showHeader={false}
           />
         </TabsContent>
 
@@ -224,6 +217,7 @@ function ProductsManager() {
             formFields={typeFormFields}
             permissionPrefix="product_types"
             showBreadcrumbs={false}
+            showHeader={false}
           />
         </TabsContent>
 
@@ -237,6 +231,7 @@ function ProductsManager() {
             customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
             defaultFilters={{ type: ['product', 'products'] }}
             showBreadcrumbs={false}
+            showHeader={false}
             restorePermission="tenant.categories.restore"
             onSoftDeleteOverride={softDeleteCategory}
             onRestoreOverride={restoreCategory}

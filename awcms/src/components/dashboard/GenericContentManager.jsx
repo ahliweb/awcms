@@ -48,6 +48,7 @@ const GenericContentManager = ({
     onCreateOverride, // Optional override function for the create action
     onSoftDeleteOverride,
     onRestoreOverride,
+    showHeader = true, // Set false when parent already renders a PageHeader
 }) => {
     const { t } = useTranslation();
     const { toast } = useToast();
@@ -448,6 +449,7 @@ const GenericContentManager = ({
                             </ol>
                         </nav>
                     )}
+                    {showHeader && (
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                             <h2 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
@@ -486,6 +488,7 @@ const GenericContentManager = ({
                             )}
                         </div>
                     </div>
+                    )}
 
                     <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center gap-2">
                         <div className="flex-1 max-w-sm">
@@ -533,12 +536,12 @@ const GenericContentManager = ({
                                 {showTrash && (
                                     <>
                                         {canRestore && (
-                                            <Button size="icon" variant="ghost" onClick={() => handleRestore(item.id)} className="text-green-600 hover:bg-green-50" title={t('common.restore')}>
+                                            <Button size="icon" variant="ghost" onClick={() => handleRestore(item.id)} className="text-primary hover:bg-primary/10" title={t('common.restore')}>
                                                 <RotateCcw className="w-4 h-4" />
                                             </Button>
                                         )}
                                         {canPermDelete && (
-                                            <Button size="icon" variant="ghost" onClick={() => handlePermDelete(item)} className="text-red-700 hover:bg-red-100" title="Permanently Delete">
+                                            <Button size="icon" variant="ghost" onClick={() => handlePermDelete(item)} className="text-destructive hover:bg-destructive/10" title="Permanently Delete">
                                                 <div className="relative">
                                                     <Trash2 className="w-4 h-4" />
                                                     <span className="absolute -top-1 -right-1 text-[10px] font-bold">×</span>

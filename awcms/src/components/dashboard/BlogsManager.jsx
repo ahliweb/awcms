@@ -13,6 +13,7 @@ import BlogsOverviewCards from '@/components/dashboard/blogs/BlogsOverviewCards'
 import BlogsHeaderActions from '@/components/dashboard/blogs/BlogsHeaderActions';
 import BlogsToolbarActions from '@/components/dashboard/blogs/BlogsToolbarActions';
 import BlogsContentPanels from '@/components/dashboard/blogs/BlogsContentPanels';
+import StatusBadge from '@/components/ui/StatusBadge';
 
 /**
  * BlogsManager - Manages blogs, categories, and tags.
@@ -188,33 +189,12 @@ function BlogsManager() {
     {
       key: 'workflow_state',
       label: t('blogs.workflow'),
-      render: (value) => {
-        const colors = {
-          published: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-          approved: 'border-primary/25 bg-primary/10 text-primary',
-          reviewed: 'border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-500',
-          draft: 'border-border/70 bg-muted text-muted-foreground'
-        };
-        return (
-          <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium capitalize', colors[value] || colors.draft)}>
-            {value}
-          </span>
-        );
-      }
+      render: (value) => <StatusBadge status={value || 'draft'} />
     },
     {
       key: 'status',
       label: t('blogs.visibility'),
-      render: (value) => (
-        <span className={cn(
-          'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium capitalize',
-          value === 'published'
-            ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-            : 'border-border/70 bg-secondary text-secondary-foreground'
-        )}>
-          {value || 'draft'}
-        </span>
-      )
+      render: (value) => <StatusBadge status={value || 'draft'} />
     },
     { key: 'published_at', label: t('common.published'), type: 'date' },
     {

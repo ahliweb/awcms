@@ -44,7 +44,7 @@ function AdminDashboard() {
             value: teamSize,
             hint: `${data?.overview?.orders || 0} orders in tracking`,
             icon: Users2,
-            iconClassName: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+            iconClassName: 'border-primary/25 bg-primary/10 text-primary',
         },
         {
             label: 'System Pulse',
@@ -52,8 +52,8 @@ function AdminDashboard() {
             hint: `${activityItems} recent activity events`,
             icon: ShieldCheck,
             iconClassName: isHealthy
-                ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                : 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                ? 'border-primary/25 bg-primary/10 text-primary'
+                : 'border-destructive/25 bg-destructive/10 text-destructive',
         },
     ];
 

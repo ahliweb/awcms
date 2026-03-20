@@ -83,6 +83,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       - name: Resolve admin app env from env or secrets
         id: admin-env
         env:
@@ -195,9 +198,10 @@ jobs:
 
       - name: Build
         run: npm run build
+        working-directory: ./awcms
         env:
-          VITE_SUPABASE_URL: ${{ steps.admin-env.outputs.vite_supabase_url }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ steps.admin-env.outputs.vite_supabase_key }}
+          VITE_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
 
   # ============================================
   # Lint & Build - Public Portal (Astro)
@@ -224,6 +228,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
 
       - name: Resolve primary public env from env or secrets
         id: public-env
@@ -389,6 +396,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       - name: Run typecheck
         run: npm run typecheck
 
@@ -417,95 +427,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Resolve smandapbun public env from env or secrets
-        id: smandapbun-env
-        env:
-          SECRET_PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
-          SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
-          SECRET_PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import os
-
-          candidates = [
-              Path('awcms-public/smandapbun/.env.production'),
-              Path('awcms-public/smandapbun/.env.remote'),
-              Path('awcms-public/smandapbun/.env.local'),
-              Path('awcms-public/smandapbun/.env'),
-              Path('awcms/.env.production'),
-              Path('awcms/.env.remote'),
-              Path('awcms/.env.local'),
-              Path('awcms/.env'),
-          ]
-
-          values = {'url': '', 'key': '', 'tenant_id': '', 'url_source': '', 'key_source': '', 'tenant_source': ''}
-
-          def parse_env(path):
-              parsed = {}
-              for raw in path.read_text(encoding='utf-8').splitlines():
-                  line = raw.strip()
-                  if not line or line.startswith('#') or '=' not in line:
-                      continue
-                  key, value = line.split('=', 1)
-                  parsed[key.strip()] = value.strip().strip('"').strip("'")
-              return parsed
-
-          for candidate in candidates:
-              if not candidate.exists():
-                  continue
-              parsed = parse_env(candidate)
-              if not values['url']:
-                  value = parsed.get('PUBLIC_SUPABASE_URL', '').strip() or parsed.get('VITE_SUPABASE_URL', '').strip()
-                  if value:
-                      values['url'] = value
-                      values['url_source'] = str(candidate)
-              if not values['key']:
-                  value = parsed.get('PUBLIC_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY', '').strip()
-                  if value:
-                      values['key'] = value
-                      values['key_source'] = str(candidate)
-              if not values['tenant_id']:
-                  value = parsed.get('PUBLIC_TENANT_ID', '').strip()
-                  if value:
-                      values['tenant_id'] = value
-                      values['tenant_source'] = str(candidate)
-
-          if not values['url']:
-              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_URL') or '').strip()
-              if value:
-                  values['url'] = value
-                  values['url_source'] = 'github_secret'
-          if not values['key']:
-              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_KEY') or '').strip()
-              if value:
-                  values['key'] = value
-                  values['key_source'] = 'github_secret'
-          if not values['tenant_id']:
-              value = (os.environ.get('SECRET_PUBLIC_TENANT_ID') or '').strip()
-              if value:
-                  values['tenant_id'] = value
-                  values['tenant_source'] = 'github_secret'
-
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
-              output.write(f"public_supabase_url={values['url']}\n")
-              output.write(f"public_supabase_key={values['key']}\n")
-              output.write(f"public_tenant_id={values['tenant_id']}\n")
-              output.write(f"url_source={values['url_source']}\n")
-              output.write(f"key_source={values['key_source']}\n")
-              output.write(f"tenant_source={values['tenant_source']}\n")
-
-          for field in ('url', 'key', 'tenant_id'):
-              if values[field]:
-                  print(f"::add-mask::{values[field]}")
-          PY
-
-      - name: Show smandapbun public env source
-        run: |
-          echo "PUBLIC_SUPABASE_URL source: ${{ steps.smandapbun-env.outputs.url_source || 'unresolved' }}"
-          echo "PUBLIC_SUPABASE_PUBLISHABLE_KEY source: ${{ steps.smandapbun-env.outputs.key_source || 'unresolved' }}"
-          echo "PUBLIC_TENANT_ID source: ${{ steps.smandapbun-env.outputs.tenant_source || 'unresolved' }}"
 
       - name: Run lint
         run: npm run lint
@@ -668,8 +589,10 @@ jobs:
                   values['account_source'] = 'github_secret'
 
           if not values['account_id']:
-              values['account_id'] = '5255727b7269584897c8c97ebdd3347f'
-              values['account_source'] = 'workflow_default'
+              raise SystemExit(
+                  'CLOUDFLARE_ACCOUNT_ID could not be resolved from env files or the CLOUDFLARE_ACCOUNT_ID secret. '
+                  'Please set the CLOUDFLARE_ACCOUNT_ID GitHub Actions secret for this repository.'
+              )
 
           output_path = os.environ['GITHUB_OUTPUT']
           with open(output_path, 'a', encoding='utf-8') as output:
@@ -828,6 +751,108 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Resolve smandapbun public env from env or secrets
+        id: smandapbun-env
+        env:
+          SECRET_PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] }}
+          SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] }}
+          SECRET_PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          candidates = [
+              Path('awcms-public/smandapbun/.env.production'),
+              Path('awcms-public/smandapbun/.env.remote'),
+              Path('awcms-public/smandapbun/.env.local'),
+              Path('awcms-public/smandapbun/.env'),
+              Path('awcms/.env.production'),
+              Path('awcms/.env.remote'),
+              Path('awcms/.env.local'),
+              Path('awcms/.env'),
+          ]
+
+          values = {
+              'url': '',
+              'key': '',
+              'tenant_id': '',
+              'url_source': '',
+              'key_source': '',
+              'tenant_source': '',
+          }
+
+          def parse_env(path):
+              parsed = {}
+              for raw in path.read_text(encoding='utf-8').splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith('#') or '=' not in line:
+                      continue
+                  key, value = line.split('=', 1)
+                  parsed[key.strip()] = value.strip().strip('"').strip("'")
+              return parsed
+
+          for candidate in candidates:
+              if not candidate.exists():
+                  continue
+              parsed = parse_env(candidate)
+              if not values['url']:
+                  value = parsed.get('PUBLIC_SUPABASE_URL', '').strip() or parsed.get('VITE_SUPABASE_URL', '').strip()
+                  if value:
+                      values['url'] = value
+                      values['url_source'] = str(candidate)
+              if not values['key']:
+                  value = parsed.get('PUBLIC_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_KEY', '').strip() or parsed.get('VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY', '').strip()
+                  if value:
+                      values['key'] = value
+                      values['key_source'] = str(candidate)
+              if not values['tenant_id']:
+                  value = parsed.get('PUBLIC_TENANT_ID', '').strip()
+                  if value:
+                      values['tenant_id'] = value
+                      values['tenant_source'] = str(candidate)
+
+          if not values['url']:
+              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_URL') or '').strip()
+              if value:
+                  values['url'] = value
+                  values['url_source'] = 'github_secret'
+          if not values['key']:
+              value = (os.environ.get('SECRET_PUBLIC_SUPABASE_KEY') or '').strip()
+              if value:
+                  values['key'] = value
+                  values['key_source'] = 'github_secret'
+          if not values['tenant_id']:
+              value = (os.environ.get('SECRET_PUBLIC_TENANT_ID') or '').strip()
+              if value:
+                  values['tenant_id'] = value
+                  values['tenant_source'] = 'github_secret'
+
+          output_path = os.environ['GITHUB_OUTPUT']
+          with open(output_path, 'a', encoding='utf-8') as output:
+              output.write(f"public_supabase_url={values['url']}\n")
+              output.write(f"public_supabase_key={values['key']}\n")
+              output.write(f"public_tenant_id={values['tenant_id']}\n")
+              output.write(f"url_source={values['url_source']}\n")
+              output.write(f"key_source={values['key_source']}\n")
+              output.write(f"tenant_source={values['tenant_source']}\n")
+
+          for field, label in [('url', 'PUBLIC_SUPABASE_URL'), ('key', 'PUBLIC_SUPABASE_PUBLISHABLE_KEY'), ('tenant_id', 'PUBLIC_TENANT_ID')]:
+              if values[field]:
+                  print(f'::add-mask::{values[field]}')
+              else:
+                  print(f'{label} not resolved from env files or secrets.')
+          PY
+
+      - name: Show smandapbun public env source
+        run: |
+          echo "PUBLIC_SUPABASE_URL source: ${{ steps.smandapbun-env.outputs.url_source || 'unresolved' }}"
+          echo "PUBLIC_SUPABASE_PUBLISHABLE_KEY source: ${{ steps.smandapbun-env.outputs.key_source || 'unresolved' }}"
+          echo "PUBLIC_TENANT_ID source: ${{ steps.smandapbun-env.outputs.tenant_source || 'unresolved' }}"
 
       - name: Run checks
         run: npm run check && npm run lint

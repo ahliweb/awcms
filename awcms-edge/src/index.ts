@@ -29,6 +29,13 @@ type Bindings = {
   GITHUB_REBUILD_EVENT_TYPE?: string
   SMANDAPBUN_REBUILD_WEBHOOK_SECRET?: string
   TURNSTILE_SECRET_KEY?: string
+  /**
+   * Comma-separated list of allowed CORS origins, e.g.
+   * "https://admin.example.com,https://portal.example.com"
+   * When unset (local dev), all origins are allowed.
+   * Set via `npx wrangler secret put CORS_ALLOWED_ORIGINS` or wrangler.jsonc [vars].
+   */
+  CORS_ALLOWED_ORIGINS?: string
   /** Cloudflare Queue binding — producer + consumer for async media finalization */
   MEDIA_EVENTS_QUEUE: Queue<AnyQueueMessage>
   /** Cloudflare Queue binding — producer + consumer for async notifications/integrations */
@@ -43,7 +50,40 @@ type Variables = {
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
-app.use('*', cors())
+// CORS: restrict to CORS_ALLOWED_ORIGINS binding when set; allow all in local dev (unset).
+app.use('*', async (c, next) => {
+  const rawOrigins = c.env.CORS_ALLOWED_ORIGINS?.trim()
+  const allowedOrigins = rawOrigins
+    ? rawOrigins.split(',').map((o) => o.trim()).filter(Boolean)
+    : null
+
+  const requestOrigin = c.req.header('Origin') ?? ''
+
+  let allowOrigin: string
+  if (!allowedOrigins) {
+    // No restriction configured — allow all (dev/unset)
+    allowOrigin = '*'
+  } else if (allowedOrigins.includes(requestOrigin)) {
+    allowOrigin = requestOrigin
+  } else {
+    // Origin not in allowlist — reject preflight immediately
+    if (c.req.method === 'OPTIONS') {
+      return c.text('Forbidden', 403)
+    }
+    // For non-preflight requests, omit Allow-Origin header (browser will block)
+    allowOrigin = ''
+  }
+
+  const corsMiddleware = cors({
+    origin: allowOrigin || requestOrigin,
+    allowHeaders: ['Authorization', 'Content-Type', 'x-tenant-id'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    exposeHeaders: ['Content-Length'],
+    maxAge: 600,
+    credentials: true,
+  })
+  return corsMiddleware(c, next)
+})
 
 app.get('/health', (c) => c.json({ ok: true, service: 'awcms-edge' }))
 

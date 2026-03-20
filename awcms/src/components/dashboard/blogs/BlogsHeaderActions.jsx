@@ -19,10 +19,10 @@ function BlogsHeaderActions({
 					variant="outline"
 					onClick={onRebuild}
 					disabled={isRebuilding}
-					className={cn(
-						'h-9 rounded-xl px-3 shadow-sm border-amber-500/50 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-400',
-						isRebuilding && 'opacity-50'
-					)}
+				className={cn(
+					'h-9 rounded-xl px-3 shadow-sm border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20',
+					isRebuilding && 'opacity-50'
+				)}
 				>
 					{isRebuilding ? (
 						<RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" />

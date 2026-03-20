@@ -61,5 +61,12 @@
   },
   "observability": {
     "enabled": true
+  },
+  // CORS origin restriction. Set to a comma-separated list of allowed origins, e.g.:
+  //   "https://admin.example.com,https://portal.example.com"
+  // Leave unset (or omit) for local dev to allow all origins.
+  // In production, set via: npx wrangler secret put CORS_ALLOWED_ORIGINS
+  "vars": {
+    "CORS_ALLOWED_ORIGINS": ""
   }
 }

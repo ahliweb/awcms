@@ -14,7 +14,8 @@
     "docs:check": "node ../scripts/check_markdown_local_links.mjs && npx markdown-link-check --config ../.mlc_config.json ../SYSTEM_MODEL.md ../README.md ../AGENTS.md README.md ../DOCS_INDEX.md ../CHANGELOG.md ../CONTRIBUTING.md ../SECURITY.md ../CODE_OF_CONDUCT.md ../docs/**/*.md ../awcms/README.md ../awcms-public/README.md ../awcms-public/primary/README.md ../awcms-public/smandapbun/README.md ../awcms-mobile/README.md ../awcms-mobile/primary/README.md ../awcms-esp32/README.md ../awcms-mcp/README.md ../awcms-ext/README.md ../awcms-edge/README.md ../packages/awcms-shared/README.md",
     "db:pull": "npx supabase db pull --schema public",
     "build": "vite build",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "lint:unused": "knip --reporter compact"
   },
   "dependencies": {
     "@puckeditor/core": "^0.21.0",
@@ -97,7 +98,7 @@
   "overrides": {
     "lodash": "^4.17.23",
     "minimatch": ">=10.2.1",
-    "flatted": "^3.4.0"
+    "flatted": ">=3.4.2"
   },
   "engines": {
     "node": ">=22.12.0"

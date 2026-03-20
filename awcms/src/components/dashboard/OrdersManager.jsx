@@ -1,5 +1,6 @@
 
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import StatusBadge from '@/components/ui/StatusBadge';
 import { User, ShoppingCart } from 'lucide-react';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
@@ -34,7 +35,7 @@ function OrdersManager() {
             key: 'total_amount',
             label: 'Total',
             render: (val) => (
-                <span className="font-semibold text-green-600 dark:text-green-400">
+                <span className="font-semibold text-foreground">
                     {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val)}
                 </span>
             )
@@ -42,42 +43,12 @@ function OrdersManager() {
         {
             key: 'status',
             label: 'Order Status',
-            render: (value) => {
-                const statusConfig = {
-                    pending: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400', icon: '⏳' },
-                    paid: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', icon: '💳' },
-                    processing: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-400', icon: '📦' },
-                    shipped: { bg: 'bg-cyan-100 dark:bg-cyan-900/30', text: 'text-cyan-700 dark:text-cyan-400', icon: '🚚' },
-                    completed: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', icon: '✅' },
-                    cancelled: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400', icon: '❌' },
-                    refunded: { bg: 'bg-muted', text: 'text-muted-foreground', icon: '↩️' }
-                };
-                const config = statusConfig[value] || statusConfig.pending;
-                return (
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 ${config.bg} ${config.text}`}>
-                        <span>{config.icon}</span>
-                        {value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Pending'}
-                    </span>
-                );
-            }
+            render: (value) => <StatusBadge status={value || 'pending'} />
         },
         {
             key: 'payment_status',
             label: 'Payment',
-            render: (val) => {
-                const config = {
-                    paid: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },
-                    unpaid: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400' },
-                    partial: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400' },
-                    refunded: { bg: 'bg-muted', text: 'text-muted-foreground' }
-                };
-                const style = config[val] || config.unpaid;
-                return (
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${style.bg} ${style.text}`}>
-                        {val || 'Unpaid'}
-                    </span>
-                );
-            }
+            render: (val) => <StatusBadge status={val || 'unpaid'} />
         },
         {
             key: 'tracking_number',
@@ -160,6 +131,7 @@ function OrdersManager() {
                 canCreate={false}
                 customSelect="*"
                 showBreadcrumbs={false}
+                showHeader={false}
                 omitCreatedBy={true}
             />
         </AdminPageLayout>

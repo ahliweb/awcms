@@ -20,7 +20,7 @@ const DashboardWidgetHeader = ({
     return (
         <CardHeader
             className={cn(
-                'flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60',
+                'flex flex-row items-center justify-between border-b border-border/60 pb-3',
                 className
             )}
         >
@@ -28,7 +28,7 @@ const DashboardWidgetHeader = ({
                 {IconComponent || resolvedIcon ? (
                     <span
                         className={cn(
-                            'flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200',
+                            'flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-card/70 text-muted-foreground',
                             iconWrapperClassName
                         )}
                     >
@@ -37,19 +37,19 @@ const DashboardWidgetHeader = ({
                 ) : null}
                 <div>
                     {title && (
-                        <CardTitle className="text-base font-semibold text-slate-800 dark:text-slate-100">
+                        <CardTitle className="text-base font-semibold text-foreground">
                             {title}
                         </CardTitle>
                     )}
                     {subtitle && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
+                        <p className="text-xs text-muted-foreground">{subtitle}</p>
                     )}
                 </div>
             </div>
             {(badge || actions) && (
                 <div className="flex items-center gap-2">
                     {badge ? (
-                        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                             {badge}
                         </span>
                     ) : null}

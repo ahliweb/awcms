@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Edit, Trash2, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { Pagination } from '@/components/ui/pagination';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 
 const ContentTable = ({
   data = [],
@@ -69,9 +70,9 @@ const ContentTable = ({
 
   if (!data || data.length === 0) {
     return (
-      <div className="dashboard-surface p-12 flex flex-col items-center justify-center text-slate-500">
-        <p className="text-lg font-semibold text-slate-700">No items found</p>
-        <p className="text-sm text-slate-500">Try adjusting your search or filters.</p>
+      <div className="dashboard-surface p-12 flex flex-col items-center justify-center text-muted-foreground">
+        <p className="text-lg font-semibold text-foreground">No items found</p>
+        <p className="text-sm text-muted-foreground">Try adjusting your search or filters.</p>
       </div>
     );
   }
@@ -102,7 +103,7 @@ const ContentTable = ({
                     ) : col.type === 'date' ? (
                       item[col.key] ? format(new Date(item[col.key]), 'MMM d, yyyy') : '-'
                     ) : col.type === 'boolean' ? (
-                      item[col.key] ? <span className="text-green-600">Yes</span> : <span className="text-destructive">No</span>
+                      <StatusBadge status={item[col.key] ? 'yes' : 'no'} />
                     ) : (
                       <span className="text-foreground">{item[col.key]}</span>
                     )}
@@ -113,17 +114,17 @@ const ContentTable = ({
                     <div className="flex justify-end gap-2">
                       {extraActions && extraActions(item)}
                       {onView && (
-                        <Button variant="ghost" size="icon" onClick={() => onView(item)} className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10">
+                        <Button variant="ghost" size="icon" onClick={() => onView(item)} aria-label="View" className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10">
                           <Eye className="w-4 h-4" />
                         </Button>
                       )}
                       {onEdit && (
-                        <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10">
+                        <Button variant="ghost" size="icon" onClick={() => onEdit(item)} aria-label="Edit" className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10">
                           <Edit className="w-4 h-4" />
                         </Button>
                       )}
                       {onDelete && (
-                        <Button variant="ghost" size="icon" onClick={() => onDelete(item)} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                        <Button variant="ghost" size="icon" onClick={() => onDelete(item)} aria-label="Delete" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       )}

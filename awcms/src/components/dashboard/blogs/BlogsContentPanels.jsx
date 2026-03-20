@@ -37,50 +37,53 @@ function BlogsContentPanels({
 			}}
 			tabs={tabs}
 		>
-			<TabsContent value="blogs" className="mt-0">
-				<GenericContentManager
-					tableName="blogs"
-					resourceName={t('blogs.type')}
-					columns={blogColumns}
-					formFields={blogFormFields}
-					permissionPrefix="blog"
-					showBreadcrumbs={false}
-					defaultFilters={blogFilters}
-					EditorComponent={WrappedBlogEditor}
-					customRowActions={customRowActions}
-					customToolbarActions={customToolbarActions}
-				/>
-			</TabsContent>
+		<TabsContent value="blogs" className="mt-0">
+			<GenericContentManager
+				tableName="blogs"
+				resourceName={t('blogs.type')}
+				columns={blogColumns}
+				formFields={blogFormFields}
+				permissionPrefix="blog"
+				showBreadcrumbs={false}
+				showHeader={false}
+				defaultFilters={blogFilters}
+				EditorComponent={WrappedBlogEditor}
+				customRowActions={customRowActions}
+				customToolbarActions={customToolbarActions}
+			/>
+		</TabsContent>
 
-			<TabsContent value="categories" className="mt-0">
-				<GenericContentManager
-					tableName="categories"
-					resourceName={t('common.category')}
-					columns={categoryColumns}
-					formFields={categoryFormFields}
-					permissionPrefix="categories"
-					showBreadcrumbs={false}
-					customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-					defaultFilters={{ type: ['blog', 'blogs', 'content'] }}
-					restorePermission="tenant.categories.restore"
-					onSoftDeleteOverride={softDeleteCategory}
-					onRestoreOverride={restoreCategory}
-				/>
-			</TabsContent>
+		<TabsContent value="categories" className="mt-0">
+			<GenericContentManager
+				tableName="categories"
+				resourceName={t('common.category')}
+				columns={categoryColumns}
+				formFields={categoryFormFields}
+				permissionPrefix="categories"
+				showBreadcrumbs={false}
+				showHeader={false}
+				customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
+				defaultFilters={{ type: ['blog', 'blogs', 'content'] }}
+				restorePermission="tenant.categories.restore"
+				onSoftDeleteOverride={softDeleteCategory}
+				onRestoreOverride={restoreCategory}
+			/>
+		</TabsContent>
 
-			<TabsContent value="tags" className="mt-0">
-				<GenericContentManager
-					tableName="tags"
-					resourceName="Tag"
-					columns={tagColumns}
-					formFields={tagFormFields}
-					permissionPrefix="tag"
-					showBreadcrumbs={false}
-					restorePermission="tenant.tag.restore"
-					onSoftDeleteOverride={softDeleteTag}
-					onRestoreOverride={restoreTag}
-				/>
-			</TabsContent>
+		<TabsContent value="tags" className="mt-0">
+			<GenericContentManager
+				tableName="tags"
+				resourceName="Tag"
+				columns={tagColumns}
+				formFields={tagFormFields}
+				permissionPrefix="tag"
+				showBreadcrumbs={false}
+				showHeader={false}
+				restorePermission="tenant.tag.restore"
+				onSoftDeleteOverride={softDeleteTag}
+				onRestoreOverride={restoreTag}
+			/>
+		</TabsContent>
 		</PageTabs>
 	);
 }

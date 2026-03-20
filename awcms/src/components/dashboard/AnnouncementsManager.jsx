@@ -1,5 +1,6 @@
 
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import StatusBadge from '@/components/ui/StatusBadge';
 import { Megaphone } from 'lucide-react';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
@@ -9,27 +10,12 @@ function AnnouncementsManager() {
         {
             key: 'status',
             label: 'Status',
-            render: (value) => (
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${value === 'published' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                    value === 'draft' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                        value === 'expired' ? 'bg-muted text-muted-foreground' :
-                            'bg-muted text-muted-foreground'
-                    }`}>
-                    {value || 'draft'}
-                </span>
-            )
+            render: (value) => <StatusBadge status={value || 'draft'} />
         },
         {
             key: 'priority',
             label: 'Priority',
-            render: (value) => (
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${value === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                    value === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                    }`}>
-                    {value || 'normal'}
-                </span>
-            )
+            render: (value) => <StatusBadge status={value || 'normal'} />
         },
         {
             key: 'published_at',
@@ -77,6 +63,7 @@ function AnnouncementsManager() {
                 formFields={formFields}
                 permissionPrefix="announcements"
                 showBreadcrumbs={false}
+                showHeader={false}
             />
         </AdminPageLayout>
     );
