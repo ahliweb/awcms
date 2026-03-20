@@ -227,10 +227,125 @@ export function buildEmailSendMessage(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// Event: whatsapp.send.requested
+// Enqueued by: POST /api/notifications  (channel_type === "whatsapp")
+// Consumed by: notificationsConsumer.ts
+// ---------------------------------------------------------------------------
+
+export const WHATSAPP_SEND_EVENT = "whatsapp.send.requested" as const;
+export const WHATSAPP_SEND_SCHEMA = "1.0" as const;
+
+export interface WhatsAppSendMessage extends QueueMessageEnvelope {
+  schema_version: typeof WHATSAPP_SEND_SCHEMA;
+  event_type: typeof WHATSAPP_SEND_EVENT;
+  resource_type: "whatsapp_send";
+  meta: {
+    /** Recipient phone number in E.164 format, e.g. "+6281234567890" */
+    phone: string;
+    /** Plain-text or WhatsApp-formatted message body */
+    message: string;
+    /** StarSender device/sender ID */
+    sender_id: string;
+    /** dispatch_id in notification_dispatches — updated by consumer */
+    dispatch_id: string;
+    /** Optional media URL to attach */
+    media_url?: string;
+  };
+}
+
+export function buildWhatsAppSendMessage(opts: {
+  tenant_id: string;
+  trace_id: string;
+  phone: string;
+  message: string;
+  sender_id: string;
+  dispatch_id: string;
+  media_url?: string;
+}): WhatsAppSendMessage {
+  const job_id = crypto.randomUUID();
+  return {
+    schema_version: WHATSAPP_SEND_SCHEMA,
+    event_type: WHATSAPP_SEND_EVENT,
+    job_id,
+    idempotency_key: `wa-send:${opts.tenant_id}:${opts.dispatch_id}`,
+    tenant_id: opts.tenant_id,
+    resource_type: "whatsapp_send",
+    resource_id: opts.dispatch_id,
+    occurred_at: new Date().toISOString(),
+    trace_id: opts.trace_id,
+    meta: {
+      phone: opts.phone,
+      message: opts.message,
+      sender_id: opts.sender_id,
+      dispatch_id: opts.dispatch_id,
+      media_url: opts.media_url,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Event: telegram.send.requested
+// Enqueued by: POST /api/notifications  (channel_type === "telegram")
+// Consumed by: notificationsConsumer.ts
+// ---------------------------------------------------------------------------
+
+export const TELEGRAM_SEND_EVENT = "telegram.send.requested" as const;
+export const TELEGRAM_SEND_SCHEMA = "1.0" as const;
+
+export interface TelegramSendMessage extends QueueMessageEnvelope {
+  schema_version: typeof TELEGRAM_SEND_SCHEMA;
+  event_type: typeof TELEGRAM_SEND_EVENT;
+  resource_type: "telegram_send";
+  meta: {
+    /** Telegram chat_id (numeric string or @username) */
+    chat_id: string;
+    /** Message text — supports MarkdownV2 if parse_mode is set */
+    text: string;
+    /** Optional Telegram parse_mode: "MarkdownV2" | "HTML" | undefined */
+    parse_mode?: "MarkdownV2" | "HTML";
+    /** dispatch_id in notification_dispatches — updated by consumer */
+    dispatch_id: string;
+  };
+}
+
+export function buildTelegramSendMessage(opts: {
+  tenant_id: string;
+  trace_id: string;
+  chat_id: string;
+  text: string;
+  parse_mode?: "MarkdownV2" | "HTML";
+  dispatch_id: string;
+}): TelegramSendMessage {
+  const job_id = crypto.randomUUID();
+  return {
+    schema_version: TELEGRAM_SEND_SCHEMA,
+    event_type: TELEGRAM_SEND_EVENT,
+    job_id,
+    idempotency_key: `tg-send:${opts.tenant_id}:${opts.dispatch_id}`,
+    tenant_id: opts.tenant_id,
+    resource_type: "telegram_send",
+    resource_id: opts.dispatch_id,
+    occurred_at: new Date().toISOString(),
+    trace_id: opts.trace_id,
+    meta: {
+      chat_id: opts.chat_id,
+      text: opts.text,
+      parse_mode: opts.parse_mode,
+      dispatch_id: opts.dispatch_id,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Union of all message types — extend as new event types are added
 // ---------------------------------------------------------------------------
 
-export type AnyQueueMessage = MediaFinalizeMessage | SiteRebuildMessage | EmailSendMessage;
+export type AnyQueueMessage =
+  | MediaFinalizeMessage
+  | SiteRebuildMessage
+  | EmailSendMessage
+  | WhatsAppSendMessage
+  | TelegramSendMessage;
 
 /**
  * Type guard: is the unknown value a valid QueueMessageEnvelope?

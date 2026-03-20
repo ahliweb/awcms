@@ -23,6 +23,12 @@ import {
   SITE_REBUILD_EVENT,
   SITE_REBUILD_SCHEMA,
   SiteRebuildMessage,
+  WHATSAPP_SEND_EVENT,
+  WHATSAPP_SEND_SCHEMA,
+  WhatsAppSendMessage,
+  TELEGRAM_SEND_EVENT,
+  TELEGRAM_SEND_SCHEMA,
+  TelegramSendMessage,
 } from "./contracts";
 import { logAck, logPermanent, logRetry } from "./observability";
 
@@ -33,6 +39,8 @@ import { logAck, logPermanent, logRetry } from "./observability";
 export interface NotificationsConsumerEnv {
   MAILKETING_API_TOKEN: string;
   GITHUB_REBUILD_TOKEN?: string;
+  SUPABASE_URL?: string;
+  SUPABASE_SECRET_KEY?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,6 +214,173 @@ export async function handleEmailSendMessage(
 }
 
 // ---------------------------------------------------------------------------
+// WhatsApp (StarSender) handler
+// ---------------------------------------------------------------------------
+
+const STARSENDER_API = "https://api.starsender.online/api";
+
+async function updateDispatchStatus(
+  env: NotificationsConsumerEnv,
+  dispatch_id: string,
+  status: string,
+  provider_message_id?: string,
+  error_message?: string,
+): Promise<void> {
+  const supabaseUrl = env.SUPABASE_URL;
+  const secretKey = env.SUPABASE_SECRET_KEY;
+  if (!supabaseUrl || !secretKey || !dispatch_id) return;
+
+  const update: Record<string, unknown> = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
+  if (provider_message_id !== undefined) update.provider_message_id = provider_message_id;
+  if (error_message !== undefined) update.error_message = error_message;
+
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/notification_dispatches?id=eq.${dispatch_id}`, {
+      method: "PATCH",
+      headers: {
+        "apikey": secretKey,
+        "Authorization": `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+      },
+      body: JSON.stringify(update),
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    // Non-critical: log update failures but don't affect message ack/retry
+  }
+}
+
+export async function handleWhatsAppSendMessage(
+  msg: WhatsAppSendMessage,
+  env: NotificationsConsumerEnv,
+): Promise<{ permanent: boolean; error?: string }> {
+  const { meta, job_id, tenant_id, event_type } = msg;
+  const base = { queue: 'awcms-notifications', event_type, job_id, tenant_id };
+
+  if (!meta.phone || !meta.message || !meta.sender_id) {
+    logPermanent(base, "missing phone, message, or sender_id");
+    await updateDispatchStatus(env, meta.dispatch_id, 'permanent_failure', undefined, 'missing phone, message, or sender_id');
+    return { permanent: true, error: "missing required fields" };
+  }
+
+  const payload: Record<string, string> = {
+    messageType: "text",
+    to: meta.phone,
+    body: meta.message,
+  };
+  if (meta.media_url) {
+    payload.mediaUrl = meta.media_url;
+    payload.messageType = "media";
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${STARSENDER_API}/sendMessage/${meta.sender_id}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${env.MAILKETING_API_TOKEN}`, // StarSender token reuses env key placeholder
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err: unknown) {
+    const msg_text = err instanceof Error ? err.message : String(err);
+    logRetry(base, `starsender fetch threw: ${msg_text}`);
+    await updateDispatchStatus(env, meta.dispatch_id, 'failed', undefined, msg_text);
+    return { permanent: false, error: msg_text };
+  }
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => "(unreadable)");
+    logRetry(base, `starsender returned ${response.status}: ${details}`);
+    await updateDispatchStatus(env, meta.dispatch_id, 'failed', undefined, `HTTP ${response.status}`);
+    return { permanent: false, error: `HTTP ${response.status}` };
+  }
+
+  const result = await response.json().catch(() => ({})) as Record<string, unknown>;
+  const provider_id = (result?.messageId ?? result?.id ?? job_id) as string;
+  logAck(base, { message: `whatsapp sent ok (${response.status})` });
+  await updateDispatchStatus(env, meta.dispatch_id, 'sent', String(provider_id));
+  return { permanent: false };
+}
+
+// ---------------------------------------------------------------------------
+// Telegram handler
+// ---------------------------------------------------------------------------
+
+const TELEGRAM_API = "https://api.telegram.org";
+
+export async function handleTelegramSendMessage(
+  msg: TelegramSendMessage,
+  env: NotificationsConsumerEnv,
+): Promise<{ permanent: boolean; error?: string }> {
+  const { meta, job_id, tenant_id, event_type } = msg;
+  const base = { queue: 'awcms-notifications', event_type, job_id, tenant_id };
+
+  // Bot token is stored per-channel in credentials, passed in meta is not available here.
+  // The enqueue-side (notificationService.js) must embed the bot_token into a Worker secret
+  // or pass it as part of a signed payload. For now we read it from a dedicated env var
+  // following the pattern: TELEGRAM_BOT_TOKEN (single shared bot) or future per-tenant resolution.
+  const botToken = (env as unknown as Record<string, string>)["TELEGRAM_BOT_TOKEN"] ?? "";
+  if (!botToken) {
+    logPermanent(base, "TELEGRAM_BOT_TOKEN not configured in Worker env");
+    await updateDispatchStatus(env, meta.dispatch_id, 'permanent_failure', undefined, 'TELEGRAM_BOT_TOKEN not configured');
+    return { permanent: true, error: "TELEGRAM_BOT_TOKEN not configured" };
+  }
+
+  if (!meta.chat_id || !meta.text) {
+    logPermanent(base, "missing chat_id or text");
+    await updateDispatchStatus(env, meta.dispatch_id, 'permanent_failure', undefined, 'missing chat_id or text');
+    return { permanent: true, error: "missing chat_id or text" };
+  }
+
+  const body: Record<string, unknown> = {
+    chat_id: meta.chat_id,
+    text: meta.text,
+  };
+  if (meta.parse_mode) body.parse_mode = meta.parse_mode;
+
+  let response: Response;
+  try {
+    response = await fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err: unknown) {
+    const msg_text = err instanceof Error ? err.message : String(err);
+    logRetry(base, `telegram fetch threw: ${msg_text}`);
+    await updateDispatchStatus(env, meta.dispatch_id, 'failed', undefined, msg_text);
+    return { permanent: false, error: msg_text };
+  }
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => "(unreadable)");
+    const is4xx = response.status >= 400 && response.status < 500;
+    if (is4xx) {
+      logPermanent(base, `telegram returned ${response.status}: ${details}`);
+      await updateDispatchStatus(env, meta.dispatch_id, 'permanent_failure', undefined, `HTTP ${response.status}: ${details.slice(0, 200)}`);
+      return { permanent: true, error: `HTTP ${response.status}` };
+    }
+    logRetry(base, `telegram returned ${response.status}: ${details}`);
+    await updateDispatchStatus(env, meta.dispatch_id, 'failed', undefined, `HTTP ${response.status}`);
+    return { permanent: false, error: `HTTP ${response.status}` };
+  }
+
+  const result = await response.json().catch(() => ({})) as { result?: { message_id?: number } };
+  const provider_id = result?.result?.message_id ?? job_id;
+  logAck(base, { message: `telegram sent ok (${response.status})` });
+  await updateDispatchStatus(env, meta.dispatch_id, 'sent', String(provider_id));
+  return { permanent: false };
+}
+
+// ---------------------------------------------------------------------------
 // Batch entry point — wired into export default { queue } in index.ts
 // ---------------------------------------------------------------------------
 
@@ -254,6 +429,42 @@ export async function notificationsQueueHandler(
           continue;
         }
         const result = await handleEmailSendMessage(body as EmailSendMessage, env);
+        if (result.permanent || !result.error) {
+          message.ack();
+        } else {
+          message.retry();
+        }
+        continue;
+      }
+
+      if (body.event_type === WHATSAPP_SEND_EVENT) {
+        if (body.schema_version !== WHATSAPP_SEND_SCHEMA) {
+          logPermanent(
+            { queue: 'awcms-notifications', event_type: body.event_type, job_id: body.job_id, tenant_id: body.tenant_id },
+            `unknown schema version ${body.schema_version}`,
+          );
+          message.ack();
+          continue;
+        }
+        const result = await handleWhatsAppSendMessage(body as WhatsAppSendMessage, env);
+        if (result.permanent || !result.error) {
+          message.ack();
+        } else {
+          message.retry();
+        }
+        continue;
+      }
+
+      if (body.event_type === TELEGRAM_SEND_EVENT) {
+        if (body.schema_version !== TELEGRAM_SEND_SCHEMA) {
+          logPermanent(
+            { queue: 'awcms-notifications', event_type: body.event_type, job_id: body.job_id, tenant_id: body.tenant_id },
+            `unknown schema version ${body.schema_version}`,
+          );
+          message.ack();
+          continue;
+        }
+        const result = await handleTelegramSendMessage(body as TelegramSendMessage, env);
         if (result.permanent || !result.error) {
           message.ack();
         } else {

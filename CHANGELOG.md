@@ -7,7 +7,15 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ### Added
 
-- _No entries yet._
+- **Multi-channel notification system**: new `tenant_notification_channels`, `notification_dispatches`, and `notification_templates` tables with full RLS policies (migration `20260320100000_create_notification_channels.sql`).
+- Seeded `modules` rows for `email-notifications`, `whatsapp-notifications`, `telegram-notifications` and permission keys `tenant.notifications.read`, `tenant.notifications.send`, `tenant.notifications.manage`.
+- Cloudflare Queue consumer handlers for WhatsApp (StarSender) and Telegram Bot dispatch in `awcms-edge/src/queues/notificationsConsumer.ts`; extended `contracts.ts` with `WhatsAppSendMessage` and `TelegramSendMessage` types.
+- `useNotificationChannels` hook — per-tenant CRUD for `tenant_notification_channels` (`src/hooks/useNotificationChannels.js`).
+- `useNotificationDispatches` hook — paginated read-only access to `notification_dispatches` with channel/status filtering (`src/hooks/useNotificationDispatches.js`).
+- `NotificationChannelsManager` page (`/cmspanel/notification-channels`) — configure Email, WhatsApp, and Telegram credentials per tenant with module-gating and enable/disable toggle.
+- `NotificationDispatchLog` page (`/cmspanel/notification-dispatches`) — dispatch history table with channel, status, recipient, and provider message ID.
+- `openclawClient.js` — thin OpenClaw gateway wrapper; resolves URL from `VITE_OPENCLAW_URL` or `platform_settings` (`src/lib/openclawClient.js`).
+- `notificationService.js` — `sendNotification()` and `sendTestNotification()` helpers that enqueue messages via the Edge Worker (`src/lib/notificationService.js`).
 
 ### Changed
 

@@ -238,6 +238,8 @@ class MyComponent extends Component<Props> { } // NO class components!
 | `useMedia`             | `src/hooks/useMedia.js`             | Media library operations       |
 | `useMobileUsers`       | `src/hooks/useMobileUsers.js`       | Mobile app user management     |
 | `useModules`           | `src/hooks/useModules.js`           | Per-tenant module enable/disable & sync |
+| `useNotificationChannels` | `src/hooks/useNotificationChannels.js` | Per-tenant notification channel CRUD |
+| `useNotificationDispatches` | `src/hooks/useNotificationDispatches.js` | Notification dispatch log (read-only, paginated) |
 | `useNotifications`     | `src/hooks/useNotifications.js`     | Notification system            |
 | `usePlatformStats`     | `src/hooks/usePlatformStats.js`     | Platform-wide statistics       |
 | `usePublicTenant`      | `src/hooks/usePublicTenant.js`      | Public portal tenant resolving |

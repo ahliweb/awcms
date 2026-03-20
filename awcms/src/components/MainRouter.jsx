@@ -88,6 +88,10 @@ const TenantSettings = lazy(() => import('@/components/dashboard/TenantSettings'
 const EmailSettingsManager = lazy(() => import('@/components/dashboard/email/EmailSettingsManager'));
 const EmailLogsManager = lazy(() => import('@/components/dashboard/email/EmailLogsManager'));
 
+// Notification Channels & Dispatch Log (Lazy Loaded)
+const NotificationChannelsManager = lazy(() => import('@/pages/cmspanel/NotificationChannelsManager'));
+const NotificationDispatchLog = lazy(() => import('@/pages/cmspanel/NotificationDispatchLog'));
+
 // ESP32 IoT (Lazy Loaded)
 const DevicesManager = lazy(() => import('@/pages/cmspanel/DevicesManager'));
 const DeviceDetail = lazy(() => import('@/pages/cmspanel/DeviceDetail'));
@@ -296,6 +300,8 @@ const MainRouter = () => {
           <Route path="settings/branding" element={<TenantSettings />} />
           <Route path="email-settings" element={<EmailSettingsManager />} />
           <Route path="email-logs" element={<EmailLogsManager />} />
+          <Route path="notification-channels" element={<NotificationChannelsManager />} />
+          <Route path="notification-dispatches" element={<NotificationDispatchLog />} />
 
           <Route path="platform" element={<PlatformDashboard />} />
           <Route path="platform/settings" element={<PlatformSettingsManager />} />
