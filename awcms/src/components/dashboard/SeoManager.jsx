@@ -156,10 +156,10 @@ function SeoManager() {
   return (
     <SettingsPageShell
       requiredPermission="tenant.seo.read"
-      title="SEO Manager"
+      title="SEO"
       description="Manage default metadata and crawler directives for the tenant experience."
       icon={Globe}
-      breadcrumbs={[{ label: 'Settings' }, { label: 'SEO Manager', icon: Globe }]}
+      breadcrumbs={[{ label: 'Settings' }, { label: 'SEO', icon: Globe }]}
       loading={settings.loading}
       onReload={handleReload}
       onSave={handleSave}

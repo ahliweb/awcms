@@ -146,7 +146,7 @@ const FilesManager = () => {
   return (
     <AdminPageLayout>
       <Helmet>
-        <title>{showTrash ? 'Trash - Media Library' : 'Media Library - CMS'}</title>
+        <title>{showTrash ? 'Media Library Trash - CMS' : 'Media Library - CMS'}</title>
       </Helmet>
 
       <PageHeader
