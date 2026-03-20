@@ -15,7 +15,7 @@ import PagesContentPanels from '@/components/dashboard/pages/PagesContentPanels'
  * PagesManager - Manages pages with Visual Builder support.
  * Refactored to use awadmintemplate01 components for consistent UI.
  */
-function PagesManager({ onlyVisual = false }) {
+function PagesManager({ onlyVisual = false, embedded = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const segments = useSplatSegments();
@@ -302,15 +302,16 @@ function PagesManager({ onlyVisual = false }) {
     );
   }
 
-  return (
-    <AdminPageLayout requiredPermission={onlyVisual ? "tenant.visual_pages.read" : "tenant.pages.read"}>
-      {/* Page Header with Breadcrumbs */}
-      <PageHeader
-        title={onlyVisual ? t('pages.visual_title') : t('pages.title')}
-        description={onlyVisual ? t('pages.visual_desc') : t('pages.subtitle')}
-        icon={Layers}
-        breadcrumbs={breadcrumbs}
-      />
+  const content = (
+    <>
+      {!embedded && (
+        <PageHeader
+          title={onlyVisual ? t('pages.visual_title') : t('pages.title')}
+          description={onlyVisual ? t('pages.visual_desc') : t('pages.subtitle')}
+          icon={Layers}
+          breadcrumbs={breadcrumbs}
+        />
+      )}
 
       <PagesOverviewCards
         t={t}
@@ -337,6 +338,16 @@ function PagesManager({ onlyVisual = false }) {
         tagColumns={tagColumns}
         tagFormFields={tagFormFields}
       />
+    </>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <AdminPageLayout requiredPermission={onlyVisual ? "tenant.visual_pages.read" : "tenant.pages.read"} className="space-y-6">
+      {content}
     </AdminPageLayout>
   );
 }

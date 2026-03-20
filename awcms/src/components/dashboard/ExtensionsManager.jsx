@@ -180,7 +180,7 @@ function ExtensionsManager() {
   );
 
   return (
-    <AdminPageLayout>
+    <AdminPageLayout className="space-y-6">
       <PageHeader
         title={t('extensions.title')}
         description={t('extensions.subtitle')}
@@ -207,7 +207,7 @@ function ExtensionsManager() {
           {canManageGlobal && <TabsTrigger value="rbac" className="flex gap-2 rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><Shield className="w-4 h-4" /> {t('extensions.abac')}</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="installed">
+        <TabsContent value="installed" className="mt-6">
           <ExtensionsInstalledTab
             t={t}
             loading={loading}
@@ -231,21 +231,21 @@ function ExtensionsManager() {
         </TabsContent>
 
         {canCreate && (
-          <TabsContent value="install">
-            <div className="mt-8">
+          <TabsContent value="install" className="mt-6">
+            <div>
               <ExtensionInstaller onInstallComplete={() => { setActiveTab('installed'); fetchExtensions(); }} />
             </div>
           </TabsContent>
         )}
 
-        <TabsContent value="marketplace"><ExtensionMarketplace onInstall={() => { setActiveTab('installed'); fetchExtensions(); }} /></TabsContent>
+        <TabsContent value="marketplace" className="mt-6"><ExtensionMarketplace onInstall={() => { setActiveTab('installed'); fetchExtensions(); }} /></TabsContent>
 
         {canManageGlobal && (
           <>
-            <TabsContent value="settings"><ExtensionSettings /></TabsContent>
-            <TabsContent value="health"><ExtensionHealthCheck /></TabsContent>
-            <TabsContent value="logs"><ExtensionLogs /></TabsContent>
-            <TabsContent value="rbac">
+            <TabsContent value="settings" className="mt-6"><ExtensionSettings /></TabsContent>
+            <TabsContent value="health" className="mt-6"><ExtensionHealthCheck /></TabsContent>
+            <TabsContent value="logs" className="mt-6"><ExtensionLogs /></TabsContent>
+            <TabsContent value="rbac" className="mt-6">
               <ExtensionsRbacTab
                 t={t}
                 selectedForRBAC={selectedForRBAC}

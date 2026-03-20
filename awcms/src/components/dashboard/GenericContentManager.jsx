@@ -13,6 +13,7 @@ import { useSearch } from '@/hooks/useSearch';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTenant } from '@/contexts/TenantContext';
+import { cn } from '@/lib/utils';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -35,11 +36,15 @@ const GenericContentManager = ({
     customRowActions, // Allow injecting custom action buttons
     viewPermission,
     createPermission,
+    canCreate: canCreateOverride,
+    updatePermission,
+    deletePermission,
     restorePermission,
     showBreadcrumbs = true,
     defaultSortColumn = 'created_at',
     EditorComponent, // Optional custom editor component
     customToolbarActions, // ({ openEditor }) => ReactNode
+    headerContent,
     omitCreatedBy = false,
     enableSoftDelete = true,
     enableTrashRoute = true,
@@ -48,6 +53,7 @@ const GenericContentManager = ({
     onCreateOverride, // Optional override function for the create action
     onSoftDeleteOverride,
     onRestoreOverride,
+    disableTenantFilter = false,
     showHeader = true, // Set false when parent already renders a PageHeader
 }) => {
     const { t } = useTranslation();
@@ -95,9 +101,17 @@ const GenericContentManager = ({
     const canView = viewPermission
         ? hasPermission(viewPermission)
         : hasPermission(`tenant.${permissionPrefix}.read`);
-    const canCreate = createPermission
+    const canCreate = typeof canCreateOverride === 'boolean'
+        ? canCreateOverride
+        : createPermission
         ? hasPermission(createPermission)
         : hasPermission(`tenant.${permissionPrefix}.create`);
+    const canUpdate = updatePermission
+        ? hasPermission(updatePermission)
+        : hasPermission(`tenant.${permissionPrefix}.update`);
+    const canDelete = deletePermission
+        ? hasPermission(deletePermission)
+        : hasPermission(`tenant.${permissionPrefix}.delete`);
     const canRestore = restorePermission
         ? hasPermission(restorePermission)
         : hasPermission(`tenant.${permissionPrefix}.restore`);
@@ -110,11 +124,37 @@ const GenericContentManager = ({
         : normalizedPath;
     const showTrash = (enableTrashRoute && softDeleteEnabled) ? isTrashRoute : showTrashState;
 
+    const pluralizeLabel = (label) => {
+        if (!label) return 'Items';
+
+        const trimmed = String(label).trim();
+        if (!trimmed) return 'Items';
+
+        const words = trimmed.split(/\s+/);
+        const lastWord = words[words.length - 1];
+
+        if (/s$/i.test(lastWord)) return trimmed;
+
+        let pluralLastWord = `${lastWord}s`;
+
+        if (/[^aeiou]y$/i.test(lastWord)) {
+            pluralLastWord = `${lastWord.slice(0, -1)}ies`;
+        } else if (/(s|x|z|ch|sh)$/i.test(lastWord)) {
+            pluralLastWord = `${lastWord}es`;
+        }
+
+        words[words.length - 1] = pluralLastWord;
+        return words.join(' ');
+    };
+
+    const resourcePlural = pluralizeLabel(resourceName);
+    const hasToolbarActions = softDeleteEnabled || Boolean(customToolbarActions) || (canCreate && !showTrash);
+
     const fetchItems = async () => {
         if (!canView) return;
 
         // Wait for tenant context to resolve, unless we are in a special global mode (future proofing)
-        if (!currentTenant?.id && !isPlatformAdmin) return;
+        if (!disableTenantFilter && !currentTenant?.id && !isPlatformAdmin) return;
 
         setLoading(true);
         try {
@@ -126,7 +166,9 @@ const GenericContentManager = ({
                 .select(selectQuery, { count: 'exact' });
 
             // STRICT TENANT FILTERING
-            if (currentTenant?.id) {
+            if (disableTenantFilter) {
+                // No tenant scoping for platform-level resources.
+            } else if (currentTenant?.id) {
                 q = q.eq('tenant_id', currentTenant.id);
             } else if (isPlatformAdmin) {
                 // Platform admin view (no tenant selected) logic could go here
@@ -177,7 +219,7 @@ const GenericContentManager = ({
             setTotalItems(count || 0);
         } catch (err) {
             console.error(err);
-            toast({ variant: 'destructive', title: 'Error', description: `Failed to load ${resourceName}s` });
+            toast({ variant: 'destructive', title: 'Error', description: err.message || `Failed to load ${resourcePlural}` });
         } finally {
             setLoading(false);
         }
@@ -186,7 +228,7 @@ const GenericContentManager = ({
     useEffect(() => {
         fetchItems();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentPage, itemsPerPage, debouncedQuery, canView, showTrash, tableName, currentTenant?.id]);
+    }, [currentPage, itemsPerPage, debouncedQuery, canView, showTrash, tableName, currentTenant?.id, disableTenantFilter]);
 
     useEffect(() => {
         if (currentPage !== 1) setCurrentPage(1);
@@ -194,7 +236,7 @@ const GenericContentManager = ({
     }, [showTrash]);
 
     const handleEdit = (item) => {
-        if (!checkAccess('update', permissionPrefix, item)) {
+        if (!(canUpdate && checkAccess('update', permissionPrefix, item))) {
             toast({ variant: 'destructive', title: 'Access Denied', description: 'You can only edit your own content.' });
             return;
         }
@@ -209,7 +251,7 @@ const GenericContentManager = ({
 
     // Show delete confirmation dialog
     const handleDelete = (id, item) => {
-        if (!checkAccess('delete', permissionPrefix, item)) {
+        if (!(canDelete && checkAccess('delete', permissionPrefix, item))) {
             toast({ variant: 'destructive', title: 'Access Denied', description: 'You do not have permission to delete this content.' });
             return;
         }
@@ -370,7 +412,7 @@ const GenericContentManager = ({
 
     const handleManualRefresh = async () => {
         await fetchItems();
-        toast({ title: 'Refreshed', description: `Latest ${resourceName.toLowerCase()}s loaded.` });
+        toast({ title: 'Refreshed', description: `Latest ${resourcePlural.toLowerCase()} loaded.` });
     };
 
     const handleTrashToggle = () => {
@@ -431,7 +473,7 @@ const GenericContentManager = ({
                                             }`}
                                         onClick={showTrash ? handleTrashToggle : undefined}
                                     >
-                                        <span>{resourceName}s</span>
+                                        <span>{resourcePlural}</span>
                                     </div>
                                 </li>
 
@@ -449,46 +491,55 @@ const GenericContentManager = ({
                             </ol>
                         </nav>
                     )}
-                    {showHeader && (
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                            <h2 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                                {resourceName}s
-                                {showTrash && <span className="text-lg font-normal text-destructive bg-destructive/10 px-2 py-0.5 rounded-md">{t('common.trash_bin')}</span>}
-                            </h2>
-                            <p className="text-muted-foreground">{t('common.manage_resource', { resource: resourceName.toLowerCase() })}</p>
-                        </div>
-                        <div className="flex gap-2">
-                            {softDeleteEnabled && (
-                                <Button
-                                    variant={showTrash ? "destructive" : "outline"}
-                                    onClick={handleTrashToggle}
-                                    className={showTrash ? "bg-destructive hover:bg-destructive/90" : ""}
-                                >
-                                    {showTrash ? <RotateCcw className="w-4 h-4 mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                                    {showTrash ? t('common.back_to_active') : t('common.trash')}
-                                </Button>
+                    {(showHeader || hasToolbarActions) && (
+                        <div className={cn(
+                            'flex flex-col gap-4 md:flex-row md:items-center md:justify-between',
+                            !showHeader && 'md:justify-end'
+                        )}>
+                            {showHeader && (
+                                <div>
+                                    <h2 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-foreground">
+                                        {resourcePlural}
+                                        {showTrash && <span className="rounded-md bg-destructive/10 px-2 py-0.5 text-lg font-normal text-destructive">{t('common.trash_bin')}</span>}
+                                    </h2>
+                                    <p className="text-muted-foreground">{t('common.manage_resource', { resource: resourceName.toLowerCase() })}</p>
+                                </div>
                             )}
 
-                            {/* Custom Toolbar Actions */}
-                            {customToolbarActions && customToolbarActions({
-                                openEditor: (data = null) => { setSelectedItem(data); setShowEditor(true); }
-                            })}
+                            {hasToolbarActions && (
+                                <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                                    {softDeleteEnabled && (
+                                        <Button
+                                            variant={showTrash ? 'destructive' : 'outline'}
+                                            onClick={handleTrashToggle}
+                                            className={showTrash ? 'bg-destructive hover:bg-destructive/90' : ''}
+                                        >
+                                            {showTrash ? <RotateCcw className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                            {showTrash ? t('common.back_to_active') : t('common.trash')}
+                                        </Button>
+                                    )}
 
-                            {canCreate && !showTrash && (
-                                <Button onClick={() => { 
-                                    if (onCreateOverride) {
-                                        onCreateOverride();
-                                    } else {
-                                        setSelectedItem(null); setShowEditor(true); 
-                                    }
-                                }} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                                    <Plus className="w-4 h-4 mr-2" /> {t('common.create_resource', { resource: resourceName })}
-                                </Button>
+                                    {customToolbarActions && customToolbarActions({
+                                        openEditor: (data = null) => { setSelectedItem(data); setShowEditor(true); }
+                                    })}
+
+                                    {canCreate && !showTrash && (
+                                        <Button onClick={() => {
+                                            if (onCreateOverride) {
+                                                onCreateOverride();
+                                            } else {
+                                                setSelectedItem(null); setShowEditor(true);
+                                            }
+                                        }} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                                            <Plus className="mr-2 h-4 w-4" /> {t('common.create_resource', { resource: resourceName })}
+                                        </Button>
+                                    )}
+                                </div>
                             )}
                         </div>
-                    </div>
                     )}
+
+                    {headerContent}
 
                     <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center gap-2">
                         <div className="flex-1 max-w-sm">
@@ -522,11 +573,11 @@ const GenericContentManager = ({
                         loading={loading}
                         // Dynamically check permissions for each row
                         onEdit={!showTrash ? (item) => {
-                            if (checkAccess('update', permissionPrefix, item)) handleEdit(item);
+                            if (canUpdate && checkAccess('update', permissionPrefix, item)) handleEdit(item);
                             else toast({ variant: 'destructive', title: 'Access Denied', description: 'You can only edit your own content.' });
                         } : null}
 
-                        onDelete={!showTrash ? (item) => handleDelete(item.id, item) : null}
+                        onDelete={!showTrash && canDelete ? (item) => handleDelete(item.id, item) : null}
 
                         extraActions={(item) => (
                             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>

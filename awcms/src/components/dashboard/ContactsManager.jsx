@@ -40,7 +40,7 @@ function ContactsManager() {
     { key: 'latitude', label: 'Latitude', type: 'number', description: 'e.g. -6.2088' },
     { key: 'longitude', label: 'Longitude', type: 'number', description: 'e.g. 106.8456' },
     { key: 'website', label: 'Website URL' },
-    { key: 'description', label: 'Description/Notes', type: 'textarea' },
+    { key: 'description', label: 'Notes', type: 'textarea' },
     { key: 'category_id', label: 'Category', type: 'relation', table: 'categories', filter: { type: ['contact', 'contacts'] } }
   ];
 

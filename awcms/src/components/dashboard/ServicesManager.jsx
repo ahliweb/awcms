@@ -49,7 +49,7 @@ function ServicesManager() {
         <AdminPageLayout requiredPermission="tenant.services.read">
             <PageHeader
                 title="Services"
-                description="Manage your company's services showcase."
+                description="Manage your service catalog and homepage highlights."
                 icon={Wrench}
                 breadcrumbs={[{ label: 'Services', icon: Wrench }]}
             />

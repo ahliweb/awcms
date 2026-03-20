@@ -37,7 +37,7 @@ function ContactMessagesManager() {
                 title="Contact Messages"
                 description="View and manage incoming contact form submissions."
                 icon={Mail}
-                breadcrumbs={[{ label: 'Messages', icon: Mail }]}
+                breadcrumbs={[{ label: 'Contact Messages', icon: Mail }]}
             />
 
             <GenericContentManager

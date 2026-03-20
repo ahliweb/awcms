@@ -29,7 +29,7 @@ function TeamManager() {
 
     const formFields = [
         { key: 'name', label: 'Full Name', required: true },
-        { key: 'role', label: 'Job Role/Position', required: true },
+        { key: 'role', label: 'Role', required: true },
         { key: 'image', label: 'Profile Photo', type: 'image' },
         {
             key: 'social_links',
@@ -54,10 +54,10 @@ function TeamManager() {
     return (
         <AdminPageLayout requiredPermission="tenant.teams.read">
             <PageHeader
-                title="Team"
+                title="Team Members"
                 description="Manage your team members and their profiles."
                 icon={Users}
-                breadcrumbs={[{ label: 'Team', icon: Users }]}
+                breadcrumbs={[{ label: 'Team Members', icon: Users }]}
             />
 
             <GenericContentManager

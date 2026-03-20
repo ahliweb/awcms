@@ -10,7 +10,7 @@ function ProductTypesManager() {
       label: '',
       className: 'w-12',
       render: (val) => val ? (
-        <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-lg">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-lg">
           {val.startsWith('http') ? (
             <img src={val} alt="" className="w-6 h-6 object-contain" />
           ) : (
@@ -18,7 +18,7 @@ function ProductTypesManager() {
           )}
         </div>
       ) : (
-        <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
           <Layers className="w-5 h-5 text-slate-400" />
         </div>
       )
@@ -29,7 +29,7 @@ function ProductTypesManager() {
       key: 'description',
       label: 'Description',
       render: (val) => val ? (
-        <span className="text-slate-600 line-clamp-1 max-w-[300px]">{val}</span>
+        <span className="block max-w-[22rem] truncate text-slate-600" title={val}>{val}</span>
       ) : (
         <span className="text-slate-300">-</span>
       )

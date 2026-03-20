@@ -16,7 +16,7 @@ function PlatformDiagnostics() {
         breadcrumbs={[]}
       />
 
-      <div className="grid gap-4 lg:grid-cols-3 text-sm">
+      <div className="grid gap-6 text-sm lg:grid-cols-3">
         <div className="rounded-2xl border border-border/60 bg-card/65 p-6 shadow-sm backdrop-blur-sm">
           <div className="mb-4 flex items-center gap-2 text-foreground font-semibold">
             <ShieldCheck className="h-4 w-4 text-primary" />

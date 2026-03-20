@@ -29,7 +29,7 @@ function FunFactsManager() {
 
     const formFields = [
         { key: 'title', label: 'Title', required: true },
-        { key: 'count', label: 'Count Display (e.g. 500+)', required: true },
+        { key: 'count', label: 'Count', required: true, description: 'Example: 500+' },
         { key: 'icon', label: 'Icon Class (e.g. ti-user)', description: 'Themify icon class' },
         { key: 'order', label: 'Sort Order', type: 'number', defaultValue: 0 },
         {

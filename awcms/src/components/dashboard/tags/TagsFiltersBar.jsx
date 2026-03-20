@@ -21,7 +21,7 @@ function TagsFiltersBar({
   setCurrentPage,
 }) {
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm lg:flex-row">
+    <div className="dashboard-surface flex flex-col gap-4 p-4 lg:flex-row">
       <div className="max-w-sm flex-1">
         <MinCharSearchInput
           value={query}
@@ -51,7 +51,7 @@ function TagsFiltersBar({
                 setModuleFilter(event.target.value);
                 setCurrentPage(1);
               }}
-              className="h-10 w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm focus:ring-2 focus:ring-ring dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+              className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 py-2 pl-9 text-sm shadow-sm focus:ring-2 focus:ring-ring dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
             >
               {modules.map((module) => (
                 <option key={module.value} value={module.value}>{module.label}</option>
@@ -67,7 +67,7 @@ function TagsFiltersBar({
                 setActiveFilter(event.target.value);
                 setCurrentPage(1);
               }}
-              className="h-10 w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm focus:ring-2 focus:ring-ring dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+              className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 py-2 pl-9 text-sm shadow-sm focus:ring-2 focus:ring-ring dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>

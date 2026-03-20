@@ -11,7 +11,11 @@ function PartnersManager() {
             render: (value) => value ? <img src={value} alt="Partner" className="h-8 object-contain" /> : '-'
         },
         { key: 'name', label: 'Name' },
-        { key: 'link', label: 'Website' },
+        {
+            key: 'link',
+            label: 'Website',
+            render: (value) => value ? <a href={value} target="_blank" rel="noopener noreferrer" className="block max-w-[220px] truncate text-primary hover:underline" title={value}>{value}</a> : '-'
+        },
         { key: 'order', label: 'Order', type: 'number' },
         {
             key: 'status',

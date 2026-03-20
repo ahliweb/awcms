@@ -165,7 +165,7 @@ const FilesManager = () => {
         uploading={uploading}
       />
 
-      <div className="flex flex-col space-y-6">
+      <div className="space-y-6">
         {/* Stats Cards (Only show in main view) */}
         {!showTrash && (
           <div className="flex-shrink-0">
@@ -173,10 +173,10 @@ const FilesManager = () => {
           </div>
         )}
 
-        <div className="flex flex-col md:flex-row gap-6 items-start">
+        <div className="flex flex-col items-start gap-6 md:flex-row">
           {/* Sidebar for Categories */}
           {!showTrash && (
-            <div className="w-full md:w-64 flex-shrink-0 space-y-4">
+            <div className="w-full flex-shrink-0 space-y-4 md:w-64">
               <FilesCategoriesPanel
                 categories={categories}
                  selectedCategory={effectiveSelectedCategory}

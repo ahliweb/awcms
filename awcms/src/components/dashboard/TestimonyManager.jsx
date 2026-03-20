@@ -40,10 +40,10 @@ function TestimonyManager() {
     ];
 
     const formFields = [
-        { key: 'title', label: 'Title/Headline', required: true, description: 'E.g. "Great Service!"' },
+        { key: 'title', label: 'Headline', required: true, description: 'Example: "Great Service!"' },
         { key: 'slug', label: 'Slug', required: false, description: 'Auto-generated if empty' },
         { key: 'author_name', label: 'Author Name', required: true },
-        { key: 'author_position', label: 'Position/Company' },
+        { key: 'author_position', label: 'Role or Company' },
         { key: 'author_image', label: 'Author Photo', type: 'image', description: 'Upload or select from Media Library' },
         { key: 'content', label: 'Testimony', type: 'richtext', required: true },
         { key: 'category_id', label: 'Category', type: 'resource_select', resourceTable: 'categories', filter: { type: ['testimony', 'testimonies'] } },

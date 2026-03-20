@@ -106,7 +106,7 @@ function PlatformSettingsManager() {
 
             <GenericContentManager
                 tableName="platform_settings"
-                resourceName="Platform Setting"
+                resourceName="Setting"
                 columns={columns}
                 formFields={formFields}
                 // Use full ABAC strings for custom validation

@@ -30,7 +30,7 @@ function PortfolioManager() {
 
     const formFields = [
         { key: 'title', label: 'Project Title', required: true },
-        { key: 'slug', label: 'URL Slug', placeholder: 'auto-generated-from-title' },
+        { key: 'slug', label: 'Slug', placeholder: 'auto-generated-from-title' },
         { key: 'featured_image', label: 'Cover Image', type: 'image', description: 'Main project thumbnail' },
         { key: 'client', label: 'Client Name' },
         { key: 'description', label: 'Description', type: 'richtext' },
@@ -61,7 +61,7 @@ function PortfolioManager() {
 
             <GenericContentManager
                 tableName="portfolio"
-                resourceName="Portfolio Project"
+                resourceName="Project"
                 columns={columns}
                 formFields={formFields}
                 permissionPrefix="portfolio"

@@ -31,7 +31,7 @@ function PlatformDashboard() {
                 breadcrumbs={[]}
             />
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+            <div className="mb-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {mockStats.map((stat, i) => {
                     const Icon = stat.icon;
                     return (
@@ -119,7 +119,7 @@ function PlatformDashboard() {
                         </div>
                         <h3 className="text-lg font-semibold">Runtime Guarantees</h3>
                     </div>
-                    <div className="grid gap-4 lg:grid-cols-3 text-sm">
+                    <div className="grid gap-6 text-sm lg:grid-cols-3">
                         <div className="rounded-xl border border-border/60 bg-background/70 p-4">
                             <div className="flex items-center gap-2 mb-3 text-foreground font-semibold">
                                 <ShieldCheck className="w-4 h-4 text-primary" />

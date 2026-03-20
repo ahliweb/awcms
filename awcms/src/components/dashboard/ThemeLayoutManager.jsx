@@ -11,7 +11,7 @@ import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
  * ThemeLayoutManager
  * Manages system templates like Homepage, Header, Footer, etc.
  */
-const ThemeLayoutManager = () => {
+const ThemeLayoutManager = ({ embedded = false }) => {
     const [visualBuilderOpen, setVisualBuilderOpen] = useState(false);
     const [selectedPage, setSelectedPage] = useState(null);
 
@@ -94,6 +94,8 @@ const ThemeLayoutManager = () => {
             permissionPrefix="visual_pages"
             defaultFilters={{ page_type: type, editor_type: 'visual' }}
             customRowActions={visualEditorAction}
+            showBreadcrumbs={false}
+            showHeader={false}
             // Custom instructions
             headerContent={
                 <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 flex items-start gap-2 text-sm text-blue-700">
@@ -121,17 +123,9 @@ const ThemeLayoutManager = () => {
         );
     }
 
-    return (
-        <AdminPageLayout requiredPermission="tenant.visual_pages.read">
-            <PageHeader
-                title="Theme Layouts"
-                description="Manage system templates for homepage, header, footer, and more."
-                icon={Layout}
-                breadcrumbs={[{ label: 'Theme Layouts', icon: Layout }]}
-            />
-
-            <Tabs defaultValue="homepage" className="w-full">
-                <TabsList className="grid grid-cols-3 lg:grid-cols-6 mb-6 h-auto">
+    const content = (
+        <Tabs defaultValue="homepage" className="w-full">
+                <TabsList className="mb-6 grid h-auto grid-cols-3 lg:grid-cols-6">
                     <TabsTrigger value="homepage" className="flex flex-col gap-1 py-3"><Globe className="w-4 h-4" /> Homepage</TabsTrigger>
                     <TabsTrigger value="header" className="flex flex-col gap-1 py-3"><PanelTop className="w-4 h-4" /> Header</TabsTrigger>
                     <TabsTrigger value="footer" className="flex flex-col gap-1 py-3"><PanelBottom className="w-4 h-4" /> Footer</TabsTrigger>
@@ -145,7 +139,7 @@ const ThemeLayoutManager = () => {
                 <TabsContent value="footer">{renderManager('footer', <PanelBottom className="w-5 h-5" />, 'Global Footer')}</TabsContent>
 
                 <TabsContent value="single">
-                    <div className="grid gap-8">
+                    <div className="grid gap-6">
                         <div>
                             <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><FileType className="w-5 h-5" /> Single Page Template</h3>
                             {renderManager('single_page', null, 'Single Page Template')}
@@ -160,9 +154,24 @@ const ThemeLayoutManager = () => {
                 <TabsContent value="404">{renderManager('404', <AlertTriangle className="w-5 h-5" />, '404 Page')}</TabsContent>
                 <TabsContent value="archive">{renderManager('archive', <Layout className="w-5 h-5" />, 'Archive Template')}</TabsContent>
             </Tabs>
+    );
+
+    if (embedded) {
+        return content;
+    }
+
+    return (
+        <AdminPageLayout requiredPermission="tenant.visual_pages.read" className="space-y-6">
+            <PageHeader
+                title="Theme Layouts"
+                description="Manage system templates for homepage, header, footer, and more."
+                icon={Layout}
+                breadcrumbs={[{ label: 'Theme Layouts', icon: Layout }]}
+            />
+
+            {content}
         </AdminPageLayout>
     );
 };
 
 export default ThemeLayoutManager;
-

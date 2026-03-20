@@ -597,7 +597,7 @@ function MenusManager() {
     <AdminPageLayout requiredPermission="tenant.menu.read">
       <PageHeader
         title="Menu Management"
-        description="Configure public navigation structure for headers, footers, and sidebars"
+        description="Configure public navigation for headers, footers, sidebars, and localized menu variants."
         icon={Menu}
         breadcrumbs={[{ label: 'Menus', icon: Menu }]}
         actions={(
@@ -625,21 +625,21 @@ function MenusManager() {
       />
 
       <div className="space-y-6">
-          <MenusOverviewCards
-            flatMenus={flatMenus}
-            rolesCount={roles.length}
-            currentLocationLabel={MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label}
-            portalVariantLabel={portalVariantLabel}
-            duplicateCount={duplicateCount}
-          />
+        <MenusOverviewCards
+          flatMenus={flatMenus}
+          rolesCount={roles.length}
+          currentLocationLabel={MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label}
+          portalVariantLabel={portalVariantLabel}
+          duplicateCount={duplicateCount}
+        />
 
-          <MenusFiltersBar
-            searchQuery={searchQuery}
-            onChangeSearch={setSearchQuery}
-            visibilityFilter={visibilityFilter}
-            onChangeVisibility={setVisibilityFilter}
-            duplicateCount={duplicateCount}
-          />
+        <MenusFiltersBar
+          searchQuery={searchQuery}
+          onChangeSearch={setSearchQuery}
+          visibilityFilter={visibilityFilter}
+          onChangeVisibility={setVisibilityFilter}
+          duplicateCount={duplicateCount}
+        />
 
         <MenusLocaleSelector
           locales={SUPPORTED_LOCALES}

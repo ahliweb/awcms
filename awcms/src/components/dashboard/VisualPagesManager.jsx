@@ -46,7 +46,7 @@ const VisualPagesManager = () => {
     }
 
     return (
-        <AdminPageLayout requiredPermission="tenant.visual_pages.read">
+        <AdminPageLayout requiredPermission="tenant.visual_pages.read" className="space-y-6">
             <PageHeader
                 title="Visual Builder"
                 description="Manage your visual pages and system theme templates."
@@ -74,11 +74,11 @@ const VisualPagesManager = () => {
 
                 <TabsContent value="pages" className="mt-0">
                     {/* Render regular pages (page_type = regular) */}
-                    <PagesManager onlyVisual={true} defaultFilters={{ page_type: 'regular' }} />
+                    <PagesManager onlyVisual={true} embedded />
                 </TabsContent>
 
                 <TabsContent value="layouts" className="mt-0">
-                    <ThemeLayoutManager />
+                    <ThemeLayoutManager embedded />
                 </TabsContent>
             </Tabs>
         </AdminPageLayout>

@@ -179,7 +179,7 @@ function BlogsManager() {
     },
     {
       key: 'locale',
-      label: 'Lang',
+      label: t('common.language') || 'Language',
       render: (value) => (
         <span className="inline-flex items-center rounded-full border border-border/70 bg-secondary px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-secondary-foreground">
           {value || 'en'}

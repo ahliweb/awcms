@@ -26,9 +26,11 @@ function PagesContentPanels({
 				columns={pageColumns}
 				formFields={pageFormFields}
 				permissionPrefix="visual_pages"
+				customSelect="*, category:categories!pages_category_id_fkey(id, name), owner:users!created_by(email, full_name), tenant:tenants(name)"
 				customRowActions={customRowActions}
 				defaultFilters={{ editor_type: 'visual', locale: selectedLanguage }}
 				showBreadcrumbs={false}
+				showHeader={false}
 				customToolbarActions={renderLanguageToolbar}
 			/>
 		);

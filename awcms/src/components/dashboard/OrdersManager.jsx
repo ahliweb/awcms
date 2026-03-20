@@ -129,7 +129,7 @@ function OrdersManager() {
                 formFields={formFields}
                 permissionPrefix="orders"
                 canCreate={false}
-                customSelect="*"
+                customSelect="*, user:users(id, full_name, email)"
                 showBreadcrumbs={false}
                 showHeader={false}
                 omitCreatedBy={true}

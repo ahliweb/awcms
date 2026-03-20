@@ -400,7 +400,7 @@ function TagsManager() {
   return (
     <AdminPageLayout requiredPermission="tenant.tag.read">
       <PageHeader
-        title={showTrash ? 'Tags - Trash' : 'Tags Manager'}
+        title={showTrash ? 'Tags Trash' : 'Tags'}
         description="Manage tenant-scoped tags shared across content modules, with reuse visibility and safer cleanup from trash."
         icon={Tag}
         breadcrumbs={breadcrumbs}

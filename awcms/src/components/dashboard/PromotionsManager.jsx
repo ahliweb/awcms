@@ -6,11 +6,11 @@ import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 function PromotionsManager() {
     const columns = [
         { key: 'title', label: 'Promotion' },
-        { key: 'code', label: 'Promo Code' },
+        { key: 'code', label: 'Code' },
         {
             key: 'link',
             label: 'Link',
-            render: (value) => value ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-[150px] block">{value}</a> : '-'
+            render: (value) => value ? <a href={value} target="_blank" rel="noopener noreferrer" className="block max-w-[220px] truncate text-primary hover:underline" title={value}>{value}</a> : '-'
         },
         {
             key: 'status',
@@ -29,7 +29,7 @@ function PromotionsManager() {
 
     const formFields = [
         { key: 'title', label: 'Title', required: true },
-        { key: 'code', label: 'Promo Code', description: 'e.g. WINTER50, SALE2025' },
+        { key: 'code', label: 'Code', description: 'Example: WINTER50 or SALE2025' },
         { key: 'featured_image', label: 'Banner Image', type: 'image' },
         { key: 'description', label: 'Description', type: 'richtext' },
         { key: 'link', label: 'Redirect URL', type: 'url', description: 'Where to send the user when clicked (https://...)' },

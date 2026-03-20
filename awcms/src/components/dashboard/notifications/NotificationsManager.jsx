@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Send, Users, User, CheckCircle2, Search, Filter, CheckCheck } from 'lucide-react';
+import { Bell, Send, Users, User, CheckCircle2, Search, Filter, CheckCheck } from 'lucide-react';
 import ContentTable from '@/components/dashboard/ContentTable';
 import { useToast } from '@/components/ui/use-toast';
 import { Helmet } from 'react-helmet-async';
@@ -28,6 +28,7 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { encodeRouteParam } from '@/lib/routeSecurity';
+import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
 function NotificationsManager() {
     // Hooks
@@ -172,7 +173,7 @@ function NotificationsManager() {
                 return <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${colors[p] || colors.normal}`}>{p || 'normal'}</span>;
             }
         },
-        { key: 'message', label: 'Message', className: 'w-1/3', render: (text) => <span className="truncate block max-w-xs text-slate-600">{text}</span> },
+        { key: 'message', label: 'Message', className: 'w-1/3', render: (text) => <span className="block max-w-xs truncate text-slate-600" title={text}>{text}</span> },
         {
             key: 'type',
             label: 'Type',
@@ -210,18 +211,17 @@ function NotificationsManager() {
     );
 
     return (
-        <div className="space-y-6">
+        <AdminPageLayout requiredPermission="tenant.notification.read" className="space-y-6">
             <Helmet>
                 <title>Notifications - CMS</title>
             </Helmet>
 
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Notifications</h1>
-                    <p className="text-slate-500">View and manage system notifications.</p>
-                </div>
-
-                <div className="flex gap-2">
+            <PageHeader
+                title="Notifications"
+                description="View inbox activity, filter notification history, and send new notifications."
+                icon={Bell}
+                breadcrumbs={[{ label: 'Notifications', icon: Bell }]}
+                actions={<div className="flex flex-wrap gap-2">
                     <AlertDialog open={markAllOpen} onOpenChange={setMarkAllOpen}>
                         <AlertDialogTrigger asChild>
                             <Button variant="outline" className="border-slate-200/70 bg-white/70 hover:bg-white">
@@ -368,8 +368,8 @@ function NotificationsManager() {
                             </DialogContent>
                         </Dialog>
                     )}
-                </div>
-            </div>
+                </div>}
+            />
 
             <div className="dashboard-surface dashboard-surface-hover flex flex-wrap gap-4 items-center p-4">
                 <div className="relative flex-1 min-w-[200px]">
@@ -440,7 +440,7 @@ function NotificationsManager() {
                     />
                 </CardContent>
             </Card>
-        </div>
+        </AdminPageLayout>
     );
 }
 

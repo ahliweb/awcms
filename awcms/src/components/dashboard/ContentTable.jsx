@@ -105,7 +105,9 @@ const ContentTable = ({
                     ) : col.type === 'boolean' ? (
                       <StatusBadge status={item[col.key] ? 'yes' : 'no'} />
                     ) : (
-                      <span className="text-foreground">{item[col.key]}</span>
+                      <span className="block max-w-[20rem] truncate text-foreground" title={typeof item[col.key] === 'string' ? item[col.key] : undefined}>
+                        {item[col.key]}
+                      </span>
                     )}
                   </TableCell>
                 ))}
@@ -138,11 +140,11 @@ const ContentTable = ({
       </div>
 
       {pagination && (
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-4 py-4 border-t border-border mt-2">
+        <div className="dashboard-surface flex flex-col gap-4 border-border/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">
             Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of {pagination.totalItems} entries
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
             <Select
               value={String(pagination.itemsPerPage)}
               onValueChange={(value) => pagination.onLimitChange(Number(value))}
