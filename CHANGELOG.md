@@ -5,6 +5,12 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Module Management: Introduced `useModules` hook (`src/hooks/useModules.js`) providing per-tenant module data, `toggleModuleStatus` (active ↔ inactive), `syncModules` (RPC call to `sync_modules_from_sidebar`), and `isModuleEnabled` (slug-based gating, fail-open). Scoped reads for regular users; platform admins see all tenants.
+- Module Management: Rewrote `ModulesManager.jsx` to use `AdminPageLayout` with `requiredPermission` array, the new `useModules` hook, shadcn/ui `Switch` per-row toggle, semantic-token-only styling, and a "Sync from Sidebar" action visible to platform admins with `platform.module.manage`.
+- Sidebar Gating: Extended `useAdminMenu.js` to query inactive module slugs from the `modules` table and filter matching sidebar items on each menu load. Platform-scoped items are never filtered; the filter is fail-open (unknown slug → item shown). `fetchMenu` dependency array updated to re-run when `currentTenant?.id` changes.
+
 ### Changed
 
 - _No entries yet._

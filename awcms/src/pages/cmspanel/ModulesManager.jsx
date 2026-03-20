@@ -1,14 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Search, RefreshCw } from 'lucide-react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { PageHeader } from '@/templates/flowbite-admin';
+import { useState, useMemo } from 'react';
+import { Box, Search, RefreshCw, RotateCcw } from 'lucide-react';
+import { PageHeader, AdminPageLayout } from '@/templates/flowbite-admin';
 import { Card } from '@/components/ui/card';
-import { useToast } from '@/components/ui/use-toast';
-import { useAdminMenu } from '@/hooks/useAdminMenu';
-import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
-import { usePlugins } from '@/contexts/PluginContext';
-import { filterMenuItemsForSidebar, normalizeMenuPath } from '@/lib/adminMenuUtils';
+import { useModules } from '@/hooks/useModules';
 import {
   Table,
   TableBody,
@@ -16,296 +11,247 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatCreatedAt = (value) => {
   if (!value) return '-';
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
-
   return date.toLocaleDateString();
 };
 
-const slugify = (value) => {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-};
+// ─── Status badge — semantic tokens only ─────────────────────────────────────
 
-const buildModuleSlugFromMenuItem = (item) => {
-  if (!item) return '';
-
-  if (item.source === 'extension') {
-    const extensionKey = item.key || 'extension';
-    const menuPath = normalizeMenuPath(item.path);
-    const slugSuffix = slugify(menuPath || item.label || 'menu');
-    return `ext-${extensionKey}-${slugSuffix}`;
+const StatusBadge = ({ status }) => {
+  switch (status) {
+    case 'active':
+      return (
+        <Badge className="border-transparent bg-primary/10 text-primary hover:bg-primary/10">
+          Active
+        </Badge>
+      );
+    case 'inactive':
+      return (
+        <Badge className="border-transparent bg-muted text-muted-foreground hover:bg-muted">
+          Inactive
+        </Badge>
+      );
+    case 'maintenance':
+      return (
+        <Badge className="border-transparent bg-accent text-accent-foreground hover:bg-accent">
+          Maintenance
+        </Badge>
+      );
+    default:
+      return <Badge variant="outline">{status || '—'}</Badge>;
   }
-
-  return item.key || item.id || '';
 };
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 const ModulesManager = () => {
-  /* const supabase = useSupabaseClient(); - Replaced by global import */
-  const { toast } = useToast();
-  const { menuItems, loading: menuLoading } = useAdminMenu();
-  const { currentTenant } = useTenant();
-  const { hasPermission, hasAnyPermission, isPlatformAdmin, isFullAccess, isTenantAdmin, userRole } = usePermissions();
-  const { applyFilters } = usePlugins();
+  const { isPlatformAdmin, isFullAccess } = usePermissions();
 
-  const [modules, setModules] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    modules,
+    loading,
+    toggling,
+    canManage,
+    fetchModules,
+    syncModules,
+    toggleModuleStatus,
+  } = useModules();
+
   const [searchQuery, setSearchQuery] = useState('');
 
-  const isLoading = loading || menuLoading;
+  const isPlatformUser = isPlatformAdmin || isFullAccess;
 
-  const fetchModules = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { error: syncError } = await supabase.rpc('sync_modules_from_sidebar', {
-        p_tenant_id: currentTenant?.id || null,
-      });
-
-      if (syncError) {
-        console.warn('Error syncing modules from sidebar:', syncError);
-      }
-
-      let query = supabase
-        .from('modules')
-        .select(`
-          *,
-          tenant:tenants(name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (currentTenant?.id) {
-        query = query.eq('tenant_id', currentTenant.id);
-      }
-
-      // If user is admin (restriced by RLS policies we just added), they only see their own.
-      // Owner/SuperAdmin see all.
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setModules(data || []);
-    } catch (error) {
-      console.error('Error fetching modules:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load modules list",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [currentTenant?.id, toast]);
-
-  useEffect(() => {
-    fetchModules();
-  }, [fetchModules]);
-
-  const visibleMenuItems = useMemo(() => filterMenuItemsForSidebar({
-    items: menuItems,
-    hasPermission,
-    hasAnyPermission,
-    isPlatformAdmin,
-    isFullAccess,
-    isTenantAdmin,
-    subscriptionTier: currentTenant?.subscription_tier,
-    applyFilters,
-    userRole
-  }), [
-    menuItems,
-    hasPermission,
-    hasAnyPermission,
-    isPlatformAdmin,
-    isFullAccess,
-    isTenantAdmin,
-    currentTenant?.subscription_tier,
-    applyFilters,
-    userRole
-  ]);
-
-  const sidebarModules = useMemo(() => {
-    const seenSlugs = new Set();
-
-    return visibleMenuItems
-      .map((item) => {
-        const slug = buildModuleSlugFromMenuItem(item);
-        if (!slug || seenSlugs.has(slug)) return null;
-
-        seenSlugs.add(slug);
-
-        return {
-          id: `sidebar-${slug}`,
-          name: item.label || slug,
-          slug,
-          description: item.source === 'extension'
-            ? 'Available from sidebar extension menu'
-            : 'Available from sidebar menu',
-          status: item.is_visible === false ? 'inactive' : 'active',
-          created_at: null,
-          tenant: item.scope === 'platform'
-            ? { name: 'Platform' }
-            : (currentTenant ? { name: currentTenant.name } : null),
-          group_label: item.group_label || null,
-          menu_path: normalizeMenuPath(item.path),
-          source: 'sidebar',
-        };
-      })
-      .filter(Boolean);
-  }, [currentTenant, visibleMenuItems]);
-
+  // ─── Filtered list ──────────────────────────────────────────────────────
   const displayModules = useMemo(() => {
-    const mergedModules = new Map(
-      sidebarModules.map((module) => [module.slug, module])
+    if (!searchQuery) return modules;
+    const q = searchQuery.toLowerCase();
+    return modules.filter(
+      (m) =>
+        m.name?.toLowerCase().includes(q) ||
+        m.slug?.toLowerCase().includes(q) ||
+        m.status?.toLowerCase().includes(q) ||
+        m.tenant?.name?.toLowerCase().includes(q) ||
+        m.description?.toLowerCase().includes(q) ||
+        m.group_label?.toLowerCase().includes(q)
     );
+  }, [modules, searchQuery]);
 
-    modules.forEach((module) => {
-      const sidebarModule = mergedModules.get(module.slug);
-      mergedModules.set(module.slug, {
-        ...(sidebarModule || {}),
-        ...module,
-        group_label: module.group_label || sidebarModule?.group_label || null,
-        menu_path: sidebarModule?.menu_path || null,
-        tenant: module.tenant || sidebarModule?.tenant || (currentTenant ? { name: currentTenant.name } : null),
-        source: module.source || 'database',
-      });
-    });
-
-    const enrichedModules = Array.from(mergedModules.values()).sort((a, b) => {
-      const groupA = a.group_label || '';
-      const groupB = b.group_label || '';
-
-      if (groupA !== groupB) {
-        return groupA.localeCompare(groupB);
-      }
-
-      return (a.name || '').localeCompare(b.name || '');
-    });
-
-    if (!searchQuery) return enrichedModules;
-
-    const query = searchQuery.toLowerCase();
-    return enrichedModules.filter((module) => (
-      module.name?.toLowerCase().includes(query) ||
-      module.slug?.toLowerCase().includes(query) ||
-      module.status?.toLowerCase().includes(query) ||
-      module.tenant?.name?.toLowerCase().includes(query) ||
-      module.description?.toLowerCase().includes(query) ||
-      module.group_label?.toLowerCase().includes(query) ||
-      module.menu_path?.toLowerCase().includes(query)
-    ));
-  }, [currentTenant, modules, searchQuery, sidebarModules]);
-
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Active</Badge>;
-      case 'inactive':
-        return <Badge className="bg-slate-100 text-slate-800 hover:bg-slate-100">Inactive</Badge>;
-      case 'maintenance':
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Maintenance</Badge>;
-      case 'missing':
-        return <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100">Missing</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
+  // ─── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Module Management"
-        description="Manage system modules and their status across tenants."
-        icon={Box}
-      />
+    <AdminPageLayout
+      requiredPermission={['platform.module.read', 'platform.module.manage']}
+      loading={false}
+    >
+      <div className="space-y-6">
+        <PageHeader
+          title="Module Management"
+          description="Enable or disable modules across tenants. Platform admins can sync from the sidebar registry."
+          icon={Box}
+          breadcrumbs={[
+            { label: 'Platform', href: '/cmspanel' },
+            { label: 'Modules' },
+          ]}
+          actions={
+            isPlatformUser && canManage ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={syncModules}
+                disabled={loading}
+              >
+                <RotateCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Sync from Sidebar
+              </Button>
+            ) : null
+          }
+        />
 
-      <Card className="p-6">
-        <div className="flex flex-col md:flex-row gap-4 mb-6 justify-between items-center">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="Search modules..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={fetchModules} disabled={isLoading}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+        <Card className="p-6 dashboard-surface">
+          {/* ── Toolbar ── */}
+          <div className="flex flex-col md:flex-row gap-4 mb-6 justify-between items-center">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search modules…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchModules}
+              disabled={loading}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
-        </div>
 
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tenant</TableHead>
-                <TableHead>Module Name</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created At</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array(5).fill(0).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell><div className="h-4 w-32 bg-slate-100 rounded animate-pulse" /></TableCell>
-                    <TableCell><div className="h-4 w-40 bg-slate-100 rounded animate-pulse" /></TableCell>
-                    <TableCell><div className="h-4 w-24 bg-slate-100 rounded animate-pulse" /></TableCell>
-                    <TableCell><div className="h-4 w-48 bg-slate-100 rounded animate-pulse" /></TableCell>
-                    <TableCell><div className="h-6 w-16 bg-slate-100 rounded-full animate-pulse" /></TableCell>
-                    <TableCell><div className="h-4 w-24 bg-slate-100 rounded animate-pulse" /></TableCell>
-                  </TableRow>
-                ))
-              ) : displayModules.length === 0 ? (
+          {/* ── Table ── */}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-slate-500">
-                    <div className="flex flex-col items-center justify-center p-4">
-                      <Box className="w-8 h-8 mb-2 opacity-20" />
-                      <p>No modules found</p>
-                    </div>
-                  </TableCell>
+                  {isPlatformUser && <TableHead>Tenant</TableHead>}
+                  <TableHead>Module Name</TableHead>
+                  <TableHead>Slug</TableHead>
+                  <TableHead>Status</TableHead>
+                  {canManage && <TableHead className="text-center">Toggle</TableHead>}
+                  <TableHead>Created At</TableHead>
                 </TableRow>
-              ) : (
-                displayModules.map((module) => (
-                  <TableRow key={module.id}>
-                    <TableCell className="font-medium">
-                      {module.tenant?.name || <span className="text-slate-400 italic">Restricted</span>}
-                    </TableCell>
-                    <TableCell>{module.name}</TableCell>
-                    <TableCell>
-                      <code className="px-2 py-0.5 bg-slate-100 rounded text-xs font-mono text-slate-700">
-                        {module.slug}
-                      </code>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate" title={module.description}>
-                      {module.description || '-'}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(module.status)}</TableCell>
-                    <TableCell className="text-slate-500 text-xs">
-                      {formatCreatedAt(module.created_at)}
+              </TableHeader>
+
+              <TableBody>
+                {loading ? (
+                  Array(5)
+                    .fill(0)
+                    .map((_, i) => (
+                      <TableRow key={i}>
+                        {isPlatformUser && (
+                          <TableCell>
+                            <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          <div className="h-4 w-40 bg-muted rounded animate-pulse" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="h-6 w-16 bg-muted rounded-full animate-pulse" />
+                        </TableCell>
+                        {canManage && (
+                          <TableCell>
+                            <div className="h-5 w-9 bg-muted rounded-full animate-pulse mx-auto" />
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                ) : displayModules.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={isPlatformUser ? (canManage ? 6 : 5) : (canManage ? 5 : 4)}
+                      className="h-32 text-center text-muted-foreground"
+                    >
+                      <div className="flex flex-col items-center justify-center p-4">
+                        <Box className="w-8 h-8 mb-2 opacity-20" />
+                        <p>No modules found</p>
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
-    </div>
+                ) : (
+                  displayModules.map((module) => (
+                    <TableRow key={module.id}>
+                      {isPlatformUser && (
+                        <TableCell className="font-medium">
+                          {module.tenant?.name ?? (
+                            <span className="text-muted-foreground italic">Restricted</span>
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell>{module.name}</TableCell>
+                      <TableCell>
+                        <code className="px-2 py-0.5 bg-muted rounded text-xs font-mono text-foreground">
+                          {module.slug}
+                        </code>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={module.status} />
+                      </TableCell>
+                      {canManage && (
+                        <TableCell className="text-center">
+                          {/* Only active/inactive are toggleable; maintenance is left alone */}
+                          {module.status === 'maintenance' ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            <Switch
+                              checked={module.status === 'active'}
+                              disabled={toggling === module.id || !module.id}
+                              onCheckedChange={() =>
+                                toggleModuleStatus(module.id, module.status)
+                              }
+                              aria-label={`Toggle ${module.name}`}
+                            />
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell className="text-muted-foreground text-xs">
+                        {formatCreatedAt(module.created_at)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* ── Module count ── */}
+          {!loading && displayModules.length > 0 && (
+            <p className="mt-3 text-xs text-muted-foreground text-right">
+              {displayModules.length} module{displayModules.length !== 1 ? 's' : ''}
+              {searchQuery ? ' matching search' : ''}
+            </p>
+          )}
+        </Card>
+      </div>
+    </AdminPageLayout>
   );
 };
 

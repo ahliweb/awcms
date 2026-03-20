@@ -141,27 +141,29 @@ const Sidebar = ({ isOpen, onClose }) => {
             <aside
                 id="sidebar"
                 className={cn(
-                    "fixed top-0 left-0 z-30 h-full w-64 pt-[72px] transition-transform duration-200",
+                    "fixed left-0 z-30 w-64 transition-transform duration-200",
                     "border-r border-border/70 bg-card/85 text-foreground shadow-xl shadow-slate-900/5 backdrop-blur-xl dark:shadow-black/25",
                     isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
                 )}
+                style={{ top: 'var(--header-h)', height: 'calc(100vh - var(--header-h))' }}
                 aria-label="Sidebar"
             >
-                <div className="pointer-events-none absolute inset-x-0 top-16 h-20 bg-[radial-gradient(240px_80px_at_10%_0%,rgba(59,130,246,0.16),transparent_70%)] dark:bg-[radial-gradient(240px_80px_at_10%_0%,rgba(37,99,235,0.26),transparent_70%)]" />
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[radial-gradient(240px_80px_at_10%_0%,rgba(59,130,246,0.16),transparent_70%)] dark:bg-[radial-gradient(240px_80px_at_10%_0%,rgba(37,99,235,0.26),transparent_70%)]" />
 
                 <div className="relative flex h-full min-h-0 flex-col">
-                    <div className="flex h-12 items-center justify-end px-4 lg:hidden">
+                    <div className="flex h-11 items-center justify-between px-4 border-b border-border/40 lg:hidden">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Menu</span>
                         <button
                             type="button"
                             onClick={onClose}
-                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                             aria-label="Close sidebar"
                         >
                             <X className="h-4 w-4" />
                         </button>
                     </div>
 
-                    <div className="px-3 pt-4">
+                    <div className="px-3 pt-3">
                         <label htmlFor="sidebar-search" className="sr-only">Search</label>
                         <div className="relative">
                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">

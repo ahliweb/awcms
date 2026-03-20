@@ -3,6 +3,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { hooks } from '@/lib/hooks';
 import { normalizeMenuPath, resolveGroupMeta, resolveResourcePath } from '@/lib/adminMenuUtils';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { useTenant } from '@/contexts/TenantContext';
 
 const DEFAULT_MENU_CONFIG = [];
 const REMOVED_RESOURCE_KEYS = new Set();
@@ -111,6 +112,7 @@ const dedupeMenuItems = (items) => {
 export function useAdminMenu() {
   const [menuItems, setMenuItems] = useState([]);
   const { isPlatformAdmin } = usePermissions();
+  const { currentTenant } = useTenant();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -315,6 +317,36 @@ export function useAdminMenu() {
 
       combined = dedupeMenuItems(combined);
 
+      // ── Module status filter ────────────────────────────────────────────
+      // Hide menu items whose matching module slug is 'inactive' for this
+      // tenant. Platform-scoped items are never filtered. Fail-open: if a
+      // slug is not found in the modules table the item is shown.
+      try {
+        let modulesQuery = supabase
+          .from('modules')
+          .select('slug, status')
+          .eq('status', 'inactive');
+
+        if (currentTenant?.id && !isPlatformAdmin) {
+          modulesQuery = modulesQuery.eq('tenant_id', currentTenant.id);
+        }
+
+        const { data: inactiveModules } = await modulesQuery;
+
+        if (inactiveModules && inactiveModules.length > 0) {
+          const inactiveSlugs = new Set(inactiveModules.map((m) => m.slug));
+          combined = combined.filter((item) => {
+            if (item.scope === 'platform') return true; // never filter platform-admin items
+            const itemKey = getCanonicalMenuKey(item);
+            if (!itemKey) return true; // no key → show (fail-open)
+            return !inactiveSlugs.has(itemKey);
+          });
+        }
+      } catch (modulesErr) {
+        console.warn('[useAdminMenu] Could not load module status filter:', modulesErr);
+        // Fail open — show all items if modules query errors
+      }
+
       // Re-sort after adding plugin items
       combined.sort((a, b) => {
         if ((a.group_order || 0) !== (b.group_order || 0)) {
@@ -332,7 +364,7 @@ export function useAdminMenu() {
     } finally {
       setLoading(false);
     }
-  }, [isPlatformAdmin]);
+  }, [isPlatformAdmin, currentTenant?.id]);
 
   // Initial fetch
   useEffect(() => {

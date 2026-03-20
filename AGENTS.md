@@ -237,6 +237,7 @@ class MyComponent extends Component<Props> { } // NO class components!
 | `useExtensionAudit`    | `src/hooks/useExtensionAudit.js`    | Extension audit logging        |
 | `useMedia`             | `src/hooks/useMedia.js`             | Media library operations       |
 | `useMobileUsers`       | `src/hooks/useMobileUsers.js`       | Mobile app user management     |
+| `useModules`           | `src/hooks/useModules.js`           | Per-tenant module enable/disable & sync |
 | `useNotifications`     | `src/hooks/useNotifications.js`     | Notification system            |
 | `usePlatformStats`     | `src/hooks/usePlatformStats.js`     | Platform-wide statistics       |
 | `usePublicTenant`      | `src/hooks/usePublicTenant.js`      | Public portal tenant resolving |

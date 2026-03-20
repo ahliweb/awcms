@@ -57,11 +57,12 @@ function Header({ toggleSidebar, _onNavigate }) {
   };
 
   return (
-    <header className="relative sticky top-0 z-[60] border-b border-border/60 bg-background/80 shadow-[0_8px_24px_-24px_rgba(15,23,42,0.8)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
+    <header className="relative sticky top-0 z-[60] h-16 border-b border-border/60 bg-background/80 shadow-[0_8px_24px_-24px_rgba(15,23,42,0.8)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
 
-      <div className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+      <div className="flex h-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        {/* Left: branding + mobile menu */}
+        <div className="flex shrink-0 items-center gap-3 sm:gap-4">
           <Button
             variant="ghost"
             size="icon"
@@ -75,32 +76,36 @@ function Header({ toggleSidebar, _onNavigate }) {
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-600 p-2 text-white shadow-md shadow-blue-500/30">
               <ShieldCheck className="h-full w-full" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 hidden sm:block">
               <p className="truncate text-sm font-semibold tracking-tight text-foreground">AWCMS Admin</p>
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Control Center</p>
             </div>
           </div>
+        </div>
 
-          {/* Tenant Context Badge for Platform Admins */}
-          {isPlatformAdmin && currentTenant && (
-            <div className="hidden lg:flex items-center gap-3 rounded-2xl border border-primary/25 bg-primary/10 px-3 py-2 text-primary shadow-sm dark:bg-primary/20">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4" />
-                <div className="leading-tight">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/75">Tenant Scope</p>
-                  <p className="text-xs font-semibold text-primary">{currentTenant.name || currentTenant.slug || 'Tenant'}</p>
+        {/* Center: Tenant Switcher (Platform Admins only) */}
+        {isPlatformAdmin && currentTenant && (
+          <div className="hidden xl:flex flex-1 items-center justify-center px-6">
+            <div className="flex items-center gap-2.5 rounded-2xl border border-primary/20 bg-primary/8 px-3.5 py-1.5 shadow-sm ring-1 ring-primary/10 dark:bg-primary/15 dark:ring-primary/20 w-full max-w-[480px]">
+              <div className="flex shrink-0 items-center gap-2 text-primary">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
+                  <Building2 className="h-3.5 w-3.5" />
+                </div>
+                <div className="leading-none">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/60">Viewing Tenant</p>
                 </div>
               </div>
+              <div className="h-4 w-px shrink-0 bg-primary/20" />
               <Select
                 value={currentTenant.id}
                 onValueChange={(value) => {
                   switchTenantScope(value);
                 }}
               >
-                <SelectTrigger className="h-9 min-w-[240px] rounded-xl border-primary/20 bg-background/70 px-3 text-xs font-medium text-foreground shadow-none focus:ring-1 focus:ring-primary/40">
+                <SelectTrigger className="h-8 flex-1 rounded-xl border-0 bg-transparent px-2 text-sm font-semibold text-foreground shadow-none focus:ring-0 focus:ring-offset-0 hover:bg-primary/5">
                   <SelectValue placeholder="Select tenant scope" />
                 </SelectTrigger>
-                <SelectContent align="start">
+                <SelectContent align="center" className="min-w-[320px]">
                   {resolvedTenant?.id ? (
                     <SelectItem value={resolvedTenant.id}>
                       {resolvedTenant.name || resolvedTenant.slug || 'Resolved Tenant'}
@@ -116,8 +121,11 @@ function Header({ toggleSidebar, _onNavigate }) {
                 </SelectContent>
               </Select>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Spacer when no tenant switcher (keeps right actions pinned) */}
+        {!(isPlatformAdmin && currentTenant) && <div className="flex-1" />}
 
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-card/75 px-1.5 py-1 shadow-sm backdrop-blur-sm">
