@@ -42,7 +42,7 @@ const ThemesManager = () => {
     }
 
     setLoading(false);
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     fetchThemes();

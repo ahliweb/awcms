@@ -283,7 +283,6 @@ function ChannelForm({ channelType, channel, canManage, onSave, onToggle, onDele
 
 export default function NotificationChannelsManager() {
   const {
-    channels,
     loading,
     saving,
     canManage,

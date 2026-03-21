@@ -60,14 +60,19 @@ export async function getPagesSitemapEntries(
       translationQuery = translationQuery.eq("tenant_id", tenantId);
     }
 
-    const { data: translations, error: translationsError } = await translationQuery;
+    const { data: translations, error: translationsError } =
+      await translationQuery;
 
     if (translationsError) {
-      console.error("[Sitemap] Error fetching page translations:", translationsError.message);
+      console.error(
+        "[Sitemap] Error fetching page translations:",
+        translationsError.message,
+      );
     } else {
       translationMap = (translations || []).reduce((acc, row) => {
         if (!row.content_id || !row.locale || !row.slug) return acc;
-        const localeEntries = acc.get(row.content_id) || new Map<string, string>();
+        const localeEntries =
+          acc.get(row.content_id) || new Map<string, string>();
         localeEntries.set(row.locale, row.slug);
         acc.set(row.content_id, localeEntries);
         return acc;
@@ -76,7 +81,8 @@ export async function getPagesSitemapEntries(
   }
 
   return pages.flatMap((page) => {
-    const localeSlugs = translationMap.get(page.id) || new Map<string, string>();
+    const localeSlugs =
+      translationMap.get(page.id) || new Map<string, string>();
 
     return supportedLocales.map((locale) => ({
       loc: `${baseUrl}/${locale}/p/${locale === defaultLocale ? page.slug : localeSlugs.get(locale) || page.slug}`,
@@ -128,14 +134,19 @@ export async function getBlogsSitemapEntries(
       translationQuery = translationQuery.eq("tenant_id", tenantId);
     }
 
-    const { data: translations, error: translationsError } = await translationQuery;
+    const { data: translations, error: translationsError } =
+      await translationQuery;
 
     if (translationsError) {
-      console.error("[Sitemap] Error fetching blog translations:", translationsError.message);
+      console.error(
+        "[Sitemap] Error fetching blog translations:",
+        translationsError.message,
+      );
     } else {
       translationMap = (translations || []).reduce((acc, row) => {
         if (!row.content_id || !row.locale || !row.slug) return acc;
-        const localeEntries = acc.get(row.content_id) || new Map<string, string>();
+        const localeEntries =
+          acc.get(row.content_id) || new Map<string, string>();
         localeEntries.set(row.locale, row.slug);
         acc.set(row.content_id, localeEntries);
         return acc;
@@ -144,7 +155,8 @@ export async function getBlogsSitemapEntries(
   }
 
   return blogs.flatMap((blog) => {
-    const localeSlugs = translationMap.get(blog.id) || new Map<string, string>();
+    const localeSlugs =
+      translationMap.get(blog.id) || new Map<string, string>();
 
     return supportedLocales.map((locale) => ({
       loc: `${baseUrl}/${locale}/blogs/${locale === defaultLocale ? blog.slug : localeSlugs.get(locale) || blog.slug}`,
@@ -238,9 +250,21 @@ export async function getAllSitemapEntries(
   // Add static pages
   const staticEntries: SitemapEntry[] = [
     ...supportedLocales.flatMap((locale) => [
-      { loc: `${baseUrl}/${locale}`, changefreq: "daily" as const, priority: 1.0 },
-      { loc: `${baseUrl}/${locale}/blogs`, changefreq: "daily" as const, priority: 0.9 },
-      { loc: `${baseUrl}/${locale}/contact`, changefreq: "monthly" as const, priority: 0.5 },
+      {
+        loc: `${baseUrl}/${locale}`,
+        changefreq: "daily" as const,
+        priority: 1.0,
+      },
+      {
+        loc: `${baseUrl}/${locale}/blogs`,
+        changefreq: "daily" as const,
+        priority: 0.9,
+      },
+      {
+        loc: `${baseUrl}/${locale}/contact`,
+        changefreq: "monthly" as const,
+        priority: 0.5,
+      },
     ]),
   ];
 

@@ -92,7 +92,7 @@ function TenantsManager() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [toast, t]);
 
     useEffect(() => {
         if (isPlatformAdmin) {
@@ -196,7 +196,7 @@ function TenantsManager() {
         } finally {
             setRulesLoading(false);
         }
-    }, [toast]);
+    }, [toast, t]);
 
     const loadRoleLinks = useCallback(async (tenantId, parentTenantId) => {
         if (!tenantId || !parentTenantId) {
@@ -245,7 +245,7 @@ function TenantsManager() {
         } finally {
             setRoleLinksLoading(false);
         }
-    }, [toast]);
+    }, [toast, t]);
 
     useEffect(() => {
         if (!showEditor || !editingTenant) {

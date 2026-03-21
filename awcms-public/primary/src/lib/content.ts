@@ -17,7 +17,9 @@ interface ContentTranslationRow {
 
 type TranslationContentType = "page" | "article";
 
-function parseVisualTranslationContent(rawContent: string | null | undefined): Record<string, unknown> | null {
+function parseVisualTranslationContent(
+  rawContent: string | null | undefined,
+): Record<string, unknown> | null {
   if (!rawContent) return null;
 
   try {
@@ -52,7 +54,9 @@ async function getContentTranslationBySlug(
 
   let query = supabase
     .from("content_translations")
-    .select("content_id, locale, title, slug, content, excerpt, meta_description")
+    .select(
+      "content_id, locale, title, slug, content, excerpt, meta_description",
+    )
     .eq("content_type", contentType)
     .eq("locale", locale)
     .eq("slug", slug);
@@ -64,7 +68,10 @@ async function getContentTranslationBySlug(
   const { data, error } = await query.maybeSingle();
 
   if (error) {
-    console.error("[Content] Error fetching page translation by slug:", error.message);
+    console.error(
+      "[Content] Error fetching page translation by slug:",
+      error.message,
+    );
     return null;
   }
 
@@ -93,7 +100,9 @@ async function getContentTranslations(
 
   let query = supabase
     .from("content_translations")
-    .select("content_id, locale, title, slug, content, excerpt, meta_description")
+    .select(
+      "content_id, locale, title, slug, content, excerpt, meta_description",
+    )
     .eq("content_type", contentType)
     .eq("locale", locale)
     .in("content_id", contentIds);
@@ -109,13 +118,20 @@ async function getContentTranslations(
     return new Map<string, ContentTranslationRow>();
   }
 
-  return new Map((data || []).map((row) => [row.content_id, row as ContentTranslationRow]));
+  return new Map(
+    (data || []).map((row) => [row.content_id, row as ContentTranslationRow]),
+  );
 }
 
-function mergePageTranslation(page: PageData, translation?: ContentTranslationRow | null): PageData {
+function mergePageTranslation(
+  page: PageData,
+  translation?: ContentTranslationRow | null,
+): PageData {
   if (!translation) return page;
 
-  const translatedVisualContent = parseVisualTranslationContent(translation.content);
+  const translatedVisualContent = parseVisualTranslationContent(
+    translation.content,
+  );
   const isVisual = page.editor_type === "visual";
 
   return {
@@ -124,16 +140,22 @@ function mergePageTranslation(page: PageData, translation?: ContentTranslationRo
     slug: translation.slug || page.slug,
     excerpt: translation.excerpt || page.excerpt,
     meta_description: translation.meta_description || page.meta_description,
-    content: !isVisual && translation.content ? translation.content : page.content,
+    content:
+      !isVisual && translation.content ? translation.content : page.content,
     content_published: translatedVisualContent || page.content_published,
     visual_content: translatedVisualContent || page.visual_content,
   };
 }
 
-function mergeBlogTranslation(blog: BlogData, translation?: ContentTranslationRow | null): BlogData {
+function mergeBlogTranslation(
+  blog: BlogData,
+  translation?: ContentTranslationRow | null,
+): BlogData {
   if (!translation) return blog;
 
-  const translatedVisualContent = parseVisualTranslationContent(translation.content);
+  const translatedVisualContent = parseVisualTranslationContent(
+    translation.content,
+  );
   const isVisual = blog.editor_type === "visual";
 
   return {
@@ -141,7 +163,8 @@ function mergeBlogTranslation(blog: BlogData, translation?: ContentTranslationRo
     title: translation.title || blog.title,
     slug: translation.slug || blog.slug,
     excerpt: translation.excerpt || blog.excerpt,
-    content: !isVisual && translation.content ? translation.content : blog.content,
+    content:
+      !isVisual && translation.content ? translation.content : blog.content,
     visual_content: translatedVisualContent || blog.visual_content,
   };
 }
@@ -207,7 +230,12 @@ export async function getPageBySlug(
   tenantId?: string | null,
   locale?: string,
 ): Promise<PageData | null> {
-  const translationMatch = await getPageTranslationBySlug(supabase, slug, locale, tenantId);
+  const translationMatch = await getPageTranslationBySlug(
+    supabase,
+    slug,
+    locale,
+    tenantId,
+  );
 
   let query = supabase
     .from("pages")
@@ -275,7 +303,9 @@ export async function getAllPages(
     pages.map((page) => page.id),
   );
 
-  return pages.map((page) => mergePageTranslation(page, translations.get(page.id) || null));
+  return pages.map((page) =>
+    mergePageTranslation(page, translations.get(page.id) || null),
+  );
 }
 
 /**
@@ -311,7 +341,9 @@ export async function getPageByType(
   const page = (data || null) as PageData | null;
   if (!page) return null;
 
-  const translations = await getPageTranslations(supabase, locale, tenantId, [page.id]);
+  const translations = await getPageTranslations(supabase, locale, tenantId, [
+    page.id,
+  ]);
   return mergePageTranslation(page, translations.get(page.id) || null);
 }
 
@@ -324,7 +356,13 @@ export async function getBlogBySlug(
   tenantId?: string | null,
   locale?: string,
 ): Promise<BlogData | null> {
-  const translationMatch = await getContentTranslationBySlug(supabase, "article", slug, locale, tenantId);
+  const translationMatch = await getContentTranslationBySlug(
+    supabase,
+    "article",
+    slug,
+    locale,
+    tenantId,
+  );
 
   let query = supabase
     .from("blogs")
@@ -365,10 +403,13 @@ export async function getBlogBySlug(
     category = categoryData || null;
   }
 
-  return mergeBlogTranslation({
-    ...(data as BlogData),
-    category,
-  }, translationMatch);
+  return mergeBlogTranslation(
+    {
+      ...(data as BlogData),
+      category,
+    },
+    translationMatch,
+  );
 }
 
 /**
@@ -397,7 +438,10 @@ export async function getBlogs(
       .maybeSingle();
 
     if (categoryError) {
-      console.error("[Content] Error resolving blog category:", categoryError.message);
+      console.error(
+        "[Content] Error resolving blog category:",
+        categoryError.message,
+      );
       return { blogs: [], total: 0 };
     }
 
@@ -438,11 +482,16 @@ export async function getBlogs(
     const { data: blogTagRows, error: blogTagsError } = await blogTagsQuery;
 
     if (blogTagsError) {
-      console.error("[Content] Error resolving tagged blogs:", blogTagsError.message);
+      console.error(
+        "[Content] Error resolving tagged blogs:",
+        blogTagsError.message,
+      );
       return { blogs: [], total: 0 };
     }
 
-    taggedBlogIds = (blogTagRows || []).map((row) => row.blog_id).filter(Boolean);
+    taggedBlogIds = (blogTagRows || [])
+      .map((row) => row.blog_id)
+      .filter(Boolean);
     if (taggedBlogIds.length === 0) {
       return { blogs: [], total: 0 };
     }
