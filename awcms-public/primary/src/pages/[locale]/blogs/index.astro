@@ -41,6 +41,7 @@ if (supabase) {
         limit: perPage,
         offset: (currentPage - 1) * perPage,
         categorySlug,
+        tagSlug,
         locale,
     });
     blogs = result.blogs;

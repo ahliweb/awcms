@@ -3,6 +3,7 @@
  * Generates XML sitemap entries for pages, blogs, and other content.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { supportedLocales, defaultLocale } from "~/utils/i18n";
 
 export interface SitemapEntry {
   loc: string;
@@ -28,7 +29,7 @@ export async function getPagesSitemapEntries(
 ): Promise<SitemapEntry[]> {
   let query = supabase
     .from("pages")
-    .select("slug, updated_at, page_type")
+    .select("id, slug, updated_at, page_type")
     .eq("status", "published")
     .eq("is_active", true)
     .is("deleted_at", null);
@@ -44,12 +45,46 @@ export async function getPagesSitemapEntries(
     return [];
   }
 
-  return (data || []).map((page) => ({
-    loc: `${baseUrl}/p/${page.slug}`,
-    lastmod: page.updated_at,
-    changefreq: page.page_type === "homepage" ? "daily" : "weekly",
-    priority: page.page_type === "homepage" ? 1.0 : 0.8,
-  }));
+  const pages = data || [];
+  const pageIds = pages.map((page) => page.id).filter(Boolean);
+  let translationMap = new Map<string, Map<string, string>>();
+
+  if (pageIds.length > 0) {
+    let translationQuery = supabase
+      .from("content_translations")
+      .select("content_id, locale, slug")
+      .eq("content_type", "page")
+      .in("content_id", pageIds);
+
+    if (tenantId) {
+      translationQuery = translationQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: translations, error: translationsError } = await translationQuery;
+
+    if (translationsError) {
+      console.error("[Sitemap] Error fetching page translations:", translationsError.message);
+    } else {
+      translationMap = (translations || []).reduce((acc, row) => {
+        if (!row.content_id || !row.locale || !row.slug) return acc;
+        const localeEntries = acc.get(row.content_id) || new Map<string, string>();
+        localeEntries.set(row.locale, row.slug);
+        acc.set(row.content_id, localeEntries);
+        return acc;
+      }, new Map<string, Map<string, string>>());
+    }
+  }
+
+  return pages.flatMap((page) => {
+    const localeSlugs = translationMap.get(page.id) || new Map<string, string>();
+
+    return supportedLocales.map((locale) => ({
+      loc: `${baseUrl}/${locale}/p/${locale === defaultLocale ? page.slug : localeSlugs.get(locale) || page.slug}`,
+      lastmod: page.updated_at,
+      changefreq: page.page_type === "homepage" ? "daily" : "weekly",
+      priority: page.page_type === "homepage" ? 1.0 : 0.8,
+    }));
+  });
 }
 
 /**
@@ -62,7 +97,7 @@ export async function getBlogsSitemapEntries(
 ): Promise<SitemapEntry[]> {
   let query = supabase
     .from("blogs")
-    .select("slug, updated_at, published_at")
+    .select("id, slug, updated_at, published_at")
     .eq("status", "published")
     .is("deleted_at", null)
     .order("published_at", { ascending: false });
@@ -78,12 +113,46 @@ export async function getBlogsSitemapEntries(
     return [];
   }
 
-  return (data || []).map((blog) => ({
-    loc: `${baseUrl}/blogs/${blog.slug}`,
-    lastmod: blog.updated_at || blog.published_at,
-    changefreq: "weekly" as const,
-    priority: 0.7,
-  }));
+  const blogs = data || [];
+  const blogIds = blogs.map((blog) => blog.id).filter(Boolean);
+  let translationMap = new Map<string, Map<string, string>>();
+
+  if (blogIds.length > 0) {
+    let translationQuery = supabase
+      .from("content_translations")
+      .select("content_id, locale, slug")
+      .eq("content_type", "blog")
+      .in("content_id", blogIds);
+
+    if (tenantId) {
+      translationQuery = translationQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: translations, error: translationsError } = await translationQuery;
+
+    if (translationsError) {
+      console.error("[Sitemap] Error fetching blog translations:", translationsError.message);
+    } else {
+      translationMap = (translations || []).reduce((acc, row) => {
+        if (!row.content_id || !row.locale || !row.slug) return acc;
+        const localeEntries = acc.get(row.content_id) || new Map<string, string>();
+        localeEntries.set(row.locale, row.slug);
+        acc.set(row.content_id, localeEntries);
+        return acc;
+      }, new Map<string, Map<string, string>>());
+    }
+  }
+
+  return blogs.flatMap((blog) => {
+    const localeSlugs = translationMap.get(blog.id) || new Map<string, string>();
+
+    return supportedLocales.map((locale) => ({
+      loc: `${baseUrl}/${locale}/blogs/${locale === defaultLocale ? blog.slug : localeSlugs.get(locale) || blog.slug}`,
+      lastmod: blog.updated_at || blog.published_at,
+      changefreq: "weekly" as const,
+      priority: 0.7,
+    }));
+  });
 }
 
 /**
@@ -168,9 +237,11 @@ export async function getAllSitemapEntries(
 
   // Add static pages
   const staticEntries: SitemapEntry[] = [
-    { loc: baseUrl, changefreq: "daily", priority: 1.0 },
-    { loc: `${baseUrl}/blogs`, changefreq: "daily", priority: 0.9 },
-    { loc: `${baseUrl}/contact`, changefreq: "monthly", priority: 0.5 },
+    ...supportedLocales.flatMap((locale) => [
+      { loc: `${baseUrl}/${locale}`, changefreq: "daily" as const, priority: 1.0 },
+      { loc: `${baseUrl}/${locale}/blogs`, changefreq: "daily" as const, priority: 0.9 },
+      { loc: `${baseUrl}/${locale}/contact`, changefreq: "monthly" as const, priority: 0.5 },
+    ]),
   ];
 
   return [...staticEntries, ...pages, ...blogs];

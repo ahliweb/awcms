@@ -381,10 +381,72 @@ export async function getBlogs(
     limit?: number;
     offset?: number;
     categorySlug?: string;
+    tagSlug?: string;
     locale?: string;
   } = {},
 ): Promise<{ blogs: BlogData[]; total: number }> {
-  const { limit = 10, offset = 0, categorySlug, locale } = options;
+  const { limit = 10, offset = 0, categorySlug, tagSlug, locale } = options;
+
+  let categoryId: string | null = null;
+  if (categorySlug) {
+    const { data: categoryData, error: categoryError } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("slug", categorySlug)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (categoryError) {
+      console.error("[Content] Error resolving blog category:", categoryError.message);
+      return { blogs: [], total: 0 };
+    }
+
+    if (!categoryData?.id) {
+      return { blogs: [], total: 0 };
+    }
+
+    categoryId = categoryData.id;
+  }
+
+  let taggedBlogIds: string[] | null = null;
+  if (tagSlug) {
+    const { data: tagData, error: tagError } = await supabase
+      .from("tags")
+      .select("id")
+      .eq("slug", tagSlug)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (tagError) {
+      console.error("[Content] Error resolving blog tag:", tagError.message);
+      return { blogs: [], total: 0 };
+    }
+
+    if (!tagData?.id) {
+      return { blogs: [], total: 0 };
+    }
+
+    let blogTagsQuery = supabase
+      .from("blog_tags")
+      .select("blog_id")
+      .eq("tag_id", tagData.id);
+
+    if (tenantId) {
+      blogTagsQuery = blogTagsQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: blogTagRows, error: blogTagsError } = await blogTagsQuery;
+
+    if (blogTagsError) {
+      console.error("[Content] Error resolving tagged blogs:", blogTagsError.message);
+      return { blogs: [], total: 0 };
+    }
+
+    taggedBlogIds = (blogTagRows || []).map((row) => row.blog_id).filter(Boolean);
+    if (taggedBlogIds.length === 0) {
+      return { blogs: [], total: 0 };
+    }
+  }
 
   let query = supabase
     .from("blogs")
@@ -398,8 +460,12 @@ export async function getBlogs(
     query = query.eq("tenant_id", tenantId);
   }
 
-  if (categorySlug) {
-    query = query.eq("category_id", categorySlug);
+  if (categoryId) {
+    query = query.eq("category_id", categoryId);
+  }
+
+  if (taggedBlogIds) {
+    query = query.in("id", taggedBlogIds);
   }
 
   const { data, error, count } = await query;

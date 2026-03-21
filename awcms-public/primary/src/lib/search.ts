@@ -4,9 +4,6 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const isMissingLocaleColumnError = (message: string): boolean =>
-  message.includes(".locale") && message.includes("does not exist");
-
 export interface SearchResult {
   id: string;
   type: "page" | "blog" | "product";
@@ -36,6 +33,14 @@ interface BlogSearchRow {
   title: string;
   slug: string;
   excerpt?: string | null;
+}
+
+interface TranslationSearchRow {
+  content_id: string;
+  title?: string | null;
+  slug?: string | null;
+  excerpt?: string | null;
+  content?: string | null;
 }
 
 /**
@@ -91,50 +96,57 @@ async function searchPages(
   limit: number = 10,
   locale?: string,
 ): Promise<SearchResult[]> {
-  const runQuery = async (
-    withLocale: boolean,
-    includeLocaleColumn: boolean,
-  ) => {
-    let query = supabase
-      .from("pages")
-      .select(
-        includeLocaleColumn
-          ? "id, title, slug, excerpt, locale"
-          : "id, title, slug, excerpt",
-      )
-      .eq("status", "published")
-      .eq("is_active", true)
-      .is("deleted_at", null)
+  if (locale && locale !== "id") {
+    let translationQuery = supabase
+      .from("content_translations")
+      .select("content_id, title, slug, excerpt, content")
+      .eq("content_type", "page")
+      .eq("locale", locale)
       .or(
         `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,
       )
       .limit(limit);
 
     if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
+      translationQuery = translationQuery.eq("tenant_id", tenantId);
     }
 
-    if (withLocale && locale) {
-      query = query.eq("locale", locale);
+    const { data: translationData, error: translationError } = await translationQuery;
+
+    if (translationError) {
+      console.error("[Search] Error searching page translations:", translationError.message);
+      return [];
     }
 
-    return query;
-  };
+    const translationRows = (translationData || []) as TranslationSearchRow[];
 
-  const localeFilterEnabled = Boolean(locale);
-  const includeLocaleColumn = true;
-  let { data, error } = await runQuery(
-    localeFilterEnabled,
-    includeLocaleColumn,
-  );
-
-  if (
-    error &&
-    localeFilterEnabled &&
-    isMissingLocaleColumnError(error.message || "")
-  ) {
-    ({ data, error } = await runQuery(false, false));
+    return translationRows.map((page) => ({
+      id: page.content_id,
+      type: "page" as const,
+      title: page.title || "Untitled Page",
+      slug: page.slug || "",
+      excerpt: page.excerpt || undefined,
+      url: `/${locale}/p/${page.slug || ""}`,
+      score: calculateScore(page.title || "", searchTerm),
+    }));
   }
+
+  let query = supabase
+    .from("pages")
+    .select("id, title, slug, excerpt")
+    .eq("status", "published")
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .or(
+      `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,
+    )
+    .limit(limit);
+
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("[Search] Error searching pages:", error.message);
@@ -149,10 +161,7 @@ async function searchPages(
     title: page.title,
     slug: page.slug,
     excerpt: page.excerpt || undefined,
-    url:
-      locale && locale !== "en"
-        ? `/${locale}/p/${page.slug}`
-        : `/p/${page.slug}`,
+    url: locale ? `/${locale}/p/${page.slug}` : `/p/${page.slug}`,
     score: calculateScore(page.title, searchTerm),
   }));
 }
@@ -164,49 +173,56 @@ async function searchBlogs(
   limit: number = 10,
   locale?: string,
 ): Promise<SearchResult[]> {
-  const runQuery = async (
-    withLocale: boolean,
-    includeLocaleColumn: boolean,
-  ) => {
-    let query = supabase
-      .from("blogs")
-      .select(
-        includeLocaleColumn
-          ? "id, title, slug, excerpt, locale"
-          : "id, title, slug, excerpt",
-      )
-      .eq("status", "published")
-      .is("deleted_at", null)
+  if (locale && locale !== "id") {
+    let translationQuery = supabase
+      .from("content_translations")
+      .select("content_id, title, slug, excerpt, content")
+      .eq("content_type", "blog")
+      .eq("locale", locale)
       .or(
         `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,
       )
       .limit(limit);
 
     if (tenantId) {
-      query = query.eq("tenant_id", tenantId);
+      translationQuery = translationQuery.eq("tenant_id", tenantId);
     }
 
-    if (withLocale && locale) {
-      query = query.eq("locale", locale);
+    const { data: translationData, error: translationError } = await translationQuery;
+
+    if (translationError) {
+      console.error("[Search] Error searching blog translations:", translationError.message);
+      return [];
     }
 
-    return query;
-  };
+    const translationRows = (translationData || []) as TranslationSearchRow[];
 
-  const localeFilterEnabled = Boolean(locale);
-  const includeLocaleColumn = true;
-  let { data, error } = await runQuery(
-    localeFilterEnabled,
-    includeLocaleColumn,
-  );
-
-  if (
-    error &&
-    localeFilterEnabled &&
-    isMissingLocaleColumnError(error.message || "")
-  ) {
-    ({ data, error } = await runQuery(false, false));
+    return translationRows.map((blog) => ({
+      id: blog.content_id,
+      type: "blog" as const,
+      title: blog.title || "Untitled Blog",
+      slug: blog.slug || "",
+      excerpt: blog.excerpt || undefined,
+      url: `/${locale}/blogs/${blog.slug || ""}`,
+      score: calculateScore(blog.title || "", searchTerm),
+    }));
   }
+
+  let query = supabase
+    .from("blogs")
+    .select("id, title, slug, excerpt")
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .or(
+      `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,
+    )
+    .limit(limit);
+
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("[Search] Error searching blogs:", error.message);
@@ -221,10 +237,7 @@ async function searchBlogs(
     title: blog.title,
     slug: blog.slug,
     excerpt: blog.excerpt || undefined,
-    url:
-      locale && locale !== "en"
-        ? `/${locale}/blogs/${blog.slug}`
-        : `/blogs/${blog.slug}`,
+    url: locale ? `/${locale}/blogs/${blog.slug}` : `/blogs/${blog.slug}`,
     score: calculateScore(blog.title, searchTerm),
   }));
 }
