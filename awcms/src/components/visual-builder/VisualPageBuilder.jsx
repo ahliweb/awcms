@@ -148,6 +148,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('update', contentPermissionResource, page);
     const canEdit = isEditorEnabled; // Alias for readability
     const canPublish = (mode === 'template' || mode === 'part') ? false : checkAccess('publish', contentPermissionResource, page);
+    const requiresBaseLocaleFirst = (mode === 'page' || mode === 'blog') && !page?.id;
     const [isSaving, setIsSaving] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [previewMode, setPreviewMode] = useState(false);
@@ -905,9 +906,18 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     }, [handleMetadataChange]);
 
     const handleLocaleChange = useCallback((nextLocale) => {
+        if (requiresBaseLocaleFirst && nextLocale !== defaultContentLocale) {
+            toast({
+                title: 'Save base content first',
+                description: `Create the base ${mode === 'blog' ? 'blog' : 'page'} in Indonesia before editing English translations.`,
+            });
+            setPageMetadata(prev => ({ ...prev, locale: defaultContentLocale }));
+            return;
+        }
+
         setTranslationSlugCheckKey(prev => prev + 1);
         setPageMetadata(prev => ({ ...prev, locale: nextLocale }));
-    }, []);
+    }, [defaultContentLocale, mode, requiresBaseLocaleFirst, toast]);
 
     // --- RENDER ---
     return (
@@ -1110,7 +1120,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                     <>
                                         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Locale</Label>
                                         <Select value={pageMetadata.locale} onValueChange={handleLocaleChange}>
-                                            <SelectTrigger className="bg-muted/50 border-input focus:border-indigo-500 transition-colors">
+                                            <SelectTrigger className="bg-muted/50 border-input focus:border-indigo-500 transition-colors" disabled={requiresBaseLocaleFirst}>
                                                 <SelectValue placeholder="Select locale" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1118,6 +1128,11 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                                 <SelectItem value="en">English</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                        {requiresBaseLocaleFirst && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Save this {mode === 'blog' ? 'blog' : 'page'} once to enable English translation editing.
+                                            </p>
+                                        )}
                                     </>
                                 )}
                             </div>
