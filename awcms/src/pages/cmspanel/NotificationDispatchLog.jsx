@@ -104,7 +104,6 @@ export default function NotificationDispatchLog() {
     setFilters,
     canRead,
     refresh,
-    PAGE_SIZE,
   } = useNotificationDispatches();
 
   const handleFilterChange = (key, value) => {
