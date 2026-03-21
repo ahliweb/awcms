@@ -34,7 +34,8 @@ const GenericResourceEditor = ({
     onSuccess,
     _permissionPrefix,
     _createPermission,
-    omitCreatedBy = false
+    omitCreatedBy = false,
+    translationConfig = null
 }) => {
     const { user } = useAuth();
     const { toast } = useToast();
@@ -59,12 +60,57 @@ const GenericResourceEditor = ({
         }
     }, [initialData]);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadTranslation = async () => {
+            if (!translationConfig || !initialData?.id || !currentTenant?.id) return;
+
+            const { data, error } = await supabase
+                .from(translationConfig.tableName || 'content_translations')
+                .select('*')
+                .eq('content_type', translationConfig.contentType)
+                .eq('content_id', initialData.id)
+                .eq('locale', translationConfig.locale)
+                .eq('tenant_id', currentTenant.id)
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error loading translation:', error);
+                return;
+            }
+
+            if (cancelled) return;
+
+            setFormData(prev => {
+                const next = { ...prev };
+
+                Object.entries(translationConfig.fieldMap || {}).forEach(([formKey, translationKey]) => {
+                    next[formKey] = data?.[translationKey] || '';
+                });
+
+                return next;
+            });
+        };
+
+        loadTranslation();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [translationConfig, initialData?.id, currentTenant?.id]);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         try {
             const { owner: _owner, tenant: _tenant, category: _category, ...cleanPayload } = formData;
             const payload = { ...cleanPayload };
+            const translationFieldMap = translationConfig?.fieldMap || {};
+
+            Object.keys(translationFieldMap).forEach((fieldKey) => {
+                delete payload[fieldKey];
+            });
 
             payload.updated_at = new Date().toISOString();
             if (!initialData) {
@@ -125,7 +171,35 @@ const GenericResourceEditor = ({
                 }
             }
 
+            const translationSlugField = Object.entries(translationFieldMap).find(([, translationKey]) => translationKey === 'slug')?.[0];
+            const translationSlug = translationSlugField ? formData[translationSlugField] : '';
+
+            if (translationConfig && translationSlug) {
+                let translationSlugQuery = supabase
+                    .from(translationConfig.tableName || 'content_translations')
+                    .select('id')
+                    .eq('tenant_id', currentTenant.id)
+                    .eq('content_type', translationConfig.contentType)
+                    .eq('locale', translationConfig.locale)
+                    .eq('slug', translationSlug);
+
+                if (initialData?.id) {
+                    translationSlugQuery = translationSlugQuery.neq('content_id', initialData.id);
+                }
+
+                const { data: existingTranslationSlugs, error: translationSlugError } = await translationSlugQuery.limit(1);
+
+                if (translationSlugError) throw translationSlugError;
+
+                if (existingTranslationSlugs && existingTranslationSlugs.length > 0) {
+                    const uniqueSuffix = Date.now().toString(36);
+                    const suggestedSlug = `${translationSlug}-${uniqueSuffix}`;
+                    throw new Error(`Slug "${translationSlug}" is already in use for ${translationConfig.locale.toUpperCase()}. Try "${suggestedSlug}" instead.`);
+                }
+            }
+
             let error;
+            let savedRecordId = initialData?.id || null;
             if (initialData) {
                 const { error: updateError } = await udm
                     .from(tableName)
@@ -133,10 +207,11 @@ const GenericResourceEditor = ({
                     .eq('id', initialData.id);
                 error = updateError;
             } else {
-                const { error: insertError } = await udm
+                const { data: insertedRows, error: insertError } = await udm
                     .from(tableName)
                     .insert([payload]);
                 error = insertError;
+                savedRecordId = Array.isArray(insertedRows) ? insertedRows[0]?.id : insertedRows?.id;
             }
 
             if (error) {
@@ -144,6 +219,60 @@ const GenericResourceEditor = ({
                     throw new Error(`Slug "${payload.slug}" is already in use. Please use a different slug.`);
                 }
                 throw error;
+            }
+
+            if (!savedRecordId && !initialData && currentTenant?.id && payload.slug) {
+                const { data: createdRecord, error: createdRecordError } = await supabase
+                    .from(tableName)
+                    .select('id')
+                    .eq('tenant_id', currentTenant.id)
+                    .eq('slug', payload.slug)
+                    .is('deleted_at', null)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (createdRecordError) throw createdRecordError;
+                savedRecordId = createdRecord?.id || null;
+            }
+
+            if (translationConfig && savedRecordId && currentTenant?.id) {
+                const translationPayload = Object.entries(translationFieldMap).reduce((acc, [formKey, translationKey]) => {
+                    const value = formData[formKey];
+                    acc[translationKey] = typeof value === 'string' ? value.trim() : value ?? null;
+                    return acc;
+                }, {});
+
+                const hasTranslationContent = Object.values(translationPayload).some((value) => {
+                    if (typeof value === 'string') return value.length > 0;
+                    return Boolean(value);
+                });
+
+                if (hasTranslationContent) {
+                    const { error: translationError } = await supabase
+                        .from(translationConfig.tableName || 'content_translations')
+                        .upsert({
+                            content_type: translationConfig.contentType,
+                            content_id: savedRecordId,
+                            locale: translationConfig.locale,
+                            tenant_id: currentTenant.id,
+                            ...translationPayload,
+                        }, {
+                            onConflict: 'content_type,content_id,locale,tenant_id'
+                        });
+
+                    if (translationError) throw translationError;
+                } else if (initialData?.id) {
+                    const { error: translationDeleteError } = await supabase
+                        .from(translationConfig.tableName || 'content_translations')
+                        .delete()
+                        .eq('content_type', translationConfig.contentType)
+                        .eq('content_id', savedRecordId)
+                        .eq('locale', translationConfig.locale)
+                        .eq('tenant_id', currentTenant.id);
+
+                    if (translationDeleteError) throw translationDeleteError;
+                }
             }
 
             toast({ title: 'Success', description: `${resourceName} saved successfully` });
@@ -182,6 +311,18 @@ const GenericResourceEditor = ({
                     updated.slug = generateSlug(value);
                 }
             }
+
+            fields.forEach(field => {
+                if (field.autoGenerateFrom === key) {
+                    const oldSource = prev[field.autoGenerateFrom] || '';
+                    const oldValue = prev[field.key] || '';
+                    const wasAutoGenerated = !oldValue || oldValue === generateSlug(oldSource);
+
+                    if (wasAutoGenerated) {
+                        updated[field.key] = generateSlug(value);
+                    }
+                }
+            });
 
             fields.forEach(field => {
                 if (field.calculate && typeof field.calculate === 'function') {

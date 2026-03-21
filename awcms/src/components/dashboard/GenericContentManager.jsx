@@ -43,6 +43,7 @@ const GenericContentManager = ({
     showBreadcrumbs = true,
     defaultSortColumn = 'created_at',
     EditorComponent, // Optional custom editor component
+    editorProps = {},
     customToolbarActions, // ({ openEditor }) => ReactNode
     headerContent,
     omitCreatedBy = false,
@@ -436,6 +437,7 @@ const GenericContentManager = ({
                         item={selectedItem}
                         onClose={() => { setShowEditor(false); setSelectedItem(null); }}
                         onSuccess={fetchItems}
+                        {...editorProps}
                     />
                 ) : (
                     <GenericResourceEditor
@@ -448,6 +450,7 @@ const GenericContentManager = ({
                         onSuccess={fetchItems}
                         createPermission={createPermission}
                         omitCreatedBy={omitCreatedBy}
+                        {...editorProps}
                     />
                 )
             ) : (

@@ -152,6 +152,7 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
 
   const pageFormFields = [
     { key: 'title', label: t('pages.form.title'), required: true },
+    { key: 'title_en', label: t('pages.form.title_en'), layout: 'main' },
     {
       key: 'page_type',
       label: t('pages.form.page_type'),
@@ -163,6 +164,13 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
       description: t('pages.form.page_type_desc')
     },
     { key: 'slug', label: t('pages.form.slug'), required: true },
+    {
+      key: 'slug_en',
+      label: t('pages.form.slug_en'),
+      description: t('pages.form.slug_en_desc'),
+      autoGenerateFrom: 'title_en',
+      layout: 'main'
+    },
     {
       key: 'status', label: t('pages.form.status'), type: 'select', options: [
         { value: 'published', label: t('pages.form.status_published') },
@@ -186,16 +194,41 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
       description: t('pages.form.content_desc'),
       conditionalShow: (formData) => formData.editor_type !== 'visual'
     },
+    {
+      key: 'content_en',
+      label: t('pages.form.content_en'),
+      type: 'richtext',
+      description: t('pages.form.content_en_desc'),
+      conditionalShow: (formData) => formData.editor_type !== 'visual',
+      layout: 'main'
+    },
     { key: 'excerpt', label: t('pages.form.excerpt'), type: 'textarea' },
+    { key: 'excerpt_en', label: t('pages.form.excerpt_en'), type: 'textarea', layout: 'main' },
     { key: 'featured_image', label: t('pages.form.featured_image'), type: 'image' },
     // SEO Fields
     { key: 'meta_title', label: t('pages.form.meta_title') || 'Meta Title', type: 'text', description: 'SEO title (60 chars recommended)' },
     { key: 'meta_description', label: t('pages.form.meta_desc'), type: 'textarea' },
+    { key: 'meta_description_en', label: t('pages.form.meta_desc_en'), type: 'textarea', description: t('pages.form.meta_desc_en_desc') },
     { key: 'meta_keywords', label: t('pages.form.meta_keywords') || 'Meta Keywords', type: 'text', description: 'Comma-separated keywords' },
     { key: 'og_image', label: t('pages.form.og_image') || 'OG Image', type: 'image', description: 'Social sharing image (1200x630 recommended)' },
     { key: 'canonical_url', label: t('pages.form.canonical_url') || 'Canonical URL', type: 'text', description: 'Full URL if this content exists elsewhere' },
     { key: 'is_active', label: t('pages.form.active'), type: 'boolean' }
   ];
+
+  const pageEditorProps = useMemo(() => ({
+    translationConfig: {
+      tableName: 'content_translations',
+      contentType: 'page',
+      locale: 'en',
+      fieldMap: {
+        title_en: 'title',
+        slug_en: 'slug',
+        content_en: 'content',
+        excerpt_en: 'excerpt',
+        meta_description_en: 'meta_description'
+      }
+    }
+  }), []);
 
   // Custom row actions for Visual Builder
   const customRowActions = useCallback((page) => {
@@ -288,6 +321,7 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
         t={t}
         pageColumns={pageColumns}
         pageFormFields={pageFormFields}
+        pageEditorProps={pageEditorProps}
         customRowActions={customRowActions}
         categoryColumns={categoryColumns}
         categoryFormFields={categoryFormFields}

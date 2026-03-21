@@ -33,7 +33,6 @@ function PageEditor({ page, onClose, onSuccess }) {
     const [formData, setFormData] = useState({
         title: page?.title || '',
         slug: page?.slug || '',
-        locale: page?.locale || 'en',
         content: page?.content || '',
         excerpt: page?.excerpt || '',
         featured_image: page?.featured_image || '',
@@ -157,7 +156,6 @@ function PageEditor({ page, onClose, onSuccess }) {
                 tenant_id: currentTenant.id, // Explicit Tenant ID
                 title: formData.title,
                 slug: formData.slug || generateSlug(formData.title),
-                locale: formData.locale,
                 content: formData.content,
                 excerpt: formData.excerpt,
                 featured_image: formData.featured_image,
@@ -238,9 +236,6 @@ function PageEditor({ page, onClose, onSuccess }) {
                         {page?.status === 'published' && <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full border border-green-200">Live</span>}
                     </h3>
                     <div className="text-xs text-slate-500 mt-1 flex items-center gap-3">
-                        <span className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium uppercase text-[10px]">
-                            {formData.locale}
-                        </span>
                         {page?.created_by ? (
                             <span className="flex items-center gap-1"><Lock className="w-3 h-3" /> Owner: {user?.id === page.created_by ? 'You' : 'Others'}</span>
                         ) : (

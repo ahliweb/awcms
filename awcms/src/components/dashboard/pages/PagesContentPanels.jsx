@@ -10,6 +10,7 @@ function PagesContentPanels({
 	t,
 	pageColumns,
 	pageFormFields,
+	pageEditorProps,
 	customRowActions,
 	categoryColumns,
 	categoryFormFields,
@@ -23,6 +24,7 @@ function PagesContentPanels({
 				resourceName={t('pages.visual_title')}
 				columns={pageColumns}
 				formFields={pageFormFields}
+				editorProps={pageEditorProps}
 				permissionPrefix="visual_pages"
 				customSelect="*, category:categories!pages_category_id_fkey(id, name), owner:users!created_by(email, full_name), tenant:tenants(name)"
 				customRowActions={customRowActions}
@@ -47,6 +49,7 @@ function PagesContentPanels({
 					resourceName={t('pages.badges.regular')}
 					columns={pageColumns}
 					formFields={pageFormFields}
+					editorProps={pageEditorProps}
 					permissionPrefix="pages"
 					defaultFilters={{ page_type: 'regular' }}
 					customSelect="*, category:categories!pages_category_id_fkey(id, name), owner:users!created_by(email, full_name), tenant:tenants(name)"
