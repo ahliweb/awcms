@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 import {
     Save, X, Globe, Layout, Share2, FolderOpen,
     ChevronLeft, Eye, Send, Image as ImageIcon, MoreVertical
@@ -459,14 +460,14 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white/50 to-blue-50/50 pointer-events-none" />
 
             {/* 2. Top Navigation / Header */}
-            <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between shadow-sm z-50">
-                <div className="flex items-center gap-4">
+            <div className="min-h-16 px-4 py-3 md:px-6 border-b border-slate-200 bg-white flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between shadow-sm z-50">
+                <div className="flex min-w-0 items-center gap-3 md:gap-4">
                     <Button variant="ghost" onClick={onClose} className="hover:bg-slate-100/50 gap-2 pr-4 text-slate-600 rounded-full">
                         <ChevronLeft className="w-5 h-5" />
                         <span className="font-medium hidden sm:inline-block">Back</span>
                     </Button>
-                    <Separator orientation="vertical" className="h-6" />
-                    <div>
+                    <Separator orientation="vertical" className="hidden md:block h-6" />
+                    <div className="min-w-0">
                         <div className="flex items-center gap-2">
                             <Input
                                 value={formData[activeTitleKey] || ''}
@@ -477,11 +478,11 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                         ? generateSlug(e.target.value)
                                         : prev[activeSlugKey],
                                 }))}
-                                className="border-none shadow-none bg-transparent text-lg font-bold px-0 h-auto focus-visible:ring-0 placeholder:text-slate-400 min-w-[300px]"
+                                className="border-none shadow-none bg-transparent text-lg font-bold px-0 h-auto focus-visible:ring-0 placeholder:text-slate-400 min-w-0 w-full md:min-w-[300px]"
                                 placeholder="Untitled Blog"
                             />
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                             <Badge variant="outline" className={`${getStateColor(currentState)} border px-1.5 py-0 rounded-sm font-normal uppercase tracking-wider text-[10px]`}>
                                 {currentState}
                             </Badge>
@@ -489,12 +490,12 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 {effectiveLocaleBadgeLabel}
                             </Badge>
                             <span>•</span>
-                            <span>{formData[activeSlugKey] ? formData[activeSlugKey] : 'slug-placeholder'}</span>
+                            <span className="truncate max-w-[40vw] md:max-w-[420px]">{formData[activeSlugKey] ? formData[activeSlugKey] : 'slug-placeholder'}</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -523,7 +524,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                         </Tooltip>
                     </TooltipProvider>
 
-                    <Separator orientation="vertical" className="h-6" />
+                    <Separator orientation="vertical" className="hidden xl:block h-6" />
 
                     <Button variant="ghost" onClick={onClose} className="hidden sm:flex text-slate-500 hover:text-slate-700 hover:bg-slate-100 ring-0 focus:ring-0">
                         Cancel
@@ -548,7 +549,11 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
 
                     <Button
                         onClick={() => saveItem(currentState === WORKFLOW_STATES.PUBLISHED ? null : WORKFLOW_STATES.PUBLISHED)}
-                        className={`${currentState === WORKFLOW_STATES.PUBLISHED ? 'bg-slate-900' : 'bg-emerald-600 hover:bg-emerald-700'} text-white shadow-lg shadow-emerald-500/20`}
+                        className={cn(
+                            'w-full sm:w-auto',
+                            currentState === WORKFLOW_STATES.PUBLISHED ? 'bg-slate-900' : 'bg-emerald-600 hover:bg-emerald-700',
+                            'text-white shadow-lg shadow-emerald-500/20'
+                        )}
                         disabled={loading}
                     >
                         {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" /> : (currentState === WORKFLOW_STATES.PUBLISHED ? <Save className="w-4 h-4 mr-2" /> : <Send className="w-4 h-4 mr-2" />)}
@@ -563,7 +568,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
 
                     {/* Left: Main Content (Scrollable) */}
                     <ScrollArea className="flex-1 h-full">
-                        <div className="p-8 lg:p-12 max-w-4xl mx-auto space-y-8 pb-32">
+                        <div className="p-5 md:p-8 lg:p-10 xl:p-12 max-w-4xl mx-auto space-y-6 md:space-y-8 pb-32">
 
                             {/* Featured Image - Banner Style */}
                             <button
@@ -612,7 +617,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                     </ScrollArea>
 
                     {/* Right: Sidebar (Settings) - Solid */}
-                    <div className={`w-full lg:w-[380px] border-l border-slate-200 bg-slate-50 h-full overflow-y-auto ${showMobileSettings ? 'fixed inset-0 z-[110] bg-white' : 'hidden lg:block'}`}>
+                    <div className={`w-full lg:w-[360px] xl:w-[380px] border-l border-slate-200 bg-slate-50 h-full overflow-y-auto ${showMobileSettings ? 'fixed inset-0 z-[110] bg-white' : 'hidden lg:block'}`}>
                         {/* Mobile Sidebar Header */}
                         {showMobileSettings && (
                             <div className="flex items-center justify-between p-4 border-b lg:hidden">
@@ -622,7 +627,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 </Button>
                             </div>
                         )}
-                        <div className="p-6 space-y-8">
+                        <div className="p-4 md:p-5 space-y-6">
 
 
 
@@ -729,7 +734,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 </div>
                             </div>
 
-                            <div className="text-xs text-slate-400 pt-8 text-center">
+                            <div className="sticky bottom-0 -mx-4 md:-mx-5 mt-2 border-t border-slate-200 bg-slate-50/95 px-4 md:px-5 py-3 text-xs text-slate-400 text-center backdrop-blur supports-[backdrop-filter]:bg-slate-50/80">
                                 {loading ? 'Saving changes...' : 'Ready to save'}
                             </div>
 
