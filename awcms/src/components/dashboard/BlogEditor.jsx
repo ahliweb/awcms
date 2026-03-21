@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
@@ -21,6 +22,8 @@ import RichTextEditor from '@/components/ui/RichTextEditor';
 import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
 import TagInput from '@/components/ui/TagInput';
 import { getCategoryTypesForModule } from '@/lib/taxonomy';
+import { usePortalSites } from '@/hooks/usePortalSites';
+import { encodeRouteParam } from '@/lib/routeSecurity';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -87,21 +90,25 @@ function mapBlogTranslationToFormData(item, translation) {
     };
 }
 
-function BlogEditor({ item, onClose, onSuccess, translationConfig = null, selectedLanguage = DEFAULT_BLOG_LOCALE }) {
+function BlogEditor({ item, onClose, onSuccess, translationConfig = null, selectedLanguage = DEFAULT_BLOG_LOCALE, initialVisualBuilder = false }) {
     const { toast } = useToast();
+    const navigate = useNavigate();
     const { user } = useAuth();
     const { currentTenant } = useTenant();
     const { hasPermission } = usePermissions();
+    const { portals } = usePortalSites();
     const [loading, setLoading] = useState(false);
     const [categories, setCategories] = useState([]);
     const [currentState, setCurrentState] = useState(item?.workflow_state || 'draft');
+    const [portalMenuOpen, setPortalMenuOpen] = useState(false);
+    const [selectedPortal, setSelectedPortal] = useState(0);
 
     // Detect Visual Builder Mode
     // Check strict editor_type first, then fallback to content shape inspection
     const isVisualContent = item?.editor_type === 'visual' ||
         (item?.content && typeof item.content === 'object' && !Array.isArray(item.content) && item.content.root);
 
-    const [useVisualBuilder, setUseVisualBuilder] = useState(isVisualContent);
+    const [useVisualBuilder, setUseVisualBuilder] = useState(isVisualContent || initialVisualBuilder);
 
     // Mobile Settings Toggle
     const [showMobileSettings, setShowMobileSettings] = useState(false);
@@ -142,18 +149,24 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 .order('name');
 
             if (currentTenant?.id) {
-                query = query.eq('tenant_id', currentTenant.id);
+                query = query.or(`tenant_id.eq.${currentTenant.id},tenant_id.is.null`);
             }
 
             const { data, error } = await query;
 
             if (error) {
                 // Try without type filter
-                const { data: allData } = await supabase
+                let fallbackQuery = supabase
                     .from('categories')
                     .select('id, name')
                     .is('deleted_at', null)
                     .order('name');
+
+                if (currentTenant?.id) {
+                    fallbackQuery = fallbackQuery.or(`tenant_id.eq.${currentTenant.id},tenant_id.is.null`);
+                }
+
+                const { data: allData } = await fallbackQuery;
                 setCategories(allData || []);
             } else {
                 setCategories(data || []);
@@ -209,6 +222,49 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
         await saveItem(newState);
     };
 
+    const openPreview = useCallback((baseUrl) => {
+        if (!item?.id) {
+            toast({
+                variant: 'destructive',
+                title: 'Preview unavailable',
+                description: 'Save this blog once before opening a public preview.',
+            });
+            return;
+        }
+
+        const slug = formData.slug || generateSlug(formData.title || 'untitled-blog');
+
+        const previewSecret = import.meta.env.VITE_PREVIEW_SECRET || '';
+        const url = previewSecret
+            ? `${baseUrl}/blogs/${slug}?preview_secret=${previewSecret}`
+            : `${baseUrl}/blogs/${slug}`;
+
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }, [formData.slug, formData.title, item?.id, toast]);
+
+    const handleSwitchToVisualBuilder = useCallback(async () => {
+        if (!item?.id) {
+            const saved = await saveItem(null, { suppressClose: true, suppressSuccess: true });
+            if (!saved?.id) {
+                return;
+            }
+
+            const signedId = await encodeRouteParam({ value: saved.id, scope: 'blogs.edit' });
+            if (!signedId) {
+                toast({ variant: 'destructive', title: 'Navigation error', description: 'Could not open the visual builder route.' });
+                return;
+            }
+
+            setVisualSwitchOpen(false);
+            onClose?.();
+            navigate(`/cmspanel/blogs/edit/${signedId}?editor=visual`);
+            return;
+        }
+
+        setVisualSwitchOpen(false);
+        setUseVisualBuilder(true);
+    }, [item?.id, navigate, onClose, toast]);
+
     const localeBadgeLabel = selectedLanguage === 'en' ? 'EN' : 'ID';
     const effectiveLocaleBadgeLabel = isNewBlog ? 'ID' : localeBadgeLabel;
 
@@ -219,7 +275,9 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
             .replace(/(^-|-$)/g, '');
     };
 
-    const saveItem = async (workflowStateOverride = null) => {
+    const saveItem = async (workflowStateOverride = null, options = {}) => {
+        const { suppressClose = false, suppressSuccess = false } = options;
+
         if (!canEdit) {
             toast({ variant: 'destructive', title: 'Permission Denied', description: 'You cannot save this blog.' });
             return;
@@ -402,13 +460,17 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 setFormData(prev => ({ ...prev, status: finalStatus }));
             }
 
-            if (!isEditMode && onSuccess) {
+            if (!suppressSuccess && !isEditMode && onSuccess) {
                 onSuccess();
-                onClose();
-            } else if (isEditMode && onSuccess) {
+            } else if (!suppressSuccess && isEditMode && onSuccess) {
                 onSuccess(); // Refresh parent after edit
-                onClose();   // Close editor after successful edit
             }
+
+            if (!suppressClose) {
+                onClose?.();
+            }
+
+            return { id: savedItemId, status: finalStatus, workflowState: finalWorkflowState };
 
         } catch (error) {
             console.error(error);
@@ -417,6 +479,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 title: "Error",
                 description: error.message || "Failed to save blog"
             });
+            return null;
         } finally {
             setLoading(false);
         }
@@ -495,16 +558,44 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="text-slate-500">
-                                    <Eye className="w-4 h-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Preview</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    {portals.length <= 1 ? (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-slate-500" onClick={() => openPreview(portals[0]?.url || import.meta.env.VITE_PUBLIC_PORTAL_URL || 'http://localhost:4321')}>
+                                        <Eye className="w-4 h-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Preview</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    ) : (
+                        <div className="relative">
+                            <Button variant="ghost" size="sm" className="text-slate-500 gap-2" onClick={() => setPortalMenuOpen((prev) => !prev)}>
+                                <Eye className="w-4 h-4" />
+                                <span className="hidden lg:inline">Preview</span>
+                            </Button>
+                            {portalMenuOpen && (
+                                <div className="absolute right-0 top-full z-[180] mt-2 min-w-[240px] overflow-hidden rounded-2xl border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl">
+                                    {portals.map((portal, idx) => (
+                                        <button
+                                            key={`${portal.name}-${portal.url}`}
+                                            type="button"
+                                            className="flex w-full items-center justify-between gap-3 border-b border-slate-100/80 px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-indigo-50/80 last:border-0"
+                                            onClick={() => {
+                                                setSelectedPortal(idx);
+                                                setPortalMenuOpen(false);
+                                                openPreview(portal.url);
+                                            }}
+                                        >
+                                            <span className="font-medium">{portal.name}</span>
+                                            <span className="text-xs text-slate-400">{new URL(portal.url).hostname}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <TooltipProvider>
                         <Tooltip>
@@ -660,7 +751,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                             <SelectTrigger className="h-11 w-full rounded-2xl border-slate-200/80 bg-white/90 shadow-sm focus:ring-indigo-500/20">
                                                 <SelectValue placeholder="Select Category..." />
                                             </SelectTrigger>
-                                            <SelectContent className="rounded-2xl border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl">
+                                            <SelectContent position="popper" className="rounded-2xl border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl">
                                                 {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
@@ -806,10 +897,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                            onClick={() => {
-                                setUseVisualBuilder(true);
-                                setVisualSwitchOpen(false);
-                            }}
+                            onClick={handleSwitchToVisualBuilder}
                             className="bg-indigo-600 hover:bg-indigo-700"
                         >
                             Switch

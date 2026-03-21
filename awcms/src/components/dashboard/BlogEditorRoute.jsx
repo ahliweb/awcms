@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import BlogEditor from '@/components/dashboard/BlogEditor';
 import { useToast } from '@/components/ui/use-toast';
@@ -10,6 +10,7 @@ import { getBlogEditorProps } from '@/components/dashboard/blogs/blogEditorConfi
 const BlogEditorRoute = () => {
   const { id: routeParam } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { value: blogId, loading: routeLoading, isLegacy } = useSecureRouteParam(routeParam, 'blogs.edit');
   const [item, setItem] = useState(null);
@@ -65,6 +66,7 @@ const BlogEditorRoute = () => {
       item={item}
       onClose={() => navigate('/cmspanel/blogs')}
       onSuccess={() => navigate('/cmspanel/blogs')}
+      initialVisualBuilder={searchParams.get('editor') === 'visual'}
       {...getBlogEditorProps('id')}
     />
   );
