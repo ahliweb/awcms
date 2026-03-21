@@ -8,6 +8,7 @@ import Layout from "~/layouts/PageLayout.astro";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getPublicTenantId } from "~/lib/publicTenant";
 import { getBlogBySlug } from "~/lib/content";
+import PuckRenderer from "~/components/common/PuckRenderer.astro";
 import { Icon } from "astro-icon/components";
 import { t, supportedLocales, type Locale } from "~/utils/i18n";
 
@@ -22,56 +23,51 @@ export const getStaticPaths = (async () => {
         throw new Error("[Blog] Missing PUBLIC_TENANT_ID for static path generation");
     }
 
-    type BlogSlugRow = {
-        slug: string;
-        locale?: Locale | null;
-    };
-
-    let localeColumnEnabled = true;
-    let data: BlogSlugRow[];
-
-    const localizedQuery = await supabase
+    const { data: blogs, error: blogsError } = await supabase
         .from("blogs")
-        .select("slug, locale")
+        .select("id, slug")
         .eq("tenant_id", tenantId)
         .eq("status", "published")
         .is("deleted_at", null);
 
-    if (localizedQuery.error) {
-        const message = localizedQuery.error.message || "";
-
-        if (message.includes("blogs.locale") && message.includes("does not exist")) {
-            localeColumnEnabled = false;
-            const fallbackQuery = await supabase
-                .from("blogs")
-                .select("slug")
-                .eq("tenant_id", tenantId)
-                .eq("status", "published")
-                .is("deleted_at", null);
-
-            if (fallbackQuery.error) {
-                console.error("[Blog] Error fetching blog slugs:", fallbackQuery.error.message);
-                return [];
-            }
-
-            data = (fallbackQuery.data || []) as BlogSlugRow[];
-        } else {
-            console.error("[Blog] Error fetching blog slugs:", localizedQuery.error.message);
+    if (blogsError) {
+            console.error("[Blog] Error fetching blog slugs:", blogsError.message);
             return [];
-        }
-    } else {
-        data = (localizedQuery.data || []) as BlogSlugRow[];
     }
 
-    return data.flatMap((blog) => {
-        const locales = localeColumnEnabled && blog.locale ? [blog.locale] : supportedLocales;
-        return locales.map((locale) => ({
+    const publishedBlogs = (blogs || []) as Array<{ id: string; slug: string }>;
+    const blogIds = publishedBlogs.map((blog) => blog.id);
+    let translationSlugMap = new Map<string, string>();
+
+    if (blogIds.length > 0) {
+        const { data: translations, error: translationsError } = await supabase
+            .from("content_translations")
+            .select("content_id, locale, slug")
+            .eq("tenant_id", tenantId)
+            .eq("content_type", "blog")
+            .eq("locale", "en")
+            .in("content_id", blogIds);
+
+        if (translationsError) {
+            console.error("[Blog] Error fetching blog translations:", translationsError.message);
+            return [];
+        }
+
+        translationSlugMap = new Map(
+            (translations || [])
+                .filter((translation) => translation.locale === "en" && translation.slug)
+                .map((translation) => [translation.content_id, translation.slug as string]),
+        );
+    }
+
+    return publishedBlogs.flatMap((blog) =>
+        supportedLocales.map((locale) => ({
             params: {
-                slug: blog.slug,
+                slug: locale === "en" ? translationSlugMap.get(blog.id) || blog.slug : blog.slug,
                 locale,
             },
-        }));
-    });
+        })),
+    );
 }) satisfies GetStaticPaths;
 
 const { slug, locale } = Astro.params as { slug: string; locale: Locale };
@@ -121,6 +117,7 @@ const metadata = {
 
 // Content
 const isVisual = blog?.editor_type === "visual";
+const visualContent = blog?.visual_content || blog?.content_published || blog?.content_draft || null;
 const htmlContent = blog?.content || "";
 ---
 
@@ -189,12 +186,7 @@ const htmlContent = blog?.content || "";
                     {/* Blog Content */}
                     {isVisual ? (
                         <div class="visual-content prose prose-lg dark:prose-invert max-w-none">
-                            <p class="text-muted-foreground">
-                                {t(
-                                    "blogs_page.blog.visual_content_placeholder",
-                                    locale,
-                                )}
-                            </p>
+                            <PuckRenderer content={visualContent} />
                         </div>
                     ) : (
                         <div

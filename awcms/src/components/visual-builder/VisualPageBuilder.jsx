@@ -109,6 +109,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
     // State
     const [page, setPage] = useState(initialPage || null);
+    const [translationSlugCheckKey, setTranslationSlugCheckKey] = useState(0);
 
     // Initial data setup
     const initialData = initialPage?.content_draft || { content: [], root: { props: { title: '' } } };
@@ -801,6 +802,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     }, [handleMetadataChange]);
 
     const handleLocaleChange = useCallback((nextLocale) => {
+        setTranslationSlugCheckKey(prev => prev + 1);
         setPageMetadata(prev => ({ ...prev, locale: nextLocale }));
     }, []);
 
@@ -1033,11 +1035,17 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                             <div className="grid gap-3">
                                 <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">URL Slug</Label>
                                 <SlugGenerator
+                                    key={`${page?.id || 'new'}-${pageMetadata.locale}-${translationSlugCheckKey}`}
                                     initialSlug={pageMetadata.slug}
                                     titleValue={pageMetadata.title}
-                                    tableName="pages"
+                                    tableName={pageMetadata.locale === defaultPageLocale ? 'pages' : 'content_translations'}
                                     recordId={page?.id}
                                     tenantId={currentTenant?.id}
+                                    excludeField={pageMetadata.locale === defaultPageLocale ? 'id' : 'content_id'}
+                                    extraFilters={pageMetadata.locale === defaultPageLocale ? null : {
+                                        content_type: 'page',
+                                        locale: pageMetadata.locale,
+                                    }}
                                     onSlugChange={handleSlugChange}
                                 />
                             </div>

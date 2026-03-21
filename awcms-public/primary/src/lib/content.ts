@@ -7,12 +7,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 interface ContentTranslationRow {
   content_id: string;
   locale: string;
+  content_type?: string;
   title?: string | null;
   slug?: string | null;
   content?: string | null;
   excerpt?: string | null;
   meta_description?: string | null;
 }
+
+type LocalizedContentType = "page" | "blog";
 
 function parseVisualTranslationContent(rawContent: string | null | undefined): Record<string, unknown> | null {
   if (!rawContent) return null;
@@ -35,12 +38,22 @@ async function getPageTranslationBySlug(
   locale?: string,
   tenantId?: string | null,
 ): Promise<ContentTranslationRow | null> {
+  return getContentTranslationBySlug(supabase, "page", slug, locale, tenantId);
+}
+
+async function getContentTranslationBySlug(
+  supabase: SupabaseClient,
+  contentType: LocalizedContentType,
+  slug: string,
+  locale?: string,
+  tenantId?: string | null,
+): Promise<ContentTranslationRow | null> {
   if (!locale || locale === "id") return null;
 
   let query = supabase
     .from("content_translations")
     .select("content_id, locale, title, slug, content, excerpt, meta_description")
-    .eq("content_type", "page")
+    .eq("content_type", contentType)
     .eq("locale", locale)
     .eq("slug", slug);
 
@@ -64,6 +77,16 @@ async function getPageTranslations(
   tenantId?: string | null,
   contentIds: string[] = [],
 ): Promise<Map<string, ContentTranslationRow>> {
+  return getContentTranslations(supabase, "page", locale, tenantId, contentIds);
+}
+
+async function getContentTranslations(
+  supabase: SupabaseClient,
+  contentType: LocalizedContentType,
+  locale?: string,
+  tenantId?: string | null,
+  contentIds: string[] = [],
+): Promise<Map<string, ContentTranslationRow>> {
   if (!locale || locale === "id" || contentIds.length === 0) {
     return new Map<string, ContentTranslationRow>();
   }
@@ -71,7 +94,7 @@ async function getPageTranslations(
   let query = supabase
     .from("content_translations")
     .select("content_id, locale, title, slug, content, excerpt, meta_description")
-    .eq("content_type", "page")
+    .eq("content_type", contentType)
     .eq("locale", locale)
     .in("content_id", contentIds);
 
@@ -107,6 +130,22 @@ function mergePageTranslation(page: PageData, translation?: ContentTranslationRo
   };
 }
 
+function mergeBlogTranslation(blog: BlogData, translation?: ContentTranslationRow | null): BlogData {
+  if (!translation) return blog;
+
+  const translatedVisualContent = parseVisualTranslationContent(translation.content);
+  const isVisual = blog.editor_type === "visual";
+
+  return {
+    ...blog,
+    title: translation.title || blog.title,
+    slug: translation.slug || blog.slug,
+    excerpt: translation.excerpt || blog.excerpt,
+    content: !isVisual && translation.content ? translation.content : blog.content,
+    visual_content: translatedVisualContent || blog.visual_content,
+  };
+}
+
 export interface PageData {
   id: string;
   title: string;
@@ -139,6 +178,8 @@ export interface BlogData {
   slug: string;
   content: string | null;
   visual_content: Record<string, unknown> | null;
+  content_draft?: Record<string, unknown> | null;
+  content_published?: Record<string, unknown> | null;
   editor_type: "richtext" | "visual";
   excerpt: string | null;
   featured_image: string | null;
@@ -281,14 +322,21 @@ export async function getBlogBySlug(
   supabase: SupabaseClient,
   slug: string,
   tenantId?: string | null,
-  _locale?: string,
+  locale?: string,
 ): Promise<BlogData | null> {
+  const translationMatch = await getContentTranslationBySlug(supabase, "blog", slug, locale, tenantId);
+
   let query = supabase
     .from("blogs")
     .select("*")
-    .eq("slug", slug)
     .eq("status", "published")
     .is("deleted_at", null);
+
+  if (translationMatch?.content_id) {
+    query = query.eq("id", translationMatch.content_id);
+  } else {
+    query = query.eq("slug", slug);
+  }
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
@@ -317,10 +365,10 @@ export async function getBlogBySlug(
     category = categoryData || null;
   }
 
-  return {
+  return mergeBlogTranslation({
     ...(data as BlogData),
     category,
-  };
+  }, translationMatch);
 }
 
 /**
@@ -333,9 +381,10 @@ export async function getBlogs(
     limit?: number;
     offset?: number;
     categorySlug?: string;
+    locale?: string;
   } = {},
 ): Promise<{ blogs: BlogData[]; total: number }> {
-  const { limit = 10, offset = 0, categorySlug } = options;
+  const { limit = 10, offset = 0, categorySlug, locale } = options;
 
   let query = supabase
     .from("blogs")
@@ -361,6 +410,13 @@ export async function getBlogs(
   }
 
   const blogs = (data || []) as BlogData[];
+  const translations = await getContentTranslations(
+    supabase,
+    "blog",
+    locale,
+    tenantId,
+    blogs.map((blog) => blog.id),
+  );
 
   // Fetch categories separately
   const categoryIds = Array.from(
@@ -385,8 +441,12 @@ export async function getBlogs(
     }
   }
 
+  const localizedBlogs = blogs.map((blog) =>
+    mergeBlogTranslation(blog, translations.get(blog.id) || null),
+  );
+
   return {
-    blogs,
+    blogs: localizedBlogs,
     total: count || 0,
   };
 }

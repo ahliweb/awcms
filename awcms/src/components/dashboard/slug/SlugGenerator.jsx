@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,8 @@ const SlugGenerator = ({
     tableName = 'pages',
     recordId = null,
     tenantId = null,
+    extraFilters = null,
+    excludeField = 'id',
     onSlugChange
 }) => {
     const { toast } = useToast();
@@ -33,7 +35,7 @@ const SlugGenerator = ({
     };
 
     // Generate slug based on format
-    const generateSlug = React.useCallback((fmt = format, baseTitle = titleValue) => {
+    const generateSlug = useCallback((fmt = format, baseTitle = titleValue) => {
         if (!baseTitle && fmt !== 'custom') return '';
 
         const date = new Date();
@@ -54,7 +56,7 @@ const SlugGenerator = ({
     }, [format, titleValue, slug]);
 
     // Use ref to keep latest onSlugChange without triggering effect
-    const onSlugChangeRef = React.useRef(onSlugChange);
+    const onSlugChangeRef = useRef(onSlugChange);
     useEffect(() => {
         onSlugChangeRef.current = onSlugChange;
     }, [onSlugChange]);
@@ -100,8 +102,20 @@ const SlugGenerator = ({
                 query = query.eq('tenant_id', tenantId);
             }
 
+            if (extraFilters) {
+                Object.entries(extraFilters).forEach(([key, value]) => {
+                    if (Array.isArray(value)) {
+                        query = query.in(key, value);
+                    } else if (value === null) {
+                        query = query.is(key, null);
+                    } else if (value !== undefined && value !== '') {
+                        query = query.eq(key, value);
+                    }
+                });
+            }
+
             if (recordId) {
-                query = query.neq('id', recordId);
+                query = query.neq(excludeField, recordId);
             }
 
             const { data, error } = await query; // Executes remote or local automatically
