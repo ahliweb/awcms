@@ -43,6 +43,14 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 const DEFAULT_BLOG_LOCALE = 'id';
 
@@ -97,6 +105,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
     // Mobile Settings Toggle
     const [showMobileSettings, setShowMobileSettings] = useState(false);
     const [visualSwitchOpen, setVisualSwitchOpen] = useState(false);
+    const [coverImageOpen, setCoverImageOpen] = useState(false);
 
     // Initial Form Data State
     const [formData, setFormData] = useState(() => mapBlogTranslationToFormData(item, null));
@@ -557,7 +566,11 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                         <div className="p-8 lg:p-12 max-w-4xl mx-auto space-y-8 pb-32">
 
                             {/* Featured Image - Banner Style */}
-                            <div className="group relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video max-h-[300px] hover:shadow-md transition-all">
+                            <button
+                                type="button"
+                                onClick={() => setCoverImageOpen(true)}
+                                className="group relative block w-full rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video max-h-[300px] text-left hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                            >
                                 {formData.featured_image ? (
                                     <img src={formData.featured_image} alt="Cover" className="w-full h-full object-cover" />
                                 ) : (
@@ -566,15 +579,12 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                         <span className="text-sm font-medium">Add Cover Image</span>
                                     </div>
                                 )}
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                    <ImageUpload
-                                        value={formData.featured_image}
-                                        onChange={(url) => setFormData(prev => ({ ...prev, featured_image: url }))}
-                                        className="h-full w-full opacity-0 absolute inset-0 cursor-pointer" // Invisible overlay trigger
-                                    />
-                                    <Button variant="secondary" className="pointer-events-none">Change Cover</Button>
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                                    <div className="rounded-full border border-white/60 bg-white/95 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm backdrop-blur">
+                                        {formData.featured_image ? 'Change Cover' : 'Add Cover Image'}
+                                    </div>
                                 </div>
-                            </div>
+                            </button>
 
                             {/* Excerpt */}
                             <div className="space-y-2">
@@ -728,12 +738,44 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 </div>
             </div>
 
+            <Dialog open={coverImageOpen} onOpenChange={setCoverImageOpen}>
+                <DialogContent className="max-w-3xl border-slate-200 bg-white p-0 shadow-2xl">
+                    <DialogHeader className="border-b border-slate-200 px-6 py-5">
+                        <DialogTitle>Cover Image</DialogTitle>
+                        <DialogDescription>
+                            Upload a hero image, choose one from the media library, or paste an external image URL.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
+                        <ImageUpload
+                            value={formData.featured_image}
+                            onChange={(url) => setFormData(prev => ({ ...prev, featured_image: url }))}
+                        />
+                    </div>
+                    <DialogFooter className="border-t border-slate-200 px-6 py-4">
+                        {formData.featured_image ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setFormData(prev => ({ ...prev, featured_image: '' }))}
+                            >
+                                Remove Image
+                            </Button>
+                        ) : <div />}
+                        <Button type="button" onClick={() => setCoverImageOpen(false)} className="bg-slate-900 hover:bg-slate-800 text-white">
+                            Done
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <AlertDialog open={visualSwitchOpen} onOpenChange={setVisualSwitchOpen}>
-                <AlertDialogContent>
+                <AlertDialogContent className="border-slate-200 bg-white shadow-2xl">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Switch to Visual Builder?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Switching to the Visual Builder might affect existing content formatting.
+                        <AlertDialogDescription className="space-y-2">
+                            <span className="block">Use the visual builder when you want layout-driven storytelling blocks instead of the standard rich text editor.</span>
+                            <span className="block">Existing text content may need light cleanup after the switch, especially on older posts.</span>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
