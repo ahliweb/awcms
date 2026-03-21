@@ -17,6 +17,7 @@ function BlogsContentPanels({
 	categoryFormFields,
 	tagColumns,
 	tagFormFields,
+	blogEditorProps = {},
 	onContentSaved,
 }) {
 	// Wrap BlogEditorComponent to trigger onContentSaved after save
@@ -26,7 +27,7 @@ function BlogsContentPanels({
 			if (originalOnSuccess) originalOnSuccess();
 			if (onContentSaved) onContentSaved();
 		};
-		return <BlogEditorComponent {...restProps} onSuccess={wrappedOnSuccess} />;
+		return <BlogEditorComponent {...restProps} {...blogEditorProps} onSuccess={wrappedOnSuccess} />;
 	} : BlogEditorComponent;
 
 	return (

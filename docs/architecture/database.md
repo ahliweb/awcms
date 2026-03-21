@@ -1089,6 +1089,12 @@ CREATE TABLE content_translations (
 );
 ```
 
+Notes:
+
+- `page` rows store localized overlays for `pages`.
+- `article` rows store localized overlays for `blogs`.
+- The admin/public code should not assume a `pages.locale` or `blogs.locale` column; locale variants live in `content_translations`.
+
 #### page_tags / blog_tags
 
 Junction tables linking content to tags.

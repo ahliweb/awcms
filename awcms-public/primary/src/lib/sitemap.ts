@@ -121,7 +121,7 @@ export async function getBlogsSitemapEntries(
     let translationQuery = supabase
       .from("content_translations")
       .select("content_id, locale, slug")
-      .eq("content_type", "blog")
+      .eq("content_type", "article")
       .in("content_id", blogIds);
 
     if (tenantId) {

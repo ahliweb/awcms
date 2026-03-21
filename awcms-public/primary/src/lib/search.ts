@@ -177,7 +177,7 @@ async function searchBlogs(
     let translationQuery = supabase
       .from("content_translations")
       .select("content_id, title, slug, excerpt, content")
-      .eq("content_type", "blog")
+      .eq("content_type", "article")
       .eq("locale", locale)
       .or(
         `title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`,

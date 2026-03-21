@@ -44,7 +44,7 @@ export const getStaticPaths = (async () => {
             .from("content_translations")
             .select("content_id, locale, slug")
             .eq("tenant_id", tenantId)
-            .eq("content_type", "blog")
+            .eq("content_type", "article")
             .eq("locale", "en")
             .in("content_id", blogIds);
 

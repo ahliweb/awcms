@@ -44,6 +44,10 @@ function BlogsManager() {
     () => languages.find((language) => language.code === selectedLanguage)?.label || selectedLanguage.toUpperCase(),
     [languages, selectedLanguage]
   );
+  const selectedLanguageMeta = useMemo(
+    () => languages.find((language) => language.code === selectedLanguage) || languages[0],
+    [languages, selectedLanguage]
+  );
 
   const legacyEditId = searchParams.get('edit');
   const legacyStatus = searchParams.get('status');
@@ -165,7 +169,7 @@ function BlogsManager() {
   );
 
   // Blog columns and fields
-  const blogColumns = [
+  const blogColumns = useMemo(() => [
     {
       key: 'title',
       label: t('common.title'),
@@ -178,13 +182,22 @@ function BlogsManager() {
       )
     },
     {
-      key: 'locale',
+      key: 'translation_status',
       label: t('common.language') || 'Language',
-      render: (value) => (
-        <span className="inline-flex items-center rounded-full border border-border/70 bg-secondary px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-secondary-foreground">
-          {value || 'en'}
-        </span>
-      )
+        render: (_value, row) => {
+          const hasTranslation = selectedLanguage === 'id' || Boolean(row?.title_en);
+
+        return (
+          <span className={cn(
+            'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide',
+            hasTranslation
+              ? 'border-primary/25 bg-primary/10 text-primary'
+              : 'border-border/70 bg-secondary text-secondary-foreground'
+          )}>
+            {selectedLanguage}
+          </span>
+        );
+      }
     },
     {
       key: 'workflow_state',
@@ -220,7 +233,7 @@ function BlogsManager() {
         </span>
       )
     }
-  ];
+  ], [selectedLanguage, t]);
 
   // Custom Actions
   const customRowActions = (item, { openEditor }) => (
@@ -246,13 +259,21 @@ function BlogsManager() {
       selectedLanguage={selectedLanguage}
       selectedLanguageLabel={selectedLanguageLabel}
       onLanguageChange={setSelectedLanguage}
-      onCreateVisual={() => openEditor({ editor_type: 'visual', title: '', status: 'draft', locale: selectedLanguage })}
+      onCreateVisual={() => openEditor({ editor_type: 'visual', title: '', status: 'draft' })}
     />
   );
 
   const blogFormFields = [
     { key: 'title', label: t('blogs.form.title'), required: true },
+    { key: 'title_en', label: t('pages.form.title_en'), layout: 'main' },
     { key: 'slug', label: t('common.slug') },
+    {
+      key: 'slug_en',
+      label: t('pages.form.slug_en'),
+      description: t('pages.form.slug_en_desc'),
+      autoGenerateFrom: 'title_en',
+      layout: 'main'
+    },
     {
       key: 'status', label: t('common.status'), type: 'select', options: [
         { value: 'draft', label: t('common.draft') },
@@ -262,19 +283,36 @@ function BlogsManager() {
     },
     { key: 'category_id', label: t('common.category'), type: 'resource_select', resourceTable: 'categories', filter: { type: ['blog', 'blogs', 'content'] } },
     { key: 'excerpt', label: t('blogs.form.excerpt'), type: 'textarea' },
+    { key: 'excerpt_en', label: t('pages.form.excerpt_en'), type: 'textarea', layout: 'main' },
     { key: 'content', label: t('blogs.form.content'), type: 'richtext', description: t('blogs.form.content_desc') || "Main blog content with WYSIWYG editor" },
+    {
+      key: 'content_en',
+      label: t('pages.form.content_en'),
+      type: 'richtext',
+      description: t('pages.form.content_en_desc'),
+      layout: 'main'
+    },
     { key: 'featured_image', label: t('blogs.form.featured_image'), type: 'image', description: t('blogs.form.image_desc') || "Upload or select from Media Library" },
     { key: 'tags', label: t('common.tags'), type: 'tags' },
     { key: 'is_public', label: t('blogs.form.is_public'), type: 'boolean' },
-    {
-      key: 'locale',
-      label: 'Language',
-      type: 'select',
-      options: languages.map(l => ({ value: l.code, label: l.label })),
-      defaultValue: selectedLanguage,
-      hidden: true // Hide from form, set implicitly or via top toolbar in editor
-    }
+    { key: 'meta_description_en', label: t('pages.form.meta_desc_en'), type: 'textarea', description: t('pages.form.meta_desc_en_desc') }
   ];
+
+  const blogEditorProps = useMemo(() => ({
+    translationConfig: {
+      tableName: 'content_translations',
+      contentType: 'article',
+      locale: 'en',
+      fieldMap: {
+        title_en: 'title',
+        slug_en: 'slug',
+        content_en: 'content',
+        excerpt_en: 'excerpt',
+        meta_description_en: 'meta_description'
+      }
+    },
+    selectedLanguage: selectedLanguageMeta.code,
+  }), [selectedLanguageMeta.code]);
 
   // Category columns and fields
   const categoryColumns = [
@@ -343,6 +381,7 @@ function BlogsManager() {
         categoryFormFields={categoryFormFields}
         tagColumns={tagColumns}
         tagFormFields={tagFormFields}
+        blogEditorProps={blogEditorProps}
         onContentSaved={handleContentSaved}
       />
     </AdminPageLayout>

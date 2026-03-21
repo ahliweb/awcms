@@ -44,7 +44,41 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-function BlogEditor({ item, onClose, onSuccess }) {
+const DEFAULT_BLOG_LOCALE = 'id';
+
+function mapBlogTranslationToFormData(item, translation) {
+    return {
+        title: item?.title || '',
+        slug: item?.slug || '',
+        content: item?.content || '',
+        excerpt: item?.excerpt || '',
+        featured_image: item?.featured_image || '',
+        status: item?.status || 'draft',
+        workflow_state: item?.workflow_state || 'draft',
+        is_active: item?.is_active ?? true,
+        is_public: item?.is_public ?? false,
+        category_id: item?.category_id || '',
+        tags: item?.tags || [],
+        meta_title: item?.meta_title || '',
+        meta_description: item?.meta_description || '',
+        meta_keywords: item?.meta_keywords || '',
+        canonical_url: item?.canonical_url || '',
+        robots: item?.robots || 'index, follow',
+        og_title: item?.og_title || '',
+        og_description: item?.og_description || '',
+        og_image: item?.og_image || '',
+        twitter_card_type: item?.twitter_card_type || 'summary',
+        twitter_image: item?.twitter_image || '',
+        published_at: item?.published_at ? new Date(item.published_at).toISOString().slice(0, 16) : '',
+        title_en: translation?.title || '',
+        slug_en: translation?.slug || '',
+        content_en: translation?.content || '',
+        excerpt_en: translation?.excerpt || '',
+        meta_description_en: translation?.meta_description || '',
+    };
+}
+
+function BlogEditor({ item, onClose, onSuccess, translationConfig = null, selectedLanguage = DEFAULT_BLOG_LOCALE }) {
     const { toast } = useToast();
     const { user } = useAuth();
     const { currentTenant } = useTenant();
@@ -65,35 +99,7 @@ function BlogEditor({ item, onClose, onSuccess }) {
     const [visualSwitchOpen, setVisualSwitchOpen] = useState(false);
 
     // Initial Form Data State
-    const [formData, setFormData] = useState({
-        title: item?.title || '',
-        slug: item?.slug || '',
-        content: item?.content || '',
-        excerpt: item?.excerpt || '',
-        featured_image: item?.featured_image || '',
-        status: item?.status || 'draft',
-        workflow_state: item?.workflow_state || 'draft',
-        is_active: item?.is_active ?? true,
-        is_public: item?.is_public ?? false,
-        category_id: item?.category_id || '',
-        tags: item?.tags || [],
-
-        // SEO
-        meta_title: item?.meta_title || '',
-        meta_description: item?.meta_description || '',
-        meta_keywords: item?.meta_keywords || '',
-        canonical_url: item?.canonical_url || '',
-        robots: item?.robots || 'index, follow',
-
-        // Social
-        og_title: item?.og_title || '',
-        og_description: item?.og_description || '',
-        og_image: item?.og_image || '',
-        twitter_card_type: item?.twitter_card_type || 'summary',
-        twitter_image: item?.twitter_image || '',
-
-        published_at: item?.published_at ? new Date(item.published_at).toISOString().slice(0, 16) : ''
-    });
+    const [formData, setFormData] = useState(() => mapBlogTranslationToFormData(item, null));
 
     const isEditMode = !!item;
     const WORKFLOW_STATES = {
@@ -143,6 +149,44 @@ function BlogEditor({ item, onClose, onSuccess }) {
         fetchCategories();
     }, [fetchCategories]);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadTranslation = async () => {
+            if (!translationConfig || !item?.id || !currentTenant?.id) {
+                setFormData(mapBlogTranslationToFormData(item, null));
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from(translationConfig.tableName || 'content_translations')
+                .select('*')
+                .eq('content_type', translationConfig.contentType)
+                .eq('content_id', item.id)
+                .eq('locale', translationConfig.locale)
+                .eq('tenant_id', currentTenant.id)
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error loading blog translation:', error);
+                if (!cancelled) {
+                    setFormData(mapBlogTranslationToFormData(item, null));
+                }
+                return;
+            }
+
+            if (!cancelled) {
+                setFormData(mapBlogTranslationToFormData(item, data));
+            }
+        };
+
+        loadTranslation();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [translationConfig, item, currentTenant?.id]);
+
     const handleWorkflowAction = async (newState) => {
         await saveItem(newState);
     };
@@ -183,6 +227,29 @@ function BlogEditor({ item, onClose, onSuccess }) {
         setLoading(true);
 
         try {
+            if (translationConfig && formData.slug_en) {
+                let translationSlugQuery = supabase
+                    .from(translationConfig.tableName || 'content_translations')
+                    .select('id')
+                    .eq('tenant_id', currentTenant.id)
+                    .eq('content_type', translationConfig.contentType)
+                    .eq('locale', translationConfig.locale)
+                    .eq('slug', formData.slug_en);
+
+                if (item?.id) {
+                    translationSlugQuery = translationSlugQuery.neq('content_id', item.id);
+                }
+
+                const { data: existingTranslationSlugs, error: translationSlugError } = await translationSlugQuery.limit(1);
+
+                if (translationSlugError) throw translationSlugError;
+
+                if (existingTranslationSlugs && existingTranslationSlugs.length > 0) {
+                    const uniqueSuffix = Date.now().toString(36);
+                    throw new Error(`Slug "${formData.slug_en}" is already in use for ${translationConfig.locale.toUpperCase()}. Try "${formData.slug_en}-${uniqueSuffix}" instead.`);
+                }
+            }
+
             const dataToSave = {
                 tenant_id: currentTenant.id,
                 title: formData.title,
@@ -210,6 +277,13 @@ function BlogEditor({ item, onClose, onSuccess }) {
                 published_at: formData.published_at || null,
                 updated_at: new Date().toISOString()
             };
+
+            const translationFieldMap = translationConfig?.fieldMap || {};
+            const translationPayload = Object.entries(translationFieldMap).reduce((acc, [formKey, translationKey]) => {
+                const value = formData[formKey];
+                acc[translationKey] = typeof value === 'string' ? value.trim() : value ?? null;
+                return acc;
+            }, {});
 
             if (!isEditMode) {
                 dataToSave.created_by = user.id;
@@ -247,6 +321,39 @@ function BlogEditor({ item, onClose, onSuccess }) {
                     p_tags: formData.tags,
                     p_tenant_id: currentTenant.id
                 });
+
+                if (translationConfig) {
+                    const hasTranslationContent = Object.values(translationPayload).some((value) => {
+                        if (typeof value === 'string') return value.length > 0;
+                        return Boolean(value);
+                    });
+
+                    if (hasTranslationContent) {
+                        const { error: translationError } = await supabase
+                            .from(translationConfig.tableName || 'content_translations')
+                            .upsert({
+                                content_type: translationConfig.contentType,
+                                content_id: savedItemId,
+                                locale: translationConfig.locale,
+                                tenant_id: currentTenant.id,
+                                ...translationPayload,
+                            }, {
+                                onConflict: 'content_type,content_id,locale,tenant_id'
+                            });
+
+                        if (translationError) throw translationError;
+                    } else if (isEditMode) {
+                        const { error: translationDeleteError } = await supabase
+                            .from(translationConfig.tableName || 'content_translations')
+                            .delete()
+                            .eq('content_type', translationConfig.contentType)
+                            .eq('content_id', savedItemId)
+                            .eq('locale', translationConfig.locale)
+                            .eq('tenant_id', currentTenant.id);
+
+                        if (translationDeleteError) throw translationDeleteError;
+                    }
+                }
             }
 
             try {
@@ -304,6 +411,7 @@ function BlogEditor({ item, onClose, onSuccess }) {
                 onSuccess={onSuccess}
                 mode="blog" // Custom prop we added support for
                 pageId={item?.id} // Helper for mode='blog' logic
+                selectedLanguage={selectedLanguage}
             />,
             document.body
         );

@@ -39,8 +39,8 @@ import { useTenant } from '@/contexts/TenantContext'; // Added TenantContext
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import useSecureRouteParam from '@/hooks/useSecureRouteParam';
 
-const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess: _onSuccess }) => {
-    const defaultPageLocale = 'id';
+const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess: _onSuccess, selectedLanguage = 'id' }) => {
+    const defaultContentLocale = 'id';
     // Permission Hook
     const { hasPermission, checkAccess, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant(); // Get current tenant
@@ -138,15 +138,16 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         slug: initialPage?.slug || '',
         meta_description: initialPage?.meta_description || '',
         category_id: initialPage?.category_id || null, // Added category_id
-        locale: 'id',
+        locale: initialMode === 'blog' ? selectedLanguage : defaultContentLocale,
         status: initialPage?.status || 'draft',
         published_at: initialPage?.published_at ? new Date(initialPage.published_at).toISOString().slice(0, 16) : ''
     });
 
 
-    const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('edit', 'pages', page);
+    const contentPermissionResource = mode === 'blog' ? 'blogs' : 'pages';
+    const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('edit', contentPermissionResource, page);
     const canEdit = isEditorEnabled; // Alias for readability
-    const canPublish = (mode === 'template' || mode === 'part') ? false : checkAccess('publish', 'pages', page);
+    const canPublish = (mode === 'template' || mode === 'part') ? false : checkAccess('publish', contentPermissionResource, page);
     const [isSaving, setIsSaving] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [previewMode, setPreviewMode] = useState(false);
@@ -249,7 +250,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         meta_description: art.meta_description,
                         category_id: art.category_id || null,
                         status: art.status,
-                        locale: 'en',
+                        locale: selectedLanguage || defaultContentLocale,
                         published_at: art.published_at ? new Date(art.published_at).toISOString().slice(0, 16) : ''
                     });
 
@@ -266,7 +267,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         meta_description: pg.meta_description,
                         category_id: pg.category_id || null,
                         status: pg.status,
-                        locale: 'id',
+                        locale: defaultContentLocale,
                         published_at: pg.published_at ? new Date(pg.published_at).toISOString().slice(0, 16) : ''
                     });
                 }
@@ -298,16 +299,20 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             loadData();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [templateId, pageId, initialPage, mode, currentTenant?.id, isPlatformAdmin]);
+    }, [templateId, pageId, initialPage, mode, currentTenant?.id, isPlatformAdmin, selectedLanguage]);
 
     useEffect(() => {
         let cancelled = false;
 
-        const loadPageTranslation = async () => {
-            if (mode !== 'page' || !page?.id || !currentTenant?.id) return;
+        const loadTranslationOverlay = async () => {
+            if ((mode !== 'page' && mode !== 'blog') || !page?.id || !currentTenant?.id) return;
 
-            if (pageMetadata.locale === defaultPageLocale) {
-                const baseContent = page?.content_draft || page?.content_published || { content: [], root: { props: { title: page?.title || '' } } };
+            const isPageMode = mode === 'page';
+            const translationContentType = isPageMode ? 'page' : 'article';
+            const fallbackLocale = defaultContentLocale;
+            const baseContent = page?.content_draft || page?.content_published || (typeof page?.content === 'object' ? page.content : null) || { content: [], root: { props: { title: page?.title || '' } } };
+
+            if (pageMetadata.locale === fallbackLocale) {
                 if (!cancelled) {
                     setPageMetadata(prev => ({
                         ...prev,
@@ -325,24 +330,24 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 .from('content_translations')
                 .select('*')
                 .eq('tenant_id', currentTenant.id)
-                .eq('content_type', 'page')
+                .eq('content_type', translationContentType)
                 .eq('content_id', page.id)
                 .eq('locale', pageMetadata.locale)
                 .maybeSingle();
 
             if (error) {
-                console.error('Error loading page translation:', error);
+                console.error(`Error loading ${mode} translation:`, error);
                 return;
             }
 
             if (cancelled) return;
 
-            let translatedVisualContent = page?.content_draft || page?.content_published || { content: [], root: { props: { title: page?.title || '' } } };
+            let translatedVisualContent = baseContent;
             if (translation?.content) {
                 try {
                     translatedVisualContent = JSON.parse(translation.content);
                 } catch (parseError) {
-                    console.warn('Failed to parse translated visual content, using default locale content:', parseError);
+                    console.warn(`Failed to parse translated ${mode} visual content, using default locale content:`, parseError);
                 }
             }
 
@@ -356,7 +361,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             setEditorKey(prev => prev + 1);
         };
 
-        loadPageTranslation();
+        loadTranslationOverlay();
 
         return () => {
             cancelled = true;
@@ -495,17 +500,75 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                     category_id: pageMetadata.category_id,
                     status: pageMetadata.status,
                     published_at: pageMetadata.published_at || null,
-                    locale: pageMetadata.locale,
                     editor_type: 'visual',
                     tenant_id: currentTenant?.id
                 };
 
                 if (page?.id) {
-                    const { error: err } = await udm
-                        .from('blogs')
-                        .update(payload)
-                        .eq('id', page.id);
-                    error = err;
+                    if (pageMetadata.locale === defaultContentLocale) {
+                        const { error: err } = await udm
+                            .from('blogs')
+                            .update(payload)
+                            .eq('id', page.id);
+                        error = err;
+                    } else {
+                        if (pageMetadata.slug) {
+                            const { data: existingTranslationSlug, error: translationSlugError } = await supabase
+                                .from('content_translations')
+                                .select('id')
+                                .eq('tenant_id', currentTenant?.id)
+                                .eq('content_type', 'article')
+                                .eq('locale', pageMetadata.locale)
+                                .eq('slug', pageMetadata.slug)
+                                .neq('content_id', page.id)
+                                .limit(1);
+
+                            if (translationSlugError) {
+                                throw translationSlugError;
+                            }
+
+                            if (existingTranslationSlug && existingTranslationSlug.length > 0) {
+                                const uniqueSuffix = Date.now().toString(36);
+                                throw new Error(`Slug "${pageMetadata.slug}" is already in use for ${pageMetadata.locale.toUpperCase()}. Try "${pageMetadata.slug}-${uniqueSuffix}" instead.`);
+                            }
+                        }
+
+                        const translationPayload = {
+                            tenant_id: currentTenant?.id,
+                            content_type: 'article',
+                            content_id: page.id,
+                            locale: pageMetadata.locale,
+                            title: pageMetadata.title || null,
+                            slug: pageMetadata.slug || null,
+                            meta_description: pageMetadata.meta_description || null,
+                            content: JSON.stringify(contentData),
+                        };
+
+                        const hasTranslationContent = [
+                            translationPayload.title,
+                            translationPayload.slug,
+                            translationPayload.meta_description,
+                            translationPayload.content,
+                        ].some((value) => typeof value === 'string' && value.trim().length > 0);
+
+                        if (hasTranslationContent) {
+                            const { error: err } = await supabase
+                                .from('content_translations')
+                                .upsert(translationPayload, {
+                                    onConflict: 'content_type,content_id,locale,tenant_id'
+                                });
+                            error = err;
+                        } else {
+                            const { error: err } = await supabase
+                                .from('content_translations')
+                                .delete()
+                                .eq('tenant_id', currentTenant?.id)
+                                .eq('content_type', 'article')
+                                .eq('content_id', page.id)
+                                .eq('locale', pageMetadata.locale);
+                            error = err;
+                        }
+                    }
                 } else {
                     // Create new blog
                     // If offline or just standard practice, we might want to generate ID, 
@@ -530,7 +593,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 }
             } else {
                 console.log('Saving page:', page.id);
-                if (pageMetadata.locale === defaultPageLocale) {
+                if (pageMetadata.locale === defaultContentLocale) {
                     const { error: err } = await udm
                         .from('pages')
                         .update({
@@ -612,7 +675,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             setHasUnsavedChanges(false);
 
             if (!isAutoSave) {
-                const entityName = mode === 'template' ? 'Template' : (mode === 'part' ? 'Part' : 'Page');
+                const entityName = mode === 'template' ? 'Template' : (mode === 'part' ? 'Part' : (mode === 'blog' ? 'Blog' : 'Page'));
                 toast({
                     title: isOffline ? 'Saved Offline' : 'Saved',
                     description: isOffline ? `${entityName} saved to local device. Will sync when online.` : `${entityName} saved successfully.`
@@ -708,7 +771,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             const publishedAt = new Date().toISOString();
             let error = null;
 
-            if (mode === 'page' && pageMetadata.locale !== defaultPageLocale) {
+            if (mode === 'page' && pageMetadata.locale !== defaultContentLocale) {
                 const translationPayload = {
                     tenant_id: currentTenant?.id,
                     content_type: 'page',
@@ -728,14 +791,43 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                     });
 
                 error = translationError;
+            } else if (mode === 'blog' && pageMetadata.locale !== defaultContentLocale) {
+                const translationPayload = {
+                    tenant_id: currentTenant?.id,
+                    content_type: 'article',
+                    content_id: page.id,
+                    locale: pageMetadata.locale,
+                    title: pageMetadata.title || null,
+                    slug: pageMetadata.slug || null,
+                    meta_description: pageMetadata.meta_description || null,
+                    content: JSON.stringify(data),
+                    updated_at: publishedAt,
+                };
+
+                const { error: translationError } = await supabase
+                    .from('content_translations')
+                    .upsert(translationPayload, {
+                        onConflict: 'content_type,content_id,locale,tenant_id'
+                    });
+
+                error = translationError;
             } else {
-                const { error: publishError } = await udm
-                    .from('pages')
-                    .update({
+                const tableName = mode === 'blog' ? 'blogs' : 'pages';
+                const publishPayload = mode === 'blog'
+                    ? {
+                        status: 'published',
+                        content: data,
+                        published_at: publishedAt
+                    }
+                    : {
                         status: 'published',
                         content_published: data,
                         published_at: publishedAt
-                    })
+                    };
+
+                const { error: publishError } = await udm
+                    .from(tableName)
+                    .update(publishPayload)
                     .eq('id', page.id);
 
                 error = publishError;
@@ -1003,7 +1095,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                 General Information
                             </h3>
                             <div className="grid gap-3">
-                                {mode === 'page' && (
+                                {(mode === 'page' || mode === 'blog') && (
                                     <>
                                         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Locale</Label>
                                         <Select value={pageMetadata.locale} onValueChange={handleLocaleChange}>
@@ -1038,12 +1130,12 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                     key={`${page?.id || 'new'}-${pageMetadata.locale}-${translationSlugCheckKey}`}
                                     initialSlug={pageMetadata.slug}
                                     titleValue={pageMetadata.title}
-                                    tableName={pageMetadata.locale === defaultPageLocale ? 'pages' : 'content_translations'}
+                                    tableName={pageMetadata.locale === defaultContentLocale ? (mode === 'blog' ? 'blogs' : 'pages') : 'content_translations'}
                                     recordId={page?.id}
                                     tenantId={currentTenant?.id}
-                                    excludeField={pageMetadata.locale === defaultPageLocale ? 'id' : 'content_id'}
-                                    extraFilters={pageMetadata.locale === defaultPageLocale ? null : {
-                                        content_type: 'page',
+                                    excludeField={pageMetadata.locale === defaultContentLocale ? 'id' : 'content_id'}
+                                    extraFilters={pageMetadata.locale === defaultContentLocale ? null : {
+                                        content_type: mode === 'blog' ? 'article' : 'page',
                                         locale: pageMetadata.locale,
                                     }}
                                     onSlugChange={handleSlugChange}

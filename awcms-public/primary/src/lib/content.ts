@@ -15,7 +15,7 @@ interface ContentTranslationRow {
   meta_description?: string | null;
 }
 
-type LocalizedContentType = "page" | "blog";
+type TranslationContentType = "page" | "article";
 
 function parseVisualTranslationContent(rawContent: string | null | undefined): Record<string, unknown> | null {
   if (!rawContent) return null;
@@ -43,7 +43,7 @@ async function getPageTranslationBySlug(
 
 async function getContentTranslationBySlug(
   supabase: SupabaseClient,
-  contentType: LocalizedContentType,
+  contentType: TranslationContentType,
   slug: string,
   locale?: string,
   tenantId?: string | null,
@@ -82,7 +82,7 @@ async function getPageTranslations(
 
 async function getContentTranslations(
   supabase: SupabaseClient,
-  contentType: LocalizedContentType,
+  contentType: TranslationContentType,
   locale?: string,
   tenantId?: string | null,
   contentIds: string[] = [],
@@ -324,7 +324,7 @@ export async function getBlogBySlug(
   tenantId?: string | null,
   locale?: string,
 ): Promise<BlogData | null> {
-  const translationMatch = await getContentTranslationBySlug(supabase, "blog", slug, locale, tenantId);
+  const translationMatch = await getContentTranslationBySlug(supabase, "article", slug, locale, tenantId);
 
   let query = supabase
     .from("blogs")
@@ -478,7 +478,7 @@ export async function getBlogs(
   const blogs = (data || []) as BlogData[];
   const translations = await getContentTranslations(
     supabase,
-    "blog",
+    "article",
     locale,
     tenantId,
     blogs.map((blog) => blog.id),
