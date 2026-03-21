@@ -34,6 +34,35 @@ const whenExternalScripts = (
 
 import react from "@astrojs/react";
 
+function optimizeWorkerdDeps() {
+  return {
+    name: "awcms-workerd-deps",
+    configEnvironment(environment: string) {
+      if (environment === "client") {
+        return;
+      }
+
+      return {
+        optimizeDeps: {
+          include: [
+            "astro-icon",
+            "astro-embed",
+            "@astro-community/astro-embed-bluesky",
+            "@iconify/utils",
+            "@iconify/utils > debug",
+            "@atproto/api",
+            "@atproto/common-web",
+            "@atproto/lexicon",
+            "@atproto/xrpc",
+            "@atproto/syntax",
+            "debug",
+          ],
+        },
+      };
+    },
+  };
+}
+
 export default defineConfig({
   output: "static",
   adapter: cloudflare({ imageService: "compile" }),
@@ -93,7 +122,9 @@ export default defineConfig({
   },
 
   vite: {
-    plugins: [tailwindcss()] as NonNullable<AstroUserConfig["vite"]>["plugins"],
+    plugins: [tailwindcss(), optimizeWorkerdDeps()] as NonNullable<
+      AstroUserConfig["vite"]
+    >["plugins"],
     resolve: {
       alias: {
         "~": path.resolve(__dirname, "./src"),
