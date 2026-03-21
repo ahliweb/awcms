@@ -1,5 +1,6 @@
 import { Building2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell';
@@ -15,6 +16,7 @@ const DEFAULT_SCHOOL_PAGE_DATA = SCHOOL_PAGE_TABS.reduce((acc, tab) => {
 }, {});
 
 function SchoolPagesManager() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { '*': splat } = useParams();
   const { toast } = useToast();
@@ -29,7 +31,7 @@ function SchoolPagesManager() {
   const handleSave = async () => {
     try {
       await settings.save();
-      toast({ title: 'Saved', description: 'School pages updated successfully.' });
+      toast({ title: t('common.saved'), description: t('school_pages.toast.save_success') });
       
       // Auto-deploy after saving
       try {
@@ -44,16 +46,16 @@ function SchoolPagesManager() {
         console.warn('Public rebuild trigger failed:', rebuildError);
       }
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Save failed', description: error.message });
+      toast({ variant: 'destructive', title: t('common.save_failed'), description: error.message });
     }
   };
 
   const handleReload = async () => {
     try {
       await settings.reload();
-      toast({ title: 'Refreshed', description: 'School pages reloaded.' });
+      toast({ title: t('common.refreshed'), description: t('school_pages.toast.reload_success') });
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Reload failed', description: error.message });
+      toast({ variant: 'destructive', title: t('common.reload_failed'), description: error.message });
     }
   };
 
@@ -66,14 +68,14 @@ function SchoolPagesManager() {
           action: 'deploy',
         });
         toast({ 
-          title: 'Deployment Triggered', 
-          description: 'The public site rebuild process has been initiated successfully.' 
+          title: t('school_pages.toast.deploy_title'), 
+          description: t('school_pages.toast.deploy_success'),
         });
       } else {
         throw new Error('No active tenant context found.');
       }
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Deploy failed', description: error.message || 'Failed to trigger rebuild.' });
+      toast({ variant: 'destructive', title: t('school_pages.toast.deploy_failed'), description: error.message || 'Failed to trigger rebuild.' });
     }
   };
 
@@ -91,7 +93,7 @@ function SchoolPagesManager() {
       hasChanges={settings.hasChanges}
       actions={
         <Button onClick={handleDeploy} variant="secondary">
-          Deploy to Public
+          {t('school_pages.actions.deploy')}
         </Button>
       }
     >

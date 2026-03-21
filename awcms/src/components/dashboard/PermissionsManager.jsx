@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -13,6 +14,7 @@ import PermissionEditorDialog from '@/components/dashboard/permissions/Permissio
 import PermissionDeleteDialog from '@/components/dashboard/permissions/PermissionDeleteDialog';
 
 function PermissionsManager() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { isPlatformAdmin, isFullAccess, loading: permsLoading } = usePermissions();
 
@@ -157,10 +159,10 @@ function PermissionsManager() {
   };
 
   const columns = [
-    { key: 'name', label: 'Permission Name', className: 'font-semibold' },
-    { key: 'resource', label: 'Resource', className: 'text-slate-500' },
-    { key: 'action', label: 'Action', className: 'text-slate-500' },
-    { key: 'description', label: 'Description' },
+    { key: 'name', label: t('permissions.columns.name'), className: 'font-semibold' },
+    { key: 'resource', label: t('permissions.columns.resource'), className: 'text-muted-foreground' },
+    { key: 'action', label: t('permissions.columns.action'), className: 'text-muted-foreground' },
+    { key: 'description', label: t('permissions.columns.description') },
   ];
 
   if (!isSuperAdmin) {
@@ -170,10 +172,10 @@ function PermissionsManager() {
   return (
     <AdminPageLayout requiredPermission="platform.permissions.read">
       <PageHeader
-        title="Permissions"
-        description="Manage system permissions"
+        title={t('permissions.manager.title')}
+        description={t('permissions.manager.description')}
         icon={Shield}
-        breadcrumbs={[{ label: 'Permissions', icon: Shield }]}
+        breadcrumbs={[{ label: t('permissions.manager.title'), icon: Shield }]}
         actions={(
           <PermissionsHeaderActions
             loading={loading}

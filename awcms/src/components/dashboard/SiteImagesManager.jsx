@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/components/ui/use-toast';
 import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell';
 import { useSettingsRecord } from '@/components/dashboard/settings/useSettingsManager';
@@ -18,18 +17,6 @@ function SiteImagesManager() {
       gallery: [],
     },
   });
-
-  const postSections = useMemo(
-    () => [
-      <Alert key="site-images-warning">
-        <AlertTitle>Canonical resource path active</AlertTitle>
-        <AlertDescription>
-          Site Images now stays on the dedicated `site_images` admin surface while reusing the shared settings manager infrastructure.
-        </AlertDescription>
-      </Alert>,
-    ],
-    []
-  );
 
   const handleSave = async () => {
     try {
@@ -69,17 +56,13 @@ function SiteImagesManager() {
       saving={settings.saving}
       hasChanges={settings.hasChanges}
     >
-      <div className="space-y-6">
-        {postSections}
-
-        <div className="rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm">
-          <SiteImagesTabs
+      <div className="rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm">
+        <SiteImagesTabs
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             data={settings.value || {}}
-            updateSection={updateSection}
-          />
-        </div>
+          updateSection={updateSection}
+        />
       </div>
     </SettingsPageShell>
   );

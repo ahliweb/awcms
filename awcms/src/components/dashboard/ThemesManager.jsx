@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Palette } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
+import { useTranslation } from 'react-i18next';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
@@ -12,6 +13,7 @@ import ThemesGrid from '@/components/dashboard/themes/ThemesGrid';
 import ThemeDeleteDialog from '@/components/dashboard/themes/ThemeDeleteDialog';
 
 const ThemesManager = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { hasPermission, isPlatformAdmin } = usePermissions();
@@ -34,7 +36,7 @@ const ThemesManager = () => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      toast({ title: 'Error', description: 'Failed to load themes', variant: 'destructive' });
+      toast({ title: t('common.error'), description: t('themes.toast.load_error'), variant: 'destructive' });
     } else {
       setThemes(data || []);
     }
@@ -48,7 +50,7 @@ const ThemesManager = () => {
 
   const handleActivate = async (id) => {
     if (!canUpdate) {
-      toast({ title: 'Access Denied', description: 'Permission required.', variant: 'destructive' });
+      toast({ title: t('common.access_denied'), description: t('themes.toast.access_denied'), variant: 'destructive' });
       return;
     }
 
@@ -60,10 +62,10 @@ const ThemesManager = () => {
 
       if (error) throw error;
 
-      toast({ title: 'Theme Activated', description: 'New theme is now live!' });
+      toast({ title: t('themes.toast.activated_title'), description: t('themes.toast.activated') });
       fetchThemes();
     } catch (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: t('common.error'), description: error.message, variant: 'destructive' });
     }
   };
 
@@ -78,11 +80,11 @@ const ThemesManager = () => {
 
       if (error) throw error;
 
-      toast({ title: 'Deleted', description: 'Theme moved to trash.' });
+      toast({ title: t('common.deleted'), description: t('themes.toast.deleted') });
       setThemeToDelete(null);
       fetchThemes();
     } catch (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: t('common.error'), description: error.message, variant: 'destructive' });
     }
   };
 
@@ -97,9 +99,9 @@ const ThemesManager = () => {
 
     const { error } = await supabase.from('themes').insert([newTheme]);
     if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: t('common.error'), description: error.message, variant: 'destructive' });
     } else {
-      toast({ title: 'Success', description: 'Theme duplicated.' });
+      toast({ title: t('common.success'), description: t('themes.toast.duplicated') });
       fetchThemes();
     }
   };
@@ -137,10 +139,10 @@ const ThemesManager = () => {
 
         if (error) throw error;
 
-        toast({ title: 'Success', description: 'Theme imported successfully.' });
+        toast({ title: t('common.success'), description: t('themes.toast.imported') });
         fetchThemes();
       } catch (error) {
-        toast({ title: 'Import Failed', description: error.message, variant: 'destructive' });
+        toast({ title: t('themes.toast.import_failed'), description: error.message, variant: 'destructive' });
       }
     };
   };
@@ -207,10 +209,10 @@ const ThemesManager = () => {
   return (
     <AdminPageLayout requiredPermission="tenant.theme.read">
       <PageHeader
-        title="Theme Gallery"
-        description="Manage, customize, and activate visual themes for your site."
+        title={t('themes.manager.title')}
+        description={t('themes.manager.description')}
         icon={Palette}
-        breadcrumbs={[{ label: 'Themes', icon: Palette }]}
+        breadcrumbs={[{ label: t('themes.manager.breadcrumb'), icon: Palette }]}
         actions={(
           <ThemesHeaderActions
             canUpdate={canUpdate}

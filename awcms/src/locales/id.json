@@ -60,7 +60,12 @@
     "owner": "Pemilik",
     "system": "Sistem",
     "you": "Anda",
-    "global": "Global"
+    "global": "Global",
+    "saved": "Tersimpan",
+    "refreshed": "Diperbarui",
+    "deleted": "Dihapus",
+    "save_failed": "Gagal Menyimpan",
+    "reload_failed": "Gagal Memuat Ulang"
   },
   "auth": {
     "login": "Masuk",
@@ -704,7 +709,22 @@
     "subtitle": "Sesuaikan tampilan dan tata letak.",
     "colors": "Palet Warna",
     "typography": "Tipografi",
-    "layout": "Opsi Tata Letak"
+    "layout": "Opsi Tata Letak",
+    "manager": {
+      "title": "Galeri Tema",
+      "description": "Kelola, sesuaikan, dan aktifkan tema visual untuk situs Anda.",
+      "breadcrumb": "Tema"
+    },
+    "toast": {
+      "load_error": "Gagal memuat tema",
+      "access_denied": "Izin diperlukan.",
+      "activated_title": "Tema Diaktifkan",
+      "activated": "Tema baru sekarang aktif!",
+      "deleted": "Tema dipindahkan ke sampah.",
+      "duplicated": "Tema berhasil diduplikasi.",
+      "imported": "Tema berhasil diimpor.",
+      "import_failed": "Impor Gagal"
+    }
   },
   "theme_editor": {
     "title": "Editor Tema",
@@ -849,7 +869,24 @@
     "subtitle": "Terbitkan pemberitahuan penting.",
     "start_date": "Tanggal Mulai",
     "end_date": "Tanggal Selesai",
-    "priority": "Prioritas"
+    "priority": "Prioritas",
+    "manager": { "title": "Pengumuman" },
+    "columns": {
+      "title": "Judul",
+      "content": "Konten",
+      "status": "Status",
+      "priority": "Prioritas",
+      "start_date": "Tanggal Mulai",
+      "end_date": "Tanggal Selesai"
+    },
+    "fields": {
+      "title": "Judul",
+      "content": "Konten",
+      "status": "Status",
+      "priority": "Prioritas",
+      "start_date": "Tanggal Mulai",
+      "end_date": "Tanggal Selesai"
+    }
   },
   "promotions": {
     "title": "Promosi",
@@ -1064,6 +1101,47 @@
       "generic_notice": "Editor Umum (JSON)",
       "config_json_label": "Konfigurasi JSON",
       "placeholder_uuid": "Tempel format-uuid di sini"
+    }
+  },
+  "categories": {
+    "columns": { "name": "Nama", "slug": "Slug", "scope": "Lingkup" },
+    "fields": { "name": "Nama Kategori", "slug": "Slug", "description": "Deskripsi", "scope": "Lingkup" },
+    "scope_default": "umum"
+  },
+  "permissions": {
+    "manager": { "title": "Izin", "description": "Kelola izin sistem" },
+    "columns": { "name": "Nama Izin", "resource": "Sumber Daya", "action": "Aksi", "description": "Deskripsi" }
+  },
+  "approvals": {
+    "manager": { "title": "Persetujuan Akun", "description": "Kelola permintaan pendaftaran dan persetujuan pengguna." },
+    "tabs": { "pending": "Menunggu", "approved": "Disetujui", "rejected": "Ditolak" },
+    "toast": { "load_error": "Gagal memuat permintaan.", "action_failed": "Aksi Gagal", "rejected_title": "Permohonan Ditolak", "rejected_desc": "Permintaan telah ditolak." }
+  },
+  "portal_sites": {
+    "title": "Situs Portal Publik",
+    "add_portal": "Tambah Portal",
+    "description": "Konfigurasi URL portal publik untuk tenant ini. Panel admin akan menggunakannya untuk pratinjau halaman dan sinkronisasi konten.",
+    "field_name": "Nama Portal",
+    "field_url": "URL",
+    "saving": "Menyimpan...",
+    "save": "Simpan Situs Portal",
+    "loading": "Memuat situs portal...",
+    "toast": {
+      "error_min": "Minimal satu portal diperlukan.",
+      "error_validation": "Semua portal harus memiliki nama dan URL.",
+      "error_invalid_url": "bukan URL yang valid.",
+      "save_success": "Situs portal berhasil diperbarui.",
+      "save_error": "Error"
+    }
+  },
+  "school_pages": {
+    "actions": { "deploy": "Deploy ke Publik" },
+    "toast": {
+      "save_success": "Halaman sekolah berhasil diperbarui.",
+      "reload_success": "Halaman sekolah dimuat ulang.",
+      "deploy_title": "Penerapan Dipicu",
+      "deploy_success": "Proses pembangunan ulang situs publik telah berhasil dimulai.",
+      "deploy_failed": "Deploy gagal"
     }
   }
 }

@@ -11,9 +11,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
+import { useTranslation } from 'react-i18next';
 import { usePortalSites } from '@/hooks/usePortalSites';
 
 export default function PortalSitesManager() {
+    const { t } = useTranslation();
     const { portals, loading, savePortals } = usePortalSites();
     const { toast } = useToast();
     const [localPortals, setLocalPortals] = useState(null);
@@ -34,7 +36,7 @@ export default function PortalSitesManager() {
 
     const handleRemove = (idx) => {
         if (currentPortals.length <= 1) {
-            toast({ variant: 'destructive', title: 'Error', description: 'At least one portal is required.' });
+            toast({ variant: 'destructive', title: t('common.error'), description: t('portal_sites.toast.error_min') });
             return;
         }
         const updated = currentPortals.filter((_, i) => i !== idx);
@@ -42,16 +44,15 @@ export default function PortalSitesManager() {
     };
 
     const handleSave = async () => {
-        // Validate
         for (const portal of currentPortals) {
             if (!portal.name?.trim() || !portal.url?.trim()) {
-                toast({ variant: 'destructive', title: 'Validation Error', description: 'All portals must have a name and URL.' });
+                toast({ variant: 'destructive', title: t('common.validation_error'), description: t('portal_sites.toast.error_validation') });
                 return;
             }
             try {
                 new URL(portal.url);
             } catch {
-                toast({ variant: 'destructive', title: 'Invalid URL', description: `"${portal.url}" is not a valid URL.` });
+                toast({ variant: 'destructive', title: t('common.invalid_url'), description: `"${portal.url}" ${t('portal_sites.toast.error_invalid_url')}` });
                 return;
             }
         }
@@ -61,44 +62,43 @@ export default function PortalSitesManager() {
         setSaving(false);
 
         if (error) {
-            toast({ variant: 'destructive', title: 'Error', description: error });
+            toast({ variant: 'destructive', title: t('portal_sites.toast.save_error'), description: error });
         } else {
-            setLocalPortals(null); // Reset local state to sync with saved
-            toast({ title: 'Saved', description: 'Portal sites updated successfully.' });
+            setLocalPortals(null);
+            toast({ title: t('common.saved'), description: t('portal_sites.toast.save_success') });
         }
     };
 
     if (loading) {
         return (
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-2 text-slate-500">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading portal sites...
+            <div className="bg-card p-6 rounded-xl border border-border shadow-sm">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" /> {t('portal_sites.loading')}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h4 className="font-semibold text-slate-800 flex items-center gap-2 text-base">
-                    <Globe className="w-4 h-4 text-blue-600" /> Public Portal Sites
+        <div className="bg-card p-6 rounded-xl border border-border shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <h4 className="font-semibold text-foreground flex items-center gap-2 text-base">
+                    <Globe className="w-4 h-4 text-primary" /> {t('portal_sites.title')}
                 </h4>
                 <Button variant="outline" size="sm" onClick={handleAdd}>
-                    <Plus className="w-4 h-4 mr-1" /> Add Portal
+                    <Plus className="w-4 h-4 mr-1" /> {t('portal_sites.add_portal')}
                 </Button>
             </div>
 
-            <p className="text-xs text-slate-500">
-                Configure the public-facing portal URLs for this tenant. The admin panel
-                will use these for page previews and content sync.
+            <p className="text-xs text-muted-foreground">
+                {t('portal_sites.description')}
             </p>
 
             <div className="space-y-3">
                 {currentPortals.map((portal, idx) => (
-                    <div key={idx} className="flex items-end gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    <div key={idx} className="flex items-end gap-3 p-3 bg-muted/40 rounded-lg border border-border/60">
                         <div className="flex-1 space-y-1">
-                            <Label className="text-xs text-slate-500">Portal Name</Label>
+                            <Label className="text-xs text-muted-foreground">{t('portal_sites.field_name')}</Label>
                             <Input
                                 value={portal.name}
                                 onChange={(e) => handleChange(idx, 'name', e.target.value)}
@@ -107,7 +107,7 @@ export default function PortalSitesManager() {
                             />
                         </div>
                         <div className="flex-[2] space-y-1">
-                            <Label className="text-xs text-slate-500">URL</Label>
+                            <Label className="text-xs text-muted-foreground">{t('portal_sites.field_url')}</Label>
                             <Input
                                 value={portal.url}
                                 onChange={(e) => handleChange(idx, 'url', e.target.value)}
@@ -118,7 +118,7 @@ export default function PortalSitesManager() {
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="text-red-400 hover:text-red-600 hover:bg-red-50 h-9 w-9"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 w-9"
                             onClick={() => handleRemove(idx)}
                             disabled={currentPortals.length <= 1}
                         >
@@ -132,7 +132,7 @@ export default function PortalSitesManager() {
                 <div className="flex justify-end pt-2">
                     <Button onClick={handleSave} disabled={saving} size="sm">
                         {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-                        {saving ? 'Saving...' : 'Save Portal Sites'}
+                        {saving ? t('portal_sites.saving') : t('portal_sites.save')}
                     </Button>
                 </div>
             )}

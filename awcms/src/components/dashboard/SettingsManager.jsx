@@ -1,6 +1,4 @@
-import { useMemo } from 'react';
 import { Settings } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/components/ui/use-toast';
 import SettingsFormRenderer from '@/components/dashboard/settings/SettingsFormRenderer';
 import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell';
@@ -71,18 +69,6 @@ function SettingsManager() {
     },
   });
 
-  const postSections = useMemo(
-    () => [
-      <Alert key="settings-general-note">
-        <AlertTitle>Canonical general-settings surface</AlertTitle>
-        <AlertDescription>
-          {'settings_general now edits the curated site_info record instead of exposing the raw settings key/value table.'}
-        </AlertDescription>
-      </Alert>,
-    ],
-    []
-  );
-
   const handleSave = async () => {
     try {
       await settings.save();
@@ -119,7 +105,6 @@ function SettingsManager() {
         value={settings.value}
         onChange={settings.setValue}
         disabled={settings.saving}
-        postSections={postSections}
       />
     </SettingsPageShell>
   );

@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { useTranslation } from 'react-i18next';
 import { UserCheck } from 'lucide-react';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/flowbite-admin';
 import ApprovalHeaderActions from '@/components/dashboard/user-approvals/ApprovalHeaderActions';
 import ApprovalRequestsTable from '@/components/dashboard/user-approvals/ApprovalRequestsTable';
 import RejectApplicationDialog from '@/components/dashboard/user-approvals/RejectApplicationDialog';
@@ -13,6 +12,7 @@ import RejectApplicationDialog from '@/components/dashboard/user-approvals/Rejec
 const APPROVAL_TABS = ['pending', 'completed', 'rejected'];
 
 const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
+  const { t } = useTranslation();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [internalTab, setInternalTab] = useState('pending');
@@ -74,11 +74,11 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
       setTotalItems(count || 0);
     } catch (error) {
       console.error('Error fetching requests:', error);
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to load requests.' });
+      toast({ variant: 'destructive', title: t('common.error'), description: t('approvals.toast.load_error') });
     } finally {
       setLoading(false);
     }
-  }, [effectiveTab, currentPage, itemsPerPage, isSuperAdmin, toast]);
+  }, [effectiveTab, currentPage, itemsPerPage, isSuperAdmin, toast, t]);
 
   useEffect(() => {
     fetchRequests();
@@ -117,11 +117,11 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
 
       if (data?.error) throw new Error(data.error);
 
-      toast({ title: 'Success', description: data.message });
+      toast({ title: t('common.success'), description: data.message });
       fetchRequests();
     } catch (error) {
       console.error('Approval error:', error);
-      toast({ variant: 'destructive', title: 'Action Failed', description: error.message });
+      toast({ variant: 'destructive', title: t('approvals.toast.action_failed'), description: error.message });
     } finally {
       setProcessingId(null);
     }
@@ -143,13 +143,13 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      toast({ title: 'Application Rejected', description: 'The request has been rejected.' });
+      toast({ title: t('approvals.toast.rejected_title'), description: t('approvals.toast.rejected_desc') });
       setDialogOpen(false);
       setRejectReason('');
       fetchRequests();
     } catch (error) {
       console.error('Rejection error:', error);
-      toast({ variant: 'destructive', title: 'Action Failed', description: error.message });
+      toast({ variant: 'destructive', title: t('approvals.toast.action_failed'), description: error.message });
     } finally {
       setProcessingId(null);
     }
@@ -160,10 +160,10 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
   return (
     <AdminPageLayout requiredPermission="platform.approvals.read">
       <PageHeader
-        title="Account Approvals"
-        description="Manage user registration and approval requests."
+        title={t('approvals.manager.title')}
+        description={t('approvals.manager.description')}
         icon={UserCheck}
-        breadcrumbs={[{ label: 'Approvals', icon: UserCheck }]}
+        breadcrumbs={[{ label: t('approvals.manager.title'), icon: UserCheck }]}
         actions={(
           <ApprovalHeaderActions
             loading={loading}
@@ -172,82 +172,82 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
         )}
       />
 
-      <Card className="w-full">
-        <CardContent className="pt-6">
-          <Tabs value={effectiveTab} onValueChange={handleTabChange} className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="pending">Pending</TabsTrigger>
-              <TabsTrigger value="completed">Approved</TabsTrigger>
-              <TabsTrigger value="rejected">Rejected</TabsTrigger>
-            </TabsList>
+      <div className="rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm p-6">
+        <PageTabs
+          value={effectiveTab}
+          onValueChange={handleTabChange}
+          tabs={[
+            { value: 'pending', label: t('approvals.tabs.pending') },
+            { value: 'completed', label: t('approvals.tabs.approved') },
+            { value: 'rejected', label: t('approvals.tabs.rejected') },
+          ]}
+        >
+          <TabsContent value="pending" className="space-y-4">
+            <ApprovalRequestsTable
+              loading={loading}
+              requests={requests}
+              activeTab={effectiveTab}
+              showActions={true}
+              processingId={processingId}
+              isSuperAdmin={isSuperAdmin}
+              onApprove={handleApprove}
+              onOpenReject={(request) => {
+                setSelectedRequest(request);
+                setDialogOpen(true);
+              }}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              itemsPerPage={itemsPerPage}
+              setItemsPerPage={setItemsPerPage}
+              totalItems={totalItems}
+              totalPages={totalPages}
+            />
+          </TabsContent>
 
-            <TabsContent value="pending" className="space-y-4">
-              <ApprovalRequestsTable
-                loading={loading}
-                requests={requests}
-                activeTab={effectiveTab}
-                showActions={true}
-                processingId={processingId}
-                isSuperAdmin={isSuperAdmin}
-                onApprove={handleApprove}
-                onOpenReject={(request) => {
-                  setSelectedRequest(request);
-                  setDialogOpen(true);
-                }}
-                currentPage={currentPage}
-                setCurrentPage={setCurrentPage}
-                itemsPerPage={itemsPerPage}
-                setItemsPerPage={setItemsPerPage}
-                totalItems={totalItems}
-                totalPages={totalPages}
-              />
-            </TabsContent>
+          <TabsContent value="completed">
+            <ApprovalRequestsTable
+              loading={loading}
+              requests={requests}
+              activeTab={effectiveTab}
+              showActions={false}
+              processingId={processingId}
+              isSuperAdmin={isSuperAdmin}
+              onApprove={handleApprove}
+              onOpenReject={(request) => {
+                setSelectedRequest(request);
+                setDialogOpen(true);
+              }}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              itemsPerPage={itemsPerPage}
+              setItemsPerPage={setItemsPerPage}
+              totalItems={totalItems}
+              totalPages={totalPages}
+            />
+          </TabsContent>
 
-            <TabsContent value="completed">
-              <ApprovalRequestsTable
-                loading={loading}
-                requests={requests}
-                activeTab={effectiveTab}
-                showActions={false}
-                processingId={processingId}
-                isSuperAdmin={isSuperAdmin}
-                onApprove={handleApprove}
-                onOpenReject={(request) => {
-                  setSelectedRequest(request);
-                  setDialogOpen(true);
-                }}
-                currentPage={currentPage}
-                setCurrentPage={setCurrentPage}
-                itemsPerPage={itemsPerPage}
-                setItemsPerPage={setItemsPerPage}
-                totalItems={totalItems}
-                totalPages={totalPages}
-              />
-            </TabsContent>
-
-            <TabsContent value="rejected">
-              <ApprovalRequestsTable
-                loading={loading}
-                requests={requests}
-                activeTab={effectiveTab}
-                showActions={false}
-                processingId={processingId}
-                isSuperAdmin={isSuperAdmin}
-                onApprove={handleApprove}
-                onOpenReject={(request) => {
-                  setSelectedRequest(request);
-                  setDialogOpen(true);
-                }}
-                currentPage={currentPage}
-                setCurrentPage={setCurrentPage}
-                itemsPerPage={itemsPerPage}
-                setItemsPerPage={setItemsPerPage}
-                totalItems={totalItems}
-                totalPages={totalPages}
-              />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
+          <TabsContent value="rejected">
+            <ApprovalRequestsTable
+              loading={loading}
+              requests={requests}
+              activeTab={effectiveTab}
+              showActions={false}
+              processingId={processingId}
+              isSuperAdmin={isSuperAdmin}
+              onApprove={handleApprove}
+              onOpenReject={(request) => {
+                setSelectedRequest(request);
+                setDialogOpen(true);
+              }}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              itemsPerPage={itemsPerPage}
+              setItemsPerPage={setItemsPerPage}
+              totalItems={totalItems}
+              totalPages={totalPages}
+            />
+          </TabsContent>
+        </PageTabs>
 
         <RejectApplicationDialog
           open={dialogOpen}
@@ -257,7 +257,7 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
           processing={Boolean(processingId)}
           onConfirm={handleReject}
         />
-      </Card>
+      </div>
     </AdminPageLayout>
   );
 };

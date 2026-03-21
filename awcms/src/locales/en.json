@@ -60,7 +60,12 @@
     "owner": "Owner",
     "system": "System",
     "you": "You",
-    "global": "Global"
+    "global": "Global",
+    "saved": "Saved",
+    "refreshed": "Refreshed",
+    "deleted": "Deleted",
+    "save_failed": "Save Failed",
+    "reload_failed": "Reload Failed"
   },
   "auth": {
     "login": "Login",
@@ -704,7 +709,22 @@
     "subtitle": "Customize appearance and layouts.",
     "colors": "Color Palette",
     "typography": "Typography",
-    "layout": "Layout Options"
+    "layout": "Layout Options",
+    "manager": {
+      "title": "Theme Gallery",
+      "description": "Manage, customize, and activate visual themes for your site.",
+      "breadcrumb": "Themes"
+    },
+    "toast": {
+      "load_error": "Failed to load themes",
+      "access_denied": "Permission required.",
+      "activated_title": "Theme Activated",
+      "activated": "New theme is now live!",
+      "deleted": "Theme moved to trash.",
+      "duplicated": "Theme duplicated.",
+      "imported": "Theme imported successfully.",
+      "import_failed": "Import Failed"
+    }
   },
   "theme_editor": {
     "title": "Theme Editor",
@@ -849,7 +869,26 @@
     "subtitle": "Publish important notices.",
     "start_date": "Start Date",
     "end_date": "End Date",
-    "priority": "Priority"
+    "priority": "Priority",
+    "manager": {
+      "title": "Announcements"
+    },
+    "columns": {
+      "title": "Title",
+      "content": "Content",
+      "status": "Status",
+      "priority": "Priority",
+      "start_date": "Start Date",
+      "end_date": "End Date"
+    },
+    "fields": {
+      "title": "Title",
+      "content": "Content",
+      "status": "Status",
+      "priority": "Priority",
+      "start_date": "Start Date",
+      "end_date": "End Date"
+    }
   },
   "promotions": {
     "title": "Promotions",
@@ -1064,6 +1103,78 @@
       "generic_notice": "Generic Editor (JSON)",
       "config_json_label": "Config JSON",
       "placeholder_uuid": "Paste format-uuid here"
+    }
+  },
+  "categories": {
+    "columns": {
+      "name": "Name",
+      "slug": "Slug",
+      "scope": "Scope"
+    },
+    "fields": {
+      "name": "Category Name",
+      "slug": "Slug",
+      "description": "Description",
+      "scope": "Scope"
+    },
+    "scope_default": "general"
+  },
+  "permissions": {
+    "manager": {
+      "title": "Permissions",
+      "description": "Manage system permissions"
+    },
+    "columns": {
+      "name": "Permission Name",
+      "resource": "Resource",
+      "action": "Action",
+      "description": "Description"
+    }
+  },
+  "approvals": {
+    "manager": {
+      "title": "Account Approvals",
+      "description": "Manage user registration and approval requests."
+    },
+    "tabs": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "toast": {
+      "load_error": "Failed to load requests.",
+      "action_failed": "Action Failed",
+      "rejected_title": "Application Rejected",
+      "rejected_desc": "The request has been rejected."
+    }
+  },
+  "portal_sites": {
+    "title": "Public Portal Sites",
+    "add_portal": "Add Portal",
+    "description": "Configure the public-facing portal URLs for this tenant. The admin panel will use these for page previews and content sync.",
+    "field_name": "Portal Name",
+    "field_url": "URL",
+    "saving": "Saving...",
+    "save": "Save Portal Sites",
+    "loading": "Loading portal sites...",
+    "toast": {
+      "error_min": "At least one portal is required.",
+      "error_validation": "All portals must have a name and URL.",
+      "error_invalid_url": "is not a valid URL.",
+      "save_success": "Portal sites updated successfully.",
+      "save_error": "Error"
+    }
+  },
+  "school_pages": {
+    "actions": {
+      "deploy": "Deploy to Public"
+    },
+    "toast": {
+      "save_success": "School pages updated successfully.",
+      "reload_success": "School pages reloaded.",
+      "deploy_title": "Deployment Triggered",
+      "deploy_success": "The public site rebuild process has been initiated successfully.",
+      "deploy_failed": "Deploy failed"
     }
   }
 }
