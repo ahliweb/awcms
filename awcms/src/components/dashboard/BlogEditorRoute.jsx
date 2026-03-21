@@ -5,22 +5,7 @@ import BlogEditor from '@/components/dashboard/BlogEditor';
 import { useToast } from '@/components/ui/use-toast';
 import useSecureRouteParam from '@/hooks/useSecureRouteParam';
 import { encodeRouteParam } from '@/lib/routeSecurity';
-
-const blogEditorProps = {
-  translationConfig: {
-    tableName: 'content_translations',
-    contentType: 'article',
-    locale: 'en',
-    fieldMap: {
-      title_en: 'title',
-      slug_en: 'slug',
-      content_en: 'content',
-      excerpt_en: 'excerpt',
-      meta_description_en: 'meta_description',
-    },
-  },
-  selectedLanguage: 'id',
-};
+import { getBlogEditorProps } from '@/components/dashboard/blogs/blogEditorConfig';
 
 const BlogEditorRoute = () => {
   const { id: routeParam } = useParams();
@@ -80,7 +65,7 @@ const BlogEditorRoute = () => {
       item={item}
       onClose={() => navigate('/cmspanel/blogs')}
       onSuccess={() => navigate('/cmspanel/blogs')}
-      {...blogEditorProps}
+      {...getBlogEditorProps('id')}
     />
   );
 };

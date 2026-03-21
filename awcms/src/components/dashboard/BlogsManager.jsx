@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import BlogEditor from '@/components/dashboard/BlogEditor';
+import { useToast } from '@/components/ui/use-toast';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import { FileText, FolderOpen, Tag, Layout } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import BlogsOverviewCards from '@/components/dashboard/blogs/BlogsOverviewCards'
 import BlogsHeaderActions from '@/components/dashboard/blogs/BlogsHeaderActions';
 import BlogsToolbarActions from '@/components/dashboard/blogs/BlogsToolbarActions';
 import BlogsContentPanels from '@/components/dashboard/blogs/BlogsContentPanels';
+import { getBlogEditorProps } from '@/components/dashboard/blogs/blogEditorConfig';
 import StatusBadge from '@/components/ui/StatusBadge';
 
 /**
@@ -21,6 +23,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
  */
 function BlogsManager() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const segments = useSplatSegments();
   const [searchParams] = useSearchParams();
@@ -111,19 +114,20 @@ function BlogsManager() {
 
       if (response.ok) {
         setRebuildRequired(false);
-        alert('Public site rebuild started! Changes will be live in a few minutes.');
+        toast({
+          title: 'Rebuild started',
+          description: 'The public site rebuild is running and changes should be live soon.',
+        });
       } else {
         throw new Error('API not available');
       }
     } catch (_error) {
       // Show manual rebuild instructions
       setRebuildRequired(false);
-      alert(
-        'Rebuild Required!\n\n' +
-        'To publish your changes to the public site, please run:\n\n' +
-        'cd awcms-public/primary && npm run build\n\n' +
-        'Then deploy the dist/ folder to your hosting provider.'
-      );
+      toast({
+        title: 'Manual rebuild required',
+        description: 'Run `cd awcms-public/primary && npm run build`, then deploy the generated `dist/` output.',
+      });
     } finally {
       setIsRebuilding(false);
     }
@@ -298,21 +302,10 @@ function BlogsManager() {
     { key: 'meta_description_en', label: t('pages.form.meta_desc_en'), type: 'textarea', description: t('pages.form.meta_desc_en_desc') }
   ];
 
-  const blogEditorProps = useMemo(() => ({
-    translationConfig: {
-      tableName: 'content_translations',
-      contentType: 'article',
-      locale: 'en',
-      fieldMap: {
-        title_en: 'title',
-        slug_en: 'slug',
-        content_en: 'content',
-        excerpt_en: 'excerpt',
-        meta_description_en: 'meta_description'
-      }
-    },
-    selectedLanguage: selectedLanguageMeta.code,
-  }), [selectedLanguageMeta.code]);
+  const blogEditorProps = useMemo(
+    () => getBlogEditorProps(selectedLanguageMeta.code),
+    [selectedLanguageMeta.code],
+  );
 
   // Category columns and fields
   const categoryColumns = [

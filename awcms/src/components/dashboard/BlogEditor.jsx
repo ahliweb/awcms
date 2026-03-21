@@ -198,6 +198,8 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
         await saveItem(newState);
     };
 
+    const localeBadgeLabel = selectedLanguage === 'en' ? 'EN' : 'ID';
+
     const generateSlug = (text) => {
         return text
             .toLowerCase()
@@ -473,7 +475,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 {currentState}
                             </Badge>
                             <Badge variant="outline" className="border-primary/20 bg-primary/5 px-1.5 py-0 rounded-sm font-normal uppercase tracking-wider text-[10px] text-primary">
-                                {selectedLanguage}
+                                {localeBadgeLabel}
                             </Badge>
                             <span>•</span>
                             <span>{formData[activeSlugKey] ? formData[activeSlugKey] : 'slug-placeholder'}</span>
@@ -716,7 +718,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                             </div>
 
                             <div className="text-xs text-slate-400 pt-8 text-center">
-                                Last saved: {new Date().toLocaleTimeString()}
+                                {loading ? 'Saving changes...' : 'Ready to save'}
                             </div>
 
                         </div>
