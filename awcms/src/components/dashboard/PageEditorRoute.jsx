@@ -5,6 +5,7 @@ import PageEditor from '@/components/dashboard/PageEditor';
 import { useToast } from '@/components/ui/use-toast';
 import useSecureRouteParam from '@/hooks/useSecureRouteParam';
 import { encodeRouteParam } from '@/lib/routeSecurity';
+import { getPageEditorProps } from '@/components/dashboard/pages/pageEditorConfig';
 
 const PageEditorRoute = () => {
   const { id: routeParam } = useParams();
@@ -64,6 +65,7 @@ const PageEditorRoute = () => {
       page={page}
       onClose={() => navigate('/cmspanel/pages')}
       onSuccess={() => navigate('/cmspanel/pages')}
+      {...getPageEditorProps('id')}
     />
   );
 };

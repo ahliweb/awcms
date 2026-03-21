@@ -18,8 +18,46 @@ import { ImageUpload } from '@/components/ui/ImageUpload';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
+const DEFAULT_PAGE_LOCALE = 'id';
 
-function PageEditor({ page, onClose, onSuccess }) {
+
+function mapPageTranslationToFormData(page, translation) {
+    return {
+        title: page?.title || '',
+        slug: page?.slug || '',
+        content: page?.content || '',
+        excerpt: page?.excerpt || '',
+        featured_image: page?.featured_image || '',
+        status: page?.status || 'draft',
+        is_public: page?.is_public ?? false,
+        category_id: page?.category_id || '',
+        tags: page?.tags || [],
+        meta_title: page?.meta_title || '',
+        meta_description: page?.meta_description || '',
+        meta_keywords: page?.meta_keywords || '',
+        canonical_url: page?.canonical_url || '',
+        robots: page?.robots || 'index, follow',
+        og_title: page?.og_title || '',
+        og_description: page?.og_description || '',
+        og_image: page?.og_image || '',
+        twitter_card_type: page?.twitter_card_type || 'summary',
+        twitter_image: page?.twitter_image || '',
+        published_at: page?.published_at ? new Date(page.published_at).toISOString().slice(0, 16) : '',
+        layout_key: page?.layout_key || 'astrowind.standard',
+        content_type: page?.content_type || 'richtext',
+        parent_id: page?.parent_id || '',
+        template_key: page?.template_key || 'astrowind',
+        sort_order: page?.sort_order || 0,
+        nav_visibility: page?.nav_visibility ?? true,
+        title_en: translation?.title || '',
+        slug_en: translation?.slug || '',
+        content_en: translation?.content || '',
+        excerpt_en: translation?.excerpt || '',
+        meta_description_en: translation?.meta_description || '',
+    };
+}
+
+function PageEditor({ page, onClose, onSuccess, translationConfig = null, selectedLanguage = DEFAULT_PAGE_LOCALE }) {
     const { toast } = useToast();
     const { user } = useAuth();
     const { currentTenant } = useTenant(); // Get Current Tenant
@@ -30,40 +68,15 @@ function PageEditor({ page, onClose, onSuccess }) {
     const [selectedPortal, setSelectedPortal] = useState(0);
     const [portalMenuOpen, setPortalMenuOpen] = useState(false);
 
-    const [formData, setFormData] = useState({
-        title: page?.title || '',
-        slug: page?.slug || '',
-        content: page?.content || '',
-        excerpt: page?.excerpt || '',
-        featured_image: page?.featured_image || '',
-        status: page?.status || 'draft',
-        is_public: page?.is_public ?? false,
-        category_id: page?.category_id || '',
-        tags: page?.tags || [],
+    const [formData, setFormData] = useState(() => mapPageTranslationToFormData(page, null));
 
-        // SEO
-        meta_title: page?.meta_title || '',
-        meta_description: page?.meta_description || '',
-        meta_keywords: page?.meta_keywords || '',
-        canonical_url: page?.canonical_url || '',
-        robots: page?.robots || 'index, follow',
-
-        // Social
-        og_title: page?.og_title || '',
-        og_description: page?.og_description || '',
-        og_image: page?.og_image || '',
-        twitter_card_type: page?.twitter_card_type || 'summary',
-        twitter_image: page?.twitter_image || '',
-
-        published_at: page?.published_at ? new Date(page.published_at).toISOString().slice(0, 16) : '',
-        layout_key: page?.layout_key || 'astrowind.standard',
-        content_type: page?.content_type || 'richtext',
-        // Hierarchy & Nav
-        parent_id: page?.parent_id || '',
-        template_key: page?.template_key || 'astrowind',
-        sort_order: page?.sort_order || 0,
-        nav_visibility: page?.nav_visibility ?? true
-    });
+    const isTranslatedLocale = Boolean(translationConfig && selectedLanguage === translationConfig.locale);
+    const activeTitleKey = isTranslatedLocale ? 'title_en' : 'title';
+    const activeSlugKey = isTranslatedLocale ? 'slug_en' : 'slug';
+    const activeContentKey = isTranslatedLocale ? 'content_en' : 'content';
+    const activeExcerptKey = isTranslatedLocale ? 'excerpt_en' : 'excerpt';
+    const activeMetaDescriptionKey = isTranslatedLocale ? 'meta_description_en' : 'meta_description';
+    const localeBadgeLabel = selectedLanguage === 'en' ? 'EN' : 'ID';
 
     const isEditMode = !!page;
 
@@ -72,6 +85,44 @@ function PageEditor({ page, onClose, onSuccess }) {
     const canPublish = hasPermission('tenant.pages.publish');
 
     const [parentPages, setParentPages] = useState([]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadTranslation = async () => {
+            if (!translationConfig || !page?.id || !currentTenant?.id) {
+                setFormData(mapPageTranslationToFormData(page, null));
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from(translationConfig.tableName || 'content_translations')
+                .select('*')
+                .eq('content_type', translationConfig.contentType)
+                .eq('content_id', page.id)
+                .eq('locale', translationConfig.locale)
+                .eq('tenant_id', currentTenant.id)
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error loading page translation:', error);
+                if (!cancelled) {
+                    setFormData(mapPageTranslationToFormData(page, null));
+                }
+                return;
+            }
+
+            if (!cancelled) {
+                setFormData(mapPageTranslationToFormData(page, data));
+            }
+        };
+
+        loadTranslation();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [translationConfig, page, currentTenant?.id]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -152,6 +203,33 @@ function PageEditor({ page, onClose, onSuccess }) {
 
         setLoading(true);
         try {
+            const translationSlugValue = translationConfig
+                ? (formData.slug_en || (formData.title_en ? generateSlug(formData.title_en) : ''))
+                : '';
+
+            if (translationConfig && translationSlugValue) {
+                let translationSlugQuery = supabase
+                    .from(translationConfig.tableName || 'content_translations')
+                    .select('id')
+                    .eq('tenant_id', currentTenant.id)
+                    .eq('content_type', translationConfig.contentType)
+                    .eq('locale', translationConfig.locale)
+                    .eq('slug', translationSlugValue);
+
+                if (page?.id) {
+                    translationSlugQuery = translationSlugQuery.neq('content_id', page.id);
+                }
+
+                const { data: existingTranslationSlugs, error: translationSlugError } = await translationSlugQuery.limit(1);
+
+                if (translationSlugError) throw translationSlugError;
+
+                if (existingTranslationSlugs && existingTranslationSlugs.length > 0) {
+                    const uniqueSuffix = Date.now().toString(36);
+                    throw new Error(`Slug "${translationSlugValue}" is already in use for ${translationConfig.locale.toUpperCase()}. Try "${translationSlugValue}-${uniqueSuffix}" instead.`);
+                }
+            }
+
             const payload = {
                 tenant_id: currentTenant.id, // Explicit Tenant ID
                 title: formData.title,
@@ -186,6 +264,19 @@ function PageEditor({ page, onClose, onSuccess }) {
                 updated_at: new Date().toISOString()
             };
 
+            const translationFieldMap = translationConfig?.fieldMap || {};
+            const translationPayload = Object.entries(translationFieldMap).reduce((acc, [formKey, translationKey]) => {
+                const value = formData[formKey];
+                acc[translationKey] = typeof value === 'string' ? value.trim() : value ?? null;
+                return acc;
+            }, {});
+
+            if (translationConfig && !translationPayload.slug && translationSlugValue) {
+                translationPayload.slug = translationSlugValue;
+            }
+
+            let savedPageId = page?.id || null;
+
             if (!isEditMode) {
                 payload.created_by = user.id;
             }
@@ -196,8 +287,42 @@ function PageEditor({ page, onClose, onSuccess }) {
                 const { error } = await supabase.from('pages').update(payload).eq('id', page.id);
                 if (error) throw error;
             } else {
-                const { error } = await supabase.from('pages').insert([payload]);
+                const { data, error } = await supabase.from('pages').insert([payload]).select('id').single();
                 if (error) throw error;
+                savedPageId = data?.id || null;
+            }
+
+            if (translationConfig && savedPageId && currentTenant?.id) {
+                const hasTranslationContent = Object.values(translationPayload).some((value) => {
+                    if (typeof value === 'string') return value.length > 0;
+                    return Boolean(value);
+                });
+
+                if (hasTranslationContent) {
+                    const { error: translationError } = await supabase
+                        .from(translationConfig.tableName || 'content_translations')
+                        .upsert({
+                            content_type: translationConfig.contentType,
+                            content_id: savedPageId,
+                            locale: translationConfig.locale,
+                            tenant_id: currentTenant.id,
+                            ...translationPayload,
+                        }, {
+                            onConflict: 'content_type,content_id,locale,tenant_id'
+                        });
+
+                    if (translationError) throw translationError;
+                } else if (page?.id) {
+                    const { error: translationDeleteError } = await supabase
+                        .from(translationConfig.tableName || 'content_translations')
+                        .delete()
+                        .eq('content_type', translationConfig.contentType)
+                        .eq('content_id', savedPageId)
+                        .eq('locale', translationConfig.locale)
+                        .eq('tenant_id', currentTenant.id);
+
+                    if (translationDeleteError) throw translationDeleteError;
+                }
             }
 
             try {
@@ -251,8 +376,8 @@ function PageEditor({ page, onClose, onSuccess }) {
                             const baseUrl = portals[0]?.url || import.meta.env.VITE_PUBLIC_PORTAL_URL || 'http://localhost:4321';
                             const previewSecret = import.meta.env.VITE_PREVIEW_SECRET || '';
                             const url = previewSecret
-                                ? `${baseUrl}/${formData.slug}?preview_secret=${previewSecret}`
-                                : `${baseUrl}/${formData.slug}`;
+                                ? `${baseUrl}/p/${formData.slug}?preview_secret=${previewSecret}`
+                                : `${baseUrl}/p/${formData.slug}`;
                             window.open(url, '_blank');
                         }}>
                             <Globe className="w-4 h-4 mr-2" /> Preview
@@ -276,8 +401,8 @@ function PageEditor({ page, onClose, onSuccess }) {
                                                 setPortalMenuOpen(false);
                                                 const previewSecret = import.meta.env.VITE_PREVIEW_SECRET || '';
                                                 const url = previewSecret
-                                                    ? `${portal.url}/${formData.slug}?preview_secret=${previewSecret}`
-                                                    : `${portal.url}/${formData.slug}`;
+                                                    ? `${portal.url}/p/${formData.slug}?preview_secret=${previewSecret}`
+                                                    : `${portal.url}/p/${formData.slug}`;
                                                 window.open(url, '_blank');
                                             }}
                                         >
@@ -293,6 +418,9 @@ function PageEditor({ page, onClose, onSuccess }) {
                         <Save className="w-4 h-4 mr-2" />
                         {loading ? 'Saving...' : 'Save Page'}
                     </Button>
+                    <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        {localeBadgeLabel}
+                    </span>
                     <Button variant="ghost" size="icon" onClick={onClose}>
                         <X className="w-5 h-5" />
                     </Button>
@@ -326,12 +454,12 @@ function PageEditor({ page, onClose, onSuccess }) {
                                             <Label htmlFor="title">Page Title <span className="text-red-500">*</span></Label>
                                             <Input
                                                 id="title"
-                                                value={formData.title}
+                                                value={formData[activeTitleKey] || ''}
                                                 onChange={(e) => {
                                                     setFormData({
                                                         ...formData,
-                                                        title: e.target.value,
-                                                        slug: !page ? generateSlug(e.target.value) : formData.slug
+                                                        [activeTitleKey]: e.target.value,
+                                                        [activeSlugKey]: !page ? generateSlug(e.target.value) : formData[activeSlugKey]
                                                     });
                                                 }}
                                                 className="text-lg font-semibold"
@@ -346,8 +474,8 @@ function PageEditor({ page, onClose, onSuccess }) {
                                                 <span className="text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-l-md border border-r-0 border-slate-300">/pages/</span>
                                                 <Input
                                                     id="slug"
-                                                    value={formData.slug}
-                                                    onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                                                    value={formData[activeSlugKey] || ''}
+                                                    onChange={(e) => setFormData({ ...formData, [activeSlugKey]: e.target.value })}
                                                     className="rounded-l-none font-mono text-sm"
                                                     required
                                                 />
@@ -373,8 +501,8 @@ function PageEditor({ page, onClose, onSuccess }) {
                                     <div className="space-y-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                                         <Label htmlFor="content">Content <span className="text-red-500">*</span></Label>
                                         <RichTextEditor
-                                            value={formData.content}
-                                            onChange={(val) => setFormData({ ...formData, content: val })}
+                                            value={formData[activeContentKey] || ''}
+                                            onChange={(val) => setFormData({ ...formData, [activeContentKey]: val })}
                                             placeholder="Start designing your page..."
                                         />
                                     </div>
@@ -383,8 +511,8 @@ function PageEditor({ page, onClose, onSuccess }) {
                                         <Label htmlFor="excerpt">Excerpt</Label>
                                         <Textarea
                                             id="excerpt"
-                                            value={formData.excerpt}
-                                            onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
+                                            value={formData[activeExcerptKey] || ''}
+                                            onChange={(e) => setFormData({ ...formData, [activeExcerptKey]: e.target.value })}
                                             placeholder="Brief summary of the page content..."
                                         />
                                         <p className="text-xs text-slate-400">Used for search results and previews.</p>
@@ -414,15 +542,15 @@ function PageEditor({ page, onClose, onSuccess }) {
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center">
                                         <Label htmlFor="meta_description">Meta Description</Label>
-                                        <span className={`text-xs font-medium ${formData.meta_description.length > 160 ? 'text-red-500' : 'text-slate-400'}`}>
-                                            {formData.meta_description.length}/160
+                                        <span className={`text-xs font-medium ${(formData[activeMetaDescriptionKey] || '').length > 160 ? 'text-red-500' : 'text-slate-400'}`}>
+                                            {(formData[activeMetaDescriptionKey] || '').length}/160
                                         </span>
                                     </div>
                                     <Textarea
                                         id="meta_description"
-                                        value={formData.meta_description}
-                                        onChange={(e) => setFormData({ ...formData, meta_description: e.target.value })}
-                                        className={`min-h-[100px] ${formData.meta_description.length > 160 ? 'border-red-300 focus-visible:ring-red-200' : ''}`}
+                                        value={formData[activeMetaDescriptionKey] || ''}
+                                        onChange={(e) => setFormData({ ...formData, [activeMetaDescriptionKey]: e.target.value })}
+                                        className={`min-h-[100px] ${(formData[activeMetaDescriptionKey] || '').length > 160 ? 'border-red-300 focus-visible:ring-red-200' : ''}`}
                                         placeholder="Enter a concise description for search engines..."
                                     />
                                 </div>

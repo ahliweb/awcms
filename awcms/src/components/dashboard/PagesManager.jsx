@@ -9,6 +9,7 @@ import useSplatSegments from '@/hooks/useSplatSegments';
 import { cn } from '@/lib/utils';
 import PagesOverviewCards from '@/components/dashboard/pages/PagesOverviewCards';
 import PagesContentPanels from '@/components/dashboard/pages/PagesContentPanels';
+import { getPageEditorProps } from '@/components/dashboard/pages/pageEditorConfig';
 
 /**
  * PagesManager - Manages pages with Visual Builder support.
@@ -215,20 +216,7 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
     { key: 'is_active', label: t('pages.form.active'), type: 'boolean' }
   ];
 
-  const pageEditorProps = useMemo(() => ({
-    translationConfig: {
-      tableName: 'content_translations',
-      contentType: 'page',
-      locale: 'en',
-      fieldMap: {
-        title_en: 'title',
-        slug_en: 'slug',
-        content_en: 'content',
-        excerpt_en: 'excerpt',
-        meta_description_en: 'meta_description'
-      }
-    }
-  }), []);
+  const pageEditorProps = useMemo(() => getPageEditorProps('id'), []);
 
   // Custom row actions for Visual Builder
   const customRowActions = useCallback((page) => {
