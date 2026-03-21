@@ -1,5 +1,6 @@
 import PagesManager from './PagesManager';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import ThemeLayoutManager from './ThemeLayoutManager';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,6 +14,7 @@ import useSplatSegments from '@/hooks/useSplatSegments';
  * Manages both regular visual pages and system theme layouts.
  */
 const VisualPagesManager = () => {
+    const { t } = useTranslation();
     const { hasPermission } = usePermissions();
     const navigate = useNavigate();
     const segments = useSplatSegments();
@@ -35,12 +37,12 @@ const VisualPagesManager = () => {
 
     if (!hasPermission('tenant.visual_pages.read')) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-xl border border-slate-200 p-12 text-center">
-                <div className="p-4 bg-red-50 rounded-full mb-4">
-                    <ShieldAlert className="w-12 h-12 text-red-500" />
+            <div className="flex flex-col items-center justify-center min-h-[400px] bg-card rounded-xl border border-border p-12 text-center">
+                <div className="p-4 bg-destructive/10 rounded-full mb-4">
+                    <ShieldAlert className="w-12 h-12 text-destructive" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-800">Access Denied</h3>
-                <p className="text-slate-500 mt-2">You do not have permission to view this page.</p>
+                <h3 className="text-xl font-bold text-foreground">{t('common.access_denied')}</h3>
+                <p className="text-muted-foreground mt-2">{t('common.permission_required')}</p>
             </div>
         );
     }
@@ -48,10 +50,10 @@ const VisualPagesManager = () => {
     return (
         <AdminPageLayout requiredPermission="tenant.visual_pages.read" className="space-y-6">
             <PageHeader
-                title="Visual Builder"
-                description="Manage your visual pages and system theme templates."
+                title={t('pages.visual_builder')}
+                description={t('pages.visual_desc')}
                 icon={Layers}
-                breadcrumbs={[{ label: 'Visual Pages', icon: Layers }]}
+                breadcrumbs={[{ label: t('pages.visual_title'), icon: Layers }]}
             />
 
             <Tabs
@@ -61,13 +63,13 @@ const VisualPagesManager = () => {
                 }}
                 className="w-full"
             >
-                <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg inline-flex mb-6">
-                    <TabsList className="bg-transparent dark:text-slate-200">
-                        <TabsTrigger value="pages" className="flex items-center gap-2 px-4 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-950 dark:data-[state=active]:text-slate-100">
-                            <Layers className="w-4 h-4" /> Content Pages
+                <div className="bg-muted p-1 rounded-lg inline-flex mb-6">
+                    <TabsList className="bg-transparent">
+                        <TabsTrigger value="pages" className="flex items-center gap-2 px-4 data-[state=active]:bg-card data-[state=active]:text-foreground">
+                            <Layers className="w-4 h-4" /> {t('pages.tabs.pages')}
                         </TabsTrigger>
-                        <TabsTrigger value="layouts" className="flex items-center gap-2 px-4 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-950 dark:data-[state=active]:text-slate-100">
-                            <Palette className="w-4 h-4" /> Theme Layouts
+                        <TabsTrigger value="layouts" className="flex items-center gap-2 px-4 data-[state=active]:bg-card data-[state=active]:text-foreground">
+                            <Palette className="w-4 h-4" /> {t('pages.tabs.layouts')}
                         </TabsTrigger>
                     </TabsList>
                 </div>

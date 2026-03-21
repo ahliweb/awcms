@@ -10,9 +10,7 @@ function PagesContentPanels({
 	t,
 	pageColumns,
 	pageFormFields,
-	selectedLanguage,
 	customRowActions,
-	renderLanguageToolbar,
 	categoryColumns,
 	categoryFormFields,
 	tagColumns,
@@ -28,10 +26,9 @@ function PagesContentPanels({
 				permissionPrefix="visual_pages"
 				customSelect="*, category:categories!pages_category_id_fkey(id, name), owner:users!created_by(email, full_name), tenant:tenants(name)"
 				customRowActions={customRowActions}
-				defaultFilters={{ editor_type: 'visual', locale: selectedLanguage }}
+				defaultFilters={{ editor_type: 'visual' }}
 				showBreadcrumbs={false}
 				showHeader={false}
-				customToolbarActions={renderLanguageToolbar}
 			/>
 		);
 	}
@@ -51,11 +48,10 @@ function PagesContentPanels({
 					columns={pageColumns}
 					formFields={pageFormFields}
 					permissionPrefix="pages"
-					defaultFilters={{ page_type: 'regular', locale: selectedLanguage }}
+					defaultFilters={{ page_type: 'regular' }}
 					customSelect="*, category:categories!pages_category_id_fkey(id, name), owner:users!created_by(email, full_name), tenant:tenants(name)"
 					customRowActions={customRowActions}
 					showBreadcrumbs={false}
-					customToolbarActions={renderLanguageToolbar}
 				/>
 			</TabsContent>
 

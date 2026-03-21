@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { cn } from '@/lib/utils';
 import PagesOverviewCards from '@/components/dashboard/pages/PagesOverviewCards';
-import PageLanguageToolbar from '@/components/dashboard/pages/PageLanguageToolbar';
 import PagesContentPanels from '@/components/dashboard/pages/PagesContentPanels';
 
 /**
@@ -26,18 +25,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
   const hasExtraSegment = segments.length > 1;
   const hasValidTrashSuffix = segments[1] === 'trash';
   const [visualBuilderPage, setVisualBuilderPage] = useState(null);
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
-
-  // Language options
-  const languages = useMemo(() => [
-    { value: 'en', label: 'English' },
-    { value: 'id', label: 'Bahasa Indonesia' }
-  ], []);
-
-  const selectedLanguageLabel = useMemo(
-    () => languages.find((language) => language.value === selectedLanguage)?.label || selectedLanguage.toUpperCase(),
-    [languages, selectedLanguage]
-  );
 
   // Tab definitions
   const tabs = useMemo(() => onlyVisual ? [] : [
@@ -89,15 +76,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
       label: t('pages.columns.path'),
       className: 'min-w-[170px]',
       render: (value) => <span className="text-xs text-muted-foreground">/{value || '-'}</span>
-    },
-    {
-      key: 'locale',
-      label: t('common.language') || 'Language',
-      render: (value) => (
-        <span className="inline-flex items-center rounded-full border border-border/70 bg-secondary px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-secondary-foreground">
-          {value || 'en'}
-        </span>
-      )
     },
     {
       key: 'page_type',
@@ -186,14 +164,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
     },
     { key: 'slug', label: t('pages.form.slug'), required: true },
     {
-      key: 'locale',
-      label: t('common.language'),
-      type: 'select',
-      options: languages,
-      defaultValue: selectedLanguage,
-      description: 'Language of this page'
-    },
-    {
       key: 'status', label: t('pages.form.status'), type: 'select', options: [
         { value: 'published', label: t('pages.form.status_published') },
         { value: 'draft', label: t('pages.form.status_draft') }
@@ -248,16 +218,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
     }
     return null;
   }, [t]);
-
-  const renderLanguageToolbar = useCallback(() => (
-    <PageLanguageToolbar
-      t={t}
-      languages={languages}
-      selectedLanguage={selectedLanguage}
-      selectedLanguageLabel={selectedLanguageLabel}
-      onLanguageChange={setSelectedLanguage}
-    />
-  ), [languages, selectedLanguage, selectedLanguageLabel, t]);
 
   // Category columns and fields
   const categoryColumns = useMemo(() => [
@@ -318,8 +278,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
         onlyVisual={onlyVisual}
         activeTab={activeTab}
         isTrashView={isTrashView}
-        selectedLanguage={selectedLanguage}
-        selectedLanguageLabel={selectedLanguageLabel}
       />
 
       <PagesContentPanels
@@ -330,9 +288,7 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
         t={t}
         pageColumns={pageColumns}
         pageFormFields={pageFormFields}
-        selectedLanguage={selectedLanguage}
         customRowActions={customRowActions}
-        renderLanguageToolbar={renderLanguageToolbar}
         categoryColumns={categoryColumns}
         categoryFormFields={categoryFormFields}
         tagColumns={tagColumns}

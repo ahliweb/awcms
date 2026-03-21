@@ -581,6 +581,7 @@
     "template": "Template",
     "tabs": {
       "pages": "Pages",
+      "layouts": "Theme Layouts",
       "categories": "Categories"
     },
     "breadcrumbs": {

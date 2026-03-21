@@ -581,6 +581,7 @@
     "template": "Template",
     "tabs": {
       "pages": "Halaman",
+      "layouts": "Tata Letak Tema",
       "categories": "Kategori"
     },
     "breadcrumbs": {
