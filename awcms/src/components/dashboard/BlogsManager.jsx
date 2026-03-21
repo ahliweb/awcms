@@ -22,6 +22,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
  * Refactored to use awadmintemplate01 components for consistent UI.
  */
 function BlogsManager() {
+  const defaultBlogLanguage = 'id';
   const { t } = useTranslation();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ function BlogsManager() {
   const hasExtraSegment = segments.length > 1;
   const hasValidTrashSuffix = segments[1] === 'trash';
 
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [selectedLanguage, setSelectedLanguage] = useState(defaultBlogLanguage);
   const [rebuildRequired, setRebuildRequired] = useState(false);
   const [isRebuilding, setIsRebuilding] = useState(false);
   const languages = useMemo(() => [
@@ -48,8 +49,10 @@ function BlogsManager() {
     [languages, selectedLanguage]
   );
   const selectedLanguageMeta = useMemo(
-    () => languages.find((language) => language.code === selectedLanguage) || languages[0],
-    [languages, selectedLanguage]
+    () => languages.find((language) => language.code === selectedLanguage)
+      || languages.find((language) => language.code === defaultBlogLanguage)
+      || languages[0],
+    [defaultBlogLanguage, languages, selectedLanguage]
   );
 
   const legacyEditId = searchParams.get('edit');

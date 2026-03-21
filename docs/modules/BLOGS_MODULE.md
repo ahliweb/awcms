@@ -54,6 +54,12 @@ Stored in `blogs` table:
 3. **Approved**: Content is approved and ready for publish/scheduling workflows.
 4. **Published**: Publicly visible through tenant-scoped `blogs` queries filtered to `status = 'published'` and `deleted_at IS NULL`.
 
+## Localization Notes
+
+- New blogs are authored in the base/default locale first (`id`).
+- English content is stored as a translation overlay in `content_translations`.
+- Blog translation rows use `content_type = 'article'` to match the current database constraint and public rendering queries.
+
 ## Operational Concerns
 
 The Public Portal currently fetches posts directly from `blogs` to ensure:

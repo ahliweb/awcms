@@ -109,6 +109,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
     const activeMetaDescriptionKey = isTranslatedLocale ? 'meta_description_en' : 'meta_description';
 
     const isEditMode = !!item;
+    const isNewBlog = !isEditMode;
     const WORKFLOW_STATES = {
         DRAFT: 'draft',
         REVIEWED: 'reviewed',
@@ -199,6 +200,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
     };
 
     const localeBadgeLabel = selectedLanguage === 'en' ? 'EN' : 'ID';
+    const effectiveLocaleBadgeLabel = isNewBlog ? 'ID' : localeBadgeLabel;
 
     const generateSlug = (text) => {
         return text
@@ -236,7 +238,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
         setLoading(true);
 
         try {
-            const translationSlugValue = translationConfig
+            const translationSlugValue = (translationConfig && !isNewBlog)
                 ? (formData.slug_en || (formData.title_en ? generateSlug(formData.title_en) : ''))
                 : '';
 
@@ -339,7 +341,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                     p_tenant_id: currentTenant.id
                 });
 
-                if (translationConfig) {
+                if (translationConfig && !isNewBlog) {
                     const hasTranslationContent = Object.values(translationPayload).some((value) => {
                         if (typeof value === 'string') return value.length > 0;
                         return Boolean(value);
@@ -475,7 +477,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 {currentState}
                             </Badge>
                             <Badge variant="outline" className="border-primary/20 bg-primary/5 px-1.5 py-0 rounded-sm font-normal uppercase tracking-wider text-[10px] text-primary">
-                                {localeBadgeLabel}
+                                {effectiveLocaleBadgeLabel}
                             </Badge>
                             <span>•</span>
                             <span>{formData[activeSlugKey] ? formData[activeSlugKey] : 'slug-placeholder'}</span>
@@ -541,7 +543,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                         disabled={loading}
                     >
                         {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" /> : (currentState === WORKFLOW_STATES.PUBLISHED ? <Save className="w-4 h-4 mr-2" /> : <Send className="w-4 h-4 mr-2" />)}
-                        {currentState === WORKFLOW_STATES.PUBLISHED ? 'Save Changes' : 'Publish'}
+                        {isNewBlog ? 'Create Blog' : (currentState === WORKFLOW_STATES.PUBLISHED ? 'Save Changes' : 'Publish')}
                     </Button>
                 </div>
             </div>
