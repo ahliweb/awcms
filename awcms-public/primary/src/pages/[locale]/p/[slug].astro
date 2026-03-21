@@ -22,58 +22,53 @@ export const getStaticPaths = (async () => {
     throw new Error("[Page] Missing PUBLIC_TENANT_ID for static path generation");
   }
 
-  type PageSlugRow = {
-    slug: string;
-    locale?: Locale | null;
-  };
-
-  let localeColumnEnabled = true;
-  let data: PageSlugRow[];
-
-  const localizedQuery = await supabase
+  const { data: pages, error: pagesError } = await supabase
     .from("pages")
-    .select("slug, locale")
+    .select("id, slug")
     .eq("tenant_id", tenantId)
     .eq("status", "published")
     .eq("page_type", "regular")
     .is("deleted_at", null);
 
-  if (localizedQuery.error) {
-    const message = localizedQuery.error.message || "";
-
-    if (message.includes("pages.locale") && message.includes("does not exist")) {
-      localeColumnEnabled = false;
-      const fallbackQuery = await supabase
-        .from("pages")
-        .select("slug")
-        .eq("tenant_id", tenantId)
-        .eq("status", "published")
-        .eq("page_type", "regular")
-        .is("deleted_at", null);
-
-      if (fallbackQuery.error) {
-        console.error("[Page] Error fetching page slugs:", fallbackQuery.error.message);
-        return [];
-      }
-
-      data = (fallbackQuery.data || []) as PageSlugRow[];
-    } else {
-      console.error("[Page] Error fetching page slugs:", localizedQuery.error.message);
-      return [];
-    }
-  } else {
-    data = (localizedQuery.data || []) as PageSlugRow[];
+  if (pagesError) {
+    console.error("[Page] Error fetching page slugs:", pagesError.message);
+    return [];
   }
 
-  return data.flatMap((page) => {
-    const locales = localeColumnEnabled && page.locale ? [page.locale] : supportedLocales;
-    return locales.map((locale) => ({
+  const publishedPages = (pages || []) as Array<{ id: string; slug: string }>;
+
+  const pageIds = publishedPages.map((page) => page.id);
+  let translationSlugMap = new Map<string, string>();
+
+  if (pageIds.length > 0) {
+    const { data: translations, error: translationsError } = await supabase
+      .from("content_translations")
+      .select("content_id, locale, slug")
+      .eq("tenant_id", tenantId)
+      .eq("content_type", "page")
+      .eq("locale", "en")
+      .in("content_id", pageIds);
+
+    if (translationsError) {
+      console.error("[Page] Error fetching page translations:", translationsError.message);
+      return [];
+    }
+
+    translationSlugMap = new Map(
+      (translations || [])
+        .filter((translation) => translation.locale === "en" && translation.slug)
+        .map((translation) => [translation.content_id, translation.slug as string]),
+    );
+  }
+
+  return publishedPages.flatMap((page) =>
+    supportedLocales.map((locale) => ({
       params: {
-        slug: page.slug,
+        slug: locale === "en" ? translationSlugMap.get(page.id) || page.slug : page.slug,
         locale,
       },
-    }));
-  });
+    })),
+  );
 }) satisfies GetStaticPaths;
 
 const { slug, locale } = Astro.params;

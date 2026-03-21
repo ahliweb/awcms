@@ -35,9 +35,9 @@ const supabase = createClientFromEnv(import.meta.env);
 
 let homePage = null;
 if (tenantId && supabase) {
-  homePage = await getPageByType(supabase, "home", tenantId);
+  homePage = await getPageByType(supabase, "home", tenantId, locale);
   if (!homePage) {
-    homePage = await getPageBySlug(supabase, "home", tenantId);
+    homePage = await getPageBySlug(supabase, "home", tenantId, locale);
   }
 }
 

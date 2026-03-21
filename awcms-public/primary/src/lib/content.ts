@@ -4,6 +4,109 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+interface ContentTranslationRow {
+  content_id: string;
+  locale: string;
+  title?: string | null;
+  slug?: string | null;
+  content?: string | null;
+  excerpt?: string | null;
+  meta_description?: string | null;
+}
+
+function parseVisualTranslationContent(rawContent: string | null | undefined): Record<string, unknown> | null {
+  if (!rawContent) return null;
+
+  try {
+    const parsed = JSON.parse(rawContent);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+async function getPageTranslationBySlug(
+  supabase: SupabaseClient,
+  slug: string,
+  locale?: string,
+  tenantId?: string | null,
+): Promise<ContentTranslationRow | null> {
+  if (!locale || locale === "id") return null;
+
+  let query = supabase
+    .from("content_translations")
+    .select("content_id, locale, title, slug, content, excerpt, meta_description")
+    .eq("content_type", "page")
+    .eq("locale", locale)
+    .eq("slug", slug);
+
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    console.error("[Content] Error fetching page translation by slug:", error.message);
+    return null;
+  }
+
+  return (data as ContentTranslationRow | null) || null;
+}
+
+async function getPageTranslations(
+  supabase: SupabaseClient,
+  locale?: string,
+  tenantId?: string | null,
+  contentIds: string[] = [],
+): Promise<Map<string, ContentTranslationRow>> {
+  if (!locale || locale === "id" || contentIds.length === 0) {
+    return new Map<string, ContentTranslationRow>();
+  }
+
+  let query = supabase
+    .from("content_translations")
+    .select("content_id, locale, title, slug, content, excerpt, meta_description")
+    .eq("content_type", "page")
+    .eq("locale", locale)
+    .in("content_id", contentIds);
+
+  if (tenantId) {
+    query = query.eq("tenant_id", tenantId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[Content] Error fetching page translations:", error.message);
+    return new Map<string, ContentTranslationRow>();
+  }
+
+  return new Map((data || []).map((row) => [row.content_id, row as ContentTranslationRow]));
+}
+
+function mergePageTranslation(page: PageData, translation?: ContentTranslationRow | null): PageData {
+  if (!translation) return page;
+
+  const translatedVisualContent = parseVisualTranslationContent(translation.content);
+  const isVisual = page.editor_type === "visual";
+
+  return {
+    ...page,
+    title: translation.title || page.title,
+    slug: translation.slug || page.slug,
+    excerpt: translation.excerpt || page.excerpt,
+    meta_description: translation.meta_description || page.meta_description,
+    content: !isVisual && translation.content ? translation.content : page.content,
+    content_published: translatedVisualContent || page.content_published,
+    visual_content: translatedVisualContent || page.visual_content,
+  };
+}
+
 export interface PageData {
   id: string;
   title: string;
@@ -61,14 +164,21 @@ export async function getPageBySlug(
   supabase: SupabaseClient,
   slug: string,
   tenantId?: string | null,
-  _locale?: string,
+  locale?: string,
 ): Promise<PageData | null> {
+  const translationMatch = await getPageTranslationBySlug(supabase, slug, locale, tenantId);
+
   let query = supabase
     .from("pages")
     .select("*")
-    .eq("slug", slug)
     .eq("status", "published")
     .is("deleted_at", null);
+
+  if (translationMatch?.content_id) {
+    query = query.eq("id", translationMatch.content_id);
+  } else {
+    query = query.eq("slug", slug);
+  }
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
@@ -84,7 +194,7 @@ export async function getPageBySlug(
     return null;
   }
 
-  return data as PageData;
+  return mergePageTranslation(data as PageData, translationMatch);
 }
 
 /**
@@ -93,7 +203,7 @@ export async function getPageBySlug(
 export async function getAllPages(
   supabase: SupabaseClient,
   tenantId?: string | null,
-  _locale?: string,
+  locale?: string,
   limit = 100,
 ): Promise<PageData[]> {
   let query = supabase
@@ -116,7 +226,15 @@ export async function getAllPages(
     return [];
   }
 
-  return (data || []) as PageData[];
+  const pages = (data || []) as PageData[];
+  const translations = await getPageTranslations(
+    supabase,
+    locale,
+    tenantId,
+    pages.map((page) => page.id),
+  );
+
+  return pages.map((page) => mergePageTranslation(page, translations.get(page.id) || null));
 }
 
 /**
@@ -126,7 +244,7 @@ export async function getPageByType(
   supabase: SupabaseClient,
   pageType: string,
   tenantId?: string | null,
-  _locale?: string,
+  locale?: string,
 ): Promise<PageData | null> {
   let query = supabase
     .from("pages")
@@ -149,7 +267,11 @@ export async function getPageByType(
     return null;
   }
 
-  return (data || null) as PageData | null;
+  const page = (data || null) as PageData | null;
+  if (!page) return null;
+
+  const translations = await getPageTranslations(supabase, locale, tenantId, [page.id]);
+  return mergePageTranslation(page, translations.get(page.id) || null);
 }
 
 /**

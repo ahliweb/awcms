@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { Puck, Render } from '@puckeditor/core';
 import '@puckeditor/core/puck.css';
@@ -7,6 +7,7 @@ import { Save, Eye, EyeOff, ArrowLeft, Upload, Monitor, Tablet, Smartphone, Undo
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { udm } from '@/lib/data/UnifiedDataManager';
+import { supabase } from '@/lib/customSupabaseClient';
 import editorConfig from './config';
 import TemplateSelector from './TemplateSelector';
 import { useHistory } from './hooks/useHistory';
@@ -24,6 +25,13 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Settings } from 'lucide-react';
 
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -32,6 +40,7 @@ import { encodeRouteParam } from '@/lib/routeSecurity';
 import useSecureRouteParam from '@/hooks/useSecureRouteParam';
 
 const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess: _onSuccess }) => {
+    const defaultPageLocale = 'id';
     // Permission Hook
     const { hasPermission, checkAccess, isPlatformAdmin } = usePermissions();
     const { currentTenant } = useTenant(); // Get current tenant
@@ -128,7 +137,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         slug: initialPage?.slug || '',
         meta_description: initialPage?.meta_description || '',
         category_id: initialPage?.category_id || null, // Added category_id
-        locale: initialPage?.locale || 'en', // Added locale
+        locale: 'id',
         status: initialPage?.status || 'draft',
         published_at: initialPage?.published_at ? new Date(initialPage.published_at).toISOString().slice(0, 16) : ''
     });
@@ -239,7 +248,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         meta_description: art.meta_description,
                         category_id: art.category_id || null,
                         status: art.status,
-                        locale: art.locale || 'en',
+                        locale: 'en',
                         published_at: art.published_at ? new Date(art.published_at).toISOString().slice(0, 16) : ''
                     });
 
@@ -254,8 +263,10 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         title: pg.title,
                         slug: pg.slug,
                         meta_description: pg.meta_description,
+                        category_id: pg.category_id || null,
                         status: pg.status,
-                        locale: pg.locale || 'en',
+                        locale: 'id',
+                        published_at: pg.published_at ? new Date(pg.published_at).toISOString().slice(0, 16) : ''
                     });
                 }
 
@@ -287,6 +298,69 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [templateId, pageId, initialPage, mode, currentTenant?.id, isPlatformAdmin]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPageTranslation = async () => {
+            if (mode !== 'page' || !page?.id || !currentTenant?.id) return;
+
+            if (pageMetadata.locale === defaultPageLocale) {
+                const baseContent = page?.content_draft || page?.content_published || { content: [], root: { props: { title: page?.title || '' } } };
+                if (!cancelled) {
+                    setPageMetadata(prev => ({
+                        ...prev,
+                        title: page.title || '',
+                        slug: page.slug || '',
+                        meta_description: page.meta_description || '',
+                    }));
+                    resetHistory(baseContent);
+                    setEditorKey(prev => prev + 1);
+                }
+                return;
+            }
+
+            const { data: translation, error } = await supabase
+                .from('content_translations')
+                .select('*')
+                .eq('tenant_id', currentTenant.id)
+                .eq('content_type', 'page')
+                .eq('content_id', page.id)
+                .eq('locale', pageMetadata.locale)
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error loading page translation:', error);
+                return;
+            }
+
+            if (cancelled) return;
+
+            let translatedVisualContent = page?.content_draft || page?.content_published || { content: [], root: { props: { title: page?.title || '' } } };
+            if (translation?.content) {
+                try {
+                    translatedVisualContent = JSON.parse(translation.content);
+                } catch (parseError) {
+                    console.warn('Failed to parse translated visual content, using default locale content:', parseError);
+                }
+            }
+
+            setPageMetadata(prev => ({
+                ...prev,
+                title: translation?.title || page.title || '',
+                slug: translation?.slug || page.slug || '',
+                meta_description: translation?.meta_description || page.meta_description || '',
+            }));
+            resetHistory(translatedVisualContent);
+            setEditorKey(prev => prev + 1);
+        };
+
+        loadPageTranslation();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [mode, page?.id, currentTenant?.id, pageMetadata.locale, page, resetHistory]);
 
 
     const handleClose = () => {
@@ -455,21 +529,79 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 }
             } else {
                 console.log('Saving page:', page.id);
-                const { error: err } = await udm
-                    .from('pages')
-                    .update({
-                        content_draft: contentData,
-                        updated_at: timestamp,
-                        title: pageMetadata.title,
-                        slug: pageMetadata.slug,
-                        meta_description: pageMetadata.meta_description,
-                        category_id: pageMetadata.category_id,
-                        status: pageMetadata.status,
+                if (pageMetadata.locale === defaultPageLocale) {
+                    const { error: err } = await udm
+                        .from('pages')
+                        .update({
+                            content_draft: contentData,
+                            updated_at: timestamp,
+                            title: pageMetadata.title,
+                            slug: pageMetadata.slug,
+                            meta_description: pageMetadata.meta_description,
+                            category_id: pageMetadata.category_id,
+                            status: pageMetadata.status,
+                            published_at: pageMetadata.published_at || null
+                        })
+                        .eq('id', page.id);
+                    error = err;
+                } else {
+                    if (pageMetadata.slug) {
+                        const { data: existingTranslationSlug, error: translationSlugError } = await supabase
+                            .from('content_translations')
+                            .select('id')
+                            .eq('tenant_id', currentTenant?.id)
+                            .eq('content_type', 'page')
+                            .eq('locale', pageMetadata.locale)
+                            .eq('slug', pageMetadata.slug)
+                            .neq('content_id', page.id)
+                            .limit(1);
+
+                        if (translationSlugError) {
+                            throw translationSlugError;
+                        }
+
+                        if (existingTranslationSlug && existingTranslationSlug.length > 0) {
+                            const uniqueSuffix = Date.now().toString(36);
+                            throw new Error(`Slug "${pageMetadata.slug}" is already in use for ${pageMetadata.locale.toUpperCase()}. Try "${pageMetadata.slug}-${uniqueSuffix}" instead.`);
+                        }
+                    }
+
+                    const translationPayload = {
+                        tenant_id: currentTenant?.id,
+                        content_type: 'page',
+                        content_id: page.id,
                         locale: pageMetadata.locale,
-                        published_at: pageMetadata.published_at || null
-                    })
-                    .eq('id', page.id);
-                error = err;
+                        title: pageMetadata.title || null,
+                        slug: pageMetadata.slug || null,
+                        meta_description: pageMetadata.meta_description || null,
+                        content: JSON.stringify(contentData),
+                    };
+
+                    const hasTranslationContent = [
+                        translationPayload.title,
+                        translationPayload.slug,
+                        translationPayload.meta_description,
+                        translationPayload.content,
+                    ].some((value) => typeof value === 'string' && value.trim().length > 0);
+
+                    if (hasTranslationContent) {
+                        const { error: err } = await supabase
+                            .from('content_translations')
+                            .upsert(translationPayload, {
+                                onConflict: 'content_type,content_id,locale,tenant_id'
+                            });
+                        error = err;
+                    } else {
+                        const { error: err } = await supabase
+                            .from('content_translations')
+                            .delete()
+                            .eq('tenant_id', currentTenant?.id)
+                            .eq('content_type', 'page')
+                            .eq('content_id', page.id)
+                            .eq('locale', pageMetadata.locale);
+                        error = err;
+                    }
+                }
             }
 
             if (error) throw error;
@@ -572,14 +704,41 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         try {
             await saveContent(data, false);
 
-            const { error } = await udm
-                .from('pages')
-                .update({
-                    status: 'published',
-                    content_published: data,
-                    published_at: new Date().toISOString()
-                })
-                .eq('id', page.id);
+            const publishedAt = new Date().toISOString();
+            let error = null;
+
+            if (mode === 'page' && pageMetadata.locale !== defaultPageLocale) {
+                const translationPayload = {
+                    tenant_id: currentTenant?.id,
+                    content_type: 'page',
+                    content_id: page.id,
+                    locale: pageMetadata.locale,
+                    title: pageMetadata.title || null,
+                    slug: pageMetadata.slug || null,
+                    meta_description: pageMetadata.meta_description || null,
+                    content: JSON.stringify(data),
+                    updated_at: publishedAt,
+                };
+
+                const { error: translationError } = await supabase
+                    .from('content_translations')
+                    .upsert(translationPayload, {
+                        onConflict: 'content_type,content_id,locale,tenant_id'
+                    });
+
+                error = translationError;
+            } else {
+                const { error: publishError } = await udm
+                    .from('pages')
+                    .update({
+                        status: 'published',
+                        content_published: data,
+                        published_at: publishedAt
+                    })
+                    .eq('id', page.id);
+
+                error = publishError;
+            }
 
             if (error) throw error;
 
@@ -602,7 +761,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     };
 
     // Prepare config for Puck
-    const puckConfig = React.useMemo(() => ({
+    const puckConfig = useState(() => ({
         components: editorConfig.components,
         categories: editorConfig.categories,
         root: {
@@ -614,7 +773,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 );
             }
         }
-    }), []);
+    }))[0];
 
     // Viewport classes
     const viewportClasses = {
@@ -640,6 +799,10 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     const handleSlugChange = useCallback((newSlug) => {
         handleMetadataChange('slug', newSlug);
     }, [handleMetadataChange]);
+
+    const handleLocaleChange = useCallback((nextLocale) => {
+        setPageMetadata(prev => ({ ...prev, locale: nextLocale }));
+    }, []);
 
     // --- RENDER ---
     return (
@@ -837,6 +1000,23 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                 <span className="w-1 h-4 bg-indigo-500 rounded-full"></span>
                                 General Information
                             </h3>
+                            <div className="grid gap-3">
+                                {mode === 'page' && (
+                                    <>
+                                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Locale</Label>
+                                        <Select value={pageMetadata.locale} onValueChange={handleLocaleChange}>
+                                            <SelectTrigger className="bg-muted/50 border-input focus:border-indigo-500 transition-colors">
+                                                <SelectValue placeholder="Select locale" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="id">Indonesia (default)</SelectItem>
+                                                <SelectItem value="en">English</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </>
+                                )}
+                            </div>
+
                             <div className="grid gap-3">
                                 <Label htmlFor="title" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                     {mode === 'blog' ? 'Blog Title' : 'Page Title'}
