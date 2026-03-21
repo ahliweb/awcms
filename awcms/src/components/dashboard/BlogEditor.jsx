@@ -519,7 +519,9 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                     <span className="hidden lg:inline">Visual Builder</span>
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Switch to Visual Editor</TooltipContent>
+                            <TooltipContent side="bottom" align="center" className="rounded-xl border-white/70 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] px-3 py-2 text-xs text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.28)]">
+                                Switch to Visual Builder
+                            </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
 
@@ -645,22 +647,27 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                     <FolderOpen className="w-4 h-4 text-indigo-500" /> Organization
                                 </h4>
                                 <div className="space-y-4 rounded-2xl border border-white/80 bg-white/92 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
+                                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Content grouping</p>
+                                        <p className="mt-1 text-sm text-slate-600">Choose a category for structure, then add tags to improve discovery and related content suggestions.</p>
+                                    </div>
                                     <div className="space-y-2">
                                         <Label className="text-slate-500 uppercase tracking-widest text-[11px] font-semibold pl-1">Category</Label>
                                         <Select
                                             value={formData.category_id}
                                             onValueChange={(val) => setFormData({ ...formData, category_id: val })}
                                         >
-                                            <SelectTrigger className="w-full bg-white border-slate-200">
+                                            <SelectTrigger className="h-11 w-full rounded-2xl border-slate-200/80 bg-white/90 shadow-sm focus:ring-indigo-500/20">
                                                 <SelectValue placeholder="Select Category..." />
                                             </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectContent className="rounded-2xl border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl">
                                                 {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
                                         <Label className="text-slate-500 uppercase tracking-widest text-[11px] font-semibold pl-1">Tags</Label>
+                                        <p className="text-xs text-slate-500">Press Enter to add a new tag, or choose a suggested tag from the dropdown.</p>
                                         <TagInput
                                             value={formData.tags}
                                             onChange={(tags) => setFormData(p => ({ ...p, tags: tags }))}
@@ -691,7 +698,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                         <Input
                                             value={formData.meta_title}
                                             onChange={(e) => setFormData(p => ({ ...p, meta_title: e.target.value }))}
-                                            className="h-8 text-xs"
+                                            className="h-10 rounded-xl border-slate-200/80 bg-white/90 text-xs shadow-sm"
                                             placeholder="SEO Title"
                                         />
                                     </div>
@@ -700,7 +707,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                         <Textarea
                                             value={formData[activeMetaDescriptionKey] || ''}
                                             onChange={(e) => setFormData(p => ({ ...p, [activeMetaDescriptionKey]: e.target.value }))}
-                                            className="min-h-[60px] text-xs resize-none"
+                                            className="min-h-[88px] rounded-xl border-slate-200/80 bg-white/90 text-xs resize-none shadow-sm"
                                             placeholder="SEO Description"
                                         />
                                     </div>
@@ -713,12 +720,16 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                     <Share2 className="w-4 h-4 text-sky-500" /> Social
                                 </h4>
                                 <div className="space-y-4 rounded-2xl border border-white/80 bg-white/92 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
+                                    <div className="rounded-2xl border border-sky-100/80 bg-sky-50/70 px-3 py-3">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-600">Share previews</p>
+                                        <p className="mt-1 text-sm text-slate-600">Customize the preview title, description, and image that travel with the article when it is shared.</p>
+                                    </div>
                                     <div className="space-y-2">
                                         <Label className="text-xs text-slate-500">OG Title</Label>
                                         <Input
                                             value={formData.og_title}
                                             onChange={(e) => setFormData(p => ({ ...p, og_title: e.target.value }))}
-                                            className="h-8 text-xs"
+                                            className="h-10 rounded-xl border-slate-200/80 bg-white/90 text-xs shadow-sm"
                                             placeholder="Social Title"
                                         />
                                     </div>
@@ -727,16 +738,17 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                         <Textarea
                                             value={formData.og_description}
                                             onChange={(e) => setFormData(p => ({ ...p, og_description: e.target.value }))}
-                                            className="min-h-[60px] text-xs resize-none"
+                                            className="min-h-[88px] rounded-xl border-slate-200/80 bg-white/90 text-xs resize-none shadow-sm"
                                             placeholder="Social Description"
                                         />
                                     </div>
                                     <div className="space-y-2">
                                         <Label className="text-xs text-slate-500">OG Image</Label>
+                                        <p className="text-xs text-slate-500">Choose a high-contrast image so social cards stay legible and eye-catching.</p>
                                         <ImageUpload
                                             value={formData.og_image}
                                             onChange={(url) => setFormData(p => ({ ...p, og_image: url }))}
-                                            className="h-24 w-full"
+                                            className="w-full"
                                         />
                                     </div>
                                 </div>

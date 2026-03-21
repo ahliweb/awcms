@@ -117,7 +117,7 @@ const TagInput = ({
     <div ref={wrapperRef} className={cn("relative w-full", className)}>
       <div
         className={cn(
-          "flex min-h-[42px] w-full flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-white p-2 transition-all focus-within:border-transparent focus-within:ring-2 focus-within:ring-blue-500",
+          "flex min-h-[48px] w-full flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-3 py-2.5 shadow-[0_10px_25px_rgba(15,23,42,0.05)] transition-all focus-within:border-indigo-200 focus-within:ring-2 focus-within:ring-indigo-500/20",
           disabled && "bg-slate-50 opacity-70 cursor-not-allowed"
         )}
         onClick={() => !disabled && document.getElementById(TAG_INPUT_ID)?.focus()}
@@ -126,7 +126,7 @@ const TagInput = ({
           <Badge
             key={index}
             variant="secondary"
-            className="flex items-center gap-1 px-2 py-1 text-sm font-normal bg-blue-50 text-blue-700 border border-blue-100"
+            className="flex items-center gap-1 rounded-full border border-indigo-100 bg-indigo-50/90 px-2.5 py-1 text-xs font-medium text-indigo-700 shadow-sm"
           >
             <Tag className="w-3 h-3 opacity-50" />
             {tag}
@@ -134,7 +134,7 @@ const TagInput = ({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); removeTag(index); }}
-                className="ml-1 text-blue-400 hover:text-blue-600 hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                className="ml-1 rounded-full p-0.5 text-indigo-400 transition-colors hover:bg-indigo-200 hover:text-indigo-700"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -152,7 +152,7 @@ const TagInput = ({
           }}
           onKeyDown={handleKeyDown}
           onFocus={() => !disabled && setShowSuggestions(true)}
-          className="flex-1 min-w-[120px] bg-transparent outline-none text-sm text-slate-900 placeholder:text-slate-400 h-6"
+          className="h-6 min-w-[120px] flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
           placeholder={safeValue.length === 0 ? placeholder : ""}
           disabled={disabled}
           autoComplete="off"
@@ -160,7 +160,7 @@ const TagInput = ({
       </div>
 
       {showSuggestions && inputValue.length > 0 && !disabled && (
-        <div className="absolute z-50 w-full mt-1 bg-white rounded-md border border-slate-200 shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-[180] mt-2 max-h-60 w-full overflow-auto rounded-2xl border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl">
           {loading ? (
             <div className="flex items-center justify-center gap-2 p-3 text-center text-sm text-slate-500">
               <Loader2 className="w-3 h-3 animate-spin" /> Searching...
@@ -169,7 +169,7 @@ const TagInput = ({
             suggestions.map((suggestion) => (
               <div
                 key={suggestion.id}
-                className="flex cursor-pointer items-center gap-2 border-b border-slate-50 px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 last:border-0"
+                className="flex cursor-pointer items-center gap-2 border-b border-slate-100/80 px-3 py-2.5 text-sm text-slate-700 transition-colors hover:bg-indigo-50/80 hover:text-indigo-700 last:border-0"
                 onClick={() => addTag(suggestion.name)}
               >
                 <div
@@ -185,8 +185,8 @@ const TagInput = ({
               </div>
             ))
           ) : (
-            <div
-              className="px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 cursor-pointer flex items-center gap-2"
+              <div
+              className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-sm text-slate-500 transition-colors hover:bg-slate-50"
               onClick={() => addTag(inputValue)}
             >
               <Plus className="w-3 h-3" />
