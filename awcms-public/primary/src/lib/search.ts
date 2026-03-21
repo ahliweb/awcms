@@ -111,10 +111,14 @@ async function searchPages(
       translationQuery = translationQuery.eq("tenant_id", tenantId);
     }
 
-    const { data: translationData, error: translationError } = await translationQuery;
+    const { data: translationData, error: translationError } =
+      await translationQuery;
 
     if (translationError) {
-      console.error("[Search] Error searching page translations:", translationError.message);
+      console.error(
+        "[Search] Error searching page translations:",
+        translationError.message,
+      );
       return [];
     }
 
@@ -188,10 +192,14 @@ async function searchBlogs(
       translationQuery = translationQuery.eq("tenant_id", tenantId);
     }
 
-    const { data: translationData, error: translationError } = await translationQuery;
+    const { data: translationData, error: translationError } =
+      await translationQuery;
 
     if (translationError) {
-      console.error("[Search] Error searching blog translations:", translationError.message);
+      console.error(
+        "[Search] Error searching blog translations:",
+        translationError.message,
+      );
       return [];
     }
 
