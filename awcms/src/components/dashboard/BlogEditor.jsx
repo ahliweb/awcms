@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
     Save, X, Globe, Layout, Share2, FolderOpen,
-    ChevronLeft, Eye, Send, Image as ImageIcon, MoreVertical
+    ChevronLeft, Send, Image as ImageIcon, MoreVertical, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +22,6 @@ import RichTextEditor from '@/components/ui/RichTextEditor';
 import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
 import TagInput from '@/components/ui/TagInput';
 import { getCategoryTypesForModule } from '@/lib/taxonomy';
-import { usePortalSites } from '@/hooks/usePortalSites';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -92,28 +91,27 @@ function mapBlogTranslationToFormData(item, translation) {
 
 function BlogEditor({ item, onClose, onSuccess, translationConfig = null, selectedLanguage = DEFAULT_BLOG_LOCALE, initialVisualBuilder = false }) {
     const { toast } = useToast();
+    const location = useLocation();
     const navigate = useNavigate();
     const { user } = useAuth();
     const { currentTenant } = useTenant();
     const { hasPermission } = usePermissions();
-    const { portals } = usePortalSites();
     const [loading, setLoading] = useState(false);
     const [categories, setCategories] = useState([]);
     const [currentState, setCurrentState] = useState(item?.workflow_state || 'draft');
-    const [portalMenuOpen, setPortalMenuOpen] = useState(false);
-    const [selectedPortal, setSelectedPortal] = useState(0);
 
     // Detect Visual Builder Mode
     // Check strict editor_type first, then fallback to content shape inspection
     const isVisualContent = item?.editor_type === 'visual' ||
         (item?.content && typeof item.content === 'object' && !Array.isArray(item.content) && item.content.root);
 
-    const [useVisualBuilder, setUseVisualBuilder] = useState(isVisualContent || initialVisualBuilder);
+    const useVisualBuilder = isVisualContent || initialVisualBuilder;
 
     // Mobile Settings Toggle
     const [showMobileSettings, setShowMobileSettings] = useState(false);
     const [visualSwitchOpen, setVisualSwitchOpen] = useState(false);
     const [coverImageOpen, setCoverImageOpen] = useState(false);
+    const [ogImageOpen, setOgImageOpen] = useState(false);
 
     // Initial Form Data State
     const [formData, setFormData] = useState(() => mapBlogTranslationToFormData(item, null));
@@ -136,7 +134,10 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
     };
 
     // Permissions
-    const canEdit = hasPermission('tenant.blog.update') || (user?.id === item?.author_id);
+    const canCreate = hasPermission('tenant.blog.create');
+    const canEdit = isEditMode
+        ? (hasPermission('tenant.blog.update') || (user?.id === item?.author_id))
+        : canCreate;
     const canPublish = hasPermission('tenant.blog.publish');
 
     const fetchCategories = useCallback(async () => {
@@ -221,49 +222,6 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
     const handleWorkflowAction = async (newState) => {
         await saveItem(newState);
     };
-
-    const openPreview = useCallback((baseUrl) => {
-        if (!item?.id) {
-            toast({
-                variant: 'destructive',
-                title: 'Preview unavailable',
-                description: 'Save this blog once before opening a public preview.',
-            });
-            return;
-        }
-
-        const slug = formData.slug || generateSlug(formData.title || 'untitled-blog');
-
-        const previewSecret = import.meta.env.VITE_PREVIEW_SECRET || '';
-        const url = previewSecret
-            ? `${baseUrl}/blogs/${slug}?preview_secret=${previewSecret}`
-            : `${baseUrl}/blogs/${slug}`;
-
-        window.open(url, '_blank', 'noopener,noreferrer');
-    }, [formData.slug, formData.title, item?.id, toast]);
-
-    const handleSwitchToVisualBuilder = useCallback(async () => {
-        if (!item?.id) {
-            const saved = await saveItem(null, { suppressClose: true, suppressSuccess: true });
-            if (!saved?.id) {
-                return;
-            }
-
-            const signedId = await encodeRouteParam({ value: saved.id, scope: 'blogs.edit' });
-            if (!signedId) {
-                toast({ variant: 'destructive', title: 'Navigation error', description: 'Could not open the visual builder route.' });
-                return;
-            }
-
-            setVisualSwitchOpen(false);
-            onClose?.();
-            navigate(`/cmspanel/blogs/edit/${signedId}?editor=visual`);
-            return;
-        }
-
-        setVisualSwitchOpen(false);
-        setUseVisualBuilder(true);
-    }, [item?.id, navigate, onClose, toast]);
 
     const localeBadgeLabel = selectedLanguage === 'en' ? 'EN' : 'ID';
     const effectiveLocaleBadgeLabel = isNewBlog ? 'ID' : localeBadgeLabel;
@@ -485,6 +443,30 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
         }
     };
 
+    const handleSwitchToVisualBuilder = async () => {
+        const targetId = item?.id
+            ? item.id
+            : (await saveItem(null, { suppressClose: true, suppressSuccess: true }))?.id;
+
+        if (!targetId) {
+            return;
+        }
+
+        const signedId = await encodeRouteParam({ value: targetId, scope: 'blogs.edit' });
+        if (!signedId) {
+            toast({ variant: 'destructive', title: 'Navigation error', description: 'Could not open the visual builder route.' });
+            return;
+        }
+
+        setVisualSwitchOpen(false);
+
+        if (!location.pathname.includes('/cmspanel/blogs/edit/')) {
+            onClose?.();
+        }
+
+        navigate(`/cmspanel/blogs/edit/${signedId}?editor=visual`);
+    };
+
     // State Colors Helper
     const getStateColor = (state) => {
         switch (state) {
@@ -494,6 +476,10 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
             default: return 'bg-slate-500/10 text-slate-600 border-slate-500/20';
         }
     };
+
+    const selectedCategoryValue = categories.some((category) => category.id === formData.category_id)
+        ? formData.category_id
+        : '__none__';
 
     if (useVisualBuilder) {
         return createPortal(
@@ -558,45 +544,6 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                    {portals.length <= 1 ? (
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="text-slate-500" onClick={() => openPreview(portals[0]?.url || import.meta.env.VITE_PUBLIC_PORTAL_URL || 'http://localhost:4321')}>
-                                        <Eye className="w-4 h-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Preview</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    ) : (
-                        <div className="relative">
-                            <Button variant="ghost" size="sm" className="text-slate-500 gap-2" onClick={() => setPortalMenuOpen((prev) => !prev)}>
-                                <Eye className="w-4 h-4" />
-                                <span className="hidden lg:inline">Preview</span>
-                            </Button>
-                            {portalMenuOpen && (
-                                <div className="absolute right-0 top-full z-[180] mt-2 min-w-[240px] overflow-hidden rounded-2xl border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl">
-                                    {portals.map((portal, idx) => (
-                                        <button
-                                            key={`${portal.name}-${portal.url}`}
-                                            type="button"
-                                            className="flex w-full items-center justify-between gap-3 border-b border-slate-100/80 px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-indigo-50/80 last:border-0"
-                                            onClick={() => {
-                                                setSelectedPortal(idx);
-                                                setPortalMenuOpen(false);
-                                                openPreview(portal.url);
-                                            }}
-                                        >
-                                            <span className="font-medium">{portal.name}</span>
-                                            <span className="text-xs text-slate-400">{new URL(portal.url).hostname}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -607,11 +554,11 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                     className="text-slate-500 hover:text-indigo-600 hidden sm:flex gap-2"
                                 >
                                     <Layout className="w-4 h-4" />
-                                    <span className="hidden lg:inline">Visual Builder</span>
+                                    <span className="hidden lg:inline">Open Visual Builder</span>
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" align="center" className="rounded-xl border-white/70 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] px-3 py-2 text-xs text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.28)]">
-                                Switch to Visual Builder
+                                Close this editor and continue in the visual builder view
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -745,13 +692,14 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                     <div className="space-y-2">
                                         <Label className="text-slate-500 uppercase tracking-widest text-[11px] font-semibold pl-1">Category</Label>
                                         <Select
-                                            value={formData.category_id}
-                                            onValueChange={(val) => setFormData({ ...formData, category_id: val })}
+                                            value={selectedCategoryValue}
+                                            onValueChange={(val) => setFormData((prev) => ({ ...prev, category_id: val === '__none__' ? '' : val }))}
                                         >
                                             <SelectTrigger className="h-11 w-full rounded-2xl border-slate-200/80 bg-white/90 shadow-sm focus:ring-indigo-500/20">
                                                 <SelectValue placeholder="Select Category..." />
                                             </SelectTrigger>
                                             <SelectContent position="popper" className="rounded-2xl border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl">
+                                                <SelectItem value="__none__">No category</SelectItem>
                                                 {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
@@ -836,11 +784,65 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                     <div className="space-y-2">
                                         <Label className="text-xs text-slate-500">OG Image</Label>
                                         <p className="text-xs text-slate-500">Choose a high-contrast image so social cards stay legible and eye-catching.</p>
-                                        <ImageUpload
-                                            value={formData.og_image}
-                                            onChange={(url) => setFormData(p => ({ ...p, og_image: url }))}
-                                            className="w-full"
-                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setOgImageOpen(true)}
+                                            className="group relative block w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-[linear-gradient(135deg,#e0f2fe_0%,#f8fafc_50%,#e2e8f0_100%)] text-left shadow-sm transition-all hover:border-sky-200 hover:shadow-[0_18px_45px_rgba(14,165,233,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/30"
+                                        >
+                                            {formData.og_image ? (
+                                                <div className="relative h-40 w-full overflow-hidden">
+                                                    <img src={formData.og_image} alt="OG preview" className="h-full w-full object-cover" />
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-transparent opacity-90" />
+                                                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-3 text-white">
+                                                        <div>
+                                                            <p className="text-[11px] uppercase tracking-[0.22em] text-white/70">Social preview image</p>
+                                                            <p className="mt-1 text-sm font-semibold">Update how this story looks when shared</p>
+                                                        </div>
+                                                        <span className="rounded-full border border-white/40 bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur">Change</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex min-h-[168px] flex-col items-center justify-center gap-3 px-4 py-6 text-center text-slate-600">
+                                                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/80 bg-white/80 shadow-sm">
+                                                        <Sparkles className="h-6 w-6 text-sky-500" />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-semibold text-slate-700">Add a dedicated OG image</p>
+                                                        <p className="text-xs text-slate-500">Use a striking 1200x630 image to improve social previews across chat apps and networks.</p>
+                                                    </div>
+                                                    {formData.featured_image && (
+                                                        <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-medium text-sky-700">
+                                                            Or reuse your cover image below
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </button>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOgImageOpen(true)}>
+                                                Manage OG Image
+                                            </Button>
+                                            {formData.featured_image && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="rounded-xl"
+                                                    onClick={() => setFormData((prev) => ({ ...prev, og_image: prev.featured_image }))}
+                                                >
+                                                    Use Cover Image
+                                                </Button>
+                                            )}
+                                            {formData.og_image && (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    className="rounded-xl text-slate-500"
+                                                    onClick={() => setFormData((prev) => ({ ...prev, og_image: '' }))}
+                                                >
+                                                    Remove OG Image
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -879,6 +881,48 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                             </Button>
                         ) : <div />}
                         <Button type="button" onClick={() => setCoverImageOpen(false)} className="bg-slate-900 hover:bg-slate-800 text-white">
+                            Done
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={ogImageOpen} onOpenChange={setOgImageOpen}>
+                <DialogContent className="max-w-3xl overflow-hidden border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] p-0 shadow-[0_30px_90px_rgba(15,23,42,0.22)] backdrop-blur-xl">
+                    <DialogHeader className="border-b border-slate-200/80 bg-[linear-gradient(135deg,rgba(224,242,254,0.96),rgba(255,255,255,0.92))] px-6 py-5">
+                        <DialogTitle className="text-xl">Open Graph Image</DialogTitle>
+                        <DialogDescription className="max-w-2xl">
+                            Set the image that social platforms use when this article is shared. A 1200x630 landscape image usually works best.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
+                        <ImageUpload
+                            value={formData.og_image}
+                            onChange={(url) => setFormData(prev => ({ ...prev, og_image: url }))}
+                        />
+                    </div>
+                    <DialogFooter className="border-t border-slate-200/80 bg-white/70 px-6 py-4 backdrop-blur">
+                        <div className="flex flex-wrap gap-2">
+                            {formData.featured_image && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setFormData(prev => ({ ...prev, og_image: prev.featured_image }))}
+                                >
+                                    Use Cover Image
+                                </Button>
+                            )}
+                            {formData.og_image && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setFormData(prev => ({ ...prev, og_image: '' }))}
+                                >
+                                    Remove Image
+                                </Button>
+                            )}
+                        </div>
+                        <Button type="button" onClick={() => setOgImageOpen(false)} className="bg-slate-900 hover:bg-slate-800 text-white">
                             Done
                         </Button>
                     </DialogFooter>
