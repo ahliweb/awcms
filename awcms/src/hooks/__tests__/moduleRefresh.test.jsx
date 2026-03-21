@@ -23,6 +23,15 @@ const modulesRows = [
     created_at: '2026-03-20T00:00:00.000Z',
     updated_at: '2026-03-20T00:00:00.000Z',
   },
+  {
+    id: 'module-platform',
+    tenant_id: 'tenant-2',
+    name: 'Modules',
+    slug: 'modules',
+    status: 'inactive',
+    created_at: '2026-03-20T00:00:00.000Z',
+    updated_at: '2026-03-20T00:00:00.000Z',
+  },
 ];
 
 const adminMenuRows = [
@@ -37,6 +46,18 @@ const adminMenuRows = [
     is_visible: true,
     permission: 'tenant.blog.read',
     scope: 'tenant',
+  },
+  {
+    id: 'menu-modules',
+    key: 'modules',
+    label: 'Modules',
+    path: 'modules',
+    group_label: 'SYSTEM',
+    group_order: 60,
+    order: 40,
+    is_visible: true,
+    permission: 'platform.module.read',
+    scope: 'platform',
   },
 ];
 
@@ -178,7 +199,7 @@ describe('module refresh wiring', () => {
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
-      expect(result.current.modules).toHaveLength(1);
+      expect(result.current.modules).toHaveLength(2);
     });
 
     await act(async () => {
@@ -203,7 +224,7 @@ describe('module refresh wiring', () => {
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
-      expect(result.current.menuItems).toHaveLength(1);
+      expect(result.current.menuItems).toHaveLength(2);
     });
 
     const initialAdminMenuCalls = supabaseMock.from.mock.calls.filter(([table]) => table === 'admin_menus').length;
@@ -218,6 +239,18 @@ describe('module refresh wiring', () => {
       const nextAdminMenuCalls = supabaseMock.from.mock.calls.filter(([table]) => table === 'admin_menus').length;
       expect(nextAdminMenuCalls).toBeGreaterThan(initialAdminMenuCalls);
     });
+  });
+
+  it('keeps platform menu items visible even if another tenant marks that module inactive', async () => {
+    const { result } = renderHook(() => useAdminMenu());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    const keys = result.current.menuItems.map((item) => item.key);
+    expect(keys).toContain('blogs');
+    expect(keys).toContain('modules');
   });
 
   it('syncs modules for every tenant when run by a platform admin', async () => {

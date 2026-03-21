@@ -112,10 +112,15 @@ const dedupeMenuItems = (items) => {
 
 export function useAdminMenu() {
   const [menuItems, setMenuItems] = useState([]);
-  const { isPlatformAdmin } = usePermissions();
+  const { isPlatformAdmin, isFullAccess } = usePermissions();
   const { currentTenant } = useTenant();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const isPlatformUser = isPlatformAdmin || isFullAccess;
+
+  const isPlatformScopedMenuItem = useCallback((item) => {
+    return item?.scope === 'platform' || String(item?.permission || '').startsWith('platform.');
+  }, []);
 
   const fetchMenu = useCallback(async () => {
     setLoading(true);
@@ -265,9 +270,9 @@ export function useAdminMenu() {
 
       // Scope-aware filtering based on platform vs tenant
       combined = combined.filter(item => {
-        if (item.scope === 'platform') return isPlatformAdmin;
-        return true; // tenant + shared visible to all authenticated
-      });
+         if (isPlatformScopedMenuItem(item)) return isPlatformUser;
+         return true; // tenant + shared visible to all authenticated
+       });
 
       // 5. Merge Plugin-registered menu items (via filters)
       try {
@@ -323,21 +328,24 @@ export function useAdminMenu() {
       // tenant. Platform-scoped items are never filtered. Fail-open: if a
       // slug is not found in the modules table the item is shown.
       try {
+        if (!currentTenant?.id) {
+          setMenuItems(combined);
+          setLoading(false);
+          return;
+        }
+
         let modulesQuery = supabase
           .from('modules')
           .select('slug, status')
-          .eq('status', 'inactive');
-
-        if (currentTenant?.id && !isPlatformAdmin) {
-          modulesQuery = modulesQuery.eq('tenant_id', currentTenant.id);
-        }
+          .eq('status', 'inactive')
+          .eq('tenant_id', currentTenant.id);
 
         const { data: inactiveModules } = await modulesQuery;
 
         if (inactiveModules && inactiveModules.length > 0) {
           const inactiveSlugs = new Set(inactiveModules.map((m) => m.slug));
           combined = combined.filter((item) => {
-            if (item.scope === 'platform') return true; // never filter platform-admin items
+            if (isPlatformScopedMenuItem(item)) return true; // never filter platform-admin items
             const itemKey = getCanonicalMenuKey(item);
             if (!itemKey) return true; // no key → show (fail-open)
             return !inactiveSlugs.has(itemKey);
@@ -365,7 +373,7 @@ export function useAdminMenu() {
     } finally {
       setLoading(false);
     }
-  }, [isPlatformAdmin, currentTenant?.id]);
+  }, [isPlatformUser, currentTenant?.id, isPlatformScopedMenuItem]);
 
   // Initial fetch
   useEffect(() => {
