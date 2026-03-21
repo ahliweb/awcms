@@ -184,8 +184,8 @@ function BlogsManager() {
     {
       key: 'translation_status',
       label: t('common.language') || 'Language',
-        render: (_value, row) => {
-          const hasTranslation = selectedLanguage === 'id' || Boolean(row?.title_en);
+      render: (_value, row) => {
+        const hasTranslation = selectedLanguage === 'id' || Boolean(row?.title_en);
 
         return (
           <span className={cn(

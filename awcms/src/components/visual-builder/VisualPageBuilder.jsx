@@ -138,14 +138,14 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         slug: initialPage?.slug || '',
         meta_description: initialPage?.meta_description || '',
         category_id: initialPage?.category_id || null, // Added category_id
-        locale: initialMode === 'blog' ? selectedLanguage : defaultContentLocale,
+        locale: initialMode === 'blog' && initialPage?.id ? selectedLanguage : defaultContentLocale,
         status: initialPage?.status || 'draft',
         published_at: initialPage?.published_at ? new Date(initialPage.published_at).toISOString().slice(0, 16) : ''
     });
 
 
-    const contentPermissionResource = mode === 'blog' ? 'blogs' : 'pages';
-    const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('edit', contentPermissionResource, page);
+    const contentPermissionResource = mode === 'blog' ? 'blog' : 'pages';
+    const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('update', contentPermissionResource, page);
     const canEdit = isEditorEnabled; // Alias for readability
     const canPublish = (mode === 'template' || mode === 'part') ? false : checkAccess('publish', contentPermissionResource, page);
     const [isSaving, setIsSaving] = useState(false);
@@ -444,7 +444,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         if (mode === 'template' && !templateId) {
             if (!isAutoSave) toast({ variant: 'destructive', title: 'Error', description: 'Template ID is missing. Cannot save.' });
             return;
-        } else if (mode !== 'template' && (!page || !page.id)) {
+        } else if (mode !== 'template' && mode !== 'blog' && (!page || !page.id)) {
             if (!isAutoSave) toast({ variant: 'destructive', title: 'Error', description: 'Page data is missing. Cannot save.' });
             return;
         }
@@ -582,7 +582,18 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                     error = err;
 
                     if (newBlog) {
-                        setPage(newBlog);
+                        const nextPage = {
+                            ...newBlog,
+                            content_draft: typeof newBlog.content === 'object'
+                                ? newBlog.content
+                                : contentData,
+                        };
+
+                        setPage(nextPage);
+                        setPageMetadata(prev => ({
+                            ...prev,
+                            locale: defaultContentLocale,
+                        }));
                         // Update the URL without reloading? 
                         // Or just inform the user. Better to update state so subsequent saves are updates.
                         // We also need to update the history object if necessary, but 'page' state is key.
@@ -757,11 +768,11 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     // Publish page
     const handlePublish = async () => {
         if (!canPublish) {
-            toast({ variant: 'destructive', title: 'Action Denied', description: 'You do not have permission to publish pages.' });
+            toast({ variant: 'destructive', title: 'Action Denied', description: `You do not have permission to publish ${mode === 'blog' ? 'blogs' : 'pages'}.` });
             return;
         }
         if (!page || !page.id) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Page data is missing. Please reload the editor.' });
+            toast({ variant: 'destructive', title: 'Error', description: `${mode === 'blog' ? 'Blog' : 'Page'} data is missing. Please save before publishing.` });
             return;
         }
         setIsPublishing(true);
@@ -839,10 +850,10 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
             toast({
                 title: isOffline ? "Published Offline" : "Published Successfully",
-                description: isOffline ? "Changes saved locally. Status will update when online." : "Your page is now live.",
+                description: isOffline ? "Changes saved locally. Status will update when online." : `Your ${mode === 'blog' ? 'blog' : 'page'} is now live.`,
             });
         } catch (error) {
-            console.error('Error publishing page:', error);
+            console.error(`Error publishing ${mode}:`, error);
             toast({
                 title: "Publish Failed",
                 description: error.message,
