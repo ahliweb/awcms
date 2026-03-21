@@ -31,10 +31,18 @@ export function useModules() {
   const [modules, setModules]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
+  const [syncing, setSyncing]   = useState(false);
   const [toggling, setToggling] = useState(null); // moduleId being toggled
 
   // ─── Fetch ────────────────────────────────────────────────────────────────
   const fetchModules = useCallback(async () => {
+    if (!canRead) {
+      setModules([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -62,7 +70,7 @@ export function useModules() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, isPlatformAdmin, isFullAccess]);
+  }, [tenantId, isPlatformAdmin, isFullAccess, canRead]);
 
   // ─── Sync from sidebar (platform admin only) ──────────────────────────────
   const syncModules = useCallback(async () => {
@@ -71,26 +79,54 @@ export function useModules() {
       return;
     }
 
-    setLoading(true);
+    setSyncing(true);
     try {
-      const { error: syncError } = await supabase.rpc('sync_modules_from_sidebar', {
-        p_tenant_id: tenantId || null,
+      const targetTenantIds = [];
+
+      if (isPlatformAdmin || isFullAccess) {
+        const { data: tenants, error: tenantsError } = await supabase
+          .from('tenants')
+          .select('id')
+          .is('deleted_at', null)
+          .order('created_at', { ascending: true });
+
+        if (tenantsError) throw tenantsError;
+
+        targetTenantIds.push(...(tenants || []).map((tenant) => tenant.id).filter(Boolean));
+      } else if (tenantId) {
+        targetTenantIds.push(tenantId);
+      }
+
+      if (targetTenantIds.length === 0) {
+        throw new Error('No tenant targets available for module sync.');
+      }
+
+      for (const targetTenantId of targetTenantIds) {
+        const { error: syncError } = await supabase.rpc('sync_modules_from_sidebar', {
+          p_tenant_id: targetTenantId,
+        });
+
+        if (syncError) throw syncError;
+        dispatchModulesChanged({ tenantId: targetTenantId, source: 'sync' });
+      }
+
+      toast({
+        title: 'Synced',
+        description: targetTenantIds.length > 1
+          ? `Modules synced for ${targetTenantIds.length} tenants.`
+          : 'Modules synced from sidebar successfully.',
       });
 
-      if (syncError) throw syncError;
-
-      toast({ title: 'Synced', description: 'Modules synced from sidebar successfully.' });
-      dispatchModulesChanged({ tenantId, source: 'sync' });
       await fetchModules();
     } catch (err) {
       console.error('[useModules] syncModules error:', err);
       toast({ variant: 'destructive', title: 'Sync failed', description: err.message || 'Unknown error.' });
-      setLoading(false);
     }
-  }, [canManage, tenantId, fetchModules, toast]);
+    setSyncing(false);
+  }, [canManage, tenantId, fetchModules, toast, isPlatformAdmin, isFullAccess]);
 
   // ─── Toggle active / inactive ─────────────────────────────────────────────
-  const toggleModuleStatus = useCallback(async (moduleId, currentStatus) => {
+  const toggleModuleStatus = useCallback(async (moduleId, currentStatus, moduleTenantId = tenantId, moduleSlug = null) => {
     if (!canManage) {
       toast({ variant: 'destructive', title: 'Permission denied', description: 'You cannot change module status.' });
       return;
@@ -115,7 +151,13 @@ export function useModules() {
         prev.map((m) => (m.id === moduleId ? { ...m, status: nextStatus } : m))
       );
 
-      dispatchModulesChanged({ tenantId, moduleId, slug: modules.find((m) => m.id === moduleId)?.slug, status: nextStatus, source: 'toggle' });
+      dispatchModulesChanged({
+        tenantId: moduleTenantId,
+        moduleId,
+        slug: moduleSlug || modules.find((m) => m.id === moduleId)?.slug,
+        status: nextStatus,
+        source: 'toggle',
+      });
 
       toast({
         title: nextStatus === 'active' ? 'Module enabled' : 'Module disabled',
@@ -147,17 +189,17 @@ export function useModules() {
   }, [fetchModules]);
 
   useEffect(() => {
-    if (!tenantId) return undefined;
+    if (!tenantId && !isPlatformAdmin && !isFullAccess) return undefined;
 
     const channel = supabase
-      .channel(`public:modules:${tenantId}`)
+      .channel(isPlatformAdmin || isFullAccess ? 'public:modules:all' : `public:modules:${tenantId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'modules',
-          filter: `tenant_id=eq.${tenantId}`,
+          ...(isPlatformAdmin || isFullAccess ? {} : { filter: `tenant_id=eq.${tenantId}` }),
         },
         () => {
           fetchModules();
@@ -168,7 +210,7 @@ export function useModules() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tenantId, fetchModules]);
+  }, [tenantId, fetchModules, isPlatformAdmin, isFullAccess]);
 
   useEffect(() => {
     return subscribeToModulesChanged(({ tenantId: changedTenantId }) => {
@@ -182,6 +224,7 @@ export function useModules() {
     modules,
     loading,
     error,
+    syncing,
     toggling,
     canManage,
     canRead,

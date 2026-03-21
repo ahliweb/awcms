@@ -40,6 +40,11 @@ const adminMenuRows = [
   },
 ];
 
+const tenantsRows = [
+  { id: 'tenant-1' },
+  { id: 'tenant-2' },
+];
+
 const resourcesRows = [];
 const extensionMenuRows = [];
 
@@ -118,6 +123,14 @@ function buildExtensionMenuSelectChain(rows = extensionMenuRows) {
   return chain;
 }
 
+function buildTenantsSelectChain(rows = tenantsRows) {
+  const chain = {};
+  chain.select = vi.fn(() => chain);
+  chain.is = vi.fn(() => chain);
+  chain.order = vi.fn(() => Promise.resolve({ data: rows, error: null }));
+  return chain;
+}
+
 describe('module refresh wiring', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -145,6 +158,10 @@ describe('module refresh wiring', () => {
 
       if (table === 'resources_registry') {
         return buildResourcesSelectChain();
+      }
+
+      if (table === 'tenants') {
+        return buildTenantsSelectChain();
       }
 
       if (table === 'extension_menu_items') {
@@ -200,6 +217,26 @@ describe('module refresh wiring', () => {
     await waitFor(() => {
       const nextAdminMenuCalls = supabaseMock.from.mock.calls.filter(([table]) => table === 'admin_menus').length;
       expect(nextAdminMenuCalls).toBeGreaterThan(initialAdminMenuCalls);
+    });
+  });
+
+  it('syncs modules for every tenant when run by a platform admin', async () => {
+    const { result } = renderHook(() => useModules());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.syncModules();
+    });
+
+    expect(supabaseMock.rpc).toHaveBeenCalledTimes(2);
+    expect(supabaseMock.rpc).toHaveBeenNthCalledWith(1, 'sync_modules_from_sidebar', {
+      p_tenant_id: 'tenant-1',
+    });
+    expect(supabaseMock.rpc).toHaveBeenNthCalledWith(2, 'sync_modules_from_sidebar', {
+      p_tenant_id: 'tenant-2',
     });
   });
 });

@@ -98,6 +98,13 @@ Where route aliases exist, prefer the canonical `MainRouter.jsx` path noted in p
 - **Platform Dashboard** (`PlatformDashboard.jsx`, route: `platform`)
 - **Dynamic Resources** (`DynamicResourceManager.jsx`)
 
+## Module Registry Behavior
+
+- The `modules` table is tenant-scoped even when viewed from the platform Modules screen.
+- `sync_modules_from_sidebar()` builds a canonical module inventory from global admin menus, active resources, and active extension menus, then writes one row per tenant.
+- Platform operators can sync all tenants from the Modules screen; tenant-scoped consumers such as `useAdminMenu()` still read only the active tenant's rows.
+- Module toggles update the row for the specific tenant/module pair and immediately notify sidebar consumers through realtime plus the shared `awcms:modules-changed` browser event.
+
 ### 7. Mobile & IoT
 
 - **Mobile Users** (`MobileUsersManager.jsx`)

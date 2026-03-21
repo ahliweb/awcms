@@ -61,6 +61,7 @@ const ModulesManager = () => {
   const {
     modules,
     loading,
+    syncing,
     toggling,
     canManage,
     fetchModules,
@@ -108,9 +109,9 @@ const ModulesManager = () => {
                 variant="outline"
                 size="sm"
                 onClick={syncModules}
-                disabled={loading}
+                disabled={loading || syncing}
               >
-                <RotateCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                <RotateCcw className={`w-4 h-4 mr-2 ${(loading || syncing) ? 'animate-spin' : ''}`} />
                 Sync from Sidebar
               </Button>
             ) : null
@@ -123,7 +124,7 @@ const ModulesManager = () => {
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search modules…"
+                placeholder="Search modules..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -225,7 +226,7 @@ const ModulesManager = () => {
                               checked={module.status === 'active'}
                               disabled={toggling === module.id || !module.id}
                               onCheckedChange={() =>
-                                toggleModuleStatus(module.id, module.status)
+                                toggleModuleStatus(module.id, module.status, module.tenant_id, module.slug)
                               }
                               aria-label={`Toggle ${module.name}`}
                             />
