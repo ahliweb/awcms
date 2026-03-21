@@ -454,15 +454,14 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[100] flex flex-col bg-slate-50"
+            className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(14,165,233,0.10),_transparent_24%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_42%,_#f8fafc_100%)]"
         >
-            {/* 1. Blur Overlay Background - Optional visual depth */}
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white/50 to-blue-50/50 pointer-events-none" />
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.09)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.09)_1px,transparent_1px)] bg-[size:28px_28px] [mask-image:linear-gradient(180deg,rgba(255,255,255,0.75),rgba(255,255,255,0.15))]" />
 
             {/* 2. Top Navigation / Header */}
-            <div className="min-h-16 px-4 py-3 md:px-6 border-b border-slate-200 bg-white flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between shadow-sm z-50">
+            <div className="min-h-16 px-4 py-3 md:px-6 border-b border-slate-200/80 bg-white/88 backdrop-blur-xl flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between shadow-[0_8px_30px_rgba(15,23,42,0.06)] z-50">
                 <div className="flex min-w-0 items-center gap-3 md:gap-4">
-                    <Button variant="ghost" onClick={onClose} className="hover:bg-slate-100/50 gap-2 pr-4 text-slate-600 rounded-full">
+                    <Button variant="ghost" onClick={onClose} className="hover:bg-slate-100/80 gap-2 pr-4 text-slate-600 rounded-full">
                         <ChevronLeft className="w-5 h-5" />
                         <span className="font-medium hidden sm:inline-block">Back</span>
                     </Button>
@@ -563,8 +562,8 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
             </div>
 
             {/* 3. Main Workspace - 2 Columns */}
-            <div className="flex-1 overflow-hidden">
-                <div className="h-full flex flex-col lg:flex-row max-w-[1600px] mx-auto">
+            <div className="flex-1 overflow-hidden px-2 pb-2 md:px-3 md:pb-3">
+                <div className="h-full flex flex-col lg:flex-row max-w-[1600px] mx-auto rounded-[28px] border border-white/70 bg-white/55 shadow-[0_24px_80px_rgba(15,23,42,0.10)] backdrop-blur-xl overflow-hidden">
 
                     {/* Left: Main Content (Scrollable) */}
                     <ScrollArea className="flex-1 h-full">
@@ -574,18 +573,23 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                             <button
                                 type="button"
                                 onClick={() => setCoverImageOpen(true)}
-                                className="group relative block w-full rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video max-h-[300px] text-left hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                className="group relative block w-full rounded-[28px] overflow-hidden border border-slate-200/80 bg-[linear-gradient(135deg,#e2e8f0_0%,#f8fafc_48%,#dbeafe_100%)] aspect-video max-h-[320px] text-left shadow-[0_24px_60px_rgba(148,163,184,0.18)] hover:shadow-[0_32px_80px_rgba(99,102,241,0.16)] transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                             >
                                 {formData.featured_image ? (
                                     <img src={formData.featured_image} alt="Cover" className="w-full h-full object-cover" />
                                 ) : (
-                                    <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                        <ImageIcon className="w-10 h-10 mb-2 opacity-50" />
-                                        <span className="text-sm font-medium">Add Cover Image</span>
+                                    <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
+                                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/80 bg-white/80 shadow-sm backdrop-blur">
+                                            <ImageIcon className="h-8 w-8 opacity-70" />
+                                        </div>
+                                        <div className="space-y-1 text-center">
+                                            <p className="text-base font-semibold text-slate-700">Add a cover that sets the tone</p>
+                                            <p className="text-sm text-slate-500">Use a wide editorial image for cards, previews, and social sharing.</p>
+                                        </div>
                                     </div>
                                 )}
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
-                                    <div className="rounded-full border border-white/60 bg-white/95 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm backdrop-blur">
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/22 via-transparent to-white/10 transition-colors flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                                    <div className="rounded-full border border-white/70 bg-white/92 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg backdrop-blur-md">
                                         {formData.featured_image ? 'Change Cover' : 'Add Cover Image'}
                                     </div>
                                 </div>
@@ -617,7 +621,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                     </ScrollArea>
 
                     {/* Right: Sidebar (Settings) - Solid */}
-                    <div className={`w-full lg:w-[360px] xl:w-[380px] border-l border-slate-200 bg-slate-50 h-full overflow-y-auto ${showMobileSettings ? 'fixed inset-0 z-[110] bg-white' : 'hidden lg:block'}`}>
+                    <div className={`w-full lg:w-[360px] xl:w-[380px] border-l border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.86),rgba(241,245,249,0.96))] h-full overflow-y-auto ${showMobileSettings ? 'fixed inset-0 z-[110] bg-white shadow-2xl' : 'hidden lg:block'}`}>
                         {/* Mobile Sidebar Header */}
                         {showMobileSettings && (
                             <div className="flex items-center justify-between p-4 border-b lg:hidden">
@@ -628,6 +632,10 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                             </div>
                         )}
                         <div className="p-4 md:p-5 space-y-6">
+                            <div className="rounded-2xl border border-indigo-100/80 bg-[linear-gradient(135deg,rgba(238,242,255,0.95),rgba(255,255,255,0.9))] px-4 py-3 shadow-sm">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-500">Publishing flow</p>
+                                <p className="mt-1 text-sm font-medium text-slate-700">Shape the story on the left, then refine taxonomy, search, and social metadata here.</p>
+                            </div>
 
 
 
@@ -636,7 +644,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 <h4 className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
                                     <FolderOpen className="w-4 h-4 text-indigo-500" /> Organization
                                 </h4>
-                                <div className="space-y-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="space-y-4 rounded-2xl border border-white/80 bg-white/92 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
                                     <div className="space-y-2">
                                         <Label className="text-slate-500 uppercase tracking-widest text-[11px] font-semibold pl-1">Category</Label>
                                         <Select
@@ -666,7 +674,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 <h4 className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
                                     <Globe className="w-4 h-4 text-emerald-500" /> Visibility
                                 </h4>
-                                <div className="space-y-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="space-y-4 rounded-2xl border border-white/80 bg-white/92 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
                                             <Label className="text-sm">Publicly Visible</Label>
@@ -704,7 +712,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 <h4 className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
                                     <Share2 className="w-4 h-4 text-sky-500" /> Social
                                 </h4>
-                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                                <div className="space-y-4 rounded-2xl border border-white/80 bg-white/92 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
                                     <div className="space-y-2">
                                         <Label className="text-xs text-slate-500">OG Title</Label>
                                         <Input
@@ -734,7 +742,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 </div>
                             </div>
 
-                            <div className="sticky bottom-0 -mx-4 md:-mx-5 mt-2 border-t border-slate-200 bg-slate-50/95 px-4 md:px-5 py-3 text-xs text-slate-400 text-center backdrop-blur supports-[backdrop-filter]:bg-slate-50/80">
+                            <div className="sticky bottom-0 -mx-4 md:-mx-5 mt-2 border-t border-white/70 bg-white/70 px-4 md:px-5 py-3 text-xs text-slate-500 text-center backdrop-blur-xl supports-[backdrop-filter]:bg-white/65">
                                 {loading ? 'Saving changes...' : 'Ready to save'}
                             </div>
 
@@ -744,10 +752,10 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
             </div>
 
             <Dialog open={coverImageOpen} onOpenChange={setCoverImageOpen}>
-                <DialogContent className="max-w-3xl border-slate-200 bg-white p-0 shadow-2xl">
-                    <DialogHeader className="border-b border-slate-200 px-6 py-5">
-                        <DialogTitle>Cover Image</DialogTitle>
-                        <DialogDescription>
+                <DialogContent className="max-w-3xl overflow-hidden border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] p-0 shadow-[0_30px_90px_rgba(15,23,42,0.22)] backdrop-blur-xl">
+                    <DialogHeader className="border-b border-slate-200/80 bg-[linear-gradient(135deg,rgba(238,242,255,0.95),rgba(255,255,255,0.9))] px-6 py-5">
+                        <DialogTitle className="text-xl">Cover Image</DialogTitle>
+                        <DialogDescription className="max-w-2xl">
                             Upload a hero image, choose one from the media library, or paste an external image URL.
                         </DialogDescription>
                     </DialogHeader>
@@ -757,7 +765,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                             onChange={(url) => setFormData(prev => ({ ...prev, featured_image: url }))}
                         />
                     </div>
-                    <DialogFooter className="border-t border-slate-200 px-6 py-4">
+                    <DialogFooter className="border-t border-slate-200/80 bg-white/70 px-6 py-4 backdrop-blur">
                         {formData.featured_image ? (
                             <Button
                                 type="button"
@@ -775,10 +783,10 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
             </Dialog>
 
             <AlertDialog open={visualSwitchOpen} onOpenChange={setVisualSwitchOpen}>
-                <AlertDialogContent className="border-slate-200 bg-white shadow-2xl">
+                <AlertDialogContent className="border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_30px_90px_rgba(15,23,42,0.22)] backdrop-blur-xl">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Switch to Visual Builder?</AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-2">
+                        <AlertDialogTitle className="text-xl">Switch to Visual Builder?</AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2 text-slate-600">
                             <span className="block">Use the visual builder when you want layout-driven storytelling blocks instead of the standard rich text editor.</span>
                             <span className="block">Existing text content may need light cleanup after the switch, especially on older posts.</span>
                         </AlertDialogDescription>

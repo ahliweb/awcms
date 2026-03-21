@@ -48,9 +48,9 @@ export function ImageUpload({ value, onChange, disabled, className, hidePreview 
 
     return (
         <div className={`space-y-4 ${className}`}>
-            <div className="flex flex-col gap-4 md:flex-row md:items-start">
+            <div className="flex flex-col gap-5 md:flex-row md:items-start">
                 {!hidePreview && (
-                    <div className="w-36 h-36 shrink-0 rounded-2xl border border-slate-200/70 bg-slate-100/80 flex items-center justify-center overflow-hidden relative group dark:border-slate-800/70 dark:bg-slate-900/60">
+                    <div className="w-36 h-36 shrink-0 rounded-[24px] border border-white/80 bg-[linear-gradient(145deg,rgba(226,232,240,0.9),rgba(255,255,255,0.95))] flex items-center justify-center overflow-hidden relative group shadow-[0_20px_45px_rgba(15,23,42,0.08)] dark:border-slate-800/70 dark:bg-slate-900/60">
                         {hasPreview ? (
                             <>
                                 <img
@@ -60,7 +60,7 @@ export function ImageUpload({ value, onChange, disabled, className, hidePreview 
                                     onError={() => setPreviewError(true)}
                                 />
                                 {!disabled && (
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <div className="absolute inset-0 bg-slate-950/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
                                         <Button
                                             variant="destructive"
                                             size="icon"
@@ -73,7 +73,7 @@ export function ImageUpload({ value, onChange, disabled, className, hidePreview 
                                 )}
                             </>
                         ) : (
-                            <div className="flex flex-col items-center gap-2 text-slate-400">
+                            <div className="flex flex-col items-center gap-2 text-slate-500">
                                 <ImageIcon className="w-8 h-8" />
                                 <span className="text-xs font-medium">No image</span>
                             </div>
@@ -83,22 +83,22 @@ export function ImageUpload({ value, onChange, disabled, className, hidePreview 
 
                 <div className="flex-1 space-y-4">
                     <Tabs defaultValue="library" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 rounded-xl bg-slate-100/80 p-1 text-sm text-slate-500 dark:bg-slate-800/70 dark:text-slate-400">
-                            <TabsTrigger value="library" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-900 dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-white">Media Library</TabsTrigger>
-                            <TabsTrigger value="url" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-900 dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-white">External URL</TabsTrigger>
+                        <TabsList className="grid w-full grid-cols-2 rounded-2xl border border-white/70 bg-[linear-gradient(135deg,rgba(226,232,240,0.55),rgba(255,255,255,0.88))] p-1 text-sm text-slate-500 shadow-sm dark:bg-slate-800/70 dark:text-slate-400">
+                            <TabsTrigger value="library" className="rounded-xl data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-white">Media Library</TabsTrigger>
+                            <TabsTrigger value="url" className="rounded-xl data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-white">External URL</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="library" className="space-y-3 mt-4">
-                            <p className="text-sm text-slate-500 mb-2">Select from your uploaded files or upload new ones.</p>
+                            <p className="text-sm text-slate-500 mb-2">Choose a polished asset from your library or upload something new for this story.</p>
                             <Dialog open={open} onOpenChange={setOpen}>
                                 <DialogTrigger asChild>
-                                    <Button type="button" variant="outline" className="w-full" disabled={disabled}>
+                                    <Button type="button" variant="outline" className="w-full rounded-xl border-slate-200/80 bg-white/90 hover:bg-white" disabled={disabled}>
                                         <FolderOpen className="w-4 h-4 mr-2" />
                                         Browse Library
                                     </Button>
                                 </DialogTrigger>
-                                <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0 gap-0">
-                                    <DialogHeader className="px-6 py-4 border-b">
+                                <DialogContent className="max-w-4xl h-[80vh] flex flex-col overflow-hidden border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] p-0 gap-0 shadow-[0_30px_90px_rgba(15,23,42,0.22)] backdrop-blur-xl">
+                                    <DialogHeader className="px-6 py-4 border-b border-slate-200/80 bg-[linear-gradient(135deg,rgba(238,242,255,0.95),rgba(255,255,255,0.9))]">
                                         <DialogTitle>Select Media</DialogTitle>
                                     </DialogHeader>
                                     <div className="flex-1 min-h-0 overflow-hidden p-0">
