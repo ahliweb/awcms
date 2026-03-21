@@ -34,9 +34,49 @@ const whenExternalScripts = (
 
 import react from "@astrojs/react";
 
+function optimizeWorkerdDeps() {
+  return {
+    name: "awcms-workerd-deps",
+    configEnvironment(environment: string) {
+      if (environment === "client") {
+        return;
+      }
+
+      return {
+        optimizeDeps: {
+          include: [
+            "astro-icon",
+            "astro-embed",
+            "@astro-community/astro-embed-bluesky",
+            "@iconify/utils",
+            "@iconify/utils > debug",
+            "@atproto/api",
+            "@atproto/common-web",
+            "@atproto/lexicon",
+            "@atproto/xrpc",
+            "@atproto/syntax",
+            "debug",
+          ],
+        },
+      };
+    },
+  };
+}
+
 export default defineConfig({
   output: "static",
   adapter: cloudflare({ imageService: "compile" }),
+
+  // KNOWN DEV-ONLY QUIRK: In Astro dev mode you may see:
+  //   [WARN] [router] A getStaticPaths() route pattern was matched, but no
+  //   matching static path was found for requested path `/en/`.
+  // Root cause: the `[...blog]` catch-all matches `/en/` (trailing slash) before
+  // `en/index.astro` can handle it, because Astro's dev router has no redirect-aware
+  // trailing-slash guard. The `@astrojs/cloudflare` adapter sets `build.redirects: false`,
+  // so the `redirects` config option cannot suppress this in dev mode.
+  // In production (Cloudflare Pages static build), the correct page is served and
+  // no warning exists. This is non-blocking and safe to ignore during local development.
+  // Upstream reference: https://github.com/withastro/astro/issues/12036
 
   integrations: [
     react(),
@@ -93,7 +133,9 @@ export default defineConfig({
   },
 
   vite: {
-    plugins: [tailwindcss()] as NonNullable<AstroUserConfig["vite"]>["plugins"],
+    plugins: [tailwindcss(), optimizeWorkerdDeps()] as NonNullable<
+      AstroUserConfig["vite"]
+    >["plugins"],
     resolve: {
       alias: {
         "~": path.resolve(__dirname, "./src"),
