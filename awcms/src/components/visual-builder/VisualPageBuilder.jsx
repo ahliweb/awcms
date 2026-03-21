@@ -337,7 +337,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 .maybeSingle();
 
             if (error) {
-                console.error(`Error loading ${mode} translation:`, error);
+                console.error("Error loading %s translation:", mode, error);
                 return;
             }
 
@@ -348,7 +348,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 try {
                     translatedVisualContent = JSON.parse(translation.content);
                 } catch (parseError) {
-                    console.warn(`Failed to parse translated ${mode} visual content, using default locale content:`, parseError);
+                    console.warn("Failed to parse translated %s visual content, using default locale content:", mode, parseError);
                 }
             }
 
@@ -854,7 +854,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 description: isOffline ? "Changes saved locally. Status will update when online." : `Your ${mode === 'blog' ? 'blog' : 'page'} is now live.`,
             });
         } catch (error) {
-            console.error(`Error publishing ${mode}:`, error);
+            console.error("Error publishing %s:", mode, error);
             toast({
                 title: "Publish Failed",
                 description: error.message,
