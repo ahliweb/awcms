@@ -101,6 +101,13 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
     // Initial Form Data State
     const [formData, setFormData] = useState(() => mapBlogTranslationToFormData(item, null));
 
+    const isTranslatedLocale = Boolean(translationConfig && selectedLanguage === translationConfig.locale);
+    const activeTitleKey = isTranslatedLocale ? 'title_en' : 'title';
+    const activeSlugKey = isTranslatedLocale ? 'slug_en' : 'slug';
+    const activeExcerptKey = isTranslatedLocale ? 'excerpt_en' : 'excerpt';
+    const activeContentKey = isTranslatedLocale ? 'content_en' : 'content';
+    const activeMetaDescriptionKey = isTranslatedLocale ? 'meta_description_en' : 'meta_description';
+
     const isEditMode = !!item;
     const WORKFLOW_STATES = {
         DRAFT: 'draft',
@@ -227,14 +234,18 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
         setLoading(true);
 
         try {
-            if (translationConfig && formData.slug_en) {
+            const translationSlugValue = translationConfig
+                ? (formData.slug_en || (formData.title_en ? generateSlug(formData.title_en) : ''))
+                : '';
+
+            if (translationConfig && translationSlugValue) {
                 let translationSlugQuery = supabase
                     .from(translationConfig.tableName || 'content_translations')
                     .select('id')
                     .eq('tenant_id', currentTenant.id)
                     .eq('content_type', translationConfig.contentType)
                     .eq('locale', translationConfig.locale)
-                    .eq('slug', formData.slug_en);
+                    .eq('slug', translationSlugValue);
 
                 if (item?.id) {
                     translationSlugQuery = translationSlugQuery.neq('content_id', item.id);
@@ -246,7 +257,7 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
 
                 if (existingTranslationSlugs && existingTranslationSlugs.length > 0) {
                     const uniqueSuffix = Date.now().toString(36);
-                    throw new Error(`Slug "${formData.slug_en}" is already in use for ${translationConfig.locale.toUpperCase()}. Try "${formData.slug_en}-${uniqueSuffix}" instead.`);
+                    throw new Error(`Slug "${translationSlugValue}" is already in use for ${translationConfig.locale.toUpperCase()}. Try "${translationSlugValue}-${uniqueSuffix}" instead.`);
                 }
             }
 
@@ -284,6 +295,10 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 acc[translationKey] = typeof value === 'string' ? value.trim() : value ?? null;
                 return acc;
             }, {});
+
+            if (translationConfig && !translationPayload.slug && translationSlugValue) {
+                translationPayload.slug = translationSlugValue;
+            }
 
             if (!isEditMode) {
                 dataToSave.created_by = user.id;
@@ -441,8 +456,14 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                     <div>
                         <div className="flex items-center gap-2">
                             <Input
-                                value={formData.title}
-                                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value, slug: !item ? generateSlug(e.target.value) : prev.slug }))}
+                                value={formData[activeTitleKey] || ''}
+                                onChange={(e) => setFormData(prev => ({
+                                    ...prev,
+                                    [activeTitleKey]: e.target.value,
+                                    [activeSlugKey]: !item
+                                        ? generateSlug(e.target.value)
+                                        : prev[activeSlugKey],
+                                }))}
                                 className="border-none shadow-none bg-transparent text-lg font-bold px-0 h-auto focus-visible:ring-0 placeholder:text-slate-400 min-w-[300px]"
                                 placeholder="Untitled Blog"
                             />
@@ -451,8 +472,11 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                             <Badge variant="outline" className={`${getStateColor(currentState)} border px-1.5 py-0 rounded-sm font-normal uppercase tracking-wider text-[10px]`}>
                                 {currentState}
                             </Badge>
+                            <Badge variant="outline" className="border-primary/20 bg-primary/5 px-1.5 py-0 rounded-sm font-normal uppercase tracking-wider text-[10px] text-primary">
+                                {selectedLanguage}
+                            </Badge>
                             <span>•</span>
-                            <span>{formData.slug ? formData.slug : 'slug-placeholder'}</span>
+                            <span>{formData[activeSlugKey] ? formData[activeSlugKey] : 'slug-placeholder'}</span>
                         </div>
                     </div>
                 </div>
@@ -552,8 +576,8 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                             <div className="space-y-2">
                                 <Label className="text-slate-500 uppercase tracking-widest text-[11px] font-semibold pl-1">Introduction / Excerpt</Label>
                                 <Textarea
-                                    value={formData.excerpt}
-                                    onChange={(e) => setFormData(p => ({ ...p, excerpt: e.target.value }))}
+                                    value={formData[activeExcerptKey] || ''}
+                                    onChange={(e) => setFormData(p => ({ ...p, [activeExcerptKey]: e.target.value }))}
                                     className="bg-transparent border-none focus-visible:ring-0 px-0 text-lg text-slate-600 resize-none min-h-[80px] placeholder:text-slate-300"
                                     placeholder="Add a short introduction..."
                                 />
@@ -564,8 +588,8 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                             {/* Rich Editor */}
                             <div className="min-h-[500px]">
                                 <RichTextEditor
-                                    value={formData.content}
-                                    onChange={(val) => setFormData(p => ({ ...p, content: val }))}
+                                    value={formData[activeContentKey] || ''}
+                                    onChange={(val) => setFormData(p => ({ ...p, [activeContentKey]: val }))}
                                     placeholder="Tell your story..."
                                     className="prose-lg max-w-none"
                                 />
@@ -647,8 +671,8 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                     <div className="space-y-2">
                                         <Label className="text-xs text-slate-500">Meta Description</Label>
                                         <Textarea
-                                            value={formData.meta_description}
-                                            onChange={(e) => setFormData(p => ({ ...p, meta_description: e.target.value }))}
+                                            value={formData[activeMetaDescriptionKey] || ''}
+                                            onChange={(e) => setFormData(p => ({ ...p, [activeMetaDescriptionKey]: e.target.value }))}
                                             className="min-h-[60px] text-xs resize-none"
                                             placeholder="SEO Description"
                                         />
