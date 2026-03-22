@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
@@ -77,6 +77,7 @@ const candidateFiles = [
   "../../.env.remote",
 ];
 const cwd = process.cwd();
+const wranglerConfigPath = resolve(cwd, "wrangler.json");
 const loadedFiles = [];
 const mergedEnv = { ...process.env };
 
@@ -94,6 +95,29 @@ for (const relativeFile of candidateFiles) {
 }
 
 normalizeDeploymentEnv(mergedEnv);
+
+const isAstroBuild = command[0] === "astro" && command.includes("build");
+let restoreWranglerConfig = null;
+
+if (isAstroBuild && existsSync(wranglerConfigPath)) {
+  const original = readFileSync(wranglerConfigPath, "utf8");
+  const parsed = JSON.parse(original);
+
+  if (parsed.pages_build_output_dir) {
+    const sanitized = { ...parsed };
+    delete sanitized.pages_build_output_dir;
+    writeFileSync(
+      wranglerConfigPath,
+      `${JSON.stringify(sanitized, null, 2)}\n`,
+    );
+    console.log(
+      "[AWCMS Public] Temporarily removed pages_build_output_dir from wrangler.json for Astro build compatibility.",
+    );
+    restoreWranglerConfig = () => {
+      writeFileSync(wranglerConfigPath, original);
+    };
+  }
+}
 
 const isCloudflarePagesBuild =
   mergedEnv.CF_PAGES === "1" ||
@@ -149,10 +173,22 @@ const child = spawn(command[0], command.slice(1), {
 });
 
 child.on("exit", (code, signal) => {
+  if (restoreWranglerConfig) {
+    restoreWranglerConfig();
+  }
+
   if (signal) {
     process.kill(process.pid, signal);
     return;
   }
 
   process.exit(code ?? 1);
+});
+
+child.on("error", (error) => {
+  if (restoreWranglerConfig) {
+    restoreWranglerConfig();
+  }
+
+  throw error;
 });
