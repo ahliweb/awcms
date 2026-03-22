@@ -175,6 +175,12 @@ check_scope() {
   echo "Checking migration history scope: $scope"
 
   if ! output="$(npx supabase migration list --"$scope" 2>&1)"; then
+    if [ "$scope" = "local" ] && [[ "$output" == *"failed to connect to postgres"* ]]; then
+      echo "$output"
+      echo "Warning: local migration history check skipped because the local Supabase database is unavailable."
+      return 0
+    fi
+
     echo "$output"
     echo "Failed: could not list migrations for scope '$scope'."
     exit 1
