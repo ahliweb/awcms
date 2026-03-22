@@ -14,7 +14,8 @@
         "vite": "^7.0.0"
     },
     "scripts": {
-        "build": "vite build",
+        "build": "vite build --ssr src/index.js --outDir ../../../../temp_debug_files/ahliweb-analytics-build",
+        "build:ci": "vite build --ssr src/index.js --outDir ../../../../temp_debug_files/ahliweb-analytics-build",
         "dev": "vite"
     }
 }
