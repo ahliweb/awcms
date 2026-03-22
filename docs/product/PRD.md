@@ -156,7 +156,7 @@ erDiagram
 The product must operate within these repository-backed constraints:
 
 1. **Technology Baseline**
-   - Admin: React 19.2.4, Vite 7.3.1, JavaScript ES2022+.
+   - Admin: React 19.2.4, Vite `^8.0.1`, JavaScript ES2022+.
    - Public: Astro 6.x, React 19.2.4 islands, TypeScript/TSX, static output.
    - Backend: Supabase + Cloudflare Workers.
    - Mobile/IoT: Flutter and ESP32 remain supported product channels.

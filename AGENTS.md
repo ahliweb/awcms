@@ -22,7 +22,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Implementation, Refactoring, Bug Fixing.
 - **Capabilities**:
-  - Full context awareness of React 19/Vite 7/Supabase constraints.
+  - Full context awareness of React 19/Vite 8/Supabase constraints.
   - Ability to generate complex UI components using `shadcn/ui` patterns.
   - Writing SQL migrations for Supabase.
   - Updating system hooks (e.g., `useSearch`, `useAdminMenu`, `useMedia`, `useTwoFactor`).
@@ -41,7 +41,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 - **Capabilities**:
-  - Working with **Astro 6.0.4** and **React 19.2.4** (Static output + Islands).
+  - Working with **Astro 6.0.8** and **React 19.2.4** (Static output + Islands).
   - Implementing **Zod** schemas for component prop validation.
   - Optimizing for Cloudflare Pages static builds (cache headers, asset optimization).
 - **Constraints**:
@@ -57,25 +57,25 @@ Agents must be aware of the exact versions in use:
 | Technology       | Version  | Notes                            |
 | ---------------- | -------- | -------------------------------- |
 | React            | 19.2.4   | Functional components only       |
-| Vite             | 7.3.1    | Build tool & dev server          |
-| TailwindCSS      | 4.1.18 / 4.2.1 | Admin / Primary public      |
-| Supabase JS      | 2.99.1 / 2.99.1 | Admin / Primary public clients |
+| Vite             | `^8.0.1` | Build tool & dev server (`awcms`) |
+| TailwindCSS      | `^4.2.2` / `^4.2.2` | Admin / Primary public |
+| Supabase JS      | `^2.99.3` / `^2.99.3` | Admin / Primary public clients |
 | React Router DOM | 7.10.1   | Client-side routing              |
 | Puck             | 0.21.0   | Visual Editor (`@puckeditor/core`) |
-| TipTap           | 3.13.0   | Rich text editor (XSS-safe)      |
-| Framer Motion    | 12.36.0 | Animations                       |
+| TipTap           | `^3.20.4` | Rich text editor (XSS-safe)    |
+| Framer Motion    | `^12.38.0` | Animations                     |
 | Radix UI         | Latest   | Accessible UI primitives         |
 | Lucide React     | 0.577.0  | Admin / Public icon library      |
-| i18next          | 25.8.18  | Internationalization             |
+| i18next          | `^25.10.3` | Internationalization           |
 | Recharts         | 3.5.1    | Charts & Data Visualization      |
 | Leaflet          | 1.9.4    | Maps                             |
 | React Leaflet    | 5.0.0    | React bindings for Leaflet       |
 | Vitest           | 4.1.0    | Unit/Integration testing         |
-| Astro            | 6.0.4    | Primary public portal            |
+| Astro            | `6.0.8`  | Primary public portal            |
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
-> **Vite 7**: This project uses Vite 7.3.1. Be aware of deprecation warnings for `ViteDevServer` APIs in `future` config.
+> **Vite**: The admin workspace currently declares Vite `^8.0.1`; keep docs and implementation guidance aligned with the installed manifest version.
 > **Node.js**: Minimum required version is **22.12.0** (OpenClaw CLI dependency). Managed via `nvm`.
 
 ---
@@ -119,8 +119,8 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | Rule              | Requirement                                                               |
 | ----------------- | ------------------------------------------------------------------------- |
 | Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
-| **Admin Panel**   | React 19.2.4, Vite 7                                                      |
-| **Public Portal** | Astro 6.0.4 (static output), React 19.2.4                                    |
+| **Admin Panel**   | React 19.2.4, Vite `^8.0.1`                                              |
+| **Public Portal** | Astro `6.0.8` (static output), React 19.2.4                              |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase (Auth, DB, RLS) + Cloudflare Workers (Edge Logic)                |
 

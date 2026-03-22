@@ -1,7 +1,7 @@
 # AWCMS Ecosystem Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-03-20 (Audited against `package.json`, migration status, scripts, MCP topology, Context7 guidance, and the active documentation audit)
+> **Last Updated:** 2026-03-22 (Audited against live workspace manifests, migration inventory, scripts, MCP topology, Context7 guidance, and the active documentation audit)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -9,31 +9,31 @@ This document serves as the single source of truth for the AWCMS architecture, t
 
 ## 1. Technology Stack Mandates
 
-Agents must respect these exact versions to ensure compatibility across the AWCMS Ecosystem.
+Agents must respect the exact versions declared in the current workspace manifests to ensure compatibility across the AWCMS Ecosystem.
 
 ### 1.1 Admin Panel (`awcms`)
 
 * **Framework:** React 19.2.4 (Functional Components Only)
-* **Build Tool:** Vite 7.3.1
+* **Build Tool:** Vite `^8.0.1`
 * **Language:** JavaScript (ES2022+)
-* **Styling:** TailwindCSS 4.1.18 (CSS-based config)
+* **Styling:** TailwindCSS `^4.2.2` (CSS-based config)
 * **State Management:** React Context + Hooks (No Redux/Zustand unless specified)
-* **Backend Interface:** `@supabase/supabase-js` v2.99.1
+* **Backend Interface:** `@supabase/supabase-js` `^2.99.3`
 * **Routing:** React Router DOM 7.10.1
 * **Key Libraries:**
   * UI: `shadcn/ui` (Radix Primitives + Tailwind)
   * Editor: `@puckeditor/core` v0.21.0 (Puck + Render)
-  * Rich Text: `tiptap` v3.13.0
-  * Motion: `framer-motion` v12.35.2
+  * Rich Text: `@tiptap/*` `^3.20.4`
+  * Motion: `framer-motion` `^12.38.0`
   * Maps: `leaflet` v1.9.4 + `react-leaflet`
 
 ### 1.2 Public Portal (`awcms-public`)
 
-* **Meta-Framework:** Astro 6.0.4
+* **Meta-Framework:** Astro `6.0.8`
 * **Interactive Islands:** React 19.2.4
 * **Language:** TypeScript 5.x / TSX
-* **Styling:** TailwindCSS 4.2.1 in `awcms-public/primary` (tenant portals may pin compatible 4.1.x lines)
-* **Backend Interface:** `@supabase/supabase-js` v2.99.1 in both `awcms-public/primary` and `awcms-public/smandapbun`
+* **Styling:** TailwindCSS `^4.2.2` in both `awcms-public/primary` and `awcms-public/smandapbun`
+* **Backend Interface:** `@supabase/supabase-js` `^2.99.3` in both `awcms-public/primary` and `awcms-public/smandapbun`
 * **Node.js Requirement:** >= 22.12.0 (required by OpenClaw CLI)
 * **Rendering Model:** Static output (`output: "static"`) with React islands
 * **Sovereign Instances (Level 0):** For multi-national scale, distinct Supabase projects are used per region/country to ensure data sovereignty.
@@ -167,7 +167,7 @@ Agents must respect these exact versions to ensure compatibility across the AWCM
 * `src/hooks/`: Custom React hooks for data fetching and state.
 * `src/lib/`: Stateless utilities and configuration.
 * `supabase/migrations/`: canonical SQL migration files (timestamped).
-* `awcms/supabase/migrations/`: mirrored migration path used by CI/admin tooling; must remain synchronized with root migrations. Current audit evidence shows `144` root files and `144` mirrored files with parity restored.
+* `awcms/supabase/migrations/`: mirrored migration path used by CI/admin tooling; must remain synchronized with root migrations. Current inventory shows `149` root files and `149` mirrored files.
 
 ---
 

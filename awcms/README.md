@@ -1,6 +1,6 @@
 # AWCMS Admin Panel
 
-The admin panel for AWCMS, built with the bleeding-edge stack: **React 19**, **Vite 7**, and **Tailwind CSS v4**.
+The admin panel for AWCMS, built with **React 19.2.4**, **Vite `^8.0.1`**, and **Tailwind CSS `^4.2.2`**.
 
 ## Purpose
 
@@ -31,7 +31,9 @@ npm run dev
 ## Common Commands
 
 * `npm run dev` - start the Vite development server
+* `npm run dev:full` - start the admin app and local Worker together
 * `npm run lint` - run ESLint
+* `npm run test -- --run` - run Vitest once
 * `npm run build` - create the production build in `dist/`
 * `npm run docs:check` - validate markdown links used by the docs workflow
 

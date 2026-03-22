@@ -92,7 +92,9 @@ Automated rebuild flow:
 
 - Cloudflare Pages deploy hook -> production rebuild for content-only changes.
 - Admin panel save/delete events -> `awcms-edge/api/public/rebuild` -> tenant deploy hook.
-- The maintained repository workflows currently include `CI/CD`, `CI (PR)`, and `Documentation Link Check`; SMANDAPBUN repository-based deploys should use the existing Cloudflare Pages project/deploy-hook path unless a dedicated workflow is reintroduced.
+- The maintained repository workflows currently include `CI/CD`, `CI (PR)`, `Documentation Link Check`, and `Deploy Smandapbun`.
+- `deploy-smandapbun.yml` is an active repository-based deploy workflow for `awcms-public/smandapbun/` and `packages/awcms-shared/` changes, plus `repository_dispatch` and `workflow_dispatch` triggers.
+- `deploy-smandapbun.yml` must resolve `CLOUDFLARE_API_TOKEN` from GitHub secrets and `CLOUDFLARE_ACCOUNT_ID` from GitHub secrets/variables or local env files; there is no hardcoded workflow fallback.
 
 KV bindings: none currently required by the maintained repo baseline.
 
@@ -109,6 +111,14 @@ Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env value
 - `ci-pr.yml` uses mock `PUBLIC_SUPABASE_*` values so fork-safe validation can run without repository secrets.
 - Keep both key sets aligned in Cloudflare and GitHub secrets if you use both pipelines.
 - Admin production deploy from GitHub Actions currently targets only `awcms-admin`.
+- `deploy-smandapbun.yml` validates Cloudflare account access through the Cloudflare memberships API before deploying; if a token can access multiple accounts and `CLOUDFLARE_ACCOUNT_ID` is not set, the workflow fails explicitly.
+
+### Worker CORS Configuration
+
+- Admin Vite dev-server CORS is controlled separately by `VITE_CORS_ALLOWED_ORIGINS` in `awcms/vite.config.js`.
+- Worker runtime CORS is controlled by `CORS_ALLOWED_ORIGINS` in `awcms-edge`.
+- For deployed Workers, set `CORS_ALLOWED_ORIGINS` with `npx wrangler secret put CORS_ALLOWED_ORIGINS`.
+- For local Worker development, use `awcms-edge/.dev.vars` or the local `wrangler.jsonc` `vars` block.
 
 ## Verification
 
@@ -119,6 +129,8 @@ Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env value
 
 - Build failures: verify root directory and Node version.
 - Tenant resolution issues: confirm `PUBLIC_TENANT_ID` for canonical static builds; only inspect middleware/host settings when working on non-canonical SSR/runtime experiments.
+- Cloudflare account resolution failures: set `CLOUDFLARE_ACCOUNT_ID` explicitly when the API token can access multiple accounts.
+- Worker CORS failures: verify `CORS_ALLOWED_ORIGINS` for `awcms-edge`; `VITE_CORS_ALLOWED_ORIGINS` only affects the admin Vite dev server.
 - For the standing external `awcms-public` Pages deployment failure pattern and operator checklist, see `docs/deploy/awcms-public-pages-incident.md`.
 
 ## References

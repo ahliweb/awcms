@@ -23,14 +23,14 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | Framework | React | 19.2.4 | UI framework |
-| Build tool | Vite | 7.3.1 | SPA build and dev server |
+| Build tool | Vite | `^8.0.1` | SPA build and dev server |
 | Language | JavaScript | ES2022+ | Functional components |
-| Styling | TailwindCSS | 4.1.18 | Utility-first CSS |
+| Styling | TailwindCSS | `^4.2.2` | Utility-first CSS |
 | Visual editor | @puckeditor/core | 0.21.0 | Visual builder |
-| Rich text | TipTap | 3.13.0 | WYSIWYG editor |
-| Animations | Framer Motion | 12.35.2 | UI motion |
+| Rich text | TipTap | `^3.20.4` | WYSIWYG editor |
+| Animations | Framer Motion | `^12.38.0` | UI motion |
 | Routing | React Router DOM | 7.10.1 | Client routing |
-| Supabase JS | @supabase/supabase-js | 2.99.1 | API client |
+| Supabase JS | @supabase/supabase-js | `^2.99.3` | API client |
 | Maps | Leaflet + react-leaflet | 1.9.4 | Geolocation maps |
 | File upload | react-dropzone | 15.0.0 | Drag-and-drop file uploads |
 | Sanitization | DOMPurify | 3.3.3 | XSS sanitization |
@@ -43,16 +43,16 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
-| Meta-framework | Astro | 6.0.4 | Static output + islands |
+| Meta-framework | Astro | `6.0.8` | Static output + islands |
 | UI library | React | 19.2.4 | Island rendering |
-| Language | TypeScript | 5.8.3 (primary), 5.9.3 (smandapbun) | Typed components |
-| Styling | TailwindCSS | 4.2.1 | Utility-first CSS |
-| Supabase JS | @supabase/supabase-js | 2.99.1 | Public API client |
+| Language | TypeScript | `^5.8.3` (primary), `^5.9.3` (smandapbun) | Typed components |
+| Styling | TailwindCSS | `^4.2.2` | Utility-first CSS |
+| Supabase JS | @supabase/supabase-js | `^2.99.3` | Public API client |
 | Node.js | Node.js | >=22.12.0 | Runtime (OpenClaw requires v22+) |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
-`awcms-public/smandapbun` now aligns on Astro `6.0.4`, Tailwind `4.2.1`, and `@supabase/supabase-js` `^2.99.1`.
+`awcms-public/smandapbun` now aligns on Astro `6.0.8`, Tailwind `^4.2.2`, and `@supabase/supabase-js` `^2.99.3`.
 
 ### Backend and Edge
 

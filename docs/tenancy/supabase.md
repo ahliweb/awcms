@@ -74,6 +74,7 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 - Primary edge HTTP handlers live in `awcms-edge/` (Cloudflare Workers).
 - Use `SUPABASE_SECRET_KEY` only in approved server-side runtimes for cross-tenant operations and elevated workflows.
 - Must enforce tenant context checks and resource sharing rules before mutating data.
+- Notification queue consumers write dispatch outcomes to `public.notification_dispatches`; tenant clients can read those logs through RLS but do not insert/update them directly.
 
 ### Storage
 
@@ -82,6 +83,22 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 - Postgres stores the canonical media metadata, tenant ownership, and authorization state.
 - The application or Worker layer handles authorization, signed access, and post-upload bookkeeping.
 - Do not add new `storage/v1`-based media flows for maintained AWCMS features.
+- `20260322000000_fix_security_advisor_issues.sql` updates `check_tenant_limit()` and `get_storage_stats()` to use `public.media_objects` and keeps `sync_storage_files()` only as a deprecation stub so older callers receive a clear response instead of breaking against the removed `public.files` table.
+
+### Notification Infrastructure
+
+- `20260320100000_create_notification_channels.sql` adds:
+  - `tenant_notification_channels` for per-tenant channel credentials, quotas, and enable/disable state
+  - `notification_templates` for reusable tenant-scoped outbound templates
+  - `notification_dispatches` for immutable dispatch audit records
+- Seeded permissions:
+  - `tenant.notifications.read`
+  - `tenant.notifications.send`
+  - `tenant.notifications.manage`
+- Seeded modules:
+  - `email-notifications`
+  - `whatsapp-notifications`
+  - `telegram-notifications`
 
 ### Tenant Provisioning RPC Signatures
 
@@ -157,7 +174,7 @@ Run from repo root.
 - `supabase/migrations/` is the canonical authoring source.
 - `awcms/supabase/migrations/` is a required mirror used by CI linting.
 - Every migration change must be mirrored with identical filename and content.
-- As of the 2026-03-13 audit refresh, both roots contain `139` migration files and parity verification passes; keep using the verification script because matching counts alone do not guarantee future filename/content alignment.
+- Current inventory shows `149` migration files in both roots; keep using the verification script because matching counts alone do not guarantee filename/content alignment.
 - Validate parity before merge:
 
 ```bash

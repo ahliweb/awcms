@@ -25,7 +25,7 @@ AWCMS uses PostgreSQL via Supabase. This document describes the core database sc
 > **Schema Accuracy Note:** SQL blocks in this document are representative snapshots for developer orientation.
 > Canonical executable schema truth is the migration history in `supabase/migrations/` (mirrored in `awcms/supabase/migrations/`).
 > Before relying on a specific column, constraint, or policy shape, verify against the latest migration files.
-> **2026-03-20 Baseline:** Migration inventory shows `145` root migrations and `145` mirrored migrations at full parity. Verified via `scripts/verify_supabase_migration_consistency.sh`.
+> **2026-03-22 Baseline:** Migration inventory shows `149` root migrations and `149` mirrored migrations. Re-run `scripts/verify_supabase_migration_consistency.sh` for filename/content parity before relying on counts alone.
 
 ---
 
@@ -1581,6 +1581,88 @@ See migration `20260119230212_remote_schema.sql` for full column definitions. Re
 -- tenant_id, user_id, title, type, is_read, created_at
 -- See migration 20260119230212_remote_schema.sql for full definition.
 ```
+
+#### tenant_notification_channels
+
+Per-tenant outbound channel configuration introduced in `20260320100000_create_notification_channels.sql`.
+
+```sql
+CREATE TABLE public.tenant_notification_channels (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id),
+  channel_type text not null check (channel_type in ('email', 'whatsapp', 'telegram')),
+  label text not null,
+  credentials jsonb not null default '{}'::jsonb,
+  enabled boolean not null default false,
+  daily_quota int not null default 500,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+```
+
+RLS:
+
+- `select` requires `tenant.notifications.read`
+- `insert` / `update` require `tenant.notifications.manage`
+- soft delete is enforced through `deleted_at`
+
+#### notification_dispatches
+
+Immutable tenant-scoped dispatch audit log written by the Worker/queue layer.
+
+```sql
+CREATE TABLE public.notification_dispatches (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id),
+  channel_id uuid references public.tenant_notification_channels(id),
+  channel_type text not null,
+  template_id uuid,
+  recipient text not null,
+  subject text,
+  body_preview text,
+  status text not null default 'queued',
+  provider_message_id text,
+  error_message text,
+  payload_hash text,
+  job_id uuid,
+  actor_id uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+```
+
+RLS:
+
+- `select` requires `tenant.notifications.read`
+- inserts and updates are reserved for the Worker/admin-client path; no tenant direct-write policy is created
+
+#### notification_templates
+
+Reusable per-tenant outbound message templates keyed by channel + slug.
+
+```sql
+CREATE TABLE public.notification_templates (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id),
+  channel_type text not null,
+  slug text not null,
+  label text not null,
+  subject text,
+  body text not null,
+  variables jsonb not null default '[]'::jsonb,
+  is_system boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+```
+
+RLS:
+
+- `select` requires `tenant.notifications.read`
+- `insert` / `update` require `tenant.notifications.manage`
+- system templates cannot be soft-deleted by tenant users
 
 #### audit_logs
 

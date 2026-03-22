@@ -88,6 +88,11 @@ FOR SELECT USING (
 
 Legacy tables may still use tenant-only select policies and rely on admin UI ABAC checks. New tables should follow the ABAC pattern above.
 
+Recent hardening updates:
+
+- `20260321000000_fix_users_rls_infinite_recursion.sql` rebuilds `public.users` select/update policies to use `caller_has_permission(...)`, a `SECURITY DEFINER` helper with `row_security = off`, instead of recursive inline joins back to `public.users`.
+- `20260320100000_create_notification_channels.sql` adds tenant-scoped notification configuration tables with explicit separation between tenant-manageable config/templates and Worker-only dispatch writes.
+
 ### Tenant Isolation
 
 - Tenant context is injected via `x-tenant-id` in Supabase requests.
@@ -99,6 +104,7 @@ Legacy tables may still use tenant-only select policies and rely on admin UI ABA
 
 - Cloudflare Workers are the primary edge HTTP layer and must validate tenant context and permissions.
 - Privileged access with `SUPABASE_SECRET_KEY` is allowed only in approved server-side edge runtimes, migrations, and trusted operational scripts.
+- Notification delivery audit (`notification_dispatches`) is written through the Worker/queue path, not directly by tenant clients.
 
 ## Implementation Patterns
 
@@ -158,6 +164,7 @@ Development headers are set in `awcms/vite.config.js`. Production headers must b
 - Keep non-migration SQL in `supabase/manual/`.
 - Use `scripts/repair_supabase_migration_history.sh` when migration history drifts.
 - Run `scripts/verify_supabase_migration_consistency.sh` before PR merge.
+- Keep storage-related helpers aligned with `public.media_objects`; `20260322000000_fix_security_advisor_issues.sql` removes remaining functional references to the retired `public.files` table and leaves `sync_storage_files()` as an explicit deprecation stub.
 
 ## Troubleshooting
 

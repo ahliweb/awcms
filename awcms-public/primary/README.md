@@ -4,10 +4,10 @@ The primary public portal template for AWCMS, built on Astro with React islands 
 
 ## Stack
 
-- Astro 6.0.4 (static output)
+- Astro 6.0.8 (static output)
 - React 19.2.4 (islands)
-- Tailwind CSS 4 (CSS-first config)
-- Supabase JS 2.99.1
+- Tailwind CSS ^4.2.2 (CSS-first config)
+- Supabase JS ^2.99.3
 - Node.js >= 22.12.0
 
 ## Quick Start
@@ -64,6 +64,11 @@ Cloudflare Pages note:
 | `npm run preview` | Preview build locally            |
 | `npm run check`   | Astro + ESLint + Prettier checks |
 | `npm run fix`     | ESLint + Prettier autofix pass   |
+
+Build/runtime notes:
+
+- `npm run build` and `npm run check:astro` are wrapped with `scripts/run-with-deployment-env.mjs` so static checks/builds use the same deployment-env resolution path documented in the main docs.
+- `@awcms/shared` is the canonical shared helper layer for tenant resolution, public Supabase env handling, and sanitization.
 
 ## Template Lineage
 

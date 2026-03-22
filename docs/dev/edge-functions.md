@@ -79,6 +79,7 @@ npm run deploy
 - Finalize route returns `202 Accepted` and a `job_id`; finalization completes asynchronously via the `awcms-media-events` queue consumer.
 - Queue consumer does not trust message payload as authoritative; it re-reads from Supabase before writing.
 - Notifications consumer handles `site.rebuild.requested` and `email.send.requested` events from `awcms-notifications` queue.
+- Notifications infrastructure is backed by `tenant_notification_channels`, `notification_templates`, and `notification_dispatches`; tenants manage channel/template configuration through RLS, while the Worker queue path records dispatch outcomes.
 - Failed messages exhaust retries and route to the DLQ (`awcms-media-events-dlq` / `awcms-notifications-dlq`); the DLQ consumer persists entries to `queue_dead_letters` in Supabase.
 - Platform admins can replay a dead-letter entry via `POST /api/admin/queue/replay`.
 
@@ -88,6 +89,7 @@ npm run deploy
 - `401 Unauthorized`: verify the caller has a valid Supabase session and the Worker forwards the bearer token.
 - `5xx` from media routes: check R2 bindings and required Worker env values.
 - `403` from protected routes: verify the user's role flags and ABAC grants in Supabase.
+- Stale storage helper behavior: if an older caller still invokes `sync_storage_files()`, it now returns a deprecation payload because maintained media flows use Cloudflare R2 plus `public.media_objects`.
 
 ## References
 

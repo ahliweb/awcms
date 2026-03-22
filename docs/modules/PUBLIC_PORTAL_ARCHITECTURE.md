@@ -13,7 +13,7 @@ Describe how the public portal renders tenant content and enforces security cons
 
 ## Prerequisites
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal architecture (Astro 6.0.4, React 19.2.4, static output)
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal architecture (Astro 6.0.8, React 19.2.4, static output)
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/tenancy/overview.md`
 - `docs/tenancy/supabase.md`

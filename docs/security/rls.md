@@ -29,6 +29,7 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 | `auth_is_admin()` | boolean | **SECURITY DEFINER**: Checks tenant-admin, platform-admin, or full-access flags for recursion-safe administrative bypass |
 | `is_platform_admin()` | boolean | **Standard**: Checks platform admin/full-access flags. Subject to RLS recursion. |
 | `has_permission(key)` | boolean | Checks if current user has specific permission key |
+| `caller_has_permission(key)` | boolean | **SECURITY DEFINER + row_security = off** helper for recursion-safe permission checks inside `public.users` RLS policies |
 | `is_admin_or_above()` | boolean | Legacy helper still used in existing policies; prefer `has_permission` for new policy authoring. |
 | `is_tenant_descendant(ancestor, descendant)` | boolean | Checks tenant hierarchy membership (descendant path). |
 | `tenant_can_access_resource(row_tenant, resource_key, action)` | boolean | Enforces shared vs isolated resource access across tenant levels. |
@@ -51,7 +52,39 @@ from the `x-tenant-id` request header.
 - `public.current_tenant_id()` -> `supabase/migrations/20260307070000_fix_users_rls_recursion.sql`
 - `public.auth_is_admin()` -> `supabase/migrations/20260119230212_remote_schema.sql`
 - `public.has_permission()` -> `supabase/migrations/20260119230212_remote_schema.sql`
+- `public.caller_has_permission()` -> `supabase/migrations/20260321000000_fix_users_rls_infinite_recursion.sql`
 - Hierarchy access helpers (`tenant_can_access_resource`, `is_tenant_descendant`) -> `supabase/migrations/20260127160000_tenant_hierarchy_resource_sharing.sql`
+
+### `public.users` Recursion-Safe Pattern
+
+`20260321000000_fix_users_rls_infinite_recursion.sql` rebuilds `public.users` select/update policies so they do not recurse back into `public.users` while RLS is already evaluating that table.
+
+Use this pattern when a policy must answer "does the caller have permission X?" and the caller identity itself lives in `public.users`:
+
+```sql
+CREATE OR REPLACE FUNCTION public.caller_has_permission(p_permission_name text)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path to 'public'
+set row_security = off
+as $$
+begin
+  return exists (
+    select 1
+    from public.role_permissions rp
+    join public.permissions p on p.id = rp.permission_id
+    join public.users u on u.role_id = rp.role_id
+    where u.id = auth.uid()
+      and u.deleted_at is null
+      and p.name = p_permission_name
+  );
+end;
+$$;
+```
+
+Use `caller_has_permission(...)` rather than an inline `exists (...) join public.users ...` expression inside `public.users` policies.
 
 ### Migration History Drift
 
@@ -154,6 +187,7 @@ FOR SELECT USING (
 - **Plugins**: Extension/Plugin routes must query tenant-scoped tables with `tenant_id = current_tenant_id()` and rely on ABAC permissions (no role-name checks).
 - **Public portal headers**: Ensure `x-tenant-id` is set by scoped Supabase clients (static builds) or middleware (SSR) so `current_tenant_id()` resolves correctly.
 - **Recursion safety**: If a helper must query `public.users` or `public.roles` inside a policy path, keep it `SECURITY DEFINER` and explicitly evaluate whether `row_security = off` is required to avoid self-referential policy loops.
+- **Notification tables**: `tenant_notification_channels` and `notification_templates` are tenant-writable under `tenant.notifications.manage`; `notification_dispatches` is intentionally read-only to tenants and written only through the Worker/admin-client path.
 - **Migration files**: RLS policy SQL must be committed as timestamped migrations only.
 
 ## References
