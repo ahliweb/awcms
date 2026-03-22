@@ -45,7 +45,7 @@ Describe the GitHub Actions workflows used for AWCMS.
 | `build-ext-primary-analytics` | Install dependencies and run the extension SSR smoke build | `awcms-ext/primary-analytics/` | ci-push, ci-pr |
 | `typecheck-shared` | Install dependencies and run `@awcms/shared` TypeScript checks | `packages/awcms-shared/` | ci-push, ci-pr |
 | `lint-build-smandapbun` | Check and build the SMANDAPBUN public portal | `awcms-public/smandapbun/` | ci-push, ci-pr |
-| `db-check` | Supabase migration lint | `awcms/supabase` | ci-pr |
+| `db-check` | Migration parity and history safety check | repo root | ci-pr |
 | `deploy-production` | Cloudflare Pages deploy (admin panel artifact) | `awcms/` | ci-push |
 | `link-check` | Markdown link validation | repo root | docs-link-check |
 | `deploy` | Build and deploy SMANDAPBUN portal to Cloudflare Pages; also ensures custom domains | `awcms-public/smandapbun/` | deploy-smandapbun |

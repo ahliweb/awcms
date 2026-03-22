@@ -119,8 +119,10 @@ Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env value
 
 - Build failures: verify root directory and Node version.
 - Tenant resolution issues: confirm `PUBLIC_TENANT_ID` for canonical static builds; only inspect middleware/host settings when working on non-canonical SSR/runtime experiments.
+- For the standing external `awcms-public` Pages deployment failure pattern and operator checklist, see `docs/deploy/awcms-public-pages-incident.md`.
 
 ## References
 
 - `docs/deploy/overview.md`
 - `docs/tenancy/overview.md`
+- `docs/deploy/awcms-public-pages-incident.md`
