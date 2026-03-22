@@ -34,6 +34,18 @@ import { PartnersListBlock, PartnersListBlockFields, resolvePartnersData } from 
 import { TestimonialsListBlock, TestimonialsListBlockFields, resolveTestimonialsData } from './blocks/TestimonialsListBlock';
 import { PageLinkField } from './fields/PageLinkField';
 import { ImageField, MultiImageField } from './fields/ImageField';
+import {
+    ContentTitleBlock,
+    ContentExcerptBlock,
+    ContentFeaturedImageBlock,
+    ContentBodyBlock,
+    ContentMetaBlock,
+    ContentTitleBlockFields,
+    ContentExcerptBlockFields,
+    ContentFeaturedImageBlockFields,
+    ContentBodyBlockFields,
+    ContentMetaBlockFields,
+} from './blocks/ContentReferenceBlocks';
 
 import { WidgetAreaBlock, WidgetAreaBlockFields } from './blocks/WidgetAreaBlock';
 
@@ -55,6 +67,10 @@ export const puckConfig = {
         dynamic: {
             title: 'Dynamic & Interactive',
             components: ['LatestBlogs', 'ServicesList', 'TeamList', 'PartnersList', 'TestimonialsList', 'Promotion', 'Gallery', 'ContactForm', 'Navigation']
+        },
+        contentReferences: {
+            title: 'Content References',
+            components: ['ContentTitle', 'ContentExcerpt', 'ContentFeaturedImage', 'ContentBody', 'ContentMeta']
         }
     },
     components: {
@@ -211,6 +227,60 @@ export const puckConfig = {
                 html: '<p>Imported HTML fallback content.</p>'
             },
             render: RawHTMLBlock
+        },
+        ContentTitle: {
+            label: 'Content Title',
+            fields: ContentTitleBlockFields,
+            defaultProps: {
+                source: 'page',
+                headingLevel: 'h1',
+                alignment: 'left',
+                fallbackText: 'Untitled content',
+            },
+            render: ContentTitleBlock,
+        },
+        ContentExcerpt: {
+            label: 'Content Excerpt',
+            fields: ContentExcerptBlockFields,
+            defaultProps: {
+                source: 'page',
+                alignment: 'left',
+                fallbackText: 'Add a short summary for this content.',
+            },
+            render: ContentExcerptBlock,
+        },
+        ContentFeaturedImage: {
+            label: 'Content Featured Image',
+            fields: ContentFeaturedImageBlockFields,
+            defaultProps: {
+                source: 'page',
+                aspectRatio: 'video',
+                rounded: 'xl',
+                showCaption: false,
+            },
+            render: ContentFeaturedImageBlock,
+        },
+        ContentBody: {
+            label: 'Content Body',
+            fields: ContentBodyBlockFields,
+            defaultProps: {
+                source: 'page',
+                emptyState: 'This content source does not expose rich text body content yet.',
+            },
+            render: ContentBodyBlock,
+        },
+        ContentMeta: {
+            label: 'Content Meta',
+            fields: ContentMetaBlockFields,
+            defaultProps: {
+                source: 'page',
+                alignment: 'left',
+                showDate: true,
+                showAuthor: true,
+                showCategory: true,
+                showTags: true,
+            },
+            render: ContentMetaBlock,
         },
         Image: {
             label: 'Image',

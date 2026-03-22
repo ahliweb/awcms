@@ -26,6 +26,7 @@ The Blogs module is a full-featured blogging and news management system designed
 2. **Workflow State Machine**: `draft` -> `reviewed` -> `approved` -> `published`.
 3. **SEO Management**: Custom Meta Title/Description and OpenGraph support.
 4. **Taxonomy**: Categorization and tagging for content.
+5. **Pages-Owned Layouts**: Visual presentation is composed through Pages module templates (for example `single_post`) instead of direct blog-level Visual Builder editing.
 
 ## How It Works
 
@@ -34,7 +35,8 @@ Stored in `blogs` table:
 - `slug`: Unique identifier for routing (e.g., `/blogs/my-post`).
 - `tiptap_doc_jsonb`: The source of truth for content.
 - `content`: HTML fallback (optional).
-- `puck_layout_jsonb`: Optional Visual Builder layout for "Long-form" posts.
+
+Visual layouts are now managed from the Pages module so blog rows stay focused on article content and metadata.
 
 ## Admin UI
 
@@ -66,7 +68,13 @@ The Public Portal currently fetches posts directly from `blogs` to ensure:
 
 1. Only `status = 'published'` items are fetched.
 2. Tenant scoping is explicit in the query path.
-3. Rendering uses HTML/markdown content or Puck layouts where configured.
+3. Rendering uses article content inside Pages-managed visual templates where configured.
+
+### Operator Note
+
+- Choose the `single_post` Pages template when you want to control how blog detail pages render.
+- Choose `single_page` for regular page detail layouts; it is not intended to style blog entries.
+- Editors should manage article body and metadata in the Blogs module, then manage presentation in the Pages-owned visual template.
 
 `published_blogs_view` remains part of schema history and can still be useful for restricted read surfaces,
 but it is not the current public-portal fetch path.

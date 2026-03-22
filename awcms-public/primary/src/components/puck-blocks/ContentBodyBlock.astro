@@ -1,0 +1,23 @@
+---
+import { sanitizeHTML } from "~/utils/sanitize";
+
+const {
+  source = "page",
+  emptyState = "This content source does not expose rich text body content yet.",
+  context = {},
+} = Astro.props;
+
+const content = source === "blog" ? context.blog : context.page;
+const html = sanitizeHTML(content?.htmlContent || "");
+---
+
+{
+  html ? (
+    <div class="prose prose-slate max-w-none dark:prose-invert" set:html={html} />
+  ) : (
+    <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+      <p class="font-semibold text-slate-700 dark:text-slate-200">No rich text content</p>
+      <p class="mt-1">{emptyState}</p>
+    </div>
+  )
+}

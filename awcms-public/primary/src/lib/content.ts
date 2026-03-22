@@ -218,6 +218,9 @@ export interface BlogData {
     name: string;
     slug: string;
   } | null;
+  author?: {
+    full_name: string;
+  } | null;
   tags?: Array<{ id: string; name: string; slug: string }>;
 }
 
@@ -403,10 +406,39 @@ export async function getBlogBySlug(
     category = categoryData || null;
   }
 
+  let author = null;
+  if (data.author_id) {
+    const { data: authorData } = await supabase
+      .from("users")
+      .select("full_name")
+      .eq("id", data.author_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    author = authorData || null;
+  }
+
+  let tags: Array<{ id: string; name: string; slug: string }> = [];
+  const { data: blogTagRows } = await supabase
+    .from("blog_tags")
+    .select("tag_id")
+    .eq("blog_id", data.id);
+
+  const tagIds = (blogTagRows || []).map((row) => row.tag_id).filter(Boolean);
+  if (tagIds.length > 0) {
+    const { data: tagRows } = await supabase
+      .from("tags")
+      .select("id, name, slug")
+      .in("id", tagIds)
+      .is("deleted_at", null);
+    tags = (tagRows || []) as Array<{ id: string; name: string; slug: string }>;
+  }
+
   return mergeBlogTranslation(
     {
       ...(data as BlogData),
       category,
+      author,
+      tags,
     },
     translationMatch,
   );

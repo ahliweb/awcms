@@ -106,6 +106,20 @@ const isVisual = page?.editor_type === "visual";
 const visualContent =
   page?.content_published || page?.puck_layout_jsonb || null;
 const htmlContent = page?.content || "";
+const pageContext = page
+  ? {
+      page: {
+        title: page.title,
+        excerpt: page.excerpt,
+        htmlContent,
+        featuredImage: page.featured_image,
+        publishedAt: page.published_at || page.created_at,
+        categoryName: "",
+        tags: page.tags || [],
+        authorName: "",
+      },
+    }
+  : {};
 ---
 
 <Layout metadata={metadata}>
@@ -142,7 +156,7 @@ const htmlContent = page?.content || "";
             <>
               {/* Visual Builder Content (Puck JSON blocks) */}
               <div class="visual-content">
-                <PuckRenderer content={visualContent} />
+                <PuckRenderer content={visualContent} context={pageContext} />
               </div>
             </>
           ) : (
