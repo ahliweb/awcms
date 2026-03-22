@@ -72,11 +72,3 @@ export const getPluginComponent = (key) => {
     FallbackComponent.displayName = `Fallback(${key})`;
     return FallbackComponent;
 };
-
-// Legacy compatibility - map old keys to new
-const LEGACY_KEY_MAP = {
-    'BackupManager': 'backup:BackupManager',
-    'BackupScheduler': 'backup:BackupScheduler',
-    'BackupSettings': 'backup:BackupSettings',
-    'HelloWorld': 'helloworld'
-};

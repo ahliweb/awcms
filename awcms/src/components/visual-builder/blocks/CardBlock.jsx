@@ -3,26 +3,6 @@
  * Content card with image, title, and description
  */
 
-import { ColorPickerField } from '../fields/ColorPickerField';
-
-const CardBlockFields = {
-    title: { type: 'text', label: 'Title' },
-    titleColor: { type: 'custom', label: 'Title Color', render: ColorPickerField },
-    description: { type: 'textarea', label: 'Description' },
-    descriptionColor: { type: 'custom', label: 'Description Color', render: ColorPickerField },
-    image: { type: 'text', label: 'Image URL' },
-    link: { type: 'text', label: 'Link URL' },
-    variant: {
-        type: 'select',
-        label: 'Style',
-        options: [
-            { label: 'Default', value: 'default' },
-            { label: 'Bordered', value: 'bordered' },
-            { label: 'Shadow', value: 'shadow' }
-        ]
-    }
-};
-
 export const CardBlock = ({ title, titleColor, description, descriptionColor, image, link, variant, aspectRatio, hoverEffect }) => {
     const variantClasses = {
         default: 'bg-white',

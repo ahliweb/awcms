@@ -3,43 +3,6 @@
  * Full-width hero section with background image, title, and CTA
  */
 
-import { ColorPickerField } from '../fields/ColorPickerField';
-
-const HeroBlockFields = {
-    title: { type: 'text', label: 'Title' },
-    titleColor: { type: 'custom', label: 'Title Color', render: ColorPickerField },
-    subtitle: { type: 'textarea', label: 'Subtitle' },
-    subtitleColor: { type: 'custom', label: 'Subtitle Color', render: ColorPickerField },
-    backgroundImage: { type: 'text', label: 'Background Image URL' },
-    buttonText: { type: 'text', label: 'Button Text' },
-    buttonLink: { type: 'text', label: 'Button Link' },
-    alignment: {
-        type: 'select',
-        label: 'Text Alignment',
-        options: [
-            { label: 'Left', value: 'left' },
-            { label: 'Center', value: 'center' },
-            { label: 'Right', value: 'right' }
-        ]
-    },
-    overlay: {
-        type: 'radio', label: 'Dark Overlay', options: [
-            { label: 'Yes', value: true },
-            { label: 'No', value: false }
-        ]
-    },
-    height: {
-        type: 'select',
-        label: 'Height',
-        options: [
-            { label: 'Small (300px)', value: 'small' },
-            { label: 'Medium (450px)', value: 'medium' },
-            { label: 'Large (600px)', value: 'large' },
-            { label: 'Full Screen', value: 'full' }
-        ]
-    }
-};
-
 export const HeroBlock = ({ title, titleColor, subtitle, subtitleColor, backgroundImage, buttonText, buttonLink, alignment, overlay, overlayStyle, height, scrollIndicator }) => {
     const heightClasses = {
         small: 'min-h-[300px]',
