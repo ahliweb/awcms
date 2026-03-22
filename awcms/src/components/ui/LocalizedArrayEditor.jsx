@@ -16,7 +16,7 @@ import { Plus, Trash2, GripVertical, Languages, ChevronUp, ChevronDown } from 'l
  * @param {string} props.itemLabel - Label for each item (e.g., "Mission", "Goal")
  * @param {string} props.addLabel - Label for add button
  */
-function LocalizedArrayEditor({
+export function LocalizedArrayEditor({
     value = { id: [], en: [] },
     onChange,
     label,

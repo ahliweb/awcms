@@ -18,7 +18,7 @@ import { Languages } from 'lucide-react';
  * @param {boolean} props.required - Whether field is required
  * @param {string} props.className - Additional className for wrapper
  */
-function LocalizedInput({
+export function LocalizedInput({
     value = { id: '', en: '' },
     onChange,
     label,
