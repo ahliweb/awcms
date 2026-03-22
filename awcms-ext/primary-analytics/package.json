@@ -14,8 +14,8 @@
         "vite": "^7.0.0"
     },
     "scripts": {
-        "build": "vite build",
-        "build:ci": "vite build --ssr src/index.js",
+        "build": "vite build --ssr src/index.js --outDir ../../temp_debug_files/primary-analytics-build",
+        "build:ci": "vite build --ssr src/index.js --outDir ../../temp_debug_files/primary-analytics-build",
         "dev": "vite"
     }
 }

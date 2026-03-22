@@ -3,7 +3,7 @@
  * Compact widget for dashboard integration
  */
 
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
 import { ArrowRight } from 'lucide-react';
 
 const AnalyticsWidget = ({ className = '' }) => {
