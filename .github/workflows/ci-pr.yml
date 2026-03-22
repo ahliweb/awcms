@@ -327,20 +327,10 @@ jobs:
   db-check:
     name: Database Migrations Check
     runs-on: ubuntu-latest
-    # Assuming this check doesn't need secrets in 'db lint'?
-    # Supabase link might need access token? 
-    # db lint is static offline check usually.
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      - name: Validate migrations
-        run: |
-          cd awcms/supabase
-          supabase db lint
+      - name: Validate migration parity and history safety
+        run: bash ./scripts/verify_supabase_migration_consistency.sh
