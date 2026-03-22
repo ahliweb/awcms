@@ -81,6 +81,12 @@ const wranglerConfigPath = resolve(cwd, "wrangler.json");
 const loadedFiles = [];
 const mergedEnv = { ...process.env };
 
+const previewEnvHelp = [
+  "Cloudflare Pages preview deployments use their own environment variable set.",
+  "Open Cloudflare Dashboard -> Workers & Pages -> awcms-public -> Settings -> Variables and Secrets.",
+  "Add the missing values for the Preview environment, then retry the deployment.",
+];
+
 for (const relativeFile of candidateFiles) {
   const absoluteFile = resolve(cwd, relativeFile);
   if (!existsSync(absoluteFile)) continue;
@@ -158,10 +164,14 @@ if (isCloudflarePagesBuild) {
   }
 
   if (missingKeys.length > 0) {
+    const loadedEnvText =
+      loadedFiles.length > 0 ? loadedFiles.join(", ") : "no local env files";
     console.error(
       `[AWCMS Public] Missing deployment env: ${missingKeys.join(", ")}. ` +
-        "Cloudflare Pages builds must use production, remote, or linked env configuration.",
+        `Loaded sources: ${loadedEnvText}. ` +
+        "Cloudflare Pages builds must use production, remote, linked, or Pages dashboard env configuration.",
     );
+    console.error(`[AWCMS Public] ${previewEnvHelp.join(" ")}`);
     process.exit(1);
   }
 }
