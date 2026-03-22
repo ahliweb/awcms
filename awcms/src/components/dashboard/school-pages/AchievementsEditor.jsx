@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import LocalizedInput from '@/components/ui/LocalizedInput';
-import ImageUpload from '@/components/ui/ImageUpload';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 const ACHIEVEMENT_LEVELS = [
   { value: 'international', label: 'International' },

@@ -498,5 +498,3 @@ export function useMedia() {
         createCategory
     };
 }
-
-export default useMedia;

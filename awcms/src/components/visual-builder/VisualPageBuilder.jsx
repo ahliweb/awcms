@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { udm } from '@/lib/data/UnifiedDataManager';
 import { supabase } from '@/lib/customSupabaseClient';
-import editorConfig from './config';
+import { puckConfig as editorConfig } from './config';
 import TemplateSelector from './TemplateSelector';
 import { useHistory } from './hooks/useHistory';
 import SlugGenerator from '@/components/dashboard/slug/SlugGenerator';

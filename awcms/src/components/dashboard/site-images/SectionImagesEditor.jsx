@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import ImageUpload from '@/components/ui/ImageUpload';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 import { SECTION_IMAGE_FIELDS } from '@/components/dashboard/site-images/constants';
 
 function SectionImagesEditor({ data = {}, onChange }) {

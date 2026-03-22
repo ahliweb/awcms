@@ -56,5 +56,3 @@ export function DarkModeToggle() {
         </DropdownMenu>
     );
 }
-
-export default DarkModeToggle;

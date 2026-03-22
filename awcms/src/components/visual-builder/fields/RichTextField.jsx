@@ -124,5 +124,3 @@ export const RichTextField = ({ field, value, onChange, name }) => {
         </div>
     );
 };
-
-export default RichTextField;

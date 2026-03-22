@@ -3,7 +3,7 @@ import { Plus, Trash2, ImageIcon, GripVertical, ChevronDown, ChevronUp } from 'l
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import LocalizedInput from '@/components/ui/LocalizedInput';
-import ImageUpload from '@/components/ui/ImageUpload';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 function GalleryEditor({ data = {}, updateTopLevel }) {
   const albums = data?.albums || [];

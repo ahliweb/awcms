@@ -22,5 +22,3 @@ export const RawHTMLBlock = ({ html, content }) => {
         </div>
     );
 };
-
-export default RawHTMLBlock;

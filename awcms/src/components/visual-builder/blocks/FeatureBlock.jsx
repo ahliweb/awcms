@@ -60,5 +60,3 @@ export const FeatureBlock = ({ icon, title, description, iconColor }) => {
         </div>
     );
 };
-
-export default FeatureBlock;

@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import ImageUpload from '@/components/ui/ImageUpload';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 import LocalizedInput from '@/components/ui/LocalizedInput';
 
 function HeroImagesEditor({ data = {}, onChange }) {

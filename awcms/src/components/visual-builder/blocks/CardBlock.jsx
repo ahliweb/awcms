@@ -5,7 +5,7 @@
 
 import { ColorPickerField } from '../fields/ColorPickerField';
 
-export const CardBlockFields = {
+const CardBlockFields = {
     title: { type: 'text', label: 'Title' },
     titleColor: { type: 'custom', label: 'Title Color', render: ColorPickerField },
     description: { type: 'textarea', label: 'Description' },
@@ -71,5 +71,3 @@ export const CardBlock = ({ title, titleColor, description, descriptionColor, im
 
     return content;
 };
-
-export default CardBlock;

@@ -51,5 +51,3 @@ export const ColorPickerField = ({ field, name, value, onChange }) => {
         </div>
     );
 };
-
-export default ColorPickerField;

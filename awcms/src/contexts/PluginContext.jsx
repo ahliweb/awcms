@@ -41,9 +41,6 @@ export const PluginSlot = ({ name, args = {}, fallback = null }) => {
     );
 };
 
-// Backward compatibility alias
-export const PluginAction = PluginSlot;
-
 export const PluginProvider = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activePlugins, setActivePlugins] = useState([]);

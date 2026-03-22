@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { GripVertical, Trash2, Plus, ChevronDown, ChevronUp } from 'lucide-react';
-import ImageUpload from '@/components/ui/ImageUpload';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 /**
  * PositionArrayEditor - Manage an array of position objects with bilingual support
@@ -352,5 +352,3 @@ export function StaffArrayEditor({
         </div>
     );
 }
-
-export default PositionArrayEditor;

@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import LocalizedArrayEditor from '@/components/ui/LocalizedArrayEditor';
 import LocalizedInput from '@/components/ui/LocalizedInput';
-import ImageUpload from '@/components/ui/ImageUpload';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 function ProfileEditor({ data = {}, updateField }) {
   return (

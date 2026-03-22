@@ -1,7 +1,7 @@
 
 import { useTranslation } from 'react-i18next';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
-import StatusBadge from '@/components/ui/StatusBadge';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 
 function AnnouncementsManager() {
     const { t } = useTranslation();

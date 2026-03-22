@@ -650,5 +650,3 @@ export const puckConfig = {
         }
     }
 };
-
-export default puckConfig;

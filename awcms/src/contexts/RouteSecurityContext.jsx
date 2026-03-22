@@ -1,7 +1,5 @@
-import { createContext, useContext } from 'react';
+import { createContext } from 'react';
 
 const RouteSecurityContext = createContext(null);
-
-export const useRouteSecurityParams = () => useContext(RouteSecurityContext);
 
 export default RouteSecurityContext;

@@ -169,5 +169,3 @@ export function StatusBadge({ status, label, dot = false, className }) {
     </span>
   );
 }
-
-export default StatusBadge;

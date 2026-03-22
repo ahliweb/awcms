@@ -275,5 +275,3 @@ export const NavigationBlock = ({
         </nav>
     );
 };
-
-export default NavigationBlock;

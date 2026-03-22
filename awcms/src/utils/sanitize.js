@@ -9,7 +9,3 @@ export const sanitizeHTML = (html) => {
         })
     };
 };
-
-export const sanitizeString = (str) => {
-    return DOMPurify.sanitize(str);
-};

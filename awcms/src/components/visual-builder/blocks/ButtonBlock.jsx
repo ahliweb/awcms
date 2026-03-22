@@ -88,5 +88,3 @@ export const ButtonBlock = ({ text, textColor, backgroundColor, link, variant, s
         </div>
     );
 };
-
-export default ButtonBlock;

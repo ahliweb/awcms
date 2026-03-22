@@ -1,11 +1,4 @@
 
-import { clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs) {
-  return twMerge(clsx(inputs));
-}
-
 // Convert Hex to HSL for Shadcn/Tailwind
 export function hexToShadcnHsl(hex) {
   if (!hex) return "hsl(0 0% 100%)"; // Default white

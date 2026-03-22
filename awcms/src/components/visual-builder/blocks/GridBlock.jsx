@@ -49,5 +49,3 @@ export const GridBlock = ({ columns = 2, gap = 0, padding = 0, id }) => {
         </div>
     );
 };
-
-export default GridBlock;

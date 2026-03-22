@@ -18,5 +18,3 @@ export const SpacerBlock = ({ height }) => {
         <div style={{ height: `${height}px` }} className="w-full" />
     );
 };
-
-export default SpacerBlock;

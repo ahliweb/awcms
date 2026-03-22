@@ -48,5 +48,3 @@ export const TextBlock = ({ content, alignment, textColor }) => {
         />
     );
 };
-
-export default TextBlock;

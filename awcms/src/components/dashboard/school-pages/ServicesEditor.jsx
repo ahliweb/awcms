@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import LocalizedInput from '@/components/ui/LocalizedInput';
-import ImageUpload from '@/components/ui/ImageUpload';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 function ServicesEditor({ data = {}, updateField }) {
   return (

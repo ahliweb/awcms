@@ -88,5 +88,3 @@ export function useMobileUsers() {
         deleteUser,
     };
 }
-
-export default useMobileUsers;

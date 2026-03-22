@@ -115,39 +115,6 @@ export const sendEmail = async ({
 };
 
 /**
- * Add subscriber to mailing list
- */
-export const addSubscriber = async ({
-    email,
-    firstName,
-    lastName,
-    listId,
-    tenantId,
-    ...extra
-}) => {
-    const { data: { session } } = await supabase.auth.getSession();
-
-    const response = await fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token || ''}`,
-        },
-        body: JSON.stringify({
-            action: 'subscribe',
-            email,
-            first_name: firstName,
-            last_name: lastName,
-            list_id: listId,
-            tenant_id: tenantId,
-            ...extra,
-        }),
-    });
-
-    return response.json();
-};
-
-/**
  * Check email credits balance
  */
 export const checkCredits = async () => {
@@ -160,24 +127,6 @@ export const checkCredits = async () => {
             'Authorization': `Bearer ${session?.access_token || ''}`,
         },
         body: JSON.stringify({ action: 'credits' }),
-    });
-
-    return response.json();
-};
-
-/**
- * Get all mailing lists
- */
-export const getLists = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-
-    const response = await fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token || ''}`,
-        },
-        body: JSON.stringify({ action: 'lists' }),
     });
 
     return response.json();
@@ -228,16 +177,3 @@ export const sendTestEmail = async (tenantId, toEmail) => {
         tenantId,
     });
 };
-
-const emailService = {
-    getTenantEmailConfig,
-    saveTenantEmailConfig,
-    sendEmail,
-    addSubscriber,
-    checkCredits,
-    getLists,
-    getEmailLogs,
-    sendTestEmail,
-};
-
-export default emailService;
