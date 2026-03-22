@@ -1,0 +1,51 @@
+---
+const {
+  source = "page",
+  showDate = true,
+  showAuthor = true,
+  showCategory = true,
+  showTags = true,
+  alignment = "left",
+  context = {},
+} = Astro.props;
+
+const content = source === "blog" ? context.blog : context.page;
+const publishedLabel = content?.publishedAt
+  ? new Date(content.publishedAt).toLocaleDateString()
+  : null;
+const tags = Array.isArray(content?.tags)
+  ? (content.tags as Array<string | { name?: string; slug?: string }>)
+  : [];
+const justifyClass = alignment === "center"
+  ? "justify-center"
+  : alignment === "right"
+    ? "justify-end"
+    : "justify-start";
+const hasValues = Boolean(publishedLabel || content?.authorName || content?.categoryName || tags.length);
+---
+
+{
+  hasValues ? (
+    <div class={`flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400 ${justifyClass}`}>
+      {showDate && publishedLabel ? <span>{publishedLabel}</span> : null}
+      {showAuthor && content?.authorName ? <span>{content.authorName}</span> : null}
+      {showCategory && content?.categoryName ? (
+        <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-200">{content.categoryName}</span>
+      ) : null}
+      {showTags && tags.length > 0 ? (
+        <div class="flex flex-wrap items-center gap-2">
+          {tags.map((tag) => (
+            <span class="inline-flex items-center rounded-full border border-slate-200 px-2.5 py-1 text-xs dark:border-slate-700">
+              {typeof tag === "string" ? tag : tag.name || tag.slug}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  ) : (
+    <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+      <p class="font-semibold text-slate-700 dark:text-slate-200">No metadata available</p>
+      <p class="mt-1">Publish the content or enrich its metadata to populate this block.</p>
+    </div>
+  )
+}

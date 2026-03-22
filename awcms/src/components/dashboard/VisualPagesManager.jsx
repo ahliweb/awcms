@@ -51,7 +51,7 @@ const VisualPagesManager = () => {
         <AdminPageLayout requiredPermission="tenant.visual_pages.read" className="space-y-6">
             <PageHeader
                 title={t('pages.visual_builder')}
-                description={t('pages.visual_desc')}
+                description="Manage visual page compositions and shared page/blog templates from one editor surface."
                 icon={Layers}
                 breadcrumbs={[{ label: t('pages.visual_title'), icon: Layers }]}
             />

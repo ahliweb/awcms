@@ -1,4 +1,4 @@
-import { Filter, Languages, ListChecks, Sparkles, Trash2 } from 'lucide-react';
+import { Filter, Languages, LayoutTemplate, ListChecks, Trash2 } from 'lucide-react';
 
 function BlogsOverviewCards({
 	t,
@@ -54,11 +54,11 @@ function BlogsOverviewCards({
 				<div className="flex items-start justify-between gap-3">
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t('blogs.type')}</p>
-						<p className="mt-1 text-sm font-semibold text-foreground">{t('blogs.visual_builder')}</p>
-						<p className="text-xs text-muted-foreground">{t('common.create', 'Create')} + {t('common.edit', 'Edit')}</p>
+						<p className="mt-1 text-sm font-semibold text-foreground">Layout via Pages module</p>
+						<p className="text-xs text-muted-foreground">Use Visual Builder single-post templates to style blog output</p>
 					</div>
 					<span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
-						{activeView === 'trash' ? <Trash2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+						{activeView === 'trash' ? <Trash2 className="h-4 w-4" /> : <LayoutTemplate className="h-4 w-4" />}
 					</span>
 				</div>
 			</div>

@@ -16,6 +16,8 @@ import '@puckeditor/core/puck.css';
 import '@/components/visual-builder/puck-theme.css';
 import { WidgetAreaRenderer } from '@/components/public/WidgetAreaRenderer';
 import { sanitizeHTML } from '@/utils/sanitize';
+import { VisualContentProvider } from '@/components/visual-builder/VisualContentContext';
+import { createVisualContentResource } from '@/components/visual-builder/visualContentUtils';
 
 function PublicPageDetail() {
     const { slug } = useParams();
@@ -122,6 +124,18 @@ function PublicPageDetail() {
     );
 
     const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+    const htmlContent = page?.content || '';
+    const visualContentValue = {
+        page: createVisualContentResource(page, {
+            htmlContent,
+            featuredImage: page?.featured_image,
+            publishedAt: page?.published_at || page?.created_at,
+            categoryName: page?.categories?.name || '',
+            tags: page?.tags || [],
+            authorName: page?.users?.full_name || '',
+        }),
+        blog: null,
+    };
 
     return (
         <div className="bg-slate-50 min-h-screen pb-20 font-sans">
@@ -226,9 +240,11 @@ function PublicPageDetail() {
                         <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden print:shadow-none print:border-none">
                             <div className="p-8 md:p-12">
                                 {page.editor_type === 'visual' && page.content_published ? (
-                                    <div className="puck-content">
-                                        <Render config={puckConfig} data={page.content_published} />
-                                    </div>
+                                    <VisualContentProvider value={visualContentValue}>
+                                        <div className="puck-content">
+                                            <Render config={puckConfig} data={page.content_published} />
+                                        </div>
+                                    </VisualContentProvider>
                                 ) : (
                                     <div className="prose prose-slate prose-lg max-w-none prose-headings:font-bold prose-headings:text-slate-900 prose-headings:tracking-tight prose-a:text-blue-600 hover:prose-a:text-blue-700 prose-img:rounded-2xl prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-slate-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:not-italic prose-blockquote:rounded-r-lg">
                                         <div dangerouslySetInnerHTML={sanitizeHTML(page.content)} />

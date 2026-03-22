@@ -7,7 +7,7 @@ import type { GetStaticPaths } from "astro";
 import Layout from "~/layouts/PageLayout.astro";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getPublicTenantId } from "~/lib/publicTenant";
-import { getBlogBySlug } from "~/lib/content";
+import { getBlogBySlug, getPageByType } from "~/lib/content";
 import PuckRenderer from "~/components/common/PuckRenderer.astro";
 import { Icon } from "astro-icon/components";
 import { t, supportedLocales, type Locale } from "~/utils/i18n";
@@ -83,6 +83,10 @@ const blog =
         ? await getBlogBySlug(supabase, slug, tenantId, locale)
         : null;
 
+const singlePostTemplate = supabase
+    ? await getPageByType(supabase, "single_post", tenantId, locale)
+    : null;
+
 if (!blog) {
     console.log(`[Blog] Blog not found: ${slug || "unknown"} (${locale})`);
     Astro.response.status = 404;
@@ -119,12 +123,46 @@ const metadata = {
 const isVisual = blog?.editor_type === "visual";
 const visualContent = blog?.visual_content || blog?.content_published || blog?.content_draft || null;
 const htmlContent = blog?.content || "";
+const singlePostVisualContent =
+  singlePostTemplate?.content_published || singlePostTemplate?.visual_content || null;
+const useSinglePostTemplate = Boolean(
+  singlePostVisualContent && (typeof htmlContent === "string" && htmlContent.trim().length > 0 || !visualContent),
+);
+const blogContext = blog
+  ? {
+      blog: {
+        title: blog.title,
+        excerpt: blog.excerpt,
+        htmlContent,
+        featuredImage: blog.featured_image,
+        publishedAt: blog.published_at || blog.created_at,
+        categoryName: blog.category?.name || "",
+        tags: blog.tags || [],
+        authorName: blog.author?.full_name || "",
+      },
+      page: {
+        title: blog.title,
+        excerpt: blog.excerpt,
+        htmlContent,
+        featuredImage: blog.featured_image,
+        publishedAt: blog.published_at || blog.created_at,
+        categoryName: blog.category?.name || "",
+        tags: blog.tags || [],
+        authorName: blog.author?.full_name || "",
+      },
+    }
+  : {};
 ---
 
 <Layout metadata={metadata}>
     {
         blog ? (
             <article class="py-12 sm:py-16 lg:py-20">
+                {useSinglePostTemplate ? (
+                    <div class="mx-auto max-w-6xl px-6 sm:px-8">
+                        <PuckRenderer content={singlePostVisualContent} context={blogContext} />
+                    </div>
+                ) : (
                 <div class="mx-auto max-w-4xl px-6 sm:px-8">
                     {/* Blog Header */}
                     <header class="mb-8">
@@ -226,6 +264,7 @@ const htmlContent = blog?.content || "";
                         </a>
                     </footer>
                 </div>
+                )}
             </article>
         ) : (
             <section class="py-12 sm:py-16 lg:py-20">

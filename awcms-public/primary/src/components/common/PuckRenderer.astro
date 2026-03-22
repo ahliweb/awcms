@@ -18,6 +18,11 @@ import PromotionBlock from "../puck-blocks/PromotionBlock.astro";
 import NavigationBlock from "../puck-blocks/NavigationBlock.astro";
 import WidgetAreaBlock from "../puck-blocks/WidgetAreaBlock.astro";
 import GalleryBlock from "../puck-blocks/GalleryBlock.astro";
+import ContentTitleBlock from "../puck-blocks/ContentTitleBlock.astro";
+import ContentExcerptBlock from "../puck-blocks/ContentExcerptBlock.astro";
+import ContentFeaturedImageBlock from "../puck-blocks/ContentFeaturedImageBlock.astro";
+import ContentBodyBlock from "../puck-blocks/ContentBodyBlock.astro";
+import ContentMetaBlock from "../puck-blocks/ContentMetaBlock.astro";
 
 import ContactFormBlock from "../puck-blocks/ContactFormBlock.astro";
 import ServicesListBlock from "../puck-blocks/ServicesListBlock.astro";
@@ -37,6 +42,8 @@ export interface Props {
   content: PuckContent | string | null;
   /** Optional CSS class for the container */
   class?: string;
+  /** Optional page/blog context for content reference blocks */
+  context?: Record<string, unknown>;
 }
 
 interface PuckContent {
@@ -53,7 +60,7 @@ interface PuckBlock {
   props?: Record<string, unknown>;
 }
 
-const { content, class: className = "" } = Astro.props;
+const { content, class: className = "", context = {} } = Astro.props;
 
 // Parse content if it's a string
 let puckData: PuckContent | null = null;
@@ -247,7 +254,7 @@ const blocks: PuckBlock[] =
             props.content ||
             props.children ||
             [];
-          return <ContainerBlock {...props} content={containerChildren} />;
+          return <ContainerBlock {...props} content={containerChildren} context={context} />;
         }
 
         case "Divider":
@@ -351,6 +358,21 @@ const blocks: PuckBlock[] =
         case "RawHTML": {
           return <Fragment set:html={getSanitizedRawHtml(props)} />;
         }
+
+        case "ContentTitle":
+          return <ContentTitleBlock {...props} context={context} />;
+
+        case "ContentExcerpt":
+          return <ContentExcerptBlock {...props} context={context} />;
+
+        case "ContentFeaturedImage":
+          return <ContentFeaturedImageBlock {...props} context={context} />;
+
+        case "ContentBody":
+          return <ContentBodyBlock {...props} context={context} />;
+
+        case "ContentMeta":
+          return <ContentMetaBlock {...props} context={context} />;
 
         default: {
           console.warn(`[PuckRenderer] Unknown block type: ${type}`);

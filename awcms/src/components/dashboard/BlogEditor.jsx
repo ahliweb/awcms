@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
@@ -19,10 +19,8 @@ import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import RichTextEditor from '@/components/ui/RichTextEditor';
-import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
 import TagInput from '@/components/ui/TagInput';
 import { getCategoryTypesForModule } from '@/lib/taxonomy';
-import { encodeRouteParam } from '@/lib/routeSecurity';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -37,16 +35,6 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -57,11 +45,34 @@ import {
 
 const DEFAULT_BLOG_LOCALE = 'id';
 
+function extractLegacyVisualContent(value) {
+    if (!value) return null;
+    if (typeof value === 'object' && !Array.isArray(value)) {
+        return value;
+    }
+    if (typeof value !== 'string') return null;
+
+    try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed;
+        }
+    } catch (_error) {
+        return null;
+    }
+
+    return null;
+}
+
 function mapBlogTranslationToFormData(item, translation) {
+    const legacyVisualContent = extractLegacyVisualContent(item?.content);
+    const legacyVisualContentEn = extractLegacyVisualContent(translation?.content);
+
     return {
         title: item?.title || '',
         slug: item?.slug || '',
-        content: item?.content || '',
+        content: legacyVisualContent ? '' : (typeof item?.content === 'string' ? item.content : ''),
+        legacy_visual_content: legacyVisualContent,
         excerpt: item?.excerpt || '',
         featured_image: item?.featured_image || '',
         status: item?.status || 'draft',
@@ -83,15 +94,15 @@ function mapBlogTranslationToFormData(item, translation) {
         published_at: item?.published_at ? new Date(item.published_at).toISOString().slice(0, 16) : '',
         title_en: translation?.title || '',
         slug_en: translation?.slug || '',
-        content_en: translation?.content || '',
+        content_en: legacyVisualContentEn ? '' : (typeof translation?.content === 'string' ? translation.content : ''),
+        legacy_visual_content_en: legacyVisualContentEn,
         excerpt_en: translation?.excerpt || '',
         meta_description_en: translation?.meta_description || '',
     };
 }
 
-function BlogEditor({ item, onClose, onSuccess, translationConfig = null, selectedLanguage = DEFAULT_BLOG_LOCALE, initialVisualBuilder = false }) {
+function BlogEditor({ item, onClose, onSuccess, translationConfig = null, selectedLanguage = DEFAULT_BLOG_LOCALE }) {
     const { toast } = useToast();
-    const location = useLocation();
     const navigate = useNavigate();
     const { user } = useAuth();
     const { currentTenant } = useTenant();
@@ -105,11 +116,8 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
     const isVisualContent = item?.editor_type === 'visual' ||
         (item?.content && typeof item.content === 'object' && !Array.isArray(item.content) && item.content.root);
 
-    const useVisualBuilder = isVisualContent || initialVisualBuilder;
-
     // Mobile Settings Toggle
     const [showMobileSettings, setShowMobileSettings] = useState(false);
-    const [visualSwitchOpen, setVisualSwitchOpen] = useState(false);
     const [coverImageOpen, setCoverImageOpen] = useState(false);
     const [ogImageOpen, setOgImageOpen] = useState(false);
 
@@ -295,7 +303,9 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 tenant_id: currentTenant.id,
                 title: formData.title,
                 slug: formData.slug || generateSlug(formData.title),
-                content: formData.content,
+                content: isVisualContent && !formData.content
+                    ? (formData.legacy_visual_content || formData.content)
+                    : formData.content,
                 excerpt: formData.excerpt,
                 featured_image: formData.featured_image,
                 status: finalStatus,
@@ -325,6 +335,10 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 acc[translationKey] = typeof value === 'string' ? value.trim() : value ?? null;
                 return acc;
             }, {});
+
+            if (translationConfig && isVisualContent && !translationPayload.content && formData.legacy_visual_content_en) {
+                translationPayload.content = JSON.stringify(formData.legacy_visual_content_en);
+            }
 
             if (translationConfig && !translationPayload.slug && translationSlugValue) {
                 translationPayload.slug = translationSlugValue;
@@ -443,30 +457,6 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
         }
     };
 
-    const handleSwitchToVisualBuilder = async () => {
-        const targetId = item?.id
-            ? item.id
-            : (await saveItem(null, { suppressClose: true, suppressSuccess: true }))?.id;
-
-        if (!targetId) {
-            return;
-        }
-
-        const signedId = await encodeRouteParam({ value: targetId, scope: 'blogs.edit' });
-        if (!signedId) {
-            toast({ variant: 'destructive', title: 'Navigation error', description: 'Could not open the visual builder route.' });
-            return;
-        }
-
-        setVisualSwitchOpen(false);
-
-        if (!location.pathname.includes('/cmspanel/blogs/edit/')) {
-            onClose?.();
-        }
-
-        navigate(`/cmspanel/blogs/edit/${signedId}?editor=visual`);
-    };
-
     // State Colors Helper
     const getStateColor = (state) => {
         switch (state) {
@@ -480,20 +470,6 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
     const selectedCategoryValue = categories.some((category) => category.id === formData.category_id)
         ? formData.category_id
         : '__none__';
-
-    if (useVisualBuilder) {
-        return createPortal(
-            <VisualPageBuilder
-                page={item}
-                onClose={onClose}
-                onSuccess={onSuccess}
-                mode="blog" // Custom prop we added support for
-                pageId={item?.id} // Helper for mode='blog' logic
-                selectedLanguage={selectedLanguage}
-            />,
-            document.body
-        );
-    }
 
     // ... (rest of component logic)
 
@@ -550,15 +526,15 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => setVisualSwitchOpen(true)}
+                                    onClick={() => navigate('/cmspanel/visual-pages/layouts')}
                                     className="text-slate-500 hover:text-indigo-600 hidden sm:flex gap-2"
                                 >
                                     <Layout className="w-4 h-4" />
-                                    <span className="hidden lg:inline">Open Visual Builder</span>
+                                    <span className="hidden lg:inline">Manage Blog Layout</span>
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" align="center" className="rounded-xl border-white/70 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] px-3 py-2 text-xs text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.28)]">
-                                Close this editor and continue in the visual builder view
+                                Configure the public blog layout from the Pages module single-post template
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -676,6 +652,13 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-500">Publishing flow</p>
                                 <p className="mt-1 text-sm font-medium text-slate-700">Shape the story on the left, then refine taxonomy, search, and social metadata here.</p>
                             </div>
+
+                            {isVisualContent && (
+                                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm">
+                                    <p className="font-semibold">Legacy visual blog detected</p>
+                                    <p className="mt-1">Blog presentation is now managed from the Pages module using the single-post visual template. Continue editing the article content here, then adjust the public layout from Visual Builder.</p>
+                                </div>
+                            )}
 
 
 
@@ -929,26 +912,6 @@ function BlogEditor({ item, onClose, onSuccess, translationConfig = null, select
                 </DialogContent>
             </Dialog>
 
-            <AlertDialog open={visualSwitchOpen} onOpenChange={setVisualSwitchOpen}>
-                <AlertDialogContent className="border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] shadow-[0_30px_90px_rgba(15,23,42,0.22)] backdrop-blur-xl">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-xl">Switch to Visual Builder?</AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-2 text-slate-600">
-                            <span className="block">Use the visual builder when you want layout-driven storytelling blocks instead of the standard rich text editor.</span>
-                            <span className="block">Existing text content may need light cleanup after the switch, especially on older posts.</span>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleSwitchToVisualBuilder}
-                            className="bg-indigo-600 hover:bg-indigo-700"
-                        >
-                            Switch
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </motion.div>
     );
 
