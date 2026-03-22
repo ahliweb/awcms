@@ -1,0 +1,47 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/main.jsx",
+    "src/pages/**/*.jsx",
+    "src/scripts/**/*.js",
+    "src/extensions/**/src/index.js",
+    "src/plugins/**/index.js",
+    "test-eslint.config.js",
+    "debug-tenant.js",
+    "empty.js"
+  ],
+  "project": [
+    "src/**/*.{js,jsx}",
+    "scripts/**/*.js",
+    "*.js"
+  ],
+  "paths": {
+    "@": ["./src"],
+    "@/*": ["./src/*"],
+    "@plugins": ["./src/plugins"],
+    "@plugins/*": ["./src/plugins/*"]
+  },
+  "ignoreBinaries": [
+    "markdown-link-check",
+    "supabase"
+  ],
+  "ignoreDependencies": [
+    "bcryptjs",
+    "flowbite",
+    "leaflet",
+    "react-leaflet",
+    "tailwindcss-animate",
+    "@tailwindcss/typography",
+    "tailwindcss"
+  ],
+  "ignoreFiles": [
+    "public/leaflet/**",
+    "src/templates/**"
+  ],
+  "ignoreIssues": {
+    "src/extensions/**/src/index.js": ["exports", "duplicates"],
+    "src/plugins/**/index.js": ["exports", "duplicates"],
+    "src/templates/**": ["files", "exports", "duplicates"]
+  },
+  "ignoreExportsUsedInFile": true
+}
