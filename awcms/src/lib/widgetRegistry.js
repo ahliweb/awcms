@@ -92,5 +92,3 @@ export const registerWidget = (widgetDef) => {
     }
     registry.push(widgetDef);
 };
-
-export const getWidgetByType = (type) => registry.find(w => w.type === type);

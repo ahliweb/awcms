@@ -201,8 +201,6 @@ Object.defineProperty(customSupabaseClient, 'functions', {
     get: () => edgeFunctionsProxy
 });
 
-export default customSupabaseClient;
-
 export {
     customSupabaseClient,
     customSupabaseClient as supabase,

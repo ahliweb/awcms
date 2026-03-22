@@ -5,7 +5,7 @@
 
 import { ColorPickerField } from '../fields/ColorPickerField';
 
-export const HeroBlockFields = {
+const HeroBlockFields = {
     title: { type: 'text', label: 'Title' },
     titleColor: { type: 'custom', label: 'Title Color', render: ColorPickerField },
     subtitle: { type: 'textarea', label: 'Subtitle' },
@@ -124,5 +124,3 @@ export const HeroBlock = ({ title, titleColor, subtitle, subtitleColor, backgrou
         </div>
     );
 };
-
-export default HeroBlock;

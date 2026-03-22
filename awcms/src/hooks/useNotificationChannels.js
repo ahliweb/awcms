@@ -196,5 +196,3 @@ export function useNotificationChannels() {
     getChannelByType,
   };
 }
-
-export default useNotificationChannels;

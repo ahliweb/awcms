@@ -212,10 +212,3 @@ export const MultiImageField = ({ field, value, onChange, name }) => {
         </div>
     );
 };
-
-const ImageFieldFields = {
-    ImageField,
-    MultiImageField
-};
-
-export default ImageFieldFields;

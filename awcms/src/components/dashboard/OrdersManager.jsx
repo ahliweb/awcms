@@ -1,6 +1,6 @@
 
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
-import StatusBadge from '@/components/ui/StatusBadge';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { User, ShoppingCart } from 'lucide-react';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 

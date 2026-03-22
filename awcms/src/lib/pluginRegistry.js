@@ -73,46 +73,6 @@ export const getPluginComponent = (key) => {
     return FallbackComponent;
 };
 
-/**
- * Get all available component keys
- * @returns {string[]} Array of component keys
- */
-export const getAvailableComponents = () => {
-    const keys = [];
-    for (const [slug, plugin] of Object.entries(PLUGIN_REGISTRY)) {
-        if (plugin.components) {
-            Object.keys(plugin.components).forEach(name => {
-                keys.push(`${slug}:${name}`);
-            });
-        }
-    }
-    return keys;
-};
-
-/**
- * Get plugin manifest
- * @param {string} slug - Plugin slug
- * @returns {Object|null} Manifest or null
- */
-export const getPluginManifest = (slug) => {
-    const plugin = PLUGIN_REGISTRY[slug];
-    return plugin?.manifest || null;
-};
-
-/**
- * Check if plugin has lifecycle methods
- * @param {string} slug - Plugin slug
- * @returns {Object} { hasRegister, hasActivate, hasDeactivate }
- */
-export const getPluginLifecycle = (slug) => {
-    const plugin = PLUGIN_REGISTRY[slug];
-    return {
-        hasRegister: typeof plugin?.register === 'function',
-        hasActivate: typeof plugin?.activate === 'function',
-        hasDeactivate: typeof plugin?.deactivate === 'function'
-    };
-};
-
 // Legacy compatibility - map old keys to new
 const LEGACY_KEY_MAP = {
     'BackupManager': 'backup:BackupManager',
@@ -120,24 +80,3 @@ const LEGACY_KEY_MAP = {
     'BackupSettings': 'backup:BackupSettings',
     'HelloWorld': 'helloworld'
 };
-
-/**
- * Get extension component (Legacy API)
- * @deprecated Use getPluginComponent instead
- */
-export const getExtensionComponent = (key) => {
-    const mappedKey = LEGACY_KEY_MAP[key] || key;
-    return getPluginComponent(mappedKey);
-};
-
-const pluginRegistry = {
-    getAllPlugins,
-    getPlugin,
-    getPluginComponent,
-    getAvailableComponents,
-    getPluginManifest,
-    getPluginLifecycle,
-    getExtensionComponent
-};
-
-export default pluginRegistry;

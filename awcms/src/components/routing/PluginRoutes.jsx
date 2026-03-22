@@ -108,5 +108,3 @@ const PluginRoutes = () => {
         </>
     );
 };
-
-export default PluginRoutes;

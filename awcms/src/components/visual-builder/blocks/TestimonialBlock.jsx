@@ -6,7 +6,7 @@
 import { Quote } from 'lucide-react';
 import { ColorPickerField } from '../fields/ColorPickerField';
 
-export const TestimonialBlockFields = {
+const TestimonialBlockFields = {
     quote: { type: 'textarea', label: 'Testimonial Quote' },
     quoteColor: { type: 'custom', label: 'Quote Color', render: ColorPickerField },
     name: { type: 'text', label: 'Customer Name' },
@@ -117,5 +117,3 @@ export const TestimonialBlock = ({ quote, quoteColor: _quoteColor, name, nameCol
         </div>
     );
 };
-
-export default TestimonialBlock;

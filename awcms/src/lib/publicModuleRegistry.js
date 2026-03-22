@@ -91,5 +91,3 @@ export function getModulesByGroup(tenant, activeModuleSlugs = []) {
 export function getModuleByKey(key) {
     return PUBLIC_MODULES.find(m => m.key === key);
 }
-
-export default PUBLIC_MODULES;

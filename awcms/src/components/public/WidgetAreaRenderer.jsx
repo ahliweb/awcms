@@ -76,5 +76,3 @@ const TextWidget = ({ config }) => {
     }
     return <div className="prose prose-sm max-w-none">{config.content}</div>;
 };
-
-export default WidgetAreaRenderer;

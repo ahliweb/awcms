@@ -126,5 +126,3 @@ export function useNotificationDispatches() {
     PAGE_SIZE,
   };
 }
-
-export default useNotificationDispatches;

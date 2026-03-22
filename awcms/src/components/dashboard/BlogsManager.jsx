@@ -15,7 +15,7 @@ import BlogsHeaderActions from '@/components/dashboard/blogs/BlogsHeaderActions'
 import BlogsToolbarActions from '@/components/dashboard/blogs/BlogsToolbarActions';
 import BlogsContentPanels from '@/components/dashboard/blogs/BlogsContentPanels';
 import { getBlogEditorProps } from '@/components/dashboard/blogs/blogEditorConfig';
-import StatusBadge from '@/components/ui/StatusBadge';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 
 /**
  * BlogsManager - Manages blogs, categories, and tags.

@@ -138,5 +138,3 @@ export function usePushNotifications() {
         deleteNotification,
     };
 }
-
-export default usePushNotifications;

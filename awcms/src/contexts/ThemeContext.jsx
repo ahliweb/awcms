@@ -9,8 +9,6 @@ const ThemeContext = createContext({
   loading: true
 });
 
-export const useTheme = () => useContext(ThemeContext);
-
 export const ThemeProvider = ({ children }) => {
   const [currentTheme, setCurrentTheme] = useState(null);
   const [loading, setLoading] = useState(true);

@@ -126,5 +126,3 @@ export function ImageUpload({ value, onChange, disabled, className, hidePreview 
         </div>
     );
 }
-
-export default ImageUpload;

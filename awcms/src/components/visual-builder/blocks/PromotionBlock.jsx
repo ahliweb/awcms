@@ -288,5 +288,3 @@ export const PromotionBlock = ({ promotionId, variant = 'banner', showImage = tr
         </motion.div>
     );
 };
-
-export default PromotionBlock;

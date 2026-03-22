@@ -214,5 +214,3 @@ export const ContactFormBlock = ({
         </div>
     );
 };
-
-export default ContactFormBlock;

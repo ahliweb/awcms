@@ -162,5 +162,3 @@ export function useDevices() {
         totalCount: devices.length,
     };
 }
-
-export default useDevices;

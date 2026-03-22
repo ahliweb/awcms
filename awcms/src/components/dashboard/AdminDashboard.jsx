@@ -7,7 +7,7 @@ import { StatCards } from './widgets/StatCards';
 import { ActivityFeed } from './widgets/ActivityFeed';
 import { ContentDistribution } from './widgets/ContentDistribution';
 import { SystemHealth } from './widgets/SystemHealth';
-import { PluginAction } from '@/contexts/PluginContext';
+import { PluginSlot } from '@/contexts/PluginContext';
 import { PlatformOverview } from './widgets/PlatformOverview';
 import { MyApprovals } from './widgets/MyApprovals';
 import { UsageWidget } from './widgets/UsageWidget';
@@ -156,7 +156,7 @@ function AdminDashboard() {
 
                 {/* Plugin Hook: Dashboard Top */}
                 <div className="w-full">
-                    <PluginAction name="dashboard_top" args={[userRole]} />
+                    <PluginSlot name="dashboard_top" args={[userRole]} />
                 </div>
 
                 <PluginWidgets

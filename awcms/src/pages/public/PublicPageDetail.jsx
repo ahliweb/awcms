@@ -11,7 +11,7 @@ import ShareButtons from '@/components/public/ShareButtons';
 import TableOfContents from '@/components/public/TableOfContents';
 import { useTranslation } from 'react-i18next';
 import { Render } from '@puckeditor/core';
-import puckConfig from '@/components/visual-builder/config';
+import { puckConfig } from '@/components/visual-builder/config';
 import '@puckeditor/core/puck.css';
 import '@/components/visual-builder/puck-theme.css';
 import { WidgetAreaRenderer } from '@/components/public/WidgetAreaRenderer';

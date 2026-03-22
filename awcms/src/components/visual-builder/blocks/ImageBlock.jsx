@@ -4,7 +4,7 @@
  */
 
 
-export const ImageBlockFields = {
+const ImageBlockFields = {
     src: { type: 'text', label: 'Image URL' },
     alt: { type: 'text', label: 'Alt Text' },
     caption: { type: 'text', label: 'Caption' },
@@ -71,5 +71,3 @@ export const ImageBlock = ({ src, alt, caption, width, borderRadius }) => {
         </figure>
     );
 };
-
-export default ImageBlock;

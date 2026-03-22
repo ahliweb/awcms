@@ -93,5 +93,3 @@ export function useSensorData(deviceId, options = {}) {
         fetchReadings,
     };
 }
-
-export default useSensorData;

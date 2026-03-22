@@ -36,12 +36,20 @@
   ],
   "ignoreFiles": [
     "public/leaflet/**",
-    "src/templates/**"
+    "src/templates/**",
+    "src/components/public/Checkout.jsx",
+    "src/components/public/ProductCatalog.jsx",
+    "src/components/public/ShoppingCart.jsx",
+    "src/contexts/CartContext.jsx"
   ],
   "ignoreIssues": {
     "src/extensions/**/src/index.js": ["exports", "duplicates"],
     "src/plugins/**/index.js": ["exports", "duplicates"],
-    "src/templates/**": ["files", "exports", "duplicates"]
+    "src/templates/**": ["files", "exports", "duplicates"],
+    "src/extensions/ahliweb-events/index.js": ["exports"],
+    "src/lib/extensionManifest.js": ["exports"],
+    "src/lib/templateExtensions.js": ["exports"],
+    "src/plugins/helloworld/HelloWorld.jsx": ["exports"]
   },
   "ignoreExportsUsedInFile": true
 }

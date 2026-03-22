@@ -234,5 +234,3 @@ export function useModules() {
     isModuleEnabled,
   };
 }
-
-export default useModules;

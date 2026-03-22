@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export const GalleryBlockFields = {
+const GalleryBlockFields = {
     images: {
         type: 'textarea',
         label: 'Image URLs (one per line)',
@@ -174,5 +174,3 @@ export const GalleryBlock = ({ images, columns, gap, aspectRatio, lightbox, bord
         </>
     );
 };
-
-export default GalleryBlock;

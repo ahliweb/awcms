@@ -107,5 +107,3 @@ export function useHistory(initialState) {
         historyInfo
     };
 }
-
-export default useHistory;
