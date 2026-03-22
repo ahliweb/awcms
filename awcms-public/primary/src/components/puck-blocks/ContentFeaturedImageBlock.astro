@@ -1,0 +1,39 @@
+---
+const {
+  source = "page",
+  aspectRatio = "video",
+  rounded = "xl",
+  showCaption = false,
+  context = {},
+} = Astro.props;
+
+const content = source === "blog" ? context.blog : context.page;
+const src = content?.featuredImage;
+const aspectClass = aspectRatio === "square"
+  ? "aspect-square"
+  : aspectRatio === "portrait"
+    ? "aspect-[3/4]"
+    : "aspect-video";
+const radiusClass = rounded === "none"
+  ? "rounded-none"
+  : rounded === "lg"
+    ? "rounded-lg"
+    : rounded === "2xl"
+      ? "rounded-2xl"
+      : "rounded-xl";
+---
+
+{
+  src ? (
+    <figure class="space-y-2">
+      <img src={src} alt={content?.title || ""} class={`w-full object-cover shadow-sm ${aspectClass} ${radiusClass}`} />
+      {showCaption && content?.title ? <figcaption class="text-sm text-slate-500 dark:text-slate-400">{content.title}</figcaption> : null}
+    </figure>
+  ) : (
+    <div class={`flex ${aspectClass} items-center justify-center border border-dashed border-slate-300 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-900 ${radiusClass}`}>
+      <div class="text-center">
+        <p class="text-sm font-medium">No featured image</p>
+      </div>
+    </div>
+  )
+}

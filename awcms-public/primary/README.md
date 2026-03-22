@@ -39,6 +39,12 @@ VITE_PUBLIC_TENANT_ID=...
 VITE_TENANT_ID=...
 ```
 
+Cloudflare Pages note:
+
+- Preview and Production deployments use separate variable sets in Cloudflare Pages.
+- If the build fails with `[AWCMS Public] Missing deployment env`, first check the Preview environment in the `awcms-public` Pages project.
+- The minimum preview variables are `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `PUBLIC_TENANT_ID`.
+
 ## Tenant Resolution
 
 - Static builds resolve tenant data at build time using `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).

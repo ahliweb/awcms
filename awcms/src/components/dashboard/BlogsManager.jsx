@@ -5,8 +5,7 @@ import { useTranslation } from 'react-i18next';
 import BlogEditor from '@/components/dashboard/BlogEditor';
 import { useToast } from '@/components/ui/use-toast';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
-import { FileText, FolderOpen, Tag, Layout } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { FileText, FolderOpen, Tag } from 'lucide-react';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { cn } from '@/lib/utils';
@@ -232,41 +231,23 @@ function BlogsManager() {
         <span className={cn(
           'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium',
           value === 'visual'
-            ? 'border-primary/25 bg-primary/10 text-primary'
+            ? 'border-amber-200 bg-amber-50 text-amber-700'
             : 'border-border/70 bg-muted text-muted-foreground'
         )}>
-          {value === 'visual' ? <Layout className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
-          {value === 'visual' ? t('blogs.visual_builder') : t('blogs.standard_editor')}
+          <FileText className="h-3 w-3" />
+          {value === 'visual' ? 'Legacy visual content' : t('blogs.standard_editor')}
         </span>
       )
     }
   ], [selectedLanguage, t]);
 
-  // Custom Actions
-  const customRowActions = (item, { openEditor }) => (
-    <Button
-      size="sm"
-      variant="outline"
-      className="h-8 rounded-lg border-primary/25 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/15"
-      title={t('blogs.visual_builder')}
-      onClick={(e) => {
-        e.stopPropagation();
-        openEditor({ ...item, editor_type: 'visual' });
-      }}
-    >
-      <Layout className="mr-1.5 h-3.5 w-3.5" />
-      {t('blogs.visual_builder')}
-    </Button>
-  );
-
-  const customToolbarActions = ({ openEditor }) => (
+  const customToolbarActions = () => (
     <BlogsToolbarActions
       t={t}
       languages={languages}
       selectedLanguage={selectedLanguage}
       selectedLanguageLabel={selectedLanguageLabel}
       onLanguageChange={setSelectedLanguage}
-      onCreateVisual={() => openEditor({ editor_type: 'visual', title: '', status: 'draft' })}
     />
   );
 
@@ -371,7 +352,7 @@ function BlogsManager() {
         blogFormFields={blogFormFields}
         blogFilters={blogFilters}
         BlogEditorComponent={BlogEditor}
-        customRowActions={customRowActions}
+        customRowActions={null}
         customToolbarActions={customToolbarActions}
         categoryColumns={categoryColumns}
         categoryFormFields={categoryFormFields}

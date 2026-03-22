@@ -7,6 +7,186 @@ import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
 import { Button } from '@/components/ui/button';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 
+const singlePostStarterLayout = {
+    root: {
+        props: {
+            title: 'Single Post Template',
+            maxWidth: '1200px',
+            backgroundColor: '#ffffff',
+        }
+    },
+    content: [
+        {
+            type: 'Container',
+            props: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.5rem',
+                paddingTop: '4rem',
+                paddingBottom: '2rem',
+                paddingLeft: '1.5rem',
+                paddingRight: '1.5rem',
+                maxWidth: '920px',
+                marginAuto: true,
+            }
+        },
+        {
+            type: 'ContentMeta',
+            props: {
+                source: 'blog',
+                alignment: 'left',
+                showDate: true,
+                showAuthor: true,
+                showCategory: true,
+                showTags: false,
+            }
+        },
+        {
+            type: 'ContentTitle',
+            props: {
+                source: 'blog',
+                headingLevel: 'h1',
+                alignment: 'left',
+            }
+        },
+        {
+            type: 'ContentExcerpt',
+            props: {
+                source: 'blog',
+                alignment: 'left',
+                fallbackText: 'Write a short summary for this post to support the hero section.',
+            }
+        },
+        {
+            type: 'ContentFeaturedImage',
+            props: {
+                source: 'blog',
+                aspectRatio: 'video',
+                rounded: '2xl',
+                showCaption: false,
+            }
+        },
+        {
+            type: 'Divider',
+            props: {
+                color: '#e2e8f0',
+                height: '1px',
+                width: '100%',
+                style: 'solid',
+            }
+        },
+        {
+            type: 'ContentBody',
+            props: {
+                source: 'blog',
+                emptyState: 'Rich text blog content will render here.',
+            }
+        },
+        {
+            type: 'ContentMeta',
+            props: {
+                source: 'blog',
+                alignment: 'left',
+                showDate: false,
+                showAuthor: false,
+                showCategory: false,
+                showTags: true,
+            }
+        },
+    ],
+    zones: {},
+};
+
+const singlePageStarterLayout = {
+    root: {
+        props: {
+            title: 'Single Page Template',
+            maxWidth: '1200px',
+            backgroundColor: '#ffffff',
+        }
+    },
+    content: [
+        {
+            type: 'Container',
+            props: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.5rem',
+                paddingTop: '4rem',
+                paddingBottom: '2rem',
+                paddingLeft: '1.5rem',
+                paddingRight: '1.5rem',
+                maxWidth: '920px',
+                marginAuto: true,
+            }
+        },
+        {
+            type: 'ContentMeta',
+            props: {
+                source: 'page',
+                alignment: 'left',
+                showDate: true,
+                showAuthor: true,
+                showCategory: true,
+                showTags: false,
+            }
+        },
+        {
+            type: 'ContentTitle',
+            props: {
+                source: 'page',
+                headingLevel: 'h1',
+                alignment: 'left',
+            }
+        },
+        {
+            type: 'ContentExcerpt',
+            props: {
+                source: 'page',
+                alignment: 'left',
+                fallbackText: 'Add a short summary to introduce this page.',
+            }
+        },
+        {
+            type: 'ContentFeaturedImage',
+            props: {
+                source: 'page',
+                aspectRatio: 'video',
+                rounded: '2xl',
+                showCaption: false,
+            }
+        },
+        {
+            type: 'Divider',
+            props: {
+                color: '#e2e8f0',
+                height: '1px',
+                width: '100%',
+                style: 'solid',
+            }
+        },
+        {
+            type: 'ContentBody',
+            props: {
+                source: 'page',
+                emptyState: 'Rich text page content will render here.',
+            }
+        },
+        {
+            type: 'ContentMeta',
+            props: {
+                source: 'page',
+                alignment: 'left',
+                showDate: false,
+                showAuthor: false,
+                showCategory: false,
+                showTags: true,
+            }
+        },
+    ],
+    zones: {},
+};
+
 /**
  * ThemeLayoutManager
  * Manages system templates like Homepage, Header, Footer, etc.
@@ -67,6 +247,7 @@ const ThemeLayoutManager = ({ embedded = false }) => {
         { key: 'slug', label: 'System Slug', description: 'Unique identifier (e.g. system-header-v1)', required: true },
         { key: 'status', label: 'Status', type: 'select', options: [{ value: 'published', label: 'Active' }, { value: 'draft', label: 'Draft' }] },
         { key: 'editor_type', label: 'Editor', type: 'hidden', defaultValue: 'visual' },
+        { key: 'content_draft', label: 'Starter Layout', type: 'hidden', defaultValue: null },
         { key: 'is_active', label: 'Active', type: 'boolean', defaultValue: true }
     ], []);
 
@@ -85,12 +266,29 @@ const ThemeLayoutManager = ({ embedded = false }) => {
     ), [handleOpenVisualBuilder]);
 
     // Helper to render manager for specific type
-    const renderManager = useCallback((type, icon, title) => (
+    const renderManager = useCallback((type, icon, title) => {
+        const editorFields = formFields.map((field) => {
+            if (field.key === 'page_type') {
+                return { ...field, defaultValue: type };
+            }
+
+            if (type === 'single_page' && field.key === 'content_draft') {
+                return { ...field, defaultValue: singlePageStarterLayout };
+            }
+
+            if (type === 'single_post' && field.key === 'content_draft') {
+                return { ...field, defaultValue: singlePostStarterLayout };
+            }
+
+            return field;
+        });
+
+        return (
         <GenericContentManager
             tableName="pages"
             resourceName={title}
             columns={columns}
-            formFields={formFields.map(f => f.key === 'page_type' ? { ...f, defaultValue: type } : f)}
+            formFields={editorFields}
             permissionPrefix="visual_pages"
             defaultFilters={{ page_type: type, editor_type: 'visual' }}
             customRowActions={visualEditorAction}
@@ -110,7 +308,8 @@ const ThemeLayoutManager = ({ embedded = false }) => {
                 </div>
             }
         />
-    ), [columns, formFields, visualEditorAction]);
+    );
+    }, [columns, formFields, visualEditorAction]);
 
     // If Visual Builder is open, render it full-screen
     if (visualBuilderOpen && selectedPage) {
@@ -145,7 +344,7 @@ const ThemeLayoutManager = ({ embedded = false }) => {
                             {renderManager('single_page', null, 'Single Page Template')}
                         </div>
                         <div className="border-t pt-6">
-                            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><FileType className="w-5 h-5" /> Single Post Template</h3>
+                            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><FileType className="w-5 h-5" /> Single Post / Blog Template</h3>
                             {renderManager('single_post', null, 'Single Post Template')}
                         </div>
                     </div>

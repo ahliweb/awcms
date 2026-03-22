@@ -32,25 +32,28 @@ Explain the Visual Page Builder architecture and integration with public renderi
 - `awcms/src/components/dashboard/VisualPagesManager.jsx`
 - `awcms/src/components/visual-builder/VisualPageBuilder.jsx`
 - `awcms/src/components/visual-builder/config.js`
+- `awcms/src/components/visual-builder/blocks/ContentReferenceBlocks.jsx`
 
 ### Admin Routes
 
 | Route | Purpose | Notes |
 | --- | --- | --- |
 | `/cmspanel/visual-pages` | Visual page list | Canonical route for visual content pages; supports `pages` and `layouts` tab sub-slugs. |
-| `/cmspanel/visual-editor/:mode/:id/*` | Edit a visual layout | `:mode` specifies the type of layout: `template`, `part`, `page`, or `blog`. `:id` uses signed route parameters (`{uuid}.{signature}`), and the route supports editor sub-slugs. Legacy links using `?templateId` or `?partId` will redirect here. |
+| `/cmspanel/visual-editor/:mode/:id/*` | Edit a visual layout | `:mode` specifies the type of layout: `template`, `part`, or `page`. `:id` uses signed route parameters (`{uuid}.{signature}`), and the route supports editor sub-slugs. Legacy links using `?templateId` or `?partId` will redirect here. |
 
 Modes:
 
 - `template`: template layout editor
 - `part`: template part editor
 - `page`: visual page layout editor
-- `blog`: visual blog layout editor
+
+Blog presentation is owned by Pages-managed visual templates such as `single_post`, not by direct Visual Builder editing on `blogs` rows.
 
 ### Public Rendering
 
 - `awcms-public/primary/src/components/common/PuckRenderer.astro`
 - `awcms-public/primary/src/components/common/WidgetRenderer.astro`
+- `awcms-public/primary/src/pages/[locale]/blogs/[slug].astro`
 
 ## Implementation Patterns
 
@@ -76,6 +79,7 @@ Note the following patterns:
 - Use `<Puck>` for editing and `<Render config={config} data={data} />` for public output.
 - The Astro `PuckRenderer` wraps `<Render>` with an allow-list component registry.
 - Avoid rendering unknown blocks on the public portal.
+- Prefer Pages-owned content reference blocks when a layout needs to render page/blog title, excerpt, body, image, or metadata.
 
 ## Permissions and Access
 
@@ -97,6 +101,13 @@ Refer to `docs/security/abac.md` for key conventions.
 ## Operational Concerns
 
 - Ensure templates and parts are assigned for the `web` channel.
+
+## Operator Note
+
+- Use `single_page` when the layout should render standard Pages-module records and page-owned content references.
+- Use `single_post` when the layout should render Blog-module records inside the Pages-owned visual system.
+- Both template types now open with starter layouts so editors can refine structure instead of building from an empty canvas.
+- For `single_post`, prefer content-reference blocks with `source = blog`; for `single_page`, prefer `source = page`.
 
 ## References
 

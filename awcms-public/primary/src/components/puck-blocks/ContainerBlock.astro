@@ -13,6 +13,7 @@ const {
     maxWidth = "100%",
     marginAuto = false,
     content = [], // The slot content array
+    context = {},
     ...rest
 } = props;
 
@@ -47,5 +48,5 @@ const combinedStylesString =
 ---
 
 <div style={combinedStylesString} class="awcms-container-block">
-    <PuckRenderer content={{ content }} />
+    <PuckRenderer content={{ content }} context={context} />
 </div>

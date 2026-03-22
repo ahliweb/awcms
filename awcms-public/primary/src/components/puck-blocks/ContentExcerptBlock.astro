@@ -1,0 +1,20 @@
+---
+const {
+  source = "page",
+  alignment = "left",
+  fallbackText = "Add a short summary for this content.",
+  context = {},
+} = Astro.props;
+
+const content = source === "blog" ? context.blog : context.page;
+const excerpt = content?.excerpt || fallbackText;
+const alignmentClass = alignment === "center"
+  ? "text-center"
+  : alignment === "right"
+    ? "text-right"
+    : "text-left";
+---
+
+<p class={`${alignmentClass} text-lg leading-relaxed text-slate-600 dark:text-slate-300`}>
+  {excerpt}
+</p>

@@ -1,0 +1,22 @@
+---
+const {
+  source = "page",
+  headingLevel = "h1",
+  alignment = "left",
+  fallbackText = "Untitled content",
+  context = {},
+} = Astro.props;
+
+const content = source === "blog" ? context.blog : context.page;
+const title = content?.title || fallbackText;
+const Tag = headingLevel;
+const alignmentClass = alignment === "center"
+  ? "text-center"
+  : alignment === "right"
+    ? "text-right"
+    : "text-left";
+---
+
+<Tag class={`${alignmentClass} text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-100`}>
+  {title}
+</Tag>

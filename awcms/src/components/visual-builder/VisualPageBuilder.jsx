@@ -38,8 +38,10 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext'; // Added TenantContext
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import useSecureRouteParam from '@/hooks/useSecureRouteParam';
+import { VisualContentProvider } from './VisualContentContext';
+import { createVisualContentResource } from './visualContentUtils';
 
-const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess: _onSuccess, selectedLanguage = 'id' }) => {
+const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSuccess: _onSuccess }) => {
     const defaultContentLocale = 'id';
     // Permission Hook
     const { hasPermission, checkAccess, isPlatformAdmin } = usePermissions();
@@ -49,7 +51,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     const navigate = useNavigate();
     const { mode: modeParam, id: idParam } = useParams();
     const normalizedMode = modeParam ? modeParam.toLowerCase() : null;
-    const allowedModes = ['template', 'part', 'page', 'blog'];
+    const allowedModes = ['template', 'part', 'page'];
     const isAllowedMode = normalizedMode ? allowedModes.includes(normalizedMode) : false;
     const routeScope = isAllowedMode ? `visual-editor.${normalizedMode}` : 'visual-editor';
     const {
@@ -65,7 +67,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     const resolvedRouteId = routeLoading ? null : secureRouteId;
     const templateId = normalizedMode === 'template' && isAllowedMode ? resolvedRouteId : legacyTemplateId;
     const partId = normalizedMode === 'part' && isAllowedMode ? resolvedRouteId : legacyPartId;
-    const pageId = (normalizedMode === 'page' || normalizedMode === 'blog') && isAllowedMode ? resolvedRouteId : legacyPageId;
+    const pageId = normalizedMode === 'page' && isAllowedMode ? resolvedRouteId : legacyPageId;
     const mode = initialMode || normalizedMode || (partId ? 'part' : (templateId ? 'template' : 'page'));
 
     useEffect(() => {
@@ -138,17 +140,16 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         slug: initialPage?.slug || '',
         meta_description: initialPage?.meta_description || '',
         category_id: initialPage?.category_id || null, // Added category_id
-        locale: initialMode === 'blog' && initialPage?.id ? selectedLanguage : defaultContentLocale,
+        locale: defaultContentLocale,
         status: initialPage?.status || 'draft',
         published_at: initialPage?.published_at ? new Date(initialPage.published_at).toISOString().slice(0, 16) : ''
     });
 
 
-    const contentPermissionResource = mode === 'blog' ? 'blog' : 'pages';
-    const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('update', contentPermissionResource, page);
+    const isEditorEnabled = (mode === 'template' || mode === 'part') ? hasPermission('tenant.theme.update') : checkAccess('update', 'pages', page);
     const canEdit = isEditorEnabled; // Alias for readability
-    const canPublish = (mode === 'template' || mode === 'part') ? false : checkAccess('publish', contentPermissionResource, page);
-    const requiresBaseLocaleFirst = (mode === 'page' || mode === 'blog') && !page?.id;
+    const canPublish = (mode === 'template' || mode === 'part') ? false : checkAccess('publish', 'pages', page);
+    const requiresBaseLocaleFirst = mode === 'page' && !page?.id;
     const [isSaving, setIsSaving] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [previewMode, setPreviewMode] = useState(false);
@@ -180,7 +181,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         const loadData = async () => {
             if (initialPage) return; // Already have data from props
 
-            if (initialPage && (initialPage.id || initialPage.editor_type === 'visual')) return; // Already have data from props, possibly new Visual Blog
+            if (initialPage && (initialPage.id || initialPage.editor_type === 'visual')) return;
             try {
                 let fetchedData = null;
                 // CHANGED: Added tenant isolation to queries
@@ -235,27 +236,6 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         published_at: ''
                     });
 
-                } else if (mode === 'blog' && pageId) {
-                    let q = udm.from('blogs').select('*').eq('id', pageId);
-                    q = applyTenantFilter(q);
-                    const { data: art, error } = await q.single();
-                    if (error) throw error;
-                    fetchedData = {
-                        id: art.id,
-                        ...art,
-                        content_draft: typeof art.content === 'object' ? art.content : { content: [], root: { props: { title: art.title } } }
-                    };
-                    setPageMetadata({
-                        title: art.title,
-                        slug: art.slug,
-                        meta_description: art.meta_description,
-                        category_id: art.category_id || null,
-                        status: art.status,
-                        locale: selectedLanguage || defaultContentLocale,
-                        published_at: art.published_at ? new Date(art.published_at).toISOString().slice(0, 16) : ''
-                    });
-
-
                 } else if (mode === 'page' && pageId) {
                     let q = udm.from('pages').select('*').eq('id', pageId);
                     q = applyTenantFilter(q);
@@ -275,7 +255,6 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
                 if (fetchedData) {
                     setPage(fetchedData);
-                    // For blogs, we might need to be careful if content is HTML string (legacy) vs JSON (visual)
                     const initialContent = fetchedData.content_draft ||
                         (typeof fetchedData.content === 'object' ? fetchedData.content : null) ||
                         fetchedData.data ||
@@ -300,16 +279,15 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             loadData();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [templateId, pageId, initialPage, mode, currentTenant?.id, isPlatformAdmin, selectedLanguage]);
+    }, [templateId, pageId, initialPage, mode, currentTenant?.id, isPlatformAdmin]);
 
     useEffect(() => {
         let cancelled = false;
 
         const loadTranslationOverlay = async () => {
-            if ((mode !== 'page' && mode !== 'blog') || !page?.id || !currentTenant?.id) return;
+            if (mode !== 'page' || !page?.id || !currentTenant?.id) return;
 
-            const isPageMode = mode === 'page';
-            const translationContentType = isPageMode ? 'page' : 'article';
+            const translationContentType = 'page';
             const fallbackLocale = defaultContentLocale;
             const baseContent = page?.content_draft || page?.content_published || (typeof page?.content === 'object' ? page.content : null) || { content: [], root: { props: { title: page?.title || '' } } };
 
@@ -337,7 +315,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 .maybeSingle();
 
             if (error) {
-                console.error("Error loading %s translation:", mode, error);
+                    console.error('Error loading page translation:', error);
                 return;
             }
 
@@ -348,7 +326,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 try {
                     translatedVisualContent = JSON.parse(translation.content);
                 } catch (parseError) {
-                    console.warn("Failed to parse translated %s visual content, using default locale content:", mode, parseError);
+                    console.warn('Failed to parse translated page visual content, using default locale content:', parseError);
                 }
             }
 
@@ -445,7 +423,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         if (mode === 'template' && !templateId) {
             if (!isAutoSave) toast({ variant: 'destructive', title: 'Error', description: 'Template ID is missing. Cannot save.' });
             return;
-        } else if (mode !== 'template' && mode !== 'blog' && (!page || !page.id)) {
+        } else if (mode !== 'template' && (!page || !page.id)) {
             if (!isAutoSave) toast({ variant: 'destructive', title: 'Error', description: 'Page data is missing. Cannot save.' });
             return;
         }
@@ -489,120 +467,6 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                     })
                     .eq('id', partId);
                 error = err;
-            } else if (mode === 'blog') {
-                console.log('Saving blog:', page?.id ? page.id : 'NEW');
-
-                const payload = {
-                    content: contentData,
-                    updated_at: timestamp,
-                    title: pageMetadata.title,
-                    slug: pageMetadata.slug,
-                    meta_description: pageMetadata.meta_description,
-                    category_id: pageMetadata.category_id,
-                    status: pageMetadata.status,
-                    published_at: pageMetadata.published_at || null,
-                    editor_type: 'visual',
-                    tenant_id: currentTenant?.id
-                };
-
-                if (page?.id) {
-                    if (pageMetadata.locale === defaultContentLocale) {
-                        const { error: err } = await udm
-                            .from('blogs')
-                            .update(payload)
-                            .eq('id', page.id);
-                        error = err;
-                    } else {
-                        if (pageMetadata.slug) {
-                            const { data: existingTranslationSlug, error: translationSlugError } = await supabase
-                                .from('content_translations')
-                                .select('id')
-                                .eq('tenant_id', currentTenant?.id)
-                                .eq('content_type', 'article')
-                                .eq('locale', pageMetadata.locale)
-                                .eq('slug', pageMetadata.slug)
-                                .neq('content_id', page.id)
-                                .limit(1);
-
-                            if (translationSlugError) {
-                                throw translationSlugError;
-                            }
-
-                            if (existingTranslationSlug && existingTranslationSlug.length > 0) {
-                                const uniqueSuffix = Date.now().toString(36);
-                                throw new Error(`Slug "${pageMetadata.slug}" is already in use for ${pageMetadata.locale.toUpperCase()}. Try "${pageMetadata.slug}-${uniqueSuffix}" instead.`);
-                            }
-                        }
-
-                        const translationPayload = {
-                            tenant_id: currentTenant?.id,
-                            content_type: 'article',
-                            content_id: page.id,
-                            locale: pageMetadata.locale,
-                            title: pageMetadata.title || null,
-                            slug: pageMetadata.slug || null,
-                            meta_description: pageMetadata.meta_description || null,
-                            content: JSON.stringify(contentData),
-                        };
-
-                        const hasTranslationContent = [
-                            translationPayload.title,
-                            translationPayload.slug,
-                            translationPayload.meta_description,
-                            translationPayload.content,
-                        ].some((value) => typeof value === 'string' && value.trim().length > 0);
-
-                        if (hasTranslationContent) {
-                            const { error: err } = await supabase
-                                .from('content_translations')
-                                .upsert(translationPayload, {
-                                    onConflict: 'content_type,content_id,locale,tenant_id'
-                                });
-                            error = err;
-                        } else {
-                            const { error: err } = await supabase
-                                .from('content_translations')
-                                .delete()
-                                .eq('tenant_id', currentTenant?.id)
-                                .eq('content_type', 'article')
-                                .eq('content_id', page.id)
-                                .eq('locale', pageMetadata.locale);
-                            error = err;
-                        }
-                    }
-                } else {
-                    // Create new blog
-                    // If offline or just standard practice, we might want to generate ID, 
-                    // but for now let's rely on UDM/Supabase to return the created record.
-                    const { data: newBlog, error: err } = await udm
-                        .from('blogs')
-                        .insert([payload])
-                        .select()
-                        .single();
-
-                    error = err;
-
-                    if (newBlog) {
-                        const nextPage = {
-                            ...newBlog,
-                            content_draft: typeof newBlog.content === 'object'
-                                ? newBlog.content
-                                : contentData,
-                        };
-
-                        setPage(nextPage);
-                        setPageMetadata(prev => ({
-                            ...prev,
-                            locale: defaultContentLocale,
-                        }));
-                        // Update the URL without reloading? 
-                        // Or just inform the user. Better to update state so subsequent saves are updates.
-                        // We also need to update the history object if necessary, but 'page' state is key.
-
-                        // NOTE: Changing URL search params in place is tricky without rerender, 
-                        // but we can just update the internal 'page' state which the save logic uses.
-                    }
-                }
             } else {
                 console.log('Saving page:', page.id);
                 if (pageMetadata.locale === defaultContentLocale) {
@@ -687,7 +551,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             setHasUnsavedChanges(false);
 
             if (!isAutoSave) {
-                const entityName = mode === 'template' ? 'Template' : (mode === 'part' ? 'Part' : (mode === 'blog' ? 'Blog' : 'Page'));
+                const entityName = mode === 'template' ? 'Template' : (mode === 'part' ? 'Part' : 'Page');
                 toast({
                     title: isOffline ? 'Saved Offline' : 'Saved',
                     description: isOffline ? `${entityName} saved to local device. Will sync when online.` : `${entityName} saved successfully.`
@@ -769,11 +633,11 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     // Publish page
     const handlePublish = async () => {
         if (!canPublish) {
-            toast({ variant: 'destructive', title: 'Action Denied', description: `You do not have permission to publish ${mode === 'blog' ? 'blogs' : 'pages'}.` });
+            toast({ variant: 'destructive', title: 'Action Denied', description: 'You do not have permission to publish pages.' });
             return;
         }
         if (!page || !page.id) {
-            toast({ variant: 'destructive', title: 'Error', description: `${mode === 'blog' ? 'Blog' : 'Page'} data is missing. Please save before publishing.` });
+            toast({ variant: 'destructive', title: 'Error', description: 'Page data is missing. Please save before publishing.' });
             return;
         }
         setIsPublishing(true);
@@ -803,42 +667,15 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                     });
 
                 error = translationError;
-            } else if (mode === 'blog' && pageMetadata.locale !== defaultContentLocale) {
-                const translationPayload = {
-                    tenant_id: currentTenant?.id,
-                    content_type: 'article',
-                    content_id: page.id,
-                    locale: pageMetadata.locale,
-                    title: pageMetadata.title || null,
-                    slug: pageMetadata.slug || null,
-                    meta_description: pageMetadata.meta_description || null,
-                    content: JSON.stringify(data),
-                    updated_at: publishedAt,
+            } else {
+                const publishPayload = {
+                    status: 'published',
+                    content_published: data,
+                    published_at: publishedAt
                 };
 
-                const { error: translationError } = await supabase
-                    .from('content_translations')
-                    .upsert(translationPayload, {
-                        onConflict: 'content_type,content_id,locale,tenant_id'
-                    });
-
-                error = translationError;
-            } else {
-                const tableName = mode === 'blog' ? 'blogs' : 'pages';
-                const publishPayload = mode === 'blog'
-                    ? {
-                        status: 'published',
-                        content: data,
-                        published_at: publishedAt
-                    }
-                    : {
-                        status: 'published',
-                        content_published: data,
-                        published_at: publishedAt
-                    };
-
                 const { error: publishError } = await udm
-                    .from(tableName)
+                    .from('pages')
                     .update(publishPayload)
                     .eq('id', page.id);
 
@@ -849,12 +686,12 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
             setPageMetadata(prev => ({ ...prev, status: 'published' }));
 
-            toast({
-                title: isOffline ? "Published Offline" : "Published Successfully",
-                description: isOffline ? "Changes saved locally. Status will update when online." : `Your ${mode === 'blog' ? 'blog' : 'page'} is now live.`,
-            });
+                toast({
+                    title: isOffline ? "Published Offline" : "Published Successfully",
+                    description: isOffline ? 'Changes saved locally. Status will update when online.' : 'Your page is now live.',
+                });
         } catch (error) {
-            console.error("Error publishing %s:", mode, error);
+            console.error('Error publishing page:', error);
             toast({
                 title: "Publish Failed",
                 description: error.message,
@@ -909,7 +746,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
         if (requiresBaseLocaleFirst && nextLocale !== defaultContentLocale) {
             toast({
                 title: 'Save base content first',
-                description: `Create the base ${mode === 'blog' ? 'blog' : 'page'} in Indonesia before editing English translations.`,
+                description: 'Create the base page in Indonesia before editing English translations.',
             });
             setPageMetadata(prev => ({ ...prev, locale: defaultContentLocale }));
             return;
@@ -917,7 +754,31 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
         setTranslationSlugCheckKey(prev => prev + 1);
         setPageMetadata(prev => ({ ...prev, locale: nextLocale }));
-    }, [defaultContentLocale, mode, requiresBaseLocaleFirst, toast]);
+    }, [defaultContentLocale, requiresBaseLocaleFirst, toast]);
+
+    const pagePreviewResource = createVisualContentResource(page, {
+            title: pageMetadata.title,
+            excerpt: pageMetadata.meta_description,
+            categoryName: page?.category?.name || page?.categories?.name || '',
+            featuredImage: page?.featured_image || '',
+            publishedAt: pageMetadata.published_at || page?.published_at || page?.created_at || null,
+            tags: page?.tags || [],
+            authorName: page?.owner?.full_name || page?.users?.full_name || '',
+        });
+    const blogPreviewResource = createVisualContentResource(null, {
+            title: 'Sample Blog Post',
+            excerpt: 'Use this sample content to preview how single-post templates present blog entries inside the Pages-owned visual layout system.',
+            htmlContent: '<p>This is sample blog body content for the Visual Builder preview. Replace the surrounding layout with your own containers, heroes, sidebars, and metadata blocks.</p><p>Published blogs will inject their real content at runtime.</p>',
+            featuredImage: page?.featured_image || '',
+            publishedAt: pageMetadata.published_at || new Date().toISOString(),
+            categoryName: 'Blog',
+            tags: ['sample', 'preview'],
+            authorName: 'Sample Author',
+        });
+    const visualContentValue = {
+        page: page?.page_type === 'single_post' ? blogPreviewResource : pagePreviewResource,
+        blog: blogPreviewResource,
+    };
 
     // --- RENDER ---
     return (
@@ -946,7 +807,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
                             <h1 className="text-lg font-bold text-foreground tracking-tight leading-none bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-                                {pageMetadata.title || (mode === 'blog' ? 'Untitled Blog' : 'Untitled Page')}
+                                {pageMetadata.title || 'Untitled Page'}
                             </h1>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${pageMetadata.status === 'published'
                                 ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
@@ -1073,40 +934,42 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             </header>
 
             {/* Main Editor Area */}
-            <div className={`flex-1 overflow-hidden relative ${previewMode ? 'bg-background' : 'bg-muted/30'}`}>
-                {previewMode ? (
-                    <div className={`w-full h-full overflow-y-auto ${viewportClasses[viewport] || 'w-full'} transition-all mx-auto bg-white shadow-sm my-4 border min-h-screen`}>
-                        <div className="min-h-full">
-                            <Render config={puckConfig} data={data} key={`render-${editorKey}`} />
+            <VisualContentProvider value={visualContentValue}>
+                <div className={`flex-1 overflow-hidden relative ${previewMode ? 'bg-background' : 'bg-muted/30'}`}>
+                    {previewMode ? (
+                        <div className={`w-full h-full overflow-y-auto ${viewportClasses[viewport] || 'w-full'} transition-all mx-auto bg-white shadow-sm my-4 border min-h-screen`}>
+                            <div className="min-h-full">
+                                <Render config={puckConfig} data={data} key={`render-${editorKey}`} />
+                            </div>
                         </div>
-                    </div>
-                ) : (
-                    <Puck
-                        key={`puck-${editorKey}`}
-                        config={puckConfig}
-                        data={data || { content: [], root: { props: { title: page?.title || '' } } }}
-                        onChange={handleChange}
-                        headerPath={page?.slug || '/'}
-                        overrides={{
-                            header: () => null, // Hide default header to avoid duplication
-                        }}
-                        viewports={[
-                            { width: 1280, height: 'auto', label: 'Desktop', icon: <Monitor />, id: 'desktop' },
-                            { width: 768, height: 'auto', label: 'Tablet', icon: <Tablet />, id: 'tablet' },
-                            { width: 375, height: 'auto', label: 'Mobile', icon: <Smartphone />, id: 'mobile' },
-                        ]}
-                    />
-                )}
-            </div>
+                    ) : (
+                        <Puck
+                            key={`puck-${editorKey}`}
+                            config={puckConfig}
+                            data={data || { content: [], root: { props: { title: page?.title || '' } } }}
+                            onChange={handleChange}
+                            headerPath={page?.slug || '/'}
+                            overrides={{
+                                header: () => null,
+                            }}
+                            viewports={[
+                                { width: 1280, height: 'auto', label: 'Desktop', icon: <Monitor />, id: 'desktop' },
+                                { width: 768, height: 'auto', label: 'Tablet', icon: <Tablet />, id: 'tablet' },
+                                { width: 375, height: 'auto', label: 'Mobile', icon: <Smartphone />, id: 'mobile' },
+                            ]}
+                        />
+                    )}
+                </div>
+            </VisualContentProvider>
 
             <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                 <DialogContent className="sm:max-w-[500px] shadow-2xl">
                     <DialogHeader className="pb-4 border-b border-border">
                         <DialogTitle className="text-xl font-bold text-foreground tracking-tight">
-                            {mode === 'blog' ? 'Blog Settings' : 'Page Settings'}
+                            Page Settings
                         </DialogTitle>
                         <DialogDescription className="text-muted-foreground">
-                            Configure {mode === 'blog' ? 'blog' : 'page'} properties, SEO metadata, and publication status.
+                            Configure page properties, SEO metadata, and publication status.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-6 py-6">
@@ -1116,7 +979,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                 General Information
                             </h3>
                             <div className="grid gap-3">
-                                {(mode === 'page' || mode === 'blog') && (
+                                {mode === 'page' && (
                                     <>
                                         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Locale</Label>
                                         <Select value={pageMetadata.locale} onValueChange={handleLocaleChange}>
@@ -1130,7 +993,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                         </Select>
                                         {requiresBaseLocaleFirst && (
                                             <p className="text-xs text-muted-foreground">
-                                                Save this {mode === 'blog' ? 'blog' : 'page'} once to enable English translation editing.
+                                                Save this page once to enable English translation editing.
                                             </p>
                                         )}
                                     </>
@@ -1139,7 +1002,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
                             <div className="grid gap-3">
                                 <Label htmlFor="title" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                    {mode === 'blog' ? 'Blog Title' : 'Page Title'}
+                                    Page Title
                                 </Label>
                                 <Input
                                     id="title"
@@ -1156,12 +1019,12 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                     key={`${page?.id || 'new'}-${pageMetadata.locale}-${translationSlugCheckKey}`}
                                     initialSlug={pageMetadata.slug}
                                     titleValue={pageMetadata.title}
-                                    tableName={pageMetadata.locale === defaultContentLocale ? (mode === 'blog' ? 'blogs' : 'pages') : 'content_translations'}
+                                    tableName={pageMetadata.locale === defaultContentLocale ? 'pages' : 'content_translations'}
                                     recordId={page?.id}
                                     tenantId={currentTenant?.id}
                                     excludeField={pageMetadata.locale === defaultContentLocale ? 'id' : 'content_id'}
                                     extraFilters={pageMetadata.locale === defaultContentLocale ? null : {
-                                        content_type: mode === 'blog' ? 'article' : 'page',
+                                        content_type: 'page',
                                         locale: pageMetadata.locale,
                                     }}
                                     onSlugChange={handleSlugChange}
@@ -1176,7 +1039,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                     onChange={(val) => handleMetadataChange('category_id', val)}
                                     labelKey="name"
                                     valueKey="id"
-                                    filter={{ type: mode === 'blog' ? 'blog' : 'page' }}
+                                    filter={{ type: ['page', 'pages', 'content'] }}
                                     placeholder="No Category"
                                 />
                             </div>
@@ -1209,8 +1072,8 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                     <Label className="text-base font-semibold text-foreground">Publish Status</Label>
                                     <p className="text-xs text-muted-foreground font-medium">
                                         {pageMetadata.status === 'published'
-                                            ? `${mode === 'blog' ? 'Blog' : 'Page'} is live and visible to visitors.`
-                                            : `${mode === 'blog' ? 'Blog' : 'Page'} is hidden and only visible to editors.`}
+                                            ? 'Page is live and visible to visitors.'
+                                            : 'Page is hidden and only visible to editors.'}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-3">
