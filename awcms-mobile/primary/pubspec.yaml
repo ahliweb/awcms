@@ -54,7 +54,7 @@ dependencies:
   geocoding: ^4.0.0
   
   # Notifications
-  flutter_local_notifications: ^19.5.0
+  flutter_local_notifications: ^21.0.0
   
   # Utils
   intl: ^0.20.2
