@@ -13,7 +13,7 @@ import AnnouncementsManager from '@/components/dashboard/AnnouncementsManager';
 import PromotionsManager from '@/components/dashboard/PromotionsManager';
 import UsersManager from '@/components/dashboard/UsersManager';
 import RolesManager from '@/components/dashboard/RolesManager';
-import AuditLogsERP from '@/components/dashboard/AuditLogsERP';
+import AuditLogsManager from '@/components/dashboard/AuditLogsManager';
 import PolicyManager from '@/components/dashboard/PolicyManager';
 import UserProfile from '@/components/dashboard/UserProfile';
 import { Helmet } from 'react-helmet-async';
@@ -44,7 +44,7 @@ function Dashboard() {
       case 'roles':
         return <RolesManager />;
       case 'audit-logs':
-        return <AuditLogsERP />;
+        return <AuditLogsManager />;
       case 'policies':
         return <PolicyManager />;
       case 'profile':
