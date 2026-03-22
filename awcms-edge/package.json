@@ -12,15 +12,15 @@
     "test:compat-routes": "node tests/compat-routes.smoke.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1013.0",
-    "@aws-sdk/s3-request-presigner": "^3.1013.0",
-    "@supabase/supabase-js": "^2.99.1",
-    "hono": "^4.12.7"
+    "@aws-sdk/client-s3": "^3.1014.0",
+    "@aws-sdk/s3-request-presigner": "^3.1014.0",
+    "@supabase/supabase-js": "^2.99.3",
+    "hono": "^4.12.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260313.1",
+    "@cloudflare/workers-types": "^4.20260317.1",
     "typescript": "^5.5.0",
-    "wrangler": "^4.73.0"
+    "wrangler": "^4.76.0"
   },
   "overrides": {
     "undici": "^7.24.1",

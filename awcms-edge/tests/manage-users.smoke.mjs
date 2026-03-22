@@ -5,7 +5,8 @@ const smandapbunTenantId = process.env.AWCMS_SMANDAPBUN_TENANT_ID || 'd2d84ae5-f
 const primaryTenantId = process.env.AWCMS_PRIMARY_TENANT_ID || '91432330-6fec-4371-bbba-936ac7e5da76';
 
 if (!serviceKey) {
-  throw new Error('SUPABASE_SECRET_KEY is required to run the manage-users smoke test');
+  console.log('Skipping manage-users smoke test: SUPABASE_SECRET_KEY is not set.');
+  process.exit(0);
 }
 
 const restHeaders = {
@@ -85,6 +86,11 @@ const createBootstrapUser = async () => {
 };
 
 createBootstrapUser().catch((error) => {
+  if (String(error?.cause?.code || error?.code || '') === 'ECONNREFUSED') {
+    console.log(`Skipping manage-users smoke test: could not reach ${workerBaseUrl} or ${supabaseUrl}.`);
+    process.exit(0);
+  }
+
   console.error(error);
   process.exit(1);
 });
