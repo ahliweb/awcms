@@ -61,7 +61,7 @@ export const usePluginRoutes = () => {
  * PluginRoutes Component
  * Renders Route elements for each plugin-registered route
  */
-const PluginRoutes = () => {
+export const PluginRoutes = () => {
     const { routes } = usePluginRoutes();
 
     if (routes.length === 0) {

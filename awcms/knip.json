@@ -49,7 +49,9 @@
     "src/extensions/ahliweb-events/index.js": ["exports"],
     "src/lib/extensionManifest.js": ["exports"],
     "src/lib/templateExtensions.js": ["exports"],
-    "src/plugins/helloworld/HelloWorld.jsx": ["exports"]
+    "src/plugins/helloworld/HelloWorld.jsx": ["exports"],
+    "src/components/ui/LocalizedArrayEditor.jsx": ["exports", "duplicates"],
+    "src/components/ui/LocalizedInput.jsx": ["exports", "duplicates"]
   },
   "ignoreExportsUsedInFile": true
 }

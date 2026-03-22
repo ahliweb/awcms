@@ -3,34 +3,6 @@
  * Image with caption and styling options
  */
 
-
-const ImageBlockFields = {
-    src: { type: 'text', label: 'Image URL' },
-    alt: { type: 'text', label: 'Alt Text' },
-    caption: { type: 'text', label: 'Caption' },
-    width: {
-        type: 'select',
-        label: 'Width',
-        options: [
-            { label: 'Full Width', value: 'full' },
-            { label: 'Large (75%)', value: 'large' },
-            { label: 'Medium (50%)', value: 'medium' },
-            { label: 'Small (25%)', value: 'small' }
-        ]
-    },
-    borderRadius: {
-        type: 'select',
-        label: 'Border Radius',
-        options: [
-            { label: 'None', value: 'none' },
-            { label: 'Small', value: 'sm' },
-            { label: 'Medium', value: 'md' },
-            { label: 'Large', value: 'lg' },
-            { label: 'Full', value: 'full' }
-        ]
-    }
-};
-
 export const ImageBlock = ({ src, alt, caption, width, borderRadius }) => {
     const widthClasses = {
         full: 'w-full',

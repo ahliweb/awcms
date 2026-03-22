@@ -4,37 +4,6 @@
  */
 
 import { Quote } from 'lucide-react';
-import { ColorPickerField } from '../fields/ColorPickerField';
-
-const TestimonialBlockFields = {
-    quote: { type: 'textarea', label: 'Testimonial Quote' },
-    quoteColor: { type: 'custom', label: 'Quote Color', render: ColorPickerField },
-    name: { type: 'text', label: 'Customer Name' },
-    nameColor: { type: 'custom', label: 'Name Color', render: ColorPickerField },
-    role: { type: 'text', label: 'Role/Company' },
-    roleColor: { type: 'custom', label: 'Role Color', render: ColorPickerField },
-    avatar: { type: 'text', label: 'Avatar Image URL' },
-    rating: {
-        type: 'select',
-        label: 'Rating',
-        options: [
-            { label: '5 Stars', value: 5 },
-            { label: '4 Stars', value: 4 },
-            { label: '3 Stars', value: 3 },
-            { label: '2 Stars', value: 2 },
-            { label: '1 Star', value: 1 }
-        ]
-    },
-    variant: {
-        type: 'select',
-        label: 'Style',
-        options: [
-            { label: 'Card', value: 'card' },
-            { label: 'Simple', value: 'simple' },
-            { label: 'Centered', value: 'centered' }
-        ]
-    }
-};
 
 export const TestimonialBlock = ({ quote, quoteColor: _quoteColor, name, nameColor: _nameColor, role, roleColor: _roleColor, avatar, rating, variant }) => {
     const renderStars = () => {

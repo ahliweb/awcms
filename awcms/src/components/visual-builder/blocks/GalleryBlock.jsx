@@ -6,62 +6,6 @@
 import { useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-const GalleryBlockFields = {
-    images: {
-        type: 'textarea',
-        label: 'Image URLs (one per line)',
-        description: 'Enter one image URL per line'
-    },
-    columns: {
-        type: 'select',
-        label: 'Columns',
-        options: [
-            { label: '2 Columns', value: 2 },
-            { label: '3 Columns', value: 3 },
-            { label: '4 Columns', value: 4 },
-            { label: '5 Columns', value: 5 }
-        ]
-    },
-    gap: {
-        type: 'select',
-        label: 'Gap',
-        options: [
-            { label: 'None', value: 0 },
-            { label: 'Small', value: 8 },
-            { label: 'Medium', value: 16 },
-            { label: 'Large', value: 24 }
-        ]
-    },
-    aspectRatio: {
-        type: 'select',
-        label: 'Aspect Ratio',
-        options: [
-            { label: 'Square (1:1)', value: 'square' },
-            { label: 'Landscape (16:9)', value: 'landscape' },
-            { label: 'Portrait (3:4)', value: 'portrait' },
-            { label: 'Auto', value: 'auto' }
-        ]
-    },
-    lightbox: {
-        type: 'radio',
-        label: 'Enable Lightbox',
-        options: [
-            { label: 'Yes', value: true },
-            { label: 'No', value: false }
-        ]
-    },
-    borderRadius: {
-        type: 'select',
-        label: 'Border Radius',
-        options: [
-            { label: 'None', value: 'none' },
-            { label: 'Small', value: 'sm' },
-            { label: 'Medium', value: 'md' },
-            { label: 'Large', value: 'lg' }
-        ]
-    }
-};
-
 export const GalleryBlock = ({ images, columns, gap, aspectRatio, lightbox, borderRadius }) => {
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
