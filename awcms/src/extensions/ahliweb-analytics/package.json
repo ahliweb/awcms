@@ -7,11 +7,11 @@
     "license": "MIT",
     "main": "src/index.js",
     "peerDependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
     },
     "devDependencies": {
-        "vite": "^7.0.0"
+        "vite": "^8.0.1"
     },
     "scripts": {
         "build": "vite build --ssr src/index.js --outDir ../../../../temp_debug_files/ahliweb-analytics-build",
