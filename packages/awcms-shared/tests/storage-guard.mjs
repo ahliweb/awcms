@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createClientFromEnv } from '../src/supabase.ts';
+import { createClientFromEnv } from '../dist/supabase.js';
 
 const fakeClient = {
   auth: {
