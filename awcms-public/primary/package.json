@@ -100,5 +100,10 @@
     "@astro-community/astro-embed-integration": {
       "astro": "^6.0.4"
     }
+  },
+  "pnpm": {
+    "overrides": {
+      "fast-xml-parser": ">=5.5.7"
+    }
   }
 }
