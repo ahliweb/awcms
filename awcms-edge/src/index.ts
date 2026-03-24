@@ -347,6 +347,48 @@ const writeExtensionAudit = async (adminSupabase: any, payload: {
   })
 }
 
+// Local-dev proxy upload route.
+// Registered BEFORE the /api/* JWT middleware so the browser PUT (which carries
+// no Authorization header, matching presigned-URL semantics) is not rejected.
+// Auth is provided by the session record itself — only the holder of a valid,
+// pending, non-expired sessionId can write bytes here.
+// Used only when R2_ACCOUNT_ID=local-dev (wrangler dev / Miniflare).
+app.put('/api/media/upload-proxy/:sessionId', async (c) => {
+  const sessionId = c.req.param('sessionId')
+  const adminSupabase = getAdminSupabase(c.env)
+
+  // Fetch the session to get the storage key and validate it is still pending.
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('media_upload_sessions')
+    .select('id, storage_key, mime_type, status, expires_at')
+    .eq('id', sessionId)
+    .single()
+
+  if (sessionError || !session) {
+    return c.json({ error: 'Upload session not found' }, 404)
+  }
+  if (session.status !== 'pending') {
+    return c.json({ error: 'Upload session is no longer pending' }, 409)
+  }
+  if (new Date(session.expires_at) < new Date()) {
+    return c.json({ error: 'Upload session expired' }, 410)
+  }
+
+  const body = await c.req.arrayBuffer()
+  if (!body || body.byteLength === 0) {
+    return c.json({ error: 'Empty request body' }, 400)
+  }
+
+  try {
+    await c.env.STORAGE.put(session.storage_key, body, {
+      httpMetadata: { contentType: session.mime_type ?? 'application/octet-stream' },
+    })
+    return c.json({ ok: true })
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Proxy upload failed' }, 500)
+  }
+})
+
 // Middleware to verify Supabase JWT
 app.use('/api/*', async (c, next) => {
   const authHeader = c.req.header('Authorization');
@@ -474,48 +516,6 @@ app.post('/api/media/upload-session', async (c) => {
     return c.json({ error: error instanceof Error ? error.message : 'Failed to create upload session' }, 500)
   }
 });
-
-// Local-dev proxy upload route.
-// Used only when R2_ACCOUNT_ID=local-dev (wrangler dev / Miniflare).
-// The browser PUTs the file body here; the Worker writes it directly to the
-// local STORAGE R2 binding instead of a presigned S3 URL that would fail TLS.
-// This route is auth-gated via the session record — no additional JWT needed
-// because the session was already created by an authenticated user above.
-app.put('/api/media/upload-proxy/:sessionId', async (c) => {
-  const sessionId = c.req.param('sessionId')
-  const adminSupabase = getAdminSupabase(c.env)
-
-  // Fetch the session to get the storage key and validate it is still pending.
-  const { data: session, error: sessionError } = await adminSupabase
-    .from('media_upload_sessions')
-    .select('id, storage_key, mime_type, status, expires_at')
-    .eq('id', sessionId)
-    .single()
-
-  if (sessionError || !session) {
-    return c.json({ error: 'Upload session not found' }, 404)
-  }
-  if (session.status !== 'pending') {
-    return c.json({ error: 'Upload session is no longer pending' }, 409)
-  }
-  if (new Date(session.expires_at) < new Date()) {
-    return c.json({ error: 'Upload session expired' }, 410)
-  }
-
-  const body = await c.req.arrayBuffer()
-  if (!body || body.byteLength === 0) {
-    return c.json({ error: 'Empty request body' }, 400)
-  }
-
-  try {
-    await c.env.STORAGE.put(session.storage_key, body, {
-      httpMetadata: { contentType: session.mime_type ?? 'application/octet-stream' },
-    })
-    return c.json({ ok: true })
-  } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : 'Proxy upload failed' }, 500)
-  }
-})
 
 // Finalize upload after the client PUTs directly to the signed R2 URL.
 //
