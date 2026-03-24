@@ -33,7 +33,7 @@ awcms-dev/
 │   └── primary/
 ├── awcms-ext/                  # External extensions
 ├── awcms-edge/                 # Cloudflare Worker API and edge logic
-├── supabase/                   # Migrations and legacy/transitional Supabase functions
+├── supabase/                   # Canonical migrations and SQL artifacts
 ├── DOCS_INDEX.md               # Monorepo docs index
 └── AGENTS.md                   # AI agent rules (SSOT)
 ```
@@ -95,7 +95,7 @@ awcms-esp32/primary/
 ## Security and Compliance Notes
 
 - Tenant isolation applies across all packages.
-- Supabase is the only backend; no custom servers.
+- Supabase is the system of record for Auth, Postgres, RLS, and ABAC, while Cloudflare Workers are the maintained edge/backend runtime; no custom Node.js servers are permitted.
 - `supabase/` and `awcms/supabase/` migrations are kept aligned for CI.
 
 ## References

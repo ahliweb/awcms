@@ -2,7 +2,7 @@
 
 > **Documentation Authority**: `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md`
 >
-> **Last Updated**: 2026-02-27
+> **Last Updated**: 2026-03-25
 >
 > **Primary Goal**: Improve Context7 benchmark scores by using one consistent, evidence-driven answer format.
 
@@ -10,6 +10,10 @@
 
 Provide a single, reusable playbook for answering AWCMS benchmark prompts with structured,
 logical, implementation-ready guidance.
+
+This playbook is guidance-only. For live runtime, deployment, and environment authority, defer to
+`SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, and the maintained docs under `docs/dev/`, `docs/deploy/`,
+`docs/security/`, and `docs/tenancy/`.
 
 ## Audience
 

@@ -2,11 +2,12 @@
 
 # Indonesia Compliance Guide
 
-## Status Classification (Audit 2026-02-27)
+## Status Classification (Audit 2026-03-25)
 
 - This guide combines implemented technical controls with deployer-specific obligations.
 - Sections 2-3 describe platform capabilities and constraints.
 - Section 4 is an operator action checklist (deployment/legal backlog), not an assertion that all items are already completed.
+- Runtime/storage details in this guide should be interpreted alongside the current Worker-first architecture in `docs/architecture/overview.md` and `docs/security/overview.md`.
 
 ## 1. Overview
 

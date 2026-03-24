@@ -203,7 +203,7 @@ Define the non-negotiable architecture and implementation standards for AWCMS ac
 - Always enforce tenant scoping at UI entry points, data operations, and edge boundaries.
 - ABAC permission keys must follow `scope.resource.action` and be enforced in the UI and Supabase operations.
 - All deletes are soft deletes (`deleted_at`) unless explicitly documented otherwise.
-- Supabase is the only backend; no custom servers are permitted.
+- Supabase is the system of record for Auth, Postgres, RLS, and ABAC, while Cloudflare Workers are the maintained edge/backend runtime; no custom Node.js servers are permitted.
 
 ## Operational Concerns
 
