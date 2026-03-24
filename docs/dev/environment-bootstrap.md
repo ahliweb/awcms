@@ -26,12 +26,15 @@ cd ../awcms-mcp && npm install
 cd ../packages/awcms-shared && npm install
 ```
 
+The `../smandapbun` step above is relative to `awcms-public/primary/`; the full workspace path is
+`awcms-public/smandapbun/`.
+
 ## Files You Must Configure
 
 | Target | File | Purpose |
 | --- | --- | --- |
 | Admin app | `awcms/.env.local` | Supabase publishable config, Worker URLs, Cloudflare/R2/deployment secrets |
-| Public portal (`primary`) | `awcms-public/primary/.env.local` | Build-time tenant identity and public runtime config |
+| Public portal (`primary`) | `awcms-public/primary/.env.local` | Build-time tenant identity plus local/deployment-aligned public runtime config |
 | Public portal (`smandapbun`) | `awcms-public/smandapbun/.env.local` | Dedicated tenant build-time config |
 | Worker | `awcms-edge/.dev.vars` | Cloudflare Worker local runtime, R2, secret, rebuild, and Turnstile config |
 | MCP server | `awcms-mcp/.env` | Supabase DB URL and Context7 key |
@@ -62,6 +65,12 @@ These values are required for a usable local/dev + deployment-aligned setup:
 - `R2_CUSTOM_DOMAIN`
 - `R2_S3_API_ENDPOINT`
 
+### Local Worker Routing
+
+- `VITE_LOCAL_EDGE_URL`
+- `VITE_REMOTE_EDGE_URL`
+- `VITE_EDGE_API_TIMEOUT_MS` (optional)
+
 ### Worker / Rebuild / Turnstile
 
 - `TURNSTILE_SECRET_KEY`
@@ -86,7 +95,7 @@ For Cloudflare Pages / Workers and GitHub Actions, keep these aligned:
 | Surface | Required Inputs |
 | --- | --- |
 | Cloudflare Pages (`awcms`) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_EDGE_URL`, `VITE_TURNSTILE_SITE_KEY` |
-| Cloudflare Pages (`awcms-public/primary`) | `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TENANT_ID`, `PUBLIC_TENANT_SLUG`, `PUBLIC_TURNSTILE_SITE_KEY` |
+| Cloudflare Pages (`awcms-public/primary`) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TENANT_ID`, `PUBLIC_TENANT_SLUG`, `PUBLIC_TURNSTILE_SITE_KEY` (`PUBLIC_SUPABASE_*` remains supported as a deployment fallback) |
 | Cloudflare Pages (`awcms-public/smandapbun`) | `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TENANT_ID`, `PUBLIC_TENANT_SLUG`, `PUBLIC_TURNSTILE_SITE_KEY`, `CLOUDFLARE_ACCOUNT_ID` |
 | Cloudflare Worker (`awcms-edge`) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, all `R2_*`, rebuild tokens, Turnstile secret |
 | GitHub Actions | repository secrets matching the Pages/Worker runtime inputs above |
@@ -101,6 +110,17 @@ For Cloudflare Pages / Workers and GitHub Actions, keep these aligned:
 6. Run local admin/public/edge services.
 7. Run `bash scripts/ci-validate-runtime.sh`.
 8. Mirror the same values into Cloudflare Pages, Wrangler secrets, and GitHub Actions secrets.
+
+## Local R2 Reality
+
+- `awcms-edge/.dev.vars` configures the local Worker runtime only.
+- Local `wrangler dev` uses isolated local R2 state and does not sync with remote Cloudflare R2.
+- When you need to reconcile local and remote tenant media, use the Worker commands from `awcms-edge/package.json` after the local Worker is running:
+  - `npm run sync:r2:remote`
+  - `npm run sync:r2:local`
+  - `npm run sync:r2:cleanup-local`
+  - `npm run sync:r2:cleanup-remote`
+- The reverse-sync and cleanup flows depend on both `awcms-edge/.dev.vars` and `awcms/.env.remote` being populated.
 
 ## Python Setup Helper
 

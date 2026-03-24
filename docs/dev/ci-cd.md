@@ -136,6 +136,9 @@ cd ../../awcms/supabase
 npx supabase db lint
 ```
 
+The `../smandapbun` step above is relative to `awcms-public/primary/`; the full workspace path is
+`awcms-public/smandapbun/`.
+
 ## Troubleshooting
 
 - Missing env vars: verify secrets and repo variables.

@@ -46,6 +46,7 @@ Statically render tenant-scoped content using Astro build-time data fetching wit
 | `VITE_PUBLIC_TENANT_ID` | Build env | Optional | Fallback resolver |
 | `VITE_SUPABASE_URL` / `PUBLIC_SUPABASE_URL` | Build env | Yes | Supabase URL (`PUBLIC_*` supported as build fallback) |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Build env | Yes | Publishable key (`PUBLIC_*` supported as build fallback) |
+| `PUBLIC_TURNSTILE_SITE_KEY` | Build env | Conditional | Required for public forms that render Turnstile |
 
 ### Workflow
 
@@ -112,8 +113,10 @@ Public portals require:
 - `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (CI/build fallback)
 - `PUBLIC_TENANT_ID` (recommended for static builds)
 - `VITE_PUBLIC_TENANT_ID` or `VITE_TENANT_ID` (fallbacks)
+- `PUBLIC_TURNSTILE_SITE_KEY` when the portal renders Turnstile-protected forms
 
 `createClientFromEnv` uses `import.meta.env` for static builds (supports `VITE_*` and `PUBLIC_*` keys); `runtime.env` is only used in SSR/runtime deployments.
+`awcms-public/primary` wraps `npm run build` and `npm run check:astro` with `scripts/run-with-deployment-env.mjs` so local validation follows the same env-resolution path as deployment.
 
 ## 5. Development Workflow
 

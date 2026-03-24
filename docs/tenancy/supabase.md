@@ -66,7 +66,7 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 ### Public Portal Client
 
 - Static builds resolve tenant via `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
-- `awcms-public/primary/src/lib/supabase.ts` and `awcms-public/smandapbun/src/lib/supabase.ts` both build on `@awcms/shared/supabase`; headers are set when scoped access is required.
+- `awcms-public/primary` and `awcms-public/smandapbun` both build on `@awcms/shared/supabase`; headers are set when scoped access is required.
 - Canonical static deployments do not depend on middleware-based analytics logging.
 
 ### Edge Logic
@@ -174,7 +174,7 @@ Run from repo root.
 - `supabase/migrations/` is the canonical authoring source.
 - `awcms/supabase/migrations/` is a required mirror used by CI linting.
 - Every migration change must be mirrored with identical filename and content.
-- Current inventory shows `149` migration files in both roots; keep using the verification script because matching counts alone do not guarantee filename/content alignment.
+- Current inventory shows `150` migration files in both roots; keep using the verification script because matching counts alone do not guarantee filename/content alignment.
 - Validate parity before merge:
 
 ```bash

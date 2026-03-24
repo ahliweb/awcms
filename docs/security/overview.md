@@ -97,7 +97,7 @@ Recent hardening updates:
 
 - Tenant context is injected via `x-tenant-id` in Supabase requests.
 - `current_tenant_id()` resolves tenant context in SQL.
-- Storage paths are scoped to `{tenant_id}/...`.
+- Storage paths are scoped to `tenants/{tenant_id}/...`.
 - Public static builds resolve tenant via `PUBLIC_TENANT_ID`, `VITE_PUBLIC_TENANT_ID`, or `VITE_TENANT_ID`.
 
 ### Edge Logic
@@ -105,6 +105,7 @@ Recent hardening updates:
 - Cloudflare Workers are the primary edge HTTP layer and must validate tenant context and permissions.
 - Privileged access with `SUPABASE_SECRET_KEY` is allowed only in approved server-side edge runtimes, migrations, and trusted operational scripts.
 - Notification delivery audit (`notification_dispatches`) is written through the Worker/queue path, not directly by tenant clients.
+- Protected media reads use Worker-mediated session-bound access, while local development falls back to a Worker proxy because local `wrangler dev` does not expose a remote R2 presignable host.
 
 ## Implementation Patterns
 
@@ -165,6 +166,7 @@ Development headers are set in `awcms/vite.config.js`. Production headers must b
 - Use `scripts/repair_supabase_migration_history.sh` when migration history drifts.
 - Run `scripts/verify_supabase_migration_consistency.sh` before PR merge.
 - Keep storage-related helpers aligned with `public.media_objects`; `20260322000000_fix_security_advisor_issues.sql` removes remaining functional references to the retired `public.files` table and leaves `sync_storage_files()` as an explicit deprecation stub.
+- Permanent media deletion remains a guarded two-step flow: soft delete first, then `tenant.files.permanent_delete` through the Worker/RPC path.
 
 ## Troubleshooting
 

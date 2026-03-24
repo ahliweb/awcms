@@ -147,7 +147,8 @@ Notes:
 
 - `npm run dev:local` loads local Worker secrets from `awcms-edge/.dev.vars`.
 - Worker bindings are defined in `awcms-edge/wrangler.jsonc`.
-- The current Worker workspace pins `@supabase/supabase-js` separately from the admin/public workspaces; use `awcms-edge/package.json` as the source of truth before upgrading.
+- `awcms/`, `awcms-public/primary/`, `awcms-public/smandapbun/`, and `awcms-edge/` currently align on `@supabase/supabase-js` `^2.99.3`; still treat `awcms-edge/package.json` as the source of truth for Worker-only dependency changes.
+- Local `wrangler dev` R2 state is isolated by default. Use `npm run sync:r2:remote` or `npm run sync:r2:local` in `awcms-edge/` when you need explicit local/remote media reconciliation.
 - Production-only secrets should be set with `npx wrangler secret put <SECRET_NAME>`.
 
 ### 3.4 Operational Script Quick Reference

@@ -44,6 +44,7 @@ Use publishable keys only. Never inject `SUPABASE_SECRET_KEY` into public portal
 ## Package Notes
 
 - This package is source-first TypeScript with a dedicated `npm run typecheck` validation script.
+- `npm run test:storage-guard` verifies that shared public clients stay on the maintained Cloudflare R2 + Edge API path instead of falling back to Supabase Storage.
 - CI now runs the package directly in addition to consumer validation from `awcms-public/primary` and `awcms-public/smandapbun`.
 - It is intended for public-portal/shared-runtime code, not admin-only or server-secret flows.
 - Worker compatibility calls from `@awcms/shared/supabase` resolve against `PUBLIC_EDGE_URL` / `VITE_EDGE_URL`; missing Worker URLs should be treated as configuration errors rather than reasons to fall back to any Supabase-hosted function runtime.

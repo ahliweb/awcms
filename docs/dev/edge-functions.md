@@ -60,7 +60,32 @@ Notes:
 - `dev:local` loads local secrets from `awcms-edge/.dev.vars`.
 - Worker bindings and runtime settings live in `awcms-edge/wrangler.jsonc`.
 - Local validation should exercise Worker routes directly. Supabase Edge Function tooling/config is not part of the supported runtime.
+- Local `wrangler dev` uses the local `STORAGE` binding and `.wrangler/state/` by default; it does not read or mutate remote Cloudflare R2 automatically.
 - Production secrets belong in Cloudflare via `npx wrangler secret put <SECRET_NAME>`.
+
+## Operational Commands
+
+Run from `awcms-edge/`:
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start Wrangler in default local dev mode |
+| `npm run dev:local` | Start the Worker on `127.0.0.1:8787` |
+| `npm run typecheck` | Validate the Worker TypeScript surface |
+| `npm run deploy` | Deploy the Worker |
+| `npm run sync:r2:remote` | Reconcile local tenant media into remote R2 plus remote `media_objects` metadata |
+| `npm run sync:r2:local` | Pull remote tenant media back into local Worker storage plus local `media_objects` metadata |
+| `npm run sync:r2:cleanup-local` | Soft-delete duplicate local metadata rows and remove duplicate local objects after exact-key import |
+| `npm run sync:r2:cleanup-remote` | Soft-delete duplicate remote metadata rows and remove duplicate remote objects |
+
+## R2 Reconciliation Model
+
+- Local and remote R2 are intentionally separate surfaces.
+- `sync:r2:remote` reads local `media_objects`, downloads the authoritative file through the local Worker, uploads the same `storage_key` to remote R2, then upserts the remote metadata row.
+- `sync:r2:local` reads remote `media_objects`, downloads the authoritative file from remote R2, then imports the exact object and metadata into the local Worker/runtime.
+- `sync:r2:cleanup-local` and `sync:r2:cleanup-remote` enforce the current canonical duplicate rule: for the same `tenant_id + file_name`, keep the lexicographically smallest `storage_key` and soft-delete/remove the other copies.
+- Reverse-sync exact-key import is handled by the local-only Worker route `POST /api/media/import-local`.
+- Local duplicate cleanup is handled by the local-only Worker route `POST /api/media/cleanup-local-duplicates`.
 
 ## Deployment
 
@@ -82,6 +107,7 @@ npm run deploy
 - Notifications infrastructure is backed by `tenant_notification_channels`, `notification_templates`, and `notification_dispatches`; tenants manage channel/template configuration through RLS, while the Worker queue path records dispatch outcomes.
 - Failed messages exhaust retries and route to the DLQ (`awcms-media-events-dlq` / `awcms-notifications-dlq`); the DLQ consumer persists entries to `queue_dead_letters` in Supabase.
 - Platform admins can replay a dead-letter entry via `POST /api/admin/queue/replay`.
+- Local-only reconciliation routes reject non-local mode (`R2_ACCOUNT_ID !== local-dev`) and are not part of the deployed production API surface.
 
 ## Troubleshooting
 
@@ -90,6 +116,8 @@ npm run deploy
 - `5xx` from media routes: check R2 bindings and required Worker env values.
 - `403` from protected routes: verify the user's role flags and ABAC grants in Supabase.
 - Stale storage helper behavior: if an older caller still invokes `sync_storage_files()`, it now returns a deprecation payload because maintained media flows use Cloudflare R2 plus `public.media_objects`.
+- `sync:r2:local` fails: verify `awcms-edge/.dev.vars` and `awcms/.env.remote` both exist, the local Worker is running on `127.0.0.1:8787`, and the sync user can authenticate in both environments.
+- Local media exists but remote does not: `wrangler dev` storage is isolated by default; run `npm run sync:r2:remote` explicitly.
 
 ## References
 

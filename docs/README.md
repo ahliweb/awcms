@@ -4,7 +4,7 @@
 >
 > **Status:** Maintained
 >
-> **Last Updated:** 2026-03-13
+> **Last Updated:** 2026-03-25
 
 ## Purpose
 
@@ -50,7 +50,7 @@ When updating any document in this repo, verify claims against these implementat
 - Audit tracker and drift log: `docs/dev/documentation-audit-tracker.md`
 - Benchmark response standard: `docs/dev/context7-benchmark-playbook.md`
 
-The active 2026-03-13 audit re-baselines repository counts, authority-doc drift, migration mirror drift,
+The active 2026-03-25 audit re-baselines repository counts, authority-doc drift, migration mirror drift,
 script accuracy, security wording, dependency/version mismatches, and dead-link remediation planning.
 
 Use Context7 MCP as the primary external source for library guidance and preserve verified IDs from

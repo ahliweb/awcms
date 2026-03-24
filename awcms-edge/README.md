@@ -22,6 +22,10 @@ R2-backed media flows, and other request/response orchestration that should not 
 | `npm run dev:local` | Start Wrangler on `127.0.0.1:8787` using `awcms-edge/.dev.vars` |
 | `npm run deploy` | Deploy the Worker via Wrangler |
 | `npm run typecheck` | Run `tsc --noEmit` |
+| `npm run sync:r2:remote` | Reconcile local tenant media into remote R2 and remote metadata |
+| `npm run sync:r2:local` | Pull remote tenant media into local Worker storage and local metadata |
+| `npm run sync:r2:cleanup-local` | Remove duplicate local objects/rows after exact-key import |
+| `npm run sync:r2:cleanup-remote` | Remove duplicate remote objects/rows after exact-key reconciliation |
 
 ## Local Development
 
@@ -42,6 +46,7 @@ Notes:
 - Use `npm run sync:r2:cleanup-local` after an older non-exact local import flow to soft-delete duplicate local rows and remove duplicate local R2 objects once exact-key rows exist.
 - Use `npm run sync:r2:cleanup-remote` if remote still contains generated duplicate keys for the same tenant/file and you want to keep only the canonical exact-key copy.
 - Production secrets should be uploaded with `wrangler secret put <NAME>` rather than committed config files.
+- Local-only reconciliation routes (`/api/media/import-local`, `/api/media/cleanup-local-duplicates`) reject non-local mode and are not part of the deployed production API surface.
 
 ## Dependency Scope Note
 

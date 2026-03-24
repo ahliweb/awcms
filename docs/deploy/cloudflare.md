@@ -41,6 +41,7 @@ Environment variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_EDGE_URL`
 - `VITE_TURNSTILE_SITE_KEY`
 - `NODE_VERSION=22`
 
@@ -101,6 +102,33 @@ KV bindings: none currently required by the maintained repo baseline.
 Middleware currently uses cookie-based identifiers/tracking rather than an in-repo KV-backed or
 in-memory session driver.
 
+### Worker (`awcms-edge`)
+
+| Setting | Value |
+| --- | --- |
+| Service name | `awcms-edge` |
+| Deploy command | `npm run deploy` |
+| Validation command | `npm run typecheck` |
+| Runtime | Cloudflare Workers |
+
+Required Worker secrets / vars:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY`
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
+- `TURNSTILE_SECRET_KEY`
+- rebuild webhook/token values when public rebuild flows are enabled
+
+Operational notes:
+
+- Use `npx wrangler secret put <NAME>` for production secrets.
+- Local `wrangler dev` R2 state is isolated from remote Cloudflare R2; reconciliation requires the explicit `sync:r2:*` commands in `awcms-edge/package.json`.
+- The local-only routes `/api/media/import-local` and `/api/media/cleanup-local-duplicates` are reconciliation helpers and are not part of the deployed production API surface.
+
 ### Optional Secret Sync Helper
 
 Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env values into Cloudflare Pages secrets interactively.
@@ -131,6 +159,7 @@ Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env value
 - Tenant resolution issues: confirm `PUBLIC_TENANT_ID` for canonical static builds; only inspect middleware/host settings when working on non-canonical SSR/runtime experiments.
 - Cloudflare account resolution failures: set `CLOUDFLARE_ACCOUNT_ID` explicitly when the API token can access multiple accounts.
 - Worker CORS failures: verify `CORS_ALLOWED_ORIGINS` for `awcms-edge`; `VITE_CORS_ALLOWED_ORIGINS` only affects the admin Vite dev server.
+- Missing files after local testing: local Worker storage does not sync to remote automatically; use `npm run sync:r2:remote` or `npm run sync:r2:local` from `awcms-edge/` depending on the direction you need.
 - For the standing external `awcms-public` Pages deployment failure pattern and operator checklist, see `docs/deploy/awcms-public-pages-incident.md`.
 
 ## References

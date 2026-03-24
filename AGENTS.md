@@ -1699,6 +1699,11 @@ npx wrangler secret put TURNSTILE_SECRET_KEY
 
 | Function | Purpose | Path |
 | --- | --- | --- |
+| `/health` | Worker health response | `awcms-edge/src/index.ts` |
+| `upload-session`, `upload/:sessionId/finalize`, `upload/:sessionId/status` | Async media upload lifecycle backed by Supabase metadata and Cloudflare R2 | `awcms-edge/src/index.ts` |
+| `file/:id/access`, `file/:id`, `public/media/*` | Session-bound/private access and public media delivery | `awcms-edge/src/index.ts` |
+| `import-local`, `cleanup-local-duplicates` | Local-only reverse sync and duplicate cleanup helpers for R2 reconciliation | `awcms-edge/src/index.ts` |
+| `public/rebuild` | Tenant-aware public rebuild trigger | `awcms-edge/src/index.ts` |
 | `verify-turnstile` | Validate Turnstile tokens with host-aware secret | `awcms-edge/src/index.ts` |
 | `manage-users` | Account request workflow and admin user lifecycle | `awcms-edge/src/index.ts` |
 | `mailketing` | Email send/subscribe/credits/list integrations | `awcms-edge/src/index.ts` |
@@ -1713,7 +1718,7 @@ npx wrangler secret put TURNSTILE_SECRET_KEY
 - Soft-deleted rows are excluded with `.is("deleted_at", null)`.
 - CORS headers are present on all responses including error responses.
 - Local `awcms-edge` Worker behavior matches the deployed Worker route behavior.
-- Secrets are set via `supabase secrets set`, never hardcoded in function code.
+- Secrets are set via `npx wrangler secret put <NAME>` (or the equivalent Cloudflare secret workflow), never hardcoded in function code.
 
 ##### Failure Modes and Guardrails
 
@@ -1722,6 +1727,7 @@ npx wrangler secret put TURNSTILE_SECRET_KEY
 - **Failure:** Mutating soft-deleted rows. **Guardrail:** always chain `.is("deleted_at", null)` on queries.
 - **Failure:** Missing permission check. **Guardrail:** add `has_permission` RPC call or restrict endpoint to admin routes.
 - **Failure:** Route not found after deploy. **Guardrail:** verify the deployed Worker URL and route path in `awcms-edge/src/index.ts` and the target client env config.
+- **Failure:** Assuming local `wrangler dev` writes are visible in remote R2. **Guardrail:** local R2 is isolated by default; use the maintained `sync:r2:remote`, `sync:r2:local`, and cleanup commands when reconciliation is required.
 
 #### 7) User Login and Registration with Supabase Auth (79/100)
 

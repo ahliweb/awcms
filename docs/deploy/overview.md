@@ -26,7 +26,7 @@ Describe deployment steps for the maintained AWCMS deploy surfaces in the monore
 - Framework preset: Astro
 - Build command: `npm run build`
 - Output directory: `dist`
-- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TENANT_ID` (supports `PUBLIC_SUPABASE_*` as a build fallback)
+- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TENANT_ID`, `PUBLIC_TURNSTILE_SITE_KEY` (supports `PUBLIC_SUPABASE_*` as a build fallback)
 - Static build; environment variables resolved via `import.meta.env` at build time.
 
 For `awcms-public/smandapbun`:
@@ -42,7 +42,7 @@ For `awcms-public/smandapbun`:
 - Framework preset: None or Vite
 - Build command: `npm run build`
 - Output directory: `dist`
-- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_TURNSTILE_SITE_KEY`
+- Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_EDGE_URL`, `VITE_TURNSTILE_SITE_KEY`
 - Set `NODE_VERSION=22` (or any value `>=22.12.0`)
 
 ### 3. Edge Worker (Cloudflare Workers)
@@ -62,6 +62,7 @@ npm run deploy
 - Treat `awcms-edge/` as the server-side gateway in front of Supabase for privileged HTTP workflows used by web, mobile, IoT, and other clients.
 - Keep Supabase as the authority for Auth, Postgres, RLS, and ABAC; Worker-side validation must complement, not replace, database enforcement.
 - Configure bindings and runtime settings in `awcms-edge/wrangler.jsonc`.
+- Local Worker R2 state is isolated by default; use `npm run sync:r2:remote`, `npm run sync:r2:local`, `npm run sync:r2:cleanup-local`, and `npm run sync:r2:cleanup-remote` when reconciling local and remote tenant media.
 
 ### 4. Supabase
 
@@ -112,6 +113,7 @@ source .env && pio run -t uploadfs && pio run -t upload
 - `ci-push.yml` deploys only the admin artifact (`awcms/dist`) through `deploy-production`.
 - Public portal deployments are managed as separate Cloudflare Pages projects/pipelines.
 - `awcms-edge/` validation runs in CI, but Worker deployment is still handled outside the current GitHub Actions workflows.
+- The repo currently exposes four maintained workflows: `CI/CD`, `CI (PR)`, `Documentation Link Check`, and `Deploy Smandapbun`.
 - Before promoting a public build, run `cd awcms-public/primary && npm run check && npm run build` locally to match the current package validation baseline.
 
 ## Verification

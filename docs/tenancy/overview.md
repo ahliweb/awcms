@@ -54,6 +54,7 @@ Define how tenant isolation is resolved and enforced across AWCMS.
 - Hierarchy functions (`is_tenant_descendant`, `tenant_can_access_resource`) enforce shared vs isolated resources.
 - Public aggregates (e.g., `analytics_daily`) are readable only when scoped to the tenant id.
 - Build-time public tenant fallback order is implemented in `awcms-public/primary/src/lib/publicTenant.ts`.
+- Media objects use tenant-prefixed storage keys (`tenants/{tenant_id}/...`) and the admin media library now scopes listing/statistics to the active tenant even for platform admins; cross-tenant review requires switching tenant context first.
 
 ## Implementation Details
 

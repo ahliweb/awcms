@@ -109,8 +109,8 @@ The portal reads tenant settings and merges them with JSON defaults:
 - Root directory: `awcms-public/smandapbun`.
 - Build command: `npm run build`.
 - Output directory: `dist`.
-- Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`.
-- KV bindings: none (in-memory sessions).
+- Required env vars: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `PUBLIC_TURNSTILE_SITE_KEY`, `PUBLIC_TENANT_ID`.
+- KV bindings: none currently required by the maintained repo baseline; middleware uses cookie-based identifiers/tracking rather than an in-repo KV-backed or in-memory session driver.
 
 ## Contact Form
 
