@@ -21,7 +21,7 @@ Summarize performance strategies implemented in AWCMS.
 
 - Route-level code splitting with `React.lazy`.
 - Local caching via `UnifiedDataManager` (60s TTL).
-- Vite 7 warmup for faster dev startup.
+- Vite 8 dev/build pipeline for current plugin compatibility and faster startup.
 - React Router data loaders are a recommended direction, but they are not yet a primary admin-panel data-loading primitive.
 
 ## How It Works

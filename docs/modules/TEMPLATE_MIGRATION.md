@@ -25,10 +25,13 @@ Provide guidance for migrating legacy templates to the current template system.
 From repo root:
 
 ```bash
+scripts/verify_supabase_migration_consistency.sh
 npx supabase db push --local
 ```
 
 ### 2. Ensure `tenant_id` is Set
+
+Only use one-off SQL backfills like this in controlled migration windows. Keep all durable schema/data changes in timestamped migrations.
 
 ```sql
 UPDATE public.templates

@@ -20,6 +20,10 @@ Describe the plugin and extension architecture for AWCMS.
 
 AWCMS now uses Extension Specification v1 with a normalized split between platform catalog ownership and tenant activation ownership.
 
+Compatibility note:
+
+- Extension admin/public runtimes compose into the maintained Cloudflare Worker + Cloudflare R2 architecture; new extension features should not introduce Supabase Storage or Supabase-hosted Edge Function dependencies.
+
 > [!IMPORTANT]
 > **Terminology**: "Plugin" = Core bundled modules. "Extension" = External dynamic modules.
 

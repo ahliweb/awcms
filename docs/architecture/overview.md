@@ -20,12 +20,14 @@ Describe the runtime architecture and data flow across the AWCMS Ecosystem.
 
 ## Core Concepts
 
-AWCMS is a headless system with multiple clients sharing a Supabase backend:
+AWCMS is a multi-client platform with Supabase as the system of record and Cloudflare handling the maintained edge/object-storage runtime:
 
 - Admin Panel: React 19 SPA (Vite)
 - Public Portal: Astro static output + React islands (Cloudflare Pages)
 - Mobile: Flutter app
 - IoT: ESP32 firmware
+- Edge/API runtime: Cloudflare Workers (`awcms-edge/`)
+- Object storage: Cloudflare R2 with tenant-scoped metadata in Postgres
 
 ## How It Works
 
@@ -93,12 +95,13 @@ graph TD
 
 - Tenant isolation is enforced at UI, API, and database layers.
 - ABAC checks are mandatory at entry points and on data operations.
-- Supabase is the only backend; no custom servers.
+- Supabase remains the system of record for Auth, Postgres, RLS, and ABAC, while Cloudflare Workers are the maintained edge HTTP runtime.
 
 ## Operational Concerns
 
 - Admin and public apps are deployed as separate Cloudflare Pages projects.
-- Supabase migrations are managed in `supabase/migrations`.
+- Worker deployment is handled from `awcms-edge/` via Wrangler.
+- Supabase migrations are authored in `supabase/migrations/` and mirrored into `awcms/supabase/migrations/` for CI parity.
 
 ## Troubleshooting
 

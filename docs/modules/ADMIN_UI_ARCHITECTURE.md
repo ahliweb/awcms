@@ -12,7 +12,7 @@ Describe the admin layout system and the shared template components.
 
 ## Prerequisites
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Admin Panel architecture (React 19.2.4, Vite 7, TailwindCSS 4)
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Admin Panel architecture (React 19.2.4, Vite `^8.0.1`, TailwindCSS 4)
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/modules/COMPONENT_GUIDE.md`
 - `docs/security/abac.md`
@@ -23,6 +23,7 @@ Describe the admin layout system and the shared template components.
 - `AdminPageLayout` handles permission checks and tenant context display.
 - Tables and forms use shared components for consistency.
 - Routing currently uses `BrowserRouter` + `Routes` in `awcms/src/components/MainRouter.jsx` with `React.lazy` + `Suspense` for code splitting. If adopting data routers in the future, prefer `createBrowserRouter` + `RouterProvider` with loaders/actions (see `docs/architecture/standards.md`).
+- Worker-backed admin flows resolve through `VITE_EDGE_URL` / `VITE_LOCAL_EDGE_URL`; maintained clients do not call Supabase-hosted function URLs directly.
 
 ## How It Works
 

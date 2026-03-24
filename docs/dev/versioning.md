@@ -2,11 +2,12 @@
 
 # Versioning & Deployment Strategy
 
-## Status Classification (Audit 2026-02-27)
+## Status Classification (Audit 2026-03-25)
 
 - This document is a strategy guide and may include aspirational workflow patterns.
 - Authoritative live behavior for CI/CD and runtime checks is defined in `.github/workflows/**` and package manifests.
 - Treat checklist items in this file as release-process guidance, not as proof that every step is automated in all environments.
+- Package manifests remain the canonical version source for each maintained workspace.
 
 ## 1. Overview
 
@@ -36,6 +37,8 @@ Enable independent releases per client while preserving backward compatibility a
 5. Record releases in root `CHANGELOG.md` and tag when merging to `main`.
 
 ### Reference Implementation
+
+Examples:
 
 ```bash
 # Admin only
@@ -108,6 +111,8 @@ jobs:
 - Function signature changes: create a new endpoint instead of overwriting.
 - Mobile rollback: use OTA plus a force-update wall for critical fixes.
 
+Additional maintained workspaces also carry their own versions in package manifests, including `awcms-edge/package.json`, `awcms-mcp/package.json`, and `packages/awcms-shared/package.json`.
+
 | Application | Versioned In | Deploy Target |
 |-------------|-------------|---------------|
 | `awcms` (Admin Panel) | `awcms/package.json` | Cloudflare Pages |
@@ -141,6 +146,8 @@ hotfix/*     ← Emergency production patches
 
 ### Standard Feature Flow
 
+This is a team workflow example, not a claim that every branch type is enforced by automation in every repository state.
+
 ```bash
 # 1. Branch from main or the active integration branch used by your team
 git checkout main && git pull
@@ -156,6 +163,8 @@ git push origin feature/my-new-feature
 ```
 
 ### Hotfix Flow
+
+If your active workflow does not use `develop`, adapt the merge-back step to the branch model your team is currently operating.
 
 ```bash
 # Branch from main (not develop)
