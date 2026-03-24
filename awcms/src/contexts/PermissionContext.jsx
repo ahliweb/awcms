@@ -276,7 +276,7 @@ export const PermissionProvider = ({ children }) => {
    * Shorthand: Can user permanently delete items in this resource?
    */
   const canPermanentDelete = useCallback((resource) => {
-    return checkAccess('delete_permanent', resource);
+    return checkAccess('permanent_delete', resource);
   }, [checkAccess]);
 
   /**

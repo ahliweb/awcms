@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createClient } from '@supabase/supabase-js'
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { generateStorageKey, inferMediaKind, slugifyMediaValue, UploadSessionRequest } from './mediaContracts'
 import { compareVersions, getExtensionKey, validateExtensionManifest } from './extensions'
@@ -584,7 +584,7 @@ app.get('/api/media/upload/:sessionId/status', async (c) => {
 
   const { data: session, error } = await adminSupabase
     .from('media_upload_sessions')
-    .select('id, status, completed_at, uploader_id')
+    .select('id, status, completed_at, uploader_id, storage_key')
     .eq('id', sessionId)
     .single();
 
@@ -592,9 +592,94 @@ app.get('/api/media/upload/:sessionId/status', async (c) => {
     return c.json({ error: 'Session not found' }, 404);
   }
 
-  return c.json({ sessionId: session.id, status: session.status, completedAt: session.completed_at ?? null });
+  // When finalization is complete, include the resolved media_objects record
+  // so clients can use it directly without a second round-trip.
+  if (session.status === 'completed' && session.storage_key) {
+    const { data: mediaObject } = await adminSupabase
+      .from('media_objects')
+      .select('*')
+      .eq('storage_key', session.storage_key)
+      .is('deleted_at', null)
+      .single();
+
+    return c.json({
+      sessionId: session.id,
+      status: session.status,
+      completedAt: session.completed_at ?? null,
+      mediaObject: mediaObject ?? null,
+    });
+  }
+
+  return c.json({ sessionId: session.id, status: session.status, completedAt: session.completed_at ?? null, mediaObject: null });
 });
 
+// Permanently delete a media file from R2 + DB.
+// Requires tenant.files.permanent_delete or is_full_access on the role.
+// The file MUST already be soft-deleted (deleted_at IS NOT NULL).
+app.delete('/api/media/:id/permanent', async (c) => {
+  const mediaId = c.req.param('id');
+  const user = c.get('user');
+  const tenantId = c.req.header('x-tenant-id') ?? '';
+  const adminSupabase = getAdminSupabase(c.env);
+
+  // 1. Fetch the row (must be soft-deleted)
+  const { data: media, error: fetchError } = await adminSupabase
+    .from('media_objects')
+    .select('id, storage_key, tenant_id, deleted_at, uploader_id')
+    .eq('id', mediaId)
+    .single();
+
+  if (fetchError || !media) {
+    return c.json({ error: 'File not found' }, 404);
+  }
+
+  if (!media.deleted_at) {
+    return c.json({ error: 'File must be moved to trash before it can be permanently deleted' }, 409);
+  }
+
+  // 2. Tenant isolation: non-platform users must own the tenant
+  if (tenantId && media.tenant_id !== tenantId) {
+    return c.json({ error: 'Access denied' }, 403);
+  }
+
+  // 3. Delete from R2 (local-dev: use STORAGE binding; prod: use S3 client)
+  const isLocalDev = c.env.R2_ACCOUNT_ID === 'local-dev';
+  try {
+    if (isLocalDev) {
+      if (c.env.STORAGE) {
+        await c.env.STORAGE.delete(media.storage_key);
+      }
+    } else {
+      ensureR2SigningConfig(c.env);
+      const s3 = getR2S3Client(c.env);
+      await s3.send(new DeleteObjectCommand({
+        Bucket: c.env.R2_BUCKET_NAME,
+        Key: media.storage_key,
+      }));
+    }
+  } catch (storageErr) {
+    console.error('[permanent-delete] R2 delete failed', storageErr);
+    // Non-fatal: log and continue so the DB row is still cleaned up
+  }
+
+  // 4. Hard-delete the DB row via RPC (enforces permission check server-side)
+  const token = c.get('token');
+  const callerSupabase = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const { error: rpcError } = await callerSupabase.rpc('permanent_delete_media_object', {
+    p_media_id: mediaId,
+  });
+
+  if (rpcError) {
+    return c.json({ error: rpcError.message }, 403);
+  }
+
+  return c.json({ ok: true, id: mediaId });
+});
+
+// Get presigned URL for GET (Or proxy)
 app.get('/api/media/file/:id/access', async (c) => {
   const mediaId = c.req.param('id')
   const token = c.get('token')

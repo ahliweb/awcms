@@ -394,7 +394,7 @@ export function useMedia() {
 
             if (!uploadRes.ok) throw new Error("File upload failed");
 
-            // 3. Finalize upload and create canonical media_objects record
+            // 3. Finalize upload — edge queues the job and returns 202 immediately.
             const finalizeRes = await fetch(finalizeUrl || `${EDGE_URL}/api/media/upload/${sessionId}/finalize`, {
                 method: 'POST',
                 headers: {
@@ -406,7 +406,36 @@ export function useMedia() {
             });
 
             if (!finalizeRes.ok) throw new Error('Failed to finalize upload');
-            const uploadResult = await finalizeRes.json();
+
+            // 4. Poll status until the queue consumer has written the media_objects record.
+            //    Timeout after 30 s; poll every 500 ms.
+            const statusUrl = `${EDGE_URL}/api/media/upload/${sessionId}/status`;
+            const pollHeaders = {
+                'Authorization': `Bearer ${session.access_token}`,
+                ...(tenantId ? { 'x-tenant-id': tenantId } : {})
+            };
+            const POLL_INTERVAL_MS = 500;
+            const POLL_TIMEOUT_MS = 30_000;
+            const pollStart = Date.now();
+            let uploadResult = null;
+
+            while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
+                await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+                const statusRes = await fetch(statusUrl, { headers: pollHeaders });
+                if (!statusRes.ok) throw new Error('Failed to poll upload status');
+                const statusData = await statusRes.json();
+                if (statusData.status === 'completed' && statusData.mediaObject) {
+                    uploadResult = statusData;
+                    break;
+                }
+                if (statusData.status === 'failed') {
+                    throw new Error('Upload finalization failed');
+                }
+            }
+
+            if (!uploadResult) {
+                throw new Error('Upload finalization timed out');
+            }
 
             // Refresh stats after upload
             await fetchStats();
@@ -456,6 +485,66 @@ export function useMedia() {
         return formatMediaObject(data);
     }, []);
 
+    // Permanent Delete (hard delete from R2 + DB) – trash-view only
+    const permanentDeleteFile = useCallback(async (id) => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error('Not authenticated');
+
+            const response = await fetch(`${EDGE_URL}/api/media/${id}/permanent`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+                },
+            });
+
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Permanent delete failed');
+
+            toast({ title: 'File Permanently Deleted', description: 'File has been permanently removed.' });
+            await fetchStats();
+            return true;
+        } catch (err) {
+            console.error('Permanent delete failed:', err);
+            toast({ variant: 'destructive', title: 'Delete Failed', description: err.message });
+            return false;
+        }
+    }, [fetchStats, tenantId, toast]);
+
+    // Bulk Permanent Delete
+    const bulkPermanentDelete = useCallback(async (ids) => {
+        if (!ids || ids.length === 0) return { success: 0, error: 0 };
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return { success: 0, error: ids.length };
+
+        let success = 0;
+        let errorCount = 0;
+        for (const id of ids) {
+            const response = await fetch(`${EDGE_URL}/api/media/${id}/permanent`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+                },
+            });
+            if (response.ok) {
+                success++;
+            } else {
+                errorCount++;
+            }
+        }
+
+        if (success > 0) {
+            toast({ title: 'Files Permanently Deleted', description: `${success} file${success > 1 ? 's' : ''} permanently removed.` });
+            await fetchStats();
+        }
+        if (errorCount > 0) {
+            toast({ variant: 'destructive', title: 'Some Deletions Failed', description: `${errorCount} file${errorCount > 1 ? 's' : ''} could not be deleted.` });
+        }
+        return { success, error: errorCount };
+    }, [fetchStats, tenantId, toast]);
+
     // Sync files from storage bucket to database
     const syncFiles = useCallback(async () => {
         setSyncing(true);
@@ -490,6 +579,8 @@ export function useMedia() {
         softDeleteFile,
         bulkSoftDelete,
         restoreFile,
+        permanentDeleteFile,
+        bulkPermanentDelete,
         getFileUrl,
         getProtectedFileAccessUrl,
         updateFileMetadata,

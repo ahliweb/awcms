@@ -45,7 +45,7 @@ export function FileUploader({ onUpload, uploading, progress = 0 }) {
       <div
         {...getRootProps()}
         className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
-          ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}
+          ${isDragActive ? 'border-primary bg-primary/10' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}
           ${uploading ? 'opacity-50 pointer-events-none' : ''}
         `}
       >
@@ -53,14 +53,14 @@ export function FileUploader({ onUpload, uploading, progress = 0 }) {
 
         {uploading ? (
           <div className="flex flex-col items-center justify-center py-4">
-            <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+            <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
             <p className="text-sm font-medium text-slate-700">Uploading files...</p>
             {progress > 0 && <Progress value={progress} className="w-64 mt-4" />}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-4">
-            <div className="bg-blue-100 p-4 rounded-full mb-4">
-              <Upload className="w-6 h-6 text-blue-600" />
+            <div className="bg-primary/10 p-4 rounded-full mb-4">
+              <Upload className="w-6 h-6 text-primary" />
             </div>
             <p className="text-lg font-medium text-slate-700 mb-1">
               {isDragActive ? 'Drop files here' : 'Drag & drop files here'}

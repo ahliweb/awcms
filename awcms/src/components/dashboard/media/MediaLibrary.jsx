@@ -46,7 +46,7 @@ const isAccessUrlExpired = (entry) => {
 
 const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isTrashView = false, categoryId = null, edgeApiAvailable = true, edgeApiMessage = '', refreshEdgeApiHealth }) => {
     const { toast } = useToast();
-    const { checkAccess, isPlatformAdmin } = usePermissions();
+    const { checkAccess, isPlatformAdmin, canPermanentDelete } = usePermissions();
 
     // Use the hook
     const {
@@ -55,6 +55,8 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
         softDeleteFile,
         bulkSoftDelete,
         restoreFile,
+        permanentDeleteFile,
+        bulkPermanentDelete,
         getFileUrl,
         getProtectedFileAccessUrl,
         updateFileMetadata,
@@ -64,6 +66,7 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
     const canUpload = checkAccess('create', 'files');
     const canDelete = checkAccess('delete', 'files');
     const canUpdate = checkAccess('update', 'files');
+    const canHardDelete = canPermanentDelete('files');
     const secureWindowMinutes = Math.ceil(getSecureMediaSessionMaxAgeSeconds() / 60);
 
     const [files, setFiles] = useState([]);
@@ -337,14 +340,27 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
 
     // Perform actual delete after confirmation
     const confirmDelete = async () => {
-        if (!canDelete) {
+        if (!canDelete && !isTrashView) {
             toast({ variant: 'destructive', title: 'Permission Denied', description: 'You do not have permission to delete files.' });
             return;
         }
+
         if (isTrashView) {
-            toast({ variant: 'destructive', title: 'Action Disabled', description: 'Permanent delete is disabled. Restore files instead.' });
+            if (!canHardDelete) {
+                toast({ variant: 'destructive', title: 'Permission Denied', description: 'You do not have permission to permanently delete files.' });
+                return;
+            }
+            const id = deleteConfirm.fileId;
+            if (!id) return;
+            setDeleteConfirm({ open: false, fileId: null, fileName: '' });
+            const success = await permanentDeleteFile(id);
+            if (success) {
+                fetchFiles();
+                setSelectedFiles(new Set());
+            }
             return;
         }
+
         const id = deleteConfirm.fileId;
         if (!id) return;
 
@@ -383,10 +399,6 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
 
     // Bulk delete handler
     const handleBulkDelete = () => {
-        if (isTrashView) {
-            toast({ variant: 'destructive', title: 'Action Disabled', description: 'Permanent delete is disabled. Restore files instead.' });
-            return;
-        }
         const count = selectedFiles.size;
         setDeleteConfirm({
             open: true,
@@ -398,6 +410,21 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
 
     // Bulk delete confirmation
     const confirmBulkDelete = async () => {
+        if (isTrashView) {
+            if (!canHardDelete) {
+                toast({ variant: 'destructive', title: 'Permission Denied', description: 'You do not have permission to permanently delete files.' });
+                return;
+            }
+            const ids = Array.from(selectedFiles);
+            setDeleteConfirm({ open: false, fileId: null, fileName: '', isBulk: false });
+            const { success } = await bulkPermanentDelete(ids);
+            if (success > 0) {
+                setSelectedFiles(new Set());
+                fetchFiles();
+            }
+            return;
+        }
+
         if (!canDelete) {
             toast({ variant: 'destructive', title: 'Permission Denied', description: 'You do not have permission to delete files.' });
             return;
@@ -754,6 +781,22 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                                                     <RefreshCw className="w-4 h-4" />
                                                 </Button>
                                             ) : null}
+                                            {isTrashView && canHardDelete && (
+                                                <Button
+                                                    type="button"
+                                                    size="icon"
+                                                    variant="destructive"
+                                                    className="h-8 w-8"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleDelete(file.id, file.name);
+                                                    }}
+                                                    title="Permanently Delete"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            )}
                                             {!isTrashView && canDelete && (
                                                 <Button
                                                     type="button"
@@ -865,6 +908,23 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                                                     <RefreshCw className="w-4 h-4" />
                                                 </Button>
                                             )}
+                                            {isTrashView && canHardDelete && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleDelete(file.id, file.name);
+                                                    }}
+                                                    title="Permanently Delete"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                    Delete
+                                                </Button>
+                                            )}
                                             {!isTrashView && canDelete && (
                                                 <Button
                                                     type="button"
@@ -944,12 +1004,16 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>
-                            Move to Trash?
+                            {isTrashView ? 'Permanently Delete?' : 'Move to Trash?'}
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            {deleteConfirm.isBulk
-                                ? `This will move ${deleteConfirm.fileName} to the trash bin. You can restore them later.`
-                                : `This will move "${deleteConfirm.fileName}" to the trash bin. You can restore it later.`
+                            {isTrashView
+                                ? deleteConfirm.isBulk
+                                    ? `This will permanently delete ${deleteConfirm.fileName} from storage. This action cannot be undone.`
+                                    : `This will permanently delete "${deleteConfirm.fileName}" from storage. This action cannot be undone.`
+                                : deleteConfirm.isBulk
+                                    ? `This will move ${deleteConfirm.fileName} to the trash bin. You can restore them later.`
+                                    : `This will move "${deleteConfirm.fileName}" to the trash bin. You can restore it later.`
                             }
                         </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -957,8 +1021,9 @@ const MediaLibrary = ({ onSelect, selectionMode = false, refreshTrigger = 0, isT
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={deleteConfirm.isBulk ? confirmBulkDelete : confirmDelete}
+                            className={isTrashView ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
                         >
-                            Move to Trash
+                            {isTrashView ? 'Delete Permanently' : 'Move to Trash'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
