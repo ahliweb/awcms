@@ -22,8 +22,9 @@ Provide common fixes for local development and deployment issues.
 ### Missing Environment Variables
 
 - Confirm `awcms/.env.local` exists for the admin panel.
-- Confirm `awcms-public/primary/.env` exists for the public portal, including `PUBLIC_TENANT_ID`.
+- Confirm `awcms-public/primary/.env.local` (or the deployment-resolved env inputs used by the build wrapper) exists for the public portal, including `PUBLIC_TENANT_ID`.
 - Confirm `awcms-edge/.dev.vars` exists for local Worker development.
+- Confirm `VITE_EDGE_URL` / `VITE_LOCAL_EDGE_URL` are set when admin or public flows depend on Worker-backed routes.
 
 ### Tenant Not Found (Admin)
 
@@ -53,6 +54,7 @@ Provide common fixes for local development and deployment issues.
 - Local repair execution: `scripts/repair_supabase_migration_history.sh --apply --local`.
 - Linked/remote repair execution: `scripts/repair_supabase_migration_history.sh --apply --linked`.
 - Re-run `npx supabase db push --local` after local repairs.
+- Re-run `scripts/verify_supabase_migration_consistency.sh` after repairs so root/mirror parity is still green.
 
 ### Root/Mirror Supabase Drift (CI passes locally, fails in `db-check`)
 
