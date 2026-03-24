@@ -102,7 +102,16 @@ const getR2S3Client = (env: Bindings) => new S3Client({
   },
 })
 
-const headStoredObject = (env: Bindings, storageKey: string) => {
+const headStoredObject = async (
+  env: Bindings,
+  storageKey: string,
+): Promise<{ ContentLength?: number; ETag?: string } | null> => {
+  if (env.R2_ACCOUNT_ID === 'local-dev') {
+    if (!env.STORAGE) return null
+    const obj = await env.STORAGE.head(storageKey)
+    if (!obj) return null
+    return { ContentLength: obj.size, ETag: obj.etag }
+  }
   const client = getR2S3Client(env)
   return client.send(new HeadObjectCommand({
     Bucket: env.R2_BUCKET_NAME,
@@ -110,7 +119,20 @@ const headStoredObject = (env: Bindings, storageKey: string) => {
   }))
 }
 
-const getStoredObject = (env: Bindings, storageKey: string) => {
+const getStoredObject = async (
+  env: Bindings,
+  storageKey: string,
+): Promise<{ Body?: ReadableStream | null; ContentType?: string; ETag?: string } | null> => {
+  if (env.R2_ACCOUNT_ID === 'local-dev') {
+    if (!env.STORAGE) return null
+    const obj = await env.STORAGE.get(storageKey)
+    if (!obj) return null
+    return {
+      Body: obj.body as ReadableStream,
+      ContentType: obj.httpMetadata?.contentType,
+      ETag: obj.etag,
+    }
+  }
   const client = getR2S3Client(env)
   return client.send(new GetObjectCommand({
     Bucket: env.R2_BUCKET_NAME,
@@ -745,6 +767,27 @@ app.get('/api/media/file/:id/access', async (c) => {
       return c.json({ error: 'Secure file access has expired for this session' }, 403)
     }
 
+    await getAdminSupabase(c.env)
+      .from('media_access_audit')
+      .insert({
+        media_object_id: media.id,
+        tenant_id: media.tenant_id,
+        accessor_id: c.get('user')?.id || null,
+        action: 'read',
+      })
+
+    // In local-dev the S3 presigned URL points to a non-existent host.
+    // Return a proxy URL through this Worker instead.
+    const isLocalDev = c.env.R2_ACCOUNT_ID === 'local-dev'
+    if (isLocalDev) {
+      const proxyUrl = new URL(`/api/media/file/${mediaId}`, c.req.url).toString()
+      return c.json({
+        url: proxyUrl,
+        expiresAt: windowState.expiresAt,
+        sessionBound: true,
+      })
+    }
+
     ensureR2SigningConfig(c.env)
     const signedUrl = await getSignedUrl(
       getR2S3Client(c.env),
@@ -754,15 +797,6 @@ app.get('/api/media/file/:id/access', async (c) => {
       }),
       { expiresIn: windowState.expiresIn },
     )
-
-    await getAdminSupabase(c.env)
-      .from('media_access_audit')
-      .insert({
-        media_object_id: media.id,
-        tenant_id: media.tenant_id,
-        accessor_id: c.get('user')?.id || null,
-        action: 'read',
-      })
 
     return c.json({
       url: signedUrl,
