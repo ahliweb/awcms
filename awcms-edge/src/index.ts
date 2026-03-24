@@ -549,7 +549,7 @@ app.post('/api/media/upload/:sessionId/finalize', async (c) => {
       return c.json({ error: 'Session expired' }, 403);
     }
 
-    // Build and enqueue the finalize message.
+    // Build the finalize message.
     const traceId = c.req.header('x-request-id') ?? crypto.randomUUID()
     const message = buildMediaFinalizeMessage({
       session_id: sessionId,
@@ -558,6 +558,31 @@ app.post('/api/media/upload/:sessionId/finalize', async (c) => {
       trace_id: traceId,
     })
 
+    // In local dev, Cloudflare Queues do not fire reliably under wrangler dev /
+    // Miniflare. Bypass the queue entirely and run the consumer inline so the
+    // upload completes synchronously and the status poll returns 'completed' on
+    // the very next tick.
+    const isLocalDev = c.env.R2_ACCOUNT_ID === 'local-dev'
+    if (isLocalDev) {
+      const result = await handleMediaFinalizeMessage(message, c.env)
+      if (result === 'retry') {
+        return c.json(
+          { error: 'Finalization failed — R2 object not found. Is the proxy upload complete?' },
+          500,
+        )
+      }
+      return c.json(
+        {
+          ok: true,
+          job_id: message.job_id,
+          status: 'completed',
+          message: 'Upload finalized synchronously (local-dev mode).',
+        },
+        202,
+      )
+    }
+
+    // Production path: enqueue for async processing.
     await c.env.MEDIA_EVENTS_QUEUE.send(message)
 
     return c.json(
@@ -619,8 +644,22 @@ app.get('/api/media/upload/:sessionId/status', async (c) => {
 app.delete('/api/media/:id/permanent', async (c) => {
   const mediaId = c.req.param('id');
   const user = c.get('user');
-  const tenantId = c.req.header('x-tenant-id') ?? '';
   const adminSupabase = getAdminSupabase(c.env);
+
+  // 0. Resolve caller context (platform admins bypass tenant isolation)
+  let userContext: Awaited<ReturnType<typeof getUserContext>>;
+  try {
+    userContext = await getUserContext(c.env, user.id);
+  } catch {
+    return c.json({ error: 'Could not resolve user context' }, 500);
+  }
+
+  let resolvedTenantId: string | null;
+  try {
+    resolvedTenantId = resolveTenantId(c.req.header('x-tenant-id') ?? null, userContext);
+  } catch {
+    return c.json({ error: 'Tenant mismatch or missing tenant context' }, 403);
+  }
 
   // 1. Fetch the row (must be soft-deleted)
   const { data: media, error: fetchError } = await adminSupabase
@@ -637,9 +676,11 @@ app.delete('/api/media/:id/permanent', async (c) => {
     return c.json({ error: 'File must be moved to trash before it can be permanently deleted' }, 409);
   }
 
-  // 2. Tenant isolation: non-platform users must own the tenant
-  if (tenantId && media.tenant_id !== tenantId) {
-    return c.json({ error: 'Access denied' }, 403);
+  // 2. Tenant isolation: non-platform users must own the tenant that owns the file
+  if (!userContext.isPlatformAdmin && !userContext.isFullAccess) {
+    if (!resolvedTenantId || media.tenant_id !== resolvedTenantId) {
+      return c.json({ error: 'Access denied' }, 403);
+    }
   }
 
   // 3. Delete from R2 (local-dev: use STORAGE binding; prod: use S3 client)
