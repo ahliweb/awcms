@@ -5,6 +5,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-03-25
+
+Applies to: `awcms@4.5.0`, `@onwidget/astrowind@4.4.0`, `smanda-pangkalan-bun@4.4.0`, `awcms-mcp@4.4.0`
+
 ### Added
 
 - **Multi-channel notification system**: new `tenant_notification_channels`, `notification_dispatches`, and `notification_templates` tables with full RLS policies (migration `20260320100000_create_notification_channels.sql`).
