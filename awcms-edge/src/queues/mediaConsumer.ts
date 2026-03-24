@@ -37,6 +37,8 @@ interface ConsumerEnv {
   R2_ACCESS_KEY_ID: string
   R2_SECRET_ACCESS_KEY: string
   R2_BUCKET_NAME: string
+  /** Present in local dev (wrangler dev) — used instead of S3 client when R2_ACCOUNT_ID === 'local-dev' */
+  STORAGE?: R2Bucket
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +59,33 @@ const getR2S3Client = (env: ConsumerEnv) =>
     },
   })
 
-const headStoredObject = (env: ConsumerEnv, storageKey: string) => {
+/**
+ * Check whether an object exists in R2 and return its metadata.
+ *
+ * In local dev (`R2_ACCOUNT_ID === 'local-dev'`) we use the `STORAGE` R2
+ * binding (Miniflare simulation) because the S3-compatible endpoint
+ * (`https://local-dev.r2.cloudflarestorage.com`) does not exist and causes
+ * TLS failures. The returned shape is normalised so callers get the same
+ * `ContentLength` / `ETag` properties regardless of the path taken.
+ *
+ * In production the real S3 HEAD command is used unchanged.
+ */
+const headStoredObject = async (
+  env: ConsumerEnv,
+  storageKey: string,
+): Promise<{ ContentLength?: number; ETag?: string } | null> => {
+  if (env.R2_ACCOUNT_ID === 'local-dev') {
+    if (!env.STORAGE) {
+      throw new Error('[mediaConsumer] STORAGE binding is missing in local-dev mode')
+    }
+    const obj = await env.STORAGE.head(storageKey)
+    if (!obj) return null
+    return {
+      ContentLength: obj.size,
+      ETag: obj.etag,
+    }
+  }
+
   const client = getR2S3Client(env)
   return client.send(
     new HeadObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: storageKey }),

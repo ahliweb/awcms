@@ -406,16 +406,28 @@ app.post('/api/media/upload-session', async (c) => {
     const sessionBoundAccess = Boolean(body.sessionBoundAccess)
     const storageKey = buildStorageKey(tenantId, body.fileName, body.folder, sessionBoundAccess)
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
-    const s3 = getR2S3Client(c.env)
-    const uploadUrl = await getSignedUrl(
-      s3,
-      new PutObjectCommand({
-        Bucket: c.env.R2_BUCKET_NAME,
-        Key: storageKey,
-        ContentType: body.mimeType,
-      }),
-      { expiresIn: 15 * 60 }
-    )
+    // In local dev (R2_ACCOUNT_ID sentinel = 'local-dev') the S3 presigned URL
+    // points to a non-existent host and TLS fails in the browser.
+    // Instead, we generate a proxy upload URL that goes through this Worker,
+    // which writes to the local STORAGE R2 binding via the Workers API.
+    const isLocalDev = c.env.R2_ACCOUNT_ID === 'local-dev'
+
+    let uploadUrl: string
+    if (isLocalDev) {
+      // Placeholder — will be replaced with the real proxy URL after session insert.
+      uploadUrl = '__local_dev_proxy__'
+    } else {
+      const s3 = getR2S3Client(c.env)
+      uploadUrl = await getSignedUrl(
+        s3,
+        new PutObjectCommand({
+          Bucket: c.env.R2_BUCKET_NAME,
+          Key: storageKey,
+          ContentType: body.mimeType,
+        }),
+        { expiresIn: 15 * 60 }
+      )
+    }
 
     const { data: session, error: dbError } = await adminSupabase
       .from('media_upload_sessions')
@@ -446,6 +458,11 @@ app.post('/api/media/upload-session', async (c) => {
 
     const finalizeUrl = new URL(`/api/media/upload/${session.id}/finalize`, c.req.url).toString()
 
+    // Rewrite placeholder to real proxy URL now that we have the session id.
+    if (isLocalDev) {
+      uploadUrl = new URL(`/api/media/upload-proxy/${session.id}`, c.req.url).toString()
+    }
+
     return c.json({
       sessionId: session.id,
       uploadUrl,
@@ -457,6 +474,48 @@ app.post('/api/media/upload-session', async (c) => {
     return c.json({ error: error instanceof Error ? error.message : 'Failed to create upload session' }, 500)
   }
 });
+
+// Local-dev proxy upload route.
+// Used only when R2_ACCOUNT_ID=local-dev (wrangler dev / Miniflare).
+// The browser PUTs the file body here; the Worker writes it directly to the
+// local STORAGE R2 binding instead of a presigned S3 URL that would fail TLS.
+// This route is auth-gated via the session record — no additional JWT needed
+// because the session was already created by an authenticated user above.
+app.put('/api/media/upload-proxy/:sessionId', async (c) => {
+  const sessionId = c.req.param('sessionId')
+  const adminSupabase = getAdminSupabase(c.env)
+
+  // Fetch the session to get the storage key and validate it is still pending.
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('media_upload_sessions')
+    .select('id, storage_key, mime_type, status, expires_at')
+    .eq('id', sessionId)
+    .single()
+
+  if (sessionError || !session) {
+    return c.json({ error: 'Upload session not found' }, 404)
+  }
+  if (session.status !== 'pending') {
+    return c.json({ error: 'Upload session is no longer pending' }, 409)
+  }
+  if (new Date(session.expires_at) < new Date()) {
+    return c.json({ error: 'Upload session expired' }, 410)
+  }
+
+  const body = await c.req.arrayBuffer()
+  if (!body || body.byteLength === 0) {
+    return c.json({ error: 'Empty request body' }, 400)
+  }
+
+  try {
+    await c.env.STORAGE.put(session.storage_key, body, {
+      httpMetadata: { contentType: session.mime_type ?? 'application/octet-stream' },
+    })
+    return c.json({ ok: true })
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Proxy upload failed' }, 500)
+  }
+})
 
 // Finalize upload after the client PUTs directly to the signed R2 URL.
 //
