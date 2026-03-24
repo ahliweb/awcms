@@ -83,7 +83,7 @@ export function useMedia() {
         typeFilter = null,
         categoryId = null
     } = {}) => {
-        if (!tenantId && !isPlatformAdmin) return { data: [], count: 0 };
+        if (!tenantId) return { data: [], count: 0 };
 
         setLoading(true);
         try {
@@ -97,10 +97,7 @@ export function useMedia() {
                 `, { count: 'exact' })
                 .order('created_at', { ascending: false });
 
-            // Platform admins see all files, others are tenant-scoped
-            if (!isPlatformAdmin && tenantId) {
-                dbQuery = dbQuery.eq('tenant_id', tenantId);
-            }
+            dbQuery = dbQuery.eq('tenant_id', tenantId);
 
             // Trash View Logic
             if (isTrash) {
@@ -141,7 +138,7 @@ export function useMedia() {
         } finally {
             setLoading(false);
         }
-    }, [tenantId, isPlatformAdmin, toast]);
+    }, [tenantId, toast]);
 
     // Soft Delete File
     const softDeleteFile = useCallback(async (id) => {
@@ -291,9 +288,19 @@ export function useMedia() {
                 .select('size_bytes, mime_type, media_kind')
                 .is('deleted_at', null);
 
-            if (!isPlatformAdmin && !isFullAccess && tenantId) {
-                query = query.eq('tenant_id', tenantId);
+            if (!tenantId) {
+                setStats({
+                    total_files: 0,
+                    total_size: 0,
+                    image_count: 0,
+                    doc_count: 0,
+                    video_count: 0,
+                    other_count: 0,
+                });
+                return;
             }
+
+            query = query.eq('tenant_id', tenantId);
 
             const { data, error } = await query;
 
@@ -315,7 +322,7 @@ export function useMedia() {
         } finally {
             setStatsLoading(false);
         }
-    }, [isFullAccess, isPlatformAdmin, tenantId]);
+    }, [tenantId]);
 
     // Initial fetch
     useEffect(() => {
