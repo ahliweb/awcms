@@ -1,5 +1,7 @@
 # Release Summary - 2026-03 Admin UI Cleanup
 
+> Historical snapshot: this document records a completed March 2026 cleanup batch. Treat it as changelog-style context, not the current source of truth for admin runtime or UI architecture.
+
 ## Summary
 
 - Standardized admin page spacing, card separation, and toolbar layout across shared and custom dashboard screens.

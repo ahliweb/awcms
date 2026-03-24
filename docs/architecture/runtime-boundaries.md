@@ -19,10 +19,10 @@ Define the hard runtime boundaries for AWCMS across storage, edge logic, admin s
 
 | Concern | Approved Runtime | Disallowed Runtime |
 | --- | --- | --- |
-| Public/server HTTP workflows | Cloudflare Workers | Supabase Edge Functions |
+| Public/server HTTP workflows | Cloudflare Workers | Supabase-hosted Edge Functions |
 | Privileged orchestration | Cloudflare Workers + `SUPABASE_SECRET_KEY` | Browser clients |
 | Tenant/public compatibility routes | Cloudflare Worker compatibility routes (`/functions/v1/*`) | Supabase-hosted function URLs |
-| Async background processing | Cloudflare Queues (producer + consumer in `awcms-edge/`) | Custom Node.js servers, Supabase Edge Functions |
+| Async background processing | Cloudflare Queues (producer + consumer in `awcms-edge/`) | Custom Node.js servers, Supabase-hosted Edge Functions |
 
 ## Storage Boundary
 
@@ -31,6 +31,8 @@ Define the hard runtime boundaries for AWCMS across storage, edge logic, admin s
 | File/object storage | Cloudflare R2 | Supabase Storage |
 | Public media delivery | Cloudflare Edge API + R2 object keys | Direct storage-bucket client access |
 | Protected media access | Cloudflare Edge API session-bound URLs | Client-side privileged bucket access |
+
+- Local `wrangler dev` R2 state is isolated from remote Cloudflare R2 by default; reconciliation requires the maintained `sync:r2:*` Worker commands.
 
 ## Scope Boundary
 
@@ -52,6 +54,7 @@ Define the hard runtime boundaries for AWCMS across storage, edge logic, admin s
 - `packages/awcms-shared/src/supabase.ts` applies the same Worker proxy/storage guard behavior for public/shared clients.
 - `awcms-edge/src/index.ts` is the maintained Worker gateway.
 - `public.current_tenant_id()` honors platform-admin tenant override safely while preserving tenant isolation.
+- Worker-backed public/shared compatibility calls resolve against `VITE_EDGE_URL` / `PUBLIC_EDGE_URL`, not Supabase-hosted function endpoints.
 
 ## Validation Commands
 

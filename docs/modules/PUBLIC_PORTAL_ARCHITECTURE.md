@@ -22,6 +22,7 @@ Describe how the public portal renders tenant content and enforces security cons
 
 - Astro static output on Cloudflare Pages with React islands where interactivity is needed.
 - Tenant resolution at build time via `PUBLIC_TENANT_ID` and `getStaticPaths`.
+- `@awcms/shared` is the canonical shared helper layer for public Supabase env resolution, tenant IDs, and sanitization.
 - `PuckRenderer` (wraps `@puckeditor/core` `<Render>`) for rendering Puck JSON with a server-side allow-list.
 - View transitions are enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
 
@@ -41,6 +42,7 @@ Describe how the public portal renders tenant content and enforces security cons
 - Widget mapping: `awcms-public/primary/src/components/common/WidgetRenderer.astro`.
 - Shared types: `awcms-public/primary/src/types.d.ts`.
 - Plugin scripts: `awcms-public/primary/src/components/common/PluginLoader.astro` (via `plugins` table).
+- Public client/env resolution flows through `@awcms/shared/supabase` and `@awcms/shared/tenant` before page-level queries run.
 
 ### Rich Text
 
@@ -64,6 +66,8 @@ Describe how the public portal renders tenant content and enforces security cons
 - Use `createScopedClient` with `x-tenant-id` headers for tenant-scoped reads when needed.
 - Use `tenantUrl` from `src/lib/url.ts` for internal links.
 - Canonical static deployments do not depend on middleware-based analytics logging.
+- Primary builds commonly use `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, while `PUBLIC_SUPABASE_*` remains a supported deployment fallback.
+- Public forms that render Turnstile require `PUBLIC_TURNSTILE_SITE_KEY` at build time.
 
 ## Permissions and Access
 
@@ -87,7 +91,7 @@ Describe how the public portal renders tenant content and enforces security cons
 ## Tenant Variants
 
 - `awcms-public/smandapbun` is a dedicated single-tenant static portal.
-- It uses a fixed slug fallback and JSON fallbacks for content.
+- It uses a fixed build-time tenant plus JSON fallbacks for selected content areas during migration.
 - See `docs/tenancy/smandapbun.md` for its data sources and migration path.
 
 ## References

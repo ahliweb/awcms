@@ -1,5 +1,7 @@
 # Release Summary — Extension Platform, Tenant Scope, and Runtime Hardening
 
+> Historical snapshot: this document summarizes a completed change batch from March 2026. For current runtime authority, use `SYSTEM_MODEL.md`, `AGENTS.md`, `README.md`, and the maintained docs in `docs/dev/`, `docs/deploy/`, `docs/security/`, and `docs/tenancy/`.
+
 ## Scope
 
 This change sequence delivered three major outcomes:
