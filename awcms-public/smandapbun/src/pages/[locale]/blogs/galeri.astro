@@ -3,7 +3,6 @@ import Layout from "../../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
 import { Image } from "astro:assets";
 import {
-  getLocale,
   t,
   getLocalizedValue,
   getLocalizedPath,
@@ -12,7 +11,13 @@ import {
 import { getAdminPageBySlug, getGalleryData } from "../../../lib/api";
 import { sanitizeHTML } from "../../../utils/sanitize";
 
-const locale = getLocale(Astro.url) as Locale;
+export const prerender = true;
+
+export function getStaticPaths() {
+  return [{ params: { locale: "en" } }];
+}
+
+const { locale } = Astro.params as { locale: Locale };
 const galleryData = await getGalleryData();
 const galleryPage = await getAdminPageBySlug("galeri", locale);
 const { gallery } = galleryData;
@@ -25,8 +30,6 @@ const localImagesGlob = import.meta.glob<{ default: ImageMetadata }>(
 
 const localImages = Object.values(localImagesGlob).map((img) => img.default);
 
-// Combine with existing albums if needed, or just append as a new album
-// We'll create a unified structure for rendering
 interface GalleryItem {
   type: "local" | "remote";
   src: string | ImageMetadata;
@@ -39,15 +42,6 @@ interface Album {
 }
 
 const albums: Album[] = [
-  // ...gallery.albums.map((album: any) => ({
-  //   title: album.title,
-  //   images: album.images.map((img: string) => ({
-  //     type: "remote" as const,
-  //     src: img,
-  //     alt: getLocalizedValue(album.title, locale),
-  //   })),
-  // })),
-  // Add the local images as a new album
   {
     title: {
       id: "Kegiatan Sekolah",
@@ -305,7 +299,7 @@ const albums: Album[] = [
       const lightboxCounter = document.getElementById("lightbox-counter");
 
       let currentVisibleIndex = 0;
-      let visibleItems: HTMLElement[] = []; // Only navigate through filtered items
+      let visibleItems: HTMLElement[] = [];
 
       // Initialize visible items
       updateVisibleItems("all");
@@ -313,7 +307,6 @@ const albums: Album[] = [
       // 1. Filtering Logic
       filters.forEach((btn) => {
         btn.addEventListener("click", () => {
-          // Toggle active class
           filters.forEach((b) => {
             b.classList.remove(
               "active",
@@ -356,14 +349,13 @@ const albums: Album[] = [
 
       function updateVisibleItems(category: string | null) {
         visibleItems = [];
-        const allItems = document.querySelectorAll(".gallery-item"); // Re-query directly to ensure clean state
+        const allItems = document.querySelectorAll(".gallery-item");
         allItems.forEach((item) => {
           const el = item as HTMLElement;
           const itemCategory = el.getAttribute("data-category");
 
           if (category === "all" || itemCategory === category) {
             el.style.display = "block";
-            // Add simple animation
             el.animate(
               [
                 { transform: "scale(0.9)", opacity: 0 },
@@ -381,10 +373,8 @@ const albums: Album[] = [
       // 2. Lightbox Logic
       items.forEach((item) => {
         item.addEventListener("click", (e) => {
-          e.preventDefault(); // Prevent default link behavior if any
+          e.preventDefault();
           const clickedItem = item as HTMLElement;
-          // IMPORTANT: Find index within the CURRENTLY VISIBLE items
-          // We need to match the clicked element to one in the visibleItems array
           const index = visibleItems.findIndex(
             (visItem) => visItem === clickedItem,
           );
@@ -406,12 +396,11 @@ const albums: Album[] = [
         updateLightboxContent();
 
         lightbox.classList.remove("hidden");
-        // Small delay to allow display:block to apply before opacity transition
         requestAnimationFrame(() => {
           lightbox.classList.remove("opacity-0");
           lightboxImg.classList.remove("scale-95", "opacity-0");
         });
-        document.body.style.overflow = "hidden"; // Prevent scrolling
+        document.body.style.overflow = "hidden";
       }
 
       function closeLightbox() {
@@ -439,7 +428,6 @@ const albums: Album[] = [
         const src = currentItem.getAttribute("data-src");
         const caption = currentItem.getAttribute("data-caption");
 
-        // Preload image for smoother transition could go here
         lightboxImg.src = src || "";
         lightboxCaption.textContent = caption || "";
         lightboxCounter.textContent = `${currentVisibleIndex + 1} / ${visibleItems.length}`;
@@ -456,7 +444,6 @@ const albums: Album[] = [
         updateLightboxContent();
       }
 
-      // Event Listeners
       const newCloseBtn = document.getElementById("lightbox-close");
       newCloseBtn?.addEventListener("click", closeLightbox);
 
@@ -472,12 +459,10 @@ const albums: Album[] = [
         showPrev();
       });
 
-      // Close on background click
       lightbox?.addEventListener("click", (e) => {
         if (e.target === lightbox) closeLightbox();
       });
 
-      // Keyboard navigation
       document.addEventListener("keydown", (e) => {
         if (lightbox?.classList.contains("hidden")) return;
 
@@ -487,9 +472,7 @@ const albums: Album[] = [
       });
     }
 
-    // Initialize on load
     document.addEventListener("DOMContentLoaded", initGallery);
-    // Initialize on View Transitions nav
     document.addEventListener("astro:page-load", initGallery);
   </script>
 </Layout>

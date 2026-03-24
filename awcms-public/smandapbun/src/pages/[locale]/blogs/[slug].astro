@@ -2,7 +2,7 @@
 import type { GetStaticPaths } from "astro";
 import Layout from "../../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
-import { t, getLocalizedValue, getLocalizedPath } from "../../../utils/i18n";
+import { t, getLocalizedValue, getLocalizedPath, type Locale } from "../../../utils/i18n";
 
 import { getPosts } from "../../../lib/api";
 import { sanitizeHTML } from "~/utils/sanitize";
@@ -12,13 +12,12 @@ export const prerender = true;
 export const getStaticPaths = (async () => {
   const posts = await getPosts(500, "en");
   return posts.map((post) => ({
-    params: { slug: post.slug },
+    params: { locale: "en", slug: post.slug },
   }));
 }) satisfies GetStaticPaths;
 
-const { slug } = Astro.params;
+const { locale, slug } = Astro.params as { locale: Locale; slug: string };
 
-const locale = "en" as const;
 const allPosts = await getPosts(500, locale);
 const post = allPosts.find((item) => item.slug === slug);
 

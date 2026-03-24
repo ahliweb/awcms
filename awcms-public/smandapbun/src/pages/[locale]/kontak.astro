@@ -1,12 +1,18 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
-import { getLocale, t, getLocalizedValue, type Locale } from "../../utils/i18n";
+import { t, getLocalizedValue, type Locale } from "../../utils/i18n";
 import { getAdminPageBySlug, getContactPageData, getTenantId } from "../../lib/api";
 import { sanitizeHTML } from "../../utils/sanitize";
 import Toast from "../../components/ui/Toast.astro";
 
-const locale = getLocale(Astro.url) as Locale;
+export const prerender = true;
+
+export function getStaticPaths() {
+  return [{ params: { locale: "en" } }];
+}
+
+const { locale } = Astro.params as { locale: Locale };
 
 const contactData = await getContactPageData();
 const tenantId = await getTenantId();

@@ -2,7 +2,8 @@
 import type { GetStaticPaths } from "astro";
 import Layout from "../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
-import { t, getLocalizedValue, getLocalizedPath } from "../../utils/i18n";
+import { t, getLocalizedValue, getLocalizedPath, getLocale } from "../../utils/i18n";
+import type { Locale } from "../../utils/i18n";
 
 import { getPosts } from "../../lib/api";
 import { sanitizeHTML } from "~/utils/sanitize";
@@ -18,7 +19,7 @@ export const getStaticPaths = (async () => {
 
 const { slug } = Astro.params;
 
-const locale = "id" as const;
+const locale = getLocale(Astro.url) as Locale;
 const allPosts = await getPosts(500, locale);
 const post = allPosts.find((item) => item.slug === slug);
 

@@ -9,7 +9,14 @@ import {
 } from "../../utils/i18n";
 import { getAdminPageBySlug, getSiteData, getPosts, getProfilePageData } from "../../lib/api";
 
-const locale: Locale = "en";
+export const prerender = true;
+
+export function getStaticPaths() {
+  return [{ params: { locale: "en" } }];
+}
+
+const { locale } = Astro.params as { locale: Locale };
+
 const site = await getSiteData();
 const posts = await getPosts(3, locale);
 const profileData = await getProfilePageData();

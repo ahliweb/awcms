@@ -2,7 +2,6 @@
 import Layout from "../../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
 import {
-  getLocale,
   t,
   getLocalizedValue,
   getLocalizedPath,
@@ -10,7 +9,13 @@ import {
 } from "../../../utils/i18n";
 import { getPosts } from "../../../lib/api";
 
-const locale = getLocale(Astro.url) as Locale;
+export const prerender = true;
+
+export function getStaticPaths() {
+  return [{ params: { locale: "en" } }];
+}
+
+const { locale } = Astro.params as { locale: Locale };
 const posts = await getPosts(100, locale);
 // posts are already sorted by default from API
 ---

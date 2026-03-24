@@ -112,3 +112,26 @@ export function extractLocaleFromPath(path: string): { locale: Locale; cleanPath
     cleanPath: path,
   };
 }
+
+/**
+ * Create a translator function bound to a specific locale
+ */
+export function createTranslator(locale: Locale) {
+  return (key: string) => t(key, locale);
+}
+
+/**
+ * Locale display names for UI
+ */
+export const localeNames: Record<Locale, string> = {
+  id: 'Bahasa Indonesia',
+  en: 'English',
+};
+
+/**
+ * Locale flags for UI
+ */
+export const localeFlags: Record<Locale, string> = {
+  id: '🇮🇩',
+  en: '🇺🇸',
+};
