@@ -432,6 +432,162 @@ app.use('/api/*', async (c, next) => {
   await next();
 });
 
+app.post('/api/media/import-local', async (c) => {
+  const user = c.get('user')
+
+  if (c.env.R2_ACCOUNT_ID !== 'local-dev') {
+    return c.json({ error: 'This endpoint is only available in local-dev mode' }, 403)
+  }
+
+  if (!c.env.STORAGE) {
+    return c.json({ error: 'Local STORAGE binding is unavailable' }, 500)
+  }
+
+  let userContext: Awaited<ReturnType<typeof getUserContext>> | null = null
+  try {
+    userContext = await getUserContext(c.env, user.id)
+  } catch {
+    userContext = null
+  }
+
+  const isTrustedLocalSyncUser = user?.email === 'cms@ahliweb.com'
+  if (!isTrustedLocalSyncUser && (!userContext || (!userContext.isPlatformAdmin && !userContext.isFullAccess))) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const body = await getJsonBody(c.req.raw) as any
+  if (!body?.media || !body?.fileBase64) {
+    return c.json({ error: 'Missing media payload or fileBase64' }, 400)
+  }
+
+  const media = body.media
+  if (!media.storage_key || !media.tenant_id || !media.file_name) {
+    return c.json({ error: 'Missing required media fields' }, 400)
+  }
+
+  const requestedTenantId = typeof body.tenantId === 'string' ? body.tenantId : media.tenant_id
+  let resolvedTenantId: string | null
+  if (isTrustedLocalSyncUser && !userContext) {
+    resolvedTenantId = requestedTenantId || media.tenant_id
+  } else {
+    try {
+      resolvedTenantId = resolveTenantId(requestedTenantId, userContext!)
+    } catch {
+      return c.json({ error: 'Tenant mismatch or missing tenant context' }, 403)
+    }
+  }
+
+  if (!resolvedTenantId || resolvedTenantId !== media.tenant_id) {
+    return c.json({ error: 'Tenant mismatch' }, 403)
+  }
+
+  let bytes: Uint8Array
+  try {
+    bytes = Uint8Array.from(atob(body.fileBase64), (char) => char.charCodeAt(0))
+  } catch {
+    return c.json({ error: 'Invalid fileBase64 payload' }, 400)
+  }
+
+  try {
+    await c.env.STORAGE.put(media.storage_key, bytes, {
+      httpMetadata: { contentType: media.mime_type ?? 'application/octet-stream' },
+    })
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to import object to local storage' }, 500)
+  }
+
+  const adminSupabase = getAdminSupabase(c.env)
+  const row = {
+    id: media.id,
+    tenant_id: media.tenant_id,
+    file_name: media.file_name,
+    original_name: media.original_name,
+    mime_type: media.mime_type,
+    size_bytes: media.size_bytes,
+    storage_key: media.storage_key,
+    status: media.status,
+    access_control: media.access_control,
+    meta_data: media.meta_data,
+    uploader_id: media.uploader_id,
+    created_at: media.created_at,
+    updated_at: media.updated_at,
+    deleted_at: media.deleted_at,
+    title: media.title,
+    description: media.description,
+    alt_text: media.alt_text,
+    slug: media.slug,
+    media_kind: media.media_kind,
+    category_id: media.category_id,
+    session_bound_access: media.session_bound_access,
+  }
+
+  const { error: upsertError } = await adminSupabase
+    .from('media_objects')
+    .upsert(row, { onConflict: 'storage_key' })
+
+  if (upsertError) {
+    return c.json({ error: upsertError.message }, 500)
+  }
+
+  return c.json({ ok: true, storageKey: media.storage_key, id: media.id })
+})
+
+app.post('/api/media/cleanup-local-duplicates', async (c) => {
+  const user = c.get('user')
+
+  if (c.env.R2_ACCOUNT_ID !== 'local-dev') {
+    return c.json({ error: 'This endpoint is only available in local-dev mode' }, 403)
+  }
+
+  if (!c.env.STORAGE) {
+    return c.json({ error: 'Local STORAGE binding is unavailable' }, 500)
+  }
+
+  let userContext: Awaited<ReturnType<typeof getUserContext>> | null = null
+  try {
+    userContext = await getUserContext(c.env, user.id)
+  } catch {
+    userContext = null
+  }
+
+  const isTrustedLocalSyncUser = user?.email === 'cms@ahliweb.com'
+  if (!isTrustedLocalSyncUser && (!userContext || (!userContext.isPlatformAdmin && !userContext.isFullAccess))) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const body = await getJsonBody(c.req.raw) as any
+  if (!Array.isArray(body?.duplicates) || body.duplicates.length === 0) {
+    return c.json({ error: 'Missing duplicates payload' }, 400)
+  }
+
+  const adminSupabase = getAdminSupabase(c.env)
+  const removed: Array<{ id: string; storageKey: string }> = []
+
+  for (const duplicate of body.duplicates) {
+    if (!duplicate?.id || !duplicate?.storageKey) continue
+
+    try {
+      await c.env.STORAGE.delete(duplicate.storageKey)
+    } catch {
+      // Continue and still remove the DB row so local metadata can be reconciled.
+    }
+
+    const { error } = await adminSupabase
+      .from('media_objects')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', duplicate.id)
+      .is('deleted_at', null)
+
+    if (error) {
+      return c.json({ error: error.message }, 500)
+    }
+
+    removed.push({ id: duplicate.id, storageKey: duplicate.storageKey })
+  }
+
+  return c.json({ ok: true, removed })
+})
+
 // Request an upload session
 app.post('/api/media/upload-session', async (c) => {
   const user = c.get('user');

@@ -8,6 +8,9 @@
     "dev:local": "wrangler dev --ip 127.0.0.1 --port 8787",
     "deploy": "wrangler deploy",
     "sync:r2:remote": "node scripts/sync-local-media-to-remote.mjs",
+    "sync:r2:local": "node scripts/sync-remote-media-to-local.mjs",
+    "sync:r2:cleanup-local": "node scripts/cleanup-local-media-duplicates.mjs",
+    "sync:r2:cleanup-remote": "node scripts/cleanup-remote-media-duplicates.mjs",
     "typecheck": "tsc --noEmit",
     "test:manage-users": "node tests/manage-users.smoke.mjs",
     "test:compat-routes": "node tests/compat-routes.smoke.mjs"

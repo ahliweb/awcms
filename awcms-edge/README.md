@@ -36,6 +36,11 @@ Notes:
 - Copy `awcms-edge/.dev.vars.example` to `awcms-edge/.dev.vars` for local Worker secrets.
 - Worker bindings and runtime configuration live in `wrangler.jsonc`.
 - R2 is configured through the `STORAGE` bucket binding in `wrangler.jsonc`.
+- Local `wrangler dev` R2 writes stay in `.wrangler/state/` by default and do not sync to remote Cloudflare R2 automatically.
+- Use `npm run sync:r2:remote` when you need to reconcile local tenant media into the remote `awcms-s3` bucket and remote `media_objects` rows.
+- Use `npm run sync:r2:local` when you need to pull remote tenant media back into the local Worker/R2 simulation and local `media_objects` rows.
+- Use `npm run sync:r2:cleanup-local` after an older non-exact local import flow to soft-delete duplicate local rows and remove duplicate local R2 objects once exact-key rows exist.
+- Use `npm run sync:r2:cleanup-remote` if remote still contains generated duplicate keys for the same tenant/file and you want to keep only the canonical exact-key copy.
 - Production secrets should be uploaded with `wrangler secret put <NAME>` rather than committed config files.
 
 ## Dependency Scope Note
