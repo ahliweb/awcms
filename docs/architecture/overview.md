@@ -95,7 +95,7 @@ graph TD
 
 - Tenant isolation is enforced at UI, API, and database layers.
 - ABAC checks are mandatory at entry points and on data operations.
-- Supabase remains the system of record for Auth, Postgres, RLS, and ABAC, while Cloudflare Workers are the maintained edge HTTP runtime.
+- Supabase remains the system of record for Auth, Postgres, RLS, and ABAC, while Cloudflare Workers are the maintained edge runtime and Cloudflare R2 is the maintained object storage layer.
 
 ## Operational Concerns
 

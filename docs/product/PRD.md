@@ -111,8 +111,8 @@ graph TD
 
 - The admin panel is the main operational surface for content, settings, users, permissions, and modules.
 - The public portal is a static-first delivery surface that reads published tenant content only.
-- Supabase is the system of record for auth, database, storage, and realtime behavior.
-- Cloudflare Workers handle edge logic and HTTP orchestration where needed.
+- Supabase is the system of record for auth, PostgreSQL data, RLS, ABAC, and realtime behavior.
+- Cloudflare Workers handle the maintained edge HTTP/runtime layer, and Cloudflare R2 handles maintained object storage.
 - AI routing is tenant-aware and must not break tenant isolation.
 
 ## 6. Database Schema

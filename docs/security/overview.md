@@ -117,7 +117,7 @@ Recent hardening updates:
 
 - Use `deleted_at` for deletions and filter it on reads.
 - Do not bypass RLS unless explicitly implementing platform admin features.
-- Supabase is the system of record; Cloudflare Workers are the primary edge runtime.
+- Supabase is the system of record for Auth, Postgres, RLS, and ABAC; Cloudflare Workers are the maintained edge runtime; Cloudflare R2 is the maintained object storage layer.
 - Admin edit/detail routes use signed IDs (`{uuid}.{signature}`); use `encodeRouteParam` and `useSecureRouteParam` for non-guessable URLs.
 - Public telemetry (analytics events) must remain tenant-scoped and documented via consent notices.
 
