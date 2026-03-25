@@ -1,13 +1,14 @@
 import PagesManager from './PagesManager';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import ThemeLayoutManager from './ThemeLayoutManager';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Layers, Palette, ShieldAlert } from 'lucide-react';
+import { Calendar, ChevronRight, Home, Layers, Palette, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionContext';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import useSplatSegments from '@/hooks/useSplatSegments';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 /**
  * VisualPagesManager
@@ -47,14 +48,112 @@ const VisualPagesManager = () => {
         );
     }
 
+    const summaryCards = [
+        {
+            title: t('pages.tabs.pages'),
+            value: activeTab === 'pages' ? 'Active' : 'Ready',
+            description: 'Manage tenant visual pages with the visual builder and route-backed editing flow.',
+            accent: 'from-primary/15 via-primary/6 to-transparent',
+        },
+        {
+            title: t('pages.tabs.layouts'),
+            value: activeTab === 'layouts' ? 'Active' : 'Ready',
+            description: 'Update shared layout templates for headers, footers, archive screens, and single content views.',
+            accent: 'from-sky-500/15 via-sky-500/6 to-transparent',
+        },
+        {
+            title: 'Scope',
+            value: 'Tenant',
+            description: 'Visual pages stay aligned with tenant-facing publishing and template composition rules.',
+            accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent',
+        },
+    ];
+
     return (
-        <AdminPageLayout requiredPermission="tenant.visual_pages.read" className="space-y-6">
-            <PageHeader
-                title={t('pages.visual_builder')}
-                description="Manage visual page compositions and shared page/blog templates from one editor surface."
-                icon={Layers}
-                breadcrumbs={[{ label: t('pages.visual_title'), icon: Layers }]}
-            />
+        <div className="space-y-6">
+            <nav className="mb-6">
+                <ol className="flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground sm:gap-2.5">
+                    <li className="inline-flex items-center gap-1.5">
+                        <Link to="/cmspanel" className="flex items-center gap-1 transition-colors hover:text-foreground">
+                            <Home className="h-4 w-4" />
+                            Dashboard
+                        </Link>
+                    </li>
+                    <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+                    <li className="inline-flex items-center gap-1.5">
+                        <div
+                            className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors ${activeTab !== 'pages'
+                                ? 'cursor-pointer bg-muted text-muted-foreground hover:bg-muted/80'
+                                : 'bg-primary text-primary-foreground shadow-sm'
+                                }`}
+                            onClick={activeTab !== 'pages' ? () => navigate('/cmspanel/visual-pages', { replace: true }) : undefined}
+                        >
+                            <span>{t('pages.visual_title')}</span>
+                        </div>
+                    </li>
+                    {activeTab === 'layouts' ? (
+                        <>
+                            <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+                            <li className="inline-flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                                    <span>{t('pages.tabs.layouts')}</span>
+                                </div>
+                            </li>
+                        </>
+                    ) : null}
+                </ol>
+            </nav>
+
+            <div className="space-y-8">
+                <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-3">
+                                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                                    <Layers className="h-5 w-5" />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Visual Pages</p>
+                                    <p className="text-lg font-semibold text-foreground">{activeTab === 'layouts' ? t('pages.tabs.layouts') : t('pages.visual_builder')}</p>
+                                </div>
+                            </div>
+                            <p className="max-w-3xl text-sm text-muted-foreground">Manage visual page compositions and shared page/blog templates from one editor surface.</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+                            <Layers className="h-4 w-4 text-primary" />
+                            Refresh-safe `/cmspanel/visual-pages` routes
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+                            {activeTab === 'layouts' ? <Palette className="h-4 w-4 text-primary" /> : <Layers className="h-4 w-4 text-primary" />}
+                            {activeTab}
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+                            <Calendar className="h-4 w-4 text-primary" />
+                            Tenant visual workflow
+                        </span>
+                    </div>
+                </div>
+
+                <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
+                    <div className="grid gap-4 md:grid-cols-3">
+                        {summaryCards.map((card) => (
+                            <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
+                                <CardContent className="relative p-5">
+                                    <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
+                                    <div className="relative">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
+                                        <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
+                                        <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                </div>
+            </div>
 
             <Tabs
                 value={activeTab}
@@ -75,7 +174,6 @@ const VisualPagesManager = () => {
                 </div>
 
                 <TabsContent value="pages" className="mt-0">
-                    {/* Render regular pages (page_type = regular) */}
                     <PagesManager onlyVisual={true} embedded />
                 </TabsContent>
 
@@ -83,7 +181,7 @@ const VisualPagesManager = () => {
                     <ThemeLayoutManager embedded />
                 </TabsContent>
             </Tabs>
-        </AdminPageLayout>
+        </div>
     );
 };
 

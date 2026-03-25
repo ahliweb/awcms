@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import BlogEditor from '@/components/dashboard/BlogEditor';
 import { useToast } from '@/components/ui/use-toast';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
-import { FileText, FolderOpen, Tag } from 'lucide-react';
+import { Calendar, ChevronRight, FileText, FolderOpen, Home, Layers3, Tag } from 'lucide-react';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { cn } from '@/lib/utils';
+import { usePermissions } from '@/contexts/PermissionContext';
 import BlogsOverviewCards from '@/components/dashboard/blogs/BlogsOverviewCards';
 import BlogsHeaderActions from '@/components/dashboard/blogs/BlogsHeaderActions';
 import BlogsToolbarActions from '@/components/dashboard/blogs/BlogsToolbarActions';
@@ -25,6 +25,7 @@ function BlogsManager() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { hasPermission } = usePermissions();
   const segments = useSplatSegments();
   const [searchParams] = useSearchParams();
   const tabValues = ['blogs', 'categories', 'tags'];
@@ -39,6 +40,7 @@ function BlogsManager() {
   const [selectedLanguage, setSelectedLanguage] = useState(defaultBlogLanguage);
   const [rebuildRequired, setRebuildRequired] = useState(false);
   const [isRebuilding, setIsRebuilding] = useState(false);
+  const canView = hasPermission('tenant.blog.read');
   const languages = useMemo(() => [
     { code: 'en', label: 'English', flag: '🇺🇸' },
     { code: 'id', label: 'Indonesia', flag: '🇮🇩' }
@@ -140,14 +142,6 @@ function BlogsManager() {
     { value: 'blogs', label: t('menu.blogs'), icon: FileText, color: 'blue' },
     { value: 'categories', label: t('menu.categories'), icon: FolderOpen, color: 'purple' },
     { value: 'tags', label: t('menu.tags'), icon: Tag, color: 'emerald' },
-  ];
-
-  // Dynamic breadcrumb based on active tab
-  const breadcrumbs = [
-    { label: t('menu.blogs'), href: activeTab !== 'blogs' || activeView ? '/cmspanel/blogs' : undefined, icon: FileText },
-    ...(activeView === 'queue' ? [{ label: t('common.review_queue', 'Review Queue') }] : []),
-    ...(activeView === 'trash' ? [{ label: t('common.trash') }] : []),
-    ...(activeTab !== 'blogs' ? [{ label: activeTab === 'categories' ? t('menu.categories') : t('menu.tags') }] : []),
   ];
 
   const activeSectionLabel =
@@ -291,24 +285,123 @@ function BlogsManager() {
     [selectedLanguageMeta.code],
   );
 
-  return (
-    <AdminPageLayout requiredPermission="tenant.blog.read">
-      {/* Page Header with Breadcrumbs */}
-      <PageHeader
-        title={t('blogs.title')}
-        description={t('blogs.subtitle')}
-        icon={FileText}
-        breadcrumbs={breadcrumbs}
-        actions={headerActions}
-      />
+  if (!canView) {
+    return (
+      <div className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-border/60 bg-card/70 p-8 text-center text-muted-foreground shadow-sm">
+        {t('common.access_denied')}
+      </div>
+    );
+  }
 
-      <BlogsOverviewCards
-        t={t}
-        activeSectionLabel={activeSectionLabel}
-        selectedLanguage={selectedLanguage}
-        selectedLanguageLabel={selectedLanguageLabel}
-        activeView={activeView}
-      />
+  return (
+    <div className="space-y-6">
+      <nav className="mb-6">
+        <ol className="flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground sm:gap-2.5">
+          <li className="inline-flex items-center gap-1.5">
+            <Link to="/cmspanel" className="flex items-center gap-1 transition-colors hover:text-foreground">
+              <Home className="h-4 w-4" />
+              Dashboard
+            </Link>
+          </li>
+          <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+          <li className="inline-flex items-center gap-1.5">
+            <div
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors ${(activeTab !== 'blogs' || activeView)
+                ? 'cursor-pointer bg-muted text-muted-foreground hover:bg-muted/80'
+                : 'bg-primary text-primary-foreground shadow-sm'
+                }`}
+              onClick={(activeTab !== 'blogs' || activeView) ? () => navigate('/cmspanel/blogs', { replace: true }) : undefined}
+            >
+              <span>{t('menu.blogs')}</span>
+            </div>
+          </li>
+          {activeView === 'queue' ? (
+            <>
+              <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+              <li className="inline-flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                  <span>{t('common.review_queue', 'Review Queue')}</span>
+                </div>
+              </li>
+            </>
+          ) : null}
+          {activeView === 'trash' ? (
+            <>
+              <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+              <li className="inline-flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 rounded-full bg-destructive px-3 py-1 font-medium text-destructive-foreground shadow-sm">
+                  <span>{t('common.trash')}</span>
+                </div>
+              </li>
+            </>
+          ) : null}
+          {!activeView && activeTab === 'categories' ? (
+            <>
+              <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+              <li className="inline-flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                  <span>{t('menu.categories')}</span>
+                </div>
+              </li>
+            </>
+          ) : null}
+          {!activeView && activeTab === 'tags' ? (
+            <>
+              <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+              <li className="inline-flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                  <span>{t('menu.tags')}</span>
+                </div>
+              </li>
+            </>
+          ) : null}
+        </ol>
+      </nav>
+
+      <div className="space-y-8">
+        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                  <FileText className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Blogs</p>
+                  <p className="text-lg font-semibold text-foreground">{activeSectionLabel}</p>
+                </div>
+              </div>
+              <p className="max-w-3xl text-sm text-muted-foreground">{t('blogs.subtitle')}</p>
+            </div>
+            {headerActions}
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+              <Layers3 className="h-4 w-4 text-primary" />
+              Refresh-safe `/cmspanel/blogs` routes
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+              <FileText className="h-4 w-4 text-primary" />
+              Language: {selectedLanguageLabel}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+              <Calendar className="h-4 w-4 text-primary" />
+              {activeView === 'trash' ? t('common.trash') : activeSectionLabel}
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
+          <BlogsOverviewCards
+            t={t}
+            activeSectionLabel={activeSectionLabel}
+            selectedLanguage={selectedLanguage}
+            selectedLanguageLabel={selectedLanguageLabel}
+            activeView={activeView}
+          />
+        </div>
+      </div>
 
       <BlogsContentPanels
         activeTab={activeTab}
@@ -324,7 +417,7 @@ function BlogsManager() {
         blogEditorProps={blogEditorProps}
         onContentSaved={handleContentSaved}
       />
-    </AdminPageLayout>
+    </div>
   );
 }
 
