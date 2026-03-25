@@ -9,12 +9,12 @@ function TagsHeaderActions({
   onCreate,
 }) {
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-background/80 p-2 shadow-sm backdrop-blur-sm">
       {(canSoftDelete || showTrash) && (
         <Button
           variant={showTrash ? 'destructive' : 'outline'}
           onClick={onToggleTrash}
-          className={showTrash ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'text-muted-foreground hover:text-foreground'}
+          className={showTrash ? 'h-10 rounded-xl bg-destructive px-4 text-destructive-foreground hover:bg-destructive/90' : 'h-10 rounded-xl border-border/70 bg-background px-4 text-muted-foreground hover:text-foreground'}
         >
           {showTrash ? 'View Active Tags' : 'Trash / Deleted'}
           <Trash2 className="ml-2 h-4 w-4" />
@@ -22,7 +22,7 @@ function TagsHeaderActions({
       )}
 
       {!showTrash && canCreate && (
-        <Button onClick={onCreate} className="bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button onClick={onCreate} className="h-10 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90">
           <Plus className="mr-2 h-4 w-4" /> Create Tag
         </Button>
       )}

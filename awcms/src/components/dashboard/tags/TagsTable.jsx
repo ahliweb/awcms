@@ -28,10 +28,10 @@ function TagsTable({
   const colSpan = 5 + (showTenantColumn ? 1 : 0) + (!showTrash ? 1 : 0);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="border-b border-border bg-muted/50">
+          <thead className="border-b border-border/70 bg-muted/40 backdrop-blur-sm">
             <tr>
                {showTenantColumn && <th className="px-6 py-4 text-left text-xs font-bold uppercase text-muted-foreground">Tenant</th>}
 
@@ -93,7 +93,7 @@ function TagsTable({
                   key={tag.tag_id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="transition-colors hover:bg-muted/50"
+                  className="transition-colors hover:bg-muted/40"
                 >
                    {showTenantColumn && (
                     <td className="px-6 py-4">
@@ -104,14 +104,16 @@ function TagsTable({
                   )}
 
                   <td className="px-6 py-4">
-                    <div className="flex flex-col">
+                    <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
-                        <Tag className="h-4 w-4 text-muted-foreground" />
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Tag className="h-4 w-4" />
+                        </span>
                         <span className="font-medium text-foreground">{tag.tag_name}</span>
                       </div>
-                      <span className="pl-6 text-xs text-muted-foreground">{tag.tag_slug}</span>
+                      <span className="pl-10 text-xs font-medium uppercase tracking-wide text-muted-foreground">{tag.tag_slug}</span>
                       {tag.tag_description && (
-                        <span className="mt-1 max-w-[200px] truncate pl-6 text-xs text-muted-foreground">{tag.tag_description}</span>
+                        <span className="max-w-[240px] truncate pl-10 text-xs text-muted-foreground">{tag.tag_description}</span>
                       )}
                     </div>
                   </td>
@@ -127,16 +129,16 @@ function TagsTable({
 
                   {!showTrash && (
                     <td className="px-6 py-4">
-                      <div className="flex max-w-[250px] flex-wrap gap-1">
+                      <div className="flex max-w-[260px] flex-wrap gap-1.5">
                         {Object.entries(tag.breakdown || {}).slice(0, 4).map(([module, count]) => (
-                          <span key={module} className="flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] uppercase text-secondary-foreground">
+                          <span key={module} className="flex items-center gap-1 rounded-full border border-border/70 bg-secondary px-2 py-1 text-[10px] uppercase text-secondary-foreground">
                             {module}
-                            <span className="rounded-full bg-background px-1 text-[9px] font-bold">{count}</span>
+                            <span className="rounded-full bg-background px-1.5 text-[9px] font-bold">{count}</span>
                           </span>
                         ))}
 
                         {Object.keys(tag.breakdown || {}).length > 4 && (
-                          <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                          <span className="rounded-full bg-muted px-2 py-1 text-[10px] text-muted-foreground">
                             +{Object.keys(tag.breakdown).length - 4} more
                           </span>
                         )}
@@ -145,18 +147,18 @@ function TagsTable({
                   )}
 
                   <td className="px-6 py-4 text-center">
-                    <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tag.count > 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                      {tag.count || 0} uses
-                    </span>
-                  </td>
+                      <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-xs font-medium ${tag.count > 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                        {tag.count || 0} uses
+                      </span>
+                    </td>
 
-                  <td className="px-6 py-4 text-center">
-                    {tag.tag_is_active ? (
-                      <span className="inline-flex items-center rounded border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">Active</span>
-                    ) : (
-                      <span className="inline-flex items-center rounded border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Inactive</span>
-                    )}
-                  </td>
+                    <td className="px-6 py-4 text-center">
+                      {tag.tag_is_active ? (
+                        <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-600 dark:text-green-400">Active</span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">Inactive</span>
+                      )}
+                    </td>
 
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-1">

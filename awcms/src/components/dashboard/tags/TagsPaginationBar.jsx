@@ -11,7 +11,7 @@ function TagsPaginationBar({
   if (displayedTags.length === 0) return null;
 
   return (
-    <div className="dashboard-surface flex flex-col items-center justify-between gap-4 px-4 py-4 sm:flex-row">
+    <div className="dashboard-surface flex flex-col items-center justify-between gap-4 rounded-2xl px-4 py-4 sm:flex-row">
       <div className="text-xs text-muted-foreground">
         Showing <span className="font-medium text-foreground">{((currentPage - 1) * itemsPerPage) + 1}</span> to <span className="font-medium text-foreground">{Math.min(currentPage * itemsPerPage, displayedTags.length)}</span> of <span className="font-medium text-foreground">{displayedTags.length}</span> items
       </div>

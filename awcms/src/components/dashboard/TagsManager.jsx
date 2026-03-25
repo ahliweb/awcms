@@ -9,6 +9,7 @@ import { useSearch } from '@/hooks/useSearch';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import TagsHeaderActions from '@/components/dashboard/tags/TagsHeaderActions';
 import TagsFiltersBar from '@/components/dashboard/tags/TagsFiltersBar';
 import TagsTable from '@/components/dashboard/tags/TagsTable';
@@ -443,10 +444,31 @@ function TagsManager({
     ...(showTrash ? [{ label: 'Trash', icon: Trash2 }] : []),
   ];
 
+  const statCards = [
+    {
+      title: 'Reusable Tags',
+      value: rawTags.length,
+      description: 'Tenant tags available in selectors and editors.',
+      accent: 'from-primary/15 via-primary/6 to-transparent',
+    },
+    {
+      title: 'Usage Links',
+      value: totalUsage,
+      description: 'Total active assignments across connected modules.',
+      accent: 'from-sky-500/15 via-sky-500/6 to-transparent',
+    },
+    {
+      title: 'Selector Health',
+      value: activeCount,
+      description: `${inactiveCount} inactive tags hidden from autocomplete and pickers.`,
+      accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent',
+    },
+  ];
+
   const body = (
     <>
       {embedded ? (
-        <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="mb-8 flex flex-col gap-5 rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">{showTrash ? `${title} Trash` : title}</h2>
             <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
@@ -485,27 +507,18 @@ function TagsManager({
 
       {!showTrash && (
         <div className="mb-8 grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reusable Tags</p>
-              <p className="mt-2 text-3xl font-semibold text-foreground">{rawTags.length}</p>
-              <p className="mt-1 text-sm text-muted-foreground">Tenant tags available in selectors and editors.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Usage Links</p>
-              <p className="mt-2 text-3xl font-semibold text-foreground">{totalUsage}</p>
-              <p className="mt-1 text-sm text-muted-foreground">Total active assignments across connected modules.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selector Health</p>
-              <p className="mt-2 text-3xl font-semibold text-foreground">{activeCount}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{inactiveCount} inactive tags hidden from autocomplete and pickers.</p>
-            </CardContent>
-          </Card>
+          {statCards.map((stat) => (
+            <Card key={stat.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
+              <CardContent className="relative p-5">
+                <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', stat.accent)} />
+                <div className="relative">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{stat.title}</p>
+                  <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{stat.value}</p>
+                  <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{stat.description}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
