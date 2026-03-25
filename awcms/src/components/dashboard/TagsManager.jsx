@@ -506,7 +506,7 @@ function TagsManager({
       )}
 
       {!showTrash && (
-        <div className="mb-8 grid gap-4 md:grid-cols-3">
+        <div className="mb-8 mt-12 grid gap-4 md:grid-cols-3">
           {statCards.map((stat) => (
             <Card key={stat.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
               <CardContent className="relative p-5">
@@ -524,40 +524,40 @@ function TagsManager({
 
       <div className="mb-6">
         <TagsFiltersBar
-        query={query}
-        setQuery={setQuery}
-        clearSearch={clearSearch}
-        loading={loading}
-        searchLoading={searchLoading}
-        isSearchValid={isSearchValid}
-        searchMessage={searchMessage}
-        minLength={minLength}
-        showTrash={showTrash}
-        moduleFilter={moduleFilter}
-        setModuleFilter={setModuleFilter}
-        activeFilter={activeFilter}
-        setActiveFilter={setActiveFilter}
-        modules={TAG_MODULE_OPTIONS}
-        showModuleFilter={!lockedModuleFilter}
-        fetchTags={fetchTags}
-        setCurrentPage={setCurrentPage}
+          query={query}
+          setQuery={setQuery}
+          clearSearch={clearSearch}
+          loading={loading}
+          searchLoading={searchLoading}
+          isSearchValid={isSearchValid}
+          searchMessage={searchMessage}
+          minLength={minLength}
+          showTrash={showTrash}
+          moduleFilter={moduleFilter}
+          setModuleFilter={setModuleFilter}
+          activeFilter={activeFilter}
+          setActiveFilter={setActiveFilter}
+          modules={TAG_MODULE_OPTIONS}
+          showModuleFilter={!lockedModuleFilter}
+          fetchTags={fetchTags}
+          setCurrentPage={setCurrentPage}
         />
       </div>
 
       <div className="mb-6">
         <TagsTable
-        showTenantColumn={showTenantColumn}
-        sortConfig={sortConfig}
-        handleSort={handleSort}
-        showTrash={showTrash}
-        loading={loading}
-        currentData={currentData}
-        canRestore={canRestore}
-        canEdit={canEdit}
-        canSoftDelete={canSoftDelete}
-        onRestore={handleRestore}
-        onEdit={openModal}
-        onRequestDelete={handleRequestDelete}
+          showTenantColumn={showTenantColumn}
+          sortConfig={sortConfig}
+          handleSort={handleSort}
+          showTrash={showTrash}
+          loading={loading}
+          currentData={currentData}
+          canRestore={canRestore}
+          canEdit={canEdit}
+          canSoftDelete={canSoftDelete}
+          onRestore={handleRestore}
+          onEdit={openModal}
+          onRequestDelete={handleRequestDelete}
         />
       </div>
 
