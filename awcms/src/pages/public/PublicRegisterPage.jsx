@@ -109,7 +109,7 @@ const PublicRegisterPage = () => {
                             Once approved, you will receive an invitation email to set your password.
                         </p>
                     </div>
-                    <Link to="/login">
+                    <Link to="/cmspanel/login">
                         <Button variant="outline" className="w-full">Return to Login</Button>
                     </Link>
                 </div>
@@ -157,7 +157,7 @@ const PublicRegisterPage = () => {
                         {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Submit Application'}
                     </Button>
 
-                    <Link to="/login" className="inline-flex items-center justify-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700">
+                    <Link to="/cmspanel/login" className="inline-flex items-center justify-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700">
                         <ArrowLeft className="w-4 h-4" /> Back to Login
                     </Link>
                 </form>

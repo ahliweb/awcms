@@ -493,12 +493,12 @@ const LoginPage = () => {
         <div className="space-y-2">
           <div>
             <span>{t('login_page.no_account')} </span>
-            <Link to="/register" className="font-semibold text-slate-900 hover:text-indigo-600 dark:text-white">
+            <Link to="/cmspanel/register" className="font-semibold text-slate-900 hover:text-indigo-600 dark:text-white">
               {t('login_page.apply_access')}
             </Link>
           </div>
           <div>
-            <Link to="/forgot-password" className="font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
+            <Link to="/cmspanel/forgot-password" className="font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
               {t('login_page.forgot_password_link')}
             </Link>
           </div>

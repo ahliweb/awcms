@@ -181,15 +181,12 @@ const ProtectedRoute = ({ children }) => {
   }
 
   if (!session) {
-    // Redirect to the unified login route
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/cmspanel/login" replace />;
   }
 
   // Security Check: If 2FA is enabled but not verified, force back to login
   if (twoFactorEnabled && !is2FAVerified) {
-    // We can redirect to login. The LoginPage will see the session, check 2FA again, and show the prompt.
-    // This effectively "loops" them back to the 2FA prompt if they try to bypass it.
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/cmspanel/login" replace />;
   }
 
   return children;
@@ -203,19 +200,22 @@ const MainRouter = () => {
     <BrowserRouter>
       <Routes>
         {/* Auth Routes */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<PublicRegisterPage />} />
-        {/* Alias for cmspanel login to avoid confusion if user manually types it */}
-        <Route path="/cmspanel/login" element={<Navigate to="/login" replace />} />
-
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/cmspanel/login" element={<LoginPage />} />
+        <Route path="/cmspanel/register" element={<PublicRegisterPage />} />
+        <Route path="/cmspanel/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/cmspanel/update-password" element={<UpdatePasswordPage />} />
+
+        {/* Legacy auth aliases retained for compatibility */}
+        <Route path="/login" element={<Navigate to="/cmspanel/login" replace />} />
+        <Route path="/register" element={<Navigate to="/cmspanel/register" replace />} />
+        <Route path="/forgot-password" element={<Navigate to="/cmspanel/forgot-password" replace />} />
+        <Route path="/update-password" element={<Navigate to="/cmspanel/update-password" replace />} />
 
         {/* Public Routes */}
         {/* Public Routes - DEPRECATED/REMOVED */}
         {/* All public traffic is handled by awcms-public (Astro) */}
-        {/* Redirect root to login */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* Redirect root to the admin auth entrypoint */}
+        <Route path="/" element={<Navigate to="/cmspanel/login" replace />} />
 
 
         {/* CMS Panel Routes */}

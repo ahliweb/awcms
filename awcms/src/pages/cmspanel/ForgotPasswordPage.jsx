@@ -106,7 +106,7 @@ const ForgotPasswordPage = () => {
       subtitle={isSuccess ? t('forgot_password.check_email') : t('forgot_password.enter_email')}
       badge={t('forgot_password.badge', 'Password Recovery')}
       footer={!isSuccess ? (
-        <Link to="/login" className="inline-flex items-center gap-2 font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
+        <Link to="/cmspanel/login" className="inline-flex items-center gap-2 font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
           <ArrowLeft className="h-4 w-4" /> {t('forgot_password.back_to_login')}
         </Link>
       ) : null}
@@ -123,7 +123,7 @@ const ForgotPasswordPage = () => {
             </p>
           </div>
           <Button asChild className="h-11 w-full bg-indigo-600 text-white hover:bg-indigo-700">
-            <Link to="/login">{t('forgot_password.back_to_login')}</Link>
+            <Link to="/cmspanel/login">{t('forgot_password.back_to_login')}</Link>
           </Button>
         </div>
       ) : (
