@@ -22,7 +22,7 @@ function TagsFiltersBar({
   setCurrentPage,
 }) {
   return (
-    <div className="dashboard-surface flex flex-col gap-4 p-4 lg:flex-row">
+    <div className="dashboard-surface flex flex-col gap-4 p-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="max-w-sm flex-1">
         <MinCharSearchInput
           value={query}
@@ -38,12 +38,12 @@ function TagsFiltersBar({
           isValid={isSearchValid}
           message={searchMessage}
           minLength={minLength}
-          placeholder="Search tags... (5+ chars)"
+          placeholder="Search tags by name, slug, or description"
         />
       </div>
 
       {!showTrash && (
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
           {showModuleFilter && (
             <div className="relative w-full sm:w-48">
               <Filter className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -85,7 +85,7 @@ function TagsFiltersBar({
         size="icon"
         onClick={fetchTags}
         title="Refresh Data"
-        className="text-muted-foreground hover:text-foreground"
+        className="self-start text-muted-foreground hover:text-foreground lg:self-center"
       >
         <RefreshCw className="h-4 w-4" />
       </Button>

@@ -446,7 +446,7 @@ function TagsManager({
   const body = (
     <>
       {embedded ? (
-        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">{showTrash ? `${title} Trash` : title}</h2>
             <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
@@ -484,7 +484,7 @@ function TagsManager({
       )}
 
       {!showTrash && (
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="mb-8 grid gap-4 md:grid-cols-3">
           <Card>
             <CardContent className="p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reusable Tags</p>
@@ -509,7 +509,8 @@ function TagsManager({
         </div>
       )}
 
-      <TagsFiltersBar
+      <div className="mb-6">
+        <TagsFiltersBar
         query={query}
         setQuery={setQuery}
         clearSearch={clearSearch}
@@ -527,9 +528,11 @@ function TagsManager({
         showModuleFilter={!lockedModuleFilter}
         fetchTags={fetchTags}
         setCurrentPage={setCurrentPage}
-      />
+        />
+      </div>
 
-      <TagsTable
+      <div className="mb-6">
+        <TagsTable
         showTenantColumn={showTenantColumn}
         sortConfig={sortConfig}
         handleSort={handleSort}
@@ -542,7 +545,8 @@ function TagsManager({
         onRestore={handleRestore}
         onEdit={openModal}
         onRequestDelete={handleRequestDelete}
-      />
+        />
+      </div>
 
       <TagsPaginationBar
         displayedTags={displayedTags}
