@@ -62,7 +62,9 @@ async function getContentTranslationBySlug(
     .eq("slug", slug);
 
   if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
+    query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+  } else {
+    query = query.is("tenant_id", null);
   }
 
   const { data, error } = await query.maybeSingle();
@@ -108,7 +110,9 @@ async function getContentTranslations(
     .in("content_id", contentIds);
 
   if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
+    query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+  } else {
+    query = query.is("tenant_id", null);
   }
 
   const { data, error } = await query;
@@ -240,33 +244,40 @@ export async function getPageBySlug(
     tenantId,
   );
 
-  let query = supabase
-    .from("pages")
-    .select("*")
-    .eq("status", "published")
-    .is("deleted_at", null);
+  const fetchPage = async (scopeTenantId?: string | null) => {
+    let query = supabase
+      .from("pages")
+      .select("*")
+      .eq("status", "published")
+      .is("deleted_at", null);
 
-  if (translationMatch?.content_id) {
-    query = query.eq("id", translationMatch.content_id);
-  } else {
-    query = query.eq("slug", slug);
+    if (translationMatch?.content_id) {
+      query = query.eq("id", translationMatch.content_id);
+    } else {
+      query = query.eq("slug", slug);
+    }
+
+    if (scopeTenantId) {
+      query = query.eq("tenant_id", scopeTenantId);
+    } else {
+      query = query.is("tenant_id", null);
+    }
+
+    return query.order("published_at", { ascending: false }).limit(1).maybeSingle();
+  };
+
+  let { data, error } = await fetchPage(tenantId);
+
+  if ((error || !data) && tenantId) {
+    ({ data, error } = await fetchPage(null));
   }
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
-
-  const { data, error } = await query
-    .order("published_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   if (error) {
     console.error("[Content] Error fetching page:", error.message);
     return null;
   }
 
-  return mergePageTranslation(data as PageData, translationMatch);
+  return data ? mergePageTranslation(data as PageData, translationMatch) : null;
 }
 
 /**
@@ -288,7 +299,9 @@ export async function getAllPages(
     .limit(limit);
 
   if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
+    query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+  } else {
+    query = query.is("tenant_id", null);
   }
 
   const { data, error } = await query;
@@ -298,7 +311,20 @@ export async function getAllPages(
     return [];
   }
 
-  const pages = (data || []) as PageData[];
+  const dedupedPages = new Map<string, PageData>();
+  ((data || []) as PageData[]).forEach((page) => {
+    const existing = dedupedPages.get(page.slug);
+    if (!existing) {
+      dedupedPages.set(page.slug, page);
+      return;
+    }
+
+    if (tenantId && existing.tenant_id == null && page.tenant_id === tenantId) {
+      dedupedPages.set(page.slug, page);
+    }
+  });
+
+  const pages = Array.from(dedupedPages.values());
   const translations = await getPageTranslations(
     supabase,
     locale,
@@ -320,21 +346,28 @@ export async function getPageByType(
   tenantId?: string | null,
   locale?: string,
 ): Promise<PageData | null> {
-  let query = supabase
+  const fetchPageByType = async (scopeTenantId?: string | null) => {
+    let query = supabase
     .from("pages")
     .select("*")
     .eq("page_type", pageType)
     .eq("status", "published")
     .is("deleted_at", null);
 
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
+    if (scopeTenantId) {
+      query = query.eq("tenant_id", scopeTenantId);
+    } else {
+      query = query.is("tenant_id", null);
+    }
 
-  const { data, error } = await query
-    .order("published_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    return query.order("published_at", { ascending: false }).limit(1).maybeSingle();
+  };
+
+  let { data, error } = await fetchPageByType(tenantId);
+
+  if ((error || !data) && tenantId) {
+    ({ data, error } = await fetchPageByType(null));
+  }
 
   if (error) {
     console.error("[Content] Error fetching page by type:", error.message);

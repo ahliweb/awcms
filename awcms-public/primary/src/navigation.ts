@@ -178,8 +178,11 @@ export const footerData = {
     },
   ],
   secondaryLinks: [
-    { text: "footer.terms", href: getPermalink("/terms") },
-    { text: "footer.privacy", href: getPermalink("/privacy") },
+    { text: "footer.terms", href: getPermalink("/p/terms") },
+    { text: "footer.privacy", href: getPermalink("/p/privacy") },
+    { text: "Cookie Policy", href: getPermalink("/p/cookie-policy") },
+    { text: "Licensing", href: getPermalink("/p/licensing") },
+    { text: "footer.contact", href: getPermalink("/contact") },
   ],
   socialLinks: [
     {

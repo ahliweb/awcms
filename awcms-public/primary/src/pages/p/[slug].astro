@@ -24,7 +24,7 @@ export const getStaticPaths = (async () => {
   const { data, error } = await supabase
     .from("pages")
     .select("slug")
-    .eq("tenant_id", tenantId)
+    .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
     .eq("status", "published")
     .eq("page_type", "regular")
     .is("deleted_at", null);
@@ -34,7 +34,9 @@ export const getStaticPaths = (async () => {
     return [];
   }
 
-  return (data || []).map((page) => ({
+  const uniquePages = Array.from(new Map((data || []).map((page) => [page.slug, page])).values());
+
+  return uniquePages.map((page) => ({
     params: { slug: page.slug },
   }));
 }) satisfies GetStaticPaths;
