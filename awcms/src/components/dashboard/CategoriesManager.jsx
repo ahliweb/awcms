@@ -163,7 +163,11 @@ function CategoriesManager({
           </span>
         </div>
       </div>
-      {summaryContent}
+      {!showTrash && (
+        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
+          {summaryContent}
+        </div>
+      )}
     </div>
   );
 

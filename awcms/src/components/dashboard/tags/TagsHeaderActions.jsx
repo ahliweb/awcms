@@ -9,7 +9,7 @@ function TagsHeaderActions({
   onCreate,
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-background/80 p-2 shadow-sm backdrop-blur-sm">
+    <div className="flex flex-wrap items-center gap-3">
       {(canSoftDelete || showTrash) && (
         <Button
           variant={showTrash ? 'destructive' : 'outline'}

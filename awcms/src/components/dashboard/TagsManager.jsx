@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Tag, Trash2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronRight, Home, Layers3, ShieldCheck, Tag, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useSearch } from '@/hooks/useSearch';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 import TagsHeaderActions from '@/components/dashboard/tags/TagsHeaderActions';
 import TagsFiltersBar from '@/components/dashboard/tags/TagsFiltersBar';
 import TagsTable from '@/components/dashboard/tags/TagsTable';
@@ -36,8 +34,8 @@ function TagsManager({
   description = 'Manage tenant-scoped tags shared across content modules, with reuse visibility and safer cleanup from trash.',
 }) {
   const { toast } = useToast();
-  const { hasPermission, isPlatformAdmin } = usePermissions();
-  const { currentTenant } = useTenant();
+  const { hasPermission, isPlatformAdmin, loading: permissionsLoading } = usePermissions();
+  const { currentTenant, loading: tenantLoading } = useTenant();
   const navigate = useNavigate();
   const segments = useSplatSegments();
   const isNestedRoute = Boolean(nestedSegment);
@@ -439,11 +437,6 @@ function TagsManager({
   const inactiveCount = rawTags.filter((tag) => !tag.tag_is_active).length;
   const totalUsage = rawTags.reduce((sum, tag) => sum + (tag.count || 0), 0);
 
-  const breadcrumbs = [
-    { label: title, icon: Tag },
-    ...(showTrash ? [{ label: 'Trash', icon: Trash2 }] : []),
-  ];
-
   const statCards = [
     {
       title: 'Reusable Tags',
@@ -465,12 +458,62 @@ function TagsManager({
     },
   ];
 
-  const body = (
-    <>
-      {embedded ? (
-        <div className="mb-8 flex flex-col gap-5 rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-1">
+  const moduleBadges = lockedModuleFilter
+    ? TAG_MODULE_OPTIONS.filter((module) => module.value === lockedModuleFilter)
+    : TAG_MODULE_OPTIONS.filter((module) => module.value !== 'all');
+
+  const hasAccess = hasPermission('tenant.tag.read');
+  const isPageLoading = permissionsLoading || tenantLoading;
+
+  const summaryContent = !showTrash ? (
+    <div className="mb-8 grid gap-4 md:grid-cols-3">
+      {statCards.map((stat) => (
+        <Card key={stat.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
+          <CardContent className="relative p-5">
+            <div className="relative">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{stat.title}</p>
+              <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{stat.value}</p>
+              <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{stat.description}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  ) : null;
+
+  const headerContent = embedded ? (
+    <div className="space-y-8">
+      <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1.5">
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">{showTrash ? `${title} Trash` : title}</h2>
+            <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {moduleBadges.map((module) => (
+              <span key={module.value} className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium text-foreground shadow-sm">
+                {module.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      {summaryContent}
+    </div>
+  ) : (
+    <div className="space-y-8">
+      <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                <Tag className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Taxonomy</p>
+                <p className="text-lg font-semibold text-foreground">{showTrash ? `${title} Trash` : title}</p>
+              </div>
+            </div>
             <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
           </div>
           <TagsHeaderActions
@@ -484,43 +527,64 @@ function TagsManager({
             onCreate={() => openModal(null)}
           />
         </div>
-      ) : (
-        <PageHeader
-          title={showTrash ? `${title} Trash` : title}
-          description={description}
-          icon={Tag}
-          breadcrumbs={breadcrumbs}
-          actions={(
-            <TagsHeaderActions
-              showTrash={showTrash}
-              canSoftDelete={canSoftDelete}
-              canCreate={canCreate}
-              onToggleTrash={() => {
-                navigate(showTrash ? basePath : `${basePath}/trash`);
-                setCurrentPage(1);
-              }}
-              onCreate={() => openModal(null)}
-            />
-          )}
-        />
-      )}
-
+        <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+            <Layers3 className="h-4 w-4 text-primary" />
+            Refresh-safe `/cmspanel` tag routes
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+            <ShieldCheck className="h-4 w-4 text-emerald-600" />
+            Tenant-safe mutations and trash recovery
+          </span>
+        </div>
+      </div>
       {!showTrash && (
-        <div className="mb-8 mt-12 grid gap-4 md:grid-cols-3">
-          {statCards.map((stat) => (
-            <Card key={stat.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-              <CardContent className="relative p-5">
-                <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', stat.accent)} />
-                <div className="relative">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{stat.title}</p>
-                  <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{stat.value}</p>
-                  <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{stat.description}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
+          {summaryContent}
         </div>
       )}
+    </div>
+  );
+
+  const body = (
+    <div className="space-y-6">
+      {!embedded && (
+        <nav className="mb-6">
+          <ol className="flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground sm:gap-2.5">
+            <li className="inline-flex items-center gap-1.5">
+              <Link to="/cmspanel" className="flex items-center gap-1 transition-colors hover:text-foreground">
+                <Home className="h-4 w-4" />
+                Dashboard
+              </Link>
+            </li>
+            <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+            <li className="inline-flex items-center gap-1.5">
+              <div
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors ${showTrash
+                  ? 'cursor-pointer bg-muted text-muted-foreground hover:bg-muted/80'
+                  : 'bg-primary text-primary-foreground shadow-sm'
+                  }`}
+                onClick={showTrash ? () => navigate(basePath, { replace: true }) : undefined}
+              >
+                <span>{title}</span>
+              </div>
+            </li>
+            {showTrash && (
+              <>
+                <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+                <li className="inline-flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 rounded-full bg-destructive px-3 py-1 font-medium text-destructive-foreground shadow-sm">
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Trash</span>
+                  </div>
+                </li>
+              </>
+            )}
+          </ol>
+        </nav>
+      )}
+
+      {headerContent}
 
       <div className="mb-6">
         <TagsFiltersBar
@@ -589,18 +653,42 @@ function TagsManager({
         tagName={deleteTarget?.tag_name}
         onConfirm={handleConfirmDelete}
       />
-    </>
+    </div>
   );
 
   if (embedded) {
     return body;
   }
 
-  return (
-    <AdminPageLayout requiredPermission="tenant.tag.read">
-      {body}
-    </AdminPageLayout>
-  );
+  if (!permissionsLoading && !hasAccess) {
+    return (
+      <div
+        className="mb-4 rounded-2xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-sm"
+        role="alert"
+      >
+        <span className="font-semibold">Access denied.</span> You do not have permission to view this page.
+      </div>
+    );
+  }
+
+  if (isPageLoading) {
+    return (
+      <div className="grid min-h-[420px] place-items-center rounded-2xl border border-border/60 bg-card/55 p-8 backdrop-blur-sm">
+        <div className="text-center text-muted-foreground">
+          <div role="status">
+            <svg aria-hidden="true" className="inline h-8 w-8 animate-spin fill-primary text-muted-foreground" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="currentColor" />
+              <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="currentFill" />
+            </svg>
+            <span className="sr-only">Loading...</span>
+          </div>
+          <p className="mt-3 text-sm font-medium">Loading module data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return body;
 }
 
 export default TagsManager;

@@ -149,7 +149,7 @@ const ContentTable = ({
               value={String(pagination.itemsPerPage)}
               onValueChange={(value) => pagination.onLimitChange(Number(value))}
             >
-              <SelectTrigger className="h-9 w-[152px] rounded-xl border gap-2 border-border bg-background px-3 text-xs font-medium text-foreground shadow-sm focus:ring-ring">
+              <SelectTrigger className="h-9 w-[208px] rounded-xl border gap-2 border-border bg-background px-3 text-xs font-medium text-foreground shadow-sm focus:ring-ring">
                 <span className="truncate">Page Size</span>
                 <SelectValue />
               </SelectTrigger>
