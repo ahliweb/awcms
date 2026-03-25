@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
-import { CopyX, Plus, Save, RefreshCw, Menu } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Calendar, ChevronRight, CopyX, Home, Layers3, Menu, Plus, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -13,7 +14,6 @@ import {
   getPublicModulesForTenant,
   getPublicPortalVariant,
 } from '@/lib/publicModuleRegistry';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
 import { SUPPORTED_LOCALES } from '@/lib/i18n';
 import MenusOverviewCards from '@/components/dashboard/menus/MenusOverviewCards';
 import MenusFiltersBar from '@/components/dashboard/menus/MenusFiltersBar';
@@ -23,6 +23,7 @@ import MenusTreePanel from '@/components/dashboard/menus/MenusTreePanel';
 import MenuItemDialog from '@/components/dashboard/menus/MenuItemDialog';
 import MenuPermissionsDialog from '@/components/dashboard/menus/MenuPermissionsDialog';
 import MenuDeleteDialog from '@/components/dashboard/menus/MenuDeleteDialog';
+import useSplatSegments from '@/hooks/useSplatSegments';
 
 // Available Menu Locations
 const MENU_LOCATIONS = [
@@ -119,6 +120,8 @@ const getDuplicateMenuIds = (items) => {
 };
 
 function MenusManager() {
+  const navigate = useNavigate();
+  const segments = useSplatSegments();
   const { toast } = useToast();
   const { hasPermission, isPlatformAdmin } = usePermissions();
   const { currentTenant } = useTenant();
@@ -155,6 +158,12 @@ function MenusManager() {
   const [pages, setPages] = useState([]);
 
   useEffect(() => {
+    if (segments.length > 0) {
+      navigate('/cmspanel/menus', { replace: true });
+    }
+  }, [segments, navigate]);
+
+  useEffect(() => {
     if (canView) {
       fetchMenus();
       fetchRoles();
@@ -187,7 +196,7 @@ function MenusManager() {
 
   const fetchPages = async () => {
     try {
-      let q = supabase.from('pages').select('id, title, slug, status').neq('status', 'archived');
+      let q = supabase.from('pages').select('id, title, slug, status').neq('status', 'archived').is('deleted_at', null);
       if (currentTenant?.id) q = q.eq('tenant_id', currentTenant.id);
 
       const { data, error } = await q;
@@ -384,13 +393,20 @@ function MenusManager() {
     try {
       let error;
       if (editingMenu) {
-        const { error: updateError } = await supabase
+        let updateQuery = supabase
           .from('menus')
           .update(payload)
           .eq('id', editingMenu.id);
+        if (currentTenant?.id) {
+          updateQuery = updateQuery.eq('tenant_id', currentTenant.id);
+        }
+        const { error: updateError } = await updateQuery;
         error = updateError;
       } else {
         // Get max order for new item
+        if (!currentTenant?.id) {
+          throw new Error('Select a tenant before creating menu items.');
+        }
         payload.order = Math.max(0, ...flatMenus.map((item) => item.order || 0)) + 10;
         payload.tenant_id = currentTenant?.id; // Set tenant context
         const { error: insertError } = await supabase
@@ -593,45 +609,94 @@ function MenusManager() {
     );
   }
 
+  const headerActions = (
+    <div className="flex gap-3 flex-wrap">
+      {canCreate && (
+        <Button onClick={syncFromModules} variant="outline" disabled={syncing} className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground">
+          <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> Sync Modules
+        </Button>
+      )}
+      {duplicateCount > 0 && canDelete && (
+        <Button onClick={dedupeMenus} variant="outline" className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground">
+          <CopyX className="w-4 h-4 mr-2" /> Clean Duplicates
+        </Button>
+      )}
+      <Button onClick={saveOrder} variant="outline" disabled={hasActiveFilters} className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60">
+        <Save className="w-4 h-4 mr-2" /> Save Order
+      </Button>
+      {canCreate && (
+        <Button onClick={() => handleEdit(null)} className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-sm hover:opacity-95">
+          <Plus className="w-4 h-4 mr-2" /> Add Item
+        </Button>
+      )}
+    </div>
+  );
+
   return (
-    <AdminPageLayout requiredPermission="tenant.menu.read">
-      <PageHeader
-        title="Menu Management"
-        description="Configure public navigation for headers, footers, sidebars, and localized menu variants."
-        icon={Menu}
-        breadcrumbs={[{ label: 'Menus', icon: Menu }]}
-        actions={(
-          <div className="flex gap-3 flex-wrap">
-            {canCreate && (
-              <Button onClick={syncFromModules} variant="outline" disabled={syncing} className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground">
-                <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> Sync Modules
-              </Button>
-            )}
-            {duplicateCount > 0 && canDelete && (
-              <Button onClick={dedupeMenus} variant="outline" className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground">
-                <CopyX className="w-4 h-4 mr-2" /> Clean Duplicates
-              </Button>
-            )}
-            <Button onClick={saveOrder} variant="outline" disabled={hasActiveFilters} className="h-10 rounded-xl border-border/70 bg-background/80 px-3 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60">
-              <Save className="w-4 h-4 mr-2" /> Save Order
-            </Button>
-            {canCreate && (
-              <Button onClick={() => handleEdit(null)} className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-sm hover:opacity-95">
-                <Plus className="w-4 h-4 mr-2" /> Add Item
-              </Button>
-            )}
+    <div className="space-y-6">
+      <nav className="mb-6">
+        <ol className="flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground sm:gap-2.5">
+          <li className="inline-flex items-center gap-1.5">
+            <Link to="/cmspanel" className="flex items-center gap-1 transition-colors hover:text-foreground">
+              <Home className="h-4 w-4" />
+              Dashboard
+            </Link>
+          </li>
+          <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+          <li className="inline-flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+              <span>Menus</span>
+            </div>
+          </li>
+        </ol>
+      </nav>
+
+      <div className="space-y-8">
+        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                  <Menu className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Navigation</p>
+                  <p className="text-lg font-semibold text-foreground">Menu Management</p>
+                </div>
+              </div>
+              <p className="max-w-3xl text-sm text-muted-foreground">Configure public navigation for headers, footers, sidebars, and localized menu variants while keeping tenant-aware links aligned with related modules.</p>
+            </div>
+            {headerActions}
           </div>
-        )}
-      />
+
+          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+              <Layers3 className="h-4 w-4 text-primary" />
+              Refresh-safe `/cmspanel/menus` route shell
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              {currentTenant?.name || 'Select tenant for menu scope'}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+              <Calendar className="h-4 w-4 text-primary" />
+              {MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label} · {currentLocale}
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
+          <MenusOverviewCards
+            flatMenus={flatMenus}
+            rolesCount={roles.length}
+            currentLocationLabel={MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label}
+            portalVariantLabel={portalVariantLabel}
+            duplicateCount={duplicateCount}
+          />
+        </div>
+      </div>
 
       <div className="space-y-6">
-        <MenusOverviewCards
-          flatMenus={flatMenus}
-          rolesCount={roles.length}
-          currentLocationLabel={MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label}
-          portalVariantLabel={portalVariantLabel}
-          duplicateCount={duplicateCount}
-        />
 
         <MenusFiltersBar
           searchQuery={searchQuery}
@@ -701,7 +766,7 @@ function MenusManager() {
           onConfirm={handleConfirmDelete}
         />
       </div>
-    </AdminPageLayout>
+    </div>
   );
 }
 

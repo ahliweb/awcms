@@ -257,7 +257,7 @@ const MainRouter = () => {
           <Route path="permissions" element={<PermissionsManager />} />
           <Route path="policies" element={<PolicyManager />} />
 
-          <Route path="menus" element={<MenusManager />} />
+          <Route path="menus/*" element={<MenusManager />} />
           <Route path="products/*" element={<ProductsManager />} />
           <Route path="product-types/*" element={<ProductTypesManager />} />
           <Route path="orders/*" element={<OrdersManager />} />
