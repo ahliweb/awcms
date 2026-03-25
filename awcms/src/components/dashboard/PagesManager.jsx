@@ -240,27 +240,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
     return null;
   }, [t]);
 
-  // Category columns and fields
-  const categoryColumns = useMemo(() => [
-    { key: 'name', label: t('pages.category.name'), className: 'font-medium' },
-    { key: 'slug', label: t('pages.category.slug') },
-    { key: 'description', label: t('pages.category.description') },
-    { key: 'created_at', label: t('pages.category.created'), type: 'date' }
-  ], [t]);
-
-  const categoryFormFields = useMemo(() => [
-    { key: 'name', label: t('pages.category.form.name'), required: true },
-    { key: 'slug', label: t('pages.category.form.slug') },
-    { key: 'description', label: t('pages.category.form.description'), type: 'textarea' },
-    {
-      key: 'type', label: t('pages.category.form.type'), type: 'select', options: [
-        { value: 'content', label: 'Shared Content (Pages & Blogs)' },
-        { value: 'page', label: t('pages.category.form.type_page') },
-        { value: 'blog', label: t('pages.category.form.type_blog') }
-      ], defaultValue: 'page'
-    }
-  ], [t]);
-
   // If Visual Builder is open, show it full screen
   if (visualBuilderPage) {
     return (
@@ -300,8 +279,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
         pageFormFields={pageFormFields}
         pageEditorProps={pageEditorProps}
         customRowActions={customRowActions}
-        categoryColumns={categoryColumns}
-        categoryFormFields={categoryFormFields}
       />
     </>
   );

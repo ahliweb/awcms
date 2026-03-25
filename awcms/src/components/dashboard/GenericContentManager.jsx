@@ -399,7 +399,7 @@ const GenericContentManager = ({
 
     // Added Tenant Column for platform admins
 
-    if (isPlatformAdmin) {
+    if (isPlatformAdmin && !currentTenant?.id) {
         displayColumns.unshift({
             key: 'tenant_id',
             label: 'Nama Tenant',

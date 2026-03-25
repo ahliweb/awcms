@@ -1,7 +1,7 @@
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import CategoriesManager from '@/components/dashboard/CategoriesManager';
 import TagsManager from '@/components/dashboard/TagsManager';
 import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
-import { restoreCategory, softDeleteCategory } from '@/lib/taxonomyMutations';
 
 function BlogsContentPanels({
 	activeTab,
@@ -14,8 +14,6 @@ function BlogsContentPanels({
 	BlogEditorComponent,
 	customRowActions,
 	customToolbarActions,
-	categoryColumns,
-	categoryFormFields,
 	blogEditorProps = {},
 	onContentSaved,
 }) {
@@ -54,19 +52,13 @@ function BlogsContentPanels({
 		</TabsContent>
 
 		<TabsContent value="categories" className="mt-0">
-			<GenericContentManager
-				tableName="categories"
-				resourceName={t('common.category')}
-				columns={categoryColumns}
-				formFields={categoryFormFields}
-				permissionPrefix="categories"
-				showBreadcrumbs={false}
-				showHeader={false}
-				customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-				defaultFilters={{ type: ['blog', 'blogs', 'content'] }}
-				restorePermission="tenant.categories.restore"
-				onSoftDeleteOverride={softDeleteCategory}
-				onRestoreOverride={restoreCategory}
+			<CategoriesManager
+				embedded
+				basePath="/cmspanel/blogs/categories"
+				nestedSegment="categories"
+				lockedModule="blogs"
+				title="Blog Category"
+				description="Manage categories for editorial posts while keeping shared content categories available for cross-module reuse."
 			/>
 		</TabsContent>
 

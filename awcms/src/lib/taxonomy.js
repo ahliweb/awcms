@@ -124,6 +124,21 @@ export function getCategoryTypesForModule(moduleKey) {
   return TAXONOMY_MODULES.find((module) => module.value === moduleKey)?.categoryAliases ?? [];
 }
 
+export function getCategoryScopeOptionsForModule(moduleKey) {
+  if (!moduleKey) return CATEGORY_SCOPE_OPTIONS;
+
+  const module = TAXONOMY_MODULES.find((item) => item.value === moduleKey);
+  if (!module) return CATEGORY_SCOPE_OPTIONS;
+
+  const allowedValues = new Set(module.categoryTypes);
+
+  if (['blogs', 'pages'].includes(moduleKey)) {
+    allowedValues.add('content');
+  }
+
+  return CATEGORY_SCOPE_OPTIONS.filter((option) => allowedValues.has(option.value));
+}
+
 export function getCategoryScopeMeta(type) {
   const match = TAXONOMY_MODULES.find((module) => module.categoryAliases.includes(type));
   return match ?? null;

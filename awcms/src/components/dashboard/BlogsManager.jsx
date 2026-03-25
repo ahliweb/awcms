@@ -291,27 +291,6 @@ function BlogsManager() {
     [selectedLanguageMeta.code],
   );
 
-  // Category columns and fields
-  const categoryColumns = [
-    { key: 'name', label: t('common.name'), className: 'font-medium' },
-    { key: 'slug', label: t('common.slug') },
-    { key: 'description', label: t('common.description') },
-    { key: 'created_at', label: t('common.created_at'), type: 'date' }
-  ];
-
-  const categoryFormFields = [
-    { key: 'name', label: t('common.name'), required: true },
-    { key: 'slug', label: t('common.slug') },
-    { key: 'description', label: t('common.description'), type: 'textarea' },
-    {
-      key: 'type', label: t('blogs.type'), type: 'select', options: [
-        { value: 'content', label: 'Shared Content (Blogs & Pages)' },
-        { value: 'blog', label: t('menu.blogs') },
-        { value: 'page', label: t('menu.pages') }
-      ], defaultValue: 'blog'
-    }
-  ];
-
   return (
     <AdminPageLayout requiredPermission="tenant.blog.read">
       {/* Page Header with Breadcrumbs */}
@@ -342,8 +321,6 @@ function BlogsManager() {
         BlogEditorComponent={BlogEditor}
         customRowActions={null}
         customToolbarActions={customToolbarActions}
-        categoryColumns={categoryColumns}
-        categoryFormFields={categoryFormFields}
         blogEditorProps={blogEditorProps}
         onContentSaved={handleContentSaved}
       />

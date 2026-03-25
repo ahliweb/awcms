@@ -156,6 +156,11 @@ const GenericResourceEditor = ({
                     .eq('slug', payload.slug)
                     .is('deleted_at', null);
 
+                const tenantScopedId = currentTenant?.id || initialData?.tenant_id || null;
+                if (tenantScopedId) {
+                    slugCheckQuery = slugCheckQuery.eq('tenant_id', tenantScopedId);
+                }
+
                 if (initialData?.id) {
                     slugCheckQuery = slugCheckQuery.neq('id', initialData.id);
                 }

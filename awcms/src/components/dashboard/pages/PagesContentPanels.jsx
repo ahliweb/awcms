@@ -1,7 +1,7 @@
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import CategoriesManager from '@/components/dashboard/CategoriesManager';
 import TagsManager from '@/components/dashboard/TagsManager';
 import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
-import { restoreCategory, softDeleteCategory } from '@/lib/taxonomyMutations';
 
 function PagesContentPanels({
 	onlyVisual,
@@ -13,8 +13,6 @@ function PagesContentPanels({
 	pageFormFields,
 	pageEditorProps,
 	customRowActions,
-	categoryColumns,
-	categoryFormFields,
 }) {
 	if (onlyVisual) {
 		return (
@@ -58,18 +56,13 @@ function PagesContentPanels({
 			</TabsContent>
 
 			<TabsContent value="categories" className="mt-0">
-				<GenericContentManager
-					tableName="categories"
-					resourceName={t('pages.category.form.type_page')}
-					columns={categoryColumns}
-					formFields={categoryFormFields}
-					permissionPrefix="categories"
-					customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-					defaultFilters={{ type: ['page', 'pages', 'content'] }}
-					showBreadcrumbs={false}
-					restorePermission="tenant.categories.restore"
-					onSoftDeleteOverride={softDeleteCategory}
-					onRestoreOverride={restoreCategory}
+				<CategoriesManager
+					embedded
+					basePath="/cmspanel/pages/categories"
+					nestedSegment="categories"
+					lockedModule="pages"
+					title={t('pages.category.form.type_page') || 'Page Category'}
+					description="Organize static and landing pages with page-specific and shared content categories that survive refreshes."
 				/>
 			</TabsContent>
 
