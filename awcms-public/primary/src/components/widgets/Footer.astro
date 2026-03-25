@@ -18,6 +18,8 @@ interface Link {
   href?: string;
   ariaLabel?: string;
   icon?: string;
+  target?: string;
+  popup?: boolean;
 }
 
 interface Links {
@@ -65,12 +67,14 @@ const {
         </div>
         <div class="text-sm text-muted flex gap-1">
           {
-            secondaryLinks.map(({ text, href }, index) => (
+            secondaryLinks.map(({ text, href, target, popup }, index) => (
               <>
                 {index !== 0 ? " · " : ""}
                 <a
                   class="text-muted hover:text-gray-700 dark:text-gray-400 hover:underline transition duration-150 ease-in-out"
                   href={href}
+                  {...(target ? { target, rel: "noopener noreferrer" } : {})}
+                  {...(popup ? { "data-popup-window": "true" } : {})}
                   set:html={t(text || "", locale)}
                 />
               </>
@@ -86,12 +90,14 @@ const {
             </div>
             {links && Array.isArray(links) && links.length > 0 && (
               <ul class="text-sm">
-                {links.map(({ text, href, ariaLabel }) => (
+                {links.map(({ text, href, ariaLabel, target, popup }) => (
                   <li class="mb-2">
                     <a
                       class="text-muted hover:text-gray-700 hover:underline dark:text-gray-400 transition duration-150 ease-in-out"
                       href={href}
                       aria-label={ariaLabel}
+                      {...(target ? { target, rel: "noopener noreferrer" } : {})}
+                      {...(popup ? { "data-popup-window": "true" } : {})}
                     >
                       <Fragment set:html={t(text || "", locale)} />
                     </a>
@@ -131,3 +137,26 @@ const {
     </div>
   </div>
 </footer>
+
+<script is:inline>
+  document.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a[data-popup-window="true"]') : null;
+    if (!(link instanceof HTMLAnchorElement)) return;
+
+    event.preventDefault();
+
+    const features = [
+      'popup=yes',
+      'noopener=yes',
+      'noreferrer=yes',
+      'width=1120',
+      'height=840',
+      'left=120',
+      'top=80',
+      'resizable=yes',
+      'scrollbars=yes',
+    ].join(',');
+
+    window.open(link.href, 'awcms_policy_popup', features);
+  });
+</script>
