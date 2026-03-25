@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ExternalLink, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { sanitizeHTML } from '@/utils/sanitize';
 
 const Footer = () => {
     const year = new Date().getFullYear();
@@ -10,11 +11,77 @@ const Footer = () => {
     const legalLinks = useMemo(() => {
         const portalBase = import.meta.env.VITE_PUBLIC_PORTAL_URL || 'http://localhost:4321';
         return [
-            { label: 'Terms & Conditions', path: '/id/p/terms', description: 'Platform legal terms for AhliWeb and AWCMS service usage.' },
-            { label: 'Privacy Policy', path: '/id/p/privacy', description: 'Platform privacy commitments and data stewardship details.' },
-            { label: 'Licensing', path: '/id/p/licensing', description: 'Usage and licensing guidance for platform deliverables.' },
-            { label: 'Cookie Policy', path: '/id/p/cookie-policy', description: 'Cookie and similar technology usage for the platform.' },
-            { label: 'Contact', path: '/id/p/contact', description: 'Official AhliWeb contact details and communication channels.' },
+            {
+                label: 'Terms & Conditions',
+                path: '/id/p/terms',
+                description: 'Platform legal terms for AhliWeb and AWCMS service usage.',
+                content: `
+                  <p>Halaman ini menjelaskan penggunaan layanan AhliWeb dan AWCMS berdasarkan profesionalitas, kepatuhan hukum, dan nilai syariah sesuai pemahaman Salafus Shalih.</p>
+                  <h2>Pokok Ketentuan</h2>
+                  <ul>
+                    <li>Ruang lingkup layanan mengikuti akad, proposal, atau kontrak yang sah.</li>
+                    <li>Permintaan yang melanggar hukum, etika, atau syariat dapat ditolak.</li>
+                    <li>Pengguna wajib menjaga akses, materi, dan akun dengan aman.</li>
+                  </ul>
+                `,
+            },
+            {
+                label: 'Privacy Policy',
+                path: '/id/p/privacy',
+                description: 'Platform privacy commitments and data stewardship details.',
+                content: `
+                  <p>AhliWeb menjaga amanah data pelanggan, pengunjung, dan mitra dengan kontrol akses, audit log, segmentasi tenant, serta perlindungan infrastruktur yang proporsional.</p>
+                  <h2>Cakupan Data</h2>
+                  <ul>
+                    <li>Identitas dasar dan kebutuhan proyek.</li>
+                    <li>Log teknis dan performa untuk keamanan dan audit.</li>
+                    <li>Dokumen serta aset proyek yang diserahkan secara sah.</li>
+                  </ul>
+                `,
+            },
+            {
+                label: 'Licensing',
+                path: '/id/p/licensing',
+                description: 'Usage and licensing guidance for platform deliverables.',
+                content: `
+                  <p>Lisensi deliverable AhliWeb mengikuti akad dan tidak otomatis memindahkan seluruh hak atas komponen pihak ketiga, open-source, atau modul internal.</p>
+                  <h2>Ringkasan Lisensi</h2>
+                  <ul>
+                    <li>Hak penggunaan berlaku sesuai tujuan bisnis yang disepakati.</li>
+                    <li>Hak eksklusif atau pengalihan hak cipta harus dinyatakan tertulis.</li>
+                    <li>Kepatuhan terhadap lisensi pihak ketiga wajib dijaga.</li>
+                  </ul>
+                `,
+            },
+            {
+                label: 'Cookie Policy',
+                path: '/id/p/cookie-policy',
+                description: 'Cookie and similar technology usage for the platform.',
+                content: `
+                  <p>Cookie dan teknologi serupa digunakan untuk keamanan sesi, preferensi dasar, dan analitik yang transparan tanpa praktik manipulatif.</p>
+                  <h2>Jenis Cookie</h2>
+                  <ul>
+                    <li>Cookie esensial untuk autentikasi dan keamanan.</li>
+                    <li>Cookie analitik untuk memahami penggunaan secara agregat.</li>
+                    <li>Cookie fungsional untuk navigasi dan pengalaman pengguna.</li>
+                  </ul>
+                `,
+            },
+            {
+                label: 'Contact',
+                path: '/id/p/contact',
+                description: 'Official AhliWeb contact details and communication channels.',
+                content: `
+                  <p>AhliWeb melayani kebutuhan transformasi digital, pengembangan aplikasi, automasi bisnis, cloud, dan konsultasi sesuai prinsip amanah dan profesionalitas.</p>
+                  <h2>Kanal Resmi</h2>
+                  <ul>
+                    <li>PT Ahli Web Internasional</li>
+                    <li>Jl. Sutan Syahrir Gg. Lombok 1, Arut Selatan, Pangkalan Bun</li>
+                    <li>WhatsApp: +62-895-1338-0400</li>
+                    <li>Email: info@ahliweb.com / halo@ahliweb.com</li>
+                  </ul>
+                `,
+            },
         ].map((item) => ({
             ...item,
             href: `${portalBase}${item.path}`,
@@ -92,14 +159,25 @@ const Footer = () => {
                     </div>
                 </DialogHeader>
 
-                <div className="h-[80vh] bg-muted/20">
-                    {activeLegalPage?.href ? (
-                        <iframe
-                            key={activeLegalPage.href}
-                            src={activeLegalPage.href}
-                            title={activeLegalPage.label}
-                            className="h-full w-full border-0 bg-background"
-                        />
+                <div className="max-h-[80vh] overflow-y-auto bg-muted/20 px-6 py-6">
+                    {activeLegalPage ? (
+                        <div className="space-y-5">
+                            <div className="rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm">
+                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Page URL</p>
+                                <a
+                                    href={activeLegalPage.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-2 inline-flex break-all text-sm font-medium text-primary hover:underline"
+                                >
+                                    {activeLegalPage.href}
+                                </a>
+                            </div>
+
+                            <div className="rounded-2xl border border-border/60 bg-background p-6 shadow-sm">
+                                <div className="prose prose-slate max-w-none dark:prose-invert" dangerouslySetInnerHTML={sanitizeHTML(activeLegalPage.content || '')} />
+                            </div>
+                        </div>
                     ) : null}
                 </div>
             </DialogContent>
