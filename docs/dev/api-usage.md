@@ -89,7 +89,9 @@ const { error } = await supabase
 ### Media Upload via Cloudflare R2
 
 ```javascript
-const response = await fetch(`${import.meta.env.VITE_EDGE_URL}/api/media/upload`, {
+const edgeUrl = import.meta.env.VITE_EDGE_URL || import.meta.env.VITE_LOCAL_EDGE_URL;
+
+const response = await fetch(`${edgeUrl}/api/media/upload`, {
   method: 'POST',
   headers: {
     Authorization: `Bearer ${session.access_token}`,
@@ -104,8 +106,9 @@ const data = await response.json();
 
 ```javascript
 const { data: { session } } = await supabase.auth.getSession();
+const edgeUrl = import.meta.env.VITE_EDGE_URL || import.meta.env.VITE_LOCAL_EDGE_URL;
 
-const response = await fetch(`${import.meta.env.VITE_EDGE_URL}/api/mailketing`, {
+const response = await fetch(`${edgeUrl}/api/mailketing`, {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -124,6 +127,7 @@ const data = await response.json();
 - Secret keys may be used only in Cloudflare Workers, migrations, and trusted operational scripts.
 - Admin client injects `x-tenant-id` automatically via `customSupabaseClient`.
 - Supabase Storage is disabled; object storage must use Cloudflare R2.
+- For local dev, prefer the locally configured Worker URL (`VITE_LOCAL_EDGE_URL`) when the flow depends on `wrangler dev` routes.
 
 ## References
 

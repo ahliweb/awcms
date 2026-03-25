@@ -193,11 +193,11 @@ Because each client app has its own `package.json` with an independent `version`
 ```bash
 # Bump only the Admin Panel (e.g., after a UI-only change)
 npm version minor --prefix awcms
-# → awcms/package.json: "version": "4.0.0"
+# → awcms/package.json: "version": "4.5.0" (example current minor target)
 
 # Bump only the Public Portal
 npm version patch --prefix awcms-public/primary
-# → awcms-public/primary/package.json: "version": "3.1.1"
+# → awcms-public/primary/package.json: "version": "4.4.1" (example patch target)
 ```
 
 ### Keeping the Monorepo in Sync
@@ -207,11 +207,12 @@ The **root** `CHANGELOG.md` is the single source of truth for the overall projec
 ```markdown
 ## [Unreleased]
 
-### Changed
-- **AWCMS 4.0.0 "Cellular"**: Landed the deployment-cell control plane, Worker-first runtime standardization, migration parity restoration, and the 2026-03-13 documentation re-baseline.
+## [4.5.0] - 2026-03-25
 
-## [4.0.0] "Cellular" - 2026-03-13
-Applies to: `awcms@4.0.0`, `awcms-public-root@4.0.0`, `@onwidget/astrowind@4.0.0`, `smanda-pangkalan-bun@4.0.0`, `awcms-mcp@4.0.0`
+Applies to: `awcms@4.5.0`, `@onwidget/astrowind@4.4.0`, `smanda-pangkalan-bun@4.4.0`, `awcms-mcp@4.4.0`
+
+### Changed
+- Architecture: aligned the maintained runtime split across docs so Supabase remains the system of record, Cloudflare Workers remain the edge runtime, and Cloudflare R2 remains the object storage layer.
 ```
 
 ---

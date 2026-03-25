@@ -42,11 +42,16 @@ Expected `awcms-public` Pages settings:
 | Output directory | `dist` |
 | Node version | `22.12.0` or newer |
 
-Required environment variables:
+Required environment variables (preferred current baseline):
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `PUBLIC_TENANT_ID`
+
+Supported deployment fallback variables:
 
 - `PUBLIC_SUPABASE_URL`
 - `PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- `PUBLIC_TENANT_ID`
 
 Recommended aligned variables:
 
@@ -70,7 +75,7 @@ That means a Cloudflare log containing a message like this is a project/env conf
 3. Confirm the build command is `npm run build`.
 4. Confirm the output directory is `dist`.
 5. Confirm the Node version is `22.12.0` or newer.
-6. Verify `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `PUBLIC_TENANT_ID` exist for the failing environment.
+6. Verify either the preferred `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` pair or the supported `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` fallback exists for the failing environment, together with `PUBLIC_TENANT_ID`.
 7. Compare the Production and Preview env sets for drift.
 8. Check that no stale custom override bypasses the package build script.
 9. Re-run the deployment and inspect the first fatal error in the Cloudflare build log.
