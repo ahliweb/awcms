@@ -117,13 +117,6 @@ const Footer = () => {
                             ))}
                         </nav>
                     </div>
-                    <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                        {legalLinks.map((link) => (
-                            <code key={link.path} className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 font-mono">
-                                {link.path}
-                            </code>
-                        ))}
-                    </div>
                 </div>
                 <p className="text-xs text-muted-foreground md:text-sm">
                     &copy; 2024-{year} <a href="https://ahliweb.com" className="font-medium text-foreground transition-colors hover:text-primary" target="_blank" rel="noreferrer">AhliWeb.com</a>
@@ -133,23 +126,23 @@ const Footer = () => {
             </div>
         </footer>
         <Dialog open={Boolean(activeLegalPage)} onOpenChange={(open) => !open && setActiveLegalPage(null)}>
-            <DialogContent className="max-w-6xl overflow-hidden border-border/60 bg-background p-0 shadow-2xl">
-                <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-background via-background to-primary/5 px-6 py-5">
+            <DialogContent className="max-w-5xl overflow-hidden border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,245,249,0.96))] p-0 shadow-[0_30px_90px_rgba(15,23,42,0.22)] backdrop-blur-xl dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(15,23,42,0.95))]">
+                <DialogHeader className="border-b border-slate-200/80 bg-[linear-gradient(135deg,rgba(238,242,255,0.95),rgba(255,255,255,0.9))] px-6 py-5 dark:border-slate-800/80 dark:bg-[linear-gradient(135deg,rgba(30,41,59,0.95),rgba(15,23,42,0.92))]">
                     <div className="flex items-start justify-between gap-4">
                         <div className="space-y-1.5">
                             <DialogTitle className="flex items-center gap-2">
-                                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm ring-1 ring-primary/15">
                                     <FileText className="h-4 w-4" />
                                 </span>
                                 <span>{activeLegalPage?.label || 'Legal Page'}</span>
                             </DialogTitle>
                             <DialogDescription>{activeLegalPage?.description}</DialogDescription>
-                            <code className="inline-flex rounded-full border border-border/60 bg-background/80 px-3 py-1 text-xs font-mono text-muted-foreground">
+                            <code className="inline-flex rounded-full border border-slate-200/80 bg-white/90 px-3 py-1 text-xs font-mono text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
                                 {activeLegalPage?.href}
                             </code>
                         </div>
                         {activeLegalPage?.href ? (
-                            <Button asChild variant="outline" className="rounded-xl border-border/70 bg-background">
+                            <Button asChild variant="outline" className="rounded-xl border-slate-200/80 bg-white/90 shadow-sm hover:bg-white dark:border-slate-700 dark:bg-slate-900/70 dark:hover:bg-slate-900">
                                 <a href={activeLegalPage.href} target="_blank" rel="noreferrer">
                                     <ExternalLink className="mr-2 h-4 w-4" />
                                     Open in new tab
@@ -159,10 +152,10 @@ const Footer = () => {
                     </div>
                 </DialogHeader>
 
-                <div className="max-h-[80vh] overflow-y-auto bg-muted/20 px-6 py-6">
+                <div className="max-h-[80vh] overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.85),rgba(241,245,249,0.65))] px-6 py-6 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.88),rgba(15,23,42,0.7))]">
                     {activeLegalPage ? (
                         <div className="space-y-5">
-                            <div className="rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm">
+                            <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/85">
                                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Page URL</p>
                                 <a
                                     href={activeLegalPage.href}
@@ -174,8 +167,8 @@ const Footer = () => {
                                 </a>
                             </div>
 
-                            <div className="rounded-2xl border border-border/60 bg-background p-6 shadow-sm">
-                                <div className="prose prose-slate max-w-none dark:prose-invert" dangerouslySetInnerHTML={sanitizeHTML(activeLegalPage.content || '')} />
+                            <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950/90">
+                                <div className="prose prose-slate prose-headings:font-semibold prose-headings:tracking-tight prose-p:text-slate-700 prose-li:text-slate-700 max-w-none dark:prose-invert dark:prose-p:text-slate-200 dark:prose-li:text-slate-200" dangerouslySetInnerHTML={sanitizeHTML(activeLegalPage.content || '')} />
                             </div>
                         </div>
                     ) : null}
