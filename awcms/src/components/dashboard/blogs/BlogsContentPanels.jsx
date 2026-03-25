@@ -1,6 +1,7 @@
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import TagsManager from '@/components/dashboard/TagsManager';
 import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
-import { restoreCategory, restoreTag, softDeleteCategory, softDeleteTag } from '@/lib/taxonomyMutations';
+import { restoreCategory, softDeleteCategory } from '@/lib/taxonomyMutations';
 
 function BlogsContentPanels({
 	activeTab,
@@ -15,8 +16,6 @@ function BlogsContentPanels({
 	customToolbarActions,
 	categoryColumns,
 	categoryFormFields,
-	tagColumns,
-	tagFormFields,
 	blogEditorProps = {},
 	onContentSaved,
 }) {
@@ -72,17 +71,13 @@ function BlogsContentPanels({
 		</TabsContent>
 
 		<TabsContent value="tags" className="mt-0">
-			<GenericContentManager
-				tableName="tags"
-				resourceName="Tag"
-				columns={tagColumns}
-				formFields={tagFormFields}
-				permissionPrefix="tag"
-				showBreadcrumbs={false}
-				showHeader={false}
-				restorePermission="tenant.tag.restore"
-				onSoftDeleteOverride={softDeleteTag}
-				onRestoreOverride={restoreTag}
+			<TagsManager
+				embedded
+				basePath="/cmspanel/blogs/tags"
+				nestedSegment="tags"
+				lockedModuleFilter="blogs"
+				title="Blog Tags"
+				description="Review the tags currently used across blog posts, create new reusable labels, and clean up blog-only taxonomy without leaving the Blogs module."
 			/>
 		</TabsContent>
 		</PageTabs>

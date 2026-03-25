@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 
 function TagsTable({
-  isPlatformAdmin,
+  showTenantColumn,
   sortConfig,
   handleSort,
   showTrash,
@@ -25,7 +25,7 @@ function TagsTable({
   onEdit,
   onRequestDelete,
 }) {
-  const colSpan = 5 + (isPlatformAdmin ? 1 : 0) + (!showTrash ? 1 : 0);
+  const colSpan = 5 + (showTenantColumn ? 1 : 0) + (!showTrash ? 1 : 0);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -33,7 +33,7 @@ function TagsTable({
         <table className="w-full">
           <thead className="border-b border-border bg-muted/50">
             <tr>
-              {isPlatformAdmin && <th className="px-6 py-4 text-left text-xs font-bold uppercase text-muted-foreground">Nama Tenant</th>}
+               {showTenantColumn && <th className="px-6 py-4 text-left text-xs font-bold uppercase text-muted-foreground">Tenant</th>}
 
               <th
                 className="group cursor-pointer px-6 py-4 text-left text-xs font-bold uppercase text-muted-foreground hover:text-foreground"
@@ -95,7 +95,7 @@ function TagsTable({
                   animate={{ opacity: 1 }}
                   className="transition-colors hover:bg-muted/50"
                 >
-                  {isPlatformAdmin && (
+                   {showTenantColumn && (
                     <td className="px-6 py-4">
                       <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                         {tag.tenant_name || '(Unknown Tenant)'}

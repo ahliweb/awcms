@@ -1,6 +1,7 @@
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import TagsManager from '@/components/dashboard/TagsManager';
 import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
-import { restoreCategory, restoreTag, softDeleteCategory, softDeleteTag } from '@/lib/taxonomyMutations';
+import { restoreCategory, softDeleteCategory } from '@/lib/taxonomyMutations';
 
 function PagesContentPanels({
 	onlyVisual,
@@ -14,8 +15,6 @@ function PagesContentPanels({
 	customRowActions,
 	categoryColumns,
 	categoryFormFields,
-	tagColumns,
-	tagFormFields,
 }) {
 	if (onlyVisual) {
 		return (
@@ -75,17 +74,13 @@ function PagesContentPanels({
 			</TabsContent>
 
 			<TabsContent value="tags" className="mt-0">
-				<GenericContentManager
-					tableName="tags"
-					resourceName={t('pages.tags.singular') || 'Tag'}
-					columns={tagColumns}
-					formFields={tagFormFields}
-					permissionPrefix="tag"
-					customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-					showBreadcrumbs={false}
-					restorePermission="tenant.tag.restore"
-					onSoftDeleteOverride={softDeleteTag}
-					onRestoreOverride={restoreTag}
+				<TagsManager
+					embedded
+					basePath="/cmspanel/pages/tags"
+					nestedSegment="tags"
+					lockedModuleFilter="pages"
+					title={t('pages.tabs.tags') || 'Page Tags'}
+					description="Manage the tags attached to static and landing pages, including inactive labels and trash cleanup, while staying in the Pages workflow."
 				/>
 			</TabsContent>
 		</PageTabs>

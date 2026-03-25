@@ -130,16 +130,29 @@ export function getCategoryScopeMeta(type) {
 }
 
 export function getTagUsageMeta(moduleKey) {
-  const sharedModule = TAXONOMY_MODULES.find((module) => module.tagUsageModules.includes(moduleKey));
+  const directModule = TAXONOMY_MODULES.find((module) => (
+    module.value !== 'content' && module.tagUsageModules.includes(moduleKey)
+  ));
+  const fallbackModule = TAXONOMY_MODULES.find((module) => module.tagUsageModules.includes(moduleKey));
+  const sharedKey = ['blogs', 'articles', 'pages'].includes(moduleKey) ? 'content' : null;
+
   return {
-    key: sharedModule?.value ?? moduleKey,
-    label: TAG_USAGE_LABELS[moduleKey] ?? sharedModule?.label ?? moduleKey,
+    key: directModule?.value ?? fallbackModule?.value ?? moduleKey,
+    label: TAG_USAGE_LABELS[moduleKey] ?? directModule?.label ?? fallbackModule?.label ?? moduleKey,
+    sharedKey,
   };
 }
 
 export function matchesTagModuleFilter(moduleKey, filterValue) {
   if (!filterValue || filterValue === 'all') return true;
 
+  if (filterValue === 'content') {
+    return ['content', 'blogs', 'articles', 'pages'].includes(moduleKey);
+  }
+
   const sharedModule = TAXONOMY_MODULES.find((module) => module.tagUsageModules.includes(moduleKey));
+
+  if (moduleKey === filterValue) return true;
+
   return sharedModule?.value === filterValue;
 }

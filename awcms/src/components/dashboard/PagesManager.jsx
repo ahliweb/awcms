@@ -261,17 +261,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
     }
   ], [t]);
 
-  const tagColumns = useMemo(() => [
-    { key: 'name', label: t('pages.tags.name') || 'Name', className: 'font-medium' },
-    { key: 'slug', label: t('pages.tags.slug') || 'Slug' },
-    { key: 'created_at', label: t('pages.tags.created') || 'Created', type: 'date' }
-  ], [t]);
-
-  const tagFormFields = useMemo(() => [
-    { key: 'name', label: t('pages.tags.form.name') || 'Name', required: true },
-    { key: 'slug', label: t('pages.tags.form.slug') || 'Slug' }
-  ], [t]);
-
   // If Visual Builder is open, show it full screen
   if (visualBuilderPage) {
     return (
@@ -313,8 +302,6 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
         customRowActions={customRowActions}
         categoryColumns={categoryColumns}
         categoryFormFields={categoryFormFields}
-        tagColumns={tagColumns}
-        tagFormFields={tagFormFields}
       />
     </>
   );

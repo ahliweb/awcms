@@ -16,7 +16,7 @@ import TagsPaginationBar from '@/components/dashboard/tags/TagsPaginationBar';
 import TagEditorDialog from '@/components/dashboard/tags/TagEditorDialog';
 import TagDeleteDialog from '@/components/dashboard/tags/TagDeleteDialog';
 import { TAG_MODULE_OPTIONS, getTagUsageMeta, matchesTagModuleFilter } from '@/lib/taxonomy';
-import { restoreTag, softDeleteTag } from '@/lib/taxonomyMutations';
+import { createTag, restoreTag, softDeleteTag, updateTag } from '@/lib/taxonomyMutations';
 
 function slugifyTag(value) {
   return value
@@ -26,13 +26,21 @@ function slugifyTag(value) {
     .replace(/(^-|-$)/g, '');
 }
 
-function TagsManager() {
+function TagsManager({
+  embedded = false,
+  basePath = '/cmspanel/tags',
+  nestedSegment = null,
+  lockedModuleFilter = null,
+  title = 'Tags',
+  description = 'Manage tenant-scoped tags shared across content modules, with reuse visibility and safer cleanup from trash.',
+}) {
   const { toast } = useToast();
   const { hasPermission, isPlatformAdmin } = usePermissions();
   const { currentTenant } = useTenant();
   const navigate = useNavigate();
   const segments = useSplatSegments();
-  const showTrash = segments[0] === 'trash';
+  const isNestedRoute = Boolean(nestedSegment);
+  const showTrash = isNestedRoute ? segments[1] === 'trash' : segments[0] === 'trash';
 
   const {
     query,
@@ -49,7 +57,7 @@ function TagsManager() {
   const [displayedTags, setDisplayedTags] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [moduleFilter, setModuleFilter] = useState('all');
+  const [moduleFilter, setModuleFilter] = useState(lockedModuleFilter || 'all');
   const [activeFilter, setActiveFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'total_usage', direction: 'desc' });
 
@@ -75,17 +83,42 @@ function TagsManager() {
   const canEdit = hasPermission('tenant.tag.update');
   const canSoftDelete = hasPermission('tenant.tag.delete');
   const canRestore = hasPermission('tenant.tag.restore') || hasPermission('tenant.tag.delete');
+  const hasTenantScope = Boolean(currentTenant?.id);
+  const showTenantColumn = isPlatformAdmin && !hasTenantScope;
 
   useEffect(() => {
-    if (segments.length > 0 && segments[0] !== 'trash') {
-      navigate('/cmspanel/tags', { replace: true });
-      return;
-    }
+    if (isNestedRoute) {
+      if (segments[0] !== nestedSegment) {
+        navigate(basePath, { replace: true });
+        return;
+      }
 
-    if (segments[0] === 'trash' && segments.length > 1) {
-      navigate('/cmspanel/tags/trash', { replace: true });
+      if (segments[1] === 'trash' && segments.length > 2) {
+        navigate(`${basePath}/trash`, { replace: true });
+        return;
+      }
+
+      if (segments.length > 1 && segments[1] !== 'trash') {
+        navigate(basePath, { replace: true });
+        return;
+      }
+    } else {
+      if (segments.length > 0 && segments[0] !== 'trash') {
+        navigate(basePath, { replace: true });
+        return;
+      }
+
+      if (segments[0] === 'trash' && segments.length > 1) {
+        navigate(`${basePath}/trash`, { replace: true });
+      }
     }
-  }, [segments, navigate]);
+  }, [segments, navigate, isNestedRoute, nestedSegment, basePath]);
+
+  useEffect(() => {
+    if (lockedModuleFilter) {
+      setModuleFilter(lockedModuleFilter);
+    }
+  }, [lockedModuleFilter]);
 
   const fetchTags = useCallback(async () => {
     setLoading(true);
@@ -98,7 +131,7 @@ function TagsManager() {
           .select('*, tenant:tenants(name)')
           .not('deleted_at', 'is', null);
 
-        if (currentTenant?.id && !isPlatformAdmin) {
+        if (hasTenantScope) {
           trashQuery = trashQuery.eq('tenant_id', currentTenant.id);
         }
 
@@ -126,7 +159,7 @@ function TagsManager() {
           .select('*, tenant:tenants(name)')
           .is('deleted_at', null);
 
-        if (currentTenant?.id && !isPlatformAdmin) {
+        if (hasTenantScope) {
           tagsQuery = tagsQuery.eq('tenant_id', currentTenant.id);
         }
 
@@ -163,11 +196,14 @@ function TagsManager() {
               const tag = mergedMap.get(usage.tag_id);
               tag.count += parseInt(usage.count, 10);
                const usageMeta = getTagUsageMeta(usage.module);
-               tag.modules.add(usageMeta.key);
-               tag.breakdown[usageMeta.label] = (tag.breakdown[usageMeta.label] || 0) + parseInt(usage.count, 10);
-             }
-           });
-         }
+                tag.modules.add(usageMeta.key);
+                if (usageMeta.sharedKey) {
+                  tag.modules.add(usageMeta.sharedKey);
+                }
+                tag.breakdown[usageMeta.label] = (tag.breakdown[usageMeta.label] || 0) + parseInt(usage.count, 10);
+              }
+            });
+          }
 
         data = Array.from(mergedMap.values()).map((tag) => ({
           ...tag,
@@ -186,7 +222,7 @@ function TagsManager() {
     } finally {
       setLoading(false);
     }
-  }, [showTrash, toast, currentTenant?.id, isPlatformAdmin]);
+  }, [showTrash, toast, currentTenant?.id, hasTenantScope]);
 
   useEffect(() => {
     fetchTags();
@@ -347,32 +383,42 @@ function TagsManager() {
       return;
     }
 
+    const normalizedName = formData.name.trim();
+    const normalizedSlug = (formData.slug || slugifyTag(formData.name)).trim();
+
+    if (!normalizedSlug) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: 'Slug is required' });
+      return;
+    }
+
+    if (!editingTag && !currentTenant?.id) {
+      toast({
+        variant: 'destructive',
+        title: 'Tenant Required',
+        description: 'Select a tenant before creating shared tags.',
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
-        name: formData.name,
-        slug: formData.slug || slugifyTag(formData.name),
+        name: normalizedName,
+        slug: normalizedSlug,
         color: formData.color,
         description: formData.description,
         icon: formData.icon,
         is_active: formData.is_active,
-        updated_at: new Date().toISOString(),
       };
 
       if (editingTag) {
-        const { error } = await supabase
-          .from('tags')
-          .update(payload)
-          .eq('id', editingTag.tag_id);
-        if (error) throw error;
+        await updateTag(editingTag.tag_id, payload, { tenantId: currentTenant?.id });
         toast({ title: 'Success', description: 'Tag updated successfully' });
       } else {
-        const insertPayload = {
+        await createTag({
+          tenantId: currentTenant.id,
           ...payload,
-          tenant_id: currentTenant?.id,
-        };
-        const { error } = await supabase.from('tags').insert([insertPayload]);
-        if (error) throw error;
+        });
         toast({ title: 'Success', description: 'New tag created successfully' });
       }
 
@@ -393,30 +439,49 @@ function TagsManager() {
   const totalUsage = rawTags.reduce((sum, tag) => sum + (tag.count || 0), 0);
 
   const breadcrumbs = [
-    { label: 'Tags', icon: Tag },
+    { label: title, icon: Tag },
     ...(showTrash ? [{ label: 'Trash', icon: Trash2 }] : []),
   ];
 
-  return (
-    <AdminPageLayout requiredPermission="tenant.tag.read">
-      <PageHeader
-        title={showTrash ? 'Tags Trash' : 'Tags'}
-        description="Manage tenant-scoped tags shared across content modules, with reuse visibility and safer cleanup from trash."
-        icon={Tag}
-        breadcrumbs={breadcrumbs}
-        actions={(
+  const body = (
+    <>
+      {embedded ? (
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">{showTrash ? `${title} Trash` : title}</h2>
+            <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
+          </div>
           <TagsHeaderActions
             showTrash={showTrash}
             canSoftDelete={canSoftDelete}
             canCreate={canCreate}
             onToggleTrash={() => {
-              navigate(showTrash ? '/cmspanel/tags' : '/cmspanel/tags/trash');
+              navigate(showTrash ? basePath : `${basePath}/trash`);
               setCurrentPage(1);
             }}
             onCreate={() => openModal(null)}
           />
-        )}
-      />
+        </div>
+      ) : (
+        <PageHeader
+          title={showTrash ? `${title} Trash` : title}
+          description={description}
+          icon={Tag}
+          breadcrumbs={breadcrumbs}
+          actions={(
+            <TagsHeaderActions
+              showTrash={showTrash}
+              canSoftDelete={canSoftDelete}
+              canCreate={canCreate}
+              onToggleTrash={() => {
+                navigate(showTrash ? basePath : `${basePath}/trash`);
+                setCurrentPage(1);
+              }}
+              onCreate={() => openModal(null)}
+            />
+          )}
+        />
+      )}
 
       {!showTrash && (
         <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -459,12 +524,13 @@ function TagsManager() {
         activeFilter={activeFilter}
         setActiveFilter={setActiveFilter}
         modules={TAG_MODULE_OPTIONS}
+        showModuleFilter={!lockedModuleFilter}
         fetchTags={fetchTags}
         setCurrentPage={setCurrentPage}
       />
 
       <TagsTable
-        isPlatformAdmin={isPlatformAdmin}
+        showTenantColumn={showTenantColumn}
         sortConfig={sortConfig}
         handleSort={handleSort}
         showTrash={showTrash}
@@ -506,6 +572,16 @@ function TagsManager() {
         tagName={deleteTarget?.tag_name}
         onConfirm={handleConfirmDelete}
       />
+    </>
+  );
+
+  if (embedded) {
+    return body;
+  }
+
+  return (
+    <AdminPageLayout requiredPermission="tenant.tag.read">
+      {body}
     </AdminPageLayout>
   );
 }

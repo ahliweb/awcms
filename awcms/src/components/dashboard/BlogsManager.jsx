@@ -312,18 +312,6 @@ function BlogsManager() {
     }
   ];
 
-  // Tag columns and fields
-  const tagColumns = [
-    { key: 'name', label: t('common.name'), className: 'font-medium' },
-    { key: 'slug', label: t('common.slug') },
-    { key: 'created_at', label: t('common.created_at'), type: 'date' }
-  ];
-
-  const tagFormFields = [
-    { key: 'name', label: t('common.name'), required: true },
-    { key: 'slug', label: t('common.slug') }
-  ];
-
   return (
     <AdminPageLayout requiredPermission="tenant.blog.read">
       {/* Page Header with Breadcrumbs */}
@@ -356,8 +344,6 @@ function BlogsManager() {
         customToolbarActions={customToolbarActions}
         categoryColumns={categoryColumns}
         categoryFormFields={categoryFormFields}
-        tagColumns={tagColumns}
-        tagFormFields={tagFormFields}
         blogEditorProps={blogEditorProps}
         onContentSaved={handleContentSaved}
       />

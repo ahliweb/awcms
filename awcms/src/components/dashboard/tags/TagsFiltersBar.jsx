@@ -17,6 +17,7 @@ function TagsFiltersBar({
   activeFilter,
   setActiveFilter,
   modules,
+  showModuleFilter = true,
   fetchTags,
   setCurrentPage,
 }) {
@@ -43,21 +44,23 @@ function TagsFiltersBar({
 
       {!showTrash && (
         <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative w-full sm:w-48">
-            <Filter className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <select
-              value={moduleFilter}
-              onChange={(event) => {
-                setModuleFilter(event.target.value);
-                setCurrentPage(1);
-              }}
-              className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 py-2 pl-9 text-sm shadow-sm focus:ring-2 focus:ring-ring dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-            >
-              {modules.map((module) => (
-                <option key={module.value} value={module.value}>{module.label}</option>
-              ))}
-            </select>
-          </div>
+          {showModuleFilter && (
+            <div className="relative w-full sm:w-48">
+              <Filter className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <select
+                value={moduleFilter}
+                onChange={(event) => {
+                  setModuleFilter(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 py-2 pl-9 text-sm shadow-sm focus:ring-2 focus:ring-ring dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+              >
+                {modules.map((module) => (
+                  <option key={module.value} value={module.value}>{module.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="relative w-full sm:w-40">
             <CheckCircle className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />

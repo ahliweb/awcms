@@ -16,6 +16,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import RichTextEditor from '@/components/ui/RichTextEditor';
+import TagInput from '@/components/ui/TagInput';
 import { getCategoryTypesForModule } from '@/lib/taxonomy';
 
 const DEFAULT_PAGE_LOCALE = 'id';
@@ -325,6 +326,17 @@ function PageEditor({ page, onClose, onSuccess, translationConfig = null, select
                 }
             }
 
+            if (savedPageId) {
+                const { error: tagSyncError } = await supabase.rpc('sync_resource_tags', {
+                    p_resource_id: savedPageId,
+                    p_resource_type: 'pages',
+                    p_tags: formData.tags,
+                    p_tenant_id: currentTenant.id,
+                });
+
+                if (tagSyncError) throw tagSyncError;
+            }
+
             try {
                 await triggerPublicRebuild({
                     tenantId: currentTenant.id,
@@ -334,8 +346,6 @@ function PageEditor({ page, onClose, onSuccess, translationConfig = null, select
             } catch (rebuildError) {
                 console.warn('Public rebuild trigger failed:', rebuildError);
             }
-
-            // Sync Tags - REMOVED
 
             toast({ title: "Success", description: "Page saved successfully" });
             onSuccess?.();
@@ -714,7 +724,15 @@ function PageEditor({ page, onClose, onSuccess, translationConfig = null, select
                                             </select>
                                         </div>
 
-                                        {/* Tags Removed */}
+                                        <div className="space-y-2">
+                                            <Label htmlFor="page-tags">Tags</Label>
+                                            <p className="text-xs text-slate-500">Reuse existing tags or press Enter to create a new tenant tag while saving this page.</p>
+                                            <TagInput
+                                                value={formData.tags}
+                                                onChange={(tags) => setFormData({ ...formData, tags })}
+                                                placeholder="Add page tags..."
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
