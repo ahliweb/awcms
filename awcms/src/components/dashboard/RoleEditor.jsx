@@ -15,11 +15,13 @@ import PermissionMatrix from '@/components/dashboard/PermissionMatrix';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useTenant } from '@/contexts/TenantContext';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 const RoleEditor = ({ role, onClose, onSave }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { currentTenant } = useTenant();
+  const { hasPermission } = usePermissions();
   const navigate = useNavigate();
   const { id: routeParam } = useParams();
   const { value: routeRoleId, loading: routeLoading, isLegacy } = useSecureRouteParam(routeParam, 'roles.edit');
@@ -48,8 +50,11 @@ const RoleEditor = ({ role, onClose, onSave }) => {
   const isSystemRole = Boolean(resolvedRole?.is_system || resolvedRole?.is_public || resolvedRole?.is_guest);
   const isFullAccessRole = Boolean(resolvedRole?.is_full_access || resolvedRole?.is_platform_admin);
   const [syncingFullAccess, setSyncingFullAccess] = useState(false);
+  const canReadRoles = hasPermission('tenant.role.read');
+  const canManageRole = roleId ? hasPermission('tenant.role.update') : hasPermission('tenant.role.create');
 
   useEffect(() => {
+    if (!canReadRoles || !canManageRole) return;
     const fetchRole = async () => {
       if (role || !routeRoleId) return;
       try {
@@ -71,7 +76,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     };
 
     fetchRole();
-  }, [role, routeRoleId, toast, navigate]);
+  }, [role, routeRoleId, toast, navigate, canReadRoles, canManageRole]);
 
   useEffect(() => {
     if (!routeParam || routeLoading) return;
@@ -98,6 +103,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
   }, [resolvedRole]);
 
   useEffect(() => {
+    if (!canReadRoles || !canManageRole) return;
     const fetchPermissions = async () => {
       try {
         // 1. Fetch All Available Permissions (Master List)
@@ -132,7 +138,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     };
 
     fetchPermissions();
-  }, [roleId, toast]);
+  }, [roleId, toast, canReadRoles, canManageRole]);
 
   // Auto-select all permissions for full-access roles
   useEffect(() => {
@@ -258,6 +264,10 @@ const RoleEditor = ({ role, onClose, onSave }) => {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!canManageRole) {
+      toast({ variant: 'destructive', title: t('common.error'), description: t('common.access_denied') });
+      return;
+    }
     if (isFullAccessRole) {
       handleClose();
       return;
@@ -344,6 +354,22 @@ const RoleEditor = ({ role, onClose, onSave }) => {
   };
 
   return (
+    !canReadRoles || !canManageRole ? (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      >
+        <div className="w-full max-w-lg rounded-2xl border border-destructive/25 bg-card p-8 text-center shadow-2xl">
+          <p className="text-lg font-semibold text-destructive">Access denied</p>
+          <p className="mt-2 text-sm text-muted-foreground">You do not have permission to view or manage role settings.</p>
+          <div className="mt-6 flex justify-center">
+            <Button onClick={handleClose} variant="outline">Back to roles</Button>
+          </div>
+        </div>
+      </motion.div>
+    ) : (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -554,6 +580,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         </form>
       </motion.div>
     </motion.div>
+    )
   );
 };
 
