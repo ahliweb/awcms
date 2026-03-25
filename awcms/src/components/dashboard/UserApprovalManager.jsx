@@ -1,18 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useTranslation } from 'react-i18next';
-import { UserCheck } from 'lucide-react';
-import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/flowbite-admin';
+import { CheckCircle2, ChevronRight, Home, UserCheck, XCircle } from 'lucide-react';
+import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
 import ApprovalHeaderActions from '@/components/dashboard/user-approvals/ApprovalHeaderActions';
 import ApprovalRequestsTable from '@/components/dashboard/user-approvals/ApprovalRequestsTable';
 import RejectApplicationDialog from '@/components/dashboard/user-approvals/RejectApplicationDialog';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 const APPROVAL_TABS = ['pending', 'completed', 'rejected'];
 
-const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
+const UserApprovalManager = ({ activeTab: controlledTab, onTabChange, embedded = false }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [internalTab, setInternalTab] = useState('pending');
@@ -29,10 +33,11 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
 
-  const { isPlatformAdmin, isFullAccess } = usePermissions();
+  const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
   const { toast } = useToast();
 
   const isSuperAdmin = isPlatformAdmin || isFullAccess;
+  const canViewApprovals = hasPermission('platform.approvals.read') || isSuperAdmin;
 
   useEffect(() => {
     if (!onTabChange) return;
@@ -81,8 +86,9 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
   }, [effectiveTab, currentPage, itemsPerPage, isSuperAdmin, toast, t]);
 
   useEffect(() => {
+    if (!canViewApprovals) return;
     fetchRequests();
-  }, [fetchRequests]);
+  }, [fetchRequests, canViewApprovals]);
 
   const handleApprove = async (request) => {
     setProcessingId(request.id);
@@ -157,22 +163,101 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
 
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-  return (
-    <AdminPageLayout requiredPermission="platform.approvals.read">
-      <PageHeader
-        title={t('approvals.manager.title')}
-        description={t('approvals.manager.description')}
-        icon={UserCheck}
-        breadcrumbs={[{ label: t('approvals.manager.title'), icon: UserCheck }]}
-        actions={(
-          <ApprovalHeaderActions
-            loading={loading}
-            onRefresh={fetchRequests}
-          />
-        )}
-      />
+  const summaryCards = [
+    {
+      title: t('approvals.tabs.pending'),
+      value: effectiveTab === 'pending' ? totalItems : 'Queue',
+      description: 'Incoming applications waiting for the next approval step.',
+      accent: 'from-primary/15 via-primary/6 to-transparent',
+      icon: UserCheck,
+    },
+    {
+      title: t('approvals.tabs.approved'),
+      value: effectiveTab === 'completed' ? totalItems : 'History',
+      description: 'Approved account requests and completed onboarding outcomes.',
+      accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent',
+      icon: CheckCircle2,
+    },
+    {
+      title: t('approvals.tabs.rejected'),
+      value: effectiveTab === 'rejected' ? totalItems : 'Audit',
+      description: 'Rejected applications and reasons tracked for review.',
+      accent: 'from-destructive/15 via-destructive/6 to-transparent',
+      icon: XCircle,
+    },
+  ];
 
-      <div className="rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm p-6">
+  return (
+    <div className="space-y-8">
+      {!canViewApprovals ? (
+        <div className="rounded-2xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-sm">
+          <span className="font-semibold">Access denied.</span> You do not have permission to review user approvals.
+        </div>
+      ) : (
+        <>
+      {embedded ? (
+        <div className="space-y-8">
+          <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                    <UserCheck className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Approvals</p>
+                    <p className="text-lg font-semibold text-foreground">{t('approvals.manager.title')}</p>
+                  </div>
+                </div>
+                <p className="max-w-3xl text-sm text-muted-foreground">{t('approvals.manager.description')}</p>
+              </div>
+              <ApprovalHeaderActions loading={loading} onRefresh={fetchRequests} />
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
+            <div className="grid gap-4 md:grid-cols-3">
+              {summaryCards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
+                    <CardContent className="relative p-5">
+                      <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
+                      <div className="relative">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
+                          <Icon className="h-4 w-4 text-primary" />
+                        </div>
+                        <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
+                        <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <nav className="mb-6">
+          <ol className="flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground sm:gap-2.5">
+            <li className="inline-flex items-center gap-1.5">
+              <Link to="/cmspanel" className="flex items-center gap-1 transition-colors hover:text-foreground">
+                <Home className="h-4 w-4" />
+                Dashboard
+              </Link>
+            </li>
+            <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
+            <li className="inline-flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                <span>{t('approvals.manager.title')}</span>
+              </div>
+            </li>
+          </ol>
+        </nav>
+      )}
+
+      <div className={embedded ? '' : 'rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm backdrop-blur-sm'}>
         <PageTabs
           value={effectiveTab}
           onValueChange={handleTabChange}
@@ -258,7 +343,9 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange }) => {
           onConfirm={handleReject}
         />
       </div>
-    </AdminPageLayout>
+        </>
+      )}
+    </div>
   );
 };
 
