@@ -202,9 +202,10 @@ export function useMedia() {
                 .from('categories')
                 .select('*')
                 .in('type', getCategoryTypesForModule('media'))
+                .is('deleted_at', null)
                 .order('name');
 
-            if (!isPlatformAdmin && tenantId) {
+            if (tenantId) {
                 query = query.eq('tenant_id', tenantId);
             }
 
@@ -221,12 +222,21 @@ export function useMedia() {
     const createCategory = useCallback(async (name) => {
         if (!name) return null;
         try {
+            if (!tenantId) {
+                throw new Error('Missing tenant context');
+            }
+
+            if (!(hasPermission('tenant.categories.create') || isPlatformAdmin || isFullAccess)) {
+                throw new Error('Permission denied: Cannot create file categories.');
+            }
+
             const { data: userData } = await supabase.auth.getUser();
+            const normalizedName = name.trim();
             const { data, error } = await supabase
                 .from('categories')
                 .insert({
-                    name,
-                    slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+                    name: normalizedName,
+                    slug: normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
                     type: 'media',
                     tenant_id: tenantId,
                     created_by: userData.user?.id
@@ -236,14 +246,14 @@ export function useMedia() {
 
             if (error) throw error;
 
-            toast({ title: 'Category Created', description: `Category "${name}" created.` });
+            toast({ title: 'Category Created', description: `Category "${normalizedName}" created.` });
             return data;
         } catch (err) {
             console.error('Error creating category:', err);
             toast({ variant: 'destructive', title: 'Error', description: err.message });
             return null;
         }
-    }, [tenantId, toast]);
+    }, [tenantId, toast, hasPermission, isPlatformAdmin, isFullAccess]);
 
     // Helper: Get Public URL
     const getFileUrl = useCallback((file) => {
