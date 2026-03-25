@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Crown, Layers3, Shield, ShieldCheck, Users2 } from 'lucide-react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import { Button } from '@/components/ui/button';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,13 @@ function RolesManager() {
     privilegedRoles: 0,
     permissionLinks: 0,
   });
+  const [platformRoles, setPlatformRoles] = useState([]);
+  const [platformRolesLoading, setPlatformRolesLoading] = useState(false);
+  const [platformRolesPage, setPlatformRolesPage] = useState(1);
+  const [platformRolesPerPage, setPlatformRolesPerPage] = useState(6);
+  const [platformRolesTotal, setPlatformRolesTotal] = useState(0);
+
+  const platformRolesTotalPages = Math.max(1, Math.ceil(platformRolesTotal / platformRolesPerPage));
 
   useEffect(() => {
     let active = true;
@@ -63,6 +71,55 @@ function RolesManager() {
       active = false;
     };
   }, []);
+
+  const handleOpenRole = async (role) => {
+    const routeId = await encodeRouteParam({ value: role.id, scope: 'roles.edit' });
+    if (!routeId) {
+      toast({ variant: 'destructive', title: t('common.error'), description: t('roles.errors.load_failed', 'Unable to open role editor.') });
+      return;
+    }
+    navigate(`/cmspanel/roles/edit/${routeId}`);
+  };
+
+  useEffect(() => {
+    if (!isPlatformAdmin) return;
+
+    let active = true;
+
+    const loadPlatformRoles = async () => {
+      try {
+        setPlatformRolesLoading(true);
+        const from = (platformRolesPage - 1) * platformRolesPerPage;
+        const to = from + platformRolesPerPage - 1;
+
+        const { data, count, error } = await supabase
+          .from('roles')
+          .select('id, name, description, scope, tenant_id, is_platform_admin, is_full_access, created_at', { count: 'exact' })
+          .is('deleted_at', null)
+          .or('scope.eq.platform,is_platform_admin.eq.true,is_full_access.eq.true,tenant_id.is.null')
+          .order('name')
+          .range(from, to);
+
+        if (error) throw error;
+        if (!active) return;
+
+        setPlatformRoles(data || []);
+        setPlatformRolesTotal(count || 0);
+      } catch (error) {
+        console.error('Error loading platform roles:', error);
+      } finally {
+        if (active) {
+          setPlatformRolesLoading(false);
+        }
+      }
+    };
+
+    loadPlatformRoles();
+
+    return () => {
+      active = false;
+    };
+  }, [isPlatformAdmin, platformRolesPage, platformRolesPerPage]);
 
   const summaryCards = useMemo(() => ([
     {
@@ -140,6 +197,95 @@ function RolesManager() {
           ))}
         </div>
       </div>
+
+      {isPlatformAdmin ? (
+        <div className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Platform-Scope Role Cards</h3>
+              <p className="text-sm text-muted-foreground">Global and privileged roles stay available here even when tenant-dependent role management is scoped to the current tenant.</p>
+            </div>
+            <div className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              {platformRolesTotal} platform-scope roles
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {platformRolesLoading ? Array.from({ length: platformRolesPerPage }).map((_, index) => (
+              <div key={index} className="h-44 animate-pulse rounded-2xl border border-border/60 bg-muted/40" />
+            )) : platformRoles.map((role) => (
+              <div key={role.id} className="rounded-2xl border border-border/60 bg-background/90 p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{role.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{role.description || t('common.not_set', 'Not set')}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-500">
+                    <Crown className="h-3 w-3 fill-amber-500 text-amber-500" />
+                    Platform
+                  </span>
+                </div>
+
+                <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Scope</span>
+                    <span className="font-medium text-foreground">{role.scope || 'platform'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Tenant</span>
+                    <span className="font-medium text-foreground">{role.tenant_id ? 'Tenant-bound' : 'Global'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Access</span>
+                    <span className="font-medium text-foreground">{role.is_full_access || role.is_platform_admin ? 'Elevated' : 'Managed'}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">Created {role.created_at ? new Date(role.created_at).toLocaleDateString() : '-'}</span>
+                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => handleOpenRole(role)}>
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {platformRoles.length === 0 ? 0 : ((platformRolesPage - 1) * platformRolesPerPage) + 1} to {Math.min(platformRolesPage * platformRolesPerPage, platformRolesTotal)} of {platformRolesTotal} platform-scope roles
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={platformRolesPerPage}
+                onChange={(e) => {
+                  setPlatformRolesPerPage(Number(e.target.value));
+                  setPlatformRolesPage(1);
+                }}
+                className="h-10 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground shadow-sm"
+              >
+                {[3, 6, 9, 12].map((value) => (
+                  <option key={value} value={value}>{value} / page</option>
+                ))}
+              </select>
+              <Button variant="outline" className="rounded-xl" disabled={platformRolesPage <= 1} onClick={() => setPlatformRolesPage((page) => Math.max(1, page - 1))}>
+                Previous
+              </Button>
+              <span className="px-2 text-sm text-muted-foreground">Page {platformRolesPage} of {platformRolesTotalPages}</span>
+              <Button variant="outline" className="rounded-xl" disabled={platformRolesPage >= platformRolesTotalPages} onClick={() => setPlatformRolesPage((page) => Math.min(platformRolesTotalPages, page + 1))}>
+                Next
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Tenant-Dependent Role Management</p>
+          <p className="text-xs text-muted-foreground">{currentTenant?.name || (isPlatformAdmin ? 'Global scope' : 'Current tenant')}</p>
+        </div>
+      </div>
     </div>
   );
 
@@ -185,6 +331,14 @@ function RolesManager() {
         }
         return <span className="inline-flex items-center rounded-full border border-border/70 bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">{count || 0} {t('roles.columns.permissions')}</span>;
       }
+    },
+    {
+      key: 'tenant',
+      label: t('users.columns.tenant', 'Tenant Name'),
+      className: 'min-w-[180px]',
+      render: (_, row) => (
+        <span className="text-sm text-muted-foreground">{row.tenant?.name || (row.tenant_id ? t('common.not_set', 'Not set') : t('common.global'))}</span>
+      )
     }
   ];
 
@@ -205,14 +359,7 @@ function RolesManager() {
       customSelect="*, tenant:tenants(name), owner:users!roles_created_by_fkey(email), role_permissions(permission_id, deleted_at)"
       headerContent={headerContent}
       onCreateOverride={() => navigate('/cmspanel/roles/new')}
-      onEditOverride={async (role) => {
-        const routeId = await encodeRouteParam({ value: role.id, scope: 'roles.edit' });
-        if (!routeId) {
-          toast({ variant: 'destructive', title: t('common.error'), description: t('roles.errors.load_failed', 'Unable to open role editor.') });
-          return;
-        }
-        navigate(`/cmspanel/roles/edit/${routeId}`);
-      }}
+      onEditOverride={handleOpenRole}
     />
   );
 }
