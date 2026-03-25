@@ -5,6 +5,10 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Admin Dashboard: aligned admin authentication and recovery routes to the `/cmspanel` base path, while keeping legacy root-level auth URLs as redirects for compatibility.
+
 ## [4.5.0] - 2026-03-25
 
 Applies to: `awcms@4.5.0`, `@onwidget/astrowind@4.4.0`, `smanda-pangkalan-bun@4.4.0`, `awcms-mcp@4.4.0`
