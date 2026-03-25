@@ -113,6 +113,7 @@ All documentation follows this authority structure:
 | Testing | [docs/dev/testing.md](docs/dev/testing.md) | Vitest and smoke checks |
 | AI Workflows | [docs/dev/ai-workflows.md](docs/dev/ai-workflows.md) | Prompt templates, plan mode triggers, iteration loops |
 | Tags Module QA Checklist | [docs/dev/tags-module-qa-checklist.md](docs/dev/tags-module-qa-checklist.md) | Manual verification checklist for `/cmspanel/tags`, `/cmspanel/blogs/tags`, and `/cmspanel/pages/tags` |
+| Categories Module QA Checklist | [docs/dev/categories-module-qa-checklist.md](docs/dev/categories-module-qa-checklist.md) | Manual verification checklist for `/cmspanel/categories`, `/cmspanel/blogs/categories`, and `/cmspanel/pages/categories` |
 | AI Gateway | [docs/architecture/openclaw-gateway.md](docs/architecture/openclaw-gateway.md) | OpenClaw per-tenant setup, routing, and security runbook |
 | Autonomous Brain | [docs/architecture/ollama-integration.md](docs/architecture/ollama-integration.md) | Local Ollama runtime and OpenClaw hand-off guidance |
 | Programmatic Content Types | [docs/architecture/schema-definition.md](docs/architecture/schema-definition.md) | Defining and migrating custom schemas |
