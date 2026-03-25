@@ -76,12 +76,14 @@ export function useDashboardData() {
       const { data: recentBlogs } = await supabase
         .from('blogs')
         .select('title, updated_at, users!created_by(full_name)')
+        .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5);
 
       const { data: recentPages } = await supabase
         .from('pages')
         .select('title, updated_at, users!created_by(full_name)')
+        .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5);
 
@@ -106,6 +108,7 @@ export function useDashboardData() {
       const { data: topBlogs } = await supabase
         .from('blogs')
         .select('title, views, status')
+        .is('deleted_at', null)
         .order('views', { ascending: false })
         .limit(5);
 
