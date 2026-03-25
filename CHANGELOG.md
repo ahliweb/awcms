@@ -8,7 +8,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 ### Fixed
 
 - Admin Dashboard: aligned admin authentication and recovery routes to the `/cmspanel` base path, while keeping legacy root-level auth URLs as redirects for compatibility.
-- Taxonomy: restored page tag synchronization, repaired `sync_resource_tags` for both pages and blogs, and upgraded the embedded blog/page tag tabs to use the richer tenant-scoped Tags manager with module-aware filtering.
+- Taxonomy: overhauled the Admin Tags experience under `/cmspanel` with refresh-safe trash sub-slugs, tenant-safe tag mutations, restored page/blog tag synchronization, repaired `sync_resource_tags` for both pages and blogs, module-aware embedded tags management in Blogs and Pages, and a full UI polish across the manager, filters, stats cards, search, and tag editor dialog.
 
 ## [4.5.0] - 2026-03-25
 
