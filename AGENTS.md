@@ -2165,7 +2165,7 @@ Enable independent releases for each AWCMS client application (admin, public por
 3. Deploy in staged order: **database/functions → admin → public portals → mobile → IoT**.
 4. For breaking API changes, create versioned endpoints (e.g., `device-config-v2`) and support both versions during transition.
 5. Record releases in root `CHANGELOG.md` following Keep a Changelog format and SemVer.
-6. Tag releases when merging to `main` with pattern: `v<major>.<minor>.<patch>`.
+6. Tag releases when merging to `main` with pattern: `<major>.<minor>.<patch>`.
 7. Use path-filtered CI: each workflow job triggers only when its app directory is modified.
 
 ##### Reference Implementation

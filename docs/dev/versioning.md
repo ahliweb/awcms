@@ -178,7 +178,7 @@ git add . && git commit -m "fix: resolve critical auth bug"
 # Merge to main AND develop
 git checkout main && git merge hotfix/fix-critical-bug
 git checkout develop && git merge hotfix/fix-critical-bug
-git tag v2.32.1
+git tag 2.32.1
 git push origin main develop --tags
 ```
 
@@ -362,7 +362,7 @@ Production incidents require immediate, client-specific rollback strategies:
 - [ ] Bump version in relevant `package.json` / `pubspec.yaml`
 - [ ] Update `CHANGELOG.md` with release notes
 - [ ] Merge `develop` → `main` via PR
-- [ ] Tag release: `git tag v4.0.0 && git push --tags`
+- [ ] Tag release: `git tag 4.0.0 && git push origin 4.0.0`
 - [ ] GitHub Actions deploys web portals automatically
 - [ ] Monitor error logs during deployment sequence
 ```
