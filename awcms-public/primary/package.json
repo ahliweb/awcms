@@ -96,6 +96,9 @@
     "yauzl": "^3.2.1",
     "flatted": ">=3.4.2",
     "yaml@<2.8.3": "2.8.3",
+    "yaml-language-server": {
+      "yaml": "2.8.3"
+    },
     "@astrolib/analytics": {
       "astro": "^6.0.4"
     },
