@@ -41,7 +41,7 @@
 		"@astrojs/tailwind": "^6.0.2",
 		"@faker-js/faker": "^7.6.0",
 		"apexcharts": "^3.37.2",
-		"astro": "^5.16.9",
+		"astro": "^5.18.1",
 		"flowbite": "^2.1.1",
 		"flowbite-typography": "^1.0.3",
 		"shiki": "^0.14.1",
