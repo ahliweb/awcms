@@ -175,6 +175,7 @@ function mergeBlogTranslation(
 
 export interface PageData {
   id: string;
+  tenant_id: string | null;
   title: string;
   slug: string;
   content: string | null;
@@ -263,7 +264,10 @@ export async function getPageBySlug(
       query = query.is("tenant_id", null);
     }
 
-    return query.order("published_at", { ascending: false }).limit(1).maybeSingle();
+    return query
+      .order("published_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
   };
 
   let { data, error } = await fetchPage(tenantId);
@@ -348,11 +352,11 @@ export async function getPageByType(
 ): Promise<PageData | null> {
   const fetchPageByType = async (scopeTenantId?: string | null) => {
     let query = supabase
-    .from("pages")
-    .select("*")
-    .eq("page_type", pageType)
-    .eq("status", "published")
-    .is("deleted_at", null);
+      .from("pages")
+      .select("*")
+      .eq("page_type", pageType)
+      .eq("status", "published")
+      .is("deleted_at", null);
 
     if (scopeTenantId) {
       query = query.eq("tenant_id", scopeTenantId);
@@ -360,7 +364,10 @@ export async function getPageByType(
       query = query.is("tenant_id", null);
     }
 
-    return query.order("published_at", { ascending: false }).limit(1).maybeSingle();
+    return query
+      .order("published_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
   };
 
   let { data, error } = await fetchPageByType(tenantId);

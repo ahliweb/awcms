@@ -178,11 +178,36 @@ export const footerData = {
     },
   ],
   secondaryLinks: [
-    { text: "footer.terms", href: getPermalink("/p/terms"), target: "_blank", popup: true },
-    { text: "footer.privacy", href: getPermalink("/p/privacy"), target: "_blank", popup: true },
-    { text: "Cookie Policy", href: getPermalink("/p/cookie-policy"), target: "_blank", popup: true },
-    { text: "Licensing", href: getPermalink("/p/licensing"), target: "_blank", popup: true },
-    { text: "footer.contact", href: getPermalink("/p/contact"), target: "_blank", popup: true },
+    {
+      text: "footer.terms",
+      href: getPermalink("/p/terms"),
+      target: "_blank",
+      popup: true,
+    },
+    {
+      text: "footer.privacy",
+      href: getPermalink("/p/privacy"),
+      target: "_blank",
+      popup: true,
+    },
+    {
+      text: "Cookie Policy",
+      href: getPermalink("/p/cookie-policy"),
+      target: "_blank",
+      popup: true,
+    },
+    {
+      text: "Licensing",
+      href: getPermalink("/p/licensing"),
+      target: "_blank",
+      popup: true,
+    },
+    {
+      text: "footer.contact",
+      href: getPermalink("/p/contact"),
+      target: "_blank",
+      popup: true,
+    },
   ],
   socialLinks: [
     {

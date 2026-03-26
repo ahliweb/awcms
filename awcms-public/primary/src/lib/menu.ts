@@ -302,32 +302,39 @@ export function mapMenuItemsToHeaderLinks(items: MenuItem[]): HeaderLink[] {
 
 export function mapMenuItemsToFooterLinks(items: MenuItem[]) {
   const isPopupPage = (href?: string) =>
-    Boolean(href && [
-      "/p/terms",
-      "/p/privacy",
-      "/p/licensing",
-      "/p/cookie-policy",
-      "/p/contact",
-      "/en/p/terms",
-      "/en/p/privacy",
-      "/en/p/licensing",
-      "/en/p/cookie-policy",
-      "/en/p/contact",
-      "/id/p/terms",
-      "/id/p/privacy",
-      "/id/p/licensing",
-      "/id/p/cookie-policy",
-      "/id/p/contact",
-    ].includes(href));
+    Boolean(
+      href &&
+      [
+        "/p/terms",
+        "/p/privacy",
+        "/p/licensing",
+        "/p/cookie-policy",
+        "/p/contact",
+        "/en/p/terms",
+        "/en/p/privacy",
+        "/en/p/licensing",
+        "/en/p/cookie-policy",
+        "/en/p/contact",
+        "/id/p/terms",
+        "/id/p/privacy",
+        "/id/p/licensing",
+        "/id/p/cookie-policy",
+        "/id/p/contact",
+      ].includes(href),
+    );
 
   return items.map((item) => ({
     title: item.title,
-    links: (item.children || []).map((child) => ({
-      text: child.title,
-      href: child.url || "#",
-      target: isPopupPage(child.url) ? "_blank" : undefined,
-      popup: isPopupPage(child.url),
-    })),
+    links: (item.children || []).map((child) => {
+      const childUrl = child.url ?? undefined;
+
+      return {
+        text: child.title,
+        href: child.url || "#",
+        target: isPopupPage(childUrl) ? "_blank" : undefined,
+        popup: isPopupPage(childUrl),
+      };
+    }),
   }));
 }
 
