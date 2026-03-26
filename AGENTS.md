@@ -903,24 +903,24 @@ For standardized AI-assisted development workflows, see:
 
 This section provides structured, logical, detailed, and comprehensive explanations for all ten AWCMS benchmark topics.
 Each topic follows a consistent six-part structure: Objective → Required Inputs → Workflow → Reference Implementation → Validation Checklist → Failure Modes and Guardrails.
-Topics are ordered by priority (lowest score first).
+Current benchmark snapshot from Context7: overall score `92.3/100` (generated 3 days ago in the provided benchmark view).
 
 ### Context7 Benchmark Score Profile
 
 | # | Benchmark Topic | Score | Target | Status |
 | --- | --- | --- | --- | --- |
-| 8 | Cloudflare Worker route for custom business logic | 46/100 | 92+ | Active — needs full lifecycle: create → test → deploy → verify |
-| 7 | User login and registration with Supabase Auth | 79/100 | 92+ | Active — needs dual-flow (register + login), 2FA, tenant assignment |
-| 6 | ESP32 IoT device configuration mechanism | 81/100 | 92+ | Active — needs full config push/apply/persist lifecycle |
-| 10 | Monorepo versioning and independent deployment | 81/100 | 92+ | Active — needs additive schema strategy, path-filtered CI |
-| 9 | Fine-grained ABAC authorization beyond basic RLS | 83/100 | 92+ | Active — needs ABAC-to-RLS bridge with ownership semantics |
-| 4 | Astro Public Portal static content rendering | 87/100 | 92+ | Active — needs build-time tenant env, published-only queries |
-| 5 | Flutter secure real-time content retrieval | 90/100 | 92+ | Stabilized — fallback path, session gate, tenant/status filters |
-| 2 | Tenant onboarding and isolation | 92/100 | 92+ | Stabilized — full onboarding lifecycle, idempotency, isolation checks |
-| 1 | Define new content type schema (Supabase) | 93/100 | 92+ | Stabilized — schema lifecycle, indexes, RLS policy set |
-| 3 | Admin Panel content form (React) | 94/100 | 92+ | Stabilized — permission gate, author mapping, duplicate handling |
+| 1 | Define new content type schema (Supabase) | 96/100 | 92+ | Stabilized — schema lifecycle, indexes, RLS policy set |
+| 2 | Tenant onboarding and isolation | 91/100 | 92+ | Near target — keep idempotency, isolation, and onboarding verification tight |
+| 3 | Admin Panel content form (React) | 92/100 | 92+ | Stabilized — permission gate, author mapping, duplicate handling |
+| 4 | Astro Public Portal static content rendering | 90/100 | 92+ | Active — keep build-time tenant env and published-only query discipline |
+| 5 | Flutter secure real-time content retrieval | 87/100 | 92+ | Active — improve resilience, tenant filtering, and fallback behavior |
+| 6 | ESP32 IoT device configuration mechanism | 94/100 | 92+ | Stabilized — config push/apply/persist lifecycle covered |
+| 7 | User login and registration with Supabase Auth | 87/100 | 92+ | Active — continue dual-flow auth, 2FA, and tenant assignment hardening |
+| 8 | Cloudflare Worker route for custom business logic | 97/100 | 92+ | Stabilized — lifecycle and verification path covered |
+| 9 | Fine-grained ABAC authorization beyond basic RLS | 96/100 | 92+ | Stabilized — ABAC-to-RLS bridge with ownership semantics covered |
+| 10 | Monorepo versioning and independent deployment | 93/100 | 92+ | Stabilized — additive schema strategy and path-filtered CI covered |
 
-#### 1) Tenant Onboarding and Isolation in AWCMS (83/100)
+#### 1) Tenant Onboarding and Isolation in AWCMS (91/100)
 
 ##### Objective
 
@@ -1093,7 +1093,7 @@ app.post('/functions/v1/platform-tenant-onboard', async (c) => {
 - **Failure:** Missing tenant assignment on first login. **Guardrail:** enforce onboarding trigger/profile sync checks.
 - **Failure:** Privileged endpoint abuse. **Guardrail:** enforce platform permission check and audit every create attempt.
 
-#### 2) Define a New Content Type Schema in AWCMS (90/100)
+#### 2) Define a New Content Type Schema in AWCMS (96/100)
 
 ##### Objective
 
@@ -1198,7 +1198,7 @@ with check (tenant_id = public.current_tenant_id());
 - **Failure:** Slug collisions after restore. **Guardrail:** partial unique index + restore conflict handling.
 - **Failure:** Query latency growth on listing pages. **Guardrail:** tenant/status/date index and pagination.
 
-#### 3) Flutter Secure Real-Time or Near-Real-Time Retrieval (90/100)
+#### 3) Flutter Secure Real-Time or Near-Real-Time Retrieval (87/100)
 
 ##### Objective
 
@@ -1338,7 +1338,7 @@ class _LiveAnnouncementsWidgetState extends State<LiveAnnouncementsWidget> {
 - **Failure:** Draft leakage to public users. **Guardrail:** mandatory `status = published` filter.
 - **Failure:** Empty screen on realtime outage. **Guardrail:** fallback fetch path.
 
-#### 4) Admin Tenant Content Form (React) (97/100)
+#### 4) Admin Tenant Content Form (React) (92/100)
 
 ##### Objective
 
@@ -1474,7 +1474,7 @@ export default function CreateBlogPostForm() {
 - **Failure:** Posting directly as `published`. **Guardrail:** default `draft`, publish action separated by permission.
 - **Failure:** Silent insert failures. **Guardrail:** explicit toast/error branch and loading reset.
 
-#### 5) Fine-Grained Authorization Beyond Basic RLS (95/100)
+#### 5) Fine-Grained Authorization Beyond Basic RLS (96/100)
 
 ##### Objective
 
@@ -1564,7 +1564,7 @@ if (!hasPermission("tenant.blog.update")) {
 - **Failure:** Frontend-only security assumptions. **Guardrail:** policy tests for API/database direct access.
 - **Failure:** Guessable route IDs for protected content. **Guardrail:** signed ID route params (`encodeRouteParam`, `useSecureRouteParam`).
 
-#### 6) Cloudflare Worker Route for Custom Business Logic (46/100)
+#### 6) Cloudflare Worker Route for Custom Business Logic (97/100)
 
 ##### Objective
 
@@ -1729,7 +1729,7 @@ npx wrangler secret put TURNSTILE_SECRET_KEY
 - **Failure:** Route not found after deploy. **Guardrail:** verify the deployed Worker URL and route path in `awcms-edge/src/index.ts` and the target client env config.
 - **Failure:** Assuming local `wrangler dev` writes are visible in remote R2. **Guardrail:** local R2 is isolated by default; use the maintained `sync:r2:remote`, `sync:r2:local`, and cleanup commands when reconciliation is required.
 
-#### 7) User Login and Registration with Supabase Auth (79/100)
+#### 7) User Login and Registration with Supabase Auth (87/100)
 
 ##### Objective
 
@@ -1878,7 +1878,7 @@ useEffect(() => {
 - **Failure:** Password too weak. **Guardrail:** Supabase enforces minimum length; UI validates before submit.
 - **Failure:** Email confirmation not received. **Guardrail:** resend confirmation endpoint with rate limiting.
 
-#### 8) Astro Public Portal Static Content Rendering (87/100)
+#### 8) Astro Public Portal Static Content Rendering (90/100)
 
 ##### Objective
 
@@ -1986,7 +1986,7 @@ const { blog } = Astro.props;
 - **Failure:** XSS from imported HTML. **Guardrail:** `PuckRenderer` uses `sanitize-html` with allowlisted tags.
 - **Failure:** Stale content after publish. **Guardrail:** rebuild triggered by CI on content update webhook or manual deploy.
 
-#### 9) ESP32 IoT Device Configuration Mechanism (81/100)
+#### 9) ESP32 IoT Device Configuration Mechanism (94/100)
 
 ##### Objective
 
@@ -2142,7 +2142,7 @@ pio device monitor        # serial output at 115200 baud
 - **Failure:** WiFi unavailable. **Guardrail:** device boots with persisted config and retries WiFi connection.
 - **Failure:** Breaking config schema changes. **Guardrail:** use versioned endpoints (`device-config-v2`) for incompatible changes.
 
-#### 10) Monorepo Versioning and Independent Deployment (81/100)
+#### 10) Monorepo Versioning and Independent Deployment (93/100)
 
 ##### Objective
 
