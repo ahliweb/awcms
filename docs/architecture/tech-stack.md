@@ -68,10 +68,10 @@ Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | Framework | Flutter | 3.38.5 | Mobile app |
-| State | Riverpod | 3.1.0 | State management |
-| Supabase | supabase_flutter | 2.8.0 | Auth and data |
-| Local DB | Drift | 2.30.0 | Offline cache |
-| Routing | GoRouter | 17.0.1 | Navigation |
+| State | flutter_riverpod | `^2.6.1` | State management |
+| Supabase | supabase_flutter | `^2.8.0` | Auth and data |
+| Local DB | drift + drift_flutter | `^2.32.0` / `^0.3.0` | Offline cache |
+| Routing | go_router | `^17.1.0` | Navigation |
 
 ### IoT (awcms-esp32/primary)
 

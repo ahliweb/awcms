@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Firmware for ESP32 devices sending telemetry and configuration updates through AWCMS edge endpoints.
+Firmware for ESP32 devices sending telemetry and configuration updates through the current AWCMS device stack. The checked-in firmware still uses direct Supabase publishable-key flows for some sync paths, while new privileged device workflows should prefer Worker-mediated endpoints.
 
 ## Prerequisites
 
@@ -42,6 +42,7 @@ AUTH_PASSWORD=...
 - Use build-time secrets from `.env`.
 - Keep `.env`, generated firmware credentials, and any `secrets.h`-style files out of Git.
 - Device builds must never include `SUPABASE_SECRET_KEY`.
+- If you introduce a Worker-mediated device route, document that endpoint separately and keep the device on publishable-key credentials only.
 
 ## References
 

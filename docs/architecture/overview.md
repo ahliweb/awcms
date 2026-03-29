@@ -56,7 +56,7 @@ graph TD
         AdminPanel --> Puck
     end
 
-    subgraph "Backend Layer (Supabase)"
+    subgraph "Backend Layer (Supabase + Cloudflare)"
         RPC
         DB[(PostgreSQL)]
         Auth[GoTrue Auth]

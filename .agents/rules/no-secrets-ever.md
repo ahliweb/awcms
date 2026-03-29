@@ -34,7 +34,7 @@ The following **MUST** be in `.gitignore`:
 
 - ❌ Commit `.env` files with real values
 - ❌ Print secrets in console.log, error messages, or audit logs
-- ❌ Hardcode `SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, or any API key
+- ❌ Hardcode `SUPABASE_SECRET_KEY`, publishable keys, or any API key
 - ❌ Pass secrets via URL query parameters
 - ❌ Store secrets in database tables without encryption
 
@@ -55,8 +55,8 @@ git ls-files '*.env*' | grep -v '.example'
 | Variable | Location | Client-Exposed |
 |----------|----------|----------------|
 | `VITE_SUPABASE_URL` | `awcms/.env` | Yes (public) |
-| `VITE_SUPABASE_ANON_KEY` | `awcms/.env` | Yes (public, safe) |
-| `SUPABASE_SECRET_KEY` | Edge Functions env only | **Never** |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `awcms/.env` | Yes (public, safe) |
+| `SUPABASE_SECRET_KEY` | Cloudflare Worker / approved server runtime only | **Never** |
 | `SUPABASE_DB_URL` | CI / local dev only | **Never** |
 | `CONTEXT7_API_KEY` | MCP config only | **Never** |
 

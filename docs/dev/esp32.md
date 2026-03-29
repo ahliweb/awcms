@@ -4,11 +4,11 @@
 
 ## 1. Overview
 
-AWCMS manages ESP32 devices remotely via Cloudflare Workers and REST APIs. The firmware:
+AWCMS manages ESP32 devices through a mix of direct Supabase publishable-key flows and compatibility HTTP endpoints. The current firmware source:
 
 - Connects to WiFi.
-- Polls or subscribes to AWCMS configuration endpoints to receive pushed settings.
-- Reports telemetry back through scoped REST endpoints.
+- Polls a configured device-configuration endpoint.
+- Reports telemetry and status through publishable-key Supabase flows in the current firmware implementation.
 - **Never ships secrets**; it authenticates using a per-device publishable key.
 
 ---
@@ -51,21 +51,21 @@ Deliver device configuration updates securely via a Cloudflare Worker route, app
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
 | `device_token` | Device provisioning | Yes | Publishable per-device token |
-| `device-config` URL | Admin config | Yes | Worker compatibility route URL |
+| Config endpoint URL | Device config | Yes | Configure an actual endpoint before deployment; the example route below is illustrative |
 | `polling_interval_sec` | Config payload | Yes | Device checks interval |
 | Config schema | Server response | Yes | JSON payload with known keys |
 
 ### Workflow
 
 1. Device boots, connects to WiFi, and loads last-known config from `Preferences`.
-2. Device polls `/functions/v1/device-config` with `Authorization: Bearer <device_token>`.
-3. Worker route validates token, resolves tenant/device, and returns scoped config.
+2. Device polls its configured endpoint with `Authorization: Bearer <device_token>`.
+3. If a Worker-backed endpoint is used, it validates token, resolves tenant/device, and returns scoped config.
 4. Firmware applies config and persists it for offline recovery.
 5. When `firmware_version` increases, device triggers OTA update.
 
 ### Reference Implementation
 
-AWCMS pushes configuration to devices via a Cloudflare Worker compatibility endpoint (`/functions/v1/device-config`). The firmware's `ConfigManager` polls this endpoint on a configurable interval and applies any changes immediately.
+The example below shows a compatibility HTTP endpoint pattern. Verify the live route before copying it into firmware because `awcms-edge/src/index.ts` does not currently expose a maintained `device-config` route.
 
 ### 4.1 `ConfigManager.h`
 
@@ -191,8 +191,8 @@ void loop() {
 ```cpp
 #pragma once
 
-// Cloudflare Worker compatibility route for device configuration
-// Replace {EDGE_BASE_URL} with your deployed Worker base URL
+// Example compatibility route for device configuration.
+// Replace this with the actual deployed endpoint you operate for devices.
 #define CONFIG_ENDPOINT "https://edge.example.com/functions/v1/device-config"
 ```
 
@@ -227,7 +227,9 @@ void loop() {
 
 ## 5. Reporting Telemetry Back
 
-Devices POST sensor data or status updates to a scoped REST endpoint secured by the device token:
+The checked-in firmware still contains direct Supabase publishable-key telemetry/status helpers in `awcms-esp32/primary/include/supabase_client.h`. That is the implementation-backed baseline today. For new privileged device workflows, prefer a Worker-mediated endpoint.
+
+Current direct Supabase example:
 
 ```cpp
 void reportTelemetry(float temperature, float humidity) {
@@ -255,7 +257,7 @@ void reportTelemetry(float temperature, float humidity) {
 |------|--------|
 | Only publishable keys on device | Secret keys must never leave the server |
 | `secrets.h` in `.gitignore` | Prevents credential exposure |
-| Worker route validates device token | Server-side control; revoke compromised tokens via AWCMS Admin |
+| Worker route validates device token when used | Server-side control for privileged compatibility endpoints |
 | No plaintext WiFi fallback | Prefer WPA2 networks; log WiFi errors and halt |
 
 ---

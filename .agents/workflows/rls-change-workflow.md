@@ -34,17 +34,17 @@ description: RLS and ABAC policy change procedure with verification
 5. **Add permission key** (if new):
 
    ```sql
-   INSERT INTO permissions (key, description, scope)
-   VALUES ('scope.resource.action', 'Description', 'scope')
-   ON CONFLICT (key) DO NOTHING;
+   INSERT INTO public.permissions (name, description, resource, action)
+   VALUES ('scope.resource.action', 'Description', 'resource', 'action')
+   ON CONFLICT (name) DO NOTHING;
    ```
 
 6. **Assign to roles**:
 
    ```sql
    INSERT INTO role_permissions (role_id, permission_id)
-   SELECT r.id, p.id FROM roles r, permissions p
-   WHERE r.name = 'editor' AND p.key = 'scope.resource.action'
+   SELECT r.id, p.id FROM public.roles r, public.permissions p
+   WHERE r.name = 'editor' AND p.name = 'scope.resource.action'
    ON CONFLICT DO NOTHING;
    ```
 

@@ -340,7 +340,7 @@ Defined in `supabase/migrations/20260319120000_create_queue_dead_letters.sql`.
 | `replayed_by` | `uuid?` | Admin user ID who triggered the replay |
 | `replayed_job_id` | `text?` | New `job_id` assigned to the replayed message |
 
-RLS is enabled. The table is write-only for the service role (DLQ consumer via `SUPABASE_SECRET_KEY`) and read-only for platform admins via the admin API.
+RLS is enabled. The DLQ consumer and replay flow write through the admin client (`SUPABASE_SECRET_KEY` path), while platform-admin reads remain available through the admin API and the `queue_dead_letters_platform_admin_select` policy.
 
 ### Replay Route
 

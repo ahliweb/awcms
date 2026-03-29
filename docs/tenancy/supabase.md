@@ -174,7 +174,7 @@ Run from repo root.
 - `supabase/migrations/` is the canonical authoring source.
 - `awcms/supabase/migrations/` is a required mirror used by CI linting.
 - Every migration change must be mirrored with identical filename and content.
-- Current inventory shows `150` migration files in both roots; keep using the verification script because matching counts alone do not guarantee filename/content alignment.
+- Current inventory shows `152` migration files in both roots; keep using the verification script because matching counts alone do not guarantee filename/content alignment.
 - Validate parity before merge:
 
 ```bash

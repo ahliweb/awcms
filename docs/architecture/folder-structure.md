@@ -26,7 +26,7 @@ awcms-dev/
 ├── awcms/                      # Admin panel (React + Vite)
 ├── awcms-public/               # Public portal (Astro)
 │   └── primary/                # Astro project
-├── awcms-mcp/                   # MCP tools (Context7, Supabase)
+├── awcms-mcp/                  # MCP tools (Context7, Supabase)
 ├── awcms-mobile/               # Flutter app
 │   └── primary/
 ├── awcms-esp32/                # ESP32 firmware
@@ -34,8 +34,8 @@ awcms-dev/
 ├── awcms-ext/                  # External extensions
 ├── awcms-edge/                 # Cloudflare Worker API and edge logic
 ├── supabase/                   # Canonical migrations and SQL artifacts
-├── DOCS_INDEX.md               # Monorepo docs index
-└── AGENTS.md                   # AI agent rules (SSOT)
+├── DOCS_INDEX.md              # Monorepo docs index
+└── AGENTS.md                  # AI agent rules (SSOT)
 ```
 
 ### Admin Panel (`awcms/`)
@@ -50,7 +50,7 @@ awcms/
 │   ├── pages/                  # Route components
 │   ├── plugins/                # Core plugins
 │   └── templates/              # Admin templates
-├── supabase/                   # Legacy supabase artifacts (see docs/tenancy/supabase.md)
+├── supabase/                   # Required mirrored migrations/config for admin and CI tooling
 ├── package.json
 └── vite.config.js
 ```

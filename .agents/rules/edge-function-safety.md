@@ -1,23 +1,21 @@
 ---
-description: Enforce Supabase-only backend architecture — no Node.js servers permitted
+description: Enforce approved server-side runtimes — no standalone Node.js servers permitted
 ---
 
-# Edge Function Safety
+# Edge Runtime Safety
 
 > **Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1.3
 
 ## Rule
 
-All backend logic MUST reside in **Supabase** (PostgreSQL functions + Edge Functions).
-Standalone Node.js servers are **FORBIDDEN**. This is a non-negotiable architectural
-constraint that ensures the platform stays within the Supabase security and deployment model.
+Backend logic MUST reside in approved AWCMS server-side runtimes: **Supabase** (PostgreSQL functions, RLS, ABAC) and **Cloudflare Workers** in `awcms-edge/` for edge HTTP orchestration. Standalone Node.js servers are **FORBIDDEN**.
 
 ## Allowed Backend Patterns
 
 | Pattern | Location | Runtime |
 |---------|----------|---------|
 | PostgreSQL functions (PL/pgSQL) | `supabase/migrations/*.sql` | Supabase Postgres |
-| Edge Functions (Deno/TypeScript) | `supabase/functions/*/index.ts` | Supabase Edge Runtime |
+| Cloudflare Worker routes / queue consumers | `awcms-edge/src/**/*.ts` | Cloudflare Workers |
 | Database triggers | Migration files | Supabase Postgres |
 | RLS policies | Migration files | Supabase Postgres |
 
@@ -43,13 +41,12 @@ constraint that ensures the platform stays within the Supabase security and depl
 
 1. **Dependency review**: Reject PRs adding `express`, `fastify`, `koa`, `hapi`,
    `@nestjs/*` or similar server framework dependencies.
-2. **Architecture review**: Any new API endpoint must be implemented as a Supabase Edge
-   Function or PostgreSQL function, not a standalone server.
+2. **Architecture review**: Any new API endpoint must be implemented as a Cloudflare Worker route in `awcms-edge/` or a PostgreSQL function/RPC path, not a standalone server.
 3. **CI check**: No `node server.js` or equivalent in production deployment scripts.
 
 ## Rationale
 
-- Supabase handles connection pooling, authentication, and RLS enforcement
-- Edge Functions run in Deno with built-in isolation and security
+- Supabase handles connection pooling, authentication, RLS, and ABAC enforcement
+- Cloudflare Workers provide the maintained edge HTTP runtime for privileged orchestration and integrations
 - Eliminates infrastructure maintenance burden of standalone servers
 - Maintains consistency with multi-tenant RLS model

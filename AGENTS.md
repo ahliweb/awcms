@@ -1998,7 +1998,7 @@ Deliver device configuration updates securely via the Cloudflare Edge API, apply
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
 | `device_token` | Device provisioning (per-device publishable key) | Yes | Never the secret key |
-| `device-config` URL | Supabase Functions URL | Yes | `https://<project>.supabase.co/functions/v1/device-config` |
+| Config endpoint | Device HTTP endpoint | Yes | Example compatibility path only; verify the live device route before implementation |
 | `polling_interval_sec` | Config payload from server | Yes | Controls fetch frequency |
 | Config schema | Server JSON response | Yes | Known keys: `led_enabled`, `brightness_level`, `firmware_version` |
 | `secrets.h` | Local gitignored file | Yes | `WIFI_SSID`, `WIFI_PASS`, `DEVICE_TOKEN` |
@@ -2006,8 +2006,8 @@ Deliver device configuration updates securely via the Cloudflare Edge API, apply
 ##### Workflow
 
 1. Device boots, connects to WiFi, and loads last-known config from ESP32 `Preferences` (NVS).
-2. Device polls `/functions/v1/device-config` with `Authorization: Bearer <device_token>`.
-3. Edge Function validates the device token, resolves the tenant/device context, and returns scoped configuration JSON.
+2. Device polls its configured HTTP endpoint with `Authorization: Bearer <device_token>`.
+3. If a Worker-backed endpoint is used, it validates the device token, resolves the tenant/device context, and returns scoped configuration JSON.
 4. Firmware parses the JSON response, applies config to hardware (LED, brightness, intervals).
 5. Config is persisted to `Preferences` for offline recovery on next boot.
 6. When `firmware_version` in the payload increases, device triggers OTA update via `Update.h`.

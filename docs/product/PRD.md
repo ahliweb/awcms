@@ -97,11 +97,12 @@ graph TD
     Member[Member / Subscriber] --> Mobile[Mobile App - Flutter]
     Operator[Device Operator] --> IoT[ESP32 / Devices]
 
-    Admin --> Supabase[(Supabase: Auth + Postgres + Storage + Realtime)]
+    Admin --> Supabase[(Supabase: Auth + Postgres + RLS + Realtime)]
     Public --> Supabase
     Mobile --> Supabase
     IoT --> Edge[Cloudflare Workers / Edge Logic]
     Edge --> Supabase
+    Edge --> R2[Cloudflare R2]
 
     Admin --> AI[OpenClaw AI Gateway]
     AI --> Models[Cloud or Local Models]

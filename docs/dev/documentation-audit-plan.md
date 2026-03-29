@@ -2,9 +2,9 @@
 
 > Owner: Documentation Steward (AI + Maintainers)
 >
-> Audit Cycle: 2026-03-25 full repository re-baseline
+> Audit Cycle: 2026-03-29 full repository re-baseline
 >
-> Last Updated: 2026-03-25
+> Last Updated: 2026-03-29
 >
 > Primary Authority Chain: `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md` -> implementation/package docs
 
@@ -25,14 +25,14 @@ This cycle explicitly covers:
 - dependency/version drift against live manifests and current Context7 guidance
 - implementation drift where docs no longer match current runtime behavior, current database shape, or current edge/storage flows
 
-## Current Baseline (Verified 2026-03-25)
+## Current Baseline (Verified 2026-03-29)
 
 | Surface | Verified State | Evidence Source |
 | --- | --- | --- |
-| Tracked Markdown files | `146` | `git ls-files '*.md' | wc -l` |
-| Tracked docs files | `84` | `git ls-files 'docs/**/*.md' | wc -l` |
-| Root Supabase migrations | `150` | `ls supabase/migrations/*.sql | wc -l` |
-| Mirrored admin/CI migrations | `150` | `ls awcms/supabase/migrations/*.sql | wc -l` |
+| Tracked Markdown files | `686` | `git ls-files '*.md' | wc -l` |
+| Tracked docs files | `90` | `git ls-files 'docs/**/*.md' | wc -l` |
+| Root Supabase migrations | `152` | `python3 -c "import pathlib; print(len(list(pathlib.Path('supabase/migrations').glob('*.sql'))))"` |
+| Mirrored admin/CI migrations | `152` | `python3 -c "import pathlib; print(len(list(pathlib.Path('awcms/supabase/migrations').glob('*.sql'))))"` |
 | GitHub workflows | `4` | `ls .github/workflows | wc -l` |
 | Admin package scripts | `11` | `awcms/package.json` |
 | Public primary package scripts | `13` | `awcms-public/primary/package.json` |
@@ -52,8 +52,8 @@ This cycle explicitly covers:
 
 | ID | Severity | Finding | Evidence | Required Action |
 | --- | --- | --- | --- | --- |
-| PLAN-301 | Resolved | Migration mirror parity was restored: root migrations and mirrored migrations are both `150` | `scripts/verify_supabase_migration_consistency.sh` now passes after mirroring `20260325120000_add_files_permanent_delete_permission.sql` into `awcms/supabase/migrations/` | Keep parity verification in the standard validation gate |
-| PLAN-302 | Resolved | Documentation audit docs were re-baselined from the older 2026-03-22/2026-03-13 snapshot | `docs/dev/documentation-audit-plan.md`, `docs/dev/documentation-audit-tracker.md` now track the 2026-03-25 cycle | Keep counts, workflow inventory, and parity status current on each pass |
+| PLAN-301 | Resolved | Migration mirror parity is currently restored: root migrations and mirrored migrations are both `152` | `scripts/verify_supabase_migration_consistency.sh` passes with `152/152` parity | Keep parity verification in the standard validation gate |
+| PLAN-302 | Resolved | Documentation audit docs were re-baselined from the older 2026-03-25 snapshot | `docs/dev/documentation-audit-plan.md`, `docs/dev/documentation-audit-tracker.md` now track the 2026-03-29 cycle | Keep counts, workflow inventory, and parity status current on each pass |
 | PLAN-303 | High | Worker operational docs do not yet treat reverse R2 sync and duplicate cleanup as part of the maintained runtime/tooling surface | `awcms-edge/package.json` now includes `sync:r2:local`, `sync:r2:cleanup-local`, `sync:r2:cleanup-remote` | Update Worker, setup, deploy, and storage docs for current local/remote reconciliation workflows |
 | PLAN-304 | High | Repository-wide docs still need a systematic pass for schema accuracy, script validity, dependency drift, dead links, and security wording | `README.md`, `AGENTS.md`, `SYSTEM_MODEL.md`, `DOCS_INDEX.md`, `docs/**`, workspace READMEs | Execute a fresh full-doc audit using current manifests, migrations, workflows, and Context7 guidance |
 | PLAN-305 | Medium | Local/remote R2 behavior and reconciliation steps were undocumented until the new sync utilities landed | `awcms-edge/README.md`, recent Worker/runtime changes | Cascade the current R2 sync/cleanup model into relevant setup, edge, deploy, and storage docs |
@@ -137,7 +137,7 @@ This cycle explicitly covers:
 ## Execution Queue
 
 1. Re-baseline authority docs and package/version references.
-2. Update the tracker with the current `150/150` migration baseline and current workflow/script inventory.
+2. Update the tracker with the current `152/152` migration baseline and current workflow/script inventory.
 3. Keep `20260325120000_add_files_permanent_delete_permission.sql` mirrored in `awcms/supabase/migrations/` and verify parity after each migration change.
 4. Reconcile Worker/runtime docs for `sync:r2:remote`, `sync:r2:local`, `sync:r2:cleanup-local`, and `sync:r2:cleanup-remote`.
 5. Audit schema/security/tenancy docs against the latest migrations and current storage/media behavior.

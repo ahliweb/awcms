@@ -2,7 +2,7 @@
 
 > **Documentation Authority**: `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md`
 >
-> **Last Updated**: 2026-03-25
+> **Last Updated**: 2026-03-29
 >
 > **Primary Goal**: Improve Context7 benchmark scores by using one consistent, evidence-driven answer format.
 
@@ -230,14 +230,14 @@ Receive, apply, and persist tenant-scoped device configuration safely, with OTA 
 | Field | Source | Required | Notes |
 | --- | --- | --- | --- |
 | Device token | Provisioning | Yes | Publishable, per-device |
-| Config endpoint | Worker route URL | Yes | `/functions/v1/device-config` |
+| Config endpoint | Worker route URL | Yes | Example compatibility path only; verify the live device route before implementation |
 | Poll interval | Config payload | Yes | Runtime refresh cadence |
 | Persistent store | Device firmware | Yes | Last-known-good fallback |
 
 #### Workflow (ESP32 device config push/apply)
 
 1. Boot with persisted config.
-2. Poll config endpoint using bearer token.
+2. Poll the configured config endpoint using bearer token.
 3. Validate payload and apply hardware settings.
 4. Persist updated config to local storage.
 5. Trigger OTA path when remote firmware version is newer.
@@ -263,7 +263,7 @@ if (code == 200) {
 
 - Malformed payload: keep previous config and log parse failure.
 - Token leak: server-side revoke and rotate token.
-- Breaking payload format: move to versioned endpoint.
+- Breaking payload format: move to a versioned endpoint (for example `device-config-v2`).
 
 ### 5) Login and registration flow (90/100)
 
