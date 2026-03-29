@@ -11,6 +11,15 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Taxonomy: overhauled the Admin Tags experience under `/cmspanel` with refresh-safe trash sub-slugs, tenant-safe tag mutations, restored page/blog tag synchronization, repaired `sync_resource_tags` for both pages and blogs, module-aware embedded tags management in Blogs and Pages, and a full UI polish across the manager, filters, stats cards, search, and tag editor dialog.
 - Taxonomy: unified the Admin Categories experience under `/cmspanel` with refresh-safe category trash sub-slugs, module-aware embedded category managers for Blogs and Pages, tenant-scoped slug validation, safer platform-admin tenant behavior, and upgraded category scope UX to reduce cross-module taxonomy drift.
 
+## [4.5.1] - 2026-03-29
+
+Applies to: `awcms@4.5.1`
+
+### Changed
+
+- Documentation: completed the repository-wide documentation audit pass across authority, architecture, tenancy, workflow, module, CI, mobile, ESP32, and benchmark docs so runtime boundaries, env naming, version references, and service paths match the current AWCMS implementation.
+- Admin UI: realigned `awcms/src/lib/version.js` with the canonical admin package manifest for the `4.5.1` patch release.
+
 ## [4.5.0] - 2026-03-25
 
 Applies to: `awcms@4.5.0`, `@onwidget/astrowind@4.4.0`, `smanda-pangkalan-bun@4.4.0`, `awcms-mcp@4.4.0`

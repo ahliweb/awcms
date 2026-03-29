@@ -180,7 +180,7 @@ export const deactivate = async (supabase, tenantId) => {
 export { default as AnalyticsDashboard } from './components/AnalyticsDashboard';
 ```
 
-**Compatibility Rule**: `awcms_version` supports exact matches (for example `4.5.0`) or minimum constraints (for example `>=4.0.0`). Prefer ranges that reflect the actual compatibility window you have tested.
+**Compatibility Rule**: `awcms_version` supports exact matches (for example `4.5.1`) or minimum constraints (for example `>=4.0.0`). Prefer ranges that reflect the actual compatibility window you have tested.
 
 ---
 

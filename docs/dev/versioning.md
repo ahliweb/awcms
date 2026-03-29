@@ -193,7 +193,7 @@ Because each client app has its own `package.json` with an independent `version`
 ```bash
 # Bump only the Admin Panel (e.g., after a UI-only change)
 npm version minor --prefix awcms
-# → awcms/package.json: "version": "4.5.0" (example current minor target)
+# → awcms/package.json: "version": "4.5.1" (example current admin version)
 
 # Bump only the Public Portal
 npm version patch --prefix awcms-public/primary
@@ -207,12 +207,12 @@ The **root** `CHANGELOG.md` is the single source of truth for the overall projec
 ```markdown
 ## [Unreleased]
 
-## [4.5.0] - 2026-03-25
+## [4.5.1] - 2026-03-29
 
-Applies to: `awcms@4.5.0`, `@onwidget/astrowind@4.4.0`, `smanda-pangkalan-bun@4.4.0`, `awcms-mcp@4.4.0`
+Applies to: `awcms@4.5.1`
 
 ### Changed
-- Architecture: aligned the maintained runtime split across docs so Supabase remains the system of record, Cloudflare Workers remain the edge runtime, and Cloudflare R2 remains the object storage layer.
+- Documentation: aligned authority, architecture, tenancy, workflow, and module docs with the current AWCMS runtime and version references.
 ```
 
 ---
