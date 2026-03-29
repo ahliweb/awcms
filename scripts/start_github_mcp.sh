@@ -81,4 +81,4 @@ fi
 
 export GITHUB_PERSONAL_ACCESS_TOKEN="${token}"
 
-exec docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server
+exec docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server stdio "$@"
