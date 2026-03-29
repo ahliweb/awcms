@@ -93,7 +93,8 @@ function ExtensionsManager() {
     }
 
     if (rawActiveTab === 'rbac') {
-      const suffix = activeChildSegment ? `/${activeChildSegment}` : '';
+      const shouldDropLegacySelected = activeChildSegment === 'selected';
+      const suffix = activeChildSegment && !shouldDropLegacySelected ? `/${activeChildSegment}` : '';
       navigate(`/cmspanel/extensions/abac${suffix}`, { replace: true });
       return;
     }

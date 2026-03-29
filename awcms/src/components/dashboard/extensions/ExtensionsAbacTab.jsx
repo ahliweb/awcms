@@ -17,8 +17,8 @@ function ExtensionsAbacTab({
 				>
 					{t('common.back')}
 				</Button>
-				<h3 className="text-xl font-bold text-foreground">Managing ABAC for {selectedForABAC.name}</h3>
-				<p className="text-sm text-muted-foreground">Platform-scope role cards are shown above tenant-dependent role mappings when available.</p>
+				<h3 className="text-xl font-bold text-foreground">{t('extensions.managing_abac_for', { name: selectedForABAC.name })}</h3>
+				<p className="text-sm text-muted-foreground">{t('extensions.abac_scope_hint')}</p>
 				<ExtensionABACIntegration extensionId={selectedForABAC.id} extension={selectedForABAC} />
 			</div>
 		);
@@ -28,7 +28,7 @@ function ExtensionsAbacTab({
 		<div className="rounded-2xl border border-dashed border-border/70 bg-card/55 py-12 text-center">
 			<Shield className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
 			<h3 className="text-lg font-medium text-foreground">{t('extensions.select_extension')}</h3>
-			<p className="text-muted-foreground">Go to the &quot;Installed&quot; tab and click the Shield icon on an extension card.</p>
+			<p className="text-muted-foreground">{t('extensions.select_extension_hint')}</p>
 		</div>
 	);
 }

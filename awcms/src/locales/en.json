@@ -66,6 +66,9 @@
     "deleted": "Deleted",
     "save_failed": "Save Failed",
     "reload_failed": "Reload Failed"
+    ,"previous": "Previous"
+    ,"next": "Next"
+    ,"page_of": "Page {{page}} of {{total}}"
   },
   "auth": {
     "login": "Login",
@@ -551,6 +554,22 @@
     "logs": "System Logs",
     "abac": "ABAC",
     "select_extension": "Select an extension to manage access",
+    "select_extension_hint": "Go to the \"Installed\" tab and click the Shield icon on an extension card.",
+    "managing_abac_for": "Managing ABAC for {{name}}",
+    "abac_scope_hint": "Platform-scope role cards are shown above tenant-dependent role mappings when available.",
+    "abac_description": "Map extension permissions to platform and tenant roles using refresh-safe extension ABAC flows.",
+    "no_custom_permissions": "This extension does not define any custom permissions.",
+    "abac_refresh_safe": "Refresh-safe `/cmspanel/extensions/abac` routing",
+    "abac_role_separation": "Platform and tenant role mappings stay separated",
+    "platform_scope_roles": "Platform-Scope Role Cards",
+    "platform_scope_roles_hint": "Global and privileged roles stay available above tenant-dependent mappings for this extension.",
+    "platform_scope_roles_count": "{{count}} platform-scope roles",
+    "no_platform_roles": "No platform-scope roles are available for this extension mapping.",
+    "platform_roles_pagination": "Showing {{from}} to {{to}} of {{total}} platform-scope roles",
+    "roles_per_page": "{{count}} / page",
+    "tenant_role_management": "Tenant-Dependent Role Management",
+    "current_tenant": "Current tenant",
+    "no_tenant_roles": "No tenant roles are available for the current tenant.",
     "status_active": "Active",
     "status_inactive": "Inactive",
     "activate": "Activate",

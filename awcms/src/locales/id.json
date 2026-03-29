@@ -66,6 +66,9 @@
     "deleted": "Dihapus",
     "save_failed": "Gagal Menyimpan",
     "reload_failed": "Gagal Memuat Ulang"
+    ,"previous": "Sebelumnya"
+    ,"next": "Berikutnya"
+    ,"page_of": "Halaman {{page}} dari {{total}}"
   },
   "auth": {
     "login": "Masuk",
@@ -551,6 +554,22 @@
     "logs": "Log Sistem",
     "abac": "ABAC",
     "select_extension": "Pilih ekstensi untuk mengelola akses",
+    "select_extension_hint": "Buka tab \"Terinstal\" lalu klik ikon Perisai pada kartu ekstensi.",
+    "managing_abac_for": "Mengelola ABAC untuk {{name}}",
+    "abac_scope_hint": "Kartu peran lingkup platform ditampilkan di atas pemetaan peran yang bergantung pada tenant jika tersedia.",
+    "abac_description": "Petakan izin ekstensi ke peran platform dan tenant menggunakan alur ABAC ekstensi yang aman saat refresh.",
+    "no_custom_permissions": "Ekstensi ini tidak mendefinisikan izin kustom.",
+    "abac_refresh_safe": "Routing `/cmspanel/extensions/abac` aman saat refresh",
+    "abac_role_separation": "Pemetaan peran platform dan tenant tetap terpisah",
+    "platform_scope_roles": "Kartu Peran Lingkup Platform",
+    "platform_scope_roles_hint": "Peran global dan privilese tetap tersedia di atas pemetaan yang bergantung pada tenant untuk ekstensi ini.",
+    "platform_scope_roles_count": "{{count}} peran lingkup platform",
+    "no_platform_roles": "Tidak ada peran lingkup platform yang tersedia untuk pemetaan ekstensi ini.",
+    "platform_roles_pagination": "Menampilkan {{from}} sampai {{to}} dari {{total}} peran lingkup platform",
+    "roles_per_page": "{{count}} / halaman",
+    "tenant_role_management": "Manajemen Peran Bergantung Tenant",
+    "current_tenant": "Tenant saat ini",
+    "no_tenant_roles": "Tidak ada peran tenant yang tersedia untuk tenant saat ini.",
     "status_active": "Aktif",
     "status_inactive": "Tidak Aktif",
     "activate": "Aktifkan",

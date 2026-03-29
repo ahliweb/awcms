@@ -267,23 +267,23 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
                <Shield className="h-5 w-5 text-primary" />
                {t('extensions.abac')}
             </CardTitle>
-            <CardDescription>Map extension permissions to platform and tenant roles using refresh-safe extension ABAC flows.</CardDescription>
+            <CardDescription>{t('extensions.abac_description')}</CardDescription>
          </CardHeader>
          <CardContent>
             {extensionPermissions.length === 0 ? (
                <div className="py-8 text-center text-muted-foreground">
-                  This extension does not define any custom permissions.
+                   {t('extensions.no_custom_permissions')}
                </div>
             ) : (
                <div className="space-y-6">
                   <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                      <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
                         <Layers3 className="h-4 w-4 text-primary" />
-                        Refresh-safe `/cmspanel/extensions/abac` routing
+                        {t('extensions.abac_refresh_safe')}
                      </span>
                      <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
                         <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                        Platform and tenant role mappings stay separated
+                        {t('extensions.abac_role_separation')}
                      </span>
                      {resolvedExtension?.name ? (
                         <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
@@ -296,19 +296,23 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
                      <div className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
                         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                            <div>
-                              <h3 className="text-lg font-semibold text-foreground">Platform-Scope Role Cards</h3>
-                              <p className="text-sm text-muted-foreground">Global and privileged roles stay available above tenant-dependent mappings for this extension.</p>
+                               <h3 className="text-lg font-semibold text-foreground">{t('extensions.platform_scope_roles')}</h3>
+                               <p className="text-sm text-muted-foreground">{t('extensions.platform_scope_roles_hint')}</p>
                            </div>
                            <div className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                              {platformRoles.length} platform-scope roles
+                               {t('extensions.platform_scope_roles_count', { count: platformRoles.length })}
                            </div>
                         </div>
 
-                        {renderPermissionsMatrix(paginatedPlatformRoles, 'No platform-scope roles are available for this extension mapping.')}
+                        {renderPermissionsMatrix(paginatedPlatformRoles, t('extensions.no_platform_roles'))}
 
                         <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
                            <div className="text-sm text-muted-foreground">
-                              Showing {paginatedPlatformRoles.length === 0 ? 0 : ((platformRolesPage - 1) * platformRolesPerPage) + 1} to {Math.min(platformRolesPage * platformRolesPerPage, platformRoles.length)} of {platformRoles.length} platform-scope roles
+                               {t('extensions.platform_roles_pagination', {
+                                  from: paginatedPlatformRoles.length === 0 ? 0 : ((platformRolesPage - 1) * platformRolesPerPage) + 1,
+                                  to: Math.min(platformRolesPage * platformRolesPerPage, platformRoles.length),
+                                  total: platformRoles.length,
+                               })}
                            </div>
                            <div className="flex flex-wrap items-center gap-2">
                               <select
@@ -320,15 +324,15 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
                                  className="h-10 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground shadow-sm"
                               >
                                  {[3, 6, 9, 12].map((value) => (
-                                    <option key={value} value={value}>{value} / page</option>
+                                     <option key={value} value={value}>{t('extensions.roles_per_page', { count: value })}</option>
                                  ))}
                               </select>
                               <Button variant="outline" className="rounded-xl" disabled={platformRolesPage <= 1} onClick={() => setPlatformRolesPage((page) => Math.max(1, page - 1))}>
-                                 Previous
+                                 {t('common.previous')}
                               </Button>
-                              <span className="px-2 text-sm text-muted-foreground">Page {platformRolesPage} of {platformRolesTotalPages}</span>
+                               <span className="px-2 text-sm text-muted-foreground">{t('common.page_of', { page: platformRolesPage, total: platformRolesTotalPages })}</span>
                               <Button variant="outline" className="rounded-xl" disabled={platformRolesPage >= platformRolesTotalPages} onClick={() => setPlatformRolesPage((page) => Math.min(platformRolesTotalPages, page + 1))}>
-                                 Next
+                                 {t('common.next')}
                               </Button>
                            </div>
                         </div>
@@ -337,12 +341,12 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
 
                   <div className="space-y-2">
                      <div className="flex items-center justify-between px-1">
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Tenant-Dependent Role Management</p>
-                        <p className="text-xs text-muted-foreground">{currentTenant?.name || 'Current tenant'}</p>
+                         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t('extensions.tenant_role_management')}</p>
+                         <p className="text-xs text-muted-foreground">{currentTenant?.name || t('extensions.current_tenant')}</p>
                      </div>
                   </div>
 
-                  {renderPermissionsMatrix(tenantRoles, 'No tenant roles are available for the current tenant.')}
+                   {renderPermissionsMatrix(tenantRoles, t('extensions.no_tenant_roles'))}
 
                   <div className="mt-4 flex justify-end">
                      <Button onClick={handleSave} disabled={loading} className="rounded-xl bg-primary text-primary-foreground hover:opacity-95">
