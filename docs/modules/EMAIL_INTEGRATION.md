@@ -59,7 +59,7 @@ npm run dev:local
 ## Implementation Patterns
 
 ```javascript
-import { sendEmail } from '@/lib/email/mailketingService';
+import { sendEmail } from '@/plugins/mailketing/services/emailService';
 
 await sendEmail({
   to: 'user@example.com',
@@ -81,4 +81,4 @@ await sendEmail({
 ## References
 
 - `docs/tenancy/supabase.md`
-- `awcms/src/lib/email/mailketingService.js`
+- `awcms/src/plugins/mailketing/services/emailService.js`

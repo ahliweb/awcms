@@ -306,7 +306,7 @@ Since AWCMS clients function independently, managing shared assumptions (like Su
 
 ### Shared Node Packages
 
-For Node.js clients (`awcms` and `awcms-public/primary`), shared dependencies (e.g., `ajv`, `react-compiler`) are managed at the monorepo root via npm workspaces to ensure identical version resolution and prevent bundle duplication.
+Shared assumptions are coordinated through per-workspace manifests and the dedicated shared package in `packages/awcms-shared/`. This repository does not use a single root npm workspace manifest as the canonical dependency authority.
 
 ---
 

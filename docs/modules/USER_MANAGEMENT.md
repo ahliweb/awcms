@@ -213,7 +213,7 @@ AWCMS implements a multi-stage approval process for new account requests (Option
     - Platform Admins perform final review.
     - Upon approval, the system:
         - Creates a Supabase Auth user via `inviteUserByEmail`.
-        - Sends an email invitation with a magic link/password setup.
+        - Sends an email invitation so the user can complete account/password setup.
         - Marks the request as `completed`.
         - Captures approval timestamps.
 

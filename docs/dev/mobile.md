@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-`awcms-mobile/primary` is a cross-platform Flutter application (iOS, Android, Web) that uses **Supabase** as its backend and **Riverpod** for state management. It allows tenant end-users to browse and interact with content managed in AWCMS.
+`awcms-mobile/primary` is a cross-platform Flutter application that uses **Supabase** for client-authenticated data access and **flutter_riverpod** for state management. It allows tenant end-users to browse and interact with content managed in AWCMS.
 
 ---
 
@@ -13,9 +13,9 @@
 | Layer | Technology |
 |-------|-----------|
 | UI | Flutter Widgets |
-| State | Riverpod (`AsyncNotifierProvider`) |
+| State | `flutter_riverpod` |
 | Backend | `supabase_flutter` package |
-| Auth | Supabase Auth (Magic Link / Google OAuth) |
+| Auth | Supabase Auth (email/password, sign-up, optional magic link) |
 | Real-time | Supabase Realtime (PostgreSQL broadcasts) |
 | Secure Storage | `flutter_secure_storage` for session tokens |
 
@@ -23,20 +23,22 @@
 
 ## 3. Supabase Client Initialization
 
-Initialize the Supabase client once on app startup using the **publishable key**. Never use `SUPABASE_SECRET_KEY` in the mobile app.
+Initialize the Supabase client once on app startup using the **publishable key** loaded from `flutter_dotenv`. Never use `SUPABASE_SECRET_KEY` in the mobile app.
 
 ```dart
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
 
   await Supabase.initialize(
-    url: const String.fromEnvironment('SUPABASE_URL'),
-    anonKey: const String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY'),
+    url: dotenv.env['SUPABASE_URL'] ?? '',
+    anonKey: dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '',
   );
 
   runApp(const ProviderScope(child: AwcmsMobileApp()));
@@ -50,29 +52,37 @@ final supabase = Supabase.instance.client;
 
 ## 4. Authentication — Login & Session Management
 
-AWCMS Mobile uses Supabase Auth with magic link email sign-in as the primary flow.
+AWCMS Mobile currently implements email/password sign-in as the primary flow, with an additional magic-link helper path.
 
 ```dart
-// lib/features/auth/auth_service.dart
+// awcms-mobile/primary/lib/core/services/auth_service.dart
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {
   final _client = Supabase.instance.client;
 
-  // 1. Request magic link
-  Future<void> signInWithEmail(String email) async {
+  // 1. Email + password sign-in
+  Future<void> signInWithEmail(String email, String password) async {
+    await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+  }
+
+  // 2. Optional magic-link helper
+  Future<void> signInWithMagicLink(String email) async {
     await _client.auth.signInWithOtp(email: email);
   }
 
-  // 2. Sign out 
+  // 3. Sign out
   Future<void> signOut() async {
     await _client.auth.signOut();
   }
 
-  // 3. Listen for session changes
+  // 4. Listen for session changes
   Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
 
-  // 4. Get current user's tenant_id from metadata
+  // 5. Get current user's tenant_id from metadata
   String? get tenantId => 
       _client.auth.currentUser?.userMetadata?['tenant_id'] as String?;
 }
@@ -81,7 +91,7 @@ class AuthService {
 ### Riverpod Provider
 
 ```dart
-// lib/features/auth/auth_provider.dart
+// Example provider shape; adapt to the current mobile app structure
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -247,7 +257,7 @@ class _ArticlesScreenState extends State<ArticlesScreen> {
 |------|--------|
 | Use `SUPABASE_PUBLISHABLE_KEY` only | Publishable key is safe to bundle; secret key is not |
 | Store session in `flutter_secure_storage` | Protects JWT from plain-text access |
-| All privileged operations via server-side edge logic | Cloudflare Workers or approved Supabase functions hold `SUPABASE_SECRET_KEY` server-side |
+| All privileged operations via server-side edge logic | Cloudflare Workers or other approved server-only runtimes hold `SUPABASE_SECRET_KEY` server-side |
 | RLS policies enforce tenant isolation | Guarantees users only see their own tenant's data |
 
 ---
@@ -261,14 +271,14 @@ flutter pub get
 flutter run                 # iOS simulator, Android emulator, or web
 ```
 
-### Build Flavors
+### Current Env Files
 
-| Flavor | Purpose | Config |
-|--------|---------|--------|
-| `dev` | Local / staging Supabase | `.env.dev` |
-| `prod` | Production Supabase | `.env.prod` |
+| File | Purpose |
+|------|---------|
+| `.env` | Local/default runtime config loaded by `flutter_dotenv` |
+| `.env.remote` | Optional remote/deployment-oriented variant |
 
 ```bash
-flutter run --dart-define-from-file=.env.dev
-flutter build apk --dart-define-from-file=.env.prod
+flutter run
+flutter build apk
 ```

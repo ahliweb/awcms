@@ -59,7 +59,7 @@ Current workflow coverage boundaries:
 
 ### Runtime Notes
 
-- GitHub workflows pin Node runtime to `22.12.0` to match package `engines` constraints.
+- Main PR/push workflows pin Node runtime to `22.12.0` to match package `engines` constraints, while `deploy-smandapbun.yml` currently uses `22`.
 - Keep workflow/runtime Node versions aligned with `SYSTEM_MODEL.md` and package `engines` before bumping toolchains.
 - `awcms-edge/`, `awcms-mcp/`, `awcms-ext/primary-analytics/`, and `packages/awcms-shared/` are now first-class CI surfaces.
 - `build-ext-primary-analytics` uses `vite build --ssr src/index.js` as a package-level smoke build because the extension package does not ship a standalone app shell.
@@ -131,9 +131,9 @@ flutter pub get
 flutter analyze
 flutter test
 
-# Database lint job parity
-cd ../../awcms/supabase
-npx supabase db lint
+# Database parity job
+cd ../../..
+bash ./scripts/verify_supabase_migration_consistency.sh
 ```
 
 The `../smandapbun` step above is relative to `awcms-public/primary/`; the full workspace path is

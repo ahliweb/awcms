@@ -78,6 +78,8 @@ npm run typecheck
 
 ```bash
 cd awcms-mobile/primary
+flutter pub get
+flutter analyze
 flutter test
 ```
 

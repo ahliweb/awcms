@@ -53,6 +53,8 @@
 | DOCSYNC-NEW-09 | High | `.agents/rules/edge-function-safety.md` still described Supabase Edge Functions as the maintained backend runtime | Resolved 2026-03-29 | Rule updated to point at `awcms-edge/src/**/*.ts` and the Cloudflare Worker-first runtime | Re-check when runtime boundaries change |
 | DOCSYNC-NEW-10 | Medium | `.agents/rules/no-secrets-ever.md` still used legacy key names (`VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) | Resolved 2026-03-29 | Rule updated to `VITE_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` terminology | Re-check when env naming changes |
 | DOCSYNC-NEW-11 | Medium | `docs/architecture/tech-stack.md` mobile dependency versions drifted from `awcms-mobile/primary/pubspec.yaml` | Resolved 2026-03-29 | Riverpod/Drift/GoRouter versions refreshed from the live manifest | Re-run when the Flutter manifest changes |
+| DOCSYNC-NEW-12 | Medium | `docs/dev/mobile.md` described a magic-link-primary auth flow, stale sample paths, and outdated env file usage that did not match the checked-in Flutter app | Resolved 2026-03-29 | Mobile docs now reflect `flutter_dotenv`, current `auth_service.dart`, email/password primary auth, and existing `.env` / `.env.remote` files | Re-check when the mobile auth flow changes |
+| DOCSYNC-NEW-13 | Low | `docs/modules/EMAIL_INTEGRATION.md`, `docs/dev/api-usage.md`, `docs/dev/ci-cd.md`, `docs/dev/testing.md`, and `docs/dev/versioning.md` had lower-priority command/path/model drift | Resolved 2026-03-29 | Corrected Mailketing service path, public client example priority, DB parity command, mobile test commands, and versioning wording about dependency coordination | Re-run during the next dev/module docs sweep |
 
 ## Commands Run During This Cycle
 

@@ -50,6 +50,14 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
 ### Client Initialization (Public)
 
 ```ts
+import { createClientFromEnv } from '../lib/supabase';
+
+const supabase = createClientFromEnv(import.meta.env);
+```
+
+For request-scoped runtime or middleware-only paths, use a scoped client explicitly:
+
+```ts
 import { createScopedClient } from '../lib/supabase';
 
 const supabase = createScopedClient({ 'x-tenant-id': tenantId }, runtimeEnv);
