@@ -1,15 +1,19 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
 import ContentTable from '@/components/dashboard/ContentTable';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
-import { Plus, Building, RefreshCw } from 'lucide-react';
+import { Plus, Building, ChevronRight, Home, Layers3, RefreshCw, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearch } from '@/hooks/useSearch';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import useSplatSegments from '@/hooks/useSplatSegments';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import TenantOverviewCards from '@/components/dashboard/tenants/TenantOverviewCards';
 import TenantsListToolbar from '@/components/dashboard/tenants/TenantsListToolbar';
 import TenantsPagination from '@/components/dashboard/tenants/TenantsPagination';
@@ -19,7 +23,9 @@ import TenantDeleteDialog from '@/components/dashboard/tenants/TenantDeleteDialo
 function TenantsManager() {
     const { t } = useTranslation();
     const { toast } = useToast();
-    const { isPlatformAdmin } = usePermissions();
+    const navigate = useNavigate();
+    const segments = useSplatSegments();
+    const { isPlatformAdmin, isFullAccess, hasPermission } = usePermissions();
 
     const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -75,6 +81,21 @@ function TenantsManager() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [tenantToDelete, setTenantToDelete] = useState(null);
 
+    const canViewTenants = isPlatformAdmin || isFullAccess || hasPermission('platform.tenant.read');
+    const canManageTenants = isPlatformAdmin || isFullAccess || hasPermission('platform.tenant.create') || hasPermission('platform.tenant.update');
+    const activeView = segments[0] === 'abac' ? 'abac' : 'overview';
+
+    useEffect(() => {
+        if (segments.length > 0 && segments[0] !== 'abac') {
+            navigate('/cmspanel/tenants', { replace: true });
+            return;
+        }
+
+        if (segments[0] === 'abac' && segments.length > 1) {
+            navigate('/cmspanel/tenants/abac', { replace: true });
+        }
+    }, [segments, navigate]);
+
     const fetchTenants = React.useCallback(async () => {
         setLoading(true);
         try {
@@ -95,10 +116,10 @@ function TenantsManager() {
     }, [toast, t]);
 
     useEffect(() => {
-        if (isPlatformAdmin) {
+        if (canViewTenants) {
             fetchTenants();
         }
-    }, [isPlatformAdmin, fetchTenants]);
+    }, [canViewTenants, fetchTenants]);
 
     const handleCreate = () => {
         setEditingTenant(null);
@@ -521,7 +542,7 @@ function TenantsManager() {
         return expiryDate >= new Date() && expiryDate < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }).length;
 
-    if (!isPlatformAdmin) return (
+    if (!canViewTenants) return (
         <div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-border/60 bg-card/70 p-12 text-center shadow-sm">
             <Building className="mb-4 h-12 w-12 text-muted-foreground" />
             <h3 className="text-xl font-bold text-foreground">{t('tenants.access_denied_title')}</h3>
@@ -529,24 +550,129 @@ function TenantsManager() {
         </div>
     );
 
+    const summaryCards = [
+        {
+            title: t('tenants.summary.visible_title', 'Visible Tenants'),
+            value: filteredTenants.length,
+            description: t('tenants.summary.visible_desc', 'Platform-scoped tenant records currently available in this control plane view.'),
+            accent: 'from-primary/15 via-primary/6 to-transparent',
+        },
+        {
+            title: t('tenants.summary.active_title', 'Active Tenants'),
+            value: activeTenantCount,
+            description: t('tenants.summary.active_desc', 'Subscription and lifecycle status remain visible before deeper ABAC inheritance changes are applied.'),
+            accent: 'from-sky-500/15 via-sky-500/6 to-transparent',
+        },
+        {
+            title: t('tenants.summary.abac_title', 'ABAC Inheritance'),
+            value: activeView === 'abac' ? t('tenants.summary.abac_focus', 'Focused') : t('tenants.summary.abac_ready', 'Ready'),
+            description: t('tenants.summary.abac_desc', 'Tenant inheritance and linked role mapping stay tied to parent-tenant ABAC rules and refresh-safe routing.'),
+            accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent',
+        },
+    ];
+
     return (
-        <AdminPageLayout requiredPermission="platform.tenant.read">
-            <PageHeader
-                title={t('tenants.page_title')}
-                description={t('tenants.page_description')}
-                icon={Building}
-                breadcrumbs={[{ label: t('tenants.page_title'), icon: Building }]}
-                actions={(
-                    <div className="flex gap-2">
-                        <Button variant="ghost" onClick={fetchTenants} title="Refresh" className="text-muted-foreground hover:text-foreground">
-                            <RefreshCw className="w-4 h-4" />
-                        </Button>
+        <div className="space-y-8">
+            <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Link to="/cmspanel" className="flex items-center gap-1 transition-colors hover:text-foreground">
+                        <Home className="h-4 w-4" />
+                        <span>Dashboard</span>
+                    </Link>
+                    <ChevronRight className="h-4 w-4" />
+                    <span className="font-medium text-foreground">{t('tenants.page_title')}</span>
+                </div>
+
+                <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-3">
+                                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                                    <Building className="h-5 w-5" />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Platform Control</p>
+                                    <p className="text-lg font-semibold text-foreground">{t('tenants.page_title')}</p>
+                                </div>
+                            </div>
+                            <p className="max-w-3xl text-sm text-muted-foreground">{t('tenants.page_description')}</p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                            <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
+                                {filteredTenants.length} tenants
+                            </Badge>
+                            <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
+                                {activeView === 'abac' ? t('tenants.abac_tab', 'ABAC') : t('tenants.page_title')}
+                            </Badge>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+                            <Layers3 className="h-4 w-4 text-primary" />
+                            Refresh-safe `/cmspanel/tenants` routes
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+                            <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                            Platform tenant administration with ABAC inheritance support
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex flex-wrap gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => navigate('/cmspanel/tenants')}
+                        className={cn(
+                            'rounded-full border-border/70 bg-background/80 px-4 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground',
+                            activeView === 'overview' && 'border-primary/30 bg-primary/10 text-primary'
+                        )}
+                    >
+                        {t('tenants.overview_tab', 'Overview')}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => navigate('/cmspanel/tenants/abac')}
+                        className={cn(
+                            'rounded-full border-border/70 bg-background/80 px-4 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground',
+                            activeView === 'abac' && 'border-primary/30 bg-primary/10 text-primary'
+                        )}
+                    >
+                        {t('tenants.abac_tab', 'ABAC')}
+                    </Button>
+                </div>
+
+                <div className="flex gap-2">
+                    <Button variant="ghost" onClick={fetchTenants} title="Refresh" className="text-muted-foreground hover:text-foreground">
+                        <RefreshCw className="w-4 h-4" />
+                    </Button>
+                    {canManageTenants ? (
                         <Button onClick={handleCreate} className="bg-primary text-primary-foreground hover:bg-primary/90">
                             <Plus className="w-4 h-4 mr-2" /> {t('tenants.new_tenant')}
                         </Button>
-                    </div>
-                )}
-            />
+                    ) : null}
+                </div>
+            </div>
+
+            <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
+                <div className="mb-8 grid gap-4 md:grid-cols-3">
+                    {summaryCards.map((card) => (
+                        <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
+                            <CardContent className="relative p-5">
+                                <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
+                                <div className="relative">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
+                                    <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
+                                    <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            </div>
 
             <TenantOverviewCards
                 filteredTenants={filteredTenants}
@@ -627,7 +753,7 @@ function TenantsManager() {
                 tenantName={tenantToDelete?.name}
                 onConfirm={handleDelete}
             />
-        </AdminPageLayout>
+        </div>
     );
 }
 

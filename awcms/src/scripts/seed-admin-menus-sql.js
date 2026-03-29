@@ -42,9 +42,9 @@ const MENUS = [
     // SYSTEM Group
     { id: 'seo_manager', key: 'seo_manager', label: 'SEO Manager', path: 'seo', icon: 'Search', permission: 'tenant.seo.read', group_label: 'SYSTEM', group_order: 60, order: 10, is_visible: true },
     { id: 'languages', key: 'languages', label: 'Languages', path: 'languages', icon: 'Languages', permission: 'tenant.languages.read', group_label: 'SYSTEM', group_order: 60, order: 20, is_visible: true },
-    { id: 'extensions', key: 'extensions', label: 'Extensions', path: 'extensions', icon: 'Puzzle', permission: 'platform.extensions.read', group_label: 'SYSTEM', group_order: 60, order: 30, is_visible: true },
-    { id: 'modules', key: 'modules', label: 'Modules', path: 'modules', icon: 'Box', permission: 'platform.module.read', group_label: 'SYSTEM', group_order: 60, order: 35, is_visible: true },
-    { id: 'sidebar_manager', key: 'sidebar_manager', label: 'Sidebar Manager', path: 'admin-navigation', icon: 'List', permission: 'platform.sidebar.read', group_label: 'SYSTEM', group_order: 60, order: 40, is_visible: true },
+    { id: 'extensions', key: 'extensions', label: 'Extensions', path: 'extensions', icon: 'Puzzle', permission: 'platform.extensions.read', group_label: 'PLATFORM', group_order: 100, order: 30, is_visible: true },
+    { id: 'modules', key: 'modules', label: 'Modules', path: 'modules', icon: 'Box', permission: 'platform.module.read', group_label: 'PLATFORM', group_order: 100, order: 35, is_visible: true },
+    { id: 'sidebar_manager', key: 'sidebar_manager', label: 'Sidebar Manager', path: 'admin-navigation', icon: 'List', permission: 'platform.sidebar.read', group_label: 'PLATFORM', group_order: 100, order: 40, is_visible: true },
     { id: 'notifications', key: 'notifications', label: 'Notifications', path: 'notifications', icon: 'MessageSquareQuote', permission: 'tenant.notification.read', group_label: 'SYSTEM', group_order: 60, order: 50, is_visible: true },
     { id: 'audit_logs', key: 'audit_logs', label: 'Audit Logs', path: 'audit-logs', icon: 'FileClock', permission: 'tenant.audit.read', group_label: 'SYSTEM', group_order: 60, order: 60, is_visible: true },
     { id: 'visitor_stats', key: 'visitor_stats', label: 'Visitor Statistics', path: 'visitor-stats', icon: 'LineChart', permission: 'tenant.analytics.read', group_label: 'SYSTEM', group_order: 60, order: 65, is_visible: true },
@@ -65,7 +65,7 @@ const MENUS = [
     { id: 'mobile_config', key: 'mobile_config', label: 'App Config', path: 'mobile/config', icon: 'Settings', permission: 'tenant.mobile.update', group_label: 'MOBILE', group_order: 85, order: 30, is_visible: true },
 
     // PLATFORM Group
-    { id: 'tenants', key: 'tenants', label: 'Tenant Management', path: 'tenants', icon: 'Building', permission: 'platform.tenant.read', group_label: 'SYSTEM', group_order: 60, order: 10, is_visible: true },
+    { id: 'tenants', key: 'tenants', label: 'Tenant Management', path: 'tenants', icon: 'Building', permission: 'platform.tenant.read', group_label: 'PLATFORM', group_order: 100, order: 10, is_visible: true },
 ];
 
 async function seed() {

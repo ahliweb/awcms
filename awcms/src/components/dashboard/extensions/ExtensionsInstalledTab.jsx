@@ -18,7 +18,7 @@ function ExtensionsInstalledTab({
 	onEdit,
 	onDelete,
 	onToggleStatus,
-	onSelectRbac,
+	onSelectAbac,
 	onRefresh,
 }) {
 	return (
@@ -71,10 +71,10 @@ function ExtensionsInstalledTab({
 			) : filteredExtensions.length === 0 ? (
 				<div className="rounded-2xl border border-dashed border-border/70 bg-card/55 py-16 text-center">
 					<Puzzle className="mx-auto mb-3 h-10 w-10 text-muted-foreground/60" />
-					<h3 className="text-lg font-semibold text-foreground">No extensions found</h3>
-					<p className="text-sm text-muted-foreground">
-						{searchActive ? 'Try another search term.' : 'Install extensions to get started.'}
-					</p>
+						<h3 className="text-lg font-semibold text-foreground">{t('extensions.empty_title')}</h3>
+						<p className="text-sm text-muted-foreground">
+							{searchActive ? t('extensions.empty_search') : t('extensions.empty_default')}
+						</p>
 				</div>
 			) : (
 				<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -104,8 +104,8 @@ function ExtensionsInstalledTab({
 											<Button variant="ghost" size="sm" onClick={() => onEdit(extension)} title={t('extensions.configure')} className="text-muted-foreground hover:text-foreground"><Settings className="w-4 h-4" /></Button>
 										)}
 										{canManageGlobal && (
-											<Button variant="ghost" size="sm" onClick={() => onSelectRbac(extension)} title={t('extensions.permissions')} className="text-muted-foreground hover:text-foreground"><Shield className="w-4 h-4" /></Button>
-										)}
+										<Button variant="ghost" size="sm" onClick={() => onSelectAbac(extension)} title={t('extensions.permissions')} className="text-muted-foreground hover:text-foreground"><Shield className="w-4 h-4" /></Button>
+									)}
 										{canManageThis && (
 											<Button variant="ghost" size="sm" onClick={() => onDelete(extension)} className="text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></Button>
 										)}

@@ -73,9 +73,9 @@ function TenantEditorDialog({
 							/>
 						</div>
 
-						<div className="grid grid-cols-2 gap-4">
-							<div className="grid gap-2">
-								<Label>Parent Tenant</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label>Parent Tenant</Label>
 								<Select
 									value={formData.parent_tenant_id || 'none'}
 									onValueChange={(value) => setFormData({ ...formData, parent_tenant_id: value === 'none' ? '' : value })}
@@ -91,40 +91,41 @@ function TenantEditorDialog({
 									</SelectContent>
 								</Select>
 							</div>
-							<div className="grid gap-2">
-								<Label>Role Inheritance</Label>
-								<Select
-									value={formData.role_inheritance_mode}
-									onValueChange={(value) => setFormData({ ...formData, role_inheritance_mode: value })}
-								>
-									<SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
-									<SelectContent>
-										<SelectItem value="auto">Auto Inherit</SelectItem>
-										<SelectItem value="linked">Linked Only</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
-						</div>
+                            <div className="grid gap-2">
+                                <Label>ABAC Inheritance</Label>
+                                <Select
+                                    value={formData.role_inheritance_mode}
+                                    onValueChange={(value) => setFormData({ ...formData, role_inheritance_mode: value })}
+                                >
+                                    <SelectTrigger className="border-input"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="auto">Auto Inherit</SelectItem>
+                                        <SelectItem value="linked">Linked ABAC Mapping</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
 
-						{formData.role_inheritance_mode === 'linked' && formData.parent_tenant_id && (
-							<div className="pt-4 border-t border-border">
-								<h4 className="mb-3 text-sm font-semibold text-foreground">Linked Roles</h4>
-								{roleLinksLoading ? (
-									<div className="text-xs text-muted-foreground">Loading role links...</div>
-								) : (
-									<div className="space-y-2">
-										{roleLinks.map((link) => (
+                        {formData.role_inheritance_mode === 'linked' && formData.parent_tenant_id && (
+                            <div className="pt-4 border-t border-border">
+                                <h4 className="mb-1 text-sm font-semibold text-foreground">ABAC Role Mapping</h4>
+                                <p className="mb-3 text-xs text-muted-foreground">Map parent tenant roles to same-name child roles so ABAC inheritance can be applied safely.</p>
+                                {roleLinksLoading ? (
+                                    <div className="text-xs text-muted-foreground">Loading ABAC role mappings...</div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {roleLinks.map((link) => (
 											<div key={link.parent_role_id} className="flex items-center gap-2">
-												<Checkbox
-													checked={link.linked}
-													disabled={!link.child_role_id}
-													onCheckedChange={(value) => setRoleLinks((previous) => previous.map((item) => item.parent_role_id === link.parent_role_id ? { ...item, linked: Boolean(value) } : item))}
-												/>
-												<span className="text-sm text-foreground">{link.name}</span>
-												{!link.child_role_id && <span className="text-xs text-muted-foreground">Missing child role</span>}
-											</div>
-										))}
-									</div>
+                                                <Checkbox
+                                                    checked={link.linked}
+                                                    disabled={!link.child_role_id}
+                                                    onCheckedChange={(value) => setRoleLinks((previous) => previous.map((item) => item.parent_role_id === link.parent_role_id ? { ...item, linked: Boolean(value) } : item))}
+                                                />
+                                                <span className="text-sm text-foreground">{link.name}</span>
+                                                {!link.child_role_id && <span className="text-xs text-muted-foreground">Missing child role for ABAC mapping</span>}
+                                            </div>
+                                        ))}
+                                    </div>
 								)}
 							</div>
 						)}

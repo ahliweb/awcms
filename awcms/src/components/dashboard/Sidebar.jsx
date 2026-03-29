@@ -12,7 +12,7 @@ import { getIconComponent } from '@/lib/adminIcons';
 import { usePlugins } from '@/contexts/PluginContext';
 import { TenantUsage } from './TenantUsage';
 import { useTenant } from '@/contexts/TenantContext';
-import { filterMenuItemsForSidebar } from '@/lib/adminMenuUtils';
+import { filterMenuItemsForSidebar, resolveGroupMeta } from '@/lib/adminMenuUtils';
 
 function Sidebar({ isOpen, setIsOpen }) {
   const { t } = useTranslation();
@@ -28,6 +28,32 @@ function Sidebar({ isOpen, setIsOpen }) {
   const [collapsedGroups, setCollapsedGroups] = useState(new Set());
 
   const currentPath = location.pathname.split('/cmspanel/')[1] || 'home';
+
+  const isMenuItemActive = (itemPath) => {
+    if (!itemPath) {
+      return currentPath === '' || currentPath === 'home';
+    }
+
+    const normalizedItemPath = String(itemPath).replace(/^\/+|\/+$/g, '');
+    const normalizedCurrentPath = String(currentPath).replace(/^\/+|\/+$/g, '');
+
+    if (!normalizedItemPath) {
+      return normalizedCurrentPath === '' || normalizedCurrentPath === 'home';
+    }
+
+    if (normalizedCurrentPath === normalizedItemPath) {
+      return true;
+    }
+
+    const [, itemTail] = normalizedItemPath.split('/');
+    const [currentHead] = normalizedCurrentPath.split('/');
+
+    if (!itemTail) {
+      return currentHead === normalizedItemPath && normalizedCurrentPath.startsWith(`${normalizedItemPath}/`);
+    }
+
+    return normalizedCurrentPath.startsWith(`${normalizedItemPath}/`);
+  };
 
   const handleNavigation = (path) => {
     // Handle empty, null, undefined, or root path
@@ -98,13 +124,35 @@ function Sidebar({ isOpen, setIsOpen }) {
       : authorizedItems;
     const groups = {};
     filteredItems.forEach(item => {
-      const groupLabel = item.group_label || 'General';
+      const { label: groupLabel, order: groupOrder } = resolveGroupMeta(item.group_label, item.group_order);
       if (!groups[groupLabel]) {
-        groups[groupLabel] = { order: item.group_order || 999, items: [] };
+        groups[groupLabel] = { order: groupOrder, items: [] };
       }
-      groups[groupLabel].items.push(item);
+      groups[groupLabel].items.push({
+        ...item,
+        group_label: groupLabel,
+        group_order: groupOrder,
+      });
     });
     Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a.order - b.order));
+
+    const platformAliases = Object.keys(groups).filter((label) => ['PLATFORM', 'Platform', 'platform'].includes(label));
+    if (platformAliases.length > 1) {
+      const mergedPlatformItems = platformAliases.flatMap((label) => groups[label].items);
+      groups.PLATFORM = {
+        order: 100,
+        items: mergedPlatformItems
+          .sort((a, b) => (a.order || 0) - (b.order || 0))
+          .filter((item, index, list) => list.findIndex((candidate) => candidate.key === item.key && candidate.path === item.path) === index),
+      };
+
+      platformAliases
+        .filter((label) => label !== 'PLATFORM')
+        .forEach((label) => {
+          delete groups[label];
+        });
+    }
+
     return groups;
   }, [
     menuItems,
@@ -121,9 +169,11 @@ function Sidebar({ isOpen, setIsOpen }) {
     currentTenant?.subscription_tier
   ]);
 
-  const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
-    groupedMenus[a].order - groupedMenus[b].order
-  );
+  const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) => {
+    const orderDelta = groupedMenus[a].order - groupedMenus[b].order;
+    if (orderDelta !== 0) return orderDelta;
+    return a.localeCompare(b);
+  });
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -250,9 +300,7 @@ function Sidebar({ isOpen, setIsOpen }) {
                         >
                           {group.items.map((item) => {
                             const Icon = getIconComponent(item.icon);
-                            const isActive = item.path === ''
-                              ? currentPath === '' || currentPath === 'home'
-                              : currentPath === item.path || currentPath.startsWith(item.path + '/');
+                            const isActive = isMenuItemActive(item.path);
 
                             return (
                               <button

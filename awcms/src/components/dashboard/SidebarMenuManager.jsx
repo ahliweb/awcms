@@ -8,7 +8,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePlugins } from '@/contexts/PluginContext';
 import { useSearch } from '@/hooks/useSearch';
-import { filterMenuItemsForSidebar, resolveGroupMeta } from '@/lib/adminMenuUtils';
+import { filterMenuItemsForSidebar, resolveMenuGroupMeta } from '@/lib/adminMenuUtils';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/use-toast';
 import useSplatSegments from '@/hooks/useSplatSegments';
@@ -128,8 +128,8 @@ function SidebarMenuManager() {
     if (isSuperAdmin || canManage) {
       // Admins see ALL items (no permission filtering)
       return menuItems.map((item) => {
-        const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
-          item.group_label,
+        const { label: groupLabel, order: groupOrder } = resolveMenuGroupMeta(
+          item,
           item.group_order
         );
         return {

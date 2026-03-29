@@ -109,7 +109,7 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
 
        } catch (error) {
           console.error(error);
-          toast({ variant: 'destructive', title: t('common.error'), description: error.message || 'Failed to load extension ABAC data.' });
+          toast({ variant: 'destructive', title: t('common.error'), description: error.message || t('extensions.abac_load_failed') });
        } finally {
           setLoading(false);
        }
@@ -146,7 +146,7 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
             .is('deleted_at', null);
 
          if (!corePerms || corePerms.length === 0) {
-            toast({ title: "No permissions to map", variant: "warning" });
+            toast({ title: t('extensions.no_permissions_to_map'), variant: "warning" });
             setLoading(false);
             return;
          }
@@ -157,7 +157,7 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
 
          const roleIds = roles.map(r => r.id);
          if (roleIds.length === 0) {
-            toast({ title: "No roles available", variant: "warning" });
+            toast({ title: t('extensions.no_roles_available'), variant: "warning" });
             setLoading(false);
             return;
          }
@@ -190,7 +190,7 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
             if (error) throw error;
          }
 
-         toast({ title: t('common.success'), description: 'Extension permissions updated for platform and tenant roles.' });
+         toast({ title: t('common.success'), description: t('extensions.permissions_updated') });
 
       } catch (error) {
          console.error(error);
@@ -225,8 +225,8 @@ function ExtensionABACIntegration({ extensionId, extension = null }) {
                                  <span>{role.name}</span>
                               </div>
                               <p className="text-[10px] font-normal text-muted-foreground">
-                                 {role.tenant_id ? 'Tenant role' : 'Platform role'}
-                              </p>
+                                  {role.tenant_id ? t('extensions.tenant_role') : t('extensions.platform_role')}
+                               </p>
                            </div>
                         </th>
                      ))}

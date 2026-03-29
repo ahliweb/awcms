@@ -64,7 +64,7 @@ function ExtensionsManager() {
   const extraSegments = hasTabSegment ? segments.slice(2) : segments.slice(1);
   const selectedAbacRouteId = activeTab === 'abac' && activeChildSegment && activeChildSegment !== 'selected' ? activeChildSegment : null;
 
-  // RBAC & Permissions Logic
+  // ABAC and extension-permission access logic
   const isSuperAdmin = isPlatformAdmin || isFullAccess;
   const canCreate = isSuperAdmin || hasPermission('platform.extensions.create');
   const canManageGlobal = isSuperAdmin || hasPermission('platform.extensions.update');
@@ -401,7 +401,7 @@ function ExtensionsManager() {
             onEdit={setEditingExtension}
             onDelete={handleDelete}
             onToggleStatus={handleToggleStatus}
-            onSelectRbac={async (extension) => {
+            onSelectAbac={async (extension) => {
               setSelectedForABAC(extension);
               const routeId = await encodeRouteParam({ value: extension.id, scope: 'extensions.abac' });
               if (!routeId) {

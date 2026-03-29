@@ -7,10 +7,13 @@ const GROUP_LABEL_MAP = {
   navigation: 'NAVIGATION',
   users: 'USERS',
   system: 'SYSTEM',
+  tenant: 'TENANT',
+  tenants: 'TENANT',
   configuration: 'CONFIGURATION',
   settings: 'CONFIGURATION',
   config: 'CONFIGURATION',
   platform: 'PLATFORM',
+  'platform ': 'PLATFORM',
   mobile: 'MOBILE',
   iot: 'IoT',
   dashboard: 'CONTENT',
@@ -29,6 +32,7 @@ export const GROUP_ORDER_MAP = {
   CONFIGURATION: 70,
   IoT: 80,
   MOBILE: 85,
+  TENANT: 95,
   PLATFORM: 100,
   PLUGINS: 900,
   EXTENSIONS: 900,
@@ -71,14 +75,31 @@ export const normalizeGroupLabel = (value) => {
   if (!value) return 'General';
   const trimmed = String(value).trim();
   if (!trimmed) return 'General';
-  const mapped = GROUP_LABEL_MAP[trimmed.toLowerCase()];
-  return mapped || trimmed;
+   const collapsed = trimmed.replace(/\s+/g, ' ');
+   const mapped = GROUP_LABEL_MAP[collapsed.toLowerCase()];
+   return mapped || trimmed;
 };
 
 export const resolveGroupMeta = (rawLabel, fallbackOrder) => {
   const label = normalizeGroupLabel(rawLabel);
   const order = GROUP_ORDER_MAP[label] ?? fallbackOrder ?? 999;
   return { label, order };
+};
+
+export const isPlatformMenuItem = (item) => {
+  if (item?.scope === 'platform') return true;
+  
+  if (Array.isArray(item?.permission)) {
+    return item.permission.length > 0 && item.permission.every(p => String(p).startsWith('platform.'));
+  }
+  
+  return String(item?.permission || '').startsWith('platform.');
+};
+
+export const resolveMenuGroupMeta = (item, fallbackOrder) => {
+  const isPlatformItem = isPlatformMenuItem(item);
+  const preferredLabel = isPlatformItem ? 'PLATFORM' : item?.group_label;
+  return resolveGroupMeta(preferredLabel, fallbackOrder ?? item?.group_order);
 };
 
 export const getMenuFeatureKey = (item) => {
@@ -104,7 +125,11 @@ export const filterMenuItemsForSidebar = ({
     if (item.permission === 'super_admin_only') return isFullAccess || isPlatformAdmin;
     if (item.permission === 'platform_admin_only') return isPlatformAdmin || isFullAccess;
 
-    if (isPlatformAdmin || isFullAccess || isTenantAdmin) return true; // Allow tenant admins too
+    if (isPlatformAdmin || isFullAccess) return true;
+
+    if (isTenantAdmin && isPlatformMenuItem(item)) {
+      return false;
+    }
 
     if (!isPlatformAdmin && !isFullAccess) {
       const featureKey = getMenuFeatureKey(item);
@@ -137,10 +162,7 @@ export const filterMenuItemsForSidebar = ({
   }
 
   return filtered.map((item) => {
-    const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
-      item.group_label,
-      item.group_order
-    );
+    const { label: groupLabel, order: groupOrder } = resolveMenuGroupMeta(item, item.group_order);
     return {
       ...item,
       group_label: groupLabel,

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { getIconComponent } from '@/lib/adminIcons';
-import { filterMenuItemsForSidebar } from '@/lib/adminMenuUtils';
+import { filterMenuItemsForSidebar, resolveGroupMeta } from '@/lib/adminMenuUtils';
 
 const SidebarItem = ({ href, icon: Icon, label, active, onClick }) => (
     <li>
@@ -94,34 +94,26 @@ const Sidebar = ({ isOpen, onClose }) => {
             )
             : authorizedItems;
 
-        // Grouping
-        const groups = {
-            tenant: { label: currentTenant ? `🏠 TENANT: ${currentTenant.name}` : '🏠 TENANT', order: 0, items: [] },
-            platform: { label: '🏢 PLATFORM', order: 1, items: [] }
-        };
+        const groups = {};
 
-        filteredItems.forEach(item => {
-            if (item.scope === 'platform') {
-                groups.platform.items.push(item);
-            } else {
-                groups.tenant.items.push(item);
+        filteredItems.forEach((item) => {
+            const { label, order } = resolveGroupMeta(item.group_label, item.group_order);
+            if (!groups[label]) {
+                groups[label] = { label, order, items: [] };
             }
+            groups[label].items.push(item);
         });
 
-        // Sort items within their original groups before we flattened the structure
-        Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => {
-            if ((a.group_order || 0) !== (b.group_order || 0)) {
-                return (a.group_order || 0) - (b.group_order || 0);
-            }
-            return (a.order || 0) - (b.order || 0);
-        }));
+        Object.values(groups).forEach((group) => {
+            group.items.sort((a, b) => {
+                if ((a.order || 0) !== (b.order || 0)) {
+                    return (a.order || 0) - (b.order || 0);
+                }
+                return String(a.label || '').localeCompare(String(b.label || ''));
+            });
+        });
 
-        // Remove empty top-level groups to keep UI clean
-        const activeGroups = {};
-        if (groups.platform.items.length > 0) activeGroups.platform = groups.platform;
-        if (groups.tenant.items.length > 0) activeGroups.tenant = groups.tenant;
-
-        return activeGroups;
+        return groups;
     }, [menuItems, loading, isPlatformAdmin, isFullAccess, hasPermission, hasAnyPermission, searchQuery, t, userRole, currentTenant]);
 
     const sortedGroupKeys = Object.keys(groupedMenus).sort((a, b) =>
@@ -194,20 +186,6 @@ const Sidebar = ({ isOpen, onClose }) => {
                             {!loading && sortedGroupKeys.map(topGroupKey => {
                                 const topGroup = groupedMenus[topGroupKey];
 
-                                // Sub-group the items for this top-level section
-                                const subGroups = {};
-                                topGroup.items.forEach(item => {
-                                    const subLabel = item.group_label || 'General';
-                                    if (!subGroups[subLabel]) {
-                                        subGroups[subLabel] = { order: item.group_order || 999, items: [] };
-                                    }
-                                    subGroups[subLabel].items.push(item);
-                                });
-
-                                const sortedSubGroupKeys = Object.keys(subGroups).sort((a, b) =>
-                                    subGroups[a].order - subGroups[b].order
-                                );
-
                                 return (
                                     <div key={topGroupKey} className="pt-2 mb-4">
                                         <div className="mb-2 px-2">
@@ -216,40 +194,27 @@ const Sidebar = ({ isOpen, onClose }) => {
                                             </h2>
                                         </div>
 
-                                        {sortedSubGroupKeys.map(subGroupLabel => {
-                                            const subGroup = subGroups[subGroupLabel];
-                                            return (
-                                                <div key={`${topGroupKey}-${subGroupLabel}`} className="pt-1 mb-2 pl-2 border-l border-border/50 ml-2">
-                                                    {subGroupLabel !== 'General' && (
-                                                        <div className="mb-1.5 flex items-center gap-2">
-                                                            <h3 className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/80">
-                                                                {subGroupLabel}
-                                                            </h3>
-                                                        </div>
-                                                    )}
-
-                                                    <ul className="space-y-1">
-                                                        {subGroup.items.map(item => {
-                                                            const Icon = getIconComponent(item.icon);
-                                                            return (
-                                                                <SidebarItem
-                                                                    key={item.id}
-                                                                    href={item.path ? `/cmspanel/${item.path}` : '/cmspanel'}
-                                                                    icon={Icon}
-                                                                    label={t(`menu.${item.key}`, item.label)}
-                                                                    active={isActive(item.path)}
-                                                                    onClick={() => {
-                                                                        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                                                                            onClose();
-                                                                        }
-                                                                    }}
-                                                                />
-                                                            );
-                                                        })}
-                                                    </ul>
-                                                </div>
-                                            );
-                                        })}
+                                        <div className="pt-1 mb-2 pl-2 border-l border-border/50 ml-2">
+                                            <ul className="space-y-1">
+                                                {topGroup.items.map(item => {
+                                                    const Icon = getIconComponent(item.icon);
+                                                    return (
+                                                        <SidebarItem
+                                                            key={item.id}
+                                                            href={item.path ? `/cmspanel/${item.path}` : '/cmspanel'}
+                                                            icon={Icon}
+                                                            label={t(`menu.${item.key}`, item.label)}
+                                                            active={isActive(item.path)}
+                                                            onClick={() => {
+                                                                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                                                                    onClose();
+                                                                }
+                                                            }}
+                                                        />
+                                                    );
+                                                })}
+                                            </ul>
+                                        </div>
                                     </div>
                                 );
                             })}

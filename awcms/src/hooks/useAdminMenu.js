@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { hooks } from '@/lib/hooks';
-import { normalizeMenuPath, resolveGroupMeta, resolveResourcePath } from '@/lib/adminMenuUtils';
+import { normalizeMenuPath, resolveGroupMeta, resolveMenuGroupMeta, resolveResourcePath, isPlatformMenuItem } from '@/lib/adminMenuUtils';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { subscribeToModulesChanged } from '@/lib/moduleEvents';
@@ -39,6 +39,7 @@ const getMenuItemPriority = (item) => {
   if (item?.tenant_id) score += 80;
   if (item?.resource_id) score += 25;
   if (item?.permission) score += 10;
+  if (isPlatformMenuItem(item)) score += 60;
   if (item?.is_resource_fallback) score -= 40;
   if (item?.key && getCanonicalMenuKey(item) === item.key) score += 5;
 
@@ -108,6 +109,34 @@ const dedupeMenuItems = (items) => {
   return dedupedItems.filter(Boolean);
 };
 
+const collapseEquivalentMenuItems = (items) => {
+  const winners = new Map();
+
+  (items || []).forEach((item) => {
+    const normalizedPath = normalizeMenuPath(item?.path);
+    const normalizedLabel = String(item?.label || '').trim().toLowerCase();
+    const identity = normalizedPath ? `path:${normalizedPath}` : `label:${normalizedLabel}`;
+
+    if (!identity || identity === 'label:') {
+      return;
+    }
+
+    const current = winners.get(identity);
+    if (!current || isPreferredMenuItem(item, current)) {
+      winners.set(identity, item);
+    }
+  });
+
+  const kept = new Set(winners.values());
+  return (items || []).filter((item) => {
+    const normalizedPath = normalizeMenuPath(item?.path);
+    const normalizedLabel = String(item?.label || '').trim().toLowerCase();
+    const identity = normalizedPath ? `path:${normalizedPath}` : `label:${normalizedLabel}`;
+    if (!identity || identity === 'label:') return true;
+    return kept.has(winners.get(identity));
+  });
+};
+
 
 
 export function useAdminMenu() {
@@ -119,7 +148,7 @@ export function useAdminMenu() {
   const isPlatformUser = isPlatformAdmin || isFullAccess;
 
   const isPlatformScopedMenuItem = useCallback((item) => {
-    return item?.scope === 'platform' || String(item?.permission || '').startsWith('platform.');
+    return isPlatformMenuItem(item);
   }, []);
 
   const fetchMenu = useCallback(async () => {
@@ -205,10 +234,13 @@ export function useAdminMenu() {
         // Add missing resources as menu items (resources without admin_menus entries)
         const missingResources = resources.filter(r => !menuResourceKeys.has(r.key) && !REMOVED_RESOURCE_KEYS.has(r.key));
         resourceFallbackItems = missingResources.map(res => {
-          const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
-            res.scope?.toUpperCase() || 'SYSTEM',
-            60
-          );
+          const resourcePermission = res.permission_prefix ? `${res.permission_prefix}.read` : null;
+          const { label: groupLabel, order: groupOrder } = resolveMenuGroupMeta({
+            scope: res.scope,
+            permission: resourcePermission,
+            group_label: res.scope?.toUpperCase() || 'SYSTEM',
+            group_order: 60,
+          }, 60);
           return {
             id: `resource-${res.key}`,
             key: res.key,
@@ -219,7 +251,7 @@ export function useAdminMenu() {
             group_order: groupOrder,
             order: 999, // Put at end
             is_visible: true, // Default to visible
-            permission: res.permission_prefix ? `${res.permission_prefix}.read` : null,
+            permission: resourcePermission,
             permission_prefix: res.permission_prefix,
             resource_id: res.id,
             resource_type: res.type,
@@ -233,10 +265,8 @@ export function useAdminMenu() {
           const matchedRes = resources.find(r => r.id === menu.resource_id) || resourceMap.get(menu.key);
           if (matchedRes) {
             const resolvedPermission = menu.permission || (matchedRes.permission_prefix ? `${matchedRes.permission_prefix}.read` : null);
-            const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
-              menu.group_label,
-              menu.group_order
-            );
+            const resolvedScope = menu.scope || matchedRes.scope;
+            const { label: groupLabel, order: groupOrder } = resolveMenuGroupMeta({ ...menu, permission: resolvedPermission, scope: resolvedScope }, menu.group_order);
             return {
               ...menu,
               // If menu label/icon is null (strict DB mode), fallback to Resource
@@ -251,10 +281,7 @@ export function useAdminMenu() {
               group_order: groupOrder
             };
           }
-          const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
-            menu.group_label,
-            menu.group_order
-          );
+          const { label: groupLabel, order: groupOrder } = resolveMenuGroupMeta(menu, menu.group_order);
             return {
               ...menu,
               path: resolveResourcePath(menu.key, menu.path),
@@ -286,10 +313,11 @@ export function useAdminMenu() {
         const normalizedPluginMenus = (pluginMenuItems || [])
           .map(item => {
             const normalizedKey = item.key || item.id;
-            const { label: groupLabel, order: groupOrder } = resolveGroupMeta(
-              item.group || item.parent || 'PLUGINS',
-              item.groupOrder
-            );
+            const { label: groupLabel, order: groupOrder } = resolveMenuGroupMeta({
+              permission: item.permission || null,
+              group_label: item.group || item.parent || 'PLUGINS',
+              group_order: item.groupOrder,
+            }, item.groupOrder);
             return {
               id: `plugin-${normalizedKey}`,
               original_id: item.id,
@@ -322,6 +350,7 @@ export function useAdminMenu() {
       }
 
       combined = dedupeMenuItems(combined);
+      combined = collapseEquivalentMenuItems(combined);
 
       // ── Module status filter ────────────────────────────────────────────
       // Hide menu items whose matching module slug is 'inactive' for this
@@ -447,8 +476,8 @@ export function useAdminMenu() {
               path: item.path || '',
               icon: item.icon || 'FolderOpen',
               permission: item.permission,
-              group_label: item.group_label || 'General',
-              group_order: item.group_order || 100,
+               group_label: resolveMenuGroupMeta(item, item.group_order || 100).label,
+               group_order: resolveMenuGroupMeta(item, item.group_order || 100).order,
               order: newOrder,
               is_visible: item.is_visible !== false,
               created_at: new Date().toISOString(),
@@ -575,8 +604,8 @@ export function useAdminMenu() {
               path: item.path || '',
               icon: item.icon || 'FolderOpen',
               permission: item.permission,
-              group_label: item.group_label || 'General',
-              group_order: item.group_order || 100,
+               group_label: resolveMenuGroupMeta(item, item.group_order || 100).label,
+               group_order: resolveMenuGroupMeta(item, item.group_order || 100).order,
               order: item.order || 0,
               is_visible: !currentVisibility,
               created_at: new Date().toISOString(),
@@ -627,8 +656,8 @@ export function useAdminMenu() {
               path: item.path || '',
               icon: item.icon || 'FolderOpen',
               permission: item.permission,
-              group_label: updates.group_label || item.group_label || 'General',
-              group_order: updates.group_order || item.group_order || 100,
+               group_label: resolveMenuGroupMeta({ ...item, group_label: updates.group_label || item.group_label }, updates.group_order || item.group_order || 100).label,
+               group_order: resolveMenuGroupMeta({ ...item, group_label: updates.group_label || item.group_label }, updates.group_order || item.group_order || 100).order,
               order: item.order || 0,
               is_visible: item.is_visible !== false,
               created_at: new Date().toISOString(),
