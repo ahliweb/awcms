@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { Settings2, ShieldAlert } from 'lucide-react';
+import { ChevronRight, Home, Layers3, Settings2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useAdminMenu } from '@/hooks/useAdminMenu';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -13,7 +13,9 @@ import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/use-toast';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import SidebarMenuHeaderActions from '@/components/dashboard/sidebar-menu/SidebarMenuHeaderActions';
 import SidebarMenuItemsTab from '@/components/dashboard/sidebar-menu/SidebarMenuItemsTab';
 import SidebarMenuGroupsTab from '@/components/dashboard/sidebar-menu/SidebarMenuGroupsTab';
@@ -85,6 +87,26 @@ function SidebarMenuManager() {
   const canEdit = hasPermission('platform.sidebar.update');
   const isSuperAdmin = isPlatformAdmin || isFullAccess;
   const canManage = canEdit || isSuperAdmin;
+  const summaryCards = [
+    {
+      title: t('sidebar_manager.summary.items_title', 'Visible Entries'),
+      value: items.length,
+      description: t('sidebar_manager.summary.items_desc', 'Core, plugin, extension, and resource-backed sidebar entries currently available in this manager.'),
+      accent: 'from-primary/15 via-primary/6 to-transparent',
+    },
+    {
+      title: t('sidebar_manager.summary.groups_title', 'Navigation Groups'),
+      value: groups.length,
+      description: t('sidebar_manager.summary.groups_desc', 'Sidebar sections stay grouped and reorderable without breaking refresh-safe routes.'),
+      accent: 'from-sky-500/15 via-sky-500/6 to-transparent',
+    },
+    {
+      title: t('sidebar_manager.summary.scope_title', 'Scope'),
+      value: isSuperAdmin ? t('sidebar_manager.summary.scope_platform', 'Platform') : t('sidebar_manager.summary.scope_tenant', 'Managed'),
+      description: t('sidebar_manager.summary.scope_desc', 'Platform-level sidebar controls stay isolated from tenant content workflows.'),
+      accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent',
+    },
+  ];
 
   useEffect(() => {
     if (segments.length > 0 && !hasTabSegment) {
@@ -427,73 +449,132 @@ function SidebarMenuManager() {
   }
 
   return (
-		<AdminPageLayout requiredPermission="platform.sidebar.read" className="space-y-6">
+    <div className="space-y-8">
       <Helmet>
         <title>{t('sidebar_manager.title')} - CMS</title>
       </Helmet>
 
-      <PageHeader
-        title={t('sidebar_manager.title')}
-        description={t('sidebar_manager.subtitle')}
-        icon={Settings2}
-        breadcrumbs={[{ label: t('sidebar_manager.breadcrumbs'), icon: Settings2 }]}
-        actions={(
-          <SidebarMenuHeaderActions
-            t={t}
-            fetchMenu={fetchMenu}
-            loading={loading}
-            hasChanges={hasChanges}
-            handleSaveOrder={handleSaveOrder}
-            isSaving={isSaving}
-          />
-        )}
-      />
-
-			<Tabs
-				value={activeTab}
-				onValueChange={(value) => {
-					navigate(value === 'items' ? '/cmspanel/admin-navigation' : `/cmspanel/admin-navigation/${value}`);
-				}}
-				className="w-full"
-			>
-				<div className="flex items-center justify-between">
-					<TabsList>
-						<TabsTrigger value="items">{t('sidebar_manager.tabs.items')}</TabsTrigger>
-						<TabsTrigger value="groups">{t('sidebar_manager.tabs.groups')}</TabsTrigger>
-          </TabsList>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link to="/cmspanel" className="flex items-center gap-1 transition-colors hover:text-foreground">
+            <Home className="h-4 w-4" />
+            <span>Dashboard</span>
+          </Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="font-medium text-foreground">{t('sidebar_manager.title')}</span>
         </div>
 
-        <SidebarMenuItemsTab
-          t={t}
-          query={query}
-          setQuery={setQuery}
-          clearSearch={clearSearch}
-          loading={loading}
-          searchLoading={searchLoading}
-          isSearchValid={isSearchValid}
-          searchMessage={searchMessage}
-          minLength={minLength}
-          filteredItems={filteredItems}
-          items={items}
-          handleReorder={handleReorder}
-          canManage={canManage}
-          handleEdit={handleEdit}
-          handleToggleVisibility={handleToggleVisibility}
-        />
+        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                  <Settings2 className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">System Navigation</p>
+                  <p className="text-lg font-semibold text-foreground">{t('sidebar_manager.title')}</p>
+                </div>
+              </div>
+              <p className="max-w-3xl text-sm text-muted-foreground">{t('sidebar_manager.subtitle')}</p>
+            </div>
 
-        <SidebarMenuGroupsTab
-          t={t}
-          hasChanges={hasChanges}
-          activeTab={activeTab}
-          handleSaveGroupOrder={handleSaveGroupOrder}
-          isSaving={isSaving}
-          canManage={canManage}
-          groups={groups}
-          handleOpenNewGroup={handleOpenNewGroup}
-          handleGroupReorder={handleGroupReorder}
-          handleEditGroup={handleEditGroup}
-        />
-      </Tabs>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
+                {items.length} items
+              </Badge>
+              <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
+                {groups.length} groups
+              </Badge>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+              <Layers3 className="h-4 w-4 text-primary" />
+              Refresh-safe `/cmspanel/admin-navigation` routes
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              Platform-scoped sidebar controls and module-aware menu filtering
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
+        <div className="mb-8 grid gap-4 md:grid-cols-3">
+          {summaryCards.map((card) => (
+            <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
+              <CardContent className="relative p-5">
+                <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
+                <div className="relative">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
+                  <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
+                  <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            navigate(value === 'items' ? '/cmspanel/admin-navigation' : `/cmspanel/admin-navigation/${value}`);
+          }}
+          className="w-full"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <TabsList>
+              <TabsTrigger value="items">{t('sidebar_manager.tabs.items')}</TabsTrigger>
+              <TabsTrigger value="groups">{t('sidebar_manager.tabs.groups')}</TabsTrigger>
+            </TabsList>
+
+            <SidebarMenuHeaderActions
+              t={t}
+              fetchMenu={fetchMenu}
+              loading={loading}
+              hasChanges={hasChanges}
+              handleSaveOrder={handleSaveOrder}
+              isSaving={isSaving}
+            />
+          </div>
+
+          <SidebarMenuItemsTab
+            t={t}
+            query={query}
+            setQuery={setQuery}
+            clearSearch={clearSearch}
+            loading={loading}
+            searchLoading={searchLoading}
+            isSearchValid={isSearchValid}
+            searchMessage={searchMessage}
+            minLength={minLength}
+            filteredItems={filteredItems}
+            items={items}
+            handleReorder={handleReorder}
+            canManage={canManage}
+            handleEdit={handleEdit}
+            handleToggleVisibility={handleToggleVisibility}
+          />
+
+          <SidebarMenuGroupsTab
+            t={t}
+            hasChanges={hasChanges}
+            activeTab={activeTab}
+            handleSaveGroupOrder={handleSaveGroupOrder}
+            isSaving={isSaving}
+            canManage={canManage}
+            groups={groups}
+            handleOpenNewGroup={handleOpenNewGroup}
+            handleGroupReorder={handleGroupReorder}
+            handleEditGroup={handleEditGroup}
+          />
+        </Tabs>
+      </div>
 
       <SidebarMenuEditItemDialog
         open={!!editingItem}
@@ -529,7 +610,7 @@ function SidebarMenuManager() {
         setNewGroupForm={setNewGroupForm}
         onCreate={handleCreateGroup}
       />
-    </AdminPageLayout>
+    </div>
   );
 }
 
