@@ -114,6 +114,7 @@ All documentation follows this authority structure:
 | CI/CD | [docs/dev/ci-cd.md](docs/dev/ci-cd.md) | GitHub Actions |
 | Testing | [docs/dev/testing.md](docs/dev/testing.md) | Vitest and smoke checks |
 | AI Workflows | [docs/dev/ai-workflows.md](docs/dev/ai-workflows.md) | Prompt templates, plan mode triggers, iteration loops |
+| Prompt Component Guide | [docs/dev/prompt-guide.md](docs/dev/prompt-guide.md) | 5 essential prompt components, quick-start templates, and cheat sheet for AWCMS coding requests |
 | Tags Module QA Checklist | [docs/dev/tags-module-qa-checklist.md](docs/dev/tags-module-qa-checklist.md) | Manual verification checklist for `/cmspanel/tags`, `/cmspanel/blogs/tags`, and `/cmspanel/pages/tags` |
 | Categories Module QA Checklist | [docs/dev/categories-module-qa-checklist.md](docs/dev/categories-module-qa-checklist.md) | Manual verification checklist for `/cmspanel/categories`, `/cmspanel/blogs/categories`, and `/cmspanel/pages/categories` |
 | AI Gateway | [docs/architecture/openclaw-gateway.md](docs/architecture/openclaw-gateway.md) | OpenClaw per-tenant setup, routing, and security runbook |
