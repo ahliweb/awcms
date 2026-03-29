@@ -22,7 +22,8 @@
     "github": {
       "command": "bash",
       "args": [
-        "/home/data/dev_react/awcms-dev/scripts/start_github_mcp.sh"
+        "/home/data/dev_react/awcms-dev/scripts/start_github_mcp.sh",
+        "--toolsets=default,git"
       ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}",
@@ -42,12 +43,74 @@
         "CLOUDFLARE_API_TOKEN": "{env:CLOUDFLARE_API_TOKEN}",
         "CLOUDFLARE_ACCOUNT_ID": "{env:CLOUDFLARE_ACCOUNT_ID}"
       },
-      "enabled": true
+      "enabled": true,
+      "disabledTools": [
+        "d1_list_databases",
+        "d1_create_database",
+        "d1_delete_database",
+        "d1_query",
+
+        "do_alarm_set",
+        "do_alarm_delete",
+        "do_alarm_list",
+        "do_delete_object",
+        "do_list_objects",
+        "do_get_object",
+        "do_list_namespaces",
+        "do_create_namespace",
+        "do_delete_namespace",
+
+        "ai_embeddings",
+        "ai_inference",
+        "ai_list_models",
+        "ai_get_model",
+        "ai_text_generation",
+        "ai_image_generation",
+
+        "service_binding_create",
+        "service_binding_delete",
+        "service_binding_list",
+        "service_binding_update",
+
+        "template_create_worker",
+        "template_get",
+        "template_list",
+
+        "wfp_add_custom_domain",
+        "wfp_create_dispatch_namespace",
+        "wfp_delete_dispatch_namespace",
+        "wfp_list_custom_domains",
+        "wfp_list_dispatch_namespaces",
+        "wfp_remove_custom_domain",
+
+        "workflow_create",
+        "workflow_delete",
+        "workflow_execute",
+        "workflow_get",
+        "workflow_list",
+        "workflow_update",
+
+        "wrangler_config_get",
+        "wrangler_config_update",
+
+        "domain_list",
+
+        "version_get",
+        "version_list",
+        "version_rollback",
+
+        "r2_create_bucket",
+        "r2_delete_bucket",
+
+        "queue_delete_message",
+        "queue_get_message",
+        "queue_update_visibility"
+      ]
     },
     "paper": {
       "type": "remote",
       "url": "http://127.0.0.1:29979/mcp",
-      "enabled": true
+      "enabled": false
     }
   }
 }
