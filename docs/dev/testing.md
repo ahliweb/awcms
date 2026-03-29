@@ -15,12 +15,15 @@ Describe how to validate AWCMS packages locally and in CI.
 
 - [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for testing framework versions
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- Node.js 22.12+ (admin/public)
+- Node.js 22.12+ (admin/public/edge/mcp/shared)
 - Flutter SDK (mobile)
+- Wrangler CLI (edge worker typecheck — installed via `devDependencies` in `awcms-edge/`)
 
 ## Steps
 
-### Admin Panel
+### Admin Panel (`awcms/`)
+
+Uses **Vitest 4.1.0** for unit and integration tests.
 
 ```bash
 cd awcms
@@ -29,7 +32,7 @@ npm run test -- --run
 npm run build
 ```
 
-### Public Portal
+### Public Portal — Primary (`awcms-public/primary/`)
 
 ```bash
 cd awcms-public/primary
@@ -37,7 +40,41 @@ npm run check
 npm run build
 ```
 
-### Mobile App
+### Public Portal — Smandapbun (`awcms-public/smandapbun/`)
+
+```bash
+cd awcms-public/smandapbun
+npm run check
+npm run lint
+npm run build
+```
+
+### Edge Worker (`awcms-edge/`)
+
+Runs TypeScript type checking via Wrangler (`^4.77.0`).
+
+```bash
+cd awcms-edge
+npm run typecheck
+```
+
+### MCP Server (`awcms-mcp/`)
+
+```bash
+cd awcms-mcp
+npm run lint
+npm run build
+```
+
+### Shared Package (`packages/awcms-shared/`)
+
+```bash
+cd packages/awcms-shared
+npm install
+npm run typecheck
+```
+
+### Mobile App (`awcms-mobile/primary/`)
 
 ```bash
 cd awcms-mobile/primary
@@ -49,6 +86,13 @@ flutter test
 ```bash
 cd awcms
 npm run docs:check
+```
+
+### Database Lint
+
+```bash
+cd awcms/supabase
+npx supabase db lint
 ```
 
 ## Verification

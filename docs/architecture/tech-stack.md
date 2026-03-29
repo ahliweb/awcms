@@ -27,7 +27,7 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 | Language | JavaScript | ES2022+ | Functional components |
 | Styling | TailwindCSS | `^4.2.2` | Utility-first CSS |
 | Visual editor | @puckeditor/core | 0.21.0 | Visual builder |
-| Rich text | TipTap | `^3.20.4` | WYSIWYG editor |
+| Rich text | TipTap | `^3.20.4` | WYSIWYG editor (distributed as `@tiptap/react`, `@tiptap/starter-kit`, and extension packages — no single `@tiptap/core` import) |
 | Animations | Framer Motion | `^12.38.0` | UI motion |
 | Routing | React Router DOM | 7.10.1 | Client routing |
 | Supabase JS | @supabase/supabase-js | `^2.99.3` | API client |
@@ -61,6 +61,7 @@ Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 | Database | PostgreSQL | 17 | Primary data store |
 | Backend Platform | Supabase | 2.x | Auth, PostgREST, RLS, ABAC, realtime |
 | Edge runtime | Cloudflare Workers | Current | Primary edge HTTP orchestration |
+| Edge CLI | Wrangler | `^4.77.0` | Cloudflare Worker dev server and deploy tool (`awcms-edge/`) |
 
 ### Mobile (awcms-mobile/primary)
 

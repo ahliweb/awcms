@@ -1,7 +1,7 @@
 # AWCMS Ecosystem Model (Authoritative Source of Truth)
 
 > **Status:** ACTIVE
-> **Last Updated:** 2026-03-25 (Audited against live workspace manifests, migration inventory, scripts, MCP topology, Context7 guidance, and the active documentation audit)
+> **Last Updated:** 2026-03-29 (Re-baselined against live manifests, migration inventory, mcp.json topology, recent GitHub MCP toolset restriction, paper MCP disable, and documentation audit tracker)
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
@@ -78,12 +78,12 @@ Agents must respect the exact versions declared in the current workspace manifes
 * **Primary Config (Repo):** `mcp.json`
 * **Runtime Config (OpenCode):** `~/.config/opencode/opencode.json`
 * **Connected Servers (authoritative baseline — matches `mcp.json`):**
-  * `context7` (remote: `https://mcp.context7.com/mcp`)
-  * `supabase` (local `awcms-mcp` server: `node awcms-mcp/dist/index.js`)
-  * `github` (local Docker-backed `github/github-mcp-server` via `scripts/start_github_mcp.sh`)
-  * `cloudflare` (local npx: `@cloudflare/mcp-server-cloudflare`)
-  * `paper` (local remote: `http://127.0.0.1:29979/mcp`)
-* **GitHub Auth Pattern:** token-based local runtime via `GITHUB_PERSONAL_ACCESS_TOKEN` (or equivalent mapped vars).
+  * `context7` (remote: `https://mcp.context7.com/mcp`) — enabled
+  * `supabase` (local `awcms-mcp` server: `node awcms-mcp/dist/index.js`) — enabled
+  * `github` (local Docker-backed `github/github-mcp-server` via `scripts/start_github_mcp.sh`) — enabled; restricted to `--toolsets=default,git` to stay within the 100-tool OpenCode limit
+  * `cloudflare` (local npx: `@cloudflare/mcp-server-cloudflare`) — enabled with a curated `disabledTools` list (D1, Durable Objects, AI, service bindings, WorkersForPlatforms, Workflows, Wrangler config, R2 bucket ops) to reduce tool surface
+  * `paper` (local remote: `http://127.0.0.1:29979/mcp`) — **disabled** (`enabled: false`; requires a local Paper server running on port 29979 to activate)
+* **GitHub Auth Pattern:** token-based local runtime via `GITHUB_PERSONAL_ACCESS_TOKEN` (or equivalent mapped vars: `GITHUB_MCP_PERSONAL_ACCESS_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`).
 
 ---
 
@@ -167,7 +167,7 @@ Agents must respect the exact versions declared in the current workspace manifes
 * `src/hooks/`: Custom React hooks for data fetching and state.
 * `src/lib/`: Stateless utilities and configuration.
 * `supabase/migrations/`: canonical SQL migration files (timestamped).
-* `awcms/supabase/migrations/`: mirrored migration path used by CI/admin tooling; must remain synchronized with root migrations. Current inventory shows `150` root files and `150` mirrored files.
+* `awcms/supabase/migrations/`: mirrored migration path used by CI/admin tooling; must remain synchronized with root migrations. Current inventory shows `152` root files and `152` mirrored files.
 
 ---
 

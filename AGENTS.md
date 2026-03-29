@@ -62,7 +62,7 @@ Agents must be aware of the exact versions in use:
 | Supabase JS      | `^2.99.3` / `^2.99.3` | Admin / Primary public clients |
 | React Router DOM | 7.10.1   | Client-side routing              |
 | Puck             | 0.21.0   | Visual Editor (`@puckeditor/core`) |
-| TipTap           | `^3.20.4` | Rich text editor (XSS-safe)    |
+| TipTap           | `^3.20.4` | Rich text editor (XSS-safe) — installed as `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-image`, `@tiptap/extension-link`, `@tiptap/extension-placeholder`, `@tiptap/extension-underline`, `@tiptap/pm` |
 | Framer Motion    | `^12.38.0` | Animations                     |
 | Radix UI         | Latest   | Accessible UI primitives         |
 | Lucide React     | 0.577.0  | Admin / Public icon library      |
@@ -72,6 +72,7 @@ Agents must be aware of the exact versions in use:
 | React Leaflet    | 5.0.0    | React bindings for Leaflet       |
 | Vitest           | 4.1.0    | Unit/Integration testing         |
 | Astro            | `6.0.8`  | Primary public portal            |
+| Wrangler         | `^4.77.0` | Cloudflare Worker CLI/dev server (`awcms-edge`) |
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
@@ -114,7 +115,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
    - Lifecycle actions must be auditable in `extension_lifecycle_audit`.
    - Admin/public/edge runtime behavior must compose through registries, not direct router mutations.
 
-4. **Strict Technology Constraints**:
+5. **Strict Technology Constraints**:
 
 | Rule              | Requirement                                                               |
 | ----------------- | ------------------------------------------------------------------------- |

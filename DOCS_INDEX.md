@@ -106,6 +106,7 @@ All documentation follows this authority structure:
 | Release Summary (2026-03) | [docs/dev/release-summary-2026-03-extension-runtime-hardening.md](docs/dev/release-summary-2026-03-extension-runtime-hardening.md) | Extension platform + tenant scope + Cloudflare runtime summary |
 | Release Summary - Tags Overhaul (2026-03) | [docs/dev/release-summary-2026-03-tags-module-overhaul.md](docs/dev/release-summary-2026-03-tags-module-overhaul.md) | Stakeholder summary for the Admin Tags routing, sync, UX, and integration overhaul |
 | Release Summary - Categories Overhaul (2026-03) | [docs/dev/release-summary-2026-03-categories-module-overhaul.md](docs/dev/release-summary-2026-03-categories-module-overhaul.md) | Stakeholder summary for the Admin Categories routing, scope, UX, and integration overhaul |
+| Release Summary - MCP Optimization (2026-03) | [docs/dev/release-summary-2026-03-mcp-optimization.md](docs/dev/release-summary-2026-03-mcp-optimization.md) | MCP topology changes: paper disabled, GitHub toolset restriction, Cloudflare tools curated |
 | Admin Panel | [docs/dev/admin.md](docs/dev/admin.md) | React Admin development |
 | Public Portal | [docs/dev/public.md](docs/dev/public.md) | Astro development |
 | Mobile App | [docs/dev/mobile.md](docs/dev/mobile.md) | Flutter development |
