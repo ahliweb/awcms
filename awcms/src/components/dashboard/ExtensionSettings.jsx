@@ -28,7 +28,7 @@ function ExtensionSettings() {
   useEffect(() => {
     if (!routeParam || routeLoading) return;
     if (!extensionId) {
-      navigate('/cmspanel/extensions');
+      navigate('/cmspanel/extensions/settings', { replace: true });
       return;
     }
     if (!isLegacy) return;
@@ -53,6 +53,13 @@ function ExtensionSettings() {
           const next = preferred || data[0];
           setSelectedExtension(next.id);
           setSettings(next.config || {});
+
+          if (!extensionId) {
+            const signedId = await encodeRouteParam({ value: next.id, scope: 'extensions.settings' });
+            if (signedId) {
+              navigate(`/cmspanel/extensions/settings/${signedId}`, { replace: true });
+            }
+          }
         }
       } catch (error) {
         console.error('Error fetching extensions:', error);
@@ -60,12 +67,19 @@ function ExtensionSettings() {
     };
 
     fetchActiveExtensions();
-  }, [currentTenant?.id, extensionId, isPlatformAdmin]);
+  }, [currentTenant?.id, extensionId, isPlatformAdmin, navigate]);
 
   const handleExtensionChange = (id) => {
     const extension = extensions.find((item) => item.id === id);
     setSelectedExtension(id);
     setSettings(extension?.config || {});
+
+    void (async () => {
+      const signedId = await encodeRouteParam({ value: id, scope: 'extensions.settings' });
+      if (signedId) {
+        navigate(`/cmspanel/extensions/settings/${signedId}`);
+      }
+    })();
   };
 
   const handleSave = async () => {

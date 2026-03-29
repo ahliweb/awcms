@@ -1,6 +1,6 @@
 
 import { Link } from 'react-router-dom';
-import { RefreshCw, Calendar, ChevronRight, FileText, Home, Layers3, ShieldCheck, Users2 } from 'lucide-react';
+import { RefreshCw, Calendar, ChevronRight, Home, Layers3, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { usePermissions } from '@/contexts/PermissionContext';

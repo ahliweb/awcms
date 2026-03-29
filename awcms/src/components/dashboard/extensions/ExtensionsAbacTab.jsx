@@ -2,12 +2,12 @@ import { Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ExtensionABACIntegration from '@/components/dashboard/ExtensionABACIntegration';
 
-function ExtensionsRbacTab({
+function ExtensionsAbacTab({
 	t,
-	selectedForRBAC,
+	selectedForABAC,
 	onBack,
 }) {
-	if (selectedForRBAC) {
+	if (selectedForABAC) {
 		return (
 			<div className="space-y-4">
 				<Button
@@ -17,8 +17,9 @@ function ExtensionsRbacTab({
 				>
 					{t('common.back')}
 				</Button>
-				<h3 className="text-xl font-bold text-foreground">Managing RBAC for {selectedForRBAC.name}</h3>
-				<ExtensionABACIntegration extensionId={selectedForRBAC.id} />
+				<h3 className="text-xl font-bold text-foreground">Managing ABAC for {selectedForABAC.name}</h3>
+				<p className="text-sm text-muted-foreground">Platform-scope role cards are shown above tenant-dependent role mappings when available.</p>
+				<ExtensionABACIntegration extensionId={selectedForABAC.id} extension={selectedForABAC} />
 			</div>
 		);
 	}
@@ -32,4 +33,4 @@ function ExtensionsRbacTab({
 	);
 }
 
-export default ExtensionsRbacTab;
+export default ExtensionsAbacTab;

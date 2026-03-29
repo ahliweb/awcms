@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -16,7 +16,6 @@ const APPROVAL_TABS = ['pending', 'completed', 'rejected'];
 
 const UserApprovalManager = ({ activeTab: controlledTab, onTabChange, embedded = false }) => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [internalTab, setInternalTab] = useState('pending');

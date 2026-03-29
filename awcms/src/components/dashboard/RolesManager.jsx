@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Crown, Layers3, Shield, ShieldCheck, Users2 } from 'lucide-react';
+import { Crown, Layers3, Shield, ShieldCheck } from 'lucide-react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { Button } from '@/components/ui/button';
 import { encodeRouteParam } from '@/lib/routeSecurity';

@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { Calendar, ChevronRight, FolderOpen, Home, Image, Layers3, ShieldCheck, Trash2 } from 'lucide-react';
+import { Calendar, ChevronRight, FolderOpen, Home, Layers3, ShieldCheck, Trash2 } from 'lucide-react';
 import MediaLibrary from './media/MediaLibrary';
 import { FileStats } from './media/FileStats';
 import { useToast } from '@/components/ui/use-toast';

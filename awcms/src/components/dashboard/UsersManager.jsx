@@ -147,7 +147,7 @@ function UsersManager() {
       clearTimeout(fetchTimeout);
       setLoading(false);
     }
-  }, [canView, isPlatformAdmin, currentTenant, debouncedQuery, currentPage, itemsPerPage, toast, t]);
+  }, [canView, currentTenant, debouncedQuery, currentPage, itemsPerPage, toast, t]);
 
   const fetchPlatformUsers = useCallback(async () => {
     if (!isPlatformAdmin) return;

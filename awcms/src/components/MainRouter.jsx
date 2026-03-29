@@ -64,13 +64,10 @@ const WidgetsManager = lazy(() => import('@/components/dashboard/widgets/Widgets
 const ThemeEditor = lazy(() => import('@/components/dashboard/ThemeEditor'));
 const SeoManager = lazy(() => import('@/components/dashboard/SeoManager'));
 const ExtensionsManager = lazy(() => import('@/components/dashboard/ExtensionsManager'));
-const ExtensionMarketplace = lazy(() => import('@/components/dashboard/ExtensionMarketplace'));
-const ExtensionSettings = lazy(() => import('@/components/dashboard/ExtensionSettings'));
 const LanguageSettings = lazy(() => import('@/components/dashboard/LanguageSettings'));
 const NotificationsManager = lazy(() => import('@/components/dashboard/notifications/NotificationsManager'));
 const NotificationDetail = lazy(() => import('@/components/dashboard/notifications/NotificationDetail'));
 const SSOManager = lazy(() => import('@/components/dashboard/SSOManager'));
-const ExtensionLogs = lazy(() => import('@/components/dashboard/ExtensionLogs'));
 const SidebarMenuManager = lazy(() => import('@/components/dashboard/SidebarMenuManager'));
 const ModulesManager = lazy(() => import('@/pages/cmspanel/ModulesManager'));
 
@@ -291,10 +288,7 @@ const MainRouter = () => {
           <Route path="site-images" element={<SiteImagesManager />} />
           <Route path="school-pages/*" element={<SchoolPagesManager />} />
 
-          <Route path="extensions" element={<ExtensionsManager />} />
-          <Route path="extensions/marketplace" element={<ExtensionMarketplace />} />
-          <Route path="extensions/settings/:id" element={<ExtensionSettings />} />
-          <Route path="extensions/logs" element={<ExtensionLogs />} />
+          <Route path="extensions/*" element={<ExtensionsManager />} />
 
           <Route path="settings/general/*" element={<SettingsManager />} />
           <Route path="settings/branding" element={<TenantSettings />} />

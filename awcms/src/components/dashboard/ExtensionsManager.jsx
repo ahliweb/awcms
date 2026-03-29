@@ -1,5 +1,6 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Puzzle,
   Upload,
@@ -7,22 +8,22 @@ import {
   AlertCircle,
   Shield,
   RefreshCw,
+  ChevronRight,
+  Home,
+  Layers3,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useTranslation } from 'react-i18next';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import useSplatSegments from '@/hooks/useSplatSegments';
 import { listTenantExtensions } from '@/lib/extensionCatalog';
 import { activateTenantExtension, deactivateTenantExtension, uninstallTenantExtension } from '@/lib/extensionLifecycleApi';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { encodeRouteParam } from '@/lib/routeSecurity';
 import { cn } from '@/lib/utils';
 
 // Extension Modules
@@ -35,30 +36,123 @@ import ExtensionHealthCheck from './ExtensionHealthCheck';
 import ExtensionInstaller from './ExtensionInstaller';
 import ExtensionsOverviewCards from '@/components/dashboard/extensions/ExtensionsOverviewCards';
 import ExtensionsInstalledTab from '@/components/dashboard/extensions/ExtensionsInstalledTab';
-import ExtensionsRbacTab from '@/components/dashboard/extensions/ExtensionsRbacTab';
+import ExtensionsAbacTab from '@/components/dashboard/extensions/ExtensionsAbacTab';
 import ExtensionDeleteDialog from '@/components/dashboard/extensions/ExtensionDeleteDialog';
 
 function ExtensionsManager() {
   const { toast } = useToast();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { hasPermission, hasAnyPermission, isPlatformAdmin, isFullAccess } = usePermissions();
   const { currentTenant } = useTenant();
+  const segments = useSplatSegments();
 
   const [extensions, setExtensions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('installed');
   const [editingExtension, setEditingExtension] = useState(null);
-  const [selectedForRBAC, setSelectedForRBAC] = useState(null);
+  const [selectedForABAC, setSelectedForABAC] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
   const [extensionToDelete, setExtensionToDelete] = useState(null);
+
+  const tabValues = ['installed', 'install', 'marketplace', 'settings', 'health', 'logs', 'abac', 'rbac'];
+  const hasTabSegment = tabValues.includes(segments[0]);
+  const rawActiveTab = hasTabSegment ? segments[0] : 'installed';
+  const activeTab = rawActiveTab === 'rbac' ? 'abac' : rawActiveTab;
+  const activeChildSegment = hasTabSegment ? segments[1] || null : null;
+  const extraSegments = hasTabSegment ? segments.slice(2) : segments.slice(1);
+  const selectedAbacRouteId = activeTab === 'abac' && activeChildSegment && activeChildSegment !== 'selected' ? activeChildSegment : null;
 
   // RBAC & Permissions Logic
   const isSuperAdmin = isPlatformAdmin || isFullAccess;
   const canCreate = isSuperAdmin || hasPermission('platform.extensions.create');
   const canManageGlobal = isSuperAdmin || hasPermission('platform.extensions.update');
   const canView = isSuperAdmin || hasAnyPermission(['platform.extensions.read', 'platform.extensions.update', 'platform.extensions.create']);
+
+  const tabMeta = useMemo(() => ([
+    { value: 'installed', label: t('extensions.installed'), count: extensions.length },
+    ...(canCreate ? [{ value: 'install', label: t('extensions.install') }] : []),
+    { value: 'marketplace', label: t('extensions.marketplace') },
+    ...(canManageGlobal ? [
+      { value: 'settings', label: t('extensions.settings') },
+      { value: 'health', label: t('extensions.health') },
+      { value: 'logs', label: t('extensions.logs') },
+      { value: 'abac', label: t('extensions.abac'), icon: Shield },
+    ] : []),
+  ]), [canCreate, canManageGlobal, extensions.length, t]);
+
+  useEffect(() => {
+    if (segments.length === 0) {
+      return;
+    }
+
+    if (!hasTabSegment) {
+      navigate('/cmspanel/extensions', { replace: true });
+      return;
+    }
+
+    if (rawActiveTab === 'rbac') {
+      const suffix = activeChildSegment ? `/${activeChildSegment}` : '';
+      navigate(`/cmspanel/extensions/abac${suffix}`, { replace: true });
+      return;
+    }
+
+    if (activeTab === 'installed' && segments.length > 1) {
+      navigate('/cmspanel/extensions', { replace: true });
+      return;
+    }
+
+    if (activeTab === 'install' && !canCreate) {
+      navigate('/cmspanel/extensions', { replace: true });
+      return;
+    }
+
+    if (['settings', 'health', 'logs', 'abac'].includes(activeTab) && !canManageGlobal) {
+      navigate('/cmspanel/extensions', { replace: true });
+      return;
+    }
+
+    if (activeTab === 'marketplace' && segments.length > 1) {
+      navigate('/cmspanel/extensions/marketplace', { replace: true });
+      return;
+    }
+
+    if (activeTab === 'health' && segments.length > 1) {
+      navigate('/cmspanel/extensions/health', { replace: true });
+      return;
+    }
+
+    if (activeTab === 'logs' && segments.length > 1) {
+      navigate('/cmspanel/extensions/logs', { replace: true });
+      return;
+    }
+
+    if (activeTab === 'abac' && selectedAbacRouteId && extraSegments.length > 0) {
+      navigate(`/cmspanel/extensions/abac/${selectedAbacRouteId}`, { replace: true });
+      return;
+    }
+
+    if (activeTab === 'abac' && activeChildSegment === 'selected') {
+      navigate('/cmspanel/extensions/abac', { replace: true });
+      return;
+    }
+
+    if (activeTab === 'abac' && !selectedAbacRouteId && extraSegments.length > 0) {
+      navigate('/cmspanel/extensions/abac', { replace: true });
+      return;
+    }
+
+    if (activeTab === 'settings') {
+      if (activeChildSegment && activeChildSegment !== 'select') {
+        navigate('/cmspanel/extensions/settings', { replace: true });
+        return;
+      }
+      if (extraSegments.length > 0) {
+        navigate('/cmspanel/extensions/settings', { replace: true });
+      }
+    }
+  }, [segments, hasTabSegment, rawActiveTab, activeTab, activeChildSegment, selectedAbacRouteId, extraSegments, navigate, canCreate, canManageGlobal]);
 
   const fetchExtensions = useCallback(async () => {
     try {
@@ -137,6 +231,40 @@ function ExtensionsManager() {
   const ownedExtensionsCount = extensions.filter((ext) => ext.created_by === user?.id).length;
   const searchActive = Boolean(searchTerm.trim());
 
+  useEffect(() => {
+    if (activeTab !== 'abac') {
+      if (selectedForABAC) {
+        setSelectedForABAC(null);
+      }
+      return;
+    }
+
+    if (!selectedAbacRouteId && selectedForABAC) {
+      setSelectedForABAC(null);
+      return;
+    }
+
+    if (!selectedAbacRouteId) {
+      return;
+    }
+
+    const matched = extensions.find((extension) => extension.id === selectedAbacRouteId);
+    if (matched) {
+      if (!selectedForABAC || selectedForABAC.id !== matched.id) {
+        setSelectedForABAC(matched);
+      }
+    }
+  }, [activeTab, extensions, selectedAbacRouteId, selectedForABAC]);
+
+  const navigateToTab = useCallback((tabValue) => {
+    navigate(tabValue === 'installed' ? '/cmspanel/extensions' : `/cmspanel/extensions/${tabValue}`);
+  }, [navigate]);
+
+  const headerBadges = [
+    { label: 'Refresh-safe `/cmspanel/extensions` routes', icon: Layers3, tone: 'text-primary' },
+    { label: 'Platform permissions and signed settings routes', icon: ShieldCheck, tone: 'text-emerald-600' },
+  ];
+
   if (!canView) return (
     <div className="flex flex-col items-center justify-center min-h-[400px] bg-card rounded-xl border border-border p-12 text-center">
       <div className="p-4 bg-destructive/10 rounded-full mb-4">
@@ -149,10 +277,6 @@ function ExtensionsManager() {
 
   if (showGuide) return <ExtensionGuide onBack={() => setShowGuide(false)} />;
   if (editingExtension) return <ExtensionEditor extension={editingExtension} onClose={() => setEditingExtension(null)} onSave={() => { setEditingExtension(null); fetchExtensions(); }} />;
-
-  const breadcrumbs = [
-    { label: t('extensions.title'), icon: Puzzle }
-  ];
 
   const headerActions = (
     <div className="flex flex-wrap items-center gap-2">
@@ -171,7 +295,7 @@ function ExtensionsManager() {
         {t('extensions.guide')}
       </Button>
       {canCreate && (
-        <Button onClick={() => setActiveTab('install')} className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-sm hover:opacity-95">
+        <Button onClick={() => navigateToTab('install')} className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-sm hover:opacity-95">
           <Upload className="mr-2 h-4 w-4" />
           {t('extensions.install')}
         </Button>
@@ -180,13 +304,78 @@ function ExtensionsManager() {
   );
 
   return (
-    <AdminPageLayout className="space-y-6">
-      <PageHeader
-        title={t('extensions.title')}
-        description={t('extensions.subtitle')}
-        breadcrumbs={breadcrumbs}
-        actions={headerActions}
-      />
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link to="/cmspanel" className="flex items-center gap-1 transition-colors hover:text-foreground">
+            <Home className="h-4 w-4" />
+            <span>{t('common.dashboard') || 'Dashboard'}</span>
+          </Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="font-medium text-foreground">{t('extensions.title')}</span>
+        </div>
+
+        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                  <Puzzle className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Platform Modules</p>
+                  <p className="text-lg font-semibold text-foreground">{t('extensions.title')}</p>
+                </div>
+              </div>
+              <p className="max-w-3xl text-sm text-muted-foreground">{t('extensions.subtitle')}</p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
+                {currentTenant?.name ? `Tenant: ${currentTenant.name}` : 'Platform scope'}
+              </Badge>
+              <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
+                {extensions.length} installed entries
+              </Badge>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
+            {headerBadges.map((item) => (
+              <span key={item.label} className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
+                <item.icon className={cn('h-4 w-4', item.tone)} />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {tabMeta.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.value;
+            return (
+              <Button
+                key={tab.value}
+                variant="outline"
+                onClick={() => navigateToTab(tab.value)}
+                className={cn(
+                  'rounded-full border-border/70 bg-background/80 px-4 text-muted-foreground shadow-sm hover:bg-accent/70 hover:text-foreground',
+                  isActive && 'border-primary/30 bg-primary/10 text-primary'
+                )}
+              >
+                {Icon ? <Icon className="mr-2 h-4 w-4" /> : null}
+                {tab.label}
+                {typeof tab.count === 'number' ? <span className="ml-2 rounded-full bg-background/80 px-2 py-0.5 text-[11px] font-semibold text-foreground">{tab.count}</span> : null}
+              </Button>
+            );
+          })}
+        </div>
+
+        {headerActions}
+      </div>
 
       <ExtensionsOverviewCards
         extensionsCount={extensions.length}
@@ -196,18 +385,7 @@ function ExtensionsManager() {
         searchTerm={searchTerm}
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-border/60 bg-card/75 p-1">
-          <TabsTrigger value="installed" className="rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary">{t('extensions.installed')} ({extensions.length})</TabsTrigger>
-          {canCreate && <TabsTrigger value="install" className="rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary">{t('extensions.install')}</TabsTrigger>}
-          <TabsTrigger value="marketplace" className="rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary">{t('extensions.marketplace')}</TabsTrigger>
-          {canManageGlobal && <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary">{t('extensions.settings')}</TabsTrigger>}
-          {canManageGlobal && <TabsTrigger value="health" className="rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary">{t('extensions.health')}</TabsTrigger>}
-          {canManageGlobal && <TabsTrigger value="logs" className="rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary">{t('extensions.logs')}</TabsTrigger>}
-          {canManageGlobal && <TabsTrigger value="rbac" className="flex gap-2 rounded-lg data-[state=active]:bg-primary/10 data-[state=active]:text-primary"><Shield className="w-4 h-4" /> {t('extensions.abac')}</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="installed" className="mt-6">
+      {activeTab === 'installed' ? (
           <ExtensionsInstalledTab
             t={t}
             loading={loading}
@@ -222,39 +400,40 @@ function ExtensionsManager() {
             onEdit={setEditingExtension}
             onDelete={handleDelete}
             onToggleStatus={handleToggleStatus}
-            onSelectRbac={(extension) => {
-              setSelectedForRBAC(extension);
-              setActiveTab('rbac');
+            onSelectRbac={async (extension) => {
+              setSelectedForABAC(extension);
+              const routeId = await encodeRouteParam({ value: extension.id, scope: 'extensions.abac' });
+              if (!routeId) {
+                navigate('/cmspanel/extensions/abac');
+                return;
+              }
+              navigate(`/cmspanel/extensions/abac/${routeId}`);
             }}
             onRefresh={fetchExtensions}
           />
-        </TabsContent>
+      ) : null}
 
-        {canCreate && (
-          <TabsContent value="install" className="mt-6">
-            <div>
-              <ExtensionInstaller onInstallComplete={() => { setActiveTab('installed'); fetchExtensions(); }} />
-            </div>
-          </TabsContent>
-        )}
+      {canCreate && activeTab === 'install' ? (
+        <ExtensionInstaller onInstallComplete={() => { navigate('/cmspanel/extensions'); fetchExtensions(); }} />
+      ) : null}
 
-        <TabsContent value="marketplace" className="mt-6"><ExtensionMarketplace onInstall={() => { setActiveTab('installed'); fetchExtensions(); }} /></TabsContent>
+      {activeTab === 'marketplace' ? (
+        <ExtensionMarketplace onInstall={() => { navigate('/cmspanel/extensions'); fetchExtensions(); }} />
+      ) : null}
 
-        {canManageGlobal && (
-          <>
-            <TabsContent value="settings" className="mt-6"><ExtensionSettings /></TabsContent>
-            <TabsContent value="health" className="mt-6"><ExtensionHealthCheck /></TabsContent>
-            <TabsContent value="logs" className="mt-6"><ExtensionLogs /></TabsContent>
-            <TabsContent value="rbac" className="mt-6">
-              <ExtensionsRbacTab
-                t={t}
-                selectedForRBAC={selectedForRBAC}
-                onBack={() => setSelectedForRBAC(null)}
-              />
-            </TabsContent>
-          </>
-        )}
-      </Tabs>
+      {canManageGlobal && activeTab === 'settings' ? <ExtensionSettings /> : null}
+      {canManageGlobal && activeTab === 'health' ? <ExtensionHealthCheck /> : null}
+      {canManageGlobal && activeTab === 'logs' ? <ExtensionLogs /> : null}
+      {canManageGlobal && activeTab === 'abac' ? (
+        <ExtensionsAbacTab
+          t={t}
+          selectedForABAC={selectedForABAC}
+          onBack={() => {
+            setSelectedForABAC(null);
+            navigate('/cmspanel/extensions/abac');
+          }}
+        />
+      ) : null}
 
       <ExtensionDeleteDialog
         t={t}
@@ -262,7 +441,7 @@ function ExtensionsManager() {
         onOpenChange={(open) => !open && setExtensionToDelete(null)}
         onConfirm={handleConfirmDelete}
       />
-    </AdminPageLayout>
+    </div>
   );
 }
 
