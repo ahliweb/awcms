@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/customSupabaseClient';
+import { logAccessAudit } from '@/lib/accessAudit';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -279,13 +280,29 @@ const LoginPage = () => {
         }
       }
 
-      await supabase.from('audit_logs').insert({
-        tenant_id: userTenantId,
-        user_id: userId,
+      await logAccessAudit({
+        tenantId: userTenantId,
+        userId,
         action: 'user.login',
         resource: 'auth',
         channel: 'web',
-        ip_address: clientIP,
+        ipAddress: clientIP,
+        actorType: 'user',
+        authContext: { has_session: true, login_flow: 'password', status: 'success' },
+        moduleName: 'authentication',
+        featureName: 'login',
+        actionName: 'login',
+        resourceType: 'auth_session',
+        workspaceSource: 'awcms',
+        routePath: '/cmspanel/login',
+        url: typeof window !== 'undefined' ? window.location.href : null,
+        userAgent: navigator.userAgent,
+        purpose: 'authenticate user access',
+        triggerSource: 'login_page',
+        businessIntent: 'admin_panel_access',
+        accessChannel: 'web',
+        accessMechanism: 'react_route',
+        authMethod: 'password',
         details: { user_agent: navigator.userAgent, status: 'success' },
       });
 
@@ -382,13 +399,29 @@ const LoginPage = () => {
           console.warn('[Login 2FA] IP fetch failed:', e);
         }
 
-        await supabase.from('audit_logs').insert({
-          tenant_id: userProfile2FA?.tenant_id,
-          user_id: pendingUserId,
+        await logAccessAudit({
+          tenantId: userProfile2FA?.tenant_id,
+          userId: pendingUserId,
           action: 'user.login',
           resource: 'auth',
           channel: 'web',
-          ip_address: clientIP2FA,
+          ipAddress: clientIP2FA,
+          actorType: 'user',
+          authContext: { has_session: true, login_flow: 'password_2fa', two_factor: true, status: 'success' },
+          moduleName: 'authentication',
+          featureName: 'two_factor_login',
+          actionName: 'login',
+          resourceType: 'auth_session',
+          workspaceSource: 'awcms',
+          routePath: '/cmspanel/login',
+          url: typeof window !== 'undefined' ? window.location.href : null,
+          userAgent: navigator.userAgent,
+          purpose: 'authenticate user access',
+          triggerSource: 'login_page',
+          businessIntent: 'admin_panel_access',
+          accessChannel: 'web',
+          accessMechanism: 'react_route',
+          authMethod: 'password+totp',
           details: { user_agent: navigator.userAgent, twoFactor: true, status: 'success' },
         });
 
@@ -405,17 +438,33 @@ const LoginPage = () => {
 
       // Log failed 2FA attempt
       try {
-        await supabase.from('audit_logs').insert({
-          tenant_id: null,
-          user_id: pendingUserId,
+        await logAccessAudit({
+          tenantId: null,
+          userId: pendingUserId,
           action: 'user.login',
           resource: 'auth',
           channel: 'web',
+          actorType: 'user',
+          authContext: { has_session: false, login_flow: 'password_2fa', two_factor: true, status: 'failed' },
+          moduleName: 'authentication',
+          featureName: 'two_factor_login',
+          actionName: 'login_failed',
+          resourceType: 'auth_session',
+          workspaceSource: 'awcms',
+          routePath: '/cmspanel/login',
+          url: typeof window !== 'undefined' ? window.location.href : null,
+          userAgent: navigator.userAgent,
+          purpose: 'authenticate user access',
+          triggerSource: 'login_page',
+          businessIntent: 'admin_panel_access',
+          accessChannel: 'web',
+          accessMechanism: 'react_route',
+          authMethod: 'password+totp',
           details: {
             status: 'failed',
             error: err.message || '2FA verification failed',
             user_agent: navigator.userAgent,
-            twoFactor: true
+            twoFactor: true,
           },
         });
       } catch (logErr) {

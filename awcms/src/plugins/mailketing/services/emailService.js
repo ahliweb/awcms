@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/lib/customSupabaseClient';
+import { logAccessAudit } from '@/lib/accessAudit';
 
 const EDGE_FUNCTION_URL = `${import.meta.env.VITE_EDGE_URL}/api/mailketing`;
 
@@ -49,10 +50,21 @@ export const saveTenantEmailConfig = async (tenantId, config) => {
     }
 
     // Log config change to audit trail
-    await supabase.from('audit_logs').insert({
-        tenant_id: tenantId,
+    await logAccessAudit({
+        tenantId,
         action: 'config_change',
         resource: 'settings',
+        actorType: 'user',
+        moduleName: 'mailketing',
+        featureName: 'email_settings',
+        actionName: 'config_change',
+        resourceType: 'settings',
+        workspaceSource: 'awcms',
+        purpose: 'update tenant email configuration',
+        triggerSource: 'mailketing_email_service',
+        businessIntent: 'email_delivery_configuration',
+        accessChannel: 'web',
+        accessMechanism: 'service_call',
         details: { plugin: 'mailketing', changes: Object.keys(config) },
     });
 

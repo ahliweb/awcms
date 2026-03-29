@@ -5,9 +5,11 @@
 /// Menggunakan secure storage untuk token.
 library;
 
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'access_audit_service.dart';
 import 'secure_storage_service.dart';
 import 'security_service.dart';
 
@@ -77,6 +79,27 @@ class AuthService extends Notifier<AuthState> {
         case AuthChangeEvent.signedIn:
           if (session != null) {
             _storeTokensSecurely(session);
+            unawaited(
+              AccessAuditService.instance.logAccessEvent(
+                tenantId: session.user.userMetadata?['tenant_id'] as String?,
+                userId: session.user.id,
+                action: 'user.login',
+                resource: 'auth',
+                actorType: 'user',
+                authContext: {'has_session': true, 'event': 'signedIn'},
+                moduleName: 'authentication',
+                featureName: 'mobile_auth',
+                actionName: 'login',
+                resourceType: 'auth_session',
+                routePath: '/login',
+                screenName: 'LoginScreen',
+                purpose: 'authenticate mobile access',
+                triggerSource: 'auth_state_change',
+                businessIntent: 'mobile_app_access',
+                accessMechanism: 'supabase_auth',
+                authMethod: 'session',
+              ),
+            );
           }
           state = AuthState(
             status: AuthStatus.authenticated,
@@ -141,6 +164,7 @@ class AuthService extends Notifier<AuthState> {
 
     try {
       developer.log('[AuthService] Calling Supabase signInWithPassword...');
+      final startedAt = DateTime.now();
       final response = await Supabase.instance.client.auth.signInWithPassword(
         email: email,
         password: password,
@@ -150,6 +174,30 @@ class AuthService extends Notifier<AuthState> {
       );
 
       if (response.user != null) {
+        unawaited(
+          AccessAuditService.instance.logAccessEvent(
+            tenantId: response.user!.userMetadata?['tenant_id'] as String?,
+            userId: response.user!.id,
+            action: 'user.login',
+            resource: 'auth',
+            actorType: 'user',
+            authContext: {'has_session': true, 'login_flow': 'password'},
+            moduleName: 'authentication',
+            featureName: 'mobile_auth',
+            actionName: 'login',
+            resourceType: 'auth_session',
+            requestDurationMs: DateTime.now()
+                .difference(startedAt)
+                .inMilliseconds,
+            routePath: '/login',
+            screenName: 'LoginScreen',
+            purpose: 'authenticate mobile access',
+            triggerSource: 'auth_service',
+            businessIntent: 'mobile_app_access',
+            accessMechanism: 'supabase_auth',
+            authMethod: 'password',
+          ),
+        );
         state = AuthState(
           status: AuthStatus.authenticated,
           user: response.user,

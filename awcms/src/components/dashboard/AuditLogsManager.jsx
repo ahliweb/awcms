@@ -44,7 +44,7 @@ function AuditLogsManager() {
         .range(from, to);
 
       if (searchQuery) {
-        query = query.or(`action.ilike.%${searchQuery}%,resource.ilike.%${searchQuery}%`);
+        query = query.or(`action.ilike.%${searchQuery}%,resource.ilike.%${searchQuery}%,module_name.ilike.%${searchQuery}%,feature_name.ilike.%${searchQuery}%,route_path.ilike.%${searchQuery}%,access_channel.ilike.%${searchQuery}%`);
       }
 
       const { data, count, error } = await query;

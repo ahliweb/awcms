@@ -4,6 +4,7 @@ import {
   createScopedClient,
   getTenant,
 } from "./lib/supabase";
+import { logAccessAudit } from "./lib/accessAudit";
 import { extractPathAfterTenant, extractTenantFromPath } from "./lib/url";
 
 const TRACKING_VISITOR_COOKIE = "awcms_visitor_id";
@@ -428,30 +429,67 @@ export const onRequest = defineMiddleware(async (context, next) => {
         const utmContent = url.searchParams.get("utm_content") || "";
 
         try {
+          const eventPayload = {
+            tenant_id: tenantId,
+            event_type: "page_view",
+            path: normalizedPath,
+            visitor_id: visitorId,
+            session_id: sessionId,
+            referrer: referrer || null,
+            utm_source: utmSource || null,
+            utm_medium: utmMedium || null,
+            utm_campaign: utmCampaign || null,
+            utm_term: utmTerm || null,
+            utm_content: utmContent || null,
+            ip_address: ipAddress || null,
+            user_agent: userAgent || null,
+            device_type: deviceType || null,
+            country: country === "XX" ? null : country,
+            region: region || null,
+            consent_state: consentState || "unknown",
+          };
+
           const { error } = await analyticsClient
             .from("analytics_events")
-            .insert({
-              tenant_id: tenantId,
-              event_type: "page_view",
-              path: normalizedPath,
-              visitor_id: visitorId,
-              session_id: sessionId,
-              referrer: referrer || null,
-              utm_source: utmSource || null,
-              utm_medium: utmMedium || null,
-              utm_campaign: utmCampaign || null,
-              utm_term: utmTerm || null,
-              utm_content: utmContent || null,
-              ip_address: ipAddress || null,
-              user_agent: userAgent || null,
-              device_type: deviceType || null,
-              country: country === "XX" ? null : country,
-              region: region || null,
-              consent_state: consentState || "unknown",
-            });
+            .insert(eventPayload);
 
           if (error) {
             console.warn("[Analytics] Failed to log page view:", error.message);
+          } else {
+            await logAccessAudit(analyticsClient, {
+              tenantId,
+              action: 'page.view',
+              resource: 'public_page',
+              details: eventPayload,
+              ipAddress,
+              channel: 'public',
+              actorType: 'visitor',
+              authContext: {
+                consent_state: consentState || 'unknown',
+                visitor_id: visitorId,
+                session_id: sessionId,
+              },
+              moduleName: 'public_portal',
+              featureName: 'page_view',
+              actionName: 'view',
+              resourceType: 'page',
+              workspaceSource: 'awcms-public/primary',
+              routePath: normalizedPath,
+              url: request.url,
+              userAgent,
+              deviceMetadata: {
+                device_type: deviceType,
+                country: country === 'XX' ? null : country,
+                region: region || null,
+              },
+              purpose: 'measure and audit public content access',
+              triggerSource: 'astro_middleware',
+              businessIntent: 'public_content_access',
+              accessChannel: 'public',
+              accessMechanism: 'astro_middleware',
+              integrationSource: 'analytics_events',
+              authMethod: 'anonymous',
+            });
           }
         } catch (err) {
           console.warn("[Analytics] Logging error:", err);

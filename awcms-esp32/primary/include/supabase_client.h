@@ -98,6 +98,17 @@ bool logEvent(const char *eventType, const char *message) {
   doc["tenant_id"] = TENANT_ID;
   doc["event_type"] = eventType;
   doc["message"] = message;
+  doc["workspace_source"] = "awcms-esp32/primary";
+  doc["module_name"] = "iot_device";
+  doc["feature_name"] = "device_runtime";
+  doc["action_name"] = eventType;
+  doc["resource_type"] = "device";
+  doc["resource_id"] = DEVICE_ID;
+  doc["access_channel"] = "iot";
+  doc["access_mechanism"] = "device_firmware";
+  doc["trigger_source"] = "esp32_firmware";
+  doc["business_intent"] = "device_observability";
+  doc["auth_method"] = "device_token";
 
   String jsonData;
   serializeJson(doc, jsonData);

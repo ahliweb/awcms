@@ -369,6 +369,67 @@ const writeExtensionAudit = async (adminSupabase: any, payload: {
   })
 }
 
+const writeAccessAudit = async (adminSupabase: any, payload: {
+  tenantId?: string | null
+  userId?: string | null
+  action?: string
+  resource?: string
+  details?: Record<string, unknown>
+  ipAddress?: string | null
+  channel?: string | null
+  actorType?: string | null
+  actorRole?: string | null
+  authContext?: Record<string, unknown>
+  moduleName?: string | null
+  featureName?: string | null
+  actionName?: string | null
+  resourceType?: string | null
+  resourceId?: string | null
+  permissionKey?: string | null
+  requestDurationMs?: number | null
+  workspaceSource?: string | null
+  routePath?: string | null
+  url?: string | null
+  userAgent?: string | null
+  purpose?: string | null
+  triggerSource?: string | null
+  businessIntent?: string | null
+  accessChannel?: string | null
+  accessMechanism?: string | null
+  authMethod?: string | null
+}) => {
+  await adminSupabase.rpc('log_access_event', {
+    p_tenant_id: payload.tenantId || null,
+    p_user_id: payload.userId || null,
+    p_action: payload.action || 'access',
+    p_resource: payload.resource || 'access',
+    p_details: payload.details || {},
+    p_ip_address: payload.ipAddress || null,
+    p_channel: payload.channel || null,
+    p_actor_type: payload.actorType || null,
+    p_actor_role: payload.actorRole || null,
+    p_auth_context: payload.authContext || {},
+    p_module_name: payload.moduleName || null,
+    p_feature_name: payload.featureName || null,
+    p_action_name: payload.actionName || payload.action || 'access',
+    p_resource_type: payload.resourceType || payload.resource || 'access',
+    p_resource_id: payload.resourceId || null,
+    p_permission_key: payload.permissionKey || null,
+    p_server_timestamp: new Date().toISOString(),
+    p_request_duration_ms: payload.requestDurationMs || null,
+    p_workspace_source: payload.workspaceSource || 'awcms-edge',
+    p_route_path: payload.routePath || null,
+    p_url: payload.url || null,
+    p_user_agent: payload.userAgent || null,
+    p_purpose: payload.purpose || null,
+    p_trigger_source: payload.triggerSource || null,
+    p_business_intent: payload.businessIntent || null,
+    p_access_channel: payload.accessChannel || payload.channel || 'api',
+    p_access_mechanism: payload.accessMechanism || 'worker_route',
+    p_auth_method: payload.authMethod || null,
+  })
+}
+
 // Local-dev proxy upload route.
 // Registered BEFORE the /api/* JWT middleware so the browser PUT (which carries
 // no Authorization header, matching presigned-URL semantics) is not rejected.
@@ -590,6 +651,7 @@ app.post('/api/media/cleanup-local-duplicates', async (c) => {
 
 // Request an upload session
 app.post('/api/media/upload-session', async (c) => {
+  const startedAt = Date.now()
   const user = c.get('user');
   const token = c.get('token');
   const body = await c.req.json<UploadSessionRequest>();
@@ -682,6 +744,33 @@ app.post('/api/media/upload-session', async (c) => {
     if (isLocalDev) {
       uploadUrl = new URL(`/api/media/upload-proxy/${session.id}`, c.req.url).toString()
     }
+
+    await writeAccessAudit(adminSupabase, {
+      tenantId,
+      userId: user.id,
+      action: 'media.upload_session',
+      resource: 'upload_session',
+      details: { file_name: body.fileName, mime_type: body.mimeType, size_bytes: body.sizeBytes },
+      ipAddress: getRequestIp(c.req.raw),
+      channel: 'api',
+      actorType: 'user',
+      authContext: { has_session: true },
+      moduleName: 'media',
+      featureName: 'upload_session',
+      actionName: 'create',
+      resourceType: 'upload_session',
+      resourceId: session.id,
+      requestDurationMs: Date.now() - startedAt,
+      routePath: '/api/media/upload-session',
+      url: c.req.url,
+      userAgent: c.req.header('user-agent') || null,
+      purpose: 'create secure media upload session',
+      triggerSource: 'awcms_edge_route',
+      businessIntent: 'media_upload',
+      accessChannel: 'api',
+      accessMechanism: 'worker_route',
+      authMethod: 'bearer_token',
+    })
 
     return c.json({
       sessionId: session.id,
@@ -1106,6 +1195,7 @@ app.post('/webhooks/public-rebuild/smandapbun', async (c) => {
 })
 
 app.post('/api/public/rebuild', async (c) => {
+  const startedAt = Date.now()
   const user = c.get('user')
   const token = c.get('token')
   const adminSupabase = getAdminSupabase(c.env)
@@ -1167,6 +1257,33 @@ app.post('/api/public/rebuild', async (c) => {
   })
 
   await c.env.NOTIFICATIONS_QUEUE.send(msg)
+
+  await writeAccessAudit(adminSupabase, {
+    tenantId,
+    userId: user.id,
+    action: 'public.rebuild',
+    resource: 'site_rebuild',
+    details: { job_id: msg.job_id, action: body?.action || 'update', resource: body?.resource || null },
+    ipAddress: getRequestIp(c.req.raw),
+    channel: 'worker',
+    actorType: 'user',
+    authContext: { has_session: true },
+    moduleName: 'public_portal',
+    featureName: 'rebuild',
+    actionName: 'trigger',
+    resourceType: 'site_rebuild',
+    resourceId: msg.job_id,
+    requestDurationMs: Date.now() - startedAt,
+    routePath: '/api/public/rebuild',
+    url: c.req.url,
+    userAgent: c.req.header('user-agent') || null,
+    purpose: 'trigger tenant public rebuild',
+    triggerSource: 'awcms_edge_route',
+    businessIntent: 'public_content_delivery',
+    accessChannel: 'worker',
+    accessMechanism: 'worker_route',
+    authMethod: 'bearer_token',
+  })
 
   return c.json({ ok: true, job_id: msg.job_id, queued: true, tenantId }, 202)
 })
@@ -1325,6 +1442,7 @@ app.post('/functions/v1/mailketing', handleMailketing);
 // ---- SUPABASE EDGE FUNCTION MIGRATIONS ----
 
 app.post('/functions/v1/content-transform', async (c) => {
+  const startedAt = Date.now()
   const authHeader = c.req.header('Authorization');
   if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
 
@@ -1363,6 +1481,33 @@ app.post('/functions/v1/content-transform', async (c) => {
 
   if (error) return c.json({ error: error.message }, 400);
   if (!data) return c.json({ error: 'Blog not found or access denied' }, 404);
+
+  await writeAccessAudit(adminClient, {
+    tenantId,
+    userId: authData.user.id,
+    action: 'content.transform',
+    resource: 'content_transform',
+    details: { blog_id: payload.blog_id },
+    ipAddress: getRequestIp(c.req.raw),
+    channel: 'worker',
+    actorType: 'user',
+    authContext: { has_session: true },
+    moduleName: 'content',
+    featureName: 'transform',
+    actionName: 'update',
+    resourceType: 'content_transform',
+    resourceId: data.id,
+    requestDurationMs: Date.now() - startedAt,
+    routePath: '/functions/v1/content-transform',
+    url: c.req.url,
+    userAgent: c.req.header('user-agent') || null,
+    purpose: 'apply transformed content payload',
+    triggerSource: 'awcms_edge_route',
+    businessIntent: 'content_processing',
+    accessChannel: 'worker',
+    accessMechanism: 'worker_route',
+    authMethod: 'bearer_token',
+  })
 
   return c.json({ ok: true, id: data.id }, 200);
 });
@@ -1480,6 +1625,7 @@ app.post('/functions/v1/xendit-payment', async (c) => {
 });
 
 app.post('/functions/v1/manage-users', async (c) => {
+  const startedAt = Date.now()
   try {
     const supabaseAdmin = getAdminSupabase(c.env);
     const body = await getJsonBody(c.req.raw) as any || {};
@@ -1712,6 +1858,34 @@ app.post('/functions/v1/manage-users', async (c) => {
       default:
         return c.json({ error: `Unknown action: ${action}` }, 400);
     }
+    await writeAccessAudit(supabaseAdmin, {
+      tenantId: requesterTenantId,
+      userId: requestingUser?.id || null,
+      action: 'users.manage',
+      resource: 'user_management',
+      details: { action, request_id: request_id || null, user_id: user_id || null },
+      ipAddress: getRequestIp(c.req.raw),
+      channel: 'worker',
+      actorType: requestingUser?.id ? 'user' : 'system',
+      actorRole: roleName,
+      authContext: { has_session: Boolean(requestingUser?.id), is_super_admin: isSuperAdmin },
+      moduleName: 'users',
+      featureName: 'manage_users',
+      actionName: action || 'manage',
+      resourceType: 'user_management',
+      resourceId: user_id || request_id || null,
+      requestDurationMs: Date.now() - startedAt,
+      routePath: '/functions/v1/manage-users',
+      url: c.req.url,
+      userAgent: c.req.header('user-agent') || null,
+      purpose: 'manage tenant or platform users',
+      triggerSource: 'awcms_edge_route',
+      businessIntent: 'identity_administration',
+      accessChannel: 'worker',
+      accessMechanism: 'worker_route',
+      authMethod: hasServiceToken ? 'service_token' : 'bearer_token',
+    })
+
     return c.json(result, 200);
   } catch (error: any) {
     return c.json({ error: error.message }, 400);
@@ -1719,6 +1893,7 @@ app.post('/functions/v1/manage-users', async (c) => {
 });
 
 app.post('/functions/v1/extensions-lifecycle', async (c) => {
+  const startedAt = Date.now()
   const authHeader = c.req.header('Authorization')
   const token = authHeader?.replace(/^Bearer\s+/i, '') || ''
   if (!token) {
@@ -1808,6 +1983,32 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           metadata: { extensionKey: getExtensionKey(manifest) },
         })
 
+        await writeAccessAudit(adminSupabase, {
+          tenantId: userContext.tenantId,
+          userId: authData.user.id,
+          action: 'extensions.lifecycle',
+          resource: 'extension_lifecycle',
+          details: { action, catalog_id: data.id },
+          ipAddress: getRequestIp(c.req.raw),
+          channel: 'worker',
+          actorType: 'user',
+          authContext: { has_session: true },
+          moduleName: 'extensions',
+          featureName: 'lifecycle',
+          actionName: action,
+          resourceType: 'extension_catalog',
+          resourceId: data.id,
+          requestDurationMs: Date.now() - startedAt,
+          routePath: '/functions/v1/extensions-lifecycle',
+          url: c.req.url,
+          userAgent: c.req.header('user-agent') || null,
+          purpose: 'manage extension lifecycle actions',
+          triggerSource: 'awcms_edge_route',
+          businessIntent: 'extension_runtime_management',
+          accessChannel: 'worker',
+          accessMechanism: 'worker_route',
+          authMethod: 'bearer_token',
+        })
         return c.json({ ok: true, catalog: data })
       }
 
@@ -1897,6 +2098,32 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           metadata: { extensionKey: getExtensionKey(validation.manifest), activationState },
         })
 
+        await writeAccessAudit(adminSupabase, {
+          tenantId,
+          userId: authData.user.id,
+          action: 'extensions.lifecycle',
+          resource: 'extension_lifecycle',
+          details: { action, tenant_extension_id: tenantExtension.id, catalog_id: catalog.id },
+          ipAddress: getRequestIp(c.req.raw),
+          channel: 'worker',
+          actorType: 'user',
+          authContext: { has_session: true },
+          moduleName: 'extensions',
+          featureName: 'lifecycle',
+          actionName: action,
+          resourceType: 'tenant_extension',
+          resourceId: tenantExtension.id,
+          requestDurationMs: Date.now() - startedAt,
+          routePath: '/functions/v1/extensions-lifecycle',
+          url: c.req.url,
+          userAgent: c.req.header('user-agent') || null,
+          purpose: 'manage extension lifecycle actions',
+          triggerSource: 'awcms_edge_route',
+          businessIntent: 'extension_runtime_management',
+          accessChannel: 'worker',
+          accessMechanism: 'worker_route',
+          authMethod: 'bearer_token',
+        })
         return c.json({ ok: true, tenantExtension })
       }
 
@@ -1981,6 +2208,32 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           metadata: { extensionKey: catalog ? `${catalog.vendor}/${catalog.slug}` : tenantExtension.id },
         })
 
+        await writeAccessAudit(adminSupabase, {
+          tenantId,
+          userId: authData.user.id,
+          action: 'extensions.lifecycle',
+          resource: 'extension_lifecycle',
+          details: { action, tenant_extension_id: tenantExtension.id },
+          ipAddress: getRequestIp(c.req.raw),
+          channel: 'worker',
+          actorType: 'user',
+          authContext: { has_session: true },
+          moduleName: 'extensions',
+          featureName: 'lifecycle',
+          actionName: action,
+          resourceType: 'tenant_extension',
+          resourceId: tenantExtension.id,
+          requestDurationMs: Date.now() - startedAt,
+          routePath: '/functions/v1/extensions-lifecycle',
+          url: c.req.url,
+          userAgent: c.req.header('user-agent') || null,
+          purpose: 'manage extension lifecycle actions',
+          triggerSource: 'awcms_edge_route',
+          businessIntent: 'extension_runtime_management',
+          accessChannel: 'worker',
+          accessMechanism: 'worker_route',
+          authMethod: 'bearer_token',
+        })
         return c.json({ ok: true, tenantExtension: data })
       }
 
@@ -2021,6 +2274,31 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
         }
         const score = Object.values(checks).every((status) => status === 'ok') ? 100 : 50
 
+        await writeAccessAudit(adminSupabase, {
+          tenantId,
+          userId: authData.user.id,
+          action: 'extensions.health_check',
+          resource: 'extension_health',
+          details: { action, score },
+          ipAddress: getRequestIp(c.req.raw),
+          channel: 'worker',
+          actorType: 'user',
+          authContext: { has_session: true },
+          moduleName: 'extensions',
+          featureName: 'health_check',
+          actionName: 'health_check',
+          resourceType: 'extension_health',
+          requestDurationMs: Date.now() - startedAt,
+          routePath: '/functions/v1/extensions-lifecycle',
+          url: c.req.url,
+          userAgent: c.req.header('user-agent') || null,
+          purpose: 'inspect extension health state',
+          triggerSource: 'awcms_edge_route',
+          businessIntent: 'extension_runtime_management',
+          accessChannel: 'worker',
+          accessMechanism: 'worker_route',
+          authMethod: 'bearer_token',
+        })
         return c.json({ ok: true, checks, score })
       }
 

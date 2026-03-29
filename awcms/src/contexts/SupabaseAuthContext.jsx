@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { AUTH_STORAGE_KEY, LEGACY_AUTH_STORAGE_KEY } from '@/lib/customSupabaseClient';
+import { logAccessAudit } from '@/lib/accessAudit';
 import { useToast } from '@/components/ui/use-toast';
 
 const AuthContext = createContext(undefined);
@@ -123,17 +124,32 @@ export const AuthProvider = ({ children }) => {
       console.warn('[Auth] IP lookup failed for SSO login audit log:', e);
     }
 
-    const { error } = await supabase.from('audit_logs').insert({
-      tenant_id: tenantId,
-      user_id: session.user.id,
-      action: 'user.login',
-      resource: 'auth',
-      channel: 'sso',
-      ip_address: clientIP,
-      details: { provider, user_agent: navigator.userAgent },
-    });
-
-    if (error) {
+    try {
+      await logAccessAudit({
+        tenantId,
+        userId: session.user.id,
+        action: 'user.login',
+        resource: 'auth',
+        channel: 'sso',
+        ipAddress: clientIP,
+        actorType: 'user',
+        authContext: { provider, session_type: 'sso', has_session: true },
+        moduleName: 'authentication',
+        featureName: 'sso_login',
+        actionName: 'login',
+        resourceType: 'auth_session',
+        workspaceSource: 'awcms',
+        routePath: '/cmspanel/login',
+        url: typeof window !== 'undefined' ? window.location.href : null,
+        userAgent: navigator.userAgent,
+        purpose: 'authenticate user access',
+        triggerSource: 'supabase_auth_context',
+        accessChannel: 'sso',
+        accessMechanism: 'oauth',
+        authMethod: provider,
+        details: { provider, user_agent: navigator.userAgent },
+      });
+    } catch (error) {
       console.warn('[Auth] Failed to log SSO login event:', error);
     }
   }, []);

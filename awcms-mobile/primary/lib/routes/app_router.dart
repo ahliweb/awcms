@@ -3,10 +3,12 @@
 /// Konfigurasi routing menggunakan GoRouter.
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/services/access_audit_service.dart';
 import '../core/services/auth_service.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/auth/screens/login_screen.dart';
@@ -32,6 +34,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.home,
     debugLogDiagnostics: true,
+    observers: [_AccessAuditObserver()],
     redirect: (context, state) {
       final isLoggedIn = authState.isAuthenticated;
       final isLoggingIn = state.matchedLocation == AppRoutes.login;
@@ -109,3 +112,40 @@ final routerProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+class _AccessAuditObserver extends NavigatorObserver {
+  void _log(Route<dynamic>? route) {
+    final routeName = route?.settings.name;
+    final screenName = route?.settings.name ?? route?.settings.toString();
+    unawaited(
+      AccessAuditService.instance.logAccessEvent(
+        action: 'screen.view',
+        resource: 'mobile_screen',
+        actorType: 'user',
+        moduleName: 'mobile_app',
+        featureName: 'navigation',
+        actionName: 'view',
+        resourceType: 'screen',
+        routePath: routeName,
+        screenName: screenName,
+        purpose: 'track mobile screen access',
+        triggerSource: 'go_router',
+        businessIntent: 'mobile_navigation',
+        accessMechanism: 'navigator_observer',
+        authMethod: 'session',
+      ),
+    );
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _log(route);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _log(newRoute);
+  }
+}
