@@ -189,4 +189,4 @@ These omissions cause the most agent errors:
 
 - [AGENTS.md](../../AGENTS.md) — full tech stack table, hook reference, code patterns
 - [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) — authoritative constraints and MCP topology
-- [`.agents/workflows/`](../../.agents/workflows/) — step-by-step workflows for migrations, RLS, UI, CI
+- `.agents/workflows/` — step-by-step workflows for migrations, RLS, UI, CI (see [migration-workflow.md](../../.agents/workflows/migration-workflow.md), [rls-change-workflow.md](../../.agents/workflows/rls-change-workflow.md), [ui-change-workflow.md](../../.agents/workflows/ui-change-workflow.md), [ci-validation-workflow.md](../../.agents/workflows/ci-validation-workflow.md))
