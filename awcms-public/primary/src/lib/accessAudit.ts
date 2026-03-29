@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AccessAuditEvent = {
   tenantId?: string | null;
@@ -37,26 +37,25 @@ type AccessAuditEvent = {
 };
 
 const sanitizeText = (value: unknown) => {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
 };
 
-const sanitizeObject = (value: unknown) => (
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-);
+const sanitizeObject = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 
 export async function logAccessAudit(
   supabase: SupabaseClient,
   event: AccessAuditEvent,
 ) {
-  const { error } = await supabase.rpc('log_access_event', {
+  const { error } = await supabase.rpc("log_access_event", {
     p_tenant_id: event.tenantId ?? null,
     p_user_id: event.userId ?? null,
-    p_action: sanitizeText(event.action) || 'access',
-    p_resource: sanitizeText(event.resource) || 'access',
+    p_action: sanitizeText(event.action) || "access",
+    p_resource: sanitizeText(event.resource) || "access",
     p_details: sanitizeObject(event.details),
     p_ip_address: sanitizeText(event.ipAddress),
     p_channel: sanitizeText(event.channel),
@@ -71,7 +70,10 @@ export async function logAccessAudit(
     p_permission_key: sanitizeText(event.permissionKey),
     p_server_timestamp: event.serverTimestamp ?? new Date().toISOString(),
     p_client_timestamp: event.clientTimestamp ?? null,
-    p_request_duration_ms: typeof event.requestDurationMs === 'number' ? event.requestDurationMs : null,
+    p_request_duration_ms:
+      typeof event.requestDurationMs === "number"
+        ? event.requestDurationMs
+        : null,
     p_workspace_source: sanitizeText(event.workspaceSource),
     p_route_path: sanitizeText(event.routePath),
     p_url: sanitizeText(event.url),
