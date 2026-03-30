@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { User } from 'lucide-react';
+import { Layers3, ShieldCheck, User } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import TwoFactorSettings from '@/components/dashboard/TwoFactorSettings';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/flowbite-admin';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import ProfileSummaryCards from '@/components/dashboard/user-profile/ProfileSummaryCards';
 import PersonalInformationCard from '@/components/dashboard/user-profile/PersonalInformationCard';
 import ProfileDetailsCard from '@/components/dashboard/user-profile/ProfileDetailsCard';
@@ -15,6 +17,7 @@ import PasswordCard from '@/components/dashboard/user-profile/PasswordCard';
 import AccessControlCard from '@/components/dashboard/user-profile/AccessControlCard';
 
 function UserProfile() {
+	const { t } = useTranslation();
 	const { user } = useAuth();
 	const { userRole, permissions, isPlatformAdmin, isFullAccess, hasPermission, tenantId } = usePermissions();
 	const { toast } = useToast();
@@ -59,6 +62,7 @@ function UserProfile() {
 	const permissionCount = permissions?.length || 0;
 	const completedDetailFields = Object.values(profileDetails).filter(Boolean).length;
 	const isPlatformScope = profileData.role_is_platform_admin || profileData.role_is_full_access || isPlatformAdmin || isFullAccess;
+	const currentLanguage = typeof window !== 'undefined' ? localStorage.getItem('i18nextLng') || 'en' : 'en';
 
 	useEffect(() => {
 		if (!user) {
@@ -196,21 +200,21 @@ function UserProfile() {
 				}
 
 				toast({
-					title: 'Check your email',
-					description: 'Confirmation link sent to your new email address.'
+					title: t('profile.toast.email_check_title', 'Check your email'),
+					description: t('profile.toast.email_check_desc', 'Confirmation link sent to your new email address.')
 				});
 			}
 
 			toast({
-				title: 'Profile Updated',
-				description: 'Your profile information has been saved successfully.'
+				title: t('profile.toast.updated_title', 'Profile Updated'),
+				description: t('profile.toast.updated_desc', 'Your profile information has been saved successfully.')
 			});
 		} catch (error) {
 			console.error('Update error:', error);
 			toast({
 				variant: 'destructive',
-				title: 'Update Failed',
-				description: error.message || 'Failed to update profile.'
+				title: t('profile.toast.update_failed_title', 'Update Failed'),
+				description: error.message || t('profile.toast.update_failed_desc', 'Failed to update profile.')
 			});
 		} finally {
 			setLoading(false);
@@ -223,8 +227,8 @@ function UserProfile() {
 		if (passwordData.password !== passwordData.confirmPassword) {
 			toast({
 				variant: 'destructive',
-				title: 'Passwords do not match',
-				description: 'Please ensure both password fields match.'
+				title: t('profile.toast.password_mismatch_title', 'Passwords do not match'),
+				description: t('profile.toast.password_mismatch_desc', 'Please ensure both password fields match.')
 			});
 			return;
 		}
@@ -232,8 +236,8 @@ function UserProfile() {
 		if (passwordData.password.length < 6) {
 			toast({
 				variant: 'destructive',
-				title: 'Password too short',
-				description: 'Password must be at least 6 characters long.'
+				title: t('profile.toast.password_short_title', 'Password too short'),
+				description: t('profile.toast.password_short_desc', 'Password must be at least 6 characters long.')
 			});
 			return;
 		}
@@ -246,28 +250,28 @@ function UserProfile() {
 			}
 
 			toast({
-				title: 'Password Updated',
-				description: 'Your password has been changed successfully.'
+				title: t('profile.toast.password_updated_title', 'Password Updated'),
+				description: t('profile.toast.password_updated_desc', 'Your password has been changed successfully.')
 			});
 
 			setPasswordData({ password: '', confirmPassword: '' });
 		} catch (error) {
 			console.error('Password update error:', error);
-			let errorMessage = error.message || 'Failed to change password.';
+			let errorMessage = error.message || t('profile.toast.password_failed_desc', 'Failed to change password.');
 
 			if (errorMessage.includes('New password should be different') || error.code === 'same_password') {
-				errorMessage = 'Your new password cannot be the same as your old password.';
+				errorMessage = t('profile.toast.password_same_desc', 'Your new password cannot be the same as your old password.');
 			} else if (errorMessage.includes('Gateway Timeout') || error.status === 504) {
-				errorMessage = 'Server is busy. Please wait a moment and try again.';
+				errorMessage = t('profile.toast.server_busy_desc', 'Server is busy. Please wait a moment and try again.');
 			} else if (errorMessage.includes('fetch') || errorMessage.includes('network') || error.name === 'TypeError') {
-				errorMessage = 'Network error. Please check your connection and try again.';
+				errorMessage = t('profile.toast.network_error_desc', 'Network error. Please check your connection and try again.');
 			} else if (error.status === 429) {
-				errorMessage = 'Too many requests. Please wait a few minutes before trying again.';
+				errorMessage = t('profile.toast.rate_limit_desc', 'Too many requests. Please wait a few minutes before trying again.');
 			}
 
 			toast({
 				variant: 'destructive',
-				title: 'Update Failed',
+				title: t('profile.toast.update_failed_title', 'Update Failed'),
 				description: errorMessage
 			});
 		} finally {
@@ -304,15 +308,15 @@ function UserProfile() {
 			}
 
 			toast({
-				title: 'Profile Details Saved',
-				description: 'Your profile details have been updated successfully.'
+				title: t('profile.toast.details_saved_title', 'Profile Details Saved'),
+				description: t('profile.toast.details_saved_desc', 'Your profile details have been updated successfully.')
 			});
 		} catch (error) {
 			console.error('Profile details update error:', error);
 			toast({
 				variant: 'destructive',
-				title: 'Update Failed',
-				description: error.message || 'Failed to update profile details.'
+				title: t('profile.toast.update_failed_title', 'Update Failed'),
+				description: error.message || t('profile.toast.details_failed_desc', 'Failed to update profile details.')
 			});
 		} finally {
 			setDetailsLoading(false);
@@ -335,15 +339,15 @@ function UserProfile() {
 			}
 
 			toast({
-				title: 'Admin Fields Saved',
-				description: 'Encrypted admin notes have been updated successfully.'
+				title: t('profile.toast.admin_saved_title', 'Admin Fields Saved'),
+				description: t('profile.toast.admin_saved_desc', 'Encrypted admin notes have been updated successfully.')
 			});
 		} catch (error) {
 			console.error('Admin profile update error:', error);
 			toast({
 				variant: 'destructive',
-				title: 'Update Failed',
-				description: error.message || 'Failed to update admin fields.'
+				title: t('profile.toast.update_failed_title', 'Update Failed'),
+				description: error.message || t('profile.toast.admin_failed_desc', 'Failed to update admin fields.')
 			});
 		} finally {
 			setAdminLoading(false);
@@ -351,15 +355,21 @@ function UserProfile() {
 	};
 
 	return (
-		<AdminPageLayout className="space-y-6">
-			<PageHeader
-				title="My Profile"
-				description="Manage your account settings and security preferences."
+		<AdminPageLayout className="space-y-6" unwrapped>
+			<DashboardModuleIntro
 				icon={User}
-				breadcrumbs={[{ label: 'Profile', icon: User }]}
+				eyebrow={t('profile.eyebrow', 'Profile')}
+				title={t('profile.title', 'My Profile')}
+				description={t('profile.subtitle', 'Manage your account settings, security preferences, and profile metadata with ABAC-aware access controls.')}
+				badges={[
+					{ icon: Layers3, iconClassName: 'text-primary', label: t('profile.badges.route_shell', 'Refresh-safe `/cmspanel/profile` route shell') },
+					{ icon: ShieldCheck, iconClassName: 'text-emerald-600', label: isPlatformScope ? t('profile.badges.platform_scope', 'Platform ABAC scope active') : t('profile.badges.tenant_scope', 'Tenant ABAC scope active') },
+					{ icon: User, iconClassName: 'text-primary', label: `${t('common.language', 'Language')}: ${currentLanguage.toUpperCase()}` },
+				]}
 			/>
 
 			<ProfileSummaryCards
+				t={t}
 				effectiveRole={effectiveRole}
 				isPlatformScope={isPlatformScope}
 				permissionCount={permissionCount}
@@ -367,63 +377,61 @@ function UserProfile() {
 				primaryEmail={profileData.email || user?.email || '-'}
 			/>
 
-			<div className="w-full space-y-8 pb-4">
-				<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-					<div className="lg:col-span-2 space-y-6">
-						<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-							<PersonalInformationCard
-								profileData={profileData}
-								setProfileData={setProfileData}
-								loading={loading}
-								onSubmit={handleProfileUpdate}
+			<div className="grid grid-cols-1 items-stretch gap-6 pb-4 lg:grid-cols-3">
+				<div className="space-y-6 lg:col-span-2">
+					<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+						<PersonalInformationCard
+							profileData={profileData}
+							setProfileData={setProfileData}
+							loading={loading}
+							onSubmit={handleProfileUpdate}
+						/>
+					</motion.div>
+
+					<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+						<ProfileDetailsCard
+							profileDetails={profileDetails}
+							setProfileDetails={setProfileDetails}
+							detailsLoading={detailsLoading}
+							onSubmit={handleDetailsUpdate}
+						/>
+					</motion.div>
+
+					{canManageAdminFields && (
+						<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+							<AdminNotesCard
+								adminData={adminData}
+								setAdminData={setAdminData}
+								adminLoading={adminLoading}
+								onSubmit={handleAdminUpdate}
 							/>
 						</motion.div>
+					)}
 
-						<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-							<ProfileDetailsCard
-								profileDetails={profileDetails}
-								setProfileDetails={setProfileDetails}
-								detailsLoading={detailsLoading}
-								onSubmit={handleDetailsUpdate}
-							/>
-						</motion.div>
+					<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+						<TwoFactorSettings />
+					</motion.div>
 
-						{canManageAdminFields && (
-							<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-								<AdminNotesCard
-									adminData={adminData}
-									setAdminData={setAdminData}
-									adminLoading={adminLoading}
-									onSubmit={handleAdminUpdate}
-								/>
-							</motion.div>
-						)}
+					<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+						<PasswordCard
+							passwordData={passwordData}
+							setPasswordData={setPasswordData}
+							passLoading={passLoading}
+							onSubmit={handlePasswordChange}
+						/>
+					</motion.div>
+				</div>
 
-						<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-							<TwoFactorSettings />
-						</motion.div>
-
-						<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-							<PasswordCard
-								passwordData={passwordData}
-								setPasswordData={setPasswordData}
-								passLoading={passLoading}
-								onSubmit={handlePasswordChange}
-							/>
-						</motion.div>
-					</div>
-
-					<div className="lg:col-span-1 flex flex-col space-y-6">
-						<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}>
-							<AccessControlCard
-								profileData={profileData}
-								userRole={userRole}
-								isPlatformAdmin={isPlatformAdmin}
-								isFullAccess={isFullAccess}
-								permissions={permissions}
-							/>
-						</motion.div>
-					</div>
+				<div className="flex flex-col space-y-6 lg:col-span-1">
+					<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}>
+						<AccessControlCard
+							profileData={profileData}
+							userRole={userRole}
+							isPlatformAdmin={isPlatformAdmin}
+							isFullAccess={isFullAccess}
+							permissions={permissions}
+						/>
+					</motion.div>
 				</div>
 			</div>
 		</AdminPageLayout>

@@ -69,6 +69,11 @@
     ,"previous": "Sebelumnya"
     ,"next": "Berikutnya"
     ,"page_of": "Halaman {{page}} dari {{total}}"
+    ,"showing": "Menampilkan"
+    ,"to": "hingga"
+    ,"of": "dari"
+    ,"page": "halaman"
+    ,"created": "Dibuat"
   },
   "auth": {
     "login": "Masuk",
@@ -455,6 +460,7 @@
       "users": "Pengguna",
       "approvals": "Persetujuan Pendaftaran"
     },
+    "tenant_management_title": "Manajemen Pengguna Bergantung Tenant",
      "columns": {
       "email": "Email",
       "full_name": "Nama Lengkap",
@@ -467,6 +473,63 @@
       "confirm": "Apakah Anda yakin ingin menghapus <strong>{{name}}</strong>?",
       "warning_role": "Sebelum menghapus: Pastikan peran pengguna telah diubah menjadi 'Tanpa Akses' atau peran tanpa izin.",
       "warning_restore": "Ini akan memindahkan pengguna ke sampah. Anda dapat memulihkan akun nanti jika diperlukan."
+    },
+    "errors": {
+      "no_view_permission": "Anda tidak memiliki izin untuk melihat pengguna.",
+      "no_approvals_permission": "Anda tidak memiliki izin untuk meninjau persetujuan pengguna."
+    }
+  },
+  "profile": {
+    "eyebrow": "Profil",
+    "title": "Profil Saya",
+    "subtitle": "Kelola pengaturan akun, preferensi keamanan, dan metadata profil Anda dengan kontrol akses yang sadar ABAC.",
+    "badges": {
+      "route_shell": "Shell rute `/cmspanel/profile` yang aman saat refresh",
+      "platform_scope": "Cakupan ABAC platform aktif",
+      "tenant_scope": "Cakupan ABAC tenant aktif"
+    },
+    "summary": {
+      "current_role": "Peran Saat Ini",
+      "platform_scope": "Cakupan ABAC platform",
+      "tenant_scope": "Cakupan ABAC tenant",
+      "permissions": "Izin",
+      "permissions_desc": "Kunci akses yang ditetapkan",
+      "details": "Detail Profil",
+      "details_desc": "Kolom detail yang terisi",
+      "primary_email": "Email Utama",
+      "primary_email_desc": "Identitas login akun"
+    },
+    "access_control": {
+      "title": "Kontrol Akses",
+      "subtitle": "Peran dan izin yang ditetapkan untuk Anda",
+      "current_role": "Peran Saat Ini",
+      "active_permissions": "Izin Aktif",
+      "no_permissions": "Tidak ada izin khusus yang ditetapkan."
+    },
+    "toast": {
+      "email_check_title": "Periksa email Anda",
+      "email_check_desc": "Tautan konfirmasi dikirim ke alamat email baru Anda.",
+      "updated_title": "Profil Diperbarui",
+      "updated_desc": "Informasi profil Anda berhasil disimpan.",
+      "update_failed_title": "Pembaruan Gagal",
+      "update_failed_desc": "Gagal memperbarui profil.",
+      "password_mismatch_title": "Kata sandi tidak cocok",
+      "password_mismatch_desc": "Pastikan kedua kolom kata sandi cocok.",
+      "password_short_title": "Kata sandi terlalu pendek",
+      "password_short_desc": "Kata sandi harus minimal 6 karakter.",
+      "password_updated_title": "Kata Sandi Diperbarui",
+      "password_updated_desc": "Kata sandi Anda berhasil diubah.",
+      "password_failed_desc": "Gagal mengubah kata sandi.",
+      "password_same_desc": "Kata sandi baru Anda tidak boleh sama dengan kata sandi lama.",
+      "server_busy_desc": "Server sedang sibuk. Harap tunggu sebentar lalu coba lagi.",
+      "network_error_desc": "Kesalahan jaringan. Periksa koneksi Anda lalu coba lagi.",
+      "rate_limit_desc": "Terlalu banyak permintaan. Harap tunggu beberapa menit sebelum mencoba lagi.",
+      "details_saved_title": "Detail Profil Tersimpan",
+      "details_saved_desc": "Detail profil Anda berhasil diperbarui.",
+      "details_failed_desc": "Gagal memperbarui detail profil.",
+      "admin_saved_title": "Kolom Admin Tersimpan",
+      "admin_saved_desc": "Catatan admin terenkripsi berhasil diperbarui.",
+      "admin_failed_desc": "Gagal memperbarui kolom admin."
     }
   },
   "roles": {
@@ -483,13 +546,36 @@
       "description": "Deskripsi",
       "permissions": "Izin",
       "created_by": "Dibuat Oleh",
-      "tenant": "Nama Tenant"
+      "tenant": "Nama Tenant",
+      "scope": "Cakupan",
+      "access": "Akses"
     },
     "badges": {
       "all_access": "AKSES PENUH",
       "owner": "PEMILIK",
-      "tenant_root": "ROOT TENANT"
+      "tenant_root": "ROOT TENANT",
+      "platform_abac": "ABAC PLATFORM"
     },
+    "eyebrow": "Kontrol Akses",
+    "governance_title": "Tata Kelola Peran",
+    "governance_desc": "Kelola peran tenant dan platform, arahkan pengguna ke editor peran yang aman, dan pastikan matriks izin tetap selaras dengan kebijakan akses saat ini.",
+    "tenant_management_title": "Manajemen Peran Bergantung Tenant",
+    "current_tenant": "Tenant saat ini",
+    "platform_cards_heading": "Kartu Peran Lingkup Platform",
+    "platform_cards_hint": "Peran global dan privilese tetap tersedia di sini meskipun manajemen peran yang bergantung pada tenant dibatasi ke tenant saat ini.",
+    "summary": {
+      "roles": "Peran",
+      "roles_desc": "Definisi peran tenant dan platform yang tersedia dalam cakupan akses saat ini.",
+      "privileged_roles": "Peran Berprivilege",
+      "privileged_roles_desc": "Peran yang membawa tanda platform atau akses penuh dan memerlukan peninjauan tambahan sebelum diedit.",
+      "permission_links": "Tautan Izin",
+      "permission_links_desc": "Penugasan peran-ke-izin aktif yang saat ini diberlakukan oleh matriks izin."
+    },
+    "platform_cards_title": "Manajemen Kartu Peran Lingkup Platform",
+    "platform_cards_desc": "Akses pengguna milik platform dan penugasan berprivilege tetap terlihat di sini di atas bagian manajemen pengguna yang bergantung pada tenant agar tata kelola peran global tetap independen dari filter tenant aktif.",
+    "platform_scope_count": "peran lingkup platform",
+    "tenant_bound": "Terikat tenant",
+    "managed_access": "Dikelola",
     "delete": {
       "title": "Hapus Peran",
       "confirm": "Apakah Anda yakin ingin menghapus peran <strong>\"{{name}}\"</strong>?",
@@ -497,10 +583,21 @@
       "warning_restore": "Ini akan memindahkan peran ke sampah. Anda dapat memulihkannya jika diperlukan."
     },
     "errors": {
+      "no_view_permission": "Anda tidak memiliki izin untuk melihat peran.",
+      "no_manage_permission": "Anda tidak memiliki izin untuk melihat atau mengelola pengaturan peran.",
+      "load_failed": "Tidak dapat membuka editor peran.",
+      "load_details_failed": "Gagal memuat detail peran.",
+      "invalid_link": "Tautan peran tidak valid.",
+      "permissions_load_failed": "Gagal memuat izin.",
       "protected_role": "Peran sistem tidak dapat dihapus.",
       "assigned_users": "Ada {{count}} pengguna yang ditugaskan ke peran ini. Tetapkan ulang mereka terlebih dahulu."
     },
     "editor": {
+      "back_to_roles": "Kembali ke peran",
+      "platform_config_title": "Konfigurasi Peran Platform",
+      "edit_config_title": "Edit Konfigurasi Peran",
+      "system_root_readonly": "Peran Root Sistem ini memiliki akses 100% penuh. Konfigurasinya hanya-baca.",
+      "define_access_policies": "Tentukan kebijakan kontrol akses dan cakupan izin.",
       "toast_template_applied": "Template Diterapkan",
       "toast_template_desc": "Set izin {{template}} diterapkan",
       "toast_all_selected": "{{count}} izin dipilih",

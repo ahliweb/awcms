@@ -14,8 +14,8 @@ import { useToast } from '@/components/ui/use-toast';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import SidebarMenuHeaderActions from '@/components/dashboard/sidebar-menu/SidebarMenuHeaderActions';
 import SidebarMenuItemsTab from '@/components/dashboard/sidebar-menu/SidebarMenuItemsTab';
 import SidebarMenuGroupsTab from '@/components/dashboard/sidebar-menu/SidebarMenuGroupsTab';
@@ -464,59 +464,18 @@ function SidebarMenuManager() {
           <span className="font-medium text-foreground">{t('sidebar_manager.title')}</span>
         </div>
 
-        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                  <Settings2 className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">System Navigation</p>
-                  <p className="text-lg font-semibold text-foreground">{t('sidebar_manager.title')}</p>
-                </div>
-              </div>
-              <p className="max-w-3xl text-sm text-muted-foreground">{t('sidebar_manager.subtitle')}</p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
-                {items.length} items
-              </Badge>
-              <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
-                {groups.length} groups
-              </Badge>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <Layers3 className="h-4 w-4 text-primary" />
-              Refresh-safe `/cmspanel/admin-navigation` routes
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              Platform-scoped sidebar controls and module-aware menu filtering
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-        <div className="mb-8 grid gap-4 md:grid-cols-3">
-          {summaryCards.map((card) => (
-            <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-              <CardContent className="relative p-5">
-                <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
-                <div className="relative">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
-                  <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
-                  <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <DashboardModuleIntro
+          icon={Settings2}
+          eyebrow="System Navigation"
+          title={t('sidebar_manager.title')}
+          description={t('sidebar_manager.subtitle')}
+          badges={[
+            { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/admin-navigation` routes' },
+            { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: 'Platform-scoped sidebar controls and module-aware menu filtering' },
+            { icon: Settings2, iconClassName: 'text-primary', label: `${items.length} items / ${groups.length} groups` },
+          ]}
+          summaryCards={summaryCards}
+        />
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

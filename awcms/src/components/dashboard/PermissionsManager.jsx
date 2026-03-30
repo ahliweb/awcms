@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Shield } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Layers3, Shield, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -12,6 +12,7 @@ import PermissionsHeaderActions from '@/components/dashboard/permissions/Permiss
 import PermissionsSearchPanel from '@/components/dashboard/permissions/PermissionsSearchPanel';
 import PermissionEditorDialog from '@/components/dashboard/permissions/PermissionEditorDialog';
 import PermissionDeleteDialog from '@/components/dashboard/permissions/PermissionDeleteDialog';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 
 function PermissionsManager() {
   const { t } = useTranslation();
@@ -99,6 +100,37 @@ function PermissionsManager() {
     currentPage * itemsPerPage
   );
 
+  const uniqueResources = useMemo(
+    () => new Set(filteredPermissions.map((permission) => permission.resource).filter(Boolean)).size,
+    [filteredPermissions]
+  );
+
+  const uniqueActions = useMemo(
+    () => new Set(filteredPermissions.map((permission) => permission.action).filter(Boolean)).size,
+    [filteredPermissions]
+  );
+
+  const summaryCards = [
+    {
+      title: 'Permission Entries',
+      value: totalItems,
+      description: 'Platform-visible permission records currently available in the active matrix view.',
+      accent: 'from-primary/15 via-primary/6 to-transparent',
+    },
+    {
+      title: 'Resources',
+      value: uniqueResources,
+      description: 'Distinct ABAC resources currently represented across the permission catalog.',
+      accent: 'from-sky-500/15 via-sky-500/6 to-transparent',
+    },
+    {
+      title: 'Actions',
+      value: uniqueActions,
+      description: 'Permission actions available for platform-wide role and matrix assignment flows.',
+      accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent',
+    },
+  ];
+
   const handleSave = async (event) => {
     event.preventDefault();
 
@@ -173,7 +205,7 @@ function PermissionsManager() {
     <AdminPageLayout requiredPermission="platform.permissions.read">
       <PageHeader
         title={t('permissions.manager.title')}
-        description={t('permissions.manager.description')}
+        description="Manage the platform ABAC permission catalog, keep the permission matrix aligned with active resources, and preserve refresh-safe admin behavior."
         icon={Shield}
         breadcrumbs={[{ label: t('permissions.manager.title'), icon: Shield }]}
         actions={(
@@ -187,6 +219,18 @@ function PermissionsManager() {
             }}
           />
         )}
+      />
+
+      <DashboardModuleIntro
+        icon={Shield}
+        eyebrow="ABAC"
+        title="Permission Matrix Catalog"
+        description="Review and manage platform permission entries with ABAC-first naming, cleaner search, and direct alignment with roles, users, and extension permission mapping."
+        badges={[
+          { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/permissions` route shell' },
+          { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: 'Platform ABAC scope and role matrix alignment' },
+        ]}
+        summaryCards={summaryCards}
       />
 
       <PermissionsSearchPanel

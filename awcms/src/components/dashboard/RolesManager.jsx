@@ -6,11 +6,11 @@ import GenericContentManager from '@/components/dashboard/GenericContentManager'
 import { Button } from '@/components/ui/button';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { useToast } from '@/components/ui/use-toast';
-import { cn } from '@/lib/utils';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardContent } from '@/components/ui/card';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
+import { cn } from '@/lib/utils';
 
 function RolesManager() {
   const { t } = useTranslation();
@@ -123,90 +123,49 @@ function RolesManager() {
 
   const summaryCards = useMemo(() => ([
     {
-      title: 'Roles',
+      title: t('roles.summary.roles', 'Roles'),
       value: summary.totalRoles,
-      description: 'Tenant and platform role definitions available in the current access scope.',
+      description: t('roles.summary.roles_desc', 'Tenant and platform role definitions available in the current access scope.'),
       accent: 'from-primary/15 via-primary/6 to-transparent',
     },
     {
-      title: 'Privileged Roles',
+      title: t('roles.summary.privileged_roles', 'Privileged Roles'),
       value: summary.privilegedRoles,
-      description: 'Roles carrying platform or full-access flags that require extra review before editing.',
+      description: t('roles.summary.privileged_roles_desc', 'Roles carrying platform or full-access flags that require extra review before editing.'),
       accent: 'from-amber-500/15 via-amber-500/6 to-transparent',
     },
     {
-      title: 'Permission Links',
+      title: t('roles.summary.permission_links', 'Permission Links'),
       value: summary.permissionLinks,
-      description: 'Active role-to-permission assignments currently enforced by the permission matrix.',
+      description: t('roles.summary.permission_links_desc', 'Active role-to-permission assignments currently enforced by the permission matrix.'),
       accent: 'from-sky-500/15 via-sky-500/6 to-transparent',
     },
-  ]), [summary]);
+  ]), [summary, t]);
 
   const headerContent = (
     <div className="space-y-8">
-      <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                <Shield className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Access Control</p>
-                <p className="text-lg font-semibold text-foreground">Role Governance</p>
-              </div>
-            </div>
-            <p className="max-w-3xl text-sm text-muted-foreground">Manage tenant and platform roles, route users into secure role editors, and keep the permission matrix aligned with current access policy rules.</p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium text-foreground shadow-sm">
-              {isPlatformAdmin ? 'Platform scope active' : `Tenant scope: ${currentTenant?.name || 'Current tenant'}`}
-            </span>
-            <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium text-foreground shadow-sm">
-              Signed role editor routes
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-          <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-            <Layers3 className="h-4 w-4 text-primary" />
-            Refresh-safe `/cmspanel/roles` list screen
-          </span>
-          <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            Signed edit routes and permission-gated matrix
-          </span>
-        </div>
-      </div>
-
-      <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-3">
-          {summaryCards.map((card) => (
-            <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-              <CardContent className="relative p-5">
-                <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
-                <div className="relative">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
-                  <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
-                  <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+      <DashboardModuleIntro
+        icon={Shield}
+        eyebrow={t('roles.eyebrow', 'Access Control')}
+        title={t('roles.governance_title', 'Role Governance')}
+        description={t('roles.governance_desc', 'Manage tenant and platform roles, route users into secure role editors, and keep the permission matrix aligned with current access policy rules.')}
+        badges={[
+          { icon: Layers3, iconClassName: 'text-primary', label: t('roles.badges.route_shell', 'Refresh-safe `/cmspanel/roles` route shell') },
+          { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: t('roles.badges.matrix_alignment', 'Signed edit routes and permission-gated matrix') },
+          { icon: Shield, iconClassName: 'text-primary', label: isPlatformAdmin ? 'Platform ABAC scope active' : `Tenant ABAC scope: ${currentTenant?.name || 'Current tenant'}` },
+        ]}
+        summaryCards={summaryCards}
+      />
 
       {isPlatformAdmin ? (
         <div className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-foreground">Platform-Scope Role Cards</h3>
-              <p className="text-sm text-muted-foreground">Global and privileged roles stay available here even when tenant-dependent role management is scoped to the current tenant.</p>
+              <h3 className="text-lg font-semibold text-foreground">{t('roles.platform_cards_heading', 'Platform-Scope Role Cards')}</h3>
+              <p className="text-sm text-muted-foreground">{t('roles.platform_cards_hint', 'Global and privileged roles stay available here even when tenant-dependent role management is scoped to the current tenant.')}</p>
             </div>
             <div className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-              {platformRolesTotal} platform-scope roles
+              {platformRolesTotal} {t('roles.platform_scope_count', 'platform-scope roles')}
             </div>
           </div>
 
@@ -222,29 +181,29 @@ function RolesManager() {
                   </div>
                   <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-500">
                     <Crown className="h-3 w-3 fill-amber-500 text-amber-500" />
-                    Platform
+                    {t('roles.badges.platform_abac', 'Platform ABAC')}
                   </span>
                 </div>
 
                 <div className="mt-4 space-y-2 text-xs text-muted-foreground">
                   <div className="flex items-center justify-between gap-3">
-                    <span>Scope</span>
+                    <span>{t('roles.columns.scope', 'Scope')}</span>
                     <span className="font-medium text-foreground">{role.scope || 'platform'}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span>Tenant</span>
+                    <span>{t('users.columns.tenant', 'Tenant')}</span>
                     <span className="font-medium text-foreground">{role.tenant_id ? 'Tenant-bound' : 'Global'}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span>Access</span>
+                    <span>{t('roles.columns.access', 'Access')}</span>
                     <span className="font-medium text-foreground">{role.is_full_access || role.is_platform_admin ? 'Elevated' : 'Managed'}</span>
                   </div>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-muted-foreground">Created {role.created_at ? new Date(role.created_at).toLocaleDateString() : '-'}</span>
+                  <span className="text-[11px] text-muted-foreground">{t('common.created', 'Created')} {role.created_at ? new Date(role.created_at).toLocaleDateString() : '-'}</span>
                   <Button size="sm" variant="outline" className="rounded-xl" onClick={() => handleOpenRole(role)}>
-                    Edit
+                    {t('common.edit', 'Edit')}
                   </Button>
                 </div>
               </div>
@@ -253,7 +212,7 @@ function RolesManager() {
 
           <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-muted-foreground">
-              Showing {platformRoles.length === 0 ? 0 : ((platformRolesPage - 1) * platformRolesPerPage) + 1} to {Math.min(platformRolesPage * platformRolesPerPage, platformRolesTotal)} of {platformRolesTotal} platform-scope roles
+              {t('common.showing', 'Showing')} {platformRoles.length === 0 ? 0 : ((platformRolesPage - 1) * platformRolesPerPage) + 1} {t('common.to', 'to')} {Math.min(platformRolesPage * platformRolesPerPage, platformRolesTotal)} {t('common.of', 'of')} {platformRolesTotal} {t('roles.platform_scope_count', 'platform-scope roles')}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -265,15 +224,15 @@ function RolesManager() {
                 className="h-10 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground shadow-sm"
               >
                 {[3, 6, 9, 12].map((value) => (
-                  <option key={value} value={value}>{value} / page</option>
+                  <option key={value} value={value}>{value} / {t('common.page', 'page')}</option>
                 ))}
               </select>
               <Button variant="outline" className="rounded-xl" disabled={platformRolesPage <= 1} onClick={() => setPlatformRolesPage((page) => Math.max(1, page - 1))}>
-                Previous
+                {t('common.previous', 'Previous')}
               </Button>
-              <span className="px-2 text-sm text-muted-foreground">Page {platformRolesPage} of {platformRolesTotalPages}</span>
+              <span className="px-2 text-sm text-muted-foreground">{t('common.page', 'Page')} {platformRolesPage} {t('common.of', 'of')} {platformRolesTotalPages}</span>
               <Button variant="outline" className="rounded-xl" disabled={platformRolesPage >= platformRolesTotalPages} onClick={() => setPlatformRolesPage((page) => Math.min(platformRolesTotalPages, page + 1))}>
-                Next
+                {t('common.next', 'Next')}
               </Button>
             </div>
           </div>
@@ -282,8 +241,8 @@ function RolesManager() {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Tenant-Dependent Role Management</p>
-          <p className="text-xs text-muted-foreground">{currentTenant?.name || (isPlatformAdmin ? 'Global scope' : 'Current tenant')}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t('roles.tenant_management_title', 'Tenant-Dependent Role Management')}</p>
+          <p className="text-xs text-muted-foreground">{currentTenant?.name || (isPlatformAdmin ? t('common.global') : t('roles.current_tenant', 'Current tenant'))}</p>
         </div>
       </div>
     </div>
@@ -345,7 +304,7 @@ function RolesManager() {
   if (!hasPermission('tenant.role.read')) {
     return (
       <div className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-border/60 bg-card/70 p-8 text-center text-muted-foreground shadow-sm">
-        {t('common.access_denied')}
+        {t('roles.errors.no_view_permission', 'You do not have permission to view roles.')}
       </div>
     );
   }

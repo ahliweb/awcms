@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { Globe, Check, Languages, ShieldAlert } from 'lucide-react';
+import { Globe, Check, Languages, Layers3, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import { cn } from '@/lib/utils';
 
 const LANGUAGE_OPTIONS = [
@@ -16,6 +18,8 @@ const LANGUAGE_OPTIONS = [
 
 function LanguageSettings() {
 	const { t, i18n } = useTranslation();
+	const navigate = useNavigate();
+	const location = useLocation();
 	const { user } = useAuth();
 	const { toast } = useToast();
 	const { hasPermission } = usePermissions();
@@ -25,10 +29,17 @@ function LanguageSettings() {
 	const canUpdateLanguageSettings = hasPermission('tenant.languages.update') || hasPermission('tenant.setting.update') || canReadLanguageSettings;
 
 	const currentLanguage = i18n.language;
-const currentLanguageLabel = useMemo(
+	const currentLanguageLabel = useMemo(
 		() => LANGUAGE_OPTIONS.find((language) => language.value === currentLanguage)?.name || currentLanguage.toUpperCase(),
 		[currentLanguage]
 	);
+	const isCanonicalRoute = location.pathname === '/cmspanel/settings/language';
+
+	useEffect(() => {
+		if (!isCanonicalRoute) {
+			navigate('/cmspanel/settings/language', { replace: true });
+		}
+	}, [isCanonicalRoute, navigate]);
 
 	useEffect(() => {
 		if (!canReadLanguageSettings) {
@@ -106,64 +117,29 @@ const currentLanguageLabel = useMemo(
 		<AdminPageLayout requiredPermission="tenant.languages.read">
 			<PageHeader
 				title={t('settings.language_title')}
-				description={t('settings.language_desc')}
+				description="Manage admin language preferences with refresh-safe routing, profile-backed persistence, and multi-language support that stays aligned with the rest of the dashboard."
 				icon={Languages}
 				breadcrumbs={[{ label: 'Settings' }, { label: 'Language', icon: Languages }]}
 			/>
 
-			<div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-				<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Current Language</p>
-							<p className="mt-1 text-sm font-semibold text-foreground">{currentLanguageLabel}</p>
-							<p className="text-xs text-muted-foreground">Locale code: {currentLanguage}</p>
-						</div>
-						<span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
-							<Languages className="h-4 w-4" />
-						</span>
-					</div>
-				</div>
-
-				<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Supported Locales</p>
-							<p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{LANGUAGE_OPTIONS.length}</p>
-							<p className="text-xs text-muted-foreground">Configured in admin panel</p>
-						</div>
-						<span className="rounded-xl border border-border/70 bg-background/70 p-2 text-primary">
-							<Globe className="h-4 w-4" />
-						</span>
-					</div>
-				</div>
-
-				<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Preference Scope</p>
-							<p className="mt-1 text-sm font-semibold text-foreground">User Profile</p>
-							<p className="text-xs text-muted-foreground">Synced to user.language field</p>
-						</div>
-						<span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
-							<Check className="h-4 w-4" />
-						</span>
-					</div>
-				</div>
-
-				<div className="rounded-2xl border border-border/60 bg-card/65 p-4 shadow-sm backdrop-blur-sm">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Google Translate</p>
-							<p className="mt-1 text-sm font-semibold text-foreground">Widget Enabled</p>
-							<p className="text-xs text-muted-foreground">Browser side language assist</p>
-						</div>
-						<span className="rounded-xl border border-border/70 bg-background/70 p-2 text-primary">
-							<Globe className="h-4 w-4" />
-						</span>
-					</div>
-				</div>
-			</div>
+			<DashboardModuleIntro
+				icon={Languages}
+				eyebrow="Localization"
+				title="Language Settings"
+				description="Keep language preferences synced to the signed-in user profile, preserve refresh-safe admin routing, and keep dashboard localization behavior consistent across modules."
+				badges={[
+					{ icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/settings/language` route shell' },
+					{ icon: ShieldCheck, iconClassName: 'text-emerald-600', label: 'Tenant language permissions and profile-backed updates' },
+				]}
+				summaryCards={[
+					{ title: 'Current Language', value: currentLanguageLabel, description: `Locale code: ${currentLanguage}`, accent: 'from-primary/15 via-primary/6 to-transparent' },
+					{ title: 'Supported Locales', value: LANGUAGE_OPTIONS.length, description: 'Configured in admin panel', accent: 'from-sky-500/15 via-sky-500/6 to-transparent' },
+					{ title: 'Preference Scope', value: 'User Profile', description: 'Synced to user.language field', accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent' },
+					{ title: 'Google Translate', value: 'Enabled', description: 'Browser side language assist', accent: 'from-amber-500/15 via-amber-500/6 to-transparent' },
+				]}
+				valueClassName="text-2xl"
+				className="mb-6"
+			/>
 
 			<motion.div
 				initial={{ opacity: 0, y: 20 }}

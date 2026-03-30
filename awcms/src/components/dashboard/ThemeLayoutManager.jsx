@@ -1,11 +1,12 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Layout, Globe, FileType, AlertTriangle, PanelTop, PanelBottom, Pencil } from 'lucide-react';
+import { Layout, Globe, FileType, AlertTriangle, Layers3, PanelTop, PanelBottom, Pencil, ShieldCheck } from 'lucide-react';
 import GenericContentManager from './GenericContentManager';
 import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
 import { Button } from '@/components/ui/button';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/flowbite-admin';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 
 const singlePostStarterLayout = {
     root: {
@@ -361,11 +362,16 @@ const ThemeLayoutManager = ({ embedded = false }) => {
 
     return (
         <AdminPageLayout requiredPermission="tenant.visual_pages.read" className="space-y-6">
-            <PageHeader
-                title="Theme Layouts"
-                description="Manage system templates for homepage, header, footer, and more."
+            <DashboardModuleIntro
                 icon={Layout}
-                breadcrumbs={[{ label: 'Theme Layouts', icon: Layout }]}
+                eyebrow="Theme Layouts"
+                title="Theme Layouts"
+                description="Manage system templates for homepage, header, footer, and more while keeping visual layout flows aligned with the rest of the admin workspace."
+                badges={[
+                    { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/visual-pages/layouts` route shell' },
+                    { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: 'Tenant ABAC visual layout management' },
+                    { icon: Layout, iconClassName: 'text-primary', label: 'System templates and shared layout surfaces' },
+                ]}
             />
 
             {content}

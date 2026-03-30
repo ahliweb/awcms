@@ -1,4 +1,5 @@
 import { CheckCircle2, Crown, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const AccessControlCard = ({
 	profileData,
@@ -7,6 +8,7 @@ const AccessControlCard = ({
 	isFullAccess,
 	permissions,
 }) => {
+	const { t } = useTranslation();
 	const isElevatedRole = profileData.role_is_platform_admin || profileData.role_is_full_access || isPlatformAdmin || isFullAccess;
 
 	return (
@@ -16,14 +18,14 @@ const AccessControlCard = ({
 					<Shield className="w-5 h-5" />
 				</div>
 				<div>
-					<h3 className="font-semibold text-slate-900 dark:text-white">Access Control</h3>
-					<p className="text-xs text-slate-500 dark:text-slate-400">Your assigned role and permissions</p>
+					<h3 className="font-semibold text-slate-900 dark:text-white">{t('profile.access_control.title', 'Access Control')}</h3>
+					<p className="text-xs text-slate-500 dark:text-slate-400">{t('profile.access_control.subtitle', 'Your assigned role and permissions')}</p>
 				</div>
 			</div>
 
 			<div className="p-6 space-y-6 flex-1 flex flex-col min-h-0">
 				<div>
-					<h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-wider">Current Role</h4>
+					<h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-wider">{t('profile.access_control.current_role', 'Current Role')}</h4>
 					<div
 						className={`inline-flex items-center px-3 py-1.5 rounded-full font-semibold text-sm border ${isElevatedRole
 							? 'bg-purple-100/70 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 border-purple-200/70 dark:border-purple-800'
@@ -33,7 +35,7 @@ const AccessControlCard = ({
 						{isElevatedRole
 							? <Crown className="w-3.5 h-3.5 mr-2 text-purple-600 dark:text-purple-400" />
 							: <Shield className="w-3.5 h-3.5 mr-2" />}
-						{(profileData.role_name || userRole) ? (profileData.role_name || userRole).replace(/_/g, ' ') : 'Guest'}
+						{(profileData.role_name || userRole) ? (profileData.role_name || userRole).replace(/_/g, ' ') : t('users.guest', 'Guest')}
 					</div>
 					{profileData.role_description && (
 						<p className="text-sm text-slate-500 dark:text-slate-400 mt-2 italic">
@@ -44,7 +46,7 @@ const AccessControlCard = ({
 
 				<div className="flex-1 flex flex-col min-h-0">
 					<h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-3 uppercase tracking-wider flex items-center justify-between">
-						Active Permissions
+						{t('profile.access_control.active_permissions', 'Active Permissions')}
 						<span className="text-xs normal-case bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
 							{permissions?.length || 0}
 						</span>
@@ -64,7 +66,7 @@ const AccessControlCard = ({
 					) : (
 						<div className="flex-1 text-sm text-slate-400 italic p-6 bg-slate-50 dark:bg-slate-900/50 rounded-lg text-center border border-slate-100 dark:border-slate-800/70 flex flex-col items-center justify-center gap-2">
 							<Shield className="w-8 h-8 text-slate-200 dark:text-slate-600" />
-							No specific permissions assigned.
+							{t('profile.access_control.no_permissions', 'No specific permissions assigned.')}
 						</div>
 					)}
 				</div>

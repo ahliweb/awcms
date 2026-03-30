@@ -8,6 +8,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { triggerPublicRebuild } from '@/lib/publicRebuild';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import {
   getModuleByKey,
   getModulesByGroup,
@@ -652,48 +653,26 @@ function MenusManager() {
       </nav>
 
       <div className="space-y-8">
-        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                  <Menu className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Navigation</p>
-                  <p className="text-lg font-semibold text-foreground">Menu Management</p>
-                </div>
-              </div>
-              <p className="max-w-3xl text-sm text-muted-foreground">Configure public navigation for headers, footers, sidebars, and localized menu variants while keeping tenant-aware links aligned with related modules.</p>
-            </div>
-            {headerActions}
-          </div>
+        <DashboardModuleIntro
+          icon={Menu}
+          eyebrow="Navigation"
+          title="Menu Management"
+          description="Configure public navigation for headers, footers, sidebars, and localized menu variants while keeping tenant-aware links aligned with related modules."
+          actions={headerActions}
+          badges={[
+            { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/menus` route shell' },
+            { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: currentTenant?.name || 'Select tenant for menu scope' },
+            { icon: Calendar, iconClassName: 'text-primary', label: `${MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label} · ${currentLocale}` },
+          ]}
+        />
 
-          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <Layers3 className="h-4 w-4 text-primary" />
-              Refresh-safe `/cmspanel/menus` route shell
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              {currentTenant?.name || 'Select tenant for menu scope'}
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <Calendar className="h-4 w-4 text-primary" />
-              {MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label} · {currentLocale}
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-          <MenusOverviewCards
-            flatMenus={flatMenus}
-            rolesCount={roles.length}
-            currentLocationLabel={MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label}
-            portalVariantLabel={portalVariantLabel}
-            duplicateCount={duplicateCount}
-          />
-        </div>
+        <MenusOverviewCards
+          flatMenus={flatMenus}
+          rolesCount={roles.length}
+          currentLocationLabel={MENU_LOCATIONS.find((location) => location.id === currentLocation)?.label}
+          portalVariantLabel={portalVariantLabel}
+          duplicateCount={duplicateCount}
+        />
       </div>
 
       <div className="space-y-6">

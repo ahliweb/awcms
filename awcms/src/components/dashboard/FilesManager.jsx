@@ -8,6 +8,7 @@ import { FileStats } from './media/FileStats';
 import { useToast } from '@/components/ui/use-toast';
 import { useMedia } from '@/hooks/useMedia';
 import useSplatSegments from '@/hooks/useSplatSegments';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import FilesHeaderActions from '@/components/dashboard/files/FilesHeaderActions';
 import FilesOverviewCards from '@/components/dashboard/files/FilesOverviewCards';
 import FilesCategoriesPanel from '@/components/dashboard/files/FilesCategoriesPanel';
@@ -210,49 +211,27 @@ const FilesManager = () => {
           </nav>
 
           <div className="space-y-8">
-            <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                      <FolderOpen className="h-5 w-5" />
-                    </span>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Media</p>
-                      <p className="text-lg font-semibold text-foreground">{showTrash ? 'Media Library Trash' : 'Media Library'}</p>
-                    </div>
-                  </div>
-                  <p className="max-w-3xl text-sm text-muted-foreground">{showTrash
-                    ? 'Manage deleted files. Restore assets or review removed items without leaving the media workspace.'
-                    : 'Manage and organize digital assets, sync cloud storage, and keep file delivery aligned with tenant access controls.'}</p>
-                </div>
-                {headerActions}
-              </div>
+            <DashboardModuleIntro
+              icon={FolderOpen}
+              eyebrow="Media"
+              title={showTrash ? 'Media Library Trash' : 'Media Library'}
+              description={showTrash
+                ? 'Manage deleted files. Restore assets or review removed items without leaving the media workspace.'
+                : 'Manage and organize digital assets, sync cloud storage, and keep file delivery aligned with tenant access controls.'}
+              actions={headerActions}
+              badges={[
+                { icon: Layers3, iconClassName: 'text-primary', label: `Refresh-safe \`${basePath}\` routes` },
+                { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: isPlatformAdmin ? 'Platform ABAC scope active' : `Tenant ABAC scope: ${currentTenant?.name || 'Current tenant'}` },
+                { icon: Calendar, iconClassName: 'text-primary', label: selectedCategoryName || 'All files' },
+              ]}
+            />
 
-              <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-                <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                  <Layers3 className="h-4 w-4 text-primary" />
-                  Refresh-safe `{basePath}` routes
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                  {isPlatformAdmin ? 'Platform scope active' : `Tenant scope: ${currentTenant?.name || 'Current tenant'}`}
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                  <Calendar className="h-4 w-4 text-primary" />
-                  {selectedCategoryName || 'All files'}
-                </span>
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-              <FilesOverviewCards
-                showTrash={showTrash}
-                selectedCategoryName={selectedCategoryName}
-                categoriesCount={categories.length}
-                uploading={uploading}
-              />
-            </div>
+            <FilesOverviewCards
+              showTrash={showTrash}
+              selectedCategoryName={selectedCategoryName}
+              categoriesCount={categories.length}
+              uploading={uploading}
+            />
           </div>
 
           <div className="space-y-6">

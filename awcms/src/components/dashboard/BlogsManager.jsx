@@ -9,6 +9,7 @@ import useSplatSegments from '@/hooks/useSplatSegments';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/contexts/PermissionContext';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import BlogsOverviewCards from '@/components/dashboard/blogs/BlogsOverviewCards';
 import BlogsHeaderActions from '@/components/dashboard/blogs/BlogsHeaderActions';
 import BlogsToolbarActions from '@/components/dashboard/blogs/BlogsToolbarActions';
@@ -359,48 +360,26 @@ function BlogsManager() {
       </nav>
 
       <div className="space-y-8">
-        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                  <FileText className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Blogs</p>
-                  <p className="text-lg font-semibold text-foreground">{activeSectionLabel}</p>
-                </div>
-              </div>
-              <p className="max-w-3xl text-sm text-muted-foreground">{t('blogs.subtitle')}</p>
-            </div>
-            {headerActions}
-          </div>
+        <DashboardModuleIntro
+          icon={FileText}
+          eyebrow="Blogs"
+          title={activeSectionLabel}
+          description={t('blogs.subtitle')}
+          actions={headerActions}
+          badges={[
+            { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/blogs` routes' },
+            { icon: FileText, iconClassName: 'text-primary', label: `Language: ${selectedLanguageLabel}` },
+            { icon: Calendar, iconClassName: 'text-primary', label: activeView === 'trash' ? t('common.trash') : activeSectionLabel },
+          ]}
+        />
 
-          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <Layers3 className="h-4 w-4 text-primary" />
-              Refresh-safe `/cmspanel/blogs` routes
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <FileText className="h-4 w-4 text-primary" />
-              Language: {selectedLanguageLabel}
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <Calendar className="h-4 w-4 text-primary" />
-              {activeView === 'trash' ? t('common.trash') : activeSectionLabel}
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-          <BlogsOverviewCards
-            t={t}
-            activeSectionLabel={activeSectionLabel}
-            selectedLanguage={selectedLanguage}
-            selectedLanguageLabel={selectedLanguageLabel}
-            activeView={activeView}
-          />
-        </div>
+        <BlogsOverviewCards
+          t={t}
+          activeSectionLabel={activeSectionLabel}
+          selectedLanguage={selectedLanguage}
+          selectedLanguageLabel={selectedLanguageLabel}
+          activeView={activeView}
+        />
       </div>
 
       <BlogsContentPanels

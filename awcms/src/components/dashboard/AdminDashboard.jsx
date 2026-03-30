@@ -15,7 +15,7 @@ import { MyApprovals } from './widgets/MyApprovals';
 import { UsageWidget } from './widgets/UsageWidget';
 import { TopBlogsWidget } from './widgets/TopBlogsWidget';
 import PluginWidgets from './widgets/PluginWidgets';
-import { Card, CardContent } from '@/components/ui/card';
+import DashboardModuleIntro from './DashboardModuleIntro';
 import { cn } from '@/lib/utils';
 
 function AdminDashboard() {
@@ -123,57 +123,19 @@ function AdminDashboard() {
             </nav>
 
             <div className={spacingClass}>
-                <div className="space-y-8">
-                    <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="space-y-1.5">
-                                <div className="flex items-center gap-3">
-                                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                                        <Layers3 className="h-5 w-5" />
-                                    </span>
-                                    <div>
-                                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Dashboard</p>
-                                        <p className="text-lg font-semibold text-foreground">{`${getGreeting()}, ${roleLabel}`}</p>
-                                    </div>
-                                </div>
-                                <p className="max-w-3xl text-sm text-muted-foreground">{`Here's your performance overview for ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}.`}</p>
-                            </div>
-                            {headerActions}
-                        </div>
-
-                        <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-                            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                                <Layers3 className="h-4 w-4 text-primary" />
-                                /cmspanel dashboard shell
-                            </span>
-                            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                                {isPlatformAdmin ? 'Platform scope active' : `Tenant scope: ${currentTenant?.name || 'Current tenant'}`}
-                            </span>
-                            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                                <Calendar className="h-4 w-4 text-primary" />
-                                Last updated: {lastUpdatedLabel}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-                        <div className="grid gap-4 md:grid-cols-3">
-                            {summaryCards.map((card) => (
-                                <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-                                    <CardContent className="relative p-5">
-                                        <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
-                                        <div className="relative">
-                                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
-                                            <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
-                                            <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    </div>
-                </div>
+                <DashboardModuleIntro
+                    icon={Layers3}
+                    eyebrow="Dashboard"
+                    title={`${getGreeting()}, ${roleLabel}`}
+                    description={`Here's your ABAC-aware overview for ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}, including connected users, permissions, and module activity.`}
+                    actions={headerActions}
+                    badges={[
+                        { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel` dashboard shell' },
+                        { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: isPlatformAdmin ? 'Platform ABAC scope active' : `Tenant ABAC scope: ${currentTenant?.name || 'Current tenant'}` },
+                        { icon: Calendar, iconClassName: 'text-primary', label: `Last updated: ${lastUpdatedLabel}` },
+                    ]}
+                    summaryCards={summaryCards}
+                />
 
                 {/* Platform Overview for platform admins */}
                 {isPlatformAdmin && (

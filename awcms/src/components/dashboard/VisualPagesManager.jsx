@@ -7,8 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar, ChevronRight, Home, Layers, Palette, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionContext';
 import useSplatSegments from '@/hooks/useSplatSegments';
-import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 
 /**
  * VisualPagesManager
@@ -105,54 +104,18 @@ const VisualPagesManager = () => {
             </nav>
 
             <div className="space-y-8">
-                <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-3">
-                                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                                    <Layers className="h-5 w-5" />
-                                </span>
-                                <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Visual Pages</p>
-                                    <p className="text-lg font-semibold text-foreground">{activeTab === 'layouts' ? t('pages.tabs.layouts') : t('pages.visual_builder')}</p>
-                                </div>
-                            </div>
-                            <p className="max-w-3xl text-sm text-muted-foreground">Manage visual page compositions and shared page/blog templates from one editor surface.</p>
-                        </div>
-                    </div>
-
-                    <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                            <Layers className="h-4 w-4 text-primary" />
-                            Refresh-safe `/cmspanel/visual-pages` routes
-                        </span>
-                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                            {activeTab === 'layouts' ? <Palette className="h-4 w-4 text-primary" /> : <Layers className="h-4 w-4 text-primary" />}
-                            {activeTab}
-                        </span>
-                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                            <Calendar className="h-4 w-4 text-primary" />
-                            Tenant visual workflow
-                        </span>
-                    </div>
-                </div>
-
-                <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-                    <div className="grid gap-4 md:grid-cols-3">
-                        {summaryCards.map((card) => (
-                            <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-                                <CardContent className="relative p-5">
-                                    <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
-                                    <div className="relative">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
-                                        <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
-                                        <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-                </div>
+                <DashboardModuleIntro
+                    icon={Layers}
+                    eyebrow="Visual Pages"
+                    title={activeTab === 'layouts' ? t('pages.tabs.layouts') : t('pages.visual_builder')}
+                    description="Manage visual page compositions and shared page/blog templates from one editor surface."
+                    badges={[
+                        { icon: Layers, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/visual-pages` routes' },
+                        { icon: activeTab === 'layouts' ? Palette : Layers, iconClassName: 'text-primary', label: activeTab },
+                        { icon: Calendar, iconClassName: 'text-primary', label: 'Tenant ABAC visual workflow' },
+                    ]}
+                    summaryCards={summaryCards}
+                />
             </div>
 
             <Tabs

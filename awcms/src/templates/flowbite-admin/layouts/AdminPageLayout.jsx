@@ -8,6 +8,7 @@ const AdminPageLayout = ({
     loading = false,
     children,
     className = '',
+    unwrapped = false,
 }) => {
     const { hasPermission, hasAnyPermission, isPlatformAdmin, loading: permLoading } = usePermissions();
     const { currentTenant, loading: tenantLoading } = useTenant();
@@ -51,6 +52,10 @@ const AdminPageLayout = ({
                 </div>
             </div>
         );
+    }
+
+    if (unwrapped) {
+        return <div className={cn("space-y-8", className)}>{children}</div>;
     }
 
     return (

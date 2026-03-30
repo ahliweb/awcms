@@ -70,7 +70,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         setResolvedRole(data || null);
       } catch (err) {
         console.error('Error loading role:', err);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to load role details.' });
+        toast({ variant: 'destructive', title: t('common.error'), description: t('roles.errors.load_details_failed', 'Failed to load role details.') });
         navigate('/cmspanel/roles');
       }
     };
@@ -81,7 +81,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
   useEffect(() => {
     if (!routeParam || routeLoading) return;
     if (!routeRoleId) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Invalid role link.' });
+      toast({ variant: 'destructive', title: t('common.error'), description: t('roles.errors.invalid_link', 'Invalid role link.') });
       navigate('/cmspanel/roles');
       return;
     }
@@ -131,7 +131,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         }
       } catch (err) {
         console.error("Error loading permission matrix:", err);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to load permissions' });
+        toast({ variant: 'destructive', title: t('common.error'), description: t('roles.errors.permissions_load_failed', 'Failed to load permissions') });
       } finally {
         setLoading(false);
       }
@@ -362,10 +362,10 @@ const RoleEditor = ({ role, onClose, onSave }) => {
         className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       >
         <div className="w-full max-w-lg rounded-2xl border border-destructive/25 bg-card p-8 text-center shadow-2xl">
-          <p className="text-lg font-semibold text-destructive">Access denied</p>
-          <p className="mt-2 text-sm text-muted-foreground">You do not have permission to view or manage role settings.</p>
+          <p className="text-lg font-semibold text-destructive">{t('common.access_denied')}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{t('roles.errors.no_manage_permission', 'You do not have permission to view or manage role settings.')}</p>
           <div className="mt-6 flex justify-center">
-            <Button onClick={handleClose} variant="outline">Back to roles</Button>
+            <Button onClick={handleClose} variant="outline">{t('roles.editor.back_to_roles', 'Back to roles')}</Button>
           </div>
         </div>
       </motion.div>
@@ -386,10 +386,10 @@ const RoleEditor = ({ role, onClose, onSave }) => {
           <div>
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <Shield className={`w-5 h-5 ${isFullAccessRole ? 'text-purple-600' : 'text-blue-600'}`} />
-              {resolvedRole ? (resolvedRole.scope === 'platform' ? 'Platform Role Configuration' : 'Edit Role Configuration') : 'Create New Role'}
+              {resolvedRole ? (resolvedRole.scope === 'platform' ? t('roles.editor.platform_config_title', 'Platform Role Configuration') : t('roles.editor.edit_config_title', 'Edit Role Configuration')) : t('roles.create_role')}
             </h2>
             <p className="text-sm text-slate-500 mt-1">
-              {isFullAccessRole ? 'This System Root Role has complete 100% access. Configuration is read-only.' : 'Define access control policies and permission scopes.'}
+              {isFullAccessRole ? t('roles.editor.system_root_readonly', 'This System Root Role has complete 100% access. Configuration is read-only.') : t('roles.editor.define_access_policies', 'Define access control policies and permission scopes.')}
             </p>
           </div>
           <div className="flex gap-2">

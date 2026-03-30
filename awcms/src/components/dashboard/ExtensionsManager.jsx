@@ -14,12 +14,12 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useTranslation } from 'react-i18next';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { listTenantExtensions } from '@/lib/extensionCatalog';
 import { activateTenantExtension, deactivateTenantExtension, uninstallTenantExtension } from '@/lib/extensionLifecycleApi';
@@ -56,10 +56,9 @@ function ExtensionsManager() {
   const [showGuide, setShowGuide] = useState(false);
   const [extensionToDelete, setExtensionToDelete] = useState(null);
 
-  const tabValues = ['installed', 'install', 'marketplace', 'settings', 'health', 'logs', 'abac', 'rbac'];
+  const tabValues = ['installed', 'install', 'marketplace', 'settings', 'health', 'logs', 'abac'];
   const hasTabSegment = tabValues.includes(segments[0]);
-  const rawActiveTab = hasTabSegment ? segments[0] : 'installed';
-  const activeTab = rawActiveTab === 'rbac' ? 'abac' : rawActiveTab;
+  const activeTab = hasTabSegment ? segments[0] : 'installed';
   const activeChildSegment = hasTabSegment ? segments[1] || null : null;
   const extraSegments = hasTabSegment ? segments.slice(2) : segments.slice(1);
   const selectedAbacRouteId = activeTab === 'abac' && activeChildSegment && activeChildSegment !== 'selected' ? activeChildSegment : null;
@@ -89,13 +88,6 @@ function ExtensionsManager() {
 
     if (!hasTabSegment) {
       navigate('/cmspanel/extensions', { replace: true });
-      return;
-    }
-
-    if (rawActiveTab === 'rbac') {
-      const shouldDropLegacySelected = activeChildSegment === 'selected';
-      const suffix = activeChildSegment && !shouldDropLegacySelected ? `/${activeChildSegment}` : '';
-      navigate(`/cmspanel/extensions/abac${suffix}`, { replace: true });
       return;
     }
 
@@ -153,7 +145,7 @@ function ExtensionsManager() {
         navigate('/cmspanel/extensions/settings', { replace: true });
       }
     }
-  }, [segments, hasTabSegment, rawActiveTab, activeTab, activeChildSegment, selectedAbacRouteId, extraSegments, navigate, canCreate, canManageGlobal]);
+  }, [segments, hasTabSegment, activeTab, activeChildSegment, selectedAbacRouteId, extraSegments, navigate, canCreate, canManageGlobal]);
 
   const fetchExtensions = useCallback(async () => {
     try {
@@ -262,8 +254,8 @@ function ExtensionsManager() {
   }, [navigate]);
 
   const headerBadges = [
-    { label: 'Refresh-safe `/cmspanel/extensions` routes', icon: Layers3, tone: 'text-primary' },
-    { label: 'Platform permissions and signed settings routes', icon: ShieldCheck, tone: 'text-emerald-600' },
+    { label: 'Refresh-safe `/cmspanel/extensions` route shell', icon: Layers3, tone: 'text-primary' },
+    { label: 'Platform ABAC and signed settings routes', icon: ShieldCheck, tone: 'text-emerald-600' },
   ];
 
   if (!canView) return (
@@ -316,40 +308,17 @@ function ExtensionsManager() {
           <span className="font-medium text-foreground">{t('extensions.title')}</span>
         </div>
 
-        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                  <Puzzle className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Platform Modules</p>
-                  <p className="text-lg font-semibold text-foreground">{t('extensions.title')}</p>
-                </div>
-              </div>
-              <p className="max-w-3xl text-sm text-muted-foreground">{t('extensions.subtitle')}</p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
-                {currentTenant?.name ? `Tenant: ${currentTenant.name}` : 'Platform scope'}
-              </Badge>
-              <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
-                {extensions.length} installed entries
-              </Badge>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-            {headerBadges.map((item) => (
-              <span key={item.label} className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                <item.icon className={cn('h-4 w-4', item.tone)} />
-                {item.label}
-              </span>
-            ))}
-          </div>
-        </div>
+        <DashboardModuleIntro
+          icon={Puzzle}
+          eyebrow="Platform Modules"
+          title={t('extensions.title')}
+          description={t('extensions.subtitle')}
+          badges={[
+            ...headerBadges.map((item) => ({ icon: item.icon, iconClassName: item.tone, label: item.label })),
+            { icon: Puzzle, iconClassName: 'text-primary', label: currentTenant?.name ? `Tenant ABAC scope: ${currentTenant.name}` : 'Platform ABAC scope active' },
+            { icon: Shield, iconClassName: 'text-primary', label: `${extensions.length} installed extensions` },
+          ]}
+        />
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

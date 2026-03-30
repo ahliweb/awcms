@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 import UsersDeleteDialog from '@/components/dashboard/users/UsersDeleteDialog';
 import UsersSearchToolbar from '@/components/dashboard/users/UsersSearchToolbar';
 import UsersTableSection from '@/components/dashboard/users/UsersTableSection';
-import { Card, CardContent } from '@/components/ui/card';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 
 /**
  * UsersManager - Manages users and registration approvals.
@@ -65,12 +65,18 @@ function UsersManager() {
   const [platformUsersPage, setPlatformUsersPage] = useState(1);
   const [platformUsersPerPage, setPlatformUsersPerPage] = useState(6);
   const [platformUsersTotal, setPlatformUsersTotal] = useState(0);
+  const [platformRoles, setPlatformRoles] = useState([]);
+  const [platformRolesLoading, setPlatformRolesLoading] = useState(false);
+  const [platformRolesPage, setPlatformRolesPage] = useState(1);
+  const [platformRolesPerPage, setPlatformRolesPerPage] = useState(6);
+  const [platformRolesTotal, setPlatformRolesTotal] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
 
   const visibleUsersOnPage = users.length;
   const searchActive = Boolean(debouncedQuery);
   const platformUsersTotalPages = Math.max(1, Math.ceil(platformUsersTotal / platformUsersPerPage));
+  const platformRolesTotalPages = Math.max(1, Math.ceil(platformRolesTotal / platformRolesPerPage));
 
   useEffect(() => {
     if (segments.length > 0 && !hasTabSegment) {
@@ -198,6 +204,40 @@ function UsersManager() {
     }
   }, [isPlatformAdmin, debouncedQuery, platformUsersPage, platformUsersPerPage, toast, t]);
 
+  const fetchPlatformRoles = useCallback(async () => {
+    if (!isPlatformAdmin) return;
+
+    setPlatformRolesLoading(true);
+    try {
+      let q = supabase
+        .from('roles')
+        .select('id, name, description, scope, tenant_id, is_platform_admin, is_full_access, created_at', { count: 'exact' })
+        .is('deleted_at', null)
+        .or('scope.eq.platform,is_platform_admin.eq.true,is_full_access.eq.true,tenant_id.is.null');
+
+      if (debouncedQuery) {
+        q = q.ilike('name', `%${debouncedQuery}%`);
+      }
+
+      const from = (platformRolesPage - 1) * platformRolesPerPage;
+      const to = from + platformRolesPerPage - 1;
+
+      const { data, count, error } = await q
+        .range(from, to)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setPlatformRoles(data || []);
+      setPlatformRolesTotal(count || 0);
+    } catch (error) {
+      console.error('Error fetching platform roles:', error);
+      toast({ variant: 'destructive', title: t('common.error'), description: t('roles.errors.load_failed', 'Failed to load platform-scope roles.') });
+    } finally {
+      setPlatformRolesLoading(false);
+    }
+  }, [isPlatformAdmin, debouncedQuery, platformRolesPage, platformRolesPerPage, toast, t]);
+
   // Actions for header
   const headerActions = (
     <div className="flex items-center gap-2">
@@ -241,8 +281,9 @@ function UsersManager() {
   useEffect(() => {
     if (activeTab === 'users' && isPlatformAdmin) {
       fetchPlatformUsers();
+      fetchPlatformRoles();
     }
-  }, [activeTab, isPlatformAdmin, fetchPlatformUsers]);
+  }, [activeTab, isPlatformAdmin, fetchPlatformUsers, fetchPlatformRoles]);
 
   const handleEdit = async (user) => {
     const routeId = await encodeRouteParam({ value: user.id, scope: 'users.edit' });
@@ -376,8 +417,8 @@ function UsersManager() {
     },
     {
       title: t('users.columns.role'),
-      value: isPlatformAdmin ? 'Platform' : 'Tenant',
-      description: currentTenant?.name || 'Current access scope',
+      value: isPlatformAdmin ? t('common.global', 'Global') : t('users.breadcrumbs.users'),
+      description: currentTenant?.name || 'Current ABAC access scope',
       accent: 'from-sky-500/15 via-sky-500/6 to-transparent',
     },
   ]), [activeTab, totalItems, users.length, approvalStatus, t, isPlatformAdmin, currentTenant?.name]);
@@ -386,7 +427,7 @@ function UsersManager() {
     <div className="space-y-6">
       {!canView && activeTab === 'users' ? (
         <div className="rounded-2xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-sm">
-          <span className="font-semibold">Access denied.</span> You do not have permission to view users.
+          <span className="font-semibold">{t('common.access_denied', 'Access denied')}.</span> {t('users.errors.no_view_permission', 'You do not have permission to view users.')}
         </div>
       ) : null}
 
@@ -431,57 +472,19 @@ function UsersManager() {
         </ol>
       </nav>
 
-      <div className="space-y-8">
-        <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                  <Users className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Users</p>
-                  <p className="text-lg font-semibold text-foreground">{activeTab === 'approvals' ? t('users.tabs.approvals') : t('users.title')}</p>
-                </div>
-              </div>
-              <p className="max-w-3xl text-sm text-muted-foreground">{activeTab === 'approvals' ? 'Review registration approvals through refresh-safe nested sub-slugs while keeping onboarding decisions visible and auditable.' : t('users.subtitle')}</p>
-            </div>
-            {activeTab === 'users' ? headerActions : null}
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <Layers3 className="h-4 w-4 text-primary" />
-              Refresh-safe `/cmspanel/users` routes
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <User className="h-4 w-4 text-primary" />
-              {isPlatformAdmin ? 'Platform scope active' : `Tenant scope: ${currentTenant?.name || 'Current tenant'}`}
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-              <Calendar className="h-4 w-4 text-primary" />
-              {activeTab === 'approvals' ? (approvalStatus || 'pending') : `${visibleUsersOnPage} visible users`}
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-3">
-            {summaryCards.map((card) => (
-              <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-                <CardContent className="relative p-5">
-                  <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
-                  <div className="relative">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
-                    <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
-                    <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </div>
+      <DashboardModuleIntro
+        icon={Users}
+        eyebrow="Users"
+        title={activeTab === 'approvals' ? t('users.tabs.approvals') : t('users.title')}
+        description={activeTab === 'approvals' ? 'Review registration approvals through refresh-safe nested sub-slugs while keeping onboarding decisions visible and auditable.' : 'Manage tenant and platform users with ABAC-aware access, secure edit routes, and cleaner cross-module coordination with roles and permissions.'}
+        actions={activeTab === 'users' ? headerActions : null}
+        badges={[
+          { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/users` route shell' },
+          { icon: User, iconClassName: 'text-primary', label: isPlatformAdmin ? 'Platform ABAC scope active' : `Tenant ABAC scope: ${currentTenant?.name || 'Current tenant'}` },
+          { icon: Calendar, iconClassName: 'text-primary', label: activeTab === 'approvals' ? (approvalStatus || 'pending') : `${visibleUsersOnPage} visible users` },
+        ]}
+        summaryCards={summaryCards}
+      />
 
       {/* Tabs Navigation */}
       <PageTabs
@@ -502,50 +505,50 @@ function UsersManager() {
                 <div className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold text-foreground">Platform-Scope User Cards</h3>
-                      <p className="text-sm text-muted-foreground">Global and privileged user accounts stay visible here even when tenant-dependent user management is filtered by the active tenant.</p>
+                      <h3 className="text-lg font-semibold text-foreground">{t('roles.platform_cards_title', 'Platform-Scope Role Card Management')}</h3>
+                      <p className="text-sm text-muted-foreground">{t('roles.platform_cards_desc', 'Platform-owned user access and privileged assignments stay visible here above the tenant-dependent user management section so global role governance remains independent of active tenant filtering.')}</p>
                     </div>
                     <div className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                      {platformUsersTotal} platform-scope users
+                      {platformRolesTotal} {t('roles.platform_scope_count', 'platform-scope roles')}
                     </div>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {platformUsersLoading ? Array.from({ length: platformUsersPerPage }).map((_, index) => (
+                    {platformRolesLoading ? Array.from({ length: platformRolesPerPage }).map((_, index) => (
                       <div key={index} className="h-44 animate-pulse rounded-2xl border border-border/60 bg-muted/40" />
-                    )) : platformUsers.map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-border/60 bg-background/90 p-4 shadow-sm">
+                    )) : platformRoles.map((role) => (
+                      <div key={role.id} className="rounded-2xl border border-border/60 bg-background/90 p-4 shadow-sm">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground">{item.full_name || t('users.guest')}</p>
-                            <p className="truncate text-xs text-muted-foreground">{item.email || '-'}</p>
+                            <p className="truncate text-sm font-semibold text-foreground">{role.name || '-'}</p>
+                            <p className="truncate text-xs text-muted-foreground">{role.description || t('common.not_set', 'Not set')}</p>
                           </div>
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-500">
                             <Crown className="h-3 w-3 fill-amber-500 text-amber-500" />
-                            Platform
+                            {t('roles.badges.tenant_root', 'Platform ABAC')}
                           </span>
                         </div>
 
                         <div className="mt-4 space-y-2 text-xs text-muted-foreground">
                           <div className="flex items-center justify-between gap-3">
-                            <span>Role</span>
-                            <span className="font-medium text-foreground">{item.roles?.name || t('users.guest')}</span>
+                            <span>{t('users.columns.role')}</span>
+                            <span className="font-medium text-foreground">{role.scope || 'platform'}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
-                            <span>Department</span>
-                            <span className="font-medium text-foreground">{item.profile?.department || t('common.not_set', 'Not set')}</span>
+                            <span>{t('users.columns.tenant')}</span>
+                            <span className="font-medium text-foreground">{role.tenant_id ? t('roles.tenant_bound', 'Tenant-bound') : t('common.global')}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
-                            <span>Tenant</span>
-                            <span className="font-medium text-foreground">{item.tenant?.name || t('common.global')}</span>
+                            <span>{t('roles.columns.permissions', 'Access')}</span>
+                            <span className="font-medium text-foreground">{role.is_full_access || role.is_platform_admin ? t('roles.badges.all_access', 'Elevated') : t('roles.managed_access', 'Managed')}</span>
                           </div>
                         </div>
 
                         <div className="mt-4 flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-muted-foreground">Joined {new Date(item.created_at).toLocaleDateString()}</span>
+                          <span className="text-[11px] text-muted-foreground">{t('common.created', 'Created')} {role.created_at ? new Date(role.created_at).toLocaleDateString() : '-'}</span>
                           {canEdit ? (
-                            <Button size="sm" variant="outline" className="rounded-xl" onClick={() => handleEdit(item)}>
-                              Edit
+                            <Button size="sm" variant="outline" className="rounded-xl" onClick={() => navigate('/cmspanel/roles')}>
+                              {t('common.edit', 'Edit')}
                             </Button>
                           ) : null}
                         </div>
@@ -555,27 +558,27 @@ function UsersManager() {
 
                   <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm text-muted-foreground">
-                      Showing {platformUsers.length === 0 ? 0 : ((platformUsersPage - 1) * platformUsersPerPage) + 1} to {Math.min(platformUsersPage * platformUsersPerPage, platformUsersTotal)} of {platformUsersTotal} platform-scope users
+                      {t('common.showing', 'Showing')} {platformRoles.length === 0 ? 0 : ((platformRolesPage - 1) * platformRolesPerPage) + 1} {t('common.to', 'to')} {Math.min(platformRolesPage * platformRolesPerPage, platformRolesTotal)} {t('common.of', 'of')} {platformRolesTotal} {t('roles.platform_scope_count', 'platform-scope roles')}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <select
-                        value={platformUsersPerPage}
+                        value={platformRolesPerPage}
                         onChange={(e) => {
-                          setPlatformUsersPerPage(Number(e.target.value));
-                          setPlatformUsersPage(1);
+                          setPlatformRolesPerPage(Number(e.target.value));
+                          setPlatformRolesPage(1);
                         }}
                         className="h-10 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground shadow-sm"
                       >
                         {[3, 6, 9, 12].map((value) => (
-                          <option key={value} value={value}>{value} / page</option>
+                          <option key={value} value={value}>{value} / {t('common.page', 'page')}</option>
                         ))}
                       </select>
-                      <Button variant="outline" className="rounded-xl" disabled={platformUsersPage <= 1} onClick={() => setPlatformUsersPage((page) => Math.max(1, page - 1))}>
-                        Previous
+                      <Button variant="outline" className="rounded-xl" disabled={platformRolesPage <= 1} onClick={() => setPlatformRolesPage((page) => Math.max(1, page - 1))}>
+                        {t('common.previous', 'Previous')}
                       </Button>
-                      <span className="px-2 text-sm text-muted-foreground">Page {platformUsersPage} of {platformUsersTotalPages}</span>
-                      <Button variant="outline" className="rounded-xl" disabled={platformUsersPage >= platformUsersTotalPages} onClick={() => setPlatformUsersPage((page) => Math.min(platformUsersTotalPages, page + 1))}>
-                        Next
+                      <span className="px-2 text-sm text-muted-foreground">{t('common.page', 'Page')} {platformRolesPage} {t('common.of', 'of')} {platformRolesTotalPages}</span>
+                      <Button variant="outline" className="rounded-xl" disabled={platformRolesPage >= platformRolesTotalPages} onClick={() => setPlatformRolesPage((page) => Math.min(platformRolesTotalPages, page + 1))}>
+                        {t('common.next', 'Next')}
                       </Button>
                     </div>
                   </div>
@@ -601,7 +604,7 @@ function UsersManager() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Tenant-Dependent User Management</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t('users.tenant_management_title', 'Tenant-Dependent User Management')}</p>
                   <p className="text-xs text-muted-foreground">{currentTenant?.name || t('common.global')}</p>
                 </div>
               </div>
@@ -636,7 +639,7 @@ function UsersManager() {
             />
           ) : (
             <div className="rounded-2xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-sm">
-              <span className="font-semibold">Access denied.</span> You do not have permission to review user approvals.
+              <span className="font-semibold">{t('common.access_denied', 'Access denied')}.</span> {t('users.errors.no_approvals_permission', 'You do not have permission to review user approvals.')}
             </div>
           )}
         </TabsContent>

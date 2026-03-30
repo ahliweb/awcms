@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Home, Layers3, ShieldCheck, Tag, Trash2 } from 'lucide-react';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useSearch } from '@/hooks/useSearch';
 import useSplatSegments from '@/hooks/useSplatSegments';
-import { Card, CardContent } from '@/components/ui/card';
 import TagsHeaderActions from '@/components/dashboard/tags/TagsHeaderActions';
 import TagsFiltersBar from '@/components/dashboard/tags/TagsFiltersBar';
 import TagsTable from '@/components/dashboard/tags/TagsTable';
@@ -502,20 +502,12 @@ function TagsManager({
     </div>
   ) : (
     <div className="space-y-8">
-      <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                <Tag className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Taxonomy</p>
-                <p className="text-lg font-semibold text-foreground">{showTrash ? `${title} Trash` : title}</p>
-              </div>
-            </div>
-            <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
-          </div>
+      <DashboardModuleIntro
+        icon={Tag}
+        eyebrow="Taxonomy"
+        title={showTrash ? `${title} Trash` : title}
+        description={description}
+        actions={
           <TagsHeaderActions
             showTrash={showTrash}
             canSoftDelete={canSoftDelete}
@@ -526,22 +518,14 @@ function TagsManager({
             }}
             onCreate={() => openModal(null)}
           />
-        </div>
-        <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-          <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-            <Layers3 className="h-4 w-4 text-primary" />
-            Refresh-safe `/cmspanel` tag routes
-          </span>
-          <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            Tenant-safe mutations and trash recovery
-          </span>
-        </div>
-      </div>
+        }
+        badges={[
+          { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel` tag route shell' },
+          { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: 'Tenant-safe mutations and trash recovery' },
+        ]}
+      />
       {!showTrash && (
-        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-          {summaryContent}
-        </div>
+        <>{summaryContent}</>
       )}
     </div>
   );

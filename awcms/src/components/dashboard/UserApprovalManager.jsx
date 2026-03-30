@@ -5,12 +5,11 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, ChevronRight, Home, UserCheck, XCircle } from 'lucide-react';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
 import ApprovalHeaderActions from '@/components/dashboard/user-approvals/ApprovalHeaderActions';
 import ApprovalRequestsTable from '@/components/dashboard/user-approvals/ApprovalRequestsTable';
 import RejectApplicationDialog from '@/components/dashboard/user-approvals/RejectApplicationDialog';
-import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 
 const APPROVAL_TABS = ['pending', 'completed', 'rejected'];
 
@@ -196,46 +195,19 @@ const UserApprovalManager = ({ activeTab: controlledTab, onTabChange, embedded =
         <>
       {embedded ? (
         <div className="space-y-8">
-          <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                    <UserCheck className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Approvals</p>
-                    <p className="text-lg font-semibold text-foreground">{t('approvals.manager.title')}</p>
-                  </div>
-                </div>
-                <p className="max-w-3xl text-sm text-muted-foreground">{t('approvals.manager.description')}</p>
-              </div>
-              <ApprovalHeaderActions loading={loading} onRefresh={fetchRequests} />
-            </div>
-          </div>
-
-          <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-            <div className="grid gap-4 md:grid-cols-3">
-              {summaryCards.map((card) => {
-                const Icon = card.icon;
-                return (
-                  <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-                    <CardContent className="relative p-5">
-                      <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
-                      <div className="relative">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
-                          <Icon className="h-4 w-4 text-primary" />
-                        </div>
-                        <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
-                        <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
+          <DashboardModuleIntro
+            icon={UserCheck}
+            eyebrow="Approvals"
+            title={t('approvals.manager.title')}
+            description={t('approvals.manager.description')}
+            actions={<ApprovalHeaderActions loading={loading} onRefresh={fetchRequests} />}
+            summaryCards={summaryCards.map((card) => ({
+              title: card.title,
+              value: card.value,
+              description: card.description,
+              accent: card.accent,
+            }))}
+          />
         </div>
       ) : (
         <nav className="mb-6">

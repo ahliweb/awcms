@@ -8,6 +8,7 @@ import useSplatSegments from '@/hooks/useSplatSegments';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import PagesOverviewCards from '@/components/dashboard/pages/PagesOverviewCards';
 import PagesContentPanels from '@/components/dashboard/pages/PagesContentPanels';
 import { getPageEditorProps } from '@/components/dashboard/pages/pageEditorConfig';
@@ -365,46 +366,24 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
 
       {!embedded && (
         <div className="space-y-8">
-          <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                    <Layers className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Pages</p>
-                    <p className="text-lg font-semibold text-foreground">{onlyVisual ? t('pages.visual_title') : isTrashView ? `${t('pages.title')} ${t('common.trash')}` : t('pages.title')}</p>
-                  </div>
-                </div>
-                <p className="max-w-3xl text-sm text-muted-foreground">{onlyVisual ? t('pages.visual_desc') : t('pages.subtitle')}</p>
-              </div>
-            </div>
+          <DashboardModuleIntro
+            icon={Layers}
+            eyebrow="Pages"
+            title={onlyVisual ? t('pages.visual_title') : isTrashView ? `${t('pages.title')} ${t('common.trash')}` : t('pages.title')}
+            description={onlyVisual ? t('pages.visual_desc') : t('pages.subtitle')}
+            badges={[
+              { icon: Layers, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/pages` routes' },
+              { icon: onlyVisual ? Paintbrush : FileText, iconClassName: 'text-primary', label: onlyVisual ? t('pages.badges.visual') : activeTab },
+              { icon: Calendar, iconClassName: 'text-primary', label: isTrashView ? t('common.trash') : t('common.active', 'Active') },
+            ]}
+          />
 
-            <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-              <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                <Layers className="h-4 w-4 text-primary" />
-                Refresh-safe `/cmspanel/pages` routes
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                {onlyVisual ? <Paintbrush className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
-                {onlyVisual ? t('pages.badges.visual') : activeTab}
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                <Calendar className="h-4 w-4 text-primary" />
-                {isTrashView ? t('common.trash') : t('common.active', 'Active')}
-              </span>
-            </div>
-          </div>
-
-          <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-            <PagesOverviewCards
-              t={t}
-              onlyVisual={onlyVisual}
-              activeTab={activeTab}
-              isTrashView={isTrashView}
-            />
-          </div>
+          <PagesOverviewCards
+            t={t}
+            onlyVisual={onlyVisual}
+            activeTab={activeTab}
+            isTrashView={isTrashView}
+          />
         </div>
       )}
 

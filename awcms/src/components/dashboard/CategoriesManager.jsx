@@ -3,13 +3,11 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FolderTree, Layers3, ShieldCheck } from 'lucide-react';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { getCategoryScopeMeta, getCategoryScopeOptionsForModule, getCategoryTypesForModule } from '@/lib/taxonomy';
 import { restoreCategory, softDeleteCategory } from '@/lib/taxonomyMutations';
 import useSplatSegments from '@/hooks/useSplatSegments';
-import { cn } from '@/lib/utils';
 
 function CategoriesManager({
   embedded = false,
@@ -130,43 +128,19 @@ function CategoriesManager({
     </div>
   ) : (
     <div className="space-y-8">
-      <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                <FolderTree className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Taxonomy</p>
-                <p className="text-lg font-semibold text-foreground">Category Scopes</p>
-              </div>
-            </div>
-            <p className="max-w-3xl text-sm text-muted-foreground">Keep categories aligned with the right module, preserve safe trash recovery, and avoid accidental cross-module taxonomy drift.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {scopeOptions.map((option) => (
-              <Badge key={option.value} variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
-                {option.label}
-              </Badge>
-            ))}
-          </div>
-        </div>
-        <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-          <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-            <Layers3 className="h-4 w-4 text-primary" />
-            Refresh-safe `/cmspanel` category routes
-          </span>
-          <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            Tenant-scoped slugs and trash recovery
-          </span>
-        </div>
-      </div>
+      <DashboardModuleIntro
+        icon={FolderTree}
+        eyebrow="Taxonomy"
+        title="Category Scopes"
+        description="Keep categories aligned with the right module, preserve safe trash recovery, and avoid accidental cross-module taxonomy drift."
+        badges={[
+          { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel` category route shell' },
+          { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: 'Tenant-scoped slugs and trash recovery' },
+          ...scopeOptions.map((option) => ({ icon: FolderTree, iconClassName: 'text-primary', label: option.label })),
+        ]}
+      />
       {!showTrash && (
-        <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-          {summaryContent}
-        </div>
+        <>{summaryContent}</>
       )}
     </div>
   );

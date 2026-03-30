@@ -12,13 +12,13 @@ import { format } from 'date-fns';
 import { useSearch } from '@/hooks/useSearch';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import TenantOverviewCards from '@/components/dashboard/tenants/TenantOverviewCards';
 import TenantsListToolbar from '@/components/dashboard/tenants/TenantsListToolbar';
 import TenantsPagination from '@/components/dashboard/tenants/TenantsPagination';
 import TenantEditorDialog from '@/components/dashboard/tenants/TenantEditorDialog';
 import TenantDeleteDialog from '@/components/dashboard/tenants/TenantDeleteDialog';
+import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 
 function TenantsManager() {
     const { t } = useTranslation();
@@ -583,42 +583,18 @@ function TenantsManager() {
                     <span className="font-medium text-foreground">{t('tenants.page_title')}</span>
                 </div>
 
-                <div className="rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-primary/5 p-6 shadow-sm">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-3">
-                                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-                                    <Building className="h-5 w-5" />
-                                </span>
-                                <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Platform Control</p>
-                                    <p className="text-lg font-semibold text-foreground">{t('tenants.page_title')}</p>
-                                </div>
-                            </div>
-                            <p className="max-w-3xl text-sm text-muted-foreground">{t('tenants.page_description')}</p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                            <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
-                                {filteredTenants.length} tenants
-                            </Badge>
-                            <Badge variant="secondary" className="rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium shadow-sm">
-                                {activeView === 'abac' ? t('tenants.abac_tab', 'ABAC') : t('tenants.page_title')}
-                            </Badge>
-                        </div>
-                    </div>
-
-                    <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
-                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                            <Layers3 className="h-4 w-4 text-primary" />
-                            Refresh-safe `/cmspanel/tenants` routes
-                        </span>
-                        <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1.5 shadow-sm">
-                            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                            Platform tenant administration with ABAC inheritance support
-                        </span>
-                    </div>
-                </div>
+                <DashboardModuleIntro
+                    icon={Building}
+                    eyebrow="Platform Control"
+                    title={t('tenants.page_title')}
+                    description={t('tenants.page_description')}
+                    badges={[
+                        { icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/tenants` routes' },
+                        { icon: ShieldCheck, iconClassName: 'text-emerald-600', label: 'Platform tenant administration with ABAC inheritance support' },
+                        { icon: Building, iconClassName: 'text-primary', label: activeView === 'abac' ? t('tenants.abac_tab', 'ABAC') : t('tenants.page_title') },
+                    ]}
+                    summaryCards={summaryCards}
+                />
             </div>
 
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -654,23 +630,6 @@ function TenantsManager() {
                             <Plus className="w-4 h-4 mr-2" /> {t('tenants.new_tenant')}
                         </Button>
                     ) : null}
-                </div>
-            </div>
-
-            <div className="rounded-[28px] border border-border/60 bg-gradient-to-br from-muted/50 via-background to-background p-3 shadow-sm">
-                <div className="mb-8 grid gap-4 md:grid-cols-3">
-                    {summaryCards.map((card) => (
-                        <Card key={card.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-                            <CardContent className="relative p-5">
-                                <div className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br', card.accent)} />
-                                <div className="relative">
-                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
-                                    <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{card.value}</p>
-                                    <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">{card.description}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
                 </div>
             </div>
 

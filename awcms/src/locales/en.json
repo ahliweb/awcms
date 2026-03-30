@@ -69,6 +69,11 @@
     ,"previous": "Previous"
     ,"next": "Next"
     ,"page_of": "Page {{page}} of {{total}}"
+    ,"showing": "Showing"
+    ,"to": "to"
+    ,"of": "of"
+    ,"page": "page"
+    ,"created": "Created"
   },
   "auth": {
     "login": "Login",
@@ -455,6 +460,7 @@
       "users": "Users",
       "approvals": "Registration Approvals"
     },
+    "tenant_management_title": "Tenant-Dependent User Management",
     "columns": {
       "email": "Email",
       "full_name": "Full Name",
@@ -467,6 +473,63 @@
       "confirm": "Are you sure you want to delete <strong>{{name}}</strong>?",
       "warning_role": "Before deleting: Please ensure the user's role has been changed to 'No Access' or a role without permissions.",
       "warning_restore": "This will move the user to trash. You can restore the account later if needed."
+    },
+    "errors": {
+      "no_view_permission": "You do not have permission to view users.",
+      "no_approvals_permission": "You do not have permission to review user approvals."
+    }
+  },
+  "profile": {
+    "eyebrow": "Profile",
+    "title": "My Profile",
+    "subtitle": "Manage your account settings, security preferences, and profile metadata with ABAC-aware access controls.",
+    "badges": {
+      "route_shell": "Refresh-safe `/cmspanel/profile` route shell",
+      "platform_scope": "Platform ABAC scope active",
+      "tenant_scope": "Tenant ABAC scope active"
+    },
+    "summary": {
+      "current_role": "Current Role",
+      "platform_scope": "Platform ABAC scope",
+      "tenant_scope": "Tenant ABAC scope",
+      "permissions": "Permissions",
+      "permissions_desc": "Assigned access keys",
+      "details": "Profile Details",
+      "details_desc": "Filled detail fields",
+      "primary_email": "Primary Email",
+      "primary_email_desc": "Account login identity"
+    },
+    "access_control": {
+      "title": "Access Control",
+      "subtitle": "Your assigned role and permissions",
+      "current_role": "Current Role",
+      "active_permissions": "Active Permissions",
+      "no_permissions": "No specific permissions assigned."
+    },
+    "toast": {
+      "email_check_title": "Check your email",
+      "email_check_desc": "Confirmation link sent to your new email address.",
+      "updated_title": "Profile Updated",
+      "updated_desc": "Your profile information has been saved successfully.",
+      "update_failed_title": "Update Failed",
+      "update_failed_desc": "Failed to update profile.",
+      "password_mismatch_title": "Passwords do not match",
+      "password_mismatch_desc": "Please ensure both password fields match.",
+      "password_short_title": "Password too short",
+      "password_short_desc": "Password must be at least 6 characters long.",
+      "password_updated_title": "Password Updated",
+      "password_updated_desc": "Your password has been changed successfully.",
+      "password_failed_desc": "Failed to change password.",
+      "password_same_desc": "Your new password cannot be the same as your old password.",
+      "server_busy_desc": "Server is busy. Please wait a moment and try again.",
+      "network_error_desc": "Network error. Please check your connection and try again.",
+      "rate_limit_desc": "Too many requests. Please wait a few minutes before trying again.",
+      "details_saved_title": "Profile Details Saved",
+      "details_saved_desc": "Your profile details have been updated successfully.",
+      "details_failed_desc": "Failed to update profile details.",
+      "admin_saved_title": "Admin Fields Saved",
+      "admin_saved_desc": "Encrypted admin notes have been updated successfully.",
+      "admin_failed_desc": "Failed to update admin fields."
     }
   },
   "roles": {
@@ -483,13 +546,36 @@
       "description": "Description",
       "permissions": "Permissions",
       "created_by": "Created By",
-      "tenant": "Tenant Name"
+      "tenant": "Tenant Name",
+      "scope": "Scope",
+      "access": "Access"
     },
     "badges": {
       "all_access": "ALL ACCESS",
       "owner": "OWNER",
-      "tenant_root": "TENANT ROOT"
+      "tenant_root": "TENANT ROOT",
+      "platform_abac": "PLATFORM ABAC"
     },
+    "eyebrow": "Access Control",
+    "governance_title": "Role Governance",
+    "governance_desc": "Manage tenant and platform roles, route users into secure role editors, and keep the permission matrix aligned with current access policy rules.",
+    "tenant_management_title": "Tenant-Dependent Role Management",
+    "current_tenant": "Current tenant",
+    "platform_cards_heading": "Platform-Scope Role Cards",
+    "platform_cards_hint": "Global and privileged roles stay available here even when tenant-dependent role management is scoped to the current tenant.",
+    "summary": {
+      "roles": "Roles",
+      "roles_desc": "Tenant and platform role definitions available in the current access scope.",
+      "privileged_roles": "Privileged Roles",
+      "privileged_roles_desc": "Roles carrying platform or full-access flags that require extra review before editing.",
+      "permission_links": "Permission Links",
+      "permission_links_desc": "Active role-to-permission assignments currently enforced by the permission matrix."
+    },
+    "platform_cards_title": "Platform-Scope Role Card Management",
+    "platform_cards_desc": "Platform-owned user access and privileged assignments stay visible here above the tenant-dependent user management section so global role governance remains independent of active tenant filtering.",
+    "platform_scope_count": "platform-scope roles",
+    "tenant_bound": "Tenant-bound",
+    "managed_access": "Managed",
     "delete": {
       "title": "Delete Role",
       "confirm": "Are you sure you want to delete the role <strong>\"{{name}}\"</strong>?",
@@ -497,10 +583,21 @@
       "warning_restore": "This will move the role to trash. You can restore it if needed."
     },
     "errors": {
+      "no_view_permission": "You do not have permission to view roles.",
+      "no_manage_permission": "You do not have permission to view or manage role settings.",
+      "load_failed": "Unable to open role editor.",
+      "load_details_failed": "Failed to load role details.",
+      "invalid_link": "Invalid role link.",
+      "permissions_load_failed": "Failed to load permissions.",
       "protected_role": "System roles cannot be deleted.",
       "assigned_users": "There are {{count}} users assigned to this role. Reassign them first."
     },
     "editor": {
+      "back_to_roles": "Back to roles",
+      "platform_config_title": "Platform Role Configuration",
+      "edit_config_title": "Edit Role Configuration",
+      "system_root_readonly": "This System Root Role has complete 100% access. Configuration is read-only.",
+      "define_access_policies": "Define access control policies and permission scopes.",
       "toast_template_applied": "Template Applied",
       "toast_template_desc": "Applied {{template}} permission set",
       "toast_all_selected": "{{count}} permissions selected",
@@ -513,6 +610,10 @@
       "save_btn": "Save Configuration",
       "syncing": "Syncing…",
       "sync_btn": "Sync Full Access"
+    },
+    "badges_extra": {
+      "route_shell": "Refresh-safe `/cmspanel/roles` route shell",
+      "matrix_alignment": "Signed edit routes and permission-gated matrix"
     }
   },
   "sso": {
