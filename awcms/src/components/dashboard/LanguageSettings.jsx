@@ -7,7 +7,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/flowbite-admin';
 import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import { cn } from '@/lib/utils';
 
@@ -85,14 +85,14 @@ function LanguageSettings() {
 
 			toast({
 				title: t('common.success'),
-				description: `${t('settings.save_preferences')} success`
+				description: t('settings.language_saved', 'Language preference saved successfully.')
 			});
 		} catch (error) {
 			console.error('Language update failed:', error);
 			toast({
 				variant: 'destructive',
 				title: t('common.error'),
-				description: 'Failed to save language preference'
+				description: t('settings.language_save_failed', 'Failed to save language preference.')
 			});
 		} finally {
 			setSavingLanguage('');
@@ -101,41 +101,35 @@ function LanguageSettings() {
 
 	if (!canReadLanguageSettings) {
 		return (
-			<AdminPageLayout>
+			<AdminPageLayout unwrapped>
 				<div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-border/60 bg-card/70 p-12 text-center shadow-sm">
 					<div className="mb-4 rounded-full border border-destructive/30 bg-destructive/10 p-4">
 						<ShieldAlert className="h-12 w-12 text-destructive" />
 					</div>
-					<h3 className="text-xl font-bold text-foreground">Access Denied</h3>
-					<p className="mt-2 text-muted-foreground">You do not have permission to view language settings.</p>
+					<h3 className="text-xl font-bold text-foreground">{t('common.access_denied')}</h3>
+					<p className="mt-2 text-muted-foreground">{t('settings.language_access_denied', 'You do not have permission to view language settings.')}</p>
 				</div>
 			</AdminPageLayout>
 		);
 	}
 
 	return (
-		<AdminPageLayout requiredPermission="tenant.languages.read">
-			<PageHeader
-				title={t('settings.language_title')}
-				description="Manage admin language preferences with refresh-safe routing, profile-backed persistence, and multi-language support that stays aligned with the rest of the dashboard."
-				icon={Languages}
-				breadcrumbs={[{ label: 'Settings' }, { label: 'Language', icon: Languages }]}
-			/>
+		<AdminPageLayout requiredPermission="tenant.languages.read" unwrapped>
 
 			<DashboardModuleIntro
 				icon={Languages}
-				eyebrow="Localization"
-				title="Language Settings"
-				description="Keep language preferences synced to the signed-in user profile, preserve refresh-safe admin routing, and keep dashboard localization behavior consistent across modules."
+				eyebrow={t('settings.language_eyebrow', 'Localization')}
+				title={t('settings.language_title')}
+				description={t('settings.language_intro_desc', 'Keep language preferences synced to the signed-in user profile, preserve refresh-safe admin routing, and keep dashboard localization behavior consistent across modules.')}
 				badges={[
-					{ icon: Layers3, iconClassName: 'text-primary', label: 'Refresh-safe `/cmspanel/settings/language` route shell' },
-					{ icon: ShieldCheck, iconClassName: 'text-emerald-600', label: 'Tenant language permissions and profile-backed updates' },
+					{ icon: Layers3, iconClassName: 'text-primary', label: t('settings.language_route_shell', 'Refresh-safe `/cmspanel/settings/language` route shell') },
+					{ icon: ShieldCheck, iconClassName: 'text-emerald-600', label: t('settings.language_badge_desc', 'Tenant language permissions and profile-backed updates') },
 				]}
 				summaryCards={[
-					{ title: 'Current Language', value: currentLanguageLabel, description: `Locale code: ${currentLanguage}`, accent: 'from-primary/15 via-primary/6 to-transparent' },
-					{ title: 'Supported Locales', value: LANGUAGE_OPTIONS.length, description: 'Configured in admin panel', accent: 'from-sky-500/15 via-sky-500/6 to-transparent' },
-					{ title: 'Preference Scope', value: 'User Profile', description: 'Synced to user.language field', accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent' },
-					{ title: 'Google Translate', value: 'Enabled', description: 'Browser side language assist', accent: 'from-amber-500/15 via-amber-500/6 to-transparent' },
+					{ title: t('settings.language_summary.current', 'Current Language'), value: currentLanguageLabel, description: t('settings.language_summary.locale_code', { code: currentLanguage, defaultValue: `Locale code: ${currentLanguage}` }), accent: 'from-primary/15 via-primary/6 to-transparent' },
+					{ title: t('settings.language_summary.supported', 'Supported Locales'), value: LANGUAGE_OPTIONS.length, description: t('settings.language_summary.supported_desc', 'Configured in admin panel'), accent: 'from-sky-500/15 via-sky-500/6 to-transparent' },
+					{ title: t('settings.language_summary.scope', 'Preference Scope'), value: t('profile.title', 'User Profile'), description: t('settings.language_summary.scope_desc', 'Synced to user.language field'), accent: 'from-emerald-500/15 via-emerald-500/6 to-transparent' },
+					{ title: t('settings.language_summary.translate', 'Google Translate'), value: t('common.active', 'Active'), description: t('settings.language_summary.translate_desc', 'Browser side language assist'), accent: 'from-amber-500/15 via-amber-500/6 to-transparent' },
 				]}
 				valueClassName="text-2xl"
 				className="mb-6"
@@ -182,14 +176,14 @@ function LanguageSettings() {
 									</div>
 									{isActive ? (
 										<Check className="h-5 w-5 text-primary" />
-									) : isSaving ? (
-										<span className="text-xs font-medium text-muted-foreground">Saving...</span>
-									) : null}
-								</button>
-							);
-						})}
-					</div>
-				</div>
+							) : isSaving ? (
+								<span className="text-xs font-medium text-muted-foreground">{t('common.saving')}</span>
+							) : null}
+						</button>
+					);
+				})}
+			</div>
+		</div>
 
 				<div className="rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm backdrop-blur-sm">
 					<h3 className="mb-2 text-lg font-semibold text-foreground">{t('settings.google_translate')}</h3>

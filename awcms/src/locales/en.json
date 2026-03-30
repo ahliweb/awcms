@@ -166,6 +166,47 @@
     "title": "Dashboard - CMS",
     "meta_description": "CMS Dashboard for managing content, users, and permissions"
   },
+  "diagnostics": {
+    "eyebrow": "Diagnostics",
+    "title": "Platform Diagnostics",
+    "subtitle": "Inspect active platform scope, tenant scope, and runtime guarantees across the centralized admin system.",
+    "route_shell": "Refresh-safe `/cmspanel/platform/diagnostics` route shell",
+    "badge_desc": "Platform ABAC diagnostics with tenant context verification",
+    "unknown": "Unknown",
+    "none": "None",
+    "enabled": "Enabled",
+    "default": "Default",
+    "full": "Full",
+    "blocked": "Blocked",
+    "disabled": "Disabled",
+    "summary": {
+      "access": "Access Scope",
+      "tenant": "Tenant",
+      "access_desc": "Current ABAC authority resolved for the active admin session.",
+      "tenant_scope": "Tenant Scope",
+      "tenant_scope_desc": "Resolved tenant context used for scoped queries and admin views.",
+      "runtime": "Runtime",
+      "runtime_desc": "Edge and storage guarantees currently enforced by the platform stack."
+    },
+    "sections": {
+      "scope_access": "Scope & Access",
+      "tenant_scope": "Tenant Scope",
+      "storage_edge": "Storage & Edge"
+    },
+    "fields": {
+      "active_role": "Active role",
+      "role_scope": "Role scope",
+      "platform_access": "Platform access",
+      "resolved_tenant": "Resolved tenant",
+      "active_scope": "Active scope",
+      "scoped_override": "Scoped override",
+      "rls_tenant_id": "RLS tenant id",
+      "object_storage": "Object storage",
+      "function_runtime": "Function runtime",
+      "supabase_storage": "Supabase Storage",
+      "supabase_edge": "Supabase Edge Functions"
+    }
+  },
   "login_page": {
     "title": "Login - CMS Dashboard",
     "meta_description": "Login to access the CMS dashboard",
@@ -693,6 +734,23 @@
     "delete_confirm": "Are you sure? This will remove the extension and all its data."
   },
   "settings": {
+    "language_eyebrow": "Localization",
+    "language_intro_desc": "Keep language preferences synced to the signed-in user profile, preserve refresh-safe admin routing, and keep dashboard localization behavior consistent across modules.",
+    "language_route_shell": "Refresh-safe `/cmspanel/settings/language` route shell",
+    "language_badge_desc": "Tenant language permissions and profile-backed updates",
+    "language_saved": "Language preference saved successfully.",
+    "language_save_failed": "Failed to save language preference.",
+    "language_access_denied": "You do not have permission to view language settings.",
+    "language_summary": {
+      "current": "Current Language",
+      "locale_code": "Locale code: {{code}}",
+      "supported": "Supported Locales",
+      "supported_desc": "Configured in admin panel",
+      "scope": "Preference Scope",
+      "scope_desc": "Synced to user.language field",
+      "translate": "Google Translate",
+      "translate_desc": "Browser side language assist"
+    },
     "language_title": "Language Settings",
     "language_desc": "Manage language preferences and translation options.",
     "select_language": "Select Language",

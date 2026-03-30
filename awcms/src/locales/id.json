@@ -166,6 +166,47 @@
     "title": "Dasbor - CMS",
     "meta_description": "Dasbor CMS untuk mengelola konten, pengguna, dan izin"
   },
+  "diagnostics": {
+    "eyebrow": "Diagnostik",
+    "title": "Diagnostik Platform",
+    "subtitle": "Periksa cakupan platform aktif, cakupan tenant, dan jaminan runtime di seluruh sistem admin terpusat.",
+    "route_shell": "Shell rute `/cmspanel/platform/diagnostics` yang aman saat refresh",
+    "badge_desc": "Diagnostik ABAC platform dengan verifikasi konteks tenant",
+    "unknown": "Tidak diketahui",
+    "none": "Tidak ada",
+    "enabled": "Aktif",
+    "default": "Bawaan",
+    "full": "Penuh",
+    "blocked": "Diblokir",
+    "disabled": "Dinonaktifkan",
+    "summary": {
+      "access": "Cakupan Akses",
+      "tenant": "Tenant",
+      "access_desc": "Otoritas ABAC saat ini yang berhasil di-resolve untuk sesi admin aktif.",
+      "tenant_scope": "Cakupan Tenant",
+      "tenant_scope_desc": "Konteks tenant yang di-resolve dan digunakan untuk query terlingkup serta tampilan admin.",
+      "runtime": "Runtime",
+      "runtime_desc": "Jaminan edge dan storage yang saat ini diberlakukan oleh stack platform."
+    },
+    "sections": {
+      "scope_access": "Cakupan & Akses",
+      "tenant_scope": "Cakupan Tenant",
+      "storage_edge": "Storage & Edge"
+    },
+    "fields": {
+      "active_role": "Peran aktif",
+      "role_scope": "Cakupan peran",
+      "platform_access": "Akses platform",
+      "resolved_tenant": "Tenant ter-resolve",
+      "active_scope": "Cakupan aktif",
+      "scoped_override": "Override cakupan",
+      "rls_tenant_id": "ID tenant RLS",
+      "object_storage": "Object storage",
+      "function_runtime": "Runtime fungsi",
+      "supabase_storage": "Supabase Storage",
+      "supabase_edge": "Supabase Edge Functions"
+    }
+  },
   "login_page": {
     "title": "Masuk - Dasbor CMS",
     "meta_description": "Masuk untuk mengakses dasbor CMS",
@@ -689,6 +730,23 @@
     "delete_confirm": "Apakah Anda yakin? Ini akan menghapus ekstensi dan semua datanya."
   },
   "settings": {
+    "language_eyebrow": "Lokalisasi",
+    "language_intro_desc": "Jaga preferensi bahasa tetap sinkron dengan profil pengguna yang sedang masuk, pertahankan routing admin yang aman saat refresh, dan pastikan perilaku lokalisasi dashboard tetap konsisten antar modul.",
+    "language_route_shell": "Shell rute `/cmspanel/settings/language` yang aman saat refresh",
+    "language_badge_desc": "Izin bahasa tenant dan pembaruan berbasis profil",
+    "language_saved": "Preferensi bahasa berhasil disimpan.",
+    "language_save_failed": "Gagal menyimpan preferensi bahasa.",
+    "language_access_denied": "Anda tidak memiliki izin untuk melihat pengaturan bahasa.",
+    "language_summary": {
+      "current": "Bahasa Saat Ini",
+      "locale_code": "Kode lokal: {{code}}",
+      "supported": "Lokal yang Didukung",
+      "supported_desc": "Dikonfigurasi di panel admin",
+      "scope": "Cakupan Preferensi",
+      "scope_desc": "Disinkronkan ke field user.language",
+      "translate": "Google Translate",
+      "translate_desc": "Bantuan bahasa sisi browser"
+    },
     "language_title": "Pengaturan Bahasa",
     "language_desc": "Kelola preferensi bahasa dan opsi terjemahan.",
     "select_language": "Pilih Bahasa",
