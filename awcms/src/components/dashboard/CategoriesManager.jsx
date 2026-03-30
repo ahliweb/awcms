@@ -5,9 +5,12 @@ import { useTranslation } from 'react-i18next';
 import { FolderTree, Layers3, ShieldCheck } from 'lucide-react';
 import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { getCategoryScopeMeta, getCategoryScopeOptionsForModule, getCategoryTypesForModule } from '@/lib/taxonomy';
 import { restoreCategory, softDeleteCategory } from '@/lib/taxonomyMutations';
 import useSplatSegments from '@/hooks/useSplatSegments';
+import { cn } from '@/lib/utils';
 
 function CategoriesManager({
   embedded = false,

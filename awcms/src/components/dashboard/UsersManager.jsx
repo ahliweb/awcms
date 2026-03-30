@@ -60,11 +60,6 @@ function UsersManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
-  const [platformUsers, setPlatformUsers] = useState([]);
-  const [platformUsersLoading, setPlatformUsersLoading] = useState(false);
-  const [platformUsersPage, setPlatformUsersPage] = useState(1);
-  const [platformUsersPerPage, setPlatformUsersPerPage] = useState(6);
-  const [platformUsersTotal, setPlatformUsersTotal] = useState(0);
   const [platformRoles, setPlatformRoles] = useState([]);
   const [platformRolesLoading, setPlatformRolesLoading] = useState(false);
   const [platformRolesPage, setPlatformRolesPage] = useState(1);
@@ -75,7 +70,6 @@ function UsersManager() {
 
   const visibleUsersOnPage = users.length;
   const searchActive = Boolean(debouncedQuery);
-  const platformUsersTotalPages = Math.max(1, Math.ceil(platformUsersTotal / platformUsersPerPage));
   const platformRolesTotalPages = Math.max(1, Math.ceil(platformRolesTotal / platformRolesPerPage));
 
   useEffect(() => {
@@ -155,55 +149,6 @@ function UsersManager() {
     }
   }, [canView, currentTenant, debouncedQuery, currentPage, itemsPerPage, toast, t]);
 
-  const fetchPlatformUsers = useCallback(async () => {
-    if (!isPlatformAdmin) return;
-
-    setPlatformUsersLoading(true);
-    try {
-      const { data: globalRoles, error: rolesError } = await supabase
-        .from('roles')
-        .select('id')
-        .is('deleted_at', null)
-        .or('scope.eq.platform,is_platform_admin.eq.true,is_full_access.eq.true,tenant_id.is.null');
-
-      if (rolesError) throw rolesError;
-
-      const globalRoleIds = (globalRoles || []).map((role) => role.id).filter(Boolean);
-      const roleClause = globalRoleIds.length > 0 ? `,role_id.in.(${globalRoleIds.join(',')})` : '';
-
-      let q = supabase.from('users')
-        .select(`
-          *,
-          roles:roles!users_role_id_fkey(name, is_platform_admin, is_full_access, scope),
-          tenant:tenants(name),
-          profile:user_profiles!user_profiles_user_id_fkey(job_title, department)
-        `, { count: 'exact' })
-        .is('deleted_at', null)
-        .or(`tenant_id.is.null${roleClause}`);
-
-      if (debouncedQuery) {
-        q = q.ilike('email', `%${debouncedQuery}%`);
-      }
-
-      const from = (platformUsersPage - 1) * platformUsersPerPage;
-      const to = from + platformUsersPerPage - 1;
-
-      const { data, count, error } = await q
-        .range(from, to)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      setPlatformUsers(data || []);
-      setPlatformUsersTotal(count || 0);
-    } catch (error) {
-      console.error('Error fetching platform users:', error);
-      toast({ variant: 'destructive', title: t('common.error'), description: 'Failed to load platform-scope users.' });
-    } finally {
-      setPlatformUsersLoading(false);
-    }
-  }, [isPlatformAdmin, debouncedQuery, platformUsersPage, platformUsersPerPage, toast, t]);
-
   const fetchPlatformRoles = useCallback(async () => {
     if (!isPlatformAdmin) return;
 
@@ -280,10 +225,9 @@ function UsersManager() {
 
   useEffect(() => {
     if (activeTab === 'users' && isPlatformAdmin) {
-      fetchPlatformUsers();
       fetchPlatformRoles();
     }
-  }, [activeTab, isPlatformAdmin, fetchPlatformUsers, fetchPlatformRoles]);
+  }, [activeTab, isPlatformAdmin, fetchPlatformRoles]);
 
   const handleEdit = async (user) => {
     const routeId = await encodeRouteParam({ value: user.id, scope: 'users.edit' });

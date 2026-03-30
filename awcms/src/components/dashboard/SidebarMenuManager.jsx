@@ -13,8 +13,6 @@ import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/use-toast';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import SidebarMenuHeaderActions from '@/components/dashboard/sidebar-menu/SidebarMenuHeaderActions';
 import SidebarMenuItemsTab from '@/components/dashboard/sidebar-menu/SidebarMenuItemsTab';

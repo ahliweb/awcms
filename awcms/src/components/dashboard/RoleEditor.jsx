@@ -76,7 +76,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     };
 
     fetchRole();
-  }, [role, routeRoleId, toast, navigate, canReadRoles, canManageRole]);
+  }, [role, routeRoleId, toast, navigate, canReadRoles, canManageRole, t]);
 
   useEffect(() => {
     if (!routeParam || routeLoading) return;
@@ -92,7 +92,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
       navigate(`/cmspanel/roles/edit/${signedId}`, { replace: true });
     };
     redirectLegacy();
-  }, [routeParam, routeLoading, routeRoleId, isLegacy, navigate, toast]);
+  }, [routeParam, routeLoading, routeRoleId, isLegacy, navigate, toast, t]);
 
   useEffect(() => {
     if (!resolvedRole) return;
@@ -138,7 +138,7 @@ const RoleEditor = ({ role, onClose, onSave }) => {
     };
 
     fetchPermissions();
-  }, [roleId, toast, canReadRoles, canManageRole]);
+  }, [roleId, toast, canReadRoles, canManageRole, t]);
 
   // Auto-select all permissions for full-access roles
   useEffect(() => {

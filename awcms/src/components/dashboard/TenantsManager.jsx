@@ -11,7 +11,6 @@ import { Plus, Building, ChevronRight, Home, Layers3, RefreshCw, ShieldCheck } f
 import { format } from 'date-fns';
 import { useSearch } from '@/hooks/useSearch';
 import useSplatSegments from '@/hooks/useSplatSegments';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import TenantOverviewCards from '@/components/dashboard/tenants/TenantOverviewCards';
 import TenantsListToolbar from '@/components/dashboard/tenants/TenantsListToolbar';

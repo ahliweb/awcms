@@ -8,6 +8,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useSearch } from '@/hooks/useSearch';
 import useSplatSegments from '@/hooks/useSplatSegments';
+import { Card, CardContent } from '@/components/ui/card';
 import TagsHeaderActions from '@/components/dashboard/tags/TagsHeaderActions';
 import TagsFiltersBar from '@/components/dashboard/tags/TagsFiltersBar';
 import TagsTable from '@/components/dashboard/tags/TagsTable';
@@ -470,6 +471,7 @@ function TagsManager({
       {statCards.map((stat) => (
         <Card key={stat.title} className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
           <CardContent className="relative p-5">
+            <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${stat.accent}`} />
             <div className="relative">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{stat.title}</p>
               <p className="mt-3 text-4xl font-semibold leading-none text-foreground">{stat.value}</p>
