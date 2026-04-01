@@ -1857,7 +1857,7 @@ Helper function source baselines:
 
 ## Public Views
 
-#### published_blogs_view
+### published_blogs_view
 
 Allows the Public Portal to fetch blog content without exposing internal columns.
 

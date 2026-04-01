@@ -51,6 +51,7 @@ The JS state machine helpers in `src/lib/migrations/deploymentCellRunbooks.js` m
 **Trigger:** Workflow F with `migration_kind = 'dedicated_managed_to_self_hosted'`
 
 Same as Runbook B plus:
+
 - Deploy self-hosted Supabase instance
 - Export + import data from Managed Supabase
 - Rotate all secrets to point to new self-hosted instance
@@ -67,6 +68,7 @@ const { error } = await rollbackMigration({ migrationId, tenantId });
 ```
 
 Steps:
+
 1. Verify `rollback_deadline` has not passed (enforced automatically)
 2. Revert DNS/Cloudflare to source cell
 3. Call `rollbackMigration()` — sets status to `rolled_back`, restores `current_cell_id`
@@ -76,7 +78,7 @@ Steps:
 
 ## Migration State Machine
 
-```
+```text
 planned → in_progress → validating → completed
                       ↘ rolled_back
                     (failed — manual intervention needed)

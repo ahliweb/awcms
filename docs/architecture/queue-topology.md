@@ -264,12 +264,14 @@ For local testing without a real queue, mock the queue binding in `vitest` or us
 ## Operational Notes
 
 - Create all queues before deploying:
+
   ```bash
   npx wrangler queues create awcms-media-events
   npx wrangler queues create awcms-media-events-dlq
   npx wrangler queues create awcms-notifications
   npx wrangler queues create awcms-notifications-dlq
   ```
+
 - Monitor via Cloudflare dashboard → Workers & Pages → Queues.
 - Consumer failures retry up to `max_retries` times before routing to the DLQ consumer.
 - `idempotency_key` checks prevent double-finalization on delivery retry.

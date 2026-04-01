@@ -20,6 +20,7 @@ platform_projects
 ## Tables
 
 ### `platform_projects`
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
@@ -30,6 +31,7 @@ platform_projects
 | `default_edge_profile_id` | UUID | Future FK to edge_profiles |
 
 ### `deployment_cells`
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
@@ -40,6 +42,7 @@ platform_projects
 | `status` | TEXT | `draft` → `active` → `maintenance` → `decommissioned` |
 
 ### `tenants_control`
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
@@ -51,6 +54,7 @@ platform_projects
 | `primary_domain_id` | UUID FK (deferred) | `tenant_domains` |
 
 ### `tenant_domains`
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
@@ -63,6 +67,7 @@ platform_projects
 | `active_from` / `active_to` | TIMESTAMPTZ | Activation window |
 
 ### `tenant_service_contracts`
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
@@ -77,6 +82,7 @@ platform_projects
 > `tenant_service_contracts` is **append-only**. Never update a past row. Insert a new row to change a profile.
 
 ### `tenant_migrations`
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |

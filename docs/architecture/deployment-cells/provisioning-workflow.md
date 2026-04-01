@@ -109,6 +109,7 @@ const { contract, migration, error } = await assignServiceProfile({
 ```
 
 If `requiresCellMigration()` returns `true`, Workflow F automatically:
+
 1. Inserts a new `tenant_service_contracts` row
 2. Creates a `tenant_migrations` record
 3. Sets the tenant status to `migrating`
