@@ -402,6 +402,18 @@ jobs:
       - name: Run typecheck
         run: npm run typecheck
 
+      - name: Build OpenAPI artifacts
+        run: npm run openapi:build
+
+      - name: Validate OpenAPI boundaries
+        run: npm run openapi:validate
+
+      - name: Check OpenAPI artifact drift
+        run: npm run openapi:diff
+
+      - name: Run edge tests
+        run: npm run test
+
   # ============================================
   # Lint & Build - MCP Server
   # ============================================

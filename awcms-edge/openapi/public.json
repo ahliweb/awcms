@@ -1,0 +1,532 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "AWCMS Edge Public API",
+    "version": "1.0.0",
+    "description": "Public awcms-edge routes only. OpenAPI is descriptive only; Supabase Auth, RLS, and ABAC remain authoritative."
+  },
+  "servers": [
+    {
+      "url": "https://edge.example.com",
+      "description": "Current awcms-edge deployment origin"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Worker liveness and compatibility endpoints."
+    },
+    {
+      "name": "Public Delivery",
+      "description": "Public content and delivery surfaces safe for anonymous access."
+    },
+    {
+      "name": "Human Verification",
+      "description": "Turnstile and public anti-abuse verification flows."
+    },
+    {
+      "name": "Applications",
+      "description": "Public account application submission workflow."
+    },
+    {
+      "name": "Identity",
+      "description": "Authenticated identity and operator account management surfaces."
+    },
+    {
+      "name": "Media",
+      "description": "Authenticated media upload, access, and deletion flows."
+    },
+    {
+      "name": "Public Portal",
+      "description": "Tenant public rebuild orchestration and related delivery integrations."
+    },
+    {
+      "name": "Content",
+      "description": "Authenticated content processing routes."
+    },
+    {
+      "name": "Extensions",
+      "description": "Extension discovery, lifecycle, and health surfaces."
+    },
+    {
+      "name": "Messaging",
+      "description": "Messaging and email integration surfaces."
+    },
+    {
+      "name": "Operational",
+      "description": "Operational-only maintenance and webhook surfaces."
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "supabaseBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase access token for authenticated operator requests."
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "edgeHealth",
+        "tags": [
+          "Health"
+        ],
+        "summary": "Worker health check",
+        "description": "Simple liveness endpoint for the awcms-edge Worker.",
+        "deprecated": false,
+        "responses": {
+          "200": {
+            "description": "Worker is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "service": {
+                      "type": "string",
+                      "const": "awcms-edge"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "service"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "public",
+        "x-awcms-scope": "public",
+        "x-awcms-tenant-context": "none",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": false
+      }
+    },
+    "/public/media/{storageKey}": {
+      "get": {
+        "operationId": "getPublicMediaObject",
+        "tags": [
+          "Public Delivery"
+        ],
+        "summary": "Serve a public media object",
+        "description": "Returns a public R2-backed media object when the metadata row is uploaded, public, and not soft-deleted.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "storageKey",
+            "in": "path",
+            "required": true,
+            "description": "Canonical storage key path under `/public/media/*`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media object stream"
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "public",
+        "x-awcms-scope": "public",
+        "x-awcms-tenant-context": "none",
+        "x-awcms-r2": true,
+        "x-awcms-soft-delete-aware": true
+      }
+    },
+    "/public/sitemap": {
+      "get": {
+        "operationId": "getTenantSitemap",
+        "tags": [
+          "Public Delivery"
+        ],
+        "summary": "Generate tenant sitemap XML",
+        "description": "Builds a sitemap for a tenant using published, public, and non-deleted content only.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "description": "Tenant domain used to resolve the sitemap tenant.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": false,
+            "description": "Tenant UUID used to resolve the sitemap tenant.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "XML sitemap",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant was not found",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "public",
+        "x-awcms-scope": "public",
+        "x-awcms-tenant-context": "optional",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true
+      }
+    },
+    "/functions/v1/serve-sitemap": {
+      "get": {
+        "operationId": "redirectServeSitemap",
+        "tags": [
+          "Public Delivery"
+        ],
+        "summary": "Legacy sitemap compatibility redirect",
+        "description": "Compatibility route that redirects legacy consumers to `/public/sitemap`.",
+        "deprecated": true,
+        "responses": {
+          "301": {
+            "description": "Redirect to `/public/sitemap`"
+          }
+        },
+        "x-awcms-boundary": "public",
+        "x-awcms-scope": "public",
+        "x-awcms-tenant-context": "optional",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true
+      }
+    },
+    "/functions/v1/verify-turnstile": {
+      "post": {
+        "operationId": "verifyTurnstile",
+        "tags": [
+          "Human Verification"
+        ],
+        "summary": "Verify a Turnstile token",
+        "description": "Validates a Turnstile token at the edge. This endpoint is descriptive only and does not replace Supabase authorization.",
+        "deprecated": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "ip": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "public",
+        "x-awcms-scope": "public",
+        "x-awcms-tenant-context": "none",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": false
+      }
+    },
+    "/functions/v1/extensions/events/public": {
+      "get": {
+        "operationId": "listPublicEventsExtensionContent",
+        "tags": [
+          "Extensions",
+          "Public Delivery"
+        ],
+        "summary": "Read published public events extension content",
+        "description": "Returns published event records for tenants with the Events extension active.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "slug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 48,
+              "default": 12
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published events payload"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "public",
+        "x-awcms-scope": "public",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true
+      }
+    },
+    "/functions/v1/extensions/public-modules": {
+      "get": {
+        "operationId": "listPublicModules",
+        "tags": [
+          "Extensions",
+          "Public Delivery"
+        ],
+        "summary": "Read tenant public extension modules",
+        "description": "Returns public module descriptors for extensions active on the requested tenant.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public module manifest payload"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "public",
+        "x-awcms-scope": "public",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true
+      }
+    },
+    "/functions/v1/manage-users": {
+      "post": {
+        "operationId": "submitAccountApplication",
+        "tags": [
+          "Applications"
+        ],
+        "summary": "Submit a public account application",
+        "description": "Public application flow for account requests. This public documentation only covers `action=submit_application`; authenticated administrative actions are documented separately in protected admin surfaces.",
+        "deprecated": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "submit_application"
+                    ]
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "full_name": {
+                    "type": "string"
+                  },
+                  "tenant_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "turnstileToken": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action",
+                  "email",
+                  "full_name",
+                  "turnstileToken"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Application accepted"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "public",
+        "x-awcms-scope": "public",
+        "x-awcms-tenant-context": "optional",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": false
+      }
+    }
+  }
+}

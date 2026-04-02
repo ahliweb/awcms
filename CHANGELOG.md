@@ -5,6 +5,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Edge API: added boundary-separated OpenAPI 3.1 generation for `awcms-edge` with committed `public`, `admin`, and artifact-only `internal` specs, plus Swagger UI at `/docs` and a protected admin docs surface at `/docs/admin`.
+
+### Changed
+
+- Edge Security: hardened `awcms-edge` content-transform docs and runtime alignment by requiring tenant blog-update authorization for the documented admin mutation path, and added `platform.docs.read` seeding for protected admin API docs access.
+
 ### Fixed
 
 - Admin Dashboard: aligned admin authentication and recovery routes to the `/cmspanel` base path, while keeping legacy root-level auth URLs as redirects for compatibility.

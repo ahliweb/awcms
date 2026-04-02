@@ -3,6 +3,10 @@ import { cors } from 'hono/cors'
 import { createClient } from '@supabase/supabase-js'
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { generatePublicOpenApi } from './docs/generators/public'
+import { generateAdminOpenApi } from './docs/generators/admin'
+import { renderPublicDocsUi } from './docs/ui/public'
+import { renderAdminDocsUi } from './docs/ui/admin'
 import { generateStorageKey, inferMediaKind, slugifyMediaValue, UploadSessionRequest } from './mediaContracts'
 import { compareVersions, getExtensionKey, validateExtensionManifest } from './extensions'
 import { AnyQueueMessage, buildEmailSendMessage, buildMediaFinalizeMessage, buildSiteRebuildMessage, isValidEnvelope, MEDIA_FINALIZE_EVENT, MEDIA_FINALIZE_SCHEMA } from './queues/contracts'
@@ -10,49 +14,14 @@ import { handleMediaFinalizeMessage, mediaQueueHandler } from './queues/mediaCon
 import { notificationsQueueHandler } from './queues/notificationsConsumer'
 import { dlqQueueHandler } from './queues/dlqConsumer'
 import { logReplay } from './queues/observability'
+import { requireDocsAccess } from './middleware/docs/require-docs-access'
+import type { AppEnv, Bindings, UserContext } from './lib/runtime-types'
 
-type Bindings = {
-  STORAGE: R2Bucket
-  VITE_SUPABASE_URL: string
-  VITE_SUPABASE_PUBLISHABLE_KEY: string
-  SUPABASE_SECRET_KEY: string
-  R2_ACCOUNT_ID: string
-  R2_ACCESS_KEY_ID: string
-  R2_SECRET_ACCESS_KEY: string
-  R2_BUCKET_NAME: string
-  MEDIA_SECURE_SESSION_MAX_AGE_SECONDS?: string
-  MAILKETING_API_TOKEN: string
-  MAILKETING_DEFAULT_LIST_ID?: string
-  GITHUB_REBUILD_TOKEN?: string
-  GITHUB_REBUILD_OWNER?: string
-  GITHUB_REBUILD_REPO?: string
-  GITHUB_REBUILD_EVENT_TYPE?: string
-  SMANDAPBUN_REBUILD_WEBHOOK_SECRET?: string
-  TURNSTILE_SECRET_KEY?: string
-  /**
-   * Comma-separated list of allowed CORS origins, e.g.
-   * "https://admin.example.com,https://portal.example.com"
-   * When unset (local dev), all origins are allowed.
-   * Set via `npx wrangler secret put CORS_ALLOWED_ORIGINS` or wrangler.jsonc [vars].
-   */
-  CORS_ALLOWED_ORIGINS?: string
-  /** Cloudflare Queue binding — producer + consumer for async media finalization */
-  MEDIA_EVENTS_QUEUE: Queue<AnyQueueMessage>
-  /** Cloudflare Queue binding — producer + consumer for async notifications/integrations */
-  NOTIFICATIONS_QUEUE: Queue<AnyQueueMessage>
-}
-
-type Variables = {
-  user: any
-  token: string
-  supabase: any
-}
-
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+export const app = new Hono<AppEnv>()
 
 // CORS: restrict to CORS_ALLOWED_ORIGINS binding when set; allow all in local dev (unset).
 app.use('*', async (c, next) => {
-  const rawOrigins = c.env.CORS_ALLOWED_ORIGINS?.trim()
+  const rawOrigins = c.env?.CORS_ALLOWED_ORIGINS?.trim()
   const allowedOrigins = rawOrigins
     ? rawOrigins.split(',').map((o) => o.trim()).filter(Boolean)
     : null
@@ -86,6 +55,24 @@ app.use('*', async (c, next) => {
 })
 
 app.get('/health', (c) => c.json({ ok: true, service: 'awcms-edge' }))
+
+app.get('/openapi/public.json', (c) => {
+  const origin = new URL(c.req.url).origin
+  return c.json(generatePublicOpenApi(origin), 200)
+})
+
+app.get('/docs', (c) => {
+  return renderPublicDocsUi(c)
+})
+
+app.get('/openapi/admin.json', requireDocsAccess(), (c) => {
+  const origin = new URL(c.req.url).origin
+  return c.json(generateAdminOpenApi(origin), 200)
+})
+
+app.get('/docs/admin', requireDocsAccess(), (c) => {
+  return renderAdminDocsUi(c)
+})
 
 const getAuthedSupabase = (env: Bindings, token: string) => createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, {
   global: { headers: { Authorization: `Bearer ${token}` } }
@@ -225,7 +212,7 @@ const buildPublicMediaUrl = (requestUrl: string, storageKey: string) => {
   return new URL(`/public/media/${encodedKey}`, requestUrl).toString()
 }
 
-const getUserContext = async (env: Bindings, userId: string) => {
+const getUserContext = async (env: Bindings, userId: string): Promise<UserContext> => {
   const adminSupabase = getAdminSupabase(env)
   const { data, error } = await adminSupabase
     .from('users')
@@ -1458,8 +1445,17 @@ app.post('/functions/v1/content-transform', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const tenantId = c.req.header('x-tenant-id');
+  const userContext = await getUserContext(c.env, authData.user.id)
+  const tenantId = resolveTenantId(c.req.header('x-tenant-id') ?? null, userContext)
   if (!tenantId) return c.json({ error: 'Missing x-tenant-id header' }, 400);
+
+  const canUpdateBlog = userContext.isPlatformAdmin
+    || userContext.isFullAccess
+    || await hasAnyPermission(callerClient, ['tenant.blog.update'])
+
+  if (!canUpdateBlog) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
 
   const adminClient = getAdminSupabase(c.env);
   const payload = await getJsonBody(c.req.raw);

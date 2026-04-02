@@ -3,14 +3,20 @@
   "version": "1.0.0",
   "description": "Cloudflare Worker Edge Service for AWCMS",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "dev:local": "wrangler dev --ip 127.0.0.1 --port 8787",
     "deploy": "wrangler deploy",
+    "lint": "npm run openapi:validate",
+    "openapi:build": "node --import tsx ./scripts/openapi-build.mjs",
+    "openapi:validate": "node --import tsx ./scripts/openapi-validate.mjs",
+    "openapi:diff": "node --import tsx ./scripts/openapi-diff.mjs",
     "sync:r2:remote": "node scripts/sync-local-media-to-remote.mjs",
     "sync:r2:local": "node scripts/sync-remote-media-to-local.mjs",
     "sync:r2:cleanup-local": "node scripts/cleanup-local-media-duplicates.mjs",
     "sync:r2:cleanup-remote": "node scripts/cleanup-remote-media-duplicates.mjs",
+    "test": "node --import tsx --test ./tests/openapi.test.mjs",
     "typecheck": "tsc --noEmit",
     "test:manage-users": "node tests/manage-users.smoke.mjs",
     "test:compat-routes": "node tests/compat-routes.smoke.mjs"
@@ -23,6 +29,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260317.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.5.0",
     "wrangler": "^4.77.0"
   },

@@ -139,6 +139,7 @@ Agents must respect the exact versions declared in the current workspace manifes
 * **Database Preservation:** Workers may read/write Supabase, but PostgreSQL remains the canonical data plane and all tenant/business data continue to live in Supabase.
 * **RLS / ABAC Preservation:** RLS and `public.has_permission(...)` remain the final enforcement layer for tenant isolation and authorization. Worker-side checks are additive guardrails, not replacements.
 * **Storage Pattern:** Cloudflare R2 is used for object storage and delivery workflows, while metadata, ownership, tenant scope, and permission checks remain anchored in Supabase.
+* **OpenAPI Contract Pattern:** `awcms-edge/` may expose descriptive OpenAPI 3.1 docs for public and admin boundaries, but those specs never replace Supabase Auth, RLS, or ABAC. Internal edge routes may be generated as artifacts only and must not be exposed at runtime.
 
 ### 2.4.1 Extension Platform Ownership Model
 

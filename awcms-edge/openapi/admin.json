@@ -1,0 +1,1383 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "AWCMS Edge Admin API",
+    "version": "1.0.0",
+    "description": "Authenticated awcms-edge admin routes only. OpenAPI is descriptive only and does not replace Supabase Auth, RLS, or ABAC."
+  },
+  "servers": [
+    {
+      "url": "https://edge.example.com",
+      "description": "Current awcms-edge deployment origin"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Worker liveness and compatibility endpoints."
+    },
+    {
+      "name": "Public Delivery",
+      "description": "Public content and delivery surfaces safe for anonymous access."
+    },
+    {
+      "name": "Human Verification",
+      "description": "Turnstile and public anti-abuse verification flows."
+    },
+    {
+      "name": "Applications",
+      "description": "Public account application submission workflow."
+    },
+    {
+      "name": "Identity",
+      "description": "Authenticated identity and operator account management surfaces."
+    },
+    {
+      "name": "Media",
+      "description": "Authenticated media upload, access, and deletion flows."
+    },
+    {
+      "name": "Public Portal",
+      "description": "Tenant public rebuild orchestration and related delivery integrations."
+    },
+    {
+      "name": "Content",
+      "description": "Authenticated content processing routes."
+    },
+    {
+      "name": "Extensions",
+      "description": "Extension discovery, lifecycle, and health surfaces."
+    },
+    {
+      "name": "Messaging",
+      "description": "Messaging and email integration surfaces."
+    },
+    {
+      "name": "Operational",
+      "description": "Operational-only maintenance and webhook surfaces."
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "supabaseBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase access token for authenticated operator requests."
+      }
+    }
+  },
+  "paths": {
+    "/api/media/upload-session": {
+      "post": {
+        "operationId": "createMediaUploadSession",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Create a media upload session",
+        "description": "Creates a tenant-scoped upload session and returns the upload and finalize URLs. Supabase Auth, RLS, and ABAC remain authoritative.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "in": "header",
+            "required": true,
+            "description": "Tenant UUID resolved by the caller. Supabase and Worker checks still enforce tenant isolation.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fileName": {
+                    "type": "string"
+                  },
+                  "mimeType": {
+                    "type": "string"
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "categoryId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "folder": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "accessControl": {
+                    "type": "string",
+                    "enum": [
+                      "public",
+                      "private"
+                    ],
+                    "nullable": true
+                  },
+                  "sessionBoundAccess": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "fileName",
+                  "mimeType",
+                  "sizeBytes"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload session created"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": true,
+        "x-awcms-soft-delete-aware": false,
+        "x-awcms-permission": "tenant.files.create | tenant.files.manage",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/media/upload/{sessionId}/finalize": {
+      "post": {
+        "operationId": "finalizeMediaUpload",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Queue media upload finalization",
+        "description": "Queues or executes upload finalization for a pending upload session owned by the authenticated uploader.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Pending upload session UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Upload finalization accepted"
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": true,
+        "x-awcms-soft-delete-aware": false,
+        "x-awcms-permission": "tenant.files.create | tenant.files.manage",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/media/upload/{sessionId}/status": {
+      "get": {
+        "operationId": "getMediaUploadStatus",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Read media upload finalization status",
+        "description": "Returns the current finalization state for an upload session owned by the authenticated uploader.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Upload session UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current upload status payload"
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "tenant.files.read",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/media/{id}/permanent": {
+      "delete": {
+        "operationId": "permanentlyDeleteMediaObject",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Permanently delete a trashed media object",
+        "description": "Deletes a previously soft-deleted media object from storage and removes the database row through a guarded RPC.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Media object UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "in": "header",
+            "required": true,
+            "description": "Tenant UUID resolved by the caller. Supabase and Worker checks still enforce tenant isolation.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media object permanently deleted"
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": true,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "tenant.files.permanent_delete",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/media/file/{id}/access": {
+      "get": {
+        "operationId": "getMediaAccessUrl",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Resolve an access URL for a media object",
+        "description": "Returns either a public delivery URL or a session-bounded signed URL for an uploaded media object visible through Supabase policies.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Media object UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "maxAgeSeconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolved media access URL payload"
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": true,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "tenant.files.read",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/media/file/{id}": {
+      "get": {
+        "operationId": "streamProtectedMediaFile",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Stream a protected media object",
+        "description": "Streams a protected media object after Supabase-visible access is confirmed.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Media object UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media object stream"
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": true,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "tenant.files.read",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/public/rebuild": {
+      "post": {
+        "operationId": "queuePublicPortalRebuild",
+        "tags": [
+          "Public Portal"
+        ],
+        "summary": "Queue a tenant public portal rebuild",
+        "description": "Queues a tenant-scoped public rebuild after verifying tenant context and content-management permissions.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "in": "header",
+            "required": true,
+            "description": "Tenant UUID resolved by the caller. Supabase and Worker checks still enforce tenant isolation.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resource": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "action": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Rebuild queued"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "tenant.page.update | tenant.blog.update | tenant.menu.update",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/functions/v1/content-transform": {
+      "post": {
+        "operationId": "applyContentTransform",
+        "tags": [
+          "Content"
+        ],
+        "summary": "Apply transformed blog content",
+        "description": "Updates a tenant blog content payload after bearer authentication, tenant scoping, and blog update permission checks.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "in": "header",
+            "required": true,
+            "description": "Tenant UUID resolved by the caller. Supabase and Worker checks still enforce tenant isolation.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "blog_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "transformed": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "blog_id",
+                  "transformed"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transformed blog content persisted"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "tenant.blog.update",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/functions/v1/extensions-lifecycle": {
+      "post": {
+        "operationId": "manageExtensionLifecycle",
+        "tags": [
+          "Extensions"
+        ],
+        "summary": "Run an extension lifecycle action",
+        "description": "Runs catalog, install, activation, upgrade, and health-check actions for the extension system. The exact ABAC grant depends on the lifecycle action.",
+        "deprecated": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "catalog-register",
+                      "install",
+                      "activate",
+                      "deactivate",
+                      "config-update",
+                      "uninstall",
+                      "upgrade",
+                      "health-check"
+                    ]
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lifecycle action completed"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "optional",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "platform.extensions.manage | platform.extensions.read | tenant.setting.update | tenant.setting.read",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/functions/v1/manage-users": {
+      "post": {
+        "operationId": "manageUsersAdminActions",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Run authenticated user-management actions",
+        "description": "Protected `manage-users` actions for invitations, creation, approval, updates, deletes, and account-request review. The public application submission flow is documented separately in the public spec.",
+        "deprecated": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "approve_application_admin",
+                      "approve_application_super_admin",
+                      "reject_application",
+                      "create",
+                      "invite",
+                      "update",
+                      "delete"
+                    ]
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "nullable": true
+                  },
+                  "password": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "full_name": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "role_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "tenant_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "request_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "reason": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User-management action completed"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "optional",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "tenant.user.update | platform.tenant.read",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/functions/v1/get-client-ip": {
+      "post": {
+        "operationId": "getAuthenticatedClientIp",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Resolve the authenticated caller IP",
+        "description": "Returns the request IP for an authenticated caller after bearer-token validation.",
+        "deprecated": false,
+        "responses": {
+          "200": {
+            "description": "Resolved client IP payload"
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "none",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": false,
+        "x-awcms-permission": "tenant.user.read",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/functions/v1/xendit-payment": {
+      "post": {
+        "operationId": "checkXenditPaymentCapability",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "Check Xendit payment route capability",
+        "description": "Authenticated capability probe for the Xendit payment integration route. The current runtime returns `501` because the integration is not configured.",
+        "deprecated": false,
+        "responses": {
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Xendit integration is not configured"
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "none",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": false,
+        "x-awcms-permission": "tenant.orders.read",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    },
+    "/functions/v1/extensions/events/health": {
+      "get": {
+        "operationId": "getEventsExtensionHealth",
+        "tags": [
+          "Extensions"
+        ],
+        "summary": "Inspect tenant events extension health",
+        "description": "Returns published and upcoming counts for the Events extension after tenant resolution and permission checks.",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events extension health payload"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-awcms-boundary": "admin",
+        "x-awcms-scope": "tenant",
+        "x-awcms-tenant-context": "required",
+        "x-awcms-r2": false,
+        "x-awcms-soft-delete-aware": true,
+        "x-awcms-permission": "tenant.events.read",
+        "security": [
+          {
+            "supabaseBearerAuth": []
+          }
+        ]
+      }
+    }
+  }
+}

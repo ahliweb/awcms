@@ -40,7 +40,7 @@ Describe the GitHub Actions workflows used for AWCMS.
 | `paths-filter` | Detect changed push-paths for selected workspaces | repo root | ci-push |
 | `lint-build-public` | Run `npm run check`, then build the primary public portal | `awcms-public/primary/` | ci-push, ci-pr |
 | `build-mobile` | Flutter build and tests | `awcms-mobile/primary/` | ci-push, ci-pr |
-| `typecheck-edge` | Install dependencies and run Worker TypeScript checks | `awcms-edge/` | ci-push, ci-pr |
+| `typecheck-edge` | Install dependencies and run Worker typecheck, OpenAPI validation, artifact drift checks, and edge docs tests | `awcms-edge/` | ci-push, ci-pr |
 | `lint-build-mcp` | Install dependencies, lint, and build the MCP server | `awcms-mcp/` | ci-push, ci-pr |
 | `build-ext-primary-analytics` | Install dependencies and run the extension SSR smoke build | `awcms-ext/primary-analytics/` | ci-push, ci-pr |
 | `typecheck-shared` | Install dependencies and run `@awcms/shared` TypeScript checks | `packages/awcms-shared/` | ci-push, ci-pr |
@@ -56,6 +56,7 @@ Current workflow coverage boundaries:
 - `ci-pr` now includes dedicated jobs for `awcms-edge/`, `awcms-mcp/`, `awcms-ext/primary-analytics/`, and `packages/awcms-shared/`.
 - `deploy-smandapbun` is a separate, dedicated deploy workflow for the SMANDAPBUN portal. It triggers on push to `main` when `awcms-public/smandapbun/**` or `packages/awcms-shared/**` changes, on `repository_dispatch` (for content-triggered rebuilds from the edge), and on `workflow_dispatch` (manual). It uses `CLOUDFLARE_ACCOUNT_ID` from GitHub secrets/variables — the account ID must **not** be hardcoded in the workflow file.
 - The current extension coverage is package-specific: only `awcms-ext/primary-analytics/` has a dedicated job. Add new jobs or a matrix when more maintained extension packages appear.
+- `typecheck-edge` now validates the boundary-separated OpenAPI contract, regenerates `awcms-edge/openapi/*.json`, checks artifact drift, and runs edge docs tests.
 
 ### Runtime Notes
 
@@ -63,6 +64,7 @@ Current workflow coverage boundaries:
 - Keep workflow/runtime Node versions aligned with `SYSTEM_MODEL.md` and package `engines` before bumping toolchains.
 - `awcms-edge/`, `awcms-mcp/`, `awcms-ext/primary-analytics/`, and `packages/awcms-shared/` are now first-class CI surfaces.
 - `build-ext-primary-analytics` uses `vite build --ssr src/index.js` as a package-level smoke build because the extension package does not ship a standalone app shell.
+- The Worker CI surface verifies that `/docs` remains public-only, `/docs/admin` stays protected, and internal OpenAPI docs remain artifact-only.
 
 ### Required Secrets and Variables (GitHub Actions)
 
@@ -78,6 +80,7 @@ Notes:
 - `PUBLIC_TENANT_ID` is injected in workflow env using either repository secrets or a zero UUID fallback for static-check/build safety.
 - `deploy-production` currently deploys only the admin artifact (`awcms/dist`) to Cloudflare Pages.
 - Worker deploys for `awcms-edge/` are not part of the current GitHub Actions push/PR workflows.
+- OpenAPI runtime/docs checks are validated in CI, but internal edge specs remain generated artifacts only and are not deployed as public routes.
 - `docs-link-check.yml` now delegates to `cd awcms && npm run docs:check`, which keeps workflow scope aligned with the maintained-doc policy in the audit plan/tracker.
 
 ## Verification
@@ -110,6 +113,10 @@ npm run docs:check
 
 # Edge Worker
 cd ../awcms-edge
+npm run openapi:build
+npm run openapi:validate
+npm run openapi:diff
+npm run test
 npm run typecheck
 
 # MCP server
