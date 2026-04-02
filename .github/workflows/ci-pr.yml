@@ -91,6 +91,9 @@ jobs:
 
       - name: Run runtime validation
         run: bash ./scripts/ci-validate-runtime.sh
+        env:
+          VITE_SUPABASE_URL: "https://mock.supabase.co"
+          VITE_SUPABASE_PUBLISHABLE_KEY: "mock-publishable-key"
 
   # ============================================
   # Lint & Build - Public Portal (Astro)

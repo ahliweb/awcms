@@ -195,6 +195,9 @@ jobs:
 
       - name: Run runtime validation
         run: bash ./scripts/ci-validate-runtime.sh
+        env:
+          VITE_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] }}
 
       - name: Build
         run: npm run build
