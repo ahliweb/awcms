@@ -1605,7 +1605,8 @@ RLS:
 
 - `select` requires `tenant.notifications.read`
 - `insert` / `update` require `tenant.notifications.manage`
-- soft delete is enforced through `deleted_at`
+- This permission family applies to notification channels/templates/dispatch logs, not the older in-app `tenant.notification.*` CRUD surface.
+- Soft delete is enforced through `deleted_at`
 
 #### notification_dispatches
 
@@ -1635,7 +1636,7 @@ CREATE TABLE public.notification_dispatches (
 RLS:
 
 - `select` requires `tenant.notifications.read`
-- inserts and updates are reserved for the Worker/admin-client path; no tenant direct-write policy is created
+- Inserts and updates are reserved for the Worker/admin-client path; no tenant direct-write policy is created
 
 #### notification_templates
 
@@ -1662,7 +1663,7 @@ RLS:
 
 - `select` requires `tenant.notifications.read`
 - `insert` / `update` require `tenant.notifications.manage`
-- system templates cannot be soft-deleted by tenant users
+- System templates cannot be soft-deleted by tenant users
 
 #### audit_logs
 

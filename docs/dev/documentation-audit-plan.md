@@ -4,7 +4,7 @@
 >
 > Audit Cycle: 2026-03-29 full repository re-baseline
 >
-> Last Updated: 2026-03-29
+> Last Updated: 2026-04-01
 >
 > Primary Authority Chain: `SYSTEM_MODEL.md` -> `AGENTS.md` -> `README.md` -> `DOCS_INDEX.md` -> implementation/package docs
 
@@ -29,11 +29,11 @@ This cycle explicitly covers:
 
 | Surface | Verified State | Evidence Source |
 | --- | --- | --- |
-| Tracked Markdown files | `686` | `git ls-files '*.md' | wc -l` |
-| Tracked docs files | `90` | `git ls-files 'docs/**/*.md' | wc -l` |
-| Root Supabase migrations | `152` | `python3 -c "import pathlib; print(len(list(pathlib.Path('supabase/migrations').glob('*.sql'))))"` |
-| Mirrored admin/CI migrations | `152` | `python3 -c "import pathlib; print(len(list(pathlib.Path('awcms/supabase/migrations').glob('*.sql'))))"` |
-| GitHub workflows | `4` | `ls .github/workflows | wc -l` |
+| Tracked Markdown files | Re-verify during each audit pass | `git ls-files '*.md' | wc -l` |
+| Tracked docs files | Re-verify during each audit pass | `git ls-files 'docs/**/*.md' | wc -l` |
+| Root Supabase migrations | Re-verify during each audit pass | `python3 -c "import pathlib; print(len(list(pathlib.Path('supabase/migrations').glob('*.sql'))))"` |
+| Mirrored admin/CI migrations | Re-verify during each audit pass | `python3 -c "import pathlib; print(len(list(pathlib.Path('awcms/supabase/migrations').glob('*.sql'))))"` |
+| GitHub workflows | Re-verify during each audit pass | `ls .github/workflows | wc -l` |
 | Admin package scripts | `11` | `awcms/package.json` |
 | Public primary package scripts | `13` | `awcms-public/primary/package.json` |
 | Public SMANDAPBUN package scripts | `8` | `awcms-public/smandapbun/package.json` |

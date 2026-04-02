@@ -48,7 +48,7 @@ Describe AWCMS security posture, enforcement points, and operational expectation
 1. Client Layer   - Input validation and XSS-safe rendering
 2. Transport      - HTTPS and strict CORS
 3. API Layer      - JWT auth + RLS policies
-4. Database       - Role-based access + policy enforcement
+4. Database       - RLS + ABAC policy enforcement
 ```
 
 ### XSS Prevention
@@ -95,8 +95,8 @@ Recent hardening updates:
 
 ### Tenant Isolation
 
-- Tenant context is injected via `x-tenant-id` in Supabase requests.
-- `current_tenant_id()` resolves tenant context in SQL.
+- Tenant context may be injected via `x-tenant-id` in scoped requests when the runtime/client flow requires it.
+- `current_tenant_id()` remains the SQL-side tenant resolver.
 - Storage paths are scoped to `tenants/{tenant_id}/...`.
 - Public static builds resolve tenant via `PUBLIC_TENANT_ID`, `VITE_PUBLIC_TENANT_ID`, or `VITE_TENANT_ID`.
 
@@ -116,7 +116,7 @@ Recent hardening updates:
 ## Security and Compliance Notes
 
 - Use `deleted_at` for deletions and filter it on reads.
-- Do not bypass RLS unless explicitly implementing platform admin features.
+- Do not bypass RLS in client code. Privileged operations belong only in approved server-side runtimes using `SUPABASE_SECRET_KEY`.
 - Supabase is the system of record for Auth, Postgres, RLS, and ABAC; Cloudflare Workers are the maintained edge runtime; Cloudflare R2 is the maintained object storage layer.
 - Admin edit/detail routes use signed IDs (`{uuid}.{signature}`); use `encodeRouteParam` and `useSecureRouteParam` for non-guessable URLs.
 - Public telemetry (analytics events) must remain tenant-scoped and documented via consent notices.

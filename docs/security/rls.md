@@ -27,7 +27,7 @@ Document the RLS helpers and standard policy patterns used in AWCMS.
 | --- | --- | --- |
 | `current_tenant_id()` | UUID | Tenant from the authenticated `public.users` row, with `app.current_tenant_id` fallback for unauthenticated/request-scoped flows |
 | `auth_is_admin()` | boolean | **SECURITY DEFINER**: Checks tenant-admin, platform-admin, or full-access flags for recursion-safe administrative bypass |
-| `is_platform_admin()` | boolean | **Standard**: Checks platform admin/full-access flags. Subject to RLS recursion. |
+| `is_platform_admin()` | boolean | Legacy/non-recursion-safe helper for platform admin/full-access checks. Avoid it in new RLS policy authoring. |
 | `has_permission(key)` | boolean | Checks if current user has specific permission key |
 | `caller_has_permission(key)` | boolean | **SECURITY DEFINER + row_security = off** helper for recursion-safe permission checks inside `public.users` RLS policies |
 | `is_admin_or_above()` | boolean | Legacy helper still used in existing policies; prefer `has_permission` for new policy authoring. |
@@ -181,13 +181,13 @@ FOR SELECT USING (
 
 ## Security and Compliance Notes
 
-- **Granularity**: Policies should match the permissions defined in `PermissionMatrix.jsx`.
+- **Granularity**: Policies should match the canonical permission keys stored in `public.permissions` and any maintained admin permission-matrix UI.
 - **Isolation**: Every tenant-scoped table must include `tenant_id` and `deleted_at`.
 - **Public access**: Public reads must be explicitly scoped to published content (for example `status = 'published'` and `deleted_at IS NULL`).
 - **Plugins**: Extension/Plugin routes must query tenant-scoped tables with `tenant_id = current_tenant_id()` and rely on ABAC permissions (no role-name checks).
 - **Public portal headers**: Ensure `x-tenant-id` is set by scoped Supabase clients (static builds) or middleware (SSR) so `current_tenant_id()` resolves correctly.
 - **Recursion safety**: If a helper must query `public.users` or `public.roles` inside a policy path, keep it `SECURITY DEFINER` and explicitly evaluate whether `row_security = off` is required to avoid self-referential policy loops.
-- **Notification tables**: `tenant_notification_channels` and `notification_templates` are tenant-writable under `tenant.notifications.manage`; `notification_dispatches` is intentionally read-only to tenants and written only through the Worker/admin-client path.
+- **Notification tables**: `tenant_notification_channels` and `notification_templates` are tenant-writable under the documented notification-management permissions for that feature set; `notification_dispatches` is intentionally read-only to tenants and written only through the Worker/admin-client path.
 - **Migration files**: RLS policy SQL must be committed as timestamped migrations only.
 
 ## References

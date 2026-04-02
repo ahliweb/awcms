@@ -92,7 +92,7 @@ src/plugins/{slug}/
   "type": "core",
   "routes": [{ "path": "/cmspanel/backup", "component": "BackupSettings" }],
   "menu": { "label": "Backup", "icon": "Database", "path": "backup" },
-  "permissions": ["tenant.backup.create"]
+  "permissions": ["tenant.setting.read"]
 }
 ```
 
@@ -133,7 +133,7 @@ Source packages live under `awcms-ext/` and are served from the external extensi
 ```text
 awcms-ext/
   primary-analytics/
-  ├── manifest.json     # Extension manifest (NOT plugin.json)
+  ├── extension.json    # Extension manifest (NOT plugin.json)
   ├── package.json
   └── src/
       ├── index.js      # Entry point
@@ -143,7 +143,7 @@ awcms-ext/
 The in-repo workspace path does not need to match the runtime-served folder name. The loader derives the
 runtime bundle path from `vendor`, `slug`, `entry`, and `VITE_EXTERNAL_EXTENSIONS_PATH`.
 
-### Manifest (`manifest.json`)
+### Manifest (`extension.json`)
 
 ```json
 {
@@ -326,14 +326,14 @@ Tenant-level plugin pages and extension settings should use `tenant.setting.*` p
 1. Create `src/plugins/{slug}/plugin.json`
 2. Create `src/plugins/{slug}/index.js` with `register()`
 3. Add import to `pluginRegistry.js`
-4. Insert row in `extensions` table
+4. Register the plugin through the maintained bundled/plugin registry flow; avoid documenting new writes to legacy `public.extensions` as the primary setup path
 
 ## Quick Start: External Extension
 
 1. Create a workspace under `awcms-ext/` (for example `awcms-ext/my-extension/`)
 2. Create `extension.json` with the v1 manifest fields
 3. Create `src/index.js` with `register()` export
-4. Register in database with `extension_type: 'external'`
+4. Register the package in `platform_extension_catalog`, then activate/configure it per tenant through `tenant_extensions`
 
 ---
 

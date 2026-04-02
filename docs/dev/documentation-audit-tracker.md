@@ -2,9 +2,9 @@
 
 > Related Plan: `docs/dev/documentation-audit-plan.md`
 >
-> Status: Active - 2026-03-29 sync cycle in progress. Authority docs are re-checked, and content accuracy reconciliation remains active across all 90 docs files.
+> Status: Active - content accuracy reconciliation remains in progress across the current `docs/**/*.md` surface. Re-verify counts at the start of each audit pass.
 >
-> Last Updated: 2026-03-29
+> Last Updated: 2026-04-01
 
 ## Current Phase Status
 
@@ -20,11 +20,11 @@
 
 | Surface | Current State | Evidence |
 | --- | --- | --- |
-| Tracked Markdown files | `686` | `git ls-files '*.md' \| wc -l` |
-| Tracked docs files | `90` | `git ls-files 'docs/**/*.md' \| wc -l` |
-| Root migrations | `152` | `ls supabase/migrations/*.sql \| wc -l` (was `150` at 2026-03-25) |
-| Mirrored migrations | `152` | `ls awcms/supabase/migrations/*.sql \| wc -l` (was `150` at 2026-03-25) |
-| GitHub workflows | `4` | `ls .github/workflows \| wc -l` |
+| Tracked Markdown files | Re-verify on each pass | `git ls-files '*.md' \| wc -l` |
+| Tracked docs files | Re-verify on each pass | `git ls-files 'docs/**/*.md' \| wc -l` |
+| Root migrations | Re-verify on each pass | `ls supabase/migrations/*.sql \| wc -l` |
+| Mirrored migrations | Re-verify on each pass | `ls awcms/supabase/migrations/*.sql \| wc -l` |
+| GitHub workflows | Re-verify on each pass | `ls .github/workflows \| wc -l` |
 | Docs validation | Local-target and link check pass | `cd awcms && npm run docs:check` |
 | Migration parity | Passing | `scripts/verify_supabase_migration_consistency.sh` |
 | Edge runtime scripts | `10` | `awcms-edge/package.json` |
@@ -55,6 +55,8 @@
 | DOCSYNC-NEW-11 | Medium | `docs/architecture/tech-stack.md` mobile dependency versions drifted from `awcms-mobile/primary/pubspec.yaml` | Resolved 2026-03-29 | Riverpod/Drift/GoRouter versions refreshed from the live manifest | Re-run when the Flutter manifest changes |
 | DOCSYNC-NEW-12 | Medium | `docs/dev/mobile.md` described a magic-link-primary auth flow, stale sample paths, and outdated env file usage that did not match the checked-in Flutter app | Resolved 2026-03-29 | Mobile docs now reflect `flutter_dotenv`, current `auth_service.dart`, email/password primary auth, and existing `.env` / `.env.remote` files | Re-check when the mobile auth flow changes |
 | DOCSYNC-NEW-13 | Low | `docs/modules/EMAIL_INTEGRATION.md`, `docs/dev/api-usage.md`, `docs/dev/ci-cd.md`, `docs/dev/testing.md`, and `docs/dev/versioning.md` had lower-priority command/path/model drift | Resolved 2026-03-29 | Corrected Mailketing service path, public client example priority, DB parity command, mobile test commands, and versioning wording about dependency coordination | Re-run during the next dev/module docs sweep |
+| DOCSYNC-2026-04-01-01 | Medium | Security and tenancy docs still contained small authority drifts around platform-admin helper naming, notification permission examples, and source-of-truth wording | Resolved 2026-04-01 | `docs/security/rls.md`, `docs/security/abac.md`, `docs/security/overview.md`, `docs/tenancy/supabase.md`, and `docs/architecture/platform-tenant-separation.md` updated | Re-check when auth helpers, permissions, or notification migrations change |
+| DOCSYNC-2026-04-01-02 | Medium | Module and user docs still had stale extension-manifest naming, legacy extension-table setup guidance, incomplete role coverage, and notification permission-family ambiguity | Resolved 2026-04-01 | `docs/modules/EXTENSIONS.md`, `docs/modules/USER_MANAGEMENT.md`, `docs/security/abac.md`, and `docs/architecture/database.md` updated | Re-check when extension lifecycle, role model, or notification permissions change |
 
 ## Commands Run During This Cycle
 

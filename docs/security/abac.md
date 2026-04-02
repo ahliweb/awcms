@@ -85,7 +85,7 @@ for select using (
 - Missing `deleted_at` filter: soft-deleted data leaks into reads.
 - Using `is_platform_admin()` in RLS: prefer `auth_is_admin()` to avoid recursion.
 
-### 4. Scopes (Access Boundaries)
+## Scopes (Access Boundaries)
 
 The system defines 4 strict scopes for roles and permissions:
 
@@ -93,14 +93,14 @@ The system defines 4 strict scopes for roles and permissions:
 | :--- | :--- | :--- |
 | **platform** | **System-Wide**. Full access to all resources and tenants. | **Platform Roles Only**. (e.g. Owner, Super Admin). |
 | **tenant** | **Tenant-Bounded**. Access strictly limited to user's `tenant_id`. | **Tenant Roles Only**. (e.g. Admin, Editor). |
-| **content** | **Global Content**. Access to all content resources across tenants. | **Platform Roles Only**. Reserved for Content Moderators. |
-| **module** | **Global Extensions**. Access to all plugins/extensions system-wide. | **Platform Roles Only**. Reserved for System Integrators. |
+| **content** | Reserved or special-purpose scope. Use only when a documented platform-wide content workflow explicitly requires it. | Platform-only, if enabled by the product surface. |
+| **module** | Reserved or special-purpose scope. Use only when a documented platform-wide extension workflow explicitly requires it. | Platform-only, if enabled by the product surface. |
 
 ---
 
 ## 1. Permission Matrix (Live)
 
-These lists are maintained against the database `permissions` table and `awcms/src/components/dashboard/PermissionMatrix.jsx`.
+These lists are documented from the root migration baseline first. Any admin permission-matrix UI is a consumer of that canonical database state, not the source of truth.
 
 To verify against current database state before documentation updates:
 
@@ -115,20 +115,28 @@ order by name;
 
 | Permission Key        | Actions                      | Channel |
 | :-------------------- | :--------------------------- | :------ |
-| `platform.tenant`     | read, create, update, delete | web     |
-| `platform.setting`    | read, update                 | web     |
-| `platform.module`     | read, create, update         | web     |
-| `platform.extensions` | read, create, update, delete | web     |
-| `platform.extensions.manage` | manage | web |
-| `platform.sidebar`    | read, update                 | web     |
-| `platform.billing`    | read, update                 | web     |
-| `platform.user`       | read, create, update, delete | web     |
+| `platform.tenant.*` | read, create, update, delete | web |
+| `platform.setting.*` | read, create, update, delete | web |
+| `platform.module.read`, `platform.module.manage` | Platform module visibility and global module-management actions. Verify exact coverage from `public.permissions` before documenting new flows. | web |
+| `platform.extensions.*` | read, create, update, delete | web |
+| `platform.extensions.manage` | Platform extension catalog/lifecycle orchestration | web |
+| `platform.sidebar.read` | Platform sidebar-management visibility. | web |
+| `platform.reporting.read` | Platform reporting visibility | web |
+| `platform.billing.*` | Use only if the live `permissions` table exposes these keys. | web |
+| `platform.user.*` | Use only if the live `permissions` table exposes these keys. | web |
+
+Current app-level permission checks that should be treated as implementation-specific until they are verified in root migrations:
+
+- `platform.permissions.read`
+- `platform.approvals.read`
+- `platform.template.manage`
+- `platform.sidebar.update`
 
 ### B. Tenant (Tenant Scope) - Standardized Pattern
 
 **Format**: `tenant.{module}.{action}`
 
-**Action conventions**: `create`, `read`, `update`, `delete`, `restore`, `permanent_delete`, `publish`.
+**Action conventions**: `create`, `read`, `update`, `delete`, `restore`, `permanent_delete`, `publish`, plus feature-specific actions such as `manage` and `send` where migrations define them.
 
 #### Content Modules
 
@@ -142,13 +150,13 @@ order by name;
 | Announcements | `tenant.announcements.*` | read, create, update, delete, restore, permanent_delete          |
 | Promotions    | `tenant.promotions.*`    | read, create, update, delete, restore, permanent_delete          |
 | Widgets       | `tenant.widgets.*`       | read, create, update, delete                                     |
-| Templates     | `tenant.templates.*`     | read, create, update, delete                                     |
+| Templates     | No migration-backed `tenant.templates.*` family is verified in the current root baseline. Current template screens mainly gate through `tenant.setting.update`, with some app-level `platform.template.manage` usage. | Verify exact target screen before documenting new template permissions |
 
 #### Media Modules
 
 | Module        | Permission Prefix        | Actions                                                 |
 | :------------ | :----------------------- | :------------------------------------------------------ |
-| Files (Lib)   | `tenant.files.*`         | read, create, update, delete, manage                    |
+| Files (Lib)   | `tenant.files.*`         | read, create, update, delete, manage, restore, permanent_delete |
 | Photo Gallery | `tenant.photo_gallery.*` | read, create, update, delete, restore, permanent_delete |
 | Video Gallery | `tenant.video_gallery.*` | read, create, update, delete, restore, permanent_delete |
 
@@ -183,7 +191,8 @@ order by name;
 | Settings         | `tenant.setting.*`          | read, update                                            |
 | Themes           | `tenant.theme.*`            | read, create, update, delete                            |
 | Audit Logs       | `tenant.audit.*`            | read                                                    |
-| Notifications    | `tenant.notification.*`     | read, create, update, delete                            |
+| Notifications    | `tenant.notification.*` for in-app notification CRUD, and `tenant.notifications.*` for notification channels/templates/dispatch logs | Verify the target feature surface before choosing the prefix |
+| Modules          | `tenant.modules.read`       | read only                                               |
 | Contacts         | `tenant.contacts.*`         | read, create, update, delete, restore, permanent_delete |
 | Contact Messages | `tenant.contact_messages.*` | read, create, update, delete, restore, permanent_delete |
 | Regions          | `tenant.region.*`           | read, create, update, delete                            |
@@ -191,19 +200,24 @@ order by name;
 | SSO              | `tenant.sso.*`              | read, update                                            |
 | Languages        | `tenant.languages.*`        | read, update                                            |
 | School Pages     | `tenant.school_pages.*`     | read, update                                            |
-| Backups          | `tenant.backups.*`          | read, create, delete                                    |
+| Backups          | No root-migration-backed backup permission family is verified in this pass. | Verify the feature implementation before documenting backup permissions |
 
 #### Mobile, IoT & Platform Extensions
 
 | Module             | Permission Prefix             | Actions                      |
 | :----------------- | :---------------------------- | :--------------------------- |
-| Mobile Users       | `tenant.mobile_users.*`       | read, create, update, delete |
-| Mobile Config      | `tenant.mobile.*`             | read, update                 |
-| Push Notifications | `tenant.push_notifications.*` | read, create, update, delete |
-| IoT Devices        | `tenant.iot.*`                | read, create, update, delete |
+| Mobile Users       | `tenant.mobile_users.*`       | Present in current role-assignment snapshots; re-verify seed source before broad policy documentation |
+| Mobile Config      | `tenant.mobile.*`             | read, update |
+| Push Notifications | `tenant.push_notifications.*` | Present in current role-assignment snapshots; re-verify seed source before broad policy documentation |
+| IoT Devices        | `tenant.iot.*`                | Present in current role-assignment snapshots; re-verify seed source before broad policy documentation |
 | Platform Extensions | `platform.extensions.*`      | read, create, update, delete  |
 | Analytics          | `tenant.analytics.*`          | read                         |
 | Events             | `tenant.events.*`             | read, create, update, delete, publish |
+
+Known normalization drift still visible in current app code:
+
+- Some page-management screens still reference `tenant.pages.*`, while the migration-backed canonical family is `tenant.page.*`.
+- Some feature screens reference app-level permissions that are not yet verified in the root migration baseline. Keep new documentation and new policy work aligned to migration-backed names first.
 
 ---
 

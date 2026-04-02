@@ -91,10 +91,7 @@ const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env
   - `tenant_notification_channels` for per-tenant channel credentials, quotas, and enable/disable state
   - `notification_templates` for reusable tenant-scoped outbound templates
   - `notification_dispatches` for immutable dispatch audit records
-- Seeded permissions:
-  - `tenant.notifications.read`
-  - `tenant.notifications.send`
-  - `tenant.notifications.manage`
+- Notification permission names must be verified against the live `public.permissions` table before use. Keep documentation aligned to the exact seeded keys present in migrations rather than assuming a generic naming pattern.
 - Seeded modules:
   - `email-notifications`
   - `whatsapp-notifications`

@@ -160,20 +160,24 @@ Roles are assigned via the `role_id` Foreign Key in `public.users`.
 | `/cmspanel/users` | User list | Default tab for active users. |
 | `/cmspanel/users/new` | Create user | Opens the user editor. |
 | `/cmspanel/users/edit/:id/*` | Edit user | `:id` uses signed route params (`{uuid}.{signature}`) and supports tab sub-slugs. |
-| `/cmspanel/users/approvals/:status` | Registration approvals | Status values: `pending`, `completed`, `rejected`. |
+| `/cmspanel/users/approvals/:status` | Registration approvals | Route tabs use `pending`, `completed`, `rejected`; the backing records may still carry workflow states such as `pending_admin` and `pending_super_admin`. |
 
 ## Tenant Roles (Multi-Tenancy)
 
 Users are strictly scoped to a single `tenant_id`. Platform admin/full-access roles may be global (`tenant_id` NULL).
 
 | Role | Scope | Default Permissions |
-|------|-------|---------------------|
-| **Owner** | Global | Full Access (Can create Tenants) |
-| **Super Admin** | Global | Platform Management |
-| **Admin** | Tenant | Manage Users, Content, Settings for *their* tenant. |
-| **Editor** | Tenant | Can Edit/Publish content. Cannot manage users. |
-| **Author** | Tenant | Can Create/Edit *own* content. |
-| **Member** | Tenant | Read-only / Front-end access. |
+| --- | --- | --- |
+| **Owner** | Platform | Full platform access |
+| **Super Admin** | Platform | Platform management |
+| **Admin** | Tenant | Full tenant management |
+| **Auditor** | Tenant | Read-only tenant audit and inspection workflows |
+| **Editor** | Tenant | Content review and publish workflows |
+| **Author** | Tenant | Create and update own content |
+| **Member** | Tenant | Limited authenticated tenant access |
+| **Subscriber** | Tenant | Subscriber/premium-content access where enabled |
+| **Public** | Tenant/Public | Read-only public-facing access |
+| **No Access** | Tenant | Disabled or blocked access |
 
 > Platform admin access is determined by role flags (`is_platform_admin`/`is_full_access`), not role names.
 
@@ -193,7 +197,7 @@ Users are strictly scoped to a single `tenant_id`. Platform admin/full-access ro
 
 - **Password Reset**: Handled via Supabase's built-in email recovery flow.
 - **Account Locking**: Managed by Supabase (rate limiting).
-- **Data Access**: Users can only see their own profile data unless they have `tenant.user.read` permission (Admin level).
+- **Data Access**: Users can only see their own profile data unless they have the required `tenant.user.read` permission.
 - **Admin Notes**: Encrypted at rest via pgcrypto; access is only via RPC and admin permissions.
 
 ## Registration & Approval Workflow

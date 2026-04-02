@@ -17,11 +17,11 @@ The implementation is broken down into small, distinct execution phases to preve
 
 **Goal:** Establish the database schema required for platform settings and update the existing schema scopes without breaking the current UI.
 
-### Step 1.1: `auth_is_platform_admin()` Function
+### Step 1.1: Platform Admin Helper
 
-Create a `auth_is_platform_admin()` function. This must happen before table creation so RLS policies can use it.
+Use the maintained recursion-safe platform-admin helper pattern already documented in the migration history and authority docs. Do not introduce a parallel helper name unless the implementation requires a migration-backed compatibility reason.
 
-- Defined as: `is_platform_admin = true` OR `is_full_access = true` in the authenticated user's assigned role.
+- Defined as: platform-admin or full-access role flags on the authenticated user's assigned role.
 
 ### Step 1.2: `platform_settings` Table
 
@@ -29,7 +29,7 @@ Create the `platform_settings` table.
 
 - **Columns:** `id`, `key` (UNIQUE), `value`, `type`, `description`, `category`, `is_overridable`, timestamps.
 - **Note:** NO `tenant_id` column.
-- **RLS:** `SELECT` allowed for all authenticated users; `INSERT/UPDATE/DELETE` restricted to `auth_is_platform_admin()`.
+- **RLS:** `SELECT` should be limited to the documented platform permission path (for example `platform.setting.read`) or approved platform-admin/full-access bypass. `INSERT/UPDATE/DELETE` should remain restricted to approved platform-admin/full-access paths.
 
 ### Step 1.3: Update Existing Tables with Scopes
 
@@ -118,8 +118,8 @@ Modify the Sidebar component rendering logic so that if a user is a Platform Adm
 
 Update RLS policies on `tenants`, `extensions`, and `modules`.
 
-- Platform admins get `ALL` access across all tenants.
-- Tenant admins are strictly restricted to rows where `tenant_id` matches their own via JWT `app_metadata` or strict session lookup.
+- Platform admins get cross-tenant access only through approved platform-admin/full-access paths.
+- Tenant admins remain restricted to rows where `tenant_id` matches `public.current_tenant_id()` unless a documented hierarchy-sharing policy intentionally expands visibility.
 
 ---
 
