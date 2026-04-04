@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { HTTPException } from 'hono/http-exception'
 import { createClient } from '@supabase/supabase-js'
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
@@ -16,6 +17,8 @@ import { dlqQueueHandler } from './queues/dlqConsumer'
 import { logReplay } from './queues/observability'
 import { requireDocsAccess } from './middleware/docs/require-docs-access'
 import type { AppEnv, Bindings, UserContext } from './lib/runtime-types'
+import { getJsonBody, handleRouteError, requireJsonBody, requireString } from './lib/http'
+import { requireBearerSession, resolveBearerOrServiceActor } from './lib/auth'
 
 export const app = new Hono<AppEnv>()
 
@@ -173,14 +176,6 @@ const getSessionBoundAccessWindowSeconds = (env: Bindings, token: string, reques
   }
 }
 
-const getJsonBody = async (request: Request) => {
-  try {
-    return await request.json<Record<string, unknown>>()
-  } catch {
-    return null
-  }
-}
-
 const getRequestIp = (request: Request) => {
   return request.headers.get('cf-connecting-ip')
     || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -334,6 +329,221 @@ const ensureManagedUserProfile = async (adminSupabase: any, payload: {
       created_at: new Date().toISOString(),
     })
   if (error) throw error
+}
+
+const provisionManagedUser = async (adminSupabase: any, params: {
+  mode: 'create' | 'invite'
+  email: string
+  password?: string | null
+  fullName?: string | null
+  tenantId?: string | null
+  roleId?: string | null
+  allowPlatformRole: boolean
+}) => {
+  const assignableRole = await resolveAssignableRole(adminSupabase, {
+    roleId: params.roleId || null,
+    tenantId: params.tenantId || null,
+    allowPlatformRole: params.allowPlatformRole,
+  })
+
+  const userMetadata = {
+    full_name: params.fullName,
+    tenant_id: params.tenantId || null,
+    role_id: assignableRole.id,
+  }
+
+  const authOperation = params.mode === 'create'
+    ? await adminSupabase.auth.admin.createUser({
+      email: params.email,
+      password: params.password,
+      email_confirm: true,
+      user_metadata: userMetadata,
+    })
+    : await adminSupabase.auth.admin.inviteUserByEmail(params.email, {
+      data: userMetadata,
+    })
+
+  if (authOperation.error || !authOperation.data?.user) {
+    const fallback = params.mode === 'create' ? 'Failed to create user' : 'Failed to invite user'
+    throw new Error(authOperation.error?.message || fallback)
+  }
+
+  await ensureManagedUserProfile(adminSupabase, {
+    authUserId: authOperation.data.user.id,
+    email: params.email,
+    fullName: params.fullName,
+    tenantId: params.tenantId || null,
+    roleId: assignableRole.id,
+  })
+
+  return {
+    user: authOperation.data.user,
+    roleId: assignableRole.id,
+  }
+}
+
+const enforceRequestedTenantScope = (params: {
+  isSuperAdmin: boolean
+  requesterTenantId?: string | null
+  requestedTenantId?: string | null
+  mismatchMessage: string
+}) => {
+  if (params.isSuperAdmin) {
+    return params.requestedTenantId || null
+  }
+
+  if (!params.requesterTenantId) {
+    throw new HTTPException(403, { message: 'Forbidden: no tenant context' })
+  }
+
+  if (params.requestedTenantId && params.requestedTenantId !== params.requesterTenantId) {
+    throw new HTTPException(403, { message: params.mismatchMessage })
+  }
+
+  return params.requesterTenantId
+}
+
+const enforceOwnedTargetTenant = (params: {
+  isSuperAdmin: boolean
+  requesterTenantId?: string | null
+  targetTenantId?: string | null
+  message?: string
+}) => {
+  if (params.isSuperAdmin) return
+  if (params.targetTenantId && params.targetTenantId !== params.requesterTenantId) {
+    throw new HTTPException(403, { message: params.message || 'Forbidden' })
+  }
+}
+
+const loadAccountRequest = async (adminSupabase: any, requestId: string, select = '*') => {
+  const { data } = await adminSupabase
+    .from('account_requests')
+    .select(select)
+    .eq('id', requestId)
+    .single()
+
+  return data || null
+}
+
+const enforceAccountRequestAccess = (params: {
+  isSuperAdmin: boolean
+  requesterTenantId?: string | null
+  accountRequest?: { tenant_id?: string | null } | null
+}) => {
+  enforceOwnedTargetTenant({
+    isSuperAdmin: params.isSuperAdmin,
+    requesterTenantId: params.requesterTenantId,
+    targetTenantId: params.accountRequest?.tenant_id,
+  })
+}
+
+const loadTenantExtensionForLifecycle = async (params: {
+  adminSupabase: any
+  tenantExtensionId: string
+  requestedTenantId?: string | null
+  userContext: UserContext
+}) => {
+  const { data: tenantExtension, error } = await params.adminSupabase
+    .from('tenant_extensions')
+    .select('*, catalog:platform_extension_catalog(*)')
+    .eq('id', params.tenantExtensionId)
+    .is('deleted_at', null)
+    .single()
+
+  if (error || !tenantExtension) {
+    throw new HTTPException(404, { message: 'Tenant extension not found' })
+  }
+
+  const tenantId = resolveTenantId(params.requestedTenantId || tenantExtension.tenant_id, params.userContext)
+  if (!tenantId || tenantId !== tenantExtension.tenant_id) {
+    throw new HTTPException(403, { message: 'Tenant mismatch' })
+  }
+
+  return {
+    tenantExtension,
+    catalog: Array.isArray(tenantExtension.catalog) ? tenantExtension.catalog[0] : tenantExtension.catalog,
+    tenantId,
+  }
+}
+
+const finalizeTenantExtensionLifecycle = async (params: {
+  adminSupabase: any
+  tenantId: string
+  catalog: any
+  tenantExtensionId: string
+  actorUserId: string
+  action: string
+  request: Request
+  startedAt: number
+  metadata?: Record<string, unknown>
+}) => {
+  const extensionKey = params.catalog
+    ? `${params.catalog.vendor}/${params.catalog.slug}`
+    : params.tenantExtensionId
+
+  await writeExtensionAudit(params.adminSupabase, {
+    tenantId: params.tenantId,
+    catalogId: params.catalog?.id,
+    tenantExtensionId: params.tenantExtensionId,
+    actorUserId: params.actorUserId,
+    action: params.action,
+    status: 'succeeded',
+    metadata: {
+      extensionKey,
+      ...(params.metadata || {}),
+    },
+  })
+
+  await writeAccessAudit(params.adminSupabase, {
+    tenantId: params.tenantId,
+    userId: params.actorUserId,
+    action: 'extensions.lifecycle',
+    resource: 'extension_lifecycle',
+    details: {
+      action: params.action,
+      tenant_extension_id: params.tenantExtensionId,
+      ...(params.catalog?.id ? { catalog_id: params.catalog.id } : {}),
+    },
+    ipAddress: getRequestIp(params.request),
+    channel: 'worker',
+    actorType: 'user',
+    authContext: { has_session: true },
+    moduleName: 'extensions',
+    featureName: 'lifecycle',
+    actionName: params.action,
+    resourceType: 'tenant_extension',
+    resourceId: params.tenantExtensionId,
+    requestDurationMs: Date.now() - params.startedAt,
+    routePath: '/functions/v1/extensions-lifecycle',
+    url: params.request.url,
+    userAgent: params.request.headers.get('user-agent') || null,
+    purpose: 'manage extension lifecycle actions',
+    triggerSource: 'awcms_edge_route',
+    businessIntent: 'extension_runtime_management',
+    accessChannel: 'worker',
+    accessMechanism: 'worker_route',
+    authMethod: 'bearer_token',
+  })
+}
+
+const writeFailedExtensionLifecycleAudit = async (params: {
+  adminSupabase: any
+  actorUserId: string
+  action: string
+  tenantId?: string | null
+  catalogId?: string | null
+  tenantExtensionId?: string | null
+  metadata?: Record<string, unknown>
+}) => {
+  await writeExtensionAudit(params.adminSupabase, {
+    tenantId: params.tenantId,
+    catalogId: params.catalogId,
+    tenantExtensionId: params.tenantExtensionId,
+    actorUserId: params.actorUserId,
+    action: params.action,
+    status: 'failed',
+    metadata: params.metadata || {},
+  })
 }
 
 const writeExtensionAudit = async (adminSupabase: any, payload: {
@@ -1340,88 +1550,93 @@ app.get('/public/sitemap', async (c) => {
 const MAILKETING_API = 'https://api.mailketing.co.id/api/v1';
 
 const handleMailketing = async (c: any) => {
-  const apiToken = c.env.MAILKETING_API_TOKEN;
-  if (!apiToken) {
-    return c.json({ error: 'MAILKETING_API_TOKEN not configured' }, 500);
-  }
-
-  const body = await c.req.json();
-  const { action } = body;
-
-  // For "send" action: enqueue asynchronously and return 202
-  if (action === 'send') {
-    const traceId = c.req.header('x-trace-id') || crypto.randomUUID()
-    const tenantId = c.req.header('x-tenant-id') || 'platform'
-
-    const msg = buildEmailSendMessage({
-      tenant_id: tenantId,
-      trace_id: traceId,
-      from_name: body.from_name || 'AWCMS',
-      from_email: body.from_email || 'noreply@awcms.com',
-      recipient: body.recipient || '',
-      subject: body.subject || '',
-      content: body.content || '',
-      attach1: body.attach1,
-      attach2: body.attach2,
-      attach3: body.attach3,
-    })
-
-    await (c.env as Bindings).NOTIFICATIONS_QUEUE.send(msg)
-    return c.json({ ok: true, job_id: msg.job_id, queued: true }, 202)
-  }
-
-  // All other actions (subscribe, credits, lists) remain synchronous
-  let endpoint = '';
-  let params: Record<string, string | number> = {};
-
-  switch (action) {
-    case 'subscribe':
-      endpoint = '/addsubtolist';
-      params = {
-        api_token: apiToken,
-        list_id: body.list_id || c.env.MAILKETING_DEFAULT_LIST_ID || 1,
-        email: body.email || '',
-      };
-      if (body.first_name) params.first_name = body.first_name;
-      if (body.last_name) params.last_name = body.last_name;
-      if (body.phone) params.phone = body.phone;
-      if (body.mobile) params.mobile = body.mobile;
-      if (body.city) params.city = body.city;
-      if (body.state) params.state = body.state;
-      if (body.country) params.country = body.country;
-      if (body.company) params.company = body.company;
-      break;
-    case 'credits':
-      endpoint = '/ceksaldo';
-      params = { api_token: apiToken };
-      break;
-    case 'lists':
-      endpoint = '/viewlist';
-      params = { api_token: apiToken };
-      break;
-    default:
-      return c.json({ error: 'Invalid action. Use: send, subscribe, credits, lists' }, 400);
-  }
-
-  const formData = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    formData.append(key, String(value));
-  }
-
   try {
+    const apiToken = c.env.MAILKETING_API_TOKEN
+    if (!apiToken) {
+      throw new Error('MAILKETING_API_TOKEN not configured')
+    }
+
+    const body = await requireJsonBody(c.req.raw)
+    const action = requireString(body.action, 'Missing action')
+
+    // For "send" action: enqueue asynchronously and return 202
+    if (action === 'send') {
+      const recipient = requireString(body.recipient, 'Missing recipient')
+      const subject = requireString(body.subject, 'Missing subject')
+      const content = requireString(body.content, 'Missing content')
+      const traceId = c.req.header('x-trace-id') || crypto.randomUUID()
+      const tenantId = c.req.header('x-tenant-id') || 'platform'
+
+      const msg = buildEmailSendMessage({
+        tenant_id: tenantId,
+        trace_id: traceId,
+        from_name: typeof body.from_name === 'string' && body.from_name.trim() ? body.from_name.trim() : 'AWCMS',
+        from_email: typeof body.from_email === 'string' && body.from_email.trim() ? body.from_email.trim() : 'noreply@awcms.com',
+        recipient,
+        subject,
+        content,
+        attach1: typeof body.attach1 === 'string' ? body.attach1 : undefined,
+        attach2: typeof body.attach2 === 'string' ? body.attach2 : undefined,
+        attach3: typeof body.attach3 === 'string' ? body.attach3 : undefined,
+      })
+
+      await (c.env as Bindings).NOTIFICATIONS_QUEUE.send(msg)
+      return c.json({ ok: true, job_id: msg.job_id, queued: true }, 202)
+    }
+
+    // All other actions (subscribe, credits, lists) remain synchronous
+    let endpoint = ''
+    let params: Record<string, string | number> = {}
+
+    switch (action) {
+      case 'subscribe':
+        params = {
+          api_token: apiToken,
+          list_id: typeof body.list_id === 'number' || typeof body.list_id === 'string'
+            ? body.list_id as string | number
+            : c.env.MAILKETING_DEFAULT_LIST_ID || 1,
+          email: requireString(body.email, 'Missing email'),
+        }
+        endpoint = '/addsubtolist'
+        if (typeof body.first_name === 'string' && body.first_name.trim()) params.first_name = body.first_name.trim()
+        if (typeof body.last_name === 'string' && body.last_name.trim()) params.last_name = body.last_name.trim()
+        if (typeof body.phone === 'string' && body.phone.trim()) params.phone = body.phone.trim()
+        if (typeof body.mobile === 'string' && body.mobile.trim()) params.mobile = body.mobile.trim()
+        if (typeof body.city === 'string' && body.city.trim()) params.city = body.city.trim()
+        if (typeof body.state === 'string' && body.state.trim()) params.state = body.state.trim()
+        if (typeof body.country === 'string' && body.country.trim()) params.country = body.country.trim()
+        if (typeof body.company === 'string' && body.company.trim()) params.company = body.company.trim()
+        break
+      case 'credits':
+        endpoint = '/ceksaldo'
+        params = { api_token: apiToken }
+        break
+      case 'lists':
+        endpoint = '/viewlist'
+        params = { api_token: apiToken }
+        break
+      default:
+        return c.json({ error: 'Invalid action. Use: send, subscribe, credits, lists' }, 400)
+    }
+
+    const formData = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+      formData.append(key, String(value))
+    }
+
     const response = await fetch(`${MAILKETING_API}${endpoint}`, {
       method: 'POST',
       body: formData,
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
-    const result = await response.json() as Record<string, any>;
-    
-    const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-real-ip') || 'unknown';
-    return c.json({ ...result, client_ip: clientIp });
-  } catch (error: any) {
-    return c.json({ error: error.message }, 500);
+    })
+    const result = await response.json() as Record<string, any>
+
+    const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-real-ip') || 'unknown'
+    return c.json({ ...result, client_ip: clientIp })
+  } catch (error) {
+    return handleRouteError(c, error, 'Mailketing request failed')
   }
-};
+}
 
 app.post('/api/mailketing', handleMailketing);
 app.post('/functions/v1/mailketing', handleMailketing);
@@ -1429,93 +1644,97 @@ app.post('/functions/v1/mailketing', handleMailketing);
 // ---- SUPABASE EDGE FUNCTION MIGRATIONS ----
 
 app.post('/functions/v1/content-transform', async (c) => {
-  const startedAt = Date.now()
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
+  try {
+    const startedAt = Date.now()
+    const authHeader = c.req.header('Authorization')
+    if (!authHeader) return c.json({ error: 'Unauthorized' }, 401)
 
-  const supabaseUrl = c.env.VITE_SUPABASE_URL;
-  const publishableKey = c.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-  const callerClient = createClient(supabaseUrl, publishableKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const { data: authData, error: authError } = await callerClient.auth.getUser();
-  if (authError || !authData?.user) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-
-  const userContext = await getUserContext(c.env, authData.user.id)
-  const tenantId = resolveTenantId(c.req.header('x-tenant-id') ?? null, userContext)
-  if (!tenantId) return c.json({ error: 'Missing x-tenant-id header' }, 400);
-
-  const canUpdateBlog = userContext.isPlatformAdmin
-    || userContext.isFullAccess
-    || await hasAnyPermission(callerClient, ['tenant.blog.update'])
-
-  if (!canUpdateBlog) {
-    return c.json({ error: 'Forbidden' }, 403)
-  }
-
-  const adminClient = getAdminSupabase(c.env);
-  const payload = await getJsonBody(c.req.raw);
-  if (!payload?.blog_id || !payload?.transformed) {
-    return c.json({ error: 'Missing blog_id or transformed content' }, 400);
-  }
-
-  const { data, error } = await adminClient
-    .from('blogs')
-    .update({
-      content: payload.transformed,
-      updated_at: new Date().toISOString(),
+    const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
+      global: { headers: { Authorization: authHeader } },
     })
-    .eq('id', payload.blog_id)
-    .eq('tenant_id', tenantId)
-    .is('deleted_at', null)
-    .select('id')
-    .single();
 
-  if (error) return c.json({ error: error.message }, 400);
-  if (!data) return c.json({ error: 'Blog not found or access denied' }, 404);
+    const { data: authData, error: authError } = await callerClient.auth.getUser()
+    if (authError || !authData?.user) {
+      return c.json({ error: 'Unauthorized' }, 401)
+    }
 
-  await writeAccessAudit(adminClient, {
-    tenantId,
-    userId: authData.user.id,
-    action: 'content.transform',
-    resource: 'content_transform',
-    details: { blog_id: payload.blog_id },
-    ipAddress: getRequestIp(c.req.raw),
-    channel: 'worker',
-    actorType: 'user',
-    authContext: { has_session: true },
-    moduleName: 'content',
-    featureName: 'transform',
-    actionName: 'update',
-    resourceType: 'content_transform',
-    resourceId: data.id,
-    requestDurationMs: Date.now() - startedAt,
-    routePath: '/functions/v1/content-transform',
-    url: c.req.url,
-    userAgent: c.req.header('user-agent') || null,
-    purpose: 'apply transformed content payload',
-    triggerSource: 'awcms_edge_route',
-    businessIntent: 'content_processing',
-    accessChannel: 'worker',
-    accessMechanism: 'worker_route',
-    authMethod: 'bearer_token',
-  })
+    const userContext = await getUserContext(c.env, authData.user.id)
+    const tenantId = resolveTenantId(c.req.header('x-tenant-id') ?? null, userContext)
+    if (!tenantId) return c.json({ error: 'Missing x-tenant-id header' }, 400)
 
-  return c.json({ ok: true, id: data.id }, 200);
-});
+    const canUpdateBlog = userContext.isPlatformAdmin
+      || userContext.isFullAccess
+      || await hasAnyPermission(callerClient, ['tenant.blog.update'])
+
+    if (!canUpdateBlog) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    const adminClient = getAdminSupabase(c.env)
+    const payload = await requireJsonBody(c.req.raw)
+    const blogId = requireString(payload.blog_id, 'Missing blog_id')
+    const transformed = payload.transformed
+    if (transformed === null || transformed === undefined) {
+      return c.json({ error: 'Missing transformed content' }, 400)
+    }
+
+    const { data, error } = await adminClient
+      .from('blogs')
+      .update({
+        content: transformed,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', blogId)
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .select('id')
+      .single()
+
+    if (error) {
+      console.error('[awcms-edge] Failed to transform blog content', error)
+      return c.json({ error: 'Failed to update blog content' }, 500)
+    }
+    if (!data) return c.json({ error: 'Blog not found or access denied' }, 404)
+
+    await writeAccessAudit(adminClient, {
+      tenantId,
+      userId: authData.user.id,
+      action: 'content.transform',
+      resource: 'content_transform',
+      details: { blog_id: blogId },
+      ipAddress: getRequestIp(c.req.raw),
+      channel: 'worker',
+      actorType: 'user',
+      authContext: { has_session: true },
+      moduleName: 'content',
+      featureName: 'transform',
+      actionName: 'update',
+      resourceType: 'content_transform',
+      resourceId: data.id,
+      requestDurationMs: Date.now() - startedAt,
+      routePath: '/functions/v1/content-transform',
+      url: c.req.url,
+      userAgent: c.req.header('user-agent') || null,
+      purpose: 'apply transformed content payload',
+      triggerSource: 'awcms_edge_route',
+      businessIntent: 'content_processing',
+      accessChannel: 'worker',
+      accessMechanism: 'worker_route',
+      authMethod: 'bearer_token',
+    })
+
+    return c.json({ ok: true, id: data.id }, 200)
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to transform content')
+  }
+})
 
 app.post('/functions/v1/mailketing-webhook', async (c) => {
   try {
-    const supabase = getAdminSupabase(c.env);
-    const payload = await getJsonBody(c.req.raw) as any;
-    if (!payload) return c.json({ error: 'Invalid JSON' }, 400);
-
-    const type = String(payload.type);
-    const email = String(payload.email);
+    const payload = await requireJsonBody(c.req.raw)
+    const type = requireString(payload.type, 'Missing webhook type')
+    const email = requireString(payload.email, 'Missing webhook email')
+    const supabase = getAdminSupabase(c.env)
 
     const eventTypeMap: Record<string, string> = {
       'newsubscriber': 'subscribed',
@@ -1523,16 +1742,16 @@ app.post('/functions/v1/mailketing-webhook', async (c) => {
       'emailopen': 'opened',
       'emailclick': 'clicked',
       'bounce': 'bounced',
-    };
-    const eventType = eventTypeMap[type] || type;
+    }
+    const eventType = eventTypeMap[type] || type
 
     const { error } = await supabase.from('email_logs').insert({
       event_type: eventType,
       recipient: email,
       metadata: payload,
-    });
+    })
 
-    if (error) console.error('[Mailketing Webhook] DB Error:', error);
+    if (error) console.error('[Mailketing Webhook] DB Error:', error)
 
     if (type === 'bounce' || type === 'unsubscribe') {
       await supabase
@@ -1542,102 +1761,88 @@ app.post('/functions/v1/mailketing-webhook', async (c) => {
           metadata: {
             email_status: type === 'bounce' ? 'bounced' : 'unsubscribed',
             email_status_reason: payload.reason,
-            email_status_date: payload.date || new Date().toISOString(),
+            email_status_date: typeof payload.date === 'string' && payload.date ? payload.date : new Date().toISOString(),
           }
         })
-        .eq('email', email);
+        .eq('email', email)
     }
-    return c.json({ status: 'success', event: eventType });
-  } catch (error: any) {
-    return c.json({ error: error.message }, 500);
+    return c.json({ status: 'success', event: eventType })
+  } catch (error) {
+    return handleRouteError(c, error, 'Mailketing webhook handling failed')
   }
-});
+})
 
 app.post('/functions/v1/verify-turnstile', async (c) => {
   try {
-    const payload = await getJsonBody(c.req.raw) as any;
-    const token = payload?.token;
-    if (!token) return c.json({ success: false, error: 'Missing turnstile token' }, 400);
+    const payload = await requireJsonBody(c.req.raw)
+    const token = requireString(payload.token, 'Missing turnstile token')
 
-    const secretKey = c.env.TURNSTILE_SECRET_KEY;
-    if (!secretKey) return c.json({ success: false, error: 'Server configuration error' }, 500);
+    const secretKey = c.env.TURNSTILE_SECRET_KEY
+    if (!secretKey) return c.json({ success: false, error: 'Server configuration error' }, 500)
 
-    const formData = new FormData();
-    formData.append('secret', secretKey);
-    formData.append('response', token);
-    const ip = getRequestIp(c.req.raw);
-    if (ip) formData.append('remoteip', ip);
+    const formData = new FormData()
+    formData.append('secret', secretKey)
+    formData.append('response', token)
+    const ip = getRequestIp(c.req.raw)
+    if (ip) formData.append('remoteip', ip)
 
     const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
       body: formData,
-    });
-    const verifyResult = await res.json() as any;
+    })
+    const verifyResult = await res.json() as any
 
     if (verifyResult.success) {
-      return c.json({ success: true, ip });
+      return c.json({ success: true, ip })
     } else {
-      return c.json({ success: false, error: 'Verification failed', codes: verifyResult['error-codes'] }, 400);
+      return c.json({ success: false, error: 'Verification failed', codes: verifyResult['error-codes'] }, 400)
     }
   } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
+    if (typeof error?.status === 'number' && typeof error?.message === 'string') {
+      return c.json({ success: false, error: error.message }, error.status)
+    }
+    console.error('[awcms-edge] Turnstile verification failed', error)
+    return c.json({ success: false, error: 'Turnstile verification failed' }, 500)
   }
-});
+})
 
 app.post('/functions/v1/get-client-ip', async (c) => {
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
-
-  const token = authHeader.replace('Bearer ', '');
-  const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-
-  const { data: authData, error: authError } = await callerClient.auth.getUser();
-  if (authError || !authData?.user) {
-    return c.json({ error: 'Unauthorized' }, 401);
+  try {
+    await requireBearerSession(c.env, c.req.raw)
+    return c.json({ ip: getRequestIp(c.req.raw) })
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to resolve client IP')
   }
-
-  return c.json({ ip: getRequestIp(c.req.raw) });
-});
+})
 
 app.post('/functions/v1/xendit-payment', async (c) => {
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
-
-  const token = authHeader.replace('Bearer ', '');
-  const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-
-  const { data: authData, error: authError } = await callerClient.auth.getUser();
-  if (authError || !authData?.user) {
-    return c.json({ error: 'Unauthorized' }, 401);
+  try {
+    await requireBearerSession(c.env, c.req.raw)
+    return c.json({
+      error: 'Xendit payment route is not configured in the Cloudflare Edge API.',
+    }, 501)
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to resolve Xendit payment request')
   }
-
-  return c.json({
-    error: 'Xendit payment route is not configured in the Cloudflare Edge API.',
-  }, 501);
-});
+})
 
 app.post('/functions/v1/manage-users', async (c) => {
   const startedAt = Date.now()
   try {
-    const supabaseAdmin = getAdminSupabase(c.env);
-    const body = await getJsonBody(c.req.raw) as any || {};
-    let { action, email, password, full_name, role_id, user_id, tenant_id, request_id, reason } = body;
+    const supabaseAdmin = getAdminSupabase(c.env)
+    const body = await requireJsonBody(c.req.raw)
+    let { action, email, password, full_name, role_id, user_id, tenant_id, request_id, reason } = body as any
 
     // --- PUBLIC ACTIONS (No Auth Required) ---
     if (action === 'submit_application') {
-      const turnstileToken = body.turnstileToken;
-      if (!turnstileToken) return c.json({ error: 'Security check required' }, 400);
+      const turnstileToken = requireString(body.turnstileToken, 'Security check required')
 
-      const secretKey = c.env.TURNSTILE_SECRET_KEY;
-      if (!secretKey) return c.json({ error: 'Server configuration error' }, 500);
+      const secretKey = c.env.TURNSTILE_SECRET_KEY
+      if (!secretKey) return c.json({ error: 'Server configuration error' }, 500)
 
-      const formData = new FormData();
-      formData.append('secret', secretKey);
-      formData.append('response', turnstileToken);
+      const formData = new FormData()
+      formData.append('secret', secretKey)
+      formData.append('response', turnstileToken)
 
       const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
         method: 'POST',
@@ -1671,23 +1876,15 @@ app.post('/functions/v1/manage-users', async (c) => {
     }
 
     // --- PROTECTED ACTIONS (Auth Required) ---
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader) return c.json({ error: 'Unauthorized: No authorization header provided' }, 401);
+    const { hasServiceToken, requestingUser } = await resolveBearerOrServiceActor(supabaseAdmin, c.req.raw, {
+      missingAuthMessage: 'Unauthorized: No authorization header provided',
+      invalidTokenMessage: 'Unauthorized: Invalid token',
+    })
 
-    const token = authHeader.replace('Bearer ', '');
-    const hasServiceToken = token.startsWith('sb_secret_');
-    let requestingUser = null;
-
-    if (!hasServiceToken) {
-      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
-      if (authError || !authData?.user) return c.json({ error: 'Unauthorized: Invalid token' }, 401);
-      requestingUser = authData.user;
-    }
-
-    let roleName = 'service_key';
-    let requesterTenantId = tenant_id || null;
-    let isSuperAdmin = true;
-    let isAdmin = true;
+    let roleName = 'service_key'
+    let requesterTenantId = tenant_id || null
+    let isSuperAdmin = true
+    let isAdmin = true
 
     if (requestingUser) {
       const { data: userData, error: userDataError } = await supabaseAdmin
@@ -1696,24 +1893,28 @@ app.post('/functions/v1/manage-users', async (c) => {
         .eq('id', requestingUser.id)
         .single();
 
-      if (userDataError || !userData?.role) return c.json({ error: 'Failed to fetch user role' }, 500);
+      if (userDataError || !userData?.role) return c.json({ error: 'Failed to fetch user role' }, 500)
 
-      const r = Array.isArray(userData.role) ? userData.role[0] : userData.role as any;
-      roleName = r.name;
-      requesterTenantId = userData.tenant_id as string | null;
-      isSuperAdmin = Boolean(r.is_platform_admin || r.is_full_access);
-      isAdmin = isSuperAdmin || Boolean(r.is_tenant_admin);
+      const r = Array.isArray(userData.role) ? userData.role[0] : userData.role as any
+      roleName = r.name
+      requesterTenantId = userData.tenant_id as string | null
+      isSuperAdmin = Boolean(r.is_platform_admin || r.is_full_access)
+      isAdmin = isSuperAdmin || Boolean(r.is_tenant_admin)
     }
 
-    if (!isAdmin) return c.json({ error: 'Forbidden: Insufficient privileges' }, 403);
+    if (!isAdmin) return c.json({ error: 'Forbidden: Insufficient privileges' }, 403)
 
     let result = null;
     switch (action) {
       case 'approve_application_admin': {
         if (!request_id) return c.json({ error: 'request_id required' }, 400);
-        const { data: reqData } = await supabaseAdmin.from('account_requests').select('*').eq('id', request_id).single();
+        const reqData = await loadAccountRequest(supabaseAdmin, request_id, '*')
         if (!reqData) return c.json({ error: 'Request not found' }, 404);
-        if (!isSuperAdmin && reqData.tenant_id && reqData.tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden' }, 403);
+        enforceAccountRequestAccess({
+          isSuperAdmin,
+          requesterTenantId,
+          accountRequest: reqData,
+        })
 
         const { error: updateError } = await supabaseAdmin
           .from('account_requests')
@@ -1730,7 +1931,7 @@ app.post('/functions/v1/manage-users', async (c) => {
       case 'approve_application_super_admin': {
         if (!isSuperAdmin) return c.json({ error: 'Forbidden: Platform admin only' }, 403);
         if (!request_id) return c.json({ error: 'request_id required' }, 400);
-        const { data: reqData } = await supabaseAdmin.from('account_requests').select('*').eq('id', request_id).single();
+        const reqData = await loadAccountRequest(supabaseAdmin, request_id, '*')
         if (!reqData) return c.json({ error: 'Request not found' }, 404);
         const defaultTenantRole = await resolveAssignableRole(supabaseAdmin, {
           tenantId: reqData.tenant_id || null,
@@ -1757,8 +1958,12 @@ app.post('/functions/v1/manage-users', async (c) => {
       }
       case 'reject_application': {
         if (!request_id) return c.json({ error: 'request_id required' }, 400);
-        const { data: reqData } = await supabaseAdmin.from('account_requests').select('tenant_id').eq('id', request_id).single();
-        if (!isSuperAdmin && reqData?.tenant_id && reqData.tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden' }, 403);
+        const reqData = await loadAccountRequest(supabaseAdmin, request_id, 'tenant_id')
+        enforceAccountRequestAccess({
+          isSuperAdmin,
+          requesterTenantId,
+          accountRequest: reqData,
+        })
         await supabaseAdmin.from('account_requests').update({
           status: 'rejected',
           rejection_reason: reason || 'No reason provided',
@@ -1770,61 +1975,60 @@ app.post('/functions/v1/manage-users', async (c) => {
       case 'create': {
         if (!email) return c.json({ error: 'Email is required' }, 400);
         if (!password) return c.json({ error: 'Password is required' }, 400);
-        if (!isSuperAdmin) {
-          if (!requesterTenantId) return c.json({ error: 'Forbidden: no tenant context' }, 403);
-          if (tenant_id && tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden: Cannot create user for another tenant' }, 403);
-          tenant_id = requesterTenantId as any;
+        tenant_id = enforceRequestedTenantScope({
+          isSuperAdmin,
+          requesterTenantId,
+          requestedTenantId: tenant_id || null,
+          mismatchMessage: 'Forbidden: Cannot create user for another tenant',
+        }) as any
+        try {
+          const { user } = await provisionManagedUser(supabaseAdmin, {
+            mode: 'create',
+            email,
+            password,
+            fullName: full_name,
+            tenantId: tenant_id || null,
+            roleId: role_id || null,
+            allowPlatformRole: isSuperAdmin,
+          })
+          result = { user, message: 'User created successfully' }
+        } catch (error: any) {
+          return c.json({ error: `Failed to create user: ${error?.message || 'Unknown error'}` }, 500)
         }
-        const assignableRole = await resolveAssignableRole(supabaseAdmin, {
-          roleId: role_id || null,
-          tenantId: tenant_id || null,
-          allowPlatformRole: isSuperAdmin,
-        });
-        const { data: newAuthUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-          email, password, email_confirm: true, user_metadata: { full_name, tenant_id, role_id: assignableRole.id }
-        });
-        if (createError) return c.json({ error: 'Failed to create user: ' + createError.message }, 500);
-        await ensureManagedUserProfile(supabaseAdmin, {
-          authUserId: newAuthUser.user.id,
-          email,
-          fullName: full_name,
-          tenantId: tenant_id || null,
-          roleId: assignableRole.id,
-        });
-        result = { user: newAuthUser.user, message: 'User created successfully' };
         break;
       }
       case 'invite': {
         if (!email) return c.json({ error: 'Email is required' }, 400);
-        if (!isSuperAdmin) {
-          if (!requesterTenantId) return c.json({ error: 'Forbidden: no tenant context' }, 403);
-          if (tenant_id && tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden: Cannot invite user to another tenant' }, 403);
-          tenant_id = requesterTenantId as any;
+        tenant_id = enforceRequestedTenantScope({
+          isSuperAdmin,
+          requesterTenantId,
+          requestedTenantId: tenant_id || null,
+          mismatchMessage: 'Forbidden: Cannot invite user to another tenant',
+        }) as any
+        try {
+          const { user } = await provisionManagedUser(supabaseAdmin, {
+            mode: 'invite',
+            email,
+            fullName: full_name,
+            tenantId: tenant_id || null,
+            roleId: role_id || null,
+            allowPlatformRole: isSuperAdmin,
+          })
+          result = { user, message: 'User invited successfully' }
+        } catch (error: any) {
+          return c.json({ error: `Failed to invite user: ${error?.message || 'Unknown error'}` }, 500)
         }
-        const assignableRole = await resolveAssignableRole(supabaseAdmin, {
-          roleId: role_id || null,
-          tenantId: tenant_id || null,
-          allowPlatformRole: isSuperAdmin,
-        });
-        const { data: invitedUser, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-          data: { full_name, tenant_id, role_id: assignableRole.id }
-        });
-        if (inviteError) return c.json({ error: 'Failed to invite user: ' + inviteError.message }, 500);
-        await ensureManagedUserProfile(supabaseAdmin, {
-          authUserId: invitedUser.user.id,
-          email,
-          fullName: full_name,
-          tenantId: tenant_id || null,
-          roleId: assignableRole.id,
-        });
-        result = { user: invitedUser.user, message: 'User invited successfully' };
         break;
       }
       case 'update': {
         if (!user_id) return c.json({ error: 'user_id required' }, 400);
         if (!isSuperAdmin) {
           const { data: target } = await supabaseAdmin.from('users').select('tenant_id').eq('id', user_id).single();
-          if (target && target.tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden' }, 403);
+          enforceOwnedTargetTenant({
+            isSuperAdmin,
+            requesterTenantId,
+            targetTenantId: target?.tenant_id,
+          })
         }
         const updates: any = { updated_at: new Date().toISOString() };
         if (full_name) updates.full_name = full_name;
@@ -1845,7 +2049,11 @@ app.post('/functions/v1/manage-users', async (c) => {
       case 'delete': {
         if (!user_id) return c.json({ error: 'user_id required' }, 400);
         const { data: targetUser } = await supabaseAdmin.from('users').select('role_id, tenant_id').eq('id', user_id).single();
-        if (!isSuperAdmin && targetUser && targetUser.tenant_id !== requesterTenantId) return c.json({ error: 'Forbidden' }, 403);
+        enforceOwnedTargetTenant({
+          isSuperAdmin,
+          requesterTenantId,
+          targetTenantId: targetUser?.tenant_id,
+        })
         const { error: deleteError } = await supabaseAdmin.from('users').update({ deleted_at: new Date().toISOString() }).eq('id', user_id);
         if (deleteError) throw deleteError;
         result = { message: 'User deleted successfully' };
@@ -1882,39 +2090,21 @@ app.post('/functions/v1/manage-users', async (c) => {
       authMethod: hasServiceToken ? 'service_token' : 'bearer_token',
     })
 
-    return c.json(result, 200);
-  } catch (error: any) {
-    return c.json({ error: error.message }, 400);
+    return c.json(result, 200)
+  } catch (error) {
+    return handleRouteError(c, error, 'Manage users request failed', 400)
   }
-});
+})
 
 app.post('/functions/v1/extensions-lifecycle', async (c) => {
-  const startedAt = Date.now()
-  const authHeader = c.req.header('Authorization')
-  const token = authHeader?.replace(/^Bearer\s+/i, '') || ''
-  if (!token) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
-  const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  })
-  const adminSupabase = getAdminSupabase(c.env)
-  const { data: authData, error: authError } = await callerClient.auth.getUser(token)
-
-  if (authError || !authData?.user) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
-  const body = await getJsonBody(c.req.raw)
-  if (!body?.action || typeof body.action !== 'string') {
-    return c.json({ error: 'Missing lifecycle action' }, 400)
-  }
-
-  const userContext = await getUserContext(c.env, authData.user.id)
-  const action = body.action
-
   try {
+    const startedAt = Date.now()
+    const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)
+    const body = await requireJsonBody(c.req.raw)
+    const action = requireString(body.action, 'Missing lifecycle action')
+    const adminSupabase = getAdminSupabase(c.env)
+    const userContext = await getUserContext(c.env, user.id)
+
     switch (action) {
       case 'catalog-register': {
         const canManageCatalog = userContext.isPlatformAdmin
@@ -1926,10 +2116,10 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
 
         const validation = validateExtensionManifest(body.manifest)
         if (!validation.valid || !validation.manifest) {
-          await writeExtensionAudit(adminSupabase, {
-            actorUserId: authData.user.id,
+          await writeFailedExtensionLifecycleAudit({
+            adminSupabase,
+            actorUserId: user.id,
             action: 'catalog-register',
-            status: 'failed',
             metadata: { errors: validation.errors },
           })
           return c.json({ error: validation.errors.join(', ') }, 400)
@@ -1951,7 +2141,7 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           compatibility: manifest.compatibility || {},
           capabilities: manifest.capabilities || [],
           manifest,
-          created_by: authData.user.id,
+          created_by: user.id,
           updated_at: new Date().toISOString(),
         }
 
@@ -1962,17 +2152,17 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           .single()
 
         if (error || !data) {
-          await writeExtensionAudit(adminSupabase, {
-            actorUserId: authData.user.id,
+          await writeFailedExtensionLifecycleAudit({
+            adminSupabase,
+            actorUserId: user.id,
             action: 'catalog-register',
-            status: 'failed',
             metadata: { message: error?.message || 'Catalog upsert failed', extensionKey: getExtensionKey(manifest) },
           })
           return c.json({ error: error?.message || 'Catalog upsert failed' }, 400)
         }
 
         await writeExtensionAudit(adminSupabase, {
-          actorUserId: authData.user.id,
+          actorUserId: user.id,
           catalogId: data.id,
           action: 'catalog-register',
           status: 'succeeded',
@@ -1981,7 +2171,7 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
 
         await writeAccessAudit(adminSupabase, {
           tenantId: userContext.tenantId,
-          userId: authData.user.id,
+          userId: user.id,
           action: 'extensions.lifecycle',
           resource: 'extension_lifecycle',
           details: { action, catalog_id: data.id },
@@ -2047,22 +2237,22 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
             config: typeof body.config === 'object' && body.config ? body.config : {},
             installed_at: now,
             activated_at: activationState === 'active' ? now : null,
-            deactivated_at: activationState === 'active' ? null : now,
-            created_by: authData.user.id,
-            updated_by: authData.user.id,
-            deleted_at: null,
-            updated_at: now,
+              deactivated_at: activationState === 'active' ? null : now,
+              created_by: user.id,
+              updated_by: user.id,
+              deleted_at: null,
+              updated_at: now,
           }, { onConflict: 'tenant_id,catalog_id' })
           .select('*')
           .single()
 
         if (error || !tenantExtension) {
-          await writeExtensionAudit(adminSupabase, {
+          await writeFailedExtensionLifecycleAudit({
+            adminSupabase,
             tenantId,
             catalogId: catalog.id,
-            actorUserId: authData.user.id,
+            actorUserId: user.id,
             action: 'install',
-            status: 'failed',
             metadata: { extensionKey: getExtensionKey(validation.manifest), message: error?.message || 'Install failed' },
           })
           return c.json({ error: error?.message || 'Install failed' }, 400)
@@ -2084,41 +2274,16 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           }, { onConflict: 'name' })
         }
 
-        await writeExtensionAudit(adminSupabase, {
+        await finalizeTenantExtensionLifecycle({
+          adminSupabase,
           tenantId,
-          catalogId: catalog.id,
+          catalog,
           tenantExtensionId: tenantExtension.id,
-          actorUserId: authData.user.id,
-          action: 'install',
-          status: 'succeeded',
-          metadata: { extensionKey: getExtensionKey(validation.manifest), activationState },
-        })
-
-        await writeAccessAudit(adminSupabase, {
-          tenantId,
-          userId: authData.user.id,
-          action: 'extensions.lifecycle',
-          resource: 'extension_lifecycle',
-          details: { action, tenant_extension_id: tenantExtension.id, catalog_id: catalog.id },
-          ipAddress: getRequestIp(c.req.raw),
-          channel: 'worker',
-          actorType: 'user',
-          authContext: { has_session: true },
-          moduleName: 'extensions',
-          featureName: 'lifecycle',
-          actionName: action,
-          resourceType: 'tenant_extension',
-          resourceId: tenantExtension.id,
-          requestDurationMs: Date.now() - startedAt,
-          routePath: '/functions/v1/extensions-lifecycle',
-          url: c.req.url,
-          userAgent: c.req.header('user-agent') || null,
-          purpose: 'manage extension lifecycle actions',
-          triggerSource: 'awcms_edge_route',
-          businessIntent: 'extension_runtime_management',
-          accessChannel: 'worker',
-          accessMechanism: 'worker_route',
-          authMethod: 'bearer_token',
+          actorUserId: user.id,
+          action,
+          request: c.req.raw,
+          startedAt,
+          metadata: { activationState },
         })
         return c.json({ ok: true, tenantExtension })
       }
@@ -2128,22 +2293,12 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
       case 'config-update':
       case 'uninstall':
       case 'upgrade': {
-        const { data: tenantExtension, error: tenantExtensionError } = await adminSupabase
-          .from('tenant_extensions')
-          .select('*, catalog:platform_extension_catalog(*)')
-          .eq('id', body.tenantExtensionId)
-          .is('deleted_at', null)
-          .single()
-
-        if (tenantExtensionError || !tenantExtension) {
-          return c.json({ error: 'Tenant extension not found' }, 404)
-        }
-
-        const catalog = Array.isArray(tenantExtension.catalog) ? tenantExtension.catalog[0] : tenantExtension.catalog
-        const tenantId = resolveTenantId(typeof body.tenantId === 'string' ? body.tenantId : tenantExtension.tenant_id, userContext)
-        if (!tenantId || tenantId !== tenantExtension.tenant_id) {
-          return c.json({ error: 'Tenant mismatch' }, 403)
-        }
+        const { tenantExtension, catalog, tenantId } = await loadTenantExtensionForLifecycle({
+          adminSupabase,
+          tenantExtensionId: requireString(body.tenantExtensionId, 'Missing tenantExtensionId'),
+          requestedTenantId: typeof body.tenantId === 'string' ? body.tenantId : null,
+          userContext,
+        })
 
         const canManageTenantExtension = userContext.isPlatformAdmin
           || userContext.isFullAccess
@@ -2153,7 +2308,7 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
         }
 
         const now = new Date().toISOString()
-        let updates: Record<string, unknown> = { updated_at: now, updated_by: authData.user.id }
+        let updates: Record<string, unknown> = { updated_at: now, updated_by: user.id }
 
         if (action === 'activate') {
           updates = { ...updates, activation_state: 'active', activated_at: now, deactivated_at: null, deleted_at: null }
@@ -2182,53 +2337,27 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           .single()
 
         if (error || !data) {
-          await writeExtensionAudit(adminSupabase, {
+          await writeFailedExtensionLifecycleAudit({
+            adminSupabase,
             tenantId,
             catalogId: catalog?.id,
             tenantExtensionId: tenantExtension.id,
-            actorUserId: authData.user.id,
+            actorUserId: user.id,
             action,
-            status: 'failed',
             metadata: { message: error?.message || `${action} failed` },
           })
           return c.json({ error: error?.message || `${action} failed` }, 400)
         }
 
-        await writeExtensionAudit(adminSupabase, {
+        await finalizeTenantExtensionLifecycle({
+          adminSupabase,
           tenantId,
-          catalogId: catalog?.id,
+          catalog,
           tenantExtensionId: tenantExtension.id,
-          actorUserId: authData.user.id,
+          actorUserId: user.id,
           action,
-          status: 'succeeded',
-          metadata: { extensionKey: catalog ? `${catalog.vendor}/${catalog.slug}` : tenantExtension.id },
-        })
-
-        await writeAccessAudit(adminSupabase, {
-          tenantId,
-          userId: authData.user.id,
-          action: 'extensions.lifecycle',
-          resource: 'extension_lifecycle',
-          details: { action, tenant_extension_id: tenantExtension.id },
-          ipAddress: getRequestIp(c.req.raw),
-          channel: 'worker',
-          actorType: 'user',
-          authContext: { has_session: true },
-          moduleName: 'extensions',
-          featureName: 'lifecycle',
-          actionName: action,
-          resourceType: 'tenant_extension',
-          resourceId: tenantExtension.id,
-          requestDurationMs: Date.now() - startedAt,
-          routePath: '/functions/v1/extensions-lifecycle',
-          url: c.req.url,
-          userAgent: c.req.header('user-agent') || null,
-          purpose: 'manage extension lifecycle actions',
-          triggerSource: 'awcms_edge_route',
-          businessIntent: 'extension_runtime_management',
-          accessChannel: 'worker',
-          accessMechanism: 'worker_route',
-          authMethod: 'bearer_token',
+          request: c.req.raw,
+          startedAt,
         })
         return c.json({ ok: true, tenantExtension: data })
       }
@@ -2272,7 +2401,7 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
 
         await writeAccessAudit(adminSupabase, {
           tenantId,
-          userId: authData.user.id,
+          userId: user.id,
           action: 'extensions.health_check',
           resource: 'extension_health',
           details: { action, score },
@@ -2301,137 +2430,139 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
       default:
         return c.json({ error: `Unknown action: ${action}` }, 400)
     }
-  } catch (error: any) {
-    return c.json({ error: error.message || 'Unhandled extension lifecycle error' }, 400)
+  } catch (error) {
+    return handleRouteError(c, error, 'Unhandled extension lifecycle error', 400)
   }
 })
 
 app.get('/functions/v1/extensions/events/health', async (c) => {
-  const authHeader = c.req.header('Authorization')
-  const token = authHeader?.replace(/^Bearer\s+/i, '') || ''
-  if (!token) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
+  try {
+    const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)
+    const userContext = await getUserContext(c.env, user.id)
+    const tenantId = resolveTenantId(c.req.query('tenantId') || null, userContext)
+    if (!tenantId) {
+      return c.json({ error: 'Missing tenant context' }, 400)
+    }
 
-  const callerClient = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  })
-  const { data: authData, error: authError } = await callerClient.auth.getUser(token)
-  if (authError || !authData?.user) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
+    const canReadEvents = userContext.isPlatformAdmin
+      || userContext.isFullAccess
+      || await hasAnyPermission(callerClient, ['tenant.events.read'])
+    if (!canReadEvents) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
 
-  const userContext = await getUserContext(c.env, authData.user.id)
-  const tenantId = resolveTenantId(c.req.query('tenantId') || null, userContext)
-  if (!tenantId) {
-    return c.json({ error: 'Missing tenant context' }, 400)
-  }
-
-  const canReadEvents = userContext.isPlatformAdmin
-    || userContext.isFullAccess
-    || await hasAnyPermission(callerClient, ['tenant.events.read'])
-  if (!canReadEvents) {
-    return c.json({ error: 'Forbidden' }, 403)
-  }
-
-  const adminSupabase = getAdminSupabase(c.env)
-  const { data: eventsExtension } = await adminSupabase
-    .from('tenant_extensions')
-    .select('id, catalog:platform_extension_catalog(slug, vendor)')
-    .eq('tenant_id', tenantId)
-    .eq('activation_state', 'active')
-    .is('deleted_at', null)
-
-  const isInstalled = (eventsExtension || []).some((row: any) => {
-    const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
-    return catalog?.slug === 'events' && catalog?.vendor === 'ahliweb'
-  })
-  if (!isInstalled) {
-    return c.json({ error: 'Events extension is not active for this tenant' }, 404)
-  }
-
-  const [{ count: upcomingCount }, { count: publishedCount }] = await Promise.all([
-    adminSupabase
-      .from('events')
-      .select('id', { count: 'exact', head: true })
+    const adminSupabase = getAdminSupabase(c.env)
+    const { data: eventsExtension, error: extensionError } = await adminSupabase
+      .from('tenant_extensions')
+      .select('id, catalog:platform_extension_catalog(slug, vendor)')
       .eq('tenant_id', tenantId)
-      .eq('status', 'published')
-      .gte('start_at', new Date().toISOString())
-      .is('deleted_at', null),
-    adminSupabase
-      .from('events')
-      .select('id', { count: 'exact', head: true })
-      .eq('tenant_id', tenantId)
-      .eq('status', 'published')
-      .is('deleted_at', null),
-  ])
+      .eq('activation_state', 'active')
+      .is('deleted_at', null)
 
-  return c.json({
-    ok: true,
-    tenantId,
-    capability: 'events:health',
-    counts: {
-      published: publishedCount || 0,
-      upcoming: upcomingCount || 0,
-    },
-  })
+    if (extensionError) {
+      console.error('[extensions/events/health] Failed to load tenant extensions', extensionError)
+      return c.json({ error: 'Failed to load events extension status' }, 500)
+    }
+
+    const isInstalled = (eventsExtension || []).some((row: any) => {
+      const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+      return catalog?.slug === 'events' && catalog?.vendor === 'ahliweb'
+    })
+    if (!isInstalled) {
+      return c.json({ error: 'Events extension is not active for this tenant' }, 404)
+    }
+
+    const [{ count: upcomingCount }, { count: publishedCount }] = await Promise.all([
+      adminSupabase
+        .from('events')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .eq('status', 'published')
+        .gte('start_at', new Date().toISOString())
+        .is('deleted_at', null),
+      adminSupabase
+        .from('events')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .eq('status', 'published')
+        .is('deleted_at', null),
+    ])
+
+    return c.json({
+      ok: true,
+      tenantId,
+      capability: 'events:health',
+      counts: {
+        published: publishedCount || 0,
+        upcoming: upcomingCount || 0,
+      },
+    })
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to load events health')
+  }
 })
 
 app.get('/functions/v1/extensions/events/public', async (c) => {
-  const tenantId = c.req.query('tenantId') || ''
-  const limit = Number.parseInt(c.req.query('limit') || '12', 10)
-  const slug = c.req.query('slug') || ''
+  try {
+    const tenantId = c.req.query('tenantId') || ''
+    const limit = Number.parseInt(c.req.query('limit') || '12', 10)
+    const slug = c.req.query('slug') || ''
 
-  if (!tenantId) {
-    return c.json({ error: 'Missing tenantId' }, 400)
+    if (!tenantId) {
+      return c.json({ error: 'Missing tenantId' }, 400)
+    }
+
+    const adminSupabase = getAdminSupabase(c.env)
+    const { data: extensionRows, error: extensionError } = await adminSupabase
+      .from('tenant_extensions')
+      .select('id, catalog:platform_extension_catalog(slug, vendor)')
+      .eq('tenant_id', tenantId)
+      .eq('activation_state', 'active')
+      .is('deleted_at', null)
+
+    if (extensionError) {
+      console.error('[extensions/events/public] Failed to load tenant extensions', extensionError)
+      return c.json({ error: 'Failed to load events extension status' }, 500)
+    }
+
+    const hasEventsExtension = (extensionRows || []).some((row: any) => {
+      const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+      return catalog?.slug === 'events' && catalog?.vendor === 'ahliweb'
+    })
+
+    if (!hasEventsExtension) {
+      return c.json({ ok: true, events: [] })
+    }
+
+    let query = adminSupabase
+      .from('events')
+      .select('id, title, slug, summary, location, start_at, end_at, published_at, status')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'published')
+      .is('deleted_at', null)
+
+    if (slug) {
+      query = query.eq('slug', slug)
+    } else {
+      query = query.order('start_at', { ascending: true })
+        .limit(Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 48) : 12)
+    }
+
+    const { data: events, error } = await query
+
+    if (error) {
+      console.error('[extensions/events/public] Failed to load events', error)
+      return c.json({ error: 'Failed to load events' }, 500)
+    }
+
+    if (slug) {
+      return c.json({ ok: true, event: Array.isArray(events) ? (events[0] || null) : null })
+    }
+
+    return c.json({ ok: true, events: events || [] })
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to load public events')
   }
-
-  const adminSupabase = getAdminSupabase(c.env)
-  const { data: extensionRows, error: extensionError } = await adminSupabase
-    .from('tenant_extensions')
-    .select('id, catalog:platform_extension_catalog(slug, vendor)')
-    .eq('tenant_id', tenantId)
-    .eq('activation_state', 'active')
-    .is('deleted_at', null)
-
-  if (extensionError) {
-    return c.json({ error: extensionError.message }, 400)
-  }
-
-  const hasEventsExtension = (extensionRows || []).some((row: any) => {
-    const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
-    return catalog?.slug === 'events' && catalog?.vendor === 'ahliweb'
-  })
-
-  if (!hasEventsExtension) {
-    return c.json({ ok: true, events: [] })
-  }
-
-  let query = adminSupabase
-    .from('events')
-    .select('id, title, slug, summary, location, start_at, end_at, published_at, status')
-    .eq('tenant_id', tenantId)
-    .eq('status', 'published')
-    .is('deleted_at', null)
-
-  if (slug) {
-    query = query.eq('slug', slug)
-  } else {
-    query = query.order('start_at', { ascending: true })
-      .limit(Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 48) : 12)
-  }
-
-  const { data: events, error } = await query
-
-  if (error) {
-    return c.json({ error: error.message }, 400)
-  }
-
-  if (slug) {
-    return c.json({ ok: true, event: Array.isArray(events) ? (events[0] || null) : null })
-  }
-
-  return c.json({ ok: true, events: events || [] })
 })
 
 app.get('/functions/v1/extensions/public-modules', async (c) => {
@@ -2475,87 +2606,83 @@ app.get('/functions/v1/serve-sitemap', (c) => {
 // ---------------------------------------------------------------------------
 
 app.post('/api/admin/queue/replay', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-
-  let userContext: Awaited<ReturnType<typeof getUserContext>>
   try {
-    userContext = await getUserContext(c.env, user.id)
-  } catch {
-    return c.json({ error: 'Unable to resolve user context' }, 403)
+    const user = c.get('user')
+    if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+    let userContext: Awaited<ReturnType<typeof getUserContext>>
+    try {
+      userContext = await getUserContext(c.env, user.id)
+    } catch {
+      return c.json({ error: 'Unable to resolve user context' }, 403)
+    }
+
+    if (!userContext.isPlatformAdmin && !userContext.isFullAccess) {
+      return c.json({ error: 'Forbidden: superadmin required' }, 403)
+    }
+
+    const body = await requireJsonBody(c.req.raw)
+    const id = requireString(body.id, 'Missing required field: id')
+    const adminSupabase = getAdminSupabase(c.env)
+
+    const { data: row, error: fetchError } = await adminSupabase
+      .from('queue_dead_letters')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (fetchError) {
+      console.error('[queue/replay] Failed to fetch dead-letter row', fetchError)
+      return c.json({ error: 'Failed to load dead-letter record' }, 500)
+    }
+    if (!row) {
+      return c.json({ error: 'Dead-letter record not found' }, 404)
+    }
+    if (row.replayed_at !== null) {
+      return c.json({ error: 'Message has already been replayed', replayed_at: row.replayed_at }, 409)
+    }
+
+    let targetQueue: Queue<AnyQueueMessage> | null = null
+    if (row.queue_name === 'awcms-media-events-dlq') {
+      targetQueue = (c.env as any).MEDIA_EVENTS_QUEUE
+    } else if (row.queue_name === 'awcms-notifications-dlq') {
+      targetQueue = (c.env as any).NOTIFICATIONS_QUEUE
+    }
+
+    if (!targetQueue) {
+      return c.json({ error: `Unknown or unroutable queue: ${row.queue_name}` }, 400)
+    }
+
+    const replayed_job_id = crypto.randomUUID()
+    await targetQueue.send(row.payload as AnyQueueMessage)
+
+    const { error: updateError } = await adminSupabase
+      .from('queue_dead_letters')
+      .update({
+        replayed_at: new Date().toISOString(),
+        replayed_by: userContext.id,
+        replayed_job_id,
+      })
+      .eq('id', id)
+
+    if (updateError) {
+      console.error('[queue/replay] Failed to mark dead-letter row as replayed:', updateError.message)
+    }
+
+    logReplay(
+      {
+        queue: row.queue_name,
+        event_type: row.event_type,
+        job_id: row.job_id,
+        tenant_id: row.tenant_id ?? '',
+      },
+      { extra: { replayed_job_id, replayed_by: userContext.id, dead_letter_id: id } },
+    )
+
+    return c.json({ ok: true, replayed_job_id })
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to replay dead-letter message')
   }
-
-  if (!userContext.isPlatformAdmin && !userContext.isFullAccess) {
-    return c.json({ error: 'Forbidden: superadmin required' }, 403)
-  }
-
-  const body = await getJsonBody(c.req.raw)
-  const id = (body as any)?.id
-  if (!id || typeof id !== 'string') {
-    return c.json({ error: 'Missing required field: id' }, 400)
-  }
-
-  const adminSupabase = getAdminSupabase(c.env)
-
-  const { data: row, error: fetchError } = await adminSupabase
-    .from('queue_dead_letters')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle()
-
-  if (fetchError) {
-    return c.json({ error: fetchError.message }, 400)
-  }
-  if (!row) {
-    return c.json({ error: 'Dead-letter record not found' }, 404)
-  }
-  if (row.replayed_at !== null) {
-    return c.json({ error: 'Message has already been replayed', replayed_at: row.replayed_at }, 409)
-  }
-
-  // Determine the live target queue from the DLQ queue name
-  let targetQueue: Queue<AnyQueueMessage> | null = null
-  if (row.queue_name === 'awcms-media-events-dlq') {
-    targetQueue = (c.env as any).MEDIA_EVENTS_QUEUE
-  } else if (row.queue_name === 'awcms-notifications-dlq') {
-    targetQueue = (c.env as any).NOTIFICATIONS_QUEUE
-  }
-
-  if (!targetQueue) {
-    return c.json({ error: `Unknown or unroutable queue: ${row.queue_name}` }, 400)
-  }
-
-  const replayed_job_id = crypto.randomUUID()
-
-  // Re-enqueue the original payload onto the live queue
-  await targetQueue.send(row.payload as AnyQueueMessage)
-
-  // Mark the dead-letter row as replayed
-  const { error: updateError } = await adminSupabase
-    .from('queue_dead_letters')
-    .update({
-      replayed_at: new Date().toISOString(),
-      replayed_by: userContext.id,
-      replayed_job_id,
-    })
-    .eq('id', id)
-
-  if (updateError) {
-    // Enqueue succeeded — log the update failure but still return success
-    console.error('[queue/replay] Failed to mark dead-letter row as replayed:', updateError.message)
-  }
-
-  logReplay(
-    {
-      queue: row.queue_name,
-      event_type: row.event_type,
-      job_id: row.job_id,
-      tenant_id: row.tenant_id ?? '',
-    },
-    { extra: { replayed_job_id, replayed_by: userContext.id, dead_letter_id: id } },
-  )
-
-  return c.json({ ok: true, replayed_job_id })
 })
 
 export default {

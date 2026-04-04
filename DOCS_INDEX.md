@@ -101,9 +101,12 @@ All documentation follows this authority structure:
 | --- | --- | --- |
 | Setup Guide | [docs/dev/setup.md](docs/dev/setup.md) | **Start Here** |
 | Environment Bootstrap | [docs/dev/environment-bootstrap.md](docs/dev/environment-bootstrap.md) | Clone, env generation, and deployment-aligned setup |
+| AI Planning Workflow | [docs/dev/ai-planning-workflow.md](docs/dev/ai-planning-workflow.md) | Minimum planning record and issue/plan discipline for non-trivial AI-assisted work |
+| Review Checklist | [docs/dev/review-checklist.md](docs/dev/review-checklist.md) | Human review companion for PR scope, boundaries, docs drift, and verification quality |
 | Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Active 2026-03-25 full-repository audit, review, and conflict-resolution plan |
 | Documentation Audit Tracker | [docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md) | Live 2026-03-25 baseline, drift register, and execution status |
 | Context7 Benchmark Playbook | [docs/dev/context7-benchmark-playbook.md](docs/dev/context7-benchmark-playbook.md) | Canonical benchmark answer structure and topic playbooks |
+| OpenAPI Quality Checklist | [docs/dev/openapi-quality-checklist.md](docs/dev/openapi-quality-checklist.md) | Review checklist for edge OpenAPI examples, boundary accuracy, and doc drift |
 | Release Summary (2026-03) | [docs/dev/release-summary-2026-03-extension-runtime-hardening.md](docs/dev/release-summary-2026-03-extension-runtime-hardening.md) | Extension platform + tenant scope + Cloudflare runtime summary |
 | Release Summary - Tags Overhaul (2026-03) | [docs/dev/release-summary-2026-03-tags-module-overhaul.md](docs/dev/release-summary-2026-03-tags-module-overhaul.md) | Stakeholder summary for the Admin Tags routing, sync, UX, and integration overhaul |
 | Release Summary - Categories Overhaul (2026-03) | [docs/dev/release-summary-2026-03-categories-module-overhaul.md](docs/dev/release-summary-2026-03-categories-module-overhaul.md) | Stakeholder summary for the Admin Categories routing, scope, UX, and integration overhaul |
@@ -132,6 +135,14 @@ All documentation follows this authority structure:
 | --- | --- | --- |
 | General Deployment | [docs/deploy/overview.md](docs/deploy/overview.md) | Deployment strategies |
 | Cloudflare | [docs/deploy/cloudflare.md](docs/deploy/cloudflare.md) | Hosting on Cloudflare |
+
+### Audit
+
+| Topic | Canonical Doc | Notes |
+| --- | --- | --- |
+| Vibe Engineering Audit Checklist | [docs/audit/awcms-vibe-engineering-audit-checklist.md](docs/audit/awcms-vibe-engineering-audit-checklist.md) | Operational audit checklist for workflow, edge validation, testing, docs, and review quality |
+| Audit Findings Log | [docs/audit/awcms-audit-findings-log.md](docs/audit/awcms-audit-findings-log.md) | Findings register for audit follow-up work |
+| Release Readiness Checklist | [docs/audit/awcms-release-readiness-checklist.md](docs/audit/awcms-release-readiness-checklist.md) | Short release gate aligned to the audit checklist |
 
 ### Compliance
 

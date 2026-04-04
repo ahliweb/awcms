@@ -78,6 +78,42 @@ Run from `awcms-edge/`:
 | `npm run sync:r2:cleanup-local` | Soft-delete duplicate local metadata rows and remove duplicate local objects after exact-key import |
 | `npm run sync:r2:cleanup-remote` | Soft-delete duplicate remote metadata rows and remove duplicate remote objects |
 
+## Preferred Route Implementation Pattern
+
+For new or modified Worker routes, prefer this sequence:
+
+1. authenticate the caller early for protected routes
+2. parse and validate request shape before database writes or sensitive reads
+3. resolve tenant and permission context explicitly
+4. perform database or storage work
+5. normalize user-facing success and error responses
+6. add or update OpenAPI docs when the route is part of a documented surface
+
+Current reusable middleware already available in `awcms-edge/src/middleware/` includes:
+
+- `auth/require-session.ts`
+- `auth/require-permission.ts`
+- `auth/require-platform-scope.ts`
+- `docs/require-docs-access.ts`
+
+## Validation And Error Rules
+
+- Do not let request bodies flow into writes without shape validation.
+- Reflect critical database constraints in edge validation for user-controlled fields.
+- Return normalized `400`, `401`, `403`, and `404` responses where applicable.
+- Avoid returning raw database error text directly to end users unless it has been intentionally normalized.
+- Keep validation logic shared where it is reused across routes instead of copying request checks into every handler.
+
+## Review Expectations For Edge Changes
+
+For Worker route changes, reviewers should confirm:
+
+- validation runs before writes or sensitive reads
+- auth middleware is used where appropriate
+- permission checks remain additive guardrails and do not replace Supabase authority
+- OpenAPI artifacts and docs are updated when the route is on a documented runtime surface
+- negative-path verification includes malformed input and auth failures
+
 ## R2 Reconciliation Model
 
 - Local and remote R2 are intentionally separate surfaces.
@@ -124,5 +160,7 @@ npm run deploy
 - `docs/deploy/overview.md`
 - `docs/deploy/cloudflare.md`
 - `docs/tenancy/supabase.md`
+- `docs/dev/openapi-quality-checklist.md`
+- `docs/dev/review-checklist.md`
 - `docs/architecture/queue-topology.md`
 - `awcms-edge/README.md`

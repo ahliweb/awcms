@@ -16,7 +16,7 @@
     "sync:r2:local": "node scripts/sync-remote-media-to-local.mjs",
     "sync:r2:cleanup-local": "node scripts/cleanup-local-media-duplicates.mjs",
     "sync:r2:cleanup-remote": "node scripts/cleanup-remote-media-duplicates.mjs",
-    "test": "node --import tsx --test ./tests/openapi.test.mjs",
+    "test": "node --import tsx --test ./tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "test:manage-users": "node tests/manage-users.smoke.mjs",
     "test:compat-routes": "node tests/compat-routes.smoke.mjs"

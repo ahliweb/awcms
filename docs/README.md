@@ -4,7 +4,7 @@
 >
 > **Status:** Maintained
 >
-> **Last Updated:** 2026-03-29
+> **Last Updated:** 2026-04-04
 
 ## Purpose
 
@@ -26,6 +26,7 @@ It routes readers to canonical documents and implementation-backed runbooks.
 | Tenancy | Tenant isolation, hierarchy, Supabase tenancy behavior | `docs/tenancy/overview.md` |
 | Security | ABAC, RLS, threat model, security controls | `docs/security/overview.md` |
 | Developer Guides | Setup, CI/CD, testing, platform-specific development | `docs/dev/setup.md` |
+| Audit | Engineering audit checklist, findings, and release gates | `docs/audit/awcms-vibe-engineering-audit-checklist.md` |
 | Modules | Feature and subsystem documentation | `docs/modules/MODULES_GUIDE.md` |
 | Deploy | Deployment runbooks and environments | `docs/deploy/overview.md` |
 | Compliance | Regulatory and standards mapping | `docs/compliance/overview.md` |
@@ -49,6 +50,10 @@ When updating any document in this repo, verify claims against these implementat
 - Audit plan: `docs/dev/documentation-audit-plan.md`
 - Audit tracker and drift log: `docs/dev/documentation-audit-tracker.md`
 - Benchmark response standard: `docs/dev/context7-benchmark-playbook.md`
+- AI planning workflow: `docs/dev/ai-planning-workflow.md`
+- Review checklist: `docs/dev/review-checklist.md`
+- OpenAPI review checklist: `docs/dev/openapi-quality-checklist.md`
+- Engineering audit checklist: `docs/audit/awcms-vibe-engineering-audit-checklist.md`
 
 The active 2026-03-29 audit re-baselines repository counts, authority-doc drift, migration mirror drift,
 script accuracy, security wording, dependency/version mismatches, and dead-link remediation planning.

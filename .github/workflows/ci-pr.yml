@@ -14,10 +14,46 @@ permissions:
   contents: read
 
 jobs:
+  pr-governance:
+    name: PR Governance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR template sections
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+
+          body = os.environ.get('PR_BODY') or ''
+          required_sections = [
+              '## Summary',
+              '## Planning Record',
+              '## Affected Surfaces',
+              '## Security And Boundaries',
+              '## OpenAPI And Docs',
+              '## Verification',
+              '## Review Focus',
+          ]
+
+          missing = [section for section in required_sections if section not in body]
+          if missing:
+              print('PR body is missing required sections:')
+              for section in missing:
+                  print(f' - {section}')
+              print('\nUse .github/pull_request_template.md when opening or updating the PR.')
+              sys.exit(1)
+
+          print('PR governance template sections are present.')
+          PY
+
   # ============================================
   # Lint & Test - Admin Panel
   # ============================================
   lint-test-admin:
+    needs: pr-governance
     name: Lint & Test (Admin)
     runs-on: ubuntu-latest
     defaults:
@@ -65,6 +101,7 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: "mock-publishable-key"
 
   runtime-validation:
+    needs: pr-governance
     name: Runtime Validation
     runs-on: ubuntu-latest
 
@@ -99,6 +136,7 @@ jobs:
   # Lint & Build - Public Portal (Astro)
   # ============================================
   lint-build-public:
+    needs: pr-governance
     name: Lint & Build (Public Portal)
     runs-on: ubuntu-latest
     defaults:
@@ -140,6 +178,7 @@ jobs:
   # Flutter Build - Mobile App
   # ============================================
   build-mobile:
+    needs: pr-governance
     name: Build (Mobile - Flutter)
     runs-on: ubuntu-latest
     defaults:
@@ -173,6 +212,7 @@ jobs:
   # Typecheck - Edge Worker
   # ============================================
   typecheck-edge:
+    needs: pr-governance
     name: Typecheck (Edge Worker)
     runs-on: ubuntu-latest
     defaults:
@@ -215,6 +255,7 @@ jobs:
   # Lint & Build - MCP Server
   # ============================================
   lint-build-mcp:
+    needs: pr-governance
     name: Lint & Build (MCP)
     runs-on: ubuntu-latest
     defaults:
@@ -245,6 +286,7 @@ jobs:
   # Build - External Extension Package
   # ============================================
   build-ext-primary-analytics:
+    needs: pr-governance
     name: Build (Extension - Primary Analytics)
     runs-on: ubuntu-latest
     defaults:
@@ -272,6 +314,7 @@ jobs:
   # Typecheck - Shared Package
   # ============================================
   typecheck-shared:
+    needs: pr-governance
     name: Typecheck (@awcms/shared)
     runs-on: ubuntu-latest
     defaults:
@@ -299,6 +342,7 @@ jobs:
   # Lint & Build - SMANDAPBUN Portal (Astro)
   # ============================================
   lint-build-smandapbun:
+    needs: pr-governance
     name: Lint & Build (Smandapbun)
     runs-on: ubuntu-latest
     defaults:
@@ -340,6 +384,7 @@ jobs:
   # Database Migrations Check
   # ============================================
   db-check:
+    needs: pr-governance
     name: Database Migrations Check
     runs-on: ubuntu-latest
 

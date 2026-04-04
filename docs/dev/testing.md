@@ -6,6 +6,8 @@
 
 Describe how to validate AWCMS packages locally and in CI.
 
+This guide also defines the minimum determinism requirements expected by the AWCMS audit workflow.
+
 ## Audience
 
 - Contributors running tests before PRs
@@ -20,6 +22,14 @@ Describe how to validate AWCMS packages locally and in CI.
 - Wrangler CLI (edge worker typecheck — installed via `devDependencies` in `awcms-edge/`)
 
 ## Steps
+
+### Deterministic Test Rules
+
+- Tests must not depend on leftover database or storage state.
+- API and Worker tests should seed, reset, or clean state before execution.
+- Validation failures and authorization failures should be tested intentionally, not treated as optional coverage.
+- If a test touches Supabase-backed state, setup and teardown should be explicit in the test or harness.
+- If a change affects a shared contract, verify all affected surfaces, not only the package you edited.
 
 ### Admin Panel (`awcms/`)
 
@@ -55,8 +65,18 @@ Runs TypeScript type checking via Wrangler (`^4.77.0`).
 
 ```bash
 cd awcms-edge
+npm run openapi:build
+npm run openapi:validate
+npm run openapi:diff
+npm run test
 npm run typecheck
 ```
+
+For Worker route changes, include negative-path verification for:
+- malformed input
+- missing or invalid auth
+- permission failures
+- docs-surface and OpenAPI drift where the route is documented
 
 ### MCP Server (`awcms-mcp/`)
 
@@ -103,6 +123,8 @@ npx supabase db lint
 - Public portal renders pages via `PuckRenderer`.
 - ABAC restrictions block unauthorized actions.
 - Soft delete updates `deleted_at` instead of hard deletes.
+- Worker validation rejects malformed requests before sensitive writes.
+- Tests remain reproducible when re-run from a clean checkout.
 
 ## Troubleshooting
 
@@ -112,4 +134,6 @@ npx supabase db lint
 ## References
 
 - `docs/dev/ci-cd.md`
+- `docs/dev/ai-planning-workflow.md`
+- `docs/audit/awcms-vibe-engineering-audit-checklist.md`
 - `docs/architecture/database.md`

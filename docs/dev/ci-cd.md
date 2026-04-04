@@ -6,6 +6,8 @@
 
 Describe the GitHub Actions workflows used for AWCMS.
 
+This guide also documents the lightweight governance checks used to keep PR planning, docs updates, and OpenAPI review visible.
+
 ## Audience
 
 - Maintainers and release engineers
@@ -46,6 +48,7 @@ Describe the GitHub Actions workflows used for AWCMS.
 | `typecheck-shared` | Install dependencies and run `@awcms/shared` TypeScript checks | `packages/awcms-shared/` | ci-push, ci-pr |
 | `lint-build-smandapbun` | Check and build the SMANDAPBUN public portal | `awcms-public/smandapbun/` | ci-push, ci-pr |
 | `db-check` | Migration parity and history safety check | repo root | ci-pr |
+| `pr-governance` | Verify PR body contains the required planning, security, docs, and review sections | repo root | ci-pr |
 | `deploy-production` | Cloudflare Pages deploy (admin panel artifact) | `awcms/` | ci-push |
 | `link-check` | Markdown link validation | repo root | docs-link-check |
 | `deploy` | Build and deploy SMANDAPBUN portal to Cloudflare Pages; also ensures custom domains | `awcms-public/smandapbun/` | deploy-smandapbun |
@@ -54,9 +57,11 @@ Current workflow coverage boundaries:
 
 - `ci-push` path filters now cover `awcms/`, `awcms-public/primary/`, `awcms-mobile/`, `awcms-public/smandapbun/`, `awcms-edge/`, `awcms-mcp/`, `awcms-ext/`, and `packages/awcms-shared/`.
 - `ci-pr` now includes dedicated jobs for `awcms-edge/`, `awcms-mcp/`, `awcms-ext/primary-analytics/`, and `packages/awcms-shared/`.
+- `ci-pr` now starts with a lightweight PR governance check that requires the maintained PR template sections for planning record, affected surfaces, security boundaries, OpenAPI/docs updates, verification, and review focus.
 - `deploy-smandapbun` is a separate, dedicated deploy workflow for the SMANDAPBUN portal. It triggers on push to `main` when `awcms-public/smandapbun/**` or `packages/awcms-shared/**` changes, on `repository_dispatch` (for content-triggered rebuilds from the edge), and on `workflow_dispatch` (manual). It uses `CLOUDFLARE_ACCOUNT_ID` from GitHub secrets/variables — the account ID must **not** be hardcoded in the workflow file.
 - The current extension coverage is package-specific: only `awcms-ext/primary-analytics/` has a dedicated job. Add new jobs or a matrix when more maintained extension packages appear.
 - `typecheck-edge` now validates the boundary-separated OpenAPI contract, regenerates `awcms-edge/openapi/*.json`, checks artifact drift, and runs edge docs tests.
+- Human reviewers should use `docs/dev/review-checklist.md` alongside the PR template because CI only checks for presence of required sections, not review quality.
 
 ### Runtime Notes
 
@@ -65,6 +70,15 @@ Current workflow coverage boundaries:
 - `awcms-edge/`, `awcms-mcp/`, `awcms-ext/primary-analytics/`, and `packages/awcms-shared/` are now first-class CI surfaces.
 - `build-ext-primary-analytics` uses `vite build --ssr src/index.js` as a package-level smoke build because the extension package does not ship a standalone app shell.
 - The Worker CI surface verifies that `/docs` remains public-only, `/docs/admin` stays protected, and internal OpenAPI docs remain artifact-only.
+- PR governance is intentionally lightweight: it checks for required sections in the PR body, not human judgment quality. Reviewers still need to verify the contents.
+
+### PR Governance Expectations
+
+- Non-trivial work should include a planning record linked in the PR body.
+- The PR body should call out affected surfaces so shared contract changes are reviewed across Admin, Public, Mobile, and Edge when relevant.
+- If `awcms-edge` contracts changed, the PR should state whether OpenAPI was updated.
+- If behavior changed, docs should be updated in the same change set.
+- Security-sensitive work should explicitly note tenant, ABAC, RLS, auth, and production-data handling considerations.
 
 ### Required Secrets and Variables (GitHub Actions)
 
@@ -160,4 +174,8 @@ The `../smandapbun` step above is relative to `awcms-public/primary/`; the full 
 ## References
 
 - `docs/dev/testing.md`
+- `docs/dev/ai-planning-workflow.md`
+- `docs/dev/review-checklist.md`
+- `docs/dev/openapi-quality-checklist.md`
+- `docs/audit/awcms-release-readiness-checklist.md`
 - `docs/deploy/overview.md`
