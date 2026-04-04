@@ -4,7 +4,7 @@ Welcome to the AWCMS Ecosystem. AWCMS is a **multi-tenant CMS platform** with ad
 
 ## Status Snapshot (2026-03-29)
 
-- Active Node runtime validated: `v22.22.0` (minimum remains `>=22.12.0`).
+- Active Node runtime validated: `v22.22.2` (minimum remains `>=22.22.2`).
 - The active documentation and repository-conflict audit cycle is tracked in `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
 - Public portal runtime has moved to Astro 6 while Cloudflare Workers remain the primary edge HTTP layer.
 - MCP topology from `mcp.json` currently enables `cloudflare`, `context7`, `github`, and `supabase`; `paper` remains configured but disabled by default.
@@ -42,14 +42,14 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 - **React**: 19.2.4 (Admin + Public)
 - **Vite**: `^8.0.1` (Admin)
-- **Astro**: `6.0.8` (Primary Public + SMANDAPBUN) - *Requires Node.js >=22.12.0*
+- **Astro**: `6.0.8` (Primary Public + SMANDAPBUN) - *Requires Node.js >=22.22.2*
 - **TailwindCSS**: `^4.2.2` (Admin + Public)
 - **Supabase JS**: `^2.99.3` (Admin + Public)
 - **React Router DOM**: 7.10.1
 - **TipTap**: `^3.20.4`
 - **Puck**: 0.21.0
 - **OpenClaw**: 2026.2.21-2 (AI Gateway)
-- **Node.js**: >= 22.12.0 (managed via nvm)
+- **Node.js**: >= 22.22.2 (managed via nvm)
 
 Notes:
 

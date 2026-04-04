@@ -35,7 +35,7 @@ Provide Cloudflare deployment settings for the Admin Panel, Public Portal, Worke
 | Root directory | `awcms` |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Node version | `22` (or `>=22.12.0`) |
+| Node version | `22.22.2` (or `>=22.22.2`) |
 
 Environment variables:
 
@@ -54,7 +54,7 @@ Environment variables:
 | Root directory | `awcms-public/primary` |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Node version | `22` (or `>=22.12.0`) |
+| Node version | `22.22.2` (or `>=22.22.2`) |
 
 Environment variables:
 
@@ -75,7 +75,7 @@ Environment variables:
 | Root directory | `awcms-public/smandapbun` |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Node version | `22` (or `>=22.12.0`) |
+| Node version | `22.22.2` (or `>=22.22.2`) |
 
 Environment variables:
 

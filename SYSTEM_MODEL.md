@@ -34,7 +34,7 @@ Agents must respect the exact versions declared in the current workspace manifes
 * **Language:** TypeScript 5.x / TSX
 * **Styling:** TailwindCSS `^4.2.2` in both `awcms-public/primary` and `awcms-public/smandapbun`
 * **Backend Interface:** `@supabase/supabase-js` `^2.99.3` in both `awcms-public/primary` and `awcms-public/smandapbun`
-* **Node.js Requirement:** >= 22.12.0 (required by OpenClaw CLI)
+* **Node.js Requirement:** >= 22.22.2 (standardized current Node 22 baseline for AWCMS and OpenClaw)
 * **Rendering Model:** Static output (`output: "static"`) with React islands
 * **Sovereign Instances (Level 0):** For multi-national scale, distinct Supabase projects are used per region/country to ensure data sovereignty.
 * **Logical Regions (Global):** 10-level operational hierarchy (`regions`) for business segmentation.
@@ -55,7 +55,7 @@ Agents must respect the exact versions declared in the current workspace manifes
 ### 1.4 AI Gateway (OpenClaw)
 
 * **CLI:** OpenClaw v2026.2.21-2 (installed globally via npm)
-* **Node.js:** >= 22.12.0 (Active LTS)
+* **Node.js:** >= 22.22.2 (standardized current Node 22 baseline)
 * **Config:** `~/.openclaw/openclaw.json` (multi-agent routing)
 * **Mode:** Per-tenant isolation — each AWCMS tenant maps to an OpenClaw agent with a separate workspace
 * **Security:** Token auth, rate limiting (10 attempts/60s, 5min lockout), loopback-only binding

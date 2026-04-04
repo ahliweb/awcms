@@ -17,7 +17,7 @@ This guide also defines the minimum determinism requirements expected by the AWC
 
 - [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for testing framework versions
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- Node.js 22.12+ (admin/public/edge/mcp/shared)
+- Node.js 22.22.2+ (admin/public/edge/mcp/shared)
 - Flutter SDK (mobile)
 - Wrangler CLI (edge worker typecheck — installed via `devDependencies` in `awcms-edge/`)
 

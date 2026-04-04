@@ -12,6 +12,6 @@
         "build:all": "pnpm run build:primary && pnpm run build:smandapbun"
     },
     "engines": {
-        "node": ">=22.12.0"
+        "node": ">=22.22.2"
     }
 }

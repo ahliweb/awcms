@@ -43,7 +43,7 @@ For `awcms-public/smandapbun`:
 - Build command: `npm run build`
 - Output directory: `dist`
 - Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_EDGE_URL`, `VITE_TURNSTILE_SITE_KEY`
-- Set `NODE_VERSION=22` (or any value `>=22.12.0`)
+- Set `NODE_VERSION=22.22.2` (or any value `>=22.22.2`)
 
 ### 3. Edge Worker (Cloudflare Workers)
 

@@ -65,7 +65,7 @@ Current workflow coverage boundaries:
 
 ### Runtime Notes
 
-- Main PR/push workflows pin Node runtime to `22.12.0` to match package `engines` constraints, while `deploy-smandapbun.yml` currently uses `22`.
+- Main PR/push workflows pin Node runtime to `22.22.2` to match package `engines` constraints, and `deploy-smandapbun.yml` uses the same explicit runtime.
 - Keep workflow/runtime Node versions aligned with `SYSTEM_MODEL.md` and package `engines` before bumping toolchains.
 - `awcms-edge/`, `awcms-mcp/`, `awcms-ext/primary-analytics/`, and `packages/awcms-shared/` are now first-class CI surfaces.
 - `build-ext-primary-analytics` uses `vite build --ssr src/index.js` as a package-level smoke build because the extension package does not ship a standalone app shell.
