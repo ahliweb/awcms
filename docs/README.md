@@ -51,6 +51,7 @@ When updating any document in this repo, verify claims against these implementat
 - Audit tracker and drift log: `docs/dev/documentation-audit-tracker.md`
 - Benchmark response standard: `docs/dev/context7-benchmark-playbook.md`
 - AI planning workflow: `docs/dev/ai-planning-workflow.md`
+- Agent skill policy: `docs/dev/agent-skill-policy.md`
 - Review checklist: `docs/dev/review-checklist.md`
 - OpenAPI review checklist: `docs/dev/openapi-quality-checklist.md`
 - Engineering audit checklist: `docs/audit/awcms-vibe-engineering-audit-checklist.md`

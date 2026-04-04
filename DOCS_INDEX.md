@@ -106,6 +106,7 @@ All documentation follows this authority structure:
 | Documentation Audit Plan | [docs/dev/documentation-audit-plan.md](docs/dev/documentation-audit-plan.md) | Active 2026-03-25 full-repository audit, review, and conflict-resolution plan |
 | Documentation Audit Tracker | [docs/dev/documentation-audit-tracker.md](docs/dev/documentation-audit-tracker.md) | Live 2026-03-25 baseline, drift register, and execution status |
 | Context7 Benchmark Playbook | [docs/dev/context7-benchmark-playbook.md](docs/dev/context7-benchmark-playbook.md) | Canonical benchmark answer structure and topic playbooks |
+| Agent Skill Policy | [docs/dev/agent-skill-policy.md](docs/dev/agent-skill-policy.md) | Core retained local skills, on-demand skills, and removal policy for `.agents/skills/` |
 | OpenAPI Quality Checklist | [docs/dev/openapi-quality-checklist.md](docs/dev/openapi-quality-checklist.md) | Review checklist for edge OpenAPI examples, boundary accuracy, and doc drift |
 | Release Summary (2026-03) | [docs/dev/release-summary-2026-03-extension-runtime-hardening.md](docs/dev/release-summary-2026-03-extension-runtime-hardening.md) | Extension platform + tenant scope + Cloudflare runtime summary |
 | Release Summary - Tags Overhaul (2026-03) | [docs/dev/release-summary-2026-03-tags-module-overhaul.md](docs/dev/release-summary-2026-03-tags-module-overhaul.md) | Stakeholder summary for the Admin Tags routing, sync, UX, and integration overhaul |
@@ -159,7 +160,7 @@ All documentation follows this authority structure:
 | Topic | Path | Notes |
 | --- | --- | --- |
 | Agent Rules | `.agents/rules/` | Local agent guardrail playbooks when the optional directory is present |
-| Agent Skills | `.agents/skills/` | Local technology-specific skills when the optional directory is present |
+| Agent Skills | `.agents/skills/` | Local core skill set only; see `docs/dev/agent-skill-policy.md` for retained vs on-demand guidance |
 | Agent Workflows | `.agents/workflows/` | Local step-by-step procedures when the optional directory is present |
 
 ---
