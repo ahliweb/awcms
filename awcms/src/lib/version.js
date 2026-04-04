@@ -22,7 +22,13 @@ export const VERSION = {
 };
 
 // Computed version strings
+// - getVersionString(): package/runtime-safe semver (e.g. 4.5.2)
+// - getReleaseLabel(): human-facing release label (e.g. v4.5.2)
 export const getVersionString = () => {
     const base = `${VERSION.major}.${VERSION.minor}.${VERSION.patch}`;
     return VERSION.prerelease ? `${base}-${VERSION.prerelease}` : base;
 };
+
+export const getReleaseLabel = () => `v${getVersionString()}`;
+
+export const RELEASE_LABEL = getReleaseLabel();

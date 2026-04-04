@@ -21,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import LanguageSelector from '@/components/ui/LanguageSelector';
 import { NotificationDropdown } from '@/components/dashboard/notifications/NotificationDropdown';
 import { DarkModeToggle } from '@/components/ui/DarkModeToggle';
+import { RELEASE_LABEL } from '@/lib/version';
 
 function Header({ toggleSidebar, _onNavigate }) {
   const { user, signOut } = useAuth();
@@ -78,7 +79,10 @@ function Header({ toggleSidebar, _onNavigate }) {
             </div>
             <div className="min-w-0 hidden sm:block">
               <p className="truncate text-sm font-semibold tracking-tight text-foreground">AWCMS Admin</p>
-              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Control Center</p>
+              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <span>Control Center</span>
+                <span className="text-[10px] tracking-[0.12em] text-muted-foreground/80">{RELEASE_LABEL}</span>
+              </div>
             </div>
           </div>
         </div>

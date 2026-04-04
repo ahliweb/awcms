@@ -5,7 +5,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
-## [4.5.2] - 2026-04-04
+## [v4.5.2] - 2026-04-04
 
 Applies to: `awcms@4.5.2`
 
