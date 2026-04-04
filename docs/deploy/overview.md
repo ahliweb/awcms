@@ -115,6 +115,7 @@ source .env && pio run -t uploadfs && pio run -t upload
 - `awcms-edge/` validation runs in CI, but Worker deployment is still handled outside the current GitHub Actions workflows.
 - The repo currently exposes four maintained workflows: `CI/CD`, `CI (PR)`, `Documentation Link Check`, and `Deploy Smandapbun`.
 - Before promoting a public build, run `cd awcms-public/primary && npm run check && npm run build` locally to match the current package validation baseline.
+- For `Deploy Smandapbun`, set `CLOUDFLARE_ACCOUNT_ID` explicitly in GitHub Actions secrets or repository variables because the deploy token may have access to more than one Cloudflare account.
 
 ## Verification
 

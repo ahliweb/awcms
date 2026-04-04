@@ -161,7 +161,7 @@ jobs:
         id: cloudflare-env
         env:
           SECRET_CF_API_TOKEN: ${{ secrets['CLOUDFLARE_API_TOKEN'] }}
-          SECRET_CF_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          SECRET_CF_ACCOUNT_ID: ${{ secrets['CLOUDFLARE_ACCOUNT_ID'] || vars['CLOUDFLARE_ACCOUNT_ID'] }}
         run: |
           python3 - <<'PY'
           import os
@@ -227,7 +227,13 @@ jobs:
               secret_account_id = (os.environ.get('SECRET_CF_ACCOUNT_ID') or '').strip()
               if secret_account_id:
                   values['account_id'] = secret_account_id
-                  values['account_source'] = 'github_secret_or_var'
+                  values['account_source'] = 'github_actions_secret_or_var'
+
+          if not values['account_id']:
+              raise SystemExit(
+                  'CLOUDFLARE_ACCOUNT_ID could not be resolved from env files, GitHub secrets, or repository variables. '
+                  'Please set the CLOUDFLARE_ACCOUNT_ID GitHub Actions secret or repository variable for this repository.'
+              )
 
           output_path = os.environ['GITHUB_OUTPUT']
           with open(output_path, 'a', encoding='utf-8') as output:
@@ -248,6 +254,7 @@ jobs:
         run: |
           echo "Cloudflare token source: ${{ steps.cloudflare-env.outputs.token_source || 'unresolved' }}"
           echo "Cloudflare account source: ${{ steps.cloudflare-env.outputs.account_source || 'unresolved' }}"
+          echo "Cloudflare account resolution path: local env file or GitHub Actions secret/repository variable"
 
       - name: Validate Cloudflare deploy credentials
         id: cloudflare-preflight

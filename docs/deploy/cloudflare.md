@@ -95,7 +95,7 @@ Automated rebuild flow:
 - Admin panel save/delete events -> `awcms-edge/api/public/rebuild` -> tenant deploy hook.
 - The maintained repository workflows currently include `CI/CD`, `CI (PR)`, `Documentation Link Check`, and `Deploy Smandapbun`.
 - `deploy-smandapbun.yml` is an active repository-based deploy workflow for `awcms-public/smandapbun/` and `packages/awcms-shared/` changes, plus `repository_dispatch` and `workflow_dispatch` triggers.
-- `deploy-smandapbun.yml` must resolve `CLOUDFLARE_API_TOKEN` from GitHub secrets and `CLOUDFLARE_ACCOUNT_ID` from GitHub secrets/variables or local env files; there is no hardcoded workflow fallback.
+- `deploy-smandapbun.yml` must resolve `CLOUDFLARE_API_TOKEN` from GitHub secrets and `CLOUDFLARE_ACCOUNT_ID` from GitHub secrets/repository variables or local env files; when GitHub Actions runs without repo-local `.env*` files, the GitHub secret/variable becomes the authoritative source.
 
 KV bindings: none currently required by the maintained repo baseline.
 
@@ -157,7 +157,7 @@ Use `scripts/update_cloudflare_secrets.sh` (repo root) to sync project env value
 
 - Build failures: verify root directory and Node version.
 - Tenant resolution issues: confirm `PUBLIC_TENANT_ID` for canonical static builds; only inspect middleware/host settings when working on non-canonical SSR/runtime experiments.
-- Cloudflare account resolution failures: set `CLOUDFLARE_ACCOUNT_ID` explicitly when the API token can access multiple accounts.
+- Cloudflare account resolution failures: set `CLOUDFLARE_ACCOUNT_ID` explicitly as a GitHub Actions secret or repository variable when the API token can access multiple accounts.
 - Worker CORS failures: verify `CORS_ALLOWED_ORIGINS` for `awcms-edge`; `VITE_CORS_ALLOWED_ORIGINS` only affects the admin Vite dev server.
 - Missing files after local testing: local Worker storage does not sync to remote automatically; use `npm run sync:r2:remote` or `npm run sync:r2:local` from `awcms-edge/` depending on the direction you need.
 - For the standing external `awcms-public` Pages deployment failure pattern and operator checklist, see `docs/deploy/awcms-public-pages-incident.md`.
