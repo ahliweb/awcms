@@ -109,7 +109,18 @@ vi.mock('@/lib/hooks', () => ({
 vi.mock('@/lib/adminMenuUtils', () => ({
   normalizeMenuPath: (path) => path,
   resolveGroupMeta: (label, order = 999) => ({ label: label || 'General', order: order || 999 }),
+  resolveMenuGroupMeta: (item, fallbackOrder = 999) => ({
+    label: item?.group_label || 'General',
+    order: item?.group_order || fallbackOrder || 999,
+  }),
   resolveResourcePath: (_key, path) => path,
+  isPlatformMenuItem: (item) => {
+    if (item?.scope === 'platform') return true;
+    if (Array.isArray(item?.permission)) {
+      return item.permission.length > 0 && item.permission.every((permission) => String(permission).startsWith('platform.'));
+    }
+    return String(item?.permission || '').startsWith('platform.');
+  },
 }));
 
 function buildModulesSelectChain(rows = modulesRows) {
