@@ -48,7 +48,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | Language | TypeScript | `^5.8.3` (primary), `^5.9.3` (smandapbun) | Typed components |
 | Styling | TailwindCSS | `^4.2.2` | Utility-first CSS |
 | Supabase JS | @supabase/supabase-js | `^2.99.3` | Public API client |
-| Node.js | Node.js | >=22.22.2 | Runtime baseline for AWCMS and OpenClaw |
+| Node.js | Node.js | >=24.14.1 | Runtime baseline for AWCMS and OpenClaw |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 
@@ -95,6 +95,6 @@ Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | CLI | OpenClaw | 2026.2.21-2 | AI gateway and multi-agent routing |
-| Runtime | Node.js | >=22.22.2 | Standardized AWCMS/OpenClaw runtime |
+| Runtime | Node.js | >=24.14.1 | Standardized AWCMS/OpenClaw runtime |
 | Config | openclaw.json | — | Per-tenant agent isolation |
 | Auth | Token + Rate Limit | — | 10 attempts/60s, 5min lockout |

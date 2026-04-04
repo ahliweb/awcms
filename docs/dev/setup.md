@@ -6,7 +6,7 @@
 
 - [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for technology stack and version requirements
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- **Node.js**: v22.22.2 or higher (standardized current Node 22 baseline for the Admin/Public toolchain)
+- **Node.js**: v24.14.1 or higher (standardized current Node LTS baseline for the Admin/Public toolchain)
 - **npm**: v10+
 - **Flutter**: v3.38.5+ (if working on mobile)
 - **PlatformIO**: Core 6.1+ (if working on IoT)

@@ -77,7 +77,7 @@ Agents must be aware of the exact versions in use:
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
 > **Vite**: The admin workspace currently declares Vite `^8.0.1`; keep docs and implementation guidance aligned with the installed manifest version.
-> **Node.js**: Minimum required version is **22.22.2** (standardized Node 22 baseline across AWCMS and OpenClaw). Managed via `nvm`.
+> **Node.js**: Minimum required version is **24.14.1** (standardized Node LTS baseline across AWCMS and OpenClaw). Managed via `nvm`.
 
 ---
 

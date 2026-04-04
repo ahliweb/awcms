@@ -4,7 +4,7 @@ This guide provides a practical blueprint for writing a Node.js script to migrat
 
 ## Prerequisites
 
-1. **Node.js**: Ensure Node.js `>=22.22.2` is installed.
+1. **Node.js**: Ensure Node.js `>=24.14.1` is installed.
 2. **Supabase Client**: You will need the `@supabase/supabase-js` package.
 3. **WordPress REST API**: Your source WordPress site must be accessible via the REST API (e.g., `https://your-wp-site.com/wp-json/wp/v2/`).
 

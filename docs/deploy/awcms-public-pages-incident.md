@@ -15,7 +15,7 @@ Capture the current failure pattern for the `awcms-public` Cloudflare Pages depl
 ## Evidence
 
 - `Lint & Build (Public Portal)` passes in `CI (PR)`.
-- `Runtime Validation` passes after the Node `22.22.2` storage-guard fix.
+- `Runtime Validation` passes after the Node `24.14.1` storage-guard fix.
 - `Database Migrations Check` passes after switching the PR workflow to `scripts/verify_supabase_migration_consistency.sh`.
 - The remaining failing check is the external Cloudflare deployment integration for the `awcms-public` Pages project.
 
@@ -40,7 +40,7 @@ Expected `awcms-public` Pages settings:
 | Root directory | `awcms-public/primary` |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Node version | `22.22.2` or newer |
+| Node version | `24.14.1` or newer |
 
 Required environment variables (preferred current baseline):
 
@@ -74,7 +74,7 @@ That means a Cloudflare log containing a message like this is a project/env conf
 2. Confirm the root directory is `awcms-public/primary`.
 3. Confirm the build command is `npm run build`.
 4. Confirm the output directory is `dist`.
-5. Confirm the Node version is `22.22.2` or newer.
+5. Confirm the Node version is `24.14.1` or newer.
 6. Verify either the preferred `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` pair or the supported `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` fallback exists for the failing environment, together with `PUBLIC_TENANT_ID`.
 7. Compare the Production and Preview env sets for drift.
 8. Check that no stale custom override bypasses the package build script.
