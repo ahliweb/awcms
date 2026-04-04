@@ -5,19 +5,26 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.5.2] - 2026-04-04
+
+Applies to: `awcms@4.5.2`
+
 ### Added
 
 - Edge API: added boundary-separated OpenAPI 3.1 generation for `awcms-edge` with committed `public`, `admin`, and artifact-only `internal` specs, plus Swagger UI at `/docs` and a protected admin docs surface at `/docs/admin`.
+- Documentation Governance: added the AWCMS audit checklist, findings log, release-readiness checklist, AI planning workflow, OpenAPI quality checklist, and review checklist, plus a maintained PR template and lightweight PR governance validation in CI.
 
 ### Changed
 
 - Edge Security: hardened `awcms-edge` content-transform docs and runtime alignment by requiring tenant blog-update authorization for the documented admin mutation path, and added `platform.docs.read` seeding for protected admin API docs access.
+- Edge Runtime: standardized `awcms-edge` route-boundary validation and auth handling with shared HTTP/auth helpers, reduced duplication in `manage-users` and `extensions-lifecycle`, and expanded route-level negative coverage for anonymous, invalid-token, and invalid-payload request paths.
 
 ### Fixed
 
 - Admin Dashboard: aligned admin authentication and recovery routes to the `/cmspanel` base path, while keeping legacy root-level auth URLs as redirects for compatibility.
 - Taxonomy: overhauled the Admin Tags experience under `/cmspanel` with refresh-safe trash sub-slugs, tenant-safe tag mutations, restored page/blog tag synchronization, repaired `sync_resource_tags` for both pages and blogs, module-aware embedded tags management in Blogs and Pages, and a full UI polish across the manager, filters, stats cards, search, and tag editor dialog.
 - Taxonomy: unified the Admin Categories experience under `/cmspanel` with refresh-safe category trash sub-slugs, module-aware embedded category managers for Blogs and Pages, tenant-scoped slug validation, safer platform-admin tenant behavior, and upgraded category scope UX to reduce cross-module taxonomy drift.
+- Public Portal: synchronized `awcms-public/primary` npm and pnpm lockfiles around `@astrojs/cloudflare@13.1.7`, aligned the `patch-package` filename with the installed package version, and restored `npm run check` by adding the missing AST typing dependencies required by `src/utils/frontmatter.ts`.
 
 ## [4.5.1] - 2026-03-29
 
