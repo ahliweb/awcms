@@ -15,7 +15,7 @@ const DEFAULT_SECTION_CONTENT = {
 function ReusableSectionsManager() {
   const { currentTenant } = useTenant();
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
-  const { sections, usagesBySection, loading, saveSection, deleteSection, materializeSection, detachUsage } = useReusableSections();
+  const { sections, usagesBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages } = useReusableSections();
   const [draft, setDraft] = useState({
     name: '',
     slug: '',
@@ -100,6 +100,11 @@ function ReusableSectionsManager() {
                   <Button size="sm" variant="outline" className="rounded-xl" onClick={() => materializeSection({ sectionId: section.id })} disabled={!currentTenant?.id || (!canManagePlatform && !canManageTenantVariant)}>
                     <Wand2 className="mr-2 h-4 w-4" /> Materialize
                   </Button>
+                  {usages.length > 0 ? (
+                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => detachAllUsages({ sectionId: section.id })}>
+                      <Unlink2 className="mr-2 h-4 w-4" /> Detach All
+                    </Button>
+                  ) : null}
                   {(canManagePlatform || (canManageTenantVariant && section.owner_tenant_id === currentTenant?.id)) ? (
                     <Button size="sm" variant="ghost" className="rounded-xl text-destructive" onClick={() => deleteSection(section.id)}>
                       <Trash2 className="mr-2 h-4 w-4" /> Delete

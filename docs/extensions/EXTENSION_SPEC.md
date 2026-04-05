@@ -518,7 +518,30 @@ For a tracked usage, AWCMS now:
 
 Each tracked usage now exposes a per-usage `Detach` action.
 
-This phase is intentionally per-instance only. It does not yet add bulk detach, relink-to-source, or update-all-references workflows.
+This phase is intentionally per-instance only. It does not yet add relink-to-source or update-all-references workflows.
+
+## Phase 13 Bulk Detach
+
+Phase 13 adds the first section-level bulk workflow on top of usage tracking: detaching all currently tracked usages of a reusable section in one pass.
+
+### Bulk Detach Behavior
+
+For a selected reusable section, AWCMS now:
+
+1. Loads all tracked usages for the section.
+2. Runs detach sequentially for each usage.
+3. Converts each tracked reference into inline saved content.
+4. Re-syncs usage tracking after the batch completes.
+
+Sequential processing is intentional in this phase so multiple usages within the same source record do not overwrite each other with stale saves.
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+Sections with active tracked references now expose a `Detach All` action.
+
+This phase still does not add relink-to-source or update-all-linked-references workflows.
 
 ## Phase 5 Sandbox Readiness Metadata
 

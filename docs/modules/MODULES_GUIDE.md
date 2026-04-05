@@ -38,7 +38,7 @@ Where route aliases exist, prefer the canonical `MainRouter.jsx` path noted in p
 - **Pages** (`PagesManager.jsx`)
 - **Visual Pages** (`VisualPagesManager.jsx`)
 - **Widgets** (`WidgetsManager.jsx`)
-- **Templates** (`TemplatesManager.jsx`) - page templates, template parts, reusable sections, assignments, languages, and site blueprints for tenant-safe bootstrap, section materialization, direct visual-builder section insertion, picker-based reusable-section authoring, preview-aware reusable-section editing, saved-content usage tracking, per-instance detach workflows, and public reusable-section rendering by slug
+- **Templates** (`TemplatesManager.jsx`) - page templates, template parts, reusable sections, assignments, languages, and site blueprints for tenant-safe bootstrap, section materialization, direct visual-builder section insertion, picker-based reusable-section authoring, preview-aware reusable-section editing, saved-content usage tracking, per-instance and bulk detach workflows, and public reusable-section rendering by slug
 - **Portfolio** (`PortfolioManager.jsx`)
 - **Testimonials** (`TestimonyManager.jsx`)
 - **Announcements** (`AnnouncementsManager.jsx`)

@@ -36,6 +36,7 @@ describe('ReusableSectionsManager', () => {
   const deleteSection = vi.fn();
   const materializeSection = vi.fn();
   const detachUsage = vi.fn();
+  const detachAllUsages = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,6 +68,7 @@ describe('ReusableSectionsManager', () => {
       deleteSection,
       materializeSection,
       detachUsage,
+      detachAllUsages,
     });
   });
 
@@ -86,6 +88,12 @@ describe('ReusableSectionsManager', () => {
 
     await waitFor(() => {
       expect(detachUsage).toHaveBeenCalledWith(expect.objectContaining({ id: 'usage-1' }));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /detach all/i }));
+
+    await waitFor(() => {
+      expect(detachAllUsages).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
   });
 

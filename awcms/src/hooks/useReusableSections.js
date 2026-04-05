@@ -90,6 +90,18 @@ export function useReusableSections() {
     await fetchSections();
   }, [fetchSections, toast]);
 
+  const detachAllUsages = useCallback(async ({ sectionId }) => {
+    const usages = usagesBySection[sectionId] || [];
+    for (const usage of usages) {
+      // Sequential updates keep source saves deterministic when multiple usages belong to the same record.
+      // This avoids stale-content races between separate detach operations.
+      // eslint-disable-next-line no-await-in-loop
+      await detachReusableSectionUsage({ usage });
+    }
+    toast({ title: 'Detached All', description: 'All tracked usages were converted into inline content.' });
+    await fetchSections();
+  }, [fetchSections, toast, usagesBySection]);
+
   return {
     sections,
     usagesBySection,
@@ -99,5 +111,6 @@ export function useReusableSections() {
     deleteSection,
     materializeSection,
     detachUsage,
+    detachAllUsages,
   };
 }
