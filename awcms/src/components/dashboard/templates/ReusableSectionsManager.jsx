@@ -3,6 +3,16 @@ import { Blocks, CopyPlus, GitCompare, GitMerge, History, RefreshCcw, Sparkles, 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useReusableSections } from '@/hooks/useReusableSections';
@@ -26,6 +36,7 @@ function ReusableSectionsManager() {
     content: JSON.stringify(DEFAULT_SECTION_CONTENT, null, 2),
   });
   const [compareSelection, setCompareSelection] = useState(null);
+  const [restoreConfirmation, setRestoreConfirmation] = useState(null);
 
   const canManagePlatform = isPlatformAdmin || isFullAccess || hasPermission('platform.template.manage');
   const canManageTenantVariant = hasPermission('tenant.setting.update');
@@ -145,7 +156,7 @@ function ReusableSectionsManager() {
                               <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => setCompareSelection((current) => current?.revisionId === revision.id && current?.sectionId === section.id ? null : { sectionId: section.id, revisionId: revision.id })}>
                                 <GitCompare className="mr-1 h-3.5 w-3.5" /> Compare
                               </Button>
-                              <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => restoreRevision({ sectionId: section.id, revisionId: revision.id })}>
+                              <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => setRestoreConfirmation({ sectionId: section.id, revisionId: revision.id, revisionNumber: revision.revision_number, createdAt: revision.created_at, sectionName: section.name })}>
                                 <History className="mr-1 h-3.5 w-3.5" /> Restore
                               </Button>
                             </span>
@@ -238,6 +249,36 @@ function ReusableSectionsManager() {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={Boolean(restoreConfirmation)} onOpenChange={(open) => !open && setRestoreConfirmation(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore reusable section revision?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {restoreConfirmation ? (
+                <>
+                  This will replace the current live state of <strong>{restoreConfirmation.sectionName}</strong> with revision{' '}
+                  <strong>{restoreConfirmation.revisionNumber}</strong> from{' '}
+                  <strong>{new Date(restoreConfirmation.createdAt).toLocaleString()}</strong>.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (restoreConfirmation) {
+                  restoreRevision({ sectionId: restoreConfirmation.sectionId, revisionId: restoreConfirmation.revisionId });
+                }
+                setRestoreConfirmation(null);
+              }}
+            >
+              Restore Revision
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

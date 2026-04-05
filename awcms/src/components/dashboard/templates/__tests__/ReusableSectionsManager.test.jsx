@@ -31,6 +31,17 @@ vi.mock('@/components/ui/textarea', () => ({
   Textarea: (props) => <textarea {...props} />,
 }));
 
+vi.mock('@/components/ui/alert-dialog', () => ({
+  AlertDialog: ({ children }) => <div>{children}</div>,
+  AlertDialogContent: ({ children }) => <div>{children}</div>,
+  AlertDialogHeader: ({ children }) => <div>{children}</div>,
+  AlertDialogTitle: ({ children }) => <div>{children}</div>,
+  AlertDialogDescription: ({ children }) => <div>{children}</div>,
+  AlertDialogFooter: ({ children }) => <div>{children}</div>,
+  AlertDialogCancel: ({ children, ...props }) => <button {...props}>{children}</button>,
+  AlertDialogAction: ({ children, ...props }) => <button {...props}>{children}</button>,
+}));
+
 describe('ReusableSectionsManager', () => {
   const saveSection = vi.fn();
   const deleteSection = vi.fn();
@@ -135,13 +146,17 @@ describe('ReusableSectionsManager', () => {
       expect(updateAllLinkedReferences).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /compare/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /compare/i })[0]);
 
     await waitFor(() => {
       expect(screen.getByText(/Compare with revision 2/)).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getAllByRole('button', { name: /restore/i })[0]);
+
+    expect(screen.getByText(/Restore reusable section revision/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /restore revision/i }));
 
     await waitFor(() => {
       expect(restoreRevision).toHaveBeenCalledWith({ sectionId: 'section-1', revisionId: 'revision-2' });
