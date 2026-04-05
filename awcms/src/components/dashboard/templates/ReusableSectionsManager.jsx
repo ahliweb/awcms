@@ -15,7 +15,7 @@ const DEFAULT_SECTION_CONTENT = {
 function ReusableSectionsManager() {
   const { currentTenant } = useTenant();
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
-  const { sections, loading, saveSection, deleteSection, materializeSection } = useReusableSections();
+  const { sections, usagesBySection, loading, saveSection, deleteSection, materializeSection } = useReusableSections();
   const [draft, setDraft] = useState({
     name: '',
     slug: '',
@@ -60,7 +60,10 @@ function ReusableSectionsManager() {
         <div className="space-y-4">
           {loading ? <div className="rounded-2xl border border-border/60 bg-card/60 p-8 text-center text-muted-foreground">Loading reusable sections...</div> : null}
 
-          {sections.map((section) => (
+          {sections.map((section) => {
+            const usages = usagesBySection[section.id] || [];
+
+            return (
             <div key={section.id} className="rounded-2xl border border-border/60 bg-card/75 p-4 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -71,6 +74,21 @@ function ReusableSectionsManager() {
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">Slug: {section.slug} • Status: {section.status}</p>
                   <p className="mt-2 text-sm text-muted-foreground">{section.description || 'No description provided.'}</p>
+                  <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Usage</p>
+                    <p className="mt-1 text-xs text-foreground">{usages.length} reference(s)</p>
+                    {usages.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        {usages.slice(0, 4).map((usage) => (
+                          <li key={usage.id}>
+                            {usage.source_type}: {usage.source_label || usage.source_id}
+                            {usage.locale ? ` (${usage.locale})` : ''}
+                          </li>
+                        ))}
+                        {usages.length > 4 ? <li>+ {usages.length - 4} more</li> : null}
+                      </ul>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -85,7 +103,7 @@ function ReusableSectionsManager() {
                 </div>
               </div>
             </div>
-          ))}
+          )})}
 
           {!loading && sections.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/70 bg-card/50 p-10 text-center text-muted-foreground">

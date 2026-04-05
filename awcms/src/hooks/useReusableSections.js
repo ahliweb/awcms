@@ -8,19 +8,38 @@ export function useReusableSections() {
   const { currentTenant } = useTenant();
   const { toast } = useToast();
   const [sections, setSections] = useState([]);
+  const [usagesBySection, setUsagesBySection] = useState({});
   const [loading, setLoading] = useState(true);
 
   const fetchSections = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('reusable_sections')
-        .select('*')
-        .is('deleted_at', null)
-        .order('updated_at', { ascending: false });
+      const [{ data, error }, { data: usageRows, error: usageError }] = await Promise.all([
+        supabase
+          .from('reusable_sections')
+          .select('*')
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false }),
+        supabase
+          .from('reusable_section_usages')
+          .select('*')
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false }),
+      ]);
 
       if (error) throw error;
+      if (usageError) throw usageError;
       setSections(data || []);
+
+      const groupedUsages = (usageRows || []).reduce((accumulator, usage) => {
+        if (!accumulator[usage.reusable_section_id]) {
+          accumulator[usage.reusable_section_id] = [];
+        }
+        accumulator[usage.reusable_section_id].push(usage);
+        return accumulator;
+      }, {});
+
+      setUsagesBySection(groupedUsages);
     } catch (error) {
       toast({ title: 'Error', description: error.message || 'Failed to load reusable sections', variant: 'destructive' });
     } finally {
@@ -66,6 +85,7 @@ export function useReusableSections() {
 
   return {
     sections,
+    usagesBySection,
     loading,
     fetchSections,
     saveSection,

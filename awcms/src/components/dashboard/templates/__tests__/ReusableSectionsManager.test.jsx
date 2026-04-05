@@ -55,6 +55,12 @@ describe('ReusableSectionsManager', () => {
           owner_tenant_id: null,
         },
       ],
+      usagesBySection: {
+        'section-1': [
+          { id: 'usage-1', source_type: 'page', source_label: 'Homepage', locale: null },
+          { id: 'usage-2', source_type: 'template', source_label: 'Landing Template', locale: 'en' },
+        ],
+      },
       loading: false,
       saveSection,
       deleteSection,
@@ -66,6 +72,8 @@ describe('ReusableSectionsManager', () => {
     render(<ReusableSectionsManager />);
 
     expect(screen.getByText('Hero Section')).toBeInTheDocument();
+    expect(screen.getByText('2 reference(s)')).toBeInTheDocument();
+    expect(screen.getByText('page: Homepage')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /materialize/i }));
 
     await waitFor(() => {

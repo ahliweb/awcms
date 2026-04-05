@@ -33,6 +33,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Settings } from 'lucide-react';
+import { syncReusableSectionUsages } from '@/lib/reusableSectionUsage';
 
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext'; // Added TenantContext
@@ -545,6 +546,35 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
             }
 
             if (error) throw error;
+
+            const usageSyncConfig = mode === 'template'
+                ? {
+                    tenantId: currentTenant?.id,
+                    sourceType: 'template',
+                    sourceId: templateId,
+                    sourceLabel: pageMetadata.title || pageMetadata.slug || 'Template',
+                    locale: null,
+                    content: contentData,
+                }
+                : mode === 'part'
+                    ? {
+                        tenantId: currentTenant?.id,
+                        sourceType: 'template_part',
+                        sourceId: partId,
+                        sourceLabel: pageMetadata.title || pageMetadata.slug || 'Template Part',
+                        locale: null,
+                        content: contentData,
+                    }
+                    : {
+                        tenantId: currentTenant?.id,
+                        sourceType: pageMetadata.locale === defaultContentLocale ? 'page' : 'content_translation',
+                        sourceId: page.id,
+                        sourceLabel: pageMetadata.title || pageMetadata.slug || 'Page',
+                        locale: pageMetadata.locale === defaultContentLocale ? null : pageMetadata.locale,
+                        content: contentData,
+                    };
+
+            await syncReusableSectionUsages(usageSyncConfig);
 
             console.log('✅ Save successful');
             setLastSavedAt(new Date());

@@ -453,6 +453,44 @@ The block now:
 
 This phase does not introduce nested live rendering inside the editor. The preview is intentionally summary-only to keep the builder stable and fast.
 
+## Phase 11 Reusable Section Usage Tracking
+
+Phase 11 adds source-aware usage tracking so reusable sections can be managed as shared assets instead of blind copies.
+
+### Usage Table
+
+| Table | Scope | Purpose |
+| --- | --- | --- |
+| `reusable_section_usages` | Tenant | Records where reusable sections are referenced in saved visual content. |
+
+### Tracking Behavior
+
+When visual content is saved, AWCMS now:
+
+1. Scans the saved content for `ReusableSection` blocks.
+2. Extracts referenced section slugs and usage paths.
+3. Resolves tenant-owned sections first, then platform fallbacks.
+4. Replaces the tracked usage rows for the saved source with the latest reference set.
+
+Tracked source types currently include:
+
+- `page`
+- `template`
+- `template_part`
+- `content_translation`
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+The reusable sections manager now shows:
+
+- usage count per section
+- first linked sources
+- source type and locale when available
+
+This phase provides visibility and tracking only. It does not yet add bulk update, detach-from-source, or sync-back workflows.
+
 ## Phase 5 Sandbox Readiness Metadata
 
 Phase 5 does not enable sandboxed extension execution. It adds sandbox-readiness metadata so extension manifests, diagnostics, and operator tooling can describe future isolation needs without changing the trusted runtime contract.
