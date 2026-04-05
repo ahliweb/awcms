@@ -385,7 +385,34 @@ When an editor selects a reusable section:
 
 This keeps the runtime/editor model consistent with the current Puck-based builder and avoids adding a separate section renderer in this phase.
 
-This phase still does not add public runtime lookup-by-slug or sync-back from inserted section instances to the source section definition.
+## Phase 7 Public Runtime Lookup
+
+Phase 7 adds the first public/runtime lookup path for reusable sections so visual content can reference them by slug during Astro rendering.
+
+### Public Block Integration
+
+- Admin block: `awcms/src/components/visual-builder/blocks/ReusableSectionBlock.jsx`
+- Public block: `awcms-public/primary/src/components/puck-blocks/ReusableSectionBlock.astro`
+- Public resolver: `awcms-public/primary/src/lib/reusableSections.ts`
+- Public renderer integration: `awcms-public/primary/src/components/common/PuckRenderer.astro`
+
+### Runtime Behavior
+
+When the public portal encounters a `ReusableSection` block:
+
+1. It resolves the active tenant id from public env.
+2. It fetches the matching `reusable_sections` row by slug.
+3. `visual` sections use their stored JSON content directly.
+4. `template_part_reference` sections resolve the referenced `template_part.content`.
+5. The resolved content is rendered through the existing `PuckRenderer` pipeline.
+
+### Safety Rules
+
+- Only `status = active` and `deleted_at IS NULL` sections are considered.
+- Resolution is tenant-aware and allows platform-owned fallbacks via `owner_tenant_id IS NULL`.
+- A small nested-depth guard prevents runaway recursive section references.
+
+This phase still does not add sync-back from inserted or rendered instances to the source section definition.
 
 ## Phase 5 Sandbox Readiness Metadata
 

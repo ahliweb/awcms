@@ -1,0 +1,32 @@
+---
+import PuckRenderer from "../common/PuckRenderer.astro";
+import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
+import { getReusableSectionContentBySlug } from "~/lib/reusableSections";
+
+interface Props {
+  sectionSlug?: string;
+  title?: string;
+  reusableDepth?: number;
+}
+
+const { sectionSlug = "", title, reusableDepth = 0 } = Astro.props;
+
+const supabase = createClientFromEnv(import.meta.env);
+const tenantId = getPublicTenantId(import.meta.env);
+
+let content: Record<string, unknown> | null = null;
+const canResolve = reusableDepth < 2 && Boolean(sectionSlug);
+
+if (supabase && canResolve) {
+  content = await getReusableSectionContentBySlug(supabase, sectionSlug, tenantId);
+}
+---
+
+{content ? (
+  <PuckRenderer content={content} reusableDepth={reusableDepth + 1} />
+) : (
+  <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+    {title || "Reusable Section"}: {sectionSlug || "missing-slug"}
+  </div>
+)}

@@ -48,13 +48,14 @@ import {
 } from './blocks/ContentReferenceBlocks';
 
 import { WidgetAreaBlock, WidgetAreaBlockFields } from './blocks/WidgetAreaBlock';
+import { ReusableSectionBlock, ReusableSectionBlockFields } from './blocks/ReusableSectionBlock';
 
 // Puck configuration object
 export const puckConfig = {
     categories: {
         layout: {
             title: 'Layout & Structure',
-            components: ['Container', 'Section', 'Grid', 'Divider', 'Spacer', 'WidgetArea']
+            components: ['Container', 'Section', 'Grid', 'Divider', 'Spacer', 'WidgetArea', 'ReusableSection']
         },
         content: {
             title: 'Basic Content',
@@ -136,6 +137,15 @@ export const puckConfig = {
                 title: 'Sidebar'
             },
             render: WidgetAreaBlock
+        },
+        ReusableSection: {
+            label: 'Reusable Section',
+            fields: ReusableSectionBlockFields,
+            defaultProps: {
+                sectionSlug: 'hero-section',
+                title: 'Reusable Section',
+            },
+            render: ReusableSectionBlock,
         },
 
         // --- Basic Content ---

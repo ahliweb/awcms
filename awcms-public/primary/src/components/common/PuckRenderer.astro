@@ -17,6 +17,7 @@ import LatestBlogsBlock from "../puck-blocks/LatestBlogsBlock.astro";
 import PromotionBlock from "../puck-blocks/PromotionBlock.astro";
 import NavigationBlock from "../puck-blocks/NavigationBlock.astro";
 import WidgetAreaBlock from "../puck-blocks/WidgetAreaBlock.astro";
+import ReusableSectionBlock from "../puck-blocks/ReusableSectionBlock.astro";
 import GalleryBlock from "../puck-blocks/GalleryBlock.astro";
 import ContentTitleBlock from "../puck-blocks/ContentTitleBlock.astro";
 import ContentExcerptBlock from "../puck-blocks/ContentExcerptBlock.astro";
@@ -44,6 +45,8 @@ export interface Props {
   class?: string;
   /** Optional page/blog context for content reference blocks */
   context?: Record<string, unknown>;
+  /** Internal guard for nested reusable sections */
+  reusableDepth?: number;
 }
 
 interface PuckContent {
@@ -60,7 +63,7 @@ interface PuckBlock {
   props?: Record<string, unknown>;
 }
 
-const { content, class: className = "", context = {} } = Astro.props;
+const { content, class: className = "", context = {}, reusableDepth = 0 } = Astro.props;
 
 // Parse content if it's a string
 let puckData: PuckContent | null = null;
@@ -124,6 +127,8 @@ const blocks: PuckBlock[] =
           return <NavigationBlock {...props} />;
         case "WidgetArea":
           return <WidgetAreaBlock {...props} />;
+        case "ReusableSection":
+          return <ReusableSectionBlock {...props} reusableDepth={reusableDepth} />;
         case "Gallery":
           return <GalleryBlock {...props} />;
         case "ContactForm":
