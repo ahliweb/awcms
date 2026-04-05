@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Blocks, CopyPlus, GitCompare, GitMerge, History, RefreshCcw, Sparkles, Trash2, Unlink2, Wand2 } from 'lucide-react';
+import { Blocks, CheckCircle2, CopyPlus, GitCompare, GitMerge, History, RefreshCcw, ShieldAlert, Sparkles, Trash2, Unlink2, Wand2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,7 +26,7 @@ const DEFAULT_SECTION_CONTENT = {
 function ReusableSectionsManager() {
   const { currentTenant } = useTenant();
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
-  const { sections, usagesBySection, detachEventsBySection, revisionsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent, relinkAllDetachEvents, updateAllLinkedReferences, restoreRevision } = useReusableSections();
+  const { sections, usagesBySection, detachEventsBySection, revisionsBySection, actionRequestsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent, relinkAllDetachEvents, updateAllLinkedReferences, restoreRevision, submitActionRequest, approveActionRequest, rejectActionRequest } = useReusableSections();
   const [draft, setDraft] = useState({
     name: '',
     slug: '',
@@ -41,6 +41,7 @@ function ReusableSectionsManager() {
 
   const canManagePlatform = isPlatformAdmin || isFullAccess || hasPermission('platform.template.manage');
   const canManageTenantVariant = hasPermission('tenant.setting.update');
+  const canApproveBulkActions = isPlatformAdmin || isFullAccess || hasPermission('platform.approvals.read') || hasPermission('platform.template.manage');
 
   const confirmBulkAction = () => {
     if (!bulkActionConfirmation) return;
@@ -96,6 +97,7 @@ function ReusableSectionsManager() {
             const usages = usagesBySection[section.id] || [];
             const detachEvents = detachEventsBySection[section.id] || [];
             const revisions = revisionsBySection[section.id] || [];
+            const actionRequests = actionRequestsBySection[section.id] || [];
             const activeCompareRevision = compareSelection?.sectionId === section.id
               ? revisions.find((revision) => revision.id === compareSelection.revisionId) || null
               : null;
@@ -140,6 +142,29 @@ function ReusableSectionsManager() {
                     ) : null}
                   </div>
                   <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Bulk Action Requests</p>
+                    <p className="mt-1 text-xs text-foreground">{actionRequests.filter((request) => request.status === 'pending').length} pending request(s)</p>
+                    {actionRequests.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        {actionRequests.slice(0, 4).map((request) => (
+                          <li key={request.id} className="flex items-center justify-between gap-3">
+                            <span>{request.action_type} • {request.status}</span>
+                            {request.status === 'pending' && canApproveBulkActions ? (
+                              <span className="flex items-center gap-1">
+                                <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => approveActionRequest(request)}>
+                                  <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => rejectActionRequest(request)}>
+                                  <XCircle className="mr-1 h-3.5 w-3.5" /> Reject
+                                </Button>
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Detached Instances</p>
                     <p className="mt-1 text-xs text-foreground">{detachEvents.length} pending relink(s)</p>
                   {detachEvents.length > 0 ? (
@@ -160,9 +185,15 @@ function ReusableSectionsManager() {
                     ) : null}
                     {detachEvents.length > 0 ? (
                       <div className="mt-3">
-                        <Button size="sm" variant="outline" className="rounded-lg" onClick={() => setBulkActionConfirmation({ action: 'relinkAll', sectionId: section.id, sectionName: section.name, count: detachEvents.length })}>
-                          <GitMerge className="mr-2 h-3.5 w-3.5" /> Relink All
-                        </Button>
+                        {canApproveBulkActions ? (
+                          <Button size="sm" variant="outline" className="rounded-lg" onClick={() => setBulkActionConfirmation({ action: 'relinkAll', sectionId: section.id, sectionName: section.name, count: detachEvents.length })}>
+                            <GitMerge className="mr-2 h-3.5 w-3.5" /> Relink All
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" className="rounded-lg" onClick={() => submitActionRequest({ sectionId: section.id, actionType: 'relink_all', count: detachEvents.length })}>
+                            <ShieldAlert className="mr-2 h-3.5 w-3.5" /> Request Relink All
+                          </Button>
+                        )}
                       </div>
                     ) : null}
                   </div>
@@ -250,14 +281,26 @@ function ReusableSectionsManager() {
                     <Wand2 className="mr-2 h-4 w-4" /> Materialize
                   </Button>
                   {usages.length > 0 ? (
-                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setBulkActionConfirmation({ action: 'detachAll', sectionId: section.id, sectionName: section.name, count: usages.length })}>
-                      <Unlink2 className="mr-2 h-4 w-4" /> Detach All
-                    </Button>
+                    canApproveBulkActions ? (
+                      <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setBulkActionConfirmation({ action: 'detachAll', sectionId: section.id, sectionName: section.name, count: usages.length })}>
+                        <Unlink2 className="mr-2 h-4 w-4" /> Detach All
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="outline" className="rounded-xl" onClick={() => submitActionRequest({ sectionId: section.id, actionType: 'detach_all', count: usages.length })}>
+                        <ShieldAlert className="mr-2 h-4 w-4" /> Request Detach All
+                      </Button>
+                    )
                   ) : null}
                   {usages.length > 0 ? (
-                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setBulkActionConfirmation({ action: 'updateLinked', sectionId: section.id, sectionName: section.name, count: usages.length })}>
-                      <RefreshCcw className="mr-2 h-4 w-4" /> Update Linked
-                    </Button>
+                    canApproveBulkActions ? (
+                      <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setBulkActionConfirmation({ action: 'updateLinked', sectionId: section.id, sectionName: section.name, count: usages.length })}>
+                        <RefreshCcw className="mr-2 h-4 w-4" /> Update Linked
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="outline" className="rounded-xl" onClick={() => submitActionRequest({ sectionId: section.id, actionType: 'update_linked', count: usages.length })}>
+                        <ShieldAlert className="mr-2 h-4 w-4" /> Request Update Linked
+                      </Button>
+                    )
                   ) : null}
                   {(canManagePlatform || (canManageTenantVariant && section.owner_tenant_id === currentTenant?.id)) ? (
                     <Button size="sm" variant="ghost" className="rounded-xl text-destructive" onClick={() => deleteSection(section.id)}>

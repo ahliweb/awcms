@@ -44,12 +44,13 @@ export function useReusableSections() {
   const [usagesBySection, setUsagesBySection] = useState({});
   const [detachEventsBySection, setDetachEventsBySection] = useState({});
   const [revisionsBySection, setRevisionsBySection] = useState({});
+  const [actionRequestsBySection, setActionRequestsBySection] = useState({});
   const [loading, setLoading] = useState(true);
 
   const fetchSections = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data, error }, { data: usageRows, error: usageError }, { data: detachRows, error: detachError }, { data: revisionRows, error: revisionError }] = await Promise.all([
+      const [{ data, error }, { data: usageRows, error: usageError }, { data: detachRows, error: detachError }, { data: revisionRows, error: revisionError }, { data: actionRequestRows, error: actionRequestError }] = await Promise.all([
         supabase
           .from('reusable_sections')
           .select('*')
@@ -71,12 +72,18 @@ export function useReusableSections() {
           .select('*')
           .is('deleted_at', null)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('reusable_section_action_requests')
+          .select('*')
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false }),
       ]);
 
       if (error) throw error;
       if (usageError) throw usageError;
       if (detachError) throw detachError;
       if (revisionError) throw revisionError;
+      if (actionRequestError) throw actionRequestError;
       setSections(data || []);
 
       const groupedUsages = (usageRows || []).reduce((accumulator, usage) => {
@@ -108,6 +115,16 @@ export function useReusableSections() {
       }, {});
 
       setRevisionsBySection(groupedRevisions);
+
+      const groupedActionRequests = (actionRequestRows || []).reduce((accumulator, request) => {
+        if (!accumulator[request.reusable_section_id]) {
+          accumulator[request.reusable_section_id] = [];
+        }
+        accumulator[request.reusable_section_id].push(request);
+        return accumulator;
+      }, {});
+
+      setActionRequestsBySection(groupedActionRequests);
     } catch (error) {
       toast({ title: 'Error', description: error.message || 'Failed to load reusable sections', variant: 'destructive' });
     } finally {
@@ -223,6 +240,66 @@ export function useReusableSections() {
     await fetchSections();
   }, [fetchSections, toast, usagesBySection]);
 
+  const submitActionRequest = useCallback(async ({ sectionId, actionType, count = 0 }) => {
+    const { error } = await supabase
+      .from('reusable_section_action_requests')
+      .insert({
+        tenant_id: currentTenant?.id,
+        reusable_section_id: sectionId,
+        action_type: actionType,
+        status: 'pending',
+        request_payload: { count },
+        requested_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+      });
+
+    if (error) throw error;
+    toast({ title: 'Approval Requested', description: 'Bulk action was submitted for approval.' });
+    await fetchSections();
+  }, [currentTenant?.id, fetchSections, toast]);
+
+  const approveActionRequest = useCallback(async (request) => {
+    if (request.action_type === 'detach_all') {
+      await detachAllUsages({ sectionId: request.reusable_section_id });
+    }
+    if (request.action_type === 'relink_all') {
+      await relinkAllDetachEvents({ sectionId: request.reusable_section_id });
+    }
+    if (request.action_type === 'update_linked') {
+      await updateAllLinkedReferences({ sectionId: request.reusable_section_id });
+    }
+
+    const { error } = await supabase
+      .from('reusable_section_action_requests')
+      .update({
+        status: 'completed',
+        reviewed_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', request.id);
+
+    if (error) throw error;
+    toast({ title: 'Approved', description: 'Bulk action request approved and executed.' });
+    await fetchSections();
+  }, [detachAllUsages, fetchSections, relinkAllDetachEvents, toast, updateAllLinkedReferences]);
+
+  const rejectActionRequest = useCallback(async (request) => {
+    const { error } = await supabase
+      .from('reusable_section_action_requests')
+      .update({
+        status: 'rejected',
+        reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', request.id);
+
+    if (error) throw error;
+    toast({ title: 'Rejected', description: 'Bulk action request was rejected.' });
+    await fetchSections();
+  }, [fetchSections, toast]);
+
   const restoreRevision = useCallback(async ({ sectionId, revisionId }) => {
     const { data: revision, error: revisionError } = await supabase
       .from('reusable_section_revisions')
@@ -277,6 +354,7 @@ export function useReusableSections() {
     usagesBySection,
     detachEventsBySection,
     revisionsBySection,
+    actionRequestsBySection,
     loading,
     fetchSections,
     saveSection,
@@ -288,5 +366,8 @@ export function useReusableSections() {
     relinkAllDetachEvents,
     updateAllLinkedReferences,
     restoreRevision,
+    submitActionRequest,
+    approveActionRequest,
+    rejectActionRequest,
   };
 }

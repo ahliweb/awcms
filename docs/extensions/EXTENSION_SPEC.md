@@ -735,6 +735,43 @@ Before executing a section-wide action, AWCMS now:
 
 This phase improves safety for bulk actions only. It does not yet add approval chains or second-review workflows for bulk propagation actions.
 
+## Phase 21 Bulk Action Approval Requests
+
+Phase 21 adds the first approval workflow foundation for section-wide reusable section operations.
+
+### Approval Request Table
+
+| Table | Scope | Purpose |
+| --- | --- | --- |
+| `reusable_section_action_requests` | Tenant | Tracks approval requests for bulk reusable section operations before they are executed. |
+
+### Requestable Actions
+
+The current approval-request workflow supports:
+
+- `detach_all`
+- `relink_all`
+- `update_linked`
+
+### Workflow Behavior
+
+For users without bulk-action approval authority, AWCMS now:
+
+1. creates a pending action request instead of executing the section-wide action immediately
+2. stores request metadata including action type and affected item count
+3. exposes the pending request in the reusable sections manager
+
+For users with approval authority, AWCMS now allows:
+
+1. approving a pending request and executing the requested bulk action
+2. rejecting a pending request
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+This phase provides a lightweight section-local approval workflow. It does not yet add multi-stage approvals, centralized approval queues, or action-specific policy routing.
+
 ## Phase 18 Revision Restore Confirmation
 
 Phase 18 adds a confirmation step and basic restore guardrails to the reusable section revision workflow.

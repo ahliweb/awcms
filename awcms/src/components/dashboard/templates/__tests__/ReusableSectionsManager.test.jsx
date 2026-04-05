@@ -52,12 +52,15 @@ describe('ReusableSectionsManager', () => {
   const relinkAllDetachEvents = vi.fn();
   const updateAllLinkedReferences = vi.fn();
   const restoreRevision = vi.fn();
+  const submitActionRequest = vi.fn();
+  const approveActionRequest = vi.fn();
+  const rejectActionRequest = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
     useTenantMock.mockReturnValue({ currentTenant: { id: 'tenant-1' } });
     usePermissionsMock.mockReturnValue({
-      hasPermission: (permission) => permission === 'tenant.setting.update',
+      hasPermission: (permission) => permission === 'tenant.setting.update' || permission === 'platform.approvals.read',
       isPlatformAdmin: false,
       isFullAccess: false,
     });
@@ -89,6 +92,11 @@ describe('ReusableSectionsManager', () => {
           { id: 'revision-1', revision_number: 1, created_at: '2026-04-05T11:00:00.000Z' },
         ],
       },
+      actionRequestsBySection: {
+        'section-1': [
+          { id: 'request-1', action_type: 'update_linked', status: 'pending' },
+        ],
+      },
       loading: false,
       saveSection,
       deleteSection,
@@ -99,6 +107,9 @@ describe('ReusableSectionsManager', () => {
       relinkAllDetachEvents,
       updateAllLinkedReferences,
       restoreRevision,
+      submitActionRequest,
+      approveActionRequest,
+      rejectActionRequest,
     });
   });
 
@@ -155,6 +166,12 @@ describe('ReusableSectionsManager', () => {
       expect(updateAllLinkedReferences).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
 
+    fireEvent.click(screen.getByRole('button', { name: /approve/i }));
+
+    await waitFor(() => {
+      expect(approveActionRequest).toHaveBeenCalledWith(expect.objectContaining({ id: 'request-1' }));
+    });
+
     fireEvent.click(screen.getAllByRole('button', { name: /compare/i })[0]);
 
     await waitFor(() => {
@@ -191,6 +208,61 @@ describe('ReusableSectionsManager', () => {
         slug: 'promo-band',
         owner_tenant_id: 'tenant-1',
       }));
+    });
+  });
+
+  it('submits approval requests for non-approvers', async () => {
+    usePermissionsMock.mockReturnValue({
+      hasPermission: (permission) => permission === 'tenant.setting.update',
+      isPlatformAdmin: false,
+      isFullAccess: false,
+    });
+
+    useReusableSectionsMock.mockReturnValue({
+      sections: [
+        {
+          id: 'section-1',
+          name: 'Hero Section',
+          slug: 'hero-section',
+          status: 'active',
+          section_mode: 'visual',
+          owner_tenant_id: null,
+        },
+      ],
+      usagesBySection: {
+        'section-1': [
+          { id: 'usage-1', source_type: 'page', source_label: 'Homepage', locale: null },
+          { id: 'usage-2', source_type: 'template', source_label: 'Landing Template', locale: 'en' },
+        ],
+      },
+      detachEventsBySection: {
+        'section-1': [
+          { id: 'detach-1', source_type: 'page', source_label: 'Homepage', locale: null },
+        ],
+      },
+      revisionsBySection: {},
+      actionRequestsBySection: {},
+      loading: false,
+      saveSection,
+      deleteSection,
+      materializeSection,
+      detachUsage,
+      detachAllUsages,
+      relinkDetachEvent,
+      relinkAllDetachEvents,
+      updateAllLinkedReferences,
+      restoreRevision,
+      submitActionRequest,
+      approveActionRequest,
+      rejectActionRequest,
+    });
+
+    render(<ReusableSectionsManager />);
+
+    fireEvent.click(screen.getByRole('button', { name: /request update linked/i }));
+
+    await waitFor(() => {
+      expect(submitActionRequest).toHaveBeenCalledWith({ sectionId: 'section-1', actionType: 'update_linked', count: 2 });
     });
   });
 });
