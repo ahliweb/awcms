@@ -434,6 +434,25 @@ The field:
 
 This phase improves editor usability only; it does not change the runtime contract introduced in Phase 7.
 
+## Phase 9 Reusable Section Preview
+
+Phase 9 adds lightweight resolved-content preview inside the visual builder so authors can see what a selected reusable section represents without waiting for public rendering.
+
+### Preview Integration
+
+- Block component: `awcms/src/components/visual-builder/blocks/ReusableSectionBlock.jsx`
+
+### Preview Behavior
+
+The block now:
+
+1. Loads the referenced reusable section by slug.
+2. Resolves direct `visual` section content.
+3. Resolves referenced `template_part` content when `section_mode = template_part_reference`.
+4. Displays a compact summary inside the builder showing block count, leading block types, and source mode.
+
+This phase does not introduce nested live rendering inside the editor. The preview is intentionally summary-only to keep the builder stable and fast.
+
 ## Phase 5 Sandbox Readiness Metadata
 
 Phase 5 does not enable sandboxed extension execution. It adds sandbox-readiness metadata so extension manifests, diagnostics, and operator tooling can describe future isolation needs without changing the trusted runtime contract.
