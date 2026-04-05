@@ -98,6 +98,8 @@ function ReusableSectionsManager() {
             const detachEvents = detachEventsBySection[section.id] || [];
             const revisions = revisionsBySection[section.id] || [];
             const actionRequests = actionRequestsBySection[section.id] || [];
+            const pendingActionRequests = actionRequests.filter((request) => request.status === 'pending');
+            const historicalActionRequests = actionRequests.filter((request) => request.status !== 'pending');
             const activeCompareRevision = compareSelection?.sectionId === section.id
               ? revisions.find((revision) => revision.id === compareSelection.revisionId) || null
               : null;
@@ -143,10 +145,10 @@ function ReusableSectionsManager() {
                   </div>
                   <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Bulk Action Requests</p>
-                    <p className="mt-1 text-xs text-foreground">{actionRequests.filter((request) => request.status === 'pending').length} pending request(s)</p>
-                    {actionRequests.length > 0 ? (
+                    <p className="mt-1 text-xs text-foreground">{pendingActionRequests.length} pending request(s)</p>
+                    {pendingActionRequests.length > 0 ? (
                       <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                        {actionRequests.slice(0, 4).map((request) => (
+                        {pendingActionRequests.slice(0, 4).map((request) => (
                           <li key={request.id} className="flex items-center justify-between gap-3">
                             <span>{request.action_type} • {request.status}</span>
                             {request.status === 'pending' && canApproveBulkActions ? (
@@ -161,8 +163,25 @@ function ReusableSectionsManager() {
                             ) : null}
                           </li>
                         ))}
+                        {pendingActionRequests.length > 4 ? <li>+ {pendingActionRequests.length - 4} more pending</li> : null}
                       </ul>
-                    ) : null}
+                    ) : <p className="mt-2 text-xs text-muted-foreground">No pending requests.</p>}
+                    <div className="mt-3 border-t border-border/50 pt-3">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Request History</p>
+                      <p className="mt-1 text-xs text-foreground">{historicalActionRequests.length} historical request(s)</p>
+                      {historicalActionRequests.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                          {historicalActionRequests.slice(0, 4).map((request) => (
+                            <li key={request.id}>
+                              {request.action_type} • {request.status}
+                              {request.reviewed_at ? ` • reviewed ${new Date(request.reviewed_at).toLocaleString()}` : ''}
+                              {request.completed_at ? ` • completed ${new Date(request.completed_at).toLocaleString()}` : ''}
+                            </li>
+                          ))}
+                          {historicalActionRequests.length > 4 ? <li>+ {historicalActionRequests.length - 4} more history items</li> : null}
+                        </ul>
+                      ) : <p className="mt-2 text-xs text-muted-foreground">No historical requests yet.</p>}
+                    </div>
                   </div>
                   <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Detached Instances</p>

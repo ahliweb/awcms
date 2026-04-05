@@ -772,6 +772,32 @@ For users with approval authority, AWCMS now allows:
 
 This phase provides a lightweight section-local approval workflow. It does not yet add multi-stage approvals, centralized approval queues, or action-specific policy routing.
 
+## Phase 22 Approval Request History
+
+Phase 22 extends the reusable section approval workflow by keeping approved and rejected bulk action requests visible after review.
+
+### History Behavior
+
+The reusable sections manager now separates action requests into:
+
+1. pending requests
+2. historical requests
+
+Historical request rows now show:
+
+- action type
+- final status
+- reviewed timestamp
+- completed timestamp when available
+
+This keeps section-local approval context visible after a request is approved or rejected instead of hiding it once it leaves the pending state.
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+This phase improves section-local approval observability only. It does not yet add a centralized cross-section approval queue or richer reviewer dashboards.
+
 ## Phase 18 Revision Restore Confirmation
 
 Phase 18 adds a confirmation step and basic restore guardrails to the reusable section revision workflow.

@@ -95,6 +95,7 @@ describe('ReusableSectionsManager', () => {
       actionRequestsBySection: {
         'section-1': [
           { id: 'request-1', action_type: 'update_linked', status: 'pending' },
+          { id: 'request-2', action_type: 'detach_all', status: 'completed', reviewed_at: '2026-04-05T13:00:00.000Z', completed_at: '2026-04-05T13:05:00.000Z' },
         ],
       },
       loading: false,
@@ -121,6 +122,9 @@ describe('ReusableSectionsManager', () => {
     expect(screen.getAllByText('page: Homepage').length).toBeGreaterThan(0);
     expect(screen.getByText('2 revision(s)')).toBeInTheDocument();
     expect(screen.getByText(/Revision 2/)).toBeInTheDocument();
+    expect(screen.getByText('1 pending request(s)')).toBeInTheDocument();
+    expect(screen.getByText('1 historical request(s)')).toBeInTheDocument();
+    expect(screen.getByText(/detach_all • completed/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /materialize/i }));
 
     await waitFor(() => {

@@ -27,6 +27,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Templates: added Phase 18 revision restore confirmation for reusable sections so restore actions now require explicit confirmation with revision number and timestamp context before mutating live section state.
 - Templates: added Phase 19 revision-to-revision comparison for reusable sections so the manager can compare one saved revision against another using the same inline field-level diff model, with focused diff helper and manager coverage.
 - Templates: added Phase 21 approval-request workflows for reusable section bulk actions with mirrored `reusable_section_action_requests` schema, section-local request visibility, request submission for non-approvers, and approve/reject execution flow for authorized reviewers.
+- Templates: added Phase 22 approval request history for reusable section bulk actions so approved and rejected section-local requests remain visible with review/completion timestamps in the manager.
 - Templates: added Phase 20 bulk-action confirmation guardrails so `Detach All`, `Relink All`, and `Update Linked` now require explicit confirmation with workflow and affected-item context before execution.
 
 ### Changed
@@ -47,6 +48,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Visual Builder / Templates: reusable section revisions can now be compared against the current live section state directly in the manager before restore decisions are made.
 - Visual Builder / Templates: reusable section revision comparison now supports revision-vs-revision inspection in addition to current-vs-revision comparison.
 - Visual Builder / Templates: section-wide reusable section actions can now be routed through approval requests instead of executing immediately for users without approval authority.
+- Visual Builder / Templates: reusable section bulk action approvals now retain section-local history after review instead of disappearing once they leave the pending state.
 - Visual Builder / Templates: section-wide reusable section actions are now confirmation-gated to reduce accidental bulk detach, relink, or linked-update operations.
 - Visual Builder / Templates: reusable section revision restores are now confirmation-gated in the manager to reduce accidental destructive restores.
 
