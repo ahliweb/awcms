@@ -32,7 +32,9 @@ cd /home/data/dev_react/awcms-dev && npx supabase db reset
 
 2. **Test with multiple contexts** — Verify tenant isolation with different user roles
 
-3. **Push to remote (after approval)**
+3. **Run module-specific verification snippets when available** — For extension lifecycle changes, run the local verification section in `docs/extensions/EXTENSION_SPEC.md` after `npx supabase db reset` to validate catalog sync, auto-deactivation, and auto-restoration behavior.
+
+4. **Push to remote (after approval)**
 
 ```bash
 cd /home/data/dev_react/awcms-dev && npx supabase db push

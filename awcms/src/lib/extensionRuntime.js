@@ -1,5 +1,21 @@
 import { getPluginComponent } from '@/lib/pluginRegistry';
 
+const isExtensionRuntimeEligible = (extensionRecord) => {
+  const runtimeMode = extensionRecord?.runtime_mode || extensionRecord?.manifest?.runtime_mode || 'trusted';
+  const validationStatus = extensionRecord?.validation_status || extensionRecord?.catalog_validation_status || 'valid';
+  const activationState = extensionRecord?.activation_state || (extensionRecord?.is_active ? 'active' : 'inactive');
+
+  if (runtimeMode !== 'trusted') {
+    return false;
+  }
+
+  if (validationStatus === 'invalid') {
+    return false;
+  }
+
+  return activationState === 'active' || activationState === 'installed';
+};
+
 const resolveManifestComponent = (pluginKey, pluginModule, componentName) => {
   if (!componentName) return null;
 
@@ -20,7 +36,7 @@ const resolveManifestComponent = (pluginKey, pluginModule, componentName) => {
 
 export const registerManifestArtifacts = ({ addFilter, pluginKey, extensionRecord, pluginModule }) => {
   const manifest = extensionRecord?.manifest;
-  if (!manifest) return;
+  if (!manifest || !isExtensionRuntimeEligible(extensionRecord)) return;
 
   if (Array.isArray(manifest.menus) && manifest.menus.length > 0) {
     addFilter('admin_menu_items', `${pluginKey}_manifest_menus`, (items) => [
@@ -83,7 +99,7 @@ export const registerManifestArtifacts = ({ addFilter, pluginKey, extensionRecor
 
 export const getManifestRoutes = ({ pluginKey, extensionRecord, pluginModule }) => {
   const manifest = extensionRecord?.manifest;
-  if (!manifest || !Array.isArray(manifest.adminRoutes)) {
+  if (!manifest || !Array.isArray(manifest.adminRoutes) || !isExtensionRuntimeEligible(extensionRecord)) {
     return [];
   }
 

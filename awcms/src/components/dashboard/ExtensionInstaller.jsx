@@ -57,7 +57,7 @@ function ExtensionInstaller({ onInstallComplete }) {
     reader.onload = (e) => {
       try {
          const json = JSON.parse(e.target.result);
-         const validation = validateExtensionManifest(json, { allowLegacy: true });
+         const validation = validateExtensionManifest(json);
          if (!validation.valid) {
            throw new Error(validation.errors.join(', '));
          }

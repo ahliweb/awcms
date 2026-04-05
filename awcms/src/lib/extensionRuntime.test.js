@@ -11,7 +11,7 @@ describe('registerManifestArtifacts', () => {
     registerManifestArtifacts({
       addFilter: hookBag.addFilter,
       pluginKey: 'awcms-ext-ahliweb-events',
-      extensionRecord: { kind: 'bundled', manifest: plugin.manifest },
+      extensionRecord: { kind: 'bundled', activation_state: 'active', validation_status: 'valid', runtime_mode: 'trusted', manifest: plugin.manifest },
       pluginModule: plugin,
     });
 
@@ -22,5 +22,21 @@ describe('registerManifestArtifacts', () => {
     expect(menus.some((item) => item.key === 'events' && item.permission === 'tenant.events.read')).toBe(true);
     expect(routes.some((item) => item.path === 'events' && item.permission === 'tenant.events.read')).toBe(true);
     expect(widgets.some((item) => item.id === 'events-overview' && item.position === 'sidebar')).toBe(true);
+  });
+
+  it('skips invalid extensions', () => {
+    const hookBag = createHooks();
+    const plugin = getPlugin('awcms-ext-ahliweb-events');
+
+    registerManifestArtifacts({
+      addFilter: hookBag.addFilter,
+      pluginKey: 'awcms-ext-ahliweb-events',
+      extensionRecord: { kind: 'bundled', activation_state: 'active', validation_status: 'invalid', runtime_mode: 'trusted', manifest: plugin.manifest },
+      pluginModule: plugin,
+    });
+
+    expect(hookBag.applyFilters('admin_menu_items', [])).toHaveLength(0);
+    expect(hookBag.applyFilters('admin_routes', [])).toHaveLength(0);
+    expect(hookBag.applyFilters('dashboard_widgets', [])).toHaveLength(0);
   });
 });

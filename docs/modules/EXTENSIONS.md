@@ -310,14 +310,26 @@ Audit trail with RLS for all extension actions:
 | `platform.extensions.create` | Install/upload extensions |
 | `platform.extensions.update` | Activate/deactivate and update extension metadata |
 | `platform.extensions.delete` | Uninstall/remove extensions |
+| `platform.extensions.diagnostics.read` | View full extension validation diagnostics inside the extension manager |
 
 Tenant-level plugin pages and extension settings should use `tenant.setting.*` permissions (for example `tenant.setting.read`).
 
 ### Requirements
 
 - Extensions must declare required permissions in manifest
+- New manifests must declare explicit `runtime_mode: "trusted"`
+- New manifest capabilities must use direct `scope.resource.action` identifiers
 - Permission check before extension activation
 - Audit log for all extension lifecycle events
+- Invalid catalog updates auto-deactivate affected active tenant installs immediately through the Worker lifecycle path
+- Later valid catalog updates automatically restore only installs that were previously active
+
+### Diagnostics
+
+- Extension diagnostics are embedded in the existing Extensions management screen.
+- Users with `platform.extensions.diagnostics.read` can view normalized structured validation detail.
+- Users without that permission still see a redacted diagnostics panel with status, timestamps, and generic reason categories.
+- Use the verification snippet in `docs/extensions/EXTENSION_SPEC.md` after `npx supabase db reset` when changing extension lifecycle SQL or validation behavior.
 
 ---
 

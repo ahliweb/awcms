@@ -526,6 +526,70 @@ const finalizeTenantExtensionLifecycle = async (params: {
   })
 }
 
+const normalizeReasonCategories = (value: unknown) => {
+  if (!Array.isArray(value)) return [] as string[]
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+}
+
+const buildExtensionValidationSummary = (validation: ReturnType<typeof validateExtensionManifest>) => {
+  const diagnostics = validation.diagnostics || {
+    validationStatus: validation.valid ? 'valid' : 'invalid',
+    runtimeMode: null,
+    compatibilityStatus: 'unknown',
+    reasonCategories: validation.valid ? [] : ['invalid_manifest'],
+    invalidCapabilities: [],
+    missingArtifacts: [],
+    warnings: [],
+  }
+
+  const reasonCategories = normalizeReasonCategories(diagnostics.reasonCategories)
+
+  return {
+    validationStatus: diagnostics.validationStatus,
+    runtimeMode: diagnostics.runtimeMode,
+    compatibilityStatus: diagnostics.compatibilityStatus,
+    reasonCategories,
+    primaryReasonCategory: reasonCategories[0] || null,
+    invalidCapabilities: Array.isArray(diagnostics.invalidCapabilities) ? diagnostics.invalidCapabilities : [],
+    missingArtifacts: Array.isArray(diagnostics.missingArtifacts) ? diagnostics.missingArtifacts : [],
+    warnings: Array.isArray(diagnostics.warnings) ? diagnostics.warnings : [],
+    errors: validation.errors || [],
+  }
+}
+
+const syncCatalogValidationState = async (params: {
+  adminSupabase: any
+  actorUserId: string
+  payload: Record<string, unknown>
+}) => {
+  const { data, error } = await params.adminSupabase.rpc('sync_extension_catalog_validation_state', {
+    p_slug: params.payload.slug,
+    p_vendor: params.payload.vendor,
+    p_name: params.payload.name,
+    p_description: params.payload.description,
+    p_version: params.payload.version,
+    p_kind: params.payload.kind,
+    p_scope: params.payload.scope,
+    p_source: params.payload.source,
+    p_package_path: params.payload.package_path,
+    p_checksum: params.payload.checksum,
+    p_status: params.payload.status,
+    p_compatibility: params.payload.compatibility,
+    p_capabilities: params.payload.capabilities,
+    p_manifest: params.payload.manifest,
+    p_runtime_mode: params.payload.runtime_mode,
+    p_validation_status: params.payload.validation_status,
+    p_validation_summary: params.payload.validation_summary,
+    p_actor_user_id: params.actorUserId,
+  })
+
+  if (error || !data?.[0]) {
+    throw new Error(error?.message || 'Catalog state sync failed')
+  }
+
+  return data[0]
+}
+
 const writeFailedExtensionLifecycleAudit = async (params: {
   adminSupabase: any
   actorUserId: string
@@ -2115,40 +2179,55 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
         }
 
         const validation = validateExtensionManifest(body.manifest)
+        const validationSummary = buildExtensionValidationSummary(validation)
+        const manifest = (validation.manifest || (body.manifest && typeof body.manifest === 'object' ? body.manifest : {})) as Record<string, unknown>
+
         if (!validation.valid || !validation.manifest) {
           await writeFailedExtensionLifecycleAudit({
             adminSupabase,
             actorUserId: user.id,
             action: 'catalog-register',
-            metadata: { errors: validation.errors },
+            metadata: {
+              errors: validation.errors,
+              diagnostics: validationSummary,
+            },
           })
-          return c.json({ error: validation.errors.join(', ') }, 400)
         }
 
-        const manifest = validation.manifest
         const payload = {
-          slug: manifest.slug,
-          vendor: manifest.vendor,
-          name: manifest.name,
+          slug: typeof manifest.slug === 'string' ? manifest.slug : '',
+          vendor: typeof manifest.vendor === 'string' ? manifest.vendor : '',
+          name: typeof manifest.name === 'string' ? manifest.name : '',
           description: typeof body.description === 'string' ? body.description : null,
-          version: manifest.version,
-          kind: manifest.kind,
-          scope: manifest.scope,
+          version: typeof manifest.version === 'string' ? manifest.version : '0.0.0',
+          kind: typeof manifest.kind === 'string' ? manifest.kind : 'external',
+          scope: typeof manifest.scope === 'string' ? manifest.scope : 'tenant',
           source: typeof body.source === 'string' ? body.source : 'workspace',
           package_path: typeof body.packagePath === 'string' ? body.packagePath : null,
           checksum: typeof body.checksum === 'string' ? body.checksum : null,
           status: typeof body.status === 'string' ? body.status : 'active',
-          compatibility: manifest.compatibility || {},
-          capabilities: manifest.capabilities || [],
-          manifest,
-          created_by: user.id,
-          updated_at: new Date().toISOString(),
+          compatibility: validation.manifest?.compatibility || {},
+          capabilities: validation.manifest?.capabilities || [],
+          manifest: body.manifest,
+          runtime_mode: validationSummary.runtimeMode || 'trusted',
+          validation_status: validationSummary.validationStatus,
+          validation_summary: validationSummary,
         }
+
+        if (!payload.slug || !payload.vendor || !payload.name || !payload.version || !payload.kind || !payload.scope) {
+          return c.json({ error: validation.errors.join(', ') || 'Catalog manifest is missing required identity fields' }, 400)
+        }
+
+        const syncResult = await syncCatalogValidationState({
+          adminSupabase,
+          actorUserId: user.id,
+          payload,
+        })
 
         const { data, error } = await adminSupabase
           .from('platform_extension_catalog')
-          .upsert(payload, { onConflict: 'vendor,slug' })
           .select('*')
+          .eq('id', syncResult.catalog_id)
           .single()
 
         if (error || !data) {
@@ -2156,9 +2235,12 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
             adminSupabase,
             actorUserId: user.id,
             action: 'catalog-register',
-            metadata: { message: error?.message || 'Catalog upsert failed', extensionKey: getExtensionKey(manifest) },
+            metadata: {
+              message: error?.message || 'Catalog readback failed',
+              extensionKey: getExtensionKey({ vendor: payload.vendor as string, slug: payload.slug as string }),
+            },
           })
-          return c.json({ error: error?.message || 'Catalog upsert failed' }, 400)
+          return c.json({ error: error?.message || 'Catalog readback failed' }, 400)
         }
 
         await writeExtensionAudit(adminSupabase, {
@@ -2166,7 +2248,16 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           catalogId: data.id,
           action: 'catalog-register',
           status: 'succeeded',
-          metadata: { extensionKey: getExtensionKey(manifest) },
+          metadata: {
+            extensionKey: getExtensionKey({ vendor: payload.vendor as string, slug: payload.slug as string }),
+            validation_status: validationSummary.validationStatus,
+            runtime_mode: validationSummary.runtimeMode,
+            reason_categories: validationSummary.reasonCategories,
+            previous_catalog_version: syncResult.previous_version || null,
+            catalog_version: payload.version,
+            auto_deactivated_count: syncResult.auto_deactivated_count || 0,
+            auto_restored_count: syncResult.auto_restored_count || 0,
+          },
         })
 
         await writeAccessAudit(adminSupabase, {
@@ -2195,7 +2286,19 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           accessMechanism: 'worker_route',
           authMethod: 'bearer_token',
         })
-        return c.json({ ok: true, catalog: data })
+        const responsePayload: Record<string, unknown> = {
+          ok: true,
+          catalog: data,
+          diagnostics: validationSummary,
+          affectedTenantExtensions: {
+            autoDeactivated: syncResult.auto_deactivated_count || 0,
+            autoRestored: syncResult.auto_restored_count || 0,
+          },
+        }
+        if (!validation.valid) {
+          responsePayload.warning = validation.errors.join(', ')
+        }
+        return c.json(responsePayload)
       }
 
       case 'install': {
@@ -2223,6 +2326,9 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
         if (!validation.valid || !validation.manifest) {
           return c.json({ error: 'Catalog manifest is invalid' }, 400)
         }
+        if (catalog.validation_status === 'invalid') {
+          return c.json({ error: 'Catalog manifest is invalid and cannot be installed until a valid update is published' }, 400)
+        }
 
         const now = new Date().toISOString()
         const activationState = body.autoActivate === false ? 'installed' : 'active'
@@ -2234,6 +2340,9 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
             catalog_id: catalog.id,
             installed_version: catalog.version,
             activation_state: activationState,
+            desired_activation_state: activationState === 'active' ? 'active' : 'inactive',
+            validation_status: catalog.validation_status || 'valid',
+            validation_summary: catalog.validation_summary || {},
             config: typeof body.config === 'object' && body.config ? body.config : {},
             installed_at: now,
             activated_at: activationState === 'active' ? now : null,
@@ -2311,22 +2420,37 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
         let updates: Record<string, unknown> = { updated_at: now, updated_by: user.id }
 
         if (action === 'activate') {
-          updates = { ...updates, activation_state: 'active', activated_at: now, deactivated_at: null, deleted_at: null }
+          if (catalog?.validation_status === 'invalid') {
+            return c.json({ error: 'Cannot activate an extension with an invalid catalog manifest' }, 400)
+          }
+          updates = { ...updates, activation_state: 'active', desired_activation_state: 'active', activated_at: now, deactivated_at: null, deleted_at: null }
         }
         if (action === 'deactivate') {
-          updates = { ...updates, activation_state: 'inactive', deactivated_at: now }
+          updates = { ...updates, activation_state: 'inactive', desired_activation_state: 'inactive', deactivated_at: now }
         }
         if (action === 'config-update') {
           updates = { ...updates, config: typeof body.config === 'object' && body.config ? body.config : {} }
         }
         if (action === 'uninstall') {
-          updates = { ...updates, activation_state: 'uninstall_requested', deactivated_at: now, deleted_at: now }
+          updates = { ...updates, activation_state: 'uninstall_requested', desired_activation_state: 'inactive', deactivated_at: now, deleted_at: now }
         }
         if (action === 'upgrade') {
           if (compareVersions(String(catalog.version), String(tenantExtension.installed_version)) < 0) {
             return c.json({ error: 'Upgrade must be forward-only' }, 400)
           }
-          updates = { ...updates, installed_version: catalog.version, activation_state: 'active', activated_at: now, deleted_at: null }
+          if (catalog?.validation_status === 'invalid') {
+            return c.json({ error: 'Cannot upgrade to an invalid catalog manifest' }, 400)
+          }
+          updates = {
+            ...updates,
+            installed_version: catalog.version,
+            activation_state: 'active',
+            desired_activation_state: 'active',
+            validation_status: catalog.validation_status || 'valid',
+            validation_summary: catalog.validation_summary || {},
+            activated_at: now,
+            deleted_at: null,
+          }
         }
 
         const { data, error } = await adminSupabase

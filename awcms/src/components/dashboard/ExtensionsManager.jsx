@@ -68,6 +68,7 @@ function ExtensionsManager() {
   const canCreate = isSuperAdmin || hasPermission('platform.extensions.create');
   const canManageGlobal = isSuperAdmin || hasPermission('platform.extensions.update');
   const canView = isSuperAdmin || hasAnyPermission(['platform.extensions.read', 'platform.extensions.update', 'platform.extensions.create']);
+  const canViewDiagnostics = isSuperAdmin || hasPermission('platform.extensions.diagnostics.read');
 
   const tabMeta = useMemo(() => ([
     { value: 'installed', label: t('extensions.installed'), count: extensions.length },
@@ -185,7 +186,7 @@ function ExtensionsManager() {
       }
 
       toast({ title: newStatus ? t('extensions.activate') : t('extensions.deactivate'), description: `${ext.name} is now ${newStatus ? 'active' : 'inactive'}.` });
-      setExtensions(extensions.map(e => e.id === ext.id ? { ...e, is_active: newStatus } : e));
+      await fetchExtensions();
 
     } catch (error) {
       toast({ variant: "destructive", title: t('common.error'), description: error.message });
@@ -367,6 +368,7 @@ function ExtensionsManager() {
             user={user}
             isSuperAdmin={isSuperAdmin}
             canManageGlobal={canManageGlobal}
+            canViewDiagnostics={canViewDiagnostics}
             onEdit={setEditingExtension}
             onDelete={handleDelete}
             onToggleStatus={handleToggleStatus}

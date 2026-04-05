@@ -10,6 +10,17 @@ export const EXTENSION_KIND_VALUES = ['bundled', 'external'];
 export const EXTENSION_SCOPE_VALUES = ['platform', 'tenant'];
 export const EXTENSION_STATUS_VALUES = ['draft', 'active', 'deprecated', 'retired'];
 export const TENANT_EXTENSION_STATE_VALUES = ['installed', 'active', 'inactive', 'error', 'upgrade_required', 'uninstall_requested'];
+export const EXTENSION_RUNTIME_MODE_VALUES = ['trusted'];
+export const EXTENSION_VALIDATION_STATUS_VALUES = ['valid', 'invalid', 'warning'];
+export const EXTENSION_REASON_CATEGORIES = [
+  'invalid_manifest',
+  'unsupported_runtime_mode',
+  'capability_validation_failed',
+  'missing_artifact',
+  'compatibility_failed',
+];
+
+const CAPABILITY_PATTERN = /^[a-z]+(?:\.[a-z0-9_]+){2,}$/;
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -162,6 +173,7 @@ export const buildLegacyCompatibleManifest = (source = {}) => ({
   version: source.version || '1.0.0',
   kind: source.extension_type === 'external' ? 'external' : 'bundled',
   scope: source.scope || 'tenant',
+  runtime_mode: source.runtime_mode || source.runtimeMode || 'trusted',
   compatibility: {
     awcms: source.awcms_version || source.compatibility?.awcms || `>=${appVersion}`,
   },
@@ -205,10 +217,25 @@ export const isManifestCompatible = (manifest, currentVersion = appVersion) => {
 export const validateExtensionManifest = (manifestInput, options = {}) => {
   const { allowLegacy = false } = options;
   const errors = [];
+  const warnings = [];
+  const reasonCategories = new Set();
   const baseManifest = allowLegacy ? buildLegacyCompatibleManifest(manifestInput) : manifestInput;
 
   if (!isPlainObject(baseManifest)) {
-    return { valid: false, errors: ['Manifest must be an object'], manifest: null };
+    return {
+      valid: false,
+      errors: ['Manifest must be an object'],
+      warnings: [],
+      diagnostics: {
+        validationStatus: 'invalid',
+        runtimeMode: null,
+        compatibilityStatus: 'unknown',
+        reasonCategories: ['invalid_manifest'],
+        invalidCapabilities: [],
+        missingArtifacts: [],
+      },
+      manifest: null,
+    };
   }
 
   const manifest = {
@@ -219,6 +246,9 @@ export const validateExtensionManifest = (manifestInput, options = {}) => {
     version: isNonEmptyString(baseManifest.version) ? baseManifest.version.trim() : '',
     kind: isNonEmptyString(baseManifest.kind) ? baseManifest.kind.trim() : '',
     scope: isNonEmptyString(baseManifest.scope) ? baseManifest.scope.trim() : '',
+    runtime_mode: isNonEmptyString(baseManifest.runtime_mode || baseManifest.runtimeMode)
+      ? String(baseManifest.runtime_mode || baseManifest.runtimeMode).trim()
+      : '',
     compatibility: isPlainObject(baseManifest.compatibility) ? baseManifest.compatibility : {},
     capabilities: asArray(baseManifest.capabilities).filter(isNonEmptyString).map((value) => value.trim()),
     resources: isPlainObject(baseManifest.resources) ? baseManifest.resources : {},
@@ -246,11 +276,19 @@ export const validateExtensionManifest = (manifestInput, options = {}) => {
   if (!manifest.scope || !EXTENSION_SCOPE_VALUES.includes(manifest.scope)) {
     errors.push(`scope must be one of: ${EXTENSION_SCOPE_VALUES.join(', ')}`);
   }
+  if (!manifest.runtime_mode) {
+    errors.push('runtime_mode is required');
+    reasonCategories.add('invalid_manifest');
+  } else if (!EXTENSION_RUNTIME_MODE_VALUES.includes(manifest.runtime_mode)) {
+    errors.push(`runtime_mode must be one of: ${EXTENSION_RUNTIME_MODE_VALUES.join(', ')}`);
+    reasonCategories.add('unsupported_runtime_mode');
+  }
   if (manifest.version && !SEMVER_PATTERN.test(manifest.version)) {
     errors.push('version must be a semver string');
   }
   if (manifest.compatibility.awcms && !/^>=?\d+\.\d+\.\d+/.test(String(manifest.compatibility.awcms))) {
     errors.push('compatibility.awcms must be a semver string or >= semver range');
+    reasonCategories.add('compatibility_failed');
   }
 
   if (!isPlainObject(manifest.resources)) {
@@ -299,8 +337,29 @@ export const validateExtensionManifest = (manifestInput, options = {}) => {
 
   manifest.dependencies = normalizeDependencies(baseManifest.dependencies, errors);
 
+  const invalidCapabilities = manifest.capabilities.filter((capability) => !CAPABILITY_PATTERN.test(capability));
+  if (invalidCapabilities.length > 0) {
+    if (allowLegacy) {
+      warnings.push(`legacy capabilities should be migrated to scope.resource.action format: ${invalidCapabilities.join(', ')}`);
+    } else {
+      errors.push(`capabilities must use scope.resource.action format: ${invalidCapabilities.join(', ')}`);
+      reasonCategories.add('capability_validation_failed');
+    }
+  }
+
   if (!isPlainObject(manifest.hooks)) {
     errors.push('hooks must be an object');
+  }
+
+  const missingArtifacts = [];
+  manifest.adminRoutes.forEach((route) => {
+    if (!route.component) missingArtifacts.push(`adminRoutes:${route.path}`);
+  });
+  manifest.widgets.forEach((widget) => {
+    if (!widget.component) missingArtifacts.push(`widgets:${widget.key}`);
+  });
+  if (missingArtifacts.length > 0) {
+    reasonCategories.add('missing_artifact');
   }
 
   manifest.adminRoutes.forEach((route, index) => {
@@ -315,9 +374,32 @@ export const validateExtensionManifest = (manifestInput, options = {}) => {
     }
   });
 
+  const compatible = isManifestCompatible(manifest);
+  if (!compatible) {
+    warnings.push('compatibility.awcms does not match the current application version');
+    reasonCategories.add('compatibility_failed');
+  }
+
+  if (errors.length > 0 && reasonCategories.size === 0) {
+    reasonCategories.add('invalid_manifest');
+  }
+
+  const validationStatus = errors.length > 0 ? 'invalid' : warnings.length > 0 ? 'warning' : 'valid';
+  const diagnostics = {
+    validationStatus,
+    runtimeMode: manifest.runtime_mode || null,
+    compatibilityStatus: compatible ? 'compatible' : 'incompatible',
+    reasonCategories: Array.from(reasonCategories).filter((value) => EXTENSION_REASON_CATEGORIES.includes(value)),
+    invalidCapabilities,
+    missingArtifacts,
+    warnings,
+  };
+
   return {
     valid: errors.length === 0,
     errors,
+    warnings,
+    diagnostics,
     manifest: errors.length === 0 ? manifest : null,
   };
 };

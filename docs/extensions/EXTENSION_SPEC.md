@@ -88,6 +88,167 @@ awcms-ext/
 | `health-check` | Tenant/Platform | Validates DB access, manifest registry, collisions, permission seeding |
 | `config-update` | Tenant/Platform | Updates tenant-scoped config with audit trail |
 
+## Local Verification
+
+Use this check after changing extension lifecycle SQL, validation rules, or the Worker lifecycle orchestration.
+
+1. Reset the local database so the latest migrations are applied:
+
+```bash
+npx supabase db reset
+```
+
+2. Run the rollback-safe RPC smoke test below against the local database. It verifies that:
+- a valid catalog state can be written
+- an invalid catalog update auto-deactivates active tenant installs
+- a later valid catalog update auto-restores previously active installs
+
+```bash
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" <<'SQL'
+BEGIN;
+DO $$
+DECLARE
+  v_actor uuid := NULL;
+  v_tenant uuid;
+  v_catalog uuid;
+  v_tenant_extension uuid;
+  v_invalid record;
+  v_valid record;
+  v_activation_state text;
+  v_desired_state text;
+  v_invalidated_by text;
+  v_restored_by text;
+BEGIN
+  SELECT id INTO v_tenant FROM public.tenants WHERE slug = 'primary' LIMIT 1;
+  IF v_tenant IS NULL THEN
+    RAISE EXCEPTION 'Primary tenant not found for validation test';
+  END IF;
+
+  SELECT * INTO v_invalid
+  FROM public.sync_extension_catalog_validation_state(
+    'phase1-validation-test',
+    'awcms',
+    'Phase 1 Validation Test',
+    'Temporary validation test entry',
+    '1.0.0',
+    'external',
+    'tenant',
+    'workspace',
+    'awcms-ext/awcms/phase1-validation-test/extension.json',
+    NULL,
+    'active',
+    '{}'::jsonb,
+    '["tenant.test.read"]'::jsonb,
+    '{"schemaVersion":1,"slug":"phase1-validation-test","name":"Phase 1 Validation Test","vendor":"awcms","version":"1.0.0","kind":"external","scope":"tenant","runtime_mode":"trusted","capabilities":["tenant.test.read"]}'::jsonb,
+    'trusted',
+    'valid',
+    '{"validationStatus":"valid","runtimeMode":"trusted","compatibilityStatus":"compatible","reasonCategories":[],"invalidCapabilities":[],"missingArtifacts":[],"warnings":[],"errors":[]}'::jsonb,
+    v_actor
+  );
+
+  v_catalog := v_invalid.catalog_id;
+
+  INSERT INTO public.tenant_extensions (
+    tenant_id,
+    catalog_id,
+    installed_version,
+    activation_state,
+    desired_activation_state,
+    validation_status,
+    validation_summary,
+    created_by,
+    updated_by
+  ) VALUES (
+    v_tenant,
+    v_catalog,
+    '1.0.0',
+    'active',
+    'active',
+    'valid',
+    '{}'::jsonb,
+    v_actor,
+    v_actor
+  ) RETURNING id INTO v_tenant_extension;
+
+  SELECT * INTO v_invalid
+  FROM public.sync_extension_catalog_validation_state(
+    'phase1-validation-test',
+    'awcms',
+    'Phase 1 Validation Test',
+    'Temporary validation test entry',
+    '1.0.1',
+    'external',
+    'tenant',
+    'workspace',
+    'awcms-ext/awcms/phase1-validation-test/extension.json',
+    NULL,
+    'active',
+    '{}'::jsonb,
+    '["tenant.test.read"]'::jsonb,
+    '{"schemaVersion":1,"slug":"phase1-validation-test","name":"Phase 1 Validation Test","vendor":"awcms","version":"1.0.1","kind":"external","scope":"tenant","runtime_mode":"trusted","capabilities":["tenant.test.read"]}'::jsonb,
+    'trusted',
+    'invalid',
+    '{"validationStatus":"invalid","runtimeMode":"trusted","compatibilityStatus":"compatible","reasonCategories":["capability_validation_failed"],"primaryReasonCategory":"capability_validation_failed","invalidCapabilities":["events:health"],"missingArtifacts":[],"warnings":[],"errors":["capability mismatch"]}'::jsonb,
+    v_actor
+  );
+
+  SELECT activation_state, desired_activation_state, invalidated_by_catalog_version
+  INTO v_activation_state, v_desired_state, v_invalidated_by
+  FROM public.tenant_extensions
+  WHERE id = v_tenant_extension;
+
+  IF v_invalid.auto_deactivated_count <> 1 THEN
+    RAISE EXCEPTION 'Expected 1 auto-deactivation, got %', v_invalid.auto_deactivated_count;
+  END IF;
+  IF v_activation_state <> 'inactive' OR v_desired_state <> 'active' OR v_invalidated_by <> '1.0.1' THEN
+    RAISE EXCEPTION 'Unexpected invalidation state: activation %, desired %, invalidated_by %', v_activation_state, v_desired_state, v_invalidated_by;
+  END IF;
+
+  SELECT * INTO v_valid
+  FROM public.sync_extension_catalog_validation_state(
+    'phase1-validation-test',
+    'awcms',
+    'Phase 1 Validation Test',
+    'Temporary validation test entry',
+    '1.0.2',
+    'external',
+    'tenant',
+    'workspace',
+    'awcms-ext/awcms/phase1-validation-test/extension.json',
+    NULL,
+    'active',
+    '{}'::jsonb,
+    '["tenant.test.read"]'::jsonb,
+    '{"schemaVersion":1,"slug":"phase1-validation-test","name":"Phase 1 Validation Test","vendor":"awcms","version":"1.0.2","kind":"external","scope":"tenant","runtime_mode":"trusted","capabilities":["tenant.test.read"]}'::jsonb,
+    'trusted',
+    'valid',
+    '{"validationStatus":"valid","runtimeMode":"trusted","compatibilityStatus":"compatible","reasonCategories":[],"invalidCapabilities":[],"missingArtifacts":[],"warnings":[],"errors":[]}'::jsonb,
+    v_actor
+  );
+
+  SELECT activation_state, desired_activation_state, restored_by_catalog_version
+  INTO v_activation_state, v_desired_state, v_restored_by
+  FROM public.tenant_extensions
+  WHERE id = v_tenant_extension;
+
+  IF v_valid.auto_restored_count <> 1 THEN
+    RAISE EXCEPTION 'Expected 1 auto-restoration, got %', v_valid.auto_restored_count;
+  END IF;
+  IF v_activation_state <> 'active' OR v_desired_state <> 'active' OR v_restored_by <> '1.0.2' THEN
+    RAISE EXCEPTION 'Unexpected restoration state: activation %, desired %, restored_by %', v_activation_state, v_desired_state, v_restored_by;
+  END IF;
+
+  RAISE NOTICE 'Phase 1 validation RPC smoke test passed';
+END $$;
+ROLLBACK;
+SQL
+```
+
+Expected result:
+- `npx supabase db reset` completes without migration errors
+- the SQL block prints `NOTICE: Phase 1 validation RPC smoke test passed`
+- the transaction rolls back, leaving the local database clean
+
 ## Security Contract
 
 - Tenant-scoped tables must include `tenant_id` and `deleted_at`.

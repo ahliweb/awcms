@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import ExtensionDiagnosticsPanel from '@/components/dashboard/extensions/ExtensionDiagnosticsPanel';
 
 function ExtensionsInstalledTab({
 	t,
@@ -15,6 +16,7 @@ function ExtensionsInstalledTab({
 	user,
 	isSuperAdmin,
 	canManageGlobal,
+	canViewDiagnostics,
 	onEdit,
 	onDelete,
 	onToggleStatus,
@@ -94,8 +96,10 @@ function ExtensionsInstalledTab({
 									<div className="flex flex-wrap gap-1">
 										{extension.config?.routes?.length > 0 && <span className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{extension.config.routes.length} Routes</span>}
 										{extension.config?.menus?.length > 0 && <span className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{extension.config.menus.length} Menus</span>}
+										{extension.runtime_mode ? <span className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">Runtime {extension.runtime_mode}</span> : null}
 									</div>
 									{isOwner && <span className="mt-2 inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Your Extension</span>}
+									<ExtensionDiagnosticsPanel extension={extension} canViewDiagnostics={canViewDiagnostics} />
 								</div>
 
 								<div className="flex items-center justify-between rounded-b-2xl border-t border-border/60 bg-card/60 p-4">

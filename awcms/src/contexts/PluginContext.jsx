@@ -71,6 +71,14 @@ export const PluginProvider = ({ children }) => {
                 // 3. Register core plugins
                 for (const dbPlugin of corePlugins) {
                     try {
+                        if (dbPlugin.validation_status === 'invalid' || dbPlugin.runtime_mode !== 'trusted') {
+                            console.warn(`[Core Plugin] Skipping ${dbPlugin.name} due to validation/runtime state`, {
+                                validation_status: dbPlugin.validation_status,
+                                runtime_mode: dbPlugin.runtime_mode,
+                            });
+                            continue;
+                        }
+
                         const bundledEntry = dbPlugin.manifest?.resources?.admin?.entry;
                         const pluginKey = bundledEntry?.startsWith('bundled:')
                             ? bundledEntry.replace('bundled:', '')
@@ -106,6 +114,14 @@ export const PluginProvider = ({ children }) => {
                 // 4. Load external plugins (async)
                 for (const extPlugin of extPlugins) {
                     try {
+                        if (extPlugin.validation_status === 'invalid' || extPlugin.runtime_mode !== 'trusted') {
+                            console.warn(`[External Plugin] Skipping ${extPlugin.name} due to validation/runtime state`, {
+                                validation_status: extPlugin.validation_status,
+                                runtime_mode: extPlugin.runtime_mode,
+                            });
+                            continue;
+                        }
+
                         const manifest = extPlugin.manifest;
                         const pluginKey = `${manifest.vendor}-${manifest.slug}`;
 

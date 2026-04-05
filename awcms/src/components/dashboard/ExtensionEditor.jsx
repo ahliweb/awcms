@@ -33,7 +33,7 @@ function ExtensionEditor({ extension = {}, onClose, onSave }) {
     description: extension.description || '',
     author: extension.author || user?.user_metadata?.full_name || 'Admin',
     icon: extension.icon || '🧩',
-    config: extension.config ? JSON.stringify(extension.config, null, 2) : '{\n  "routes": [],\n  "permissions": []\n}'
+    config: extension.config ? JSON.stringify(extension.config, null, 2) : '{\n  "runtime_mode": "trusted",\n  "capabilities": [],\n  "routes": [],\n  "permissions": []\n}'
   });
 
   const handleSave = async (e) => {
@@ -62,9 +62,10 @@ function ExtensionEditor({ extension = {}, onClose, onSave }) {
         name: formData.name,
         vendor: parsedConfig.vendor || 'awcms',
         version: formData.version,
+        runtime_mode: parsedConfig.runtime_mode || 'trusted',
       };
 
-      const validation = validateExtensionManifest(manifestPayload, { allowLegacy: true });
+      const validation = validateExtensionManifest(manifestPayload);
       if (!validation.valid) {
         throw new Error(validation.errors.join(', '));
       }

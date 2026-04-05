@@ -5,6 +5,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Extensions: added Phase 1 extension validation and diagnostics hardening with explicit `runtime_mode`, strict `scope.resource.action` capability validation for new manifests, embedded diagnostics in the Extensions manager, and a repeatable local SQL verification snippet for extension lifecycle migration checks.
+
+### Changed
+
+- Extensions: made `awcms-edge` `extensions-lifecycle` the authoritative validation/update path for catalog registration, persisted normalized validation state on catalog and tenant extension records, and automatically deactivated invalid updated installs while restoring previously active installs on later valid catalog updates.
+
 ## [v4.5.2] - 2026-04-04
 
 Applies to: `awcms@4.5.2`
