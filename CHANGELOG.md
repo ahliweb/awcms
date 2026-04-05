@@ -12,12 +12,14 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Templates: added the Phase 3 reusable sections foundation with mirrored `reusable_sections` schema, a Worker-backed `/functions/v1/reusable-sections` materialization route, a new Templates workspace reusable sections tab, and focused admin/edge test coverage for section materialization boundaries.
 - Tooling: added Phase 4 AI/operator MCP tools for listing site blueprints, inspecting tenant blueprint state, and listing reusable sections from the local AWCMS database using `SUPABASE_DB_URL`.
 - Extensions: added Phase 5 sandbox-readiness metadata support with optional `sandbox_profile` manifest fields, diagnostics visibility for requested sandbox capabilities, and focused validation/UI test coverage while keeping runtime execution trusted-only.
+- Templates: added Phase 6 visual-builder integration for reusable sections by extending the existing template selector to browse reusable sections and insert resolved section content directly into the visual builder, with focused selector test coverage.
 
 ### Changed
 
 - Extensions: made `awcms-edge` `extensions-lifecycle` the authoritative validation/update path for catalog registration, persisted normalized validation state on catalog and tenant extension records, and automatically deactivated invalid updated installs while restoring previously active installs on later valid catalog updates.
 - Templates: extended the Templates workspace permission model to support both platform-managed and tenant-authored blueprint flows, and documented the new JSON-based blueprint payload path for settings, public module defaults, and template assignment bootstrap.
 - Templates: extended the Templates workspace again to support hybrid reusable sections that can be materialized into tenant `template_parts`, keeping the existing visual-builder and widget-area model as the runtime target instead of introducing a parallel section renderer.
+- Visual Builder: extended the existing template-application selector flow so reusable sections can be inserted through the same modal, keeping section insertion aligned with the current Puck builder and template-part resolution model.
 
 ## [v4.5.2] - 2026-04-04
 

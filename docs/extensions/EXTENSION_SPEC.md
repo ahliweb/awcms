@@ -360,7 +360,32 @@ The current UI supports:
 - deleting reusable sections
 - materializing a section into a tenant `template_part`
 
-This phase does not yet add direct insertion into `VisualPageBuilder` or public runtime lookup-by-slug.
+## Phase 6 Visual Builder Insertion
+
+Phase 6 connects reusable sections to the existing visual-builder insertion flow without introducing a new renderer.
+
+### Visual Builder Integration
+
+- Host editor: `awcms/src/components/visual-builder/VisualPageBuilder.jsx`
+- Selector UI: `awcms/src/components/visual-builder/TemplateSelector.jsx`
+
+The visual builder now supports two insertion sources from the same selector surface:
+
+- templates
+- reusable sections
+
+### Section Insertion Behavior
+
+When an editor selects a reusable section:
+
+1. The selector loads active `reusable_sections` records.
+2. `visual` sections use their stored JSON content directly.
+3. `template_part_reference` sections resolve content from the referenced `template_part`.
+4. The resulting content is applied to the visual builder using the existing template-application flow.
+
+This keeps the runtime/editor model consistent with the current Puck-based builder and avoids adding a separate section renderer in this phase.
+
+This phase still does not add public runtime lookup-by-slug or sync-back from inserted section instances to the source section definition.
 
 ## Phase 5 Sandbox Readiness Metadata
 

@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { Puck, Render } from '@puckeditor/core';
 import '@puckeditor/core/puck.css';
 import './puck-theme.css';
-import { Save, Eye, EyeOff, ArrowLeft, Upload, Monitor, Tablet, Smartphone, Undo2, Redo2, Loader2, WifiOff } from 'lucide-react';
+import { Save, Eye, EyeOff, ArrowLeft, Upload, Monitor, Tablet, Smartphone, Undo2, Redo2, Loader2, WifiOff, Blocks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { udm } from '@/lib/data/UnifiedDataManager';
@@ -862,6 +862,16 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                                 </span>
                             ) : 'Saved'}
                         </span>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setTemplateSelectorOpen(true)}
+                            className="h-9 px-4 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+                        >
+                            <Blocks className="w-3.5 h-3.5 mr-2" />
+                            Insert Section
+                        </Button>
 
                         <Button
                             variant="outline"
