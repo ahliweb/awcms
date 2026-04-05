@@ -776,7 +776,7 @@ jobs:
           SECRET_PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] || vars['SMANDAPBUN_SUPABASE_URL'] || vars['PUBLIC_SUPABASE_URL'] || vars['VITE_SUPABASE_URL'] }}
           SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] || vars['SMANDAPBUN_SUPABASE_KEY'] || vars['PUBLIC_SUPABASE_PUBLISHABLE_KEY'] || vars['VITE_SUPABASE_PUBLISHABLE_KEY'] || vars['VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY'] }}
           SECRET_PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] || vars['SMANDAPBUN_TENANT_ID'] || vars['PUBLIC_TENANT_ID'] || vars['VITE_PUBLIC_TENANT_ID'] || vars['VITE_TENANT_ID'] }}
-        run: python3 scripts/resolve_smandapbun_public_env.py
+        run: node scripts/resolve_smandapbun_public_env.mjs
 
       - name: Show smandapbun public env source
         run: |
