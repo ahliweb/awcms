@@ -40,6 +40,7 @@ describe('ReusableSectionsManager', () => {
   const relinkDetachEvent = vi.fn();
   const relinkAllDetachEvents = vi.fn();
   const updateAllLinkedReferences = vi.fn();
+  const restoreRevision = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,6 +87,7 @@ describe('ReusableSectionsManager', () => {
       relinkDetachEvent,
       relinkAllDetachEvents,
       updateAllLinkedReferences,
+      restoreRevision,
     });
   });
 
@@ -131,6 +133,12 @@ describe('ReusableSectionsManager', () => {
 
     await waitFor(() => {
       expect(updateAllLinkedReferences).toHaveBeenCalledWith({ sectionId: 'section-1' });
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /restore/i })[0]);
+
+    await waitFor(() => {
+      expect(restoreRevision).toHaveBeenCalledWith({ sectionId: 'section-1', revisionId: 'revision-2' });
     });
   });
 

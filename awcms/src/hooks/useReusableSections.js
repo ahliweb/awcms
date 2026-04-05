@@ -17,6 +17,26 @@ const buildRevisionSnapshot = (section) => ({
   owner_tenant_id: section.owner_tenant_id || null,
 });
 
+const persistReusableSectionRevision = async ({ section, revisionsBySection, tenantId }) => {
+  const currentRevisions = revisionsBySection[section.id] || [];
+  const nextRevisionNumber = currentRevisions.length > 0
+    ? Math.max(...currentRevisions.map((revision) => revision.revision_number || 0)) + 1
+    : 1;
+
+  const { error: revisionError } = await supabase
+    .from('reusable_section_revisions')
+    .insert({
+      tenant_id: section.owner_tenant_id || tenantId || null,
+      reusable_section_id: section.id,
+      revision_number: nextRevisionNumber,
+      snapshot: buildRevisionSnapshot(section),
+      created_at: new Date().toISOString(),
+      deleted_at: null,
+    });
+
+  if (revisionError) throw revisionError;
+};
+
 export function useReusableSections() {
   const { currentTenant } = useTenant();
   const { toast } = useToast();
@@ -128,23 +148,11 @@ export function useReusableSections() {
 
     const savedSection = savedRows?.[0];
     if (savedSection) {
-      const currentRevisions = revisionsBySection[savedSection.id] || [];
-      const nextRevisionNumber = currentRevisions.length > 0
-        ? Math.max(...currentRevisions.map((revision) => revision.revision_number || 0)) + 1
-        : 1;
-
-      const { error: revisionError } = await supabase
-        .from('reusable_section_revisions')
-        .insert({
-          tenant_id: savedSection.owner_tenant_id || currentTenant?.id || null,
-          reusable_section_id: savedSection.id,
-          revision_number: nextRevisionNumber,
-          snapshot: buildRevisionSnapshot(existingSection || savedSection),
-          created_at: new Date().toISOString(),
-          deleted_at: null,
-        });
-
-      if (revisionError) throw revisionError;
+      await persistReusableSectionRevision({
+        section: savedSection,
+        revisionsBySection,
+        tenantId: currentTenant?.id,
+      });
     }
 
     await fetchSections();
@@ -215,6 +223,55 @@ export function useReusableSections() {
     await fetchSections();
   }, [fetchSections, toast, usagesBySection]);
 
+  const restoreRevision = useCallback(async ({ sectionId, revisionId }) => {
+    const { data: revision, error: revisionError } = await supabase
+      .from('reusable_section_revisions')
+      .select('*')
+      .eq('id', revisionId)
+      .eq('reusable_section_id', sectionId)
+      .is('deleted_at', null)
+      .single();
+
+    if (revisionError) throw revisionError;
+
+    const snapshot = revision.snapshot || {};
+    const payload = {
+      name: snapshot.name,
+      slug: snapshot.slug,
+      description: snapshot.description,
+      section_mode: snapshot.section_mode,
+      status: snapshot.status,
+      content: snapshot.content || {},
+      metadata: snapshot.metadata || {},
+      template_part_id: snapshot.template_part_id || null,
+      owner_tenant_id: snapshot.owner_tenant_id ?? currentTenant?.id ?? null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('reusable_sections')
+      .update(payload)
+      .eq('id', sectionId)
+      .select('*');
+
+    if (updateError) throw updateError;
+
+    const updatedSection = updatedRows?.[0];
+    if (updatedSection) {
+      await persistReusableSectionRevision({
+        section: updatedSection,
+        revisionsBySection,
+        tenantId: currentTenant?.id,
+      });
+    }
+
+    toast({
+      title: 'Revision Restored',
+      description: `Reusable section restored from revision ${revision.revision_number}.`,
+    });
+    await fetchSections();
+  }, [currentTenant?.id, fetchSections, revisionsBySection, toast]);
+
   return {
     sections,
     usagesBySection,
@@ -230,5 +287,6 @@ export function useReusableSections() {
     relinkDetachEvent,
     relinkAllDetachEvents,
     updateAllLinkedReferences,
+    restoreRevision,
   };
 }
