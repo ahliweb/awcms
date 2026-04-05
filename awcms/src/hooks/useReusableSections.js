@@ -3,19 +3,20 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useTenant } from '@/contexts/TenantContext';
 import { useToast } from '@/components/ui/use-toast';
 import { materializeReusableSection } from '@/lib/reusableSectionsApi';
-import { detachReusableSectionUsage } from '@/lib/reusableSectionUsage';
+import { detachReusableSectionUsage, relinkReusableSectionDetachEvent } from '@/lib/reusableSectionUsage';
 
 export function useReusableSections() {
   const { currentTenant } = useTenant();
   const { toast } = useToast();
   const [sections, setSections] = useState([]);
   const [usagesBySection, setUsagesBySection] = useState({});
+  const [detachEventsBySection, setDetachEventsBySection] = useState({});
   const [loading, setLoading] = useState(true);
 
   const fetchSections = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data, error }, { data: usageRows, error: usageError }] = await Promise.all([
+      const [{ data, error }, { data: usageRows, error: usageError }, { data: detachRows, error: detachError }] = await Promise.all([
         supabase
           .from('reusable_sections')
           .select('*')
@@ -26,10 +27,17 @@ export function useReusableSections() {
           .select('*')
           .is('deleted_at', null)
           .order('updated_at', { ascending: false }),
+        supabase
+          .from('reusable_section_detach_events')
+          .select('*')
+          .eq('status', 'pending')
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false }),
       ]);
 
       if (error) throw error;
       if (usageError) throw usageError;
+      if (detachError) throw detachError;
       setSections(data || []);
 
       const groupedUsages = (usageRows || []).reduce((accumulator, usage) => {
@@ -41,6 +49,16 @@ export function useReusableSections() {
       }, {});
 
       setUsagesBySection(groupedUsages);
+
+      const groupedDetachEvents = (detachRows || []).reduce((accumulator, event) => {
+        if (!accumulator[event.reusable_section_id]) {
+          accumulator[event.reusable_section_id] = [];
+        }
+        accumulator[event.reusable_section_id].push(event);
+        return accumulator;
+      }, {});
+
+      setDetachEventsBySection(groupedDetachEvents);
     } catch (error) {
       toast({ title: 'Error', description: error.message || 'Failed to load reusable sections', variant: 'destructive' });
     } finally {
@@ -102,9 +120,16 @@ export function useReusableSections() {
     await fetchSections();
   }, [fetchSections, toast, usagesBySection]);
 
+  const relinkDetachEvent = useCallback(async (detachEvent) => {
+    await relinkReusableSectionDetachEvent({ detachEvent });
+    toast({ title: 'Relinked', description: 'Detached content was reconnected to the reusable section source.' });
+    await fetchSections();
+  }, [fetchSections, toast]);
+
   return {
     sections,
     usagesBySection,
+    detachEventsBySection,
     loading,
     fetchSections,
     saveSection,
@@ -112,5 +137,6 @@ export function useReusableSections() {
     materializeSection,
     detachUsage,
     detachAllUsages,
+    relinkDetachEvent,
   };
 }

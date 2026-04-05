@@ -37,6 +37,14 @@ const getReplacementBlocks = (content) => {
   return [];
 };
 
+const buildReusableSectionReferenceBlock = ({ slug, title }) => ({
+  type: 'ReusableSection',
+  props: {
+    sectionSlug: slug,
+    title: title || 'Reusable Section',
+  },
+});
+
 const tokenizeUsagePath = (usagePath) => {
   return usagePath
     .replace(/^root\.?/, '')
@@ -77,6 +85,34 @@ export const detachReusableSectionAtPath = (content, usagePath, replacementConte
   }
 
   parent[lastToken] = replacementContent;
+  return cloned;
+};
+
+export const relinkReusableSectionAtPath = (content, usagePath, referenceBlock) => {
+  const cloned = structuredClone(content);
+  const tokens = tokenizeUsagePath(usagePath);
+
+  if (tokens.length === 0) {
+    return cloned;
+  }
+
+  let parent = cloned;
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const token = tokens[index];
+    if (parent == null) {
+      return cloned;
+    }
+    parent = parent[token];
+  }
+
+  const lastToken = tokens[tokens.length - 1];
+
+  if (Array.isArray(parent) && typeof lastToken === 'number') {
+    parent.splice(lastToken, 1, referenceBlock);
+    return cloned;
+  }
+
+  parent[lastToken] = referenceBlock;
   return cloned;
 };
 
@@ -187,6 +223,73 @@ export const detachReusableSectionUsage = async ({ usage }) => {
     locale: source.locale,
     content: nextContent,
   });
+
+  const detachedSnapshot = Array.isArray(replacementContent?.content)
+    ? replacementContent.content
+    : replacementContent;
+
+  const { error: eventError } = await supabase
+    .from('reusable_section_detach_events')
+    .insert({
+      tenant_id: source.tenantId,
+      reusable_section_id: usage.reusable_section_id,
+      source_type: usage.source_type,
+      source_id: usage.source_id,
+      source_label: source.sourceLabel,
+      locale: source.locale,
+      usage_path: usage.usage_path,
+      detached_snapshot: detachedSnapshot || {},
+      status: 'pending',
+      detached_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      deleted_at: null,
+    });
+
+  if (eventError) throw eventError;
+
+  return nextContent;
+};
+
+export const relinkReusableSectionDetachEvent = async ({ detachEvent }) => {
+  const source = await loadSourceContent({ usage: detachEvent });
+
+  const { data: section, error: sectionError } = await supabase
+    .from('reusable_sections')
+    .select('id, slug, name')
+    .eq('id', detachEvent.reusable_section_id)
+    .is('deleted_at', null)
+    .single();
+
+  if (sectionError) throw sectionError;
+
+  const nextContent = relinkReusableSectionAtPath(
+    source.content,
+    detachEvent.usage_path,
+    buildReusableSectionReferenceBlock({ slug: section.slug, title: section.name }),
+  );
+
+  const { error: saveError } = await source.save(nextContent);
+  if (saveError) throw saveError;
+
+  await syncReusableSectionUsages({
+    tenantId: source.tenantId,
+    sourceType: detachEvent.source_type,
+    sourceId: detachEvent.source_id,
+    sourceLabel: source.sourceLabel,
+    locale: source.locale,
+    content: nextContent,
+  });
+
+  const { error: updateError } = await supabase
+    .from('reusable_section_detach_events')
+    .update({
+      status: 'relinked',
+      relinked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', detachEvent.id);
+
+  if (updateError) throw updateError;
 
   return nextContent;
 };

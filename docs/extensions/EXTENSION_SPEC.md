@@ -541,7 +541,44 @@ Sequential processing is intentional in this phase so multiple usages within the
 
 Sections with active tracked references now expose a `Detach All` action.
 
-This phase still does not add relink-to-source or update-all-linked-references workflows.
+This phase still does not add update-all-linked-references workflows.
+
+## Phase 14 Relink To Source
+
+Phase 14 adds the first relink-to-source workflow for detached reusable section instances.
+
+### Detach Event Table
+
+| Table | Scope | Purpose |
+| --- | --- | --- |
+| `reusable_section_detach_events` | Tenant | Tracks detached instances that can be relinked back to a reusable section source. |
+
+### Relink Behavior
+
+When a usage is detached, AWCMS now records a pending detach event containing:
+
+- source type
+- source id
+- source label
+- locale
+- usage path
+- detached snapshot
+
+When a relink is triggered, AWCMS now:
+
+1. Loads the current source content.
+2. Replaces the inline detached content at the tracked path with a `ReusableSection` block.
+3. Saves the updated source.
+4. Re-syncs usage tracking.
+5. Marks the detach event as `relinked`.
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+Reusable sections now show pending detached instances and expose a per-instance `Relink` action.
+
+This phase still does not add update-all-linked-references workflows.
 
 ## Phase 5 Sandbox Readiness Metadata
 

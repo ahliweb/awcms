@@ -20,6 +20,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Templates: added Phase 11 reusable-section usage tracking with mirrored `reusable_section_usages` schema, saved-content reference syncing during visual content saves, manager-side usage counts/source visibility, and focused usage extraction coverage.
 - Templates: added Phase 12 per-usage detach workflows for reusable sections, allowing tracked page/template/template-part/content-translation references to be converted into inline saved content with focused detach helper and manager interaction test coverage.
 - Templates: added Phase 13 bulk detach workflows for reusable sections so all currently tracked usages of a section can be converted into inline content in one pass, with focused manager-side action coverage.
+- Templates: added Phase 14 relink-to-source workflows for detached reusable section instances with mirrored `reusable_section_detach_events` schema, pending detach-event tracking, per-instance relink actions, and focused helper/manager coverage.
 
 ### Changed
 
@@ -33,6 +34,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Visual Builder / Templates: reusable sections now track their saved-content references and expose usage visibility in the manager so shared sections can be managed more deliberately.
 - Visual Builder / Templates: reusable section usages can now be detached from their source one instance at a time, converting the saved reference into inline content while preserving updated usage tracking.
 - Visual Builder / Templates: reusable sections now also support section-level bulk detach, processing tracked usages sequentially to keep multi-reference saves deterministic.
+- Visual Builder / Templates: detached reusable section instances can now be relinked back to their source through tracked detach events and per-instance relink actions.
 
 ## [v4.5.2] - 2026-04-04
 

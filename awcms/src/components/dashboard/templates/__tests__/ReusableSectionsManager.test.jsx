@@ -37,6 +37,7 @@ describe('ReusableSectionsManager', () => {
   const materializeSection = vi.fn();
   const detachUsage = vi.fn();
   const detachAllUsages = vi.fn();
+  const relinkDetachEvent = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,12 +64,18 @@ describe('ReusableSectionsManager', () => {
           { id: 'usage-2', source_type: 'template', source_label: 'Landing Template', locale: 'en' },
         ],
       },
+      detachEventsBySection: {
+        'section-1': [
+          { id: 'detach-1', source_type: 'page', source_label: 'Homepage', locale: null },
+        ],
+      },
       loading: false,
       saveSection,
       deleteSection,
       materializeSection,
       detachUsage,
       detachAllUsages,
+      relinkDetachEvent,
     });
   });
 
@@ -77,7 +84,7 @@ describe('ReusableSectionsManager', () => {
 
     expect(screen.getByText('Hero Section')).toBeInTheDocument();
     expect(screen.getByText('2 reference(s)')).toBeInTheDocument();
-    expect(screen.getByText('page: Homepage')).toBeInTheDocument();
+    expect(screen.getAllByText('page: Homepage').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: /materialize/i }));
 
     await waitFor(() => {
@@ -94,6 +101,12 @@ describe('ReusableSectionsManager', () => {
 
     await waitFor(() => {
       expect(detachAllUsages).toHaveBeenCalledWith({ sectionId: 'section-1' });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /relink/i }));
+
+    await waitFor(() => {
+      expect(relinkDetachEvent).toHaveBeenCalledWith(expect.objectContaining({ id: 'detach-1' }));
     });
   });
 

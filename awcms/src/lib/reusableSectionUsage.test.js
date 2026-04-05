@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detachReusableSectionAtPath, extractReusableSectionReferences } from './reusableSectionUsage';
+import { detachReusableSectionAtPath, extractReusableSectionReferences, relinkReusableSectionAtPath } from './reusableSectionUsage';
 
 describe('extractReusableSectionReferences', () => {
   it('finds reusable section blocks in nested puck content', () => {
@@ -56,6 +56,33 @@ describe('extractReusableSectionReferences', () => {
       content: [
         { type: 'Text', props: { text: 'Before' } },
         { type: 'Hero', props: { title: 'Hello' } },
+        { type: 'Button', props: { label: 'Go' } },
+        { type: 'Text', props: { text: 'After' } },
+      ],
+      root: { props: {} },
+    });
+  });
+
+  it('relinks inline content back to a reusable section block', () => {
+    const content = {
+      content: [
+        { type: 'Text', props: { text: 'Before' } },
+        { type: 'Hero', props: { title: 'Hello' } },
+        { type: 'Button', props: { label: 'Go' } },
+        { type: 'Text', props: { text: 'After' } },
+      ],
+      root: { props: {} },
+    };
+
+    const referenceBlock = {
+      type: 'ReusableSection',
+      props: { sectionSlug: 'hero-shared', title: 'Hero Shared' },
+    };
+
+    expect(relinkReusableSectionAtPath(content, 'root.content[1]', referenceBlock)).toEqual({
+      content: [
+        { type: 'Text', props: { text: 'Before' } },
+        { type: 'ReusableSection', props: { sectionSlug: 'hero-shared', title: 'Hero Shared' } },
         { type: 'Button', props: { label: 'Go' } },
         { type: 'Text', props: { text: 'After' } },
       ],

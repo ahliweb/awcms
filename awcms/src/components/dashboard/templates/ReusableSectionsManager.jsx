@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Blocks, CopyPlus, Sparkles, Trash2, Unlink2, Wand2 } from 'lucide-react';
+import { Blocks, CopyPlus, GitMerge, Sparkles, Trash2, Unlink2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,7 +15,7 @@ const DEFAULT_SECTION_CONTENT = {
 function ReusableSectionsManager() {
   const { currentTenant } = useTenant();
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
-  const { sections, usagesBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages } = useReusableSections();
+  const { sections, usagesBySection, detachEventsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent } = useReusableSections();
   const [draft, setDraft] = useState({
     name: '',
     slug: '',
@@ -62,6 +62,7 @@ function ReusableSectionsManager() {
 
           {sections.map((section) => {
             const usages = usagesBySection[section.id] || [];
+            const detachEvents = detachEventsBySection[section.id] || [];
 
             return (
             <div key={section.id} className="rounded-2xl border border-border/60 bg-card/75 p-4 shadow-sm">
@@ -91,6 +92,26 @@ function ReusableSectionsManager() {
                           </li>
                         ))}
                         {usages.length > 4 ? <li>+ {usages.length - 4} more</li> : null}
+                      </ul>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Detached Instances</p>
+                    <p className="mt-1 text-xs text-foreground">{detachEvents.length} pending relink(s)</p>
+                    {detachEvents.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        {detachEvents.slice(0, 4).map((event) => (
+                          <li key={event.id} className="flex items-center justify-between gap-3">
+                            <span>
+                              {event.source_type}: {event.source_label || event.source_id}
+                              {event.locale ? ` (${event.locale})` : ''}
+                            </span>
+                            <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => relinkDetachEvent(event)}>
+                              <GitMerge className="mr-1 h-3.5 w-3.5" /> Relink
+                            </Button>
+                          </li>
+                        ))}
+                        {detachEvents.length > 4 ? <li>+ {detachEvents.length - 4} more</li> : null}
                       </ul>
                     ) : null}
                   </div>
