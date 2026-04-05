@@ -25,6 +25,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Templates: added Phase 16 reusable-section revision history with mirrored `reusable_section_revisions` schema, save-time revision snapshots, manager-side revision visibility, and focused revision-surface validation.
 - Templates: added Phase 17 reusable-section revision comparison with inline current-vs-revision diffing in the manager, a dedicated diff helper, and focused comparison test coverage.
 - Templates: added Phase 18 revision restore confirmation for reusable sections so restore actions now require explicit confirmation with revision number and timestamp context before mutating live section state.
+- Templates: added Phase 19 revision-to-revision comparison for reusable sections so the manager can compare one saved revision against another using the same inline field-level diff model, with focused diff helper and manager coverage.
 
 ### Changed
 
@@ -42,6 +43,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Visual Builder / Templates: still-linked reusable section instances can now be refreshed from the current source in bulk through the new `Update Linked` workflow without detaching them.
 - Visual Builder / Templates: reusable sections now record numbered revision snapshots on save and expose recent revision history in the manager as a foundation for future diff/restore workflows.
 - Visual Builder / Templates: reusable section revisions can now be compared against the current live section state directly in the manager before restore decisions are made.
+- Visual Builder / Templates: reusable section revision comparison now supports revision-vs-revision inspection in addition to current-vs-revision comparison.
 - Visual Builder / Templates: reusable section revision restores are now confirmation-gated in the manager to reduce accidental destructive restores.
 
 ## [v4.5.2] - 2026-04-04

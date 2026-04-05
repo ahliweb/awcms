@@ -16,7 +16,7 @@ import {
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useReusableSections } from '@/hooks/useReusableSections';
-import { compareReusableSectionRevision } from '@/lib/reusableSectionDiff';
+import { compareReusableSectionRevision, compareReusableSectionRevisions } from '@/lib/reusableSectionDiff';
 
 const DEFAULT_SECTION_CONTENT = {
   content: [],
@@ -80,8 +80,13 @@ function ReusableSectionsManager() {
             const activeCompareRevision = compareSelection?.sectionId === section.id
               ? revisions.find((revision) => revision.id === compareSelection.revisionId) || null
               : null;
+            const baseCompareRevision = compareSelection?.sectionId === section.id && compareSelection?.baseRevisionId
+              ? revisions.find((revision) => revision.id === compareSelection.baseRevisionId) || null
+              : null;
             const comparison = activeCompareRevision
-              ? compareReusableSectionRevision(section, activeCompareRevision.snapshot)
+              ? (baseCompareRevision
+                  ? compareReusableSectionRevisions(baseCompareRevision.snapshot, activeCompareRevision.snapshot)
+                  : compareReusableSectionRevision(section, activeCompareRevision.snapshot))
               : null;
 
             return (
@@ -153,7 +158,30 @@ function ReusableSectionsManager() {
                               Revision {revision.revision_number} • {new Date(revision.created_at).toLocaleString()}
                             </span>
                             <span className="flex items-center gap-1">
-                              <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => setCompareSelection((current) => current?.revisionId === revision.id && current?.sectionId === section.id ? null : { sectionId: section.id, revisionId: revision.id })}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 rounded-lg px-2 text-[11px]"
+                                onClick={() => setCompareSelection((current) => {
+                                  if (current?.sectionId !== section.id || !current) {
+                                    return { sectionId: section.id, revisionId: revision.id, baseRevisionId: null };
+                                  }
+
+                                  if (current.revisionId === revision.id && !current.baseRevisionId) {
+                                    return null;
+                                  }
+
+                                  if (!current.baseRevisionId && current.revisionId !== revision.id) {
+                                    return { sectionId: section.id, revisionId: revision.id, baseRevisionId: current.revisionId };
+                                  }
+
+                                  if (current.baseRevisionId === revision.id) {
+                                    return { sectionId: section.id, revisionId: current.revisionId, baseRevisionId: null };
+                                  }
+
+                                  return { sectionId: section.id, revisionId: revision.id, baseRevisionId: current.baseRevisionId };
+                                })}
+                              >
                                 <GitCompare className="mr-1 h-3.5 w-3.5" /> Compare
                               </Button>
                               <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => setRestoreConfirmation({ sectionId: section.id, revisionId: revision.id, revisionNumber: revision.revision_number, createdAt: revision.created_at, sectionName: section.name })}>
@@ -168,7 +196,9 @@ function ReusableSectionsManager() {
                   {comparison ? (
                     <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
                       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Compare with revision {activeCompareRevision?.revision_number}
+                        {baseCompareRevision
+                          ? `Compare revision ${baseCompareRevision?.revision_number} to revision ${activeCompareRevision?.revision_number}`
+                          : `Compare current state with revision ${activeCompareRevision?.revision_number}`}
                       </p>
                       <p className="mt-1 text-xs text-foreground">
                         {comparison.hasChanges ? `${comparison.changedFields.length} changed field(s)` : 'No differences detected'}

@@ -677,7 +677,35 @@ The initial comparison surface covers:
 
 Recent revisions now expose a `Compare` action and render the comparison inline in the reusable sections manager.
 
-This phase does not yet add visual block diffs, compare-two-revisions mode, or approval workflows around restore.
+This phase does not yet add visual block diffs or approval workflows around restore.
+
+## Phase 19 Revision-To-Revision Comparison
+
+Phase 19 extends revision comparison so reusable section history can be compared revision-to-revision, not only against the current live state.
+
+### Comparison Modes
+
+The reusable sections manager now supports two comparison modes:
+
+1. current state vs selected revision
+2. selected revision vs another selected revision
+
+### Comparison Behavior
+
+When comparing two revisions, AWCMS now:
+
+1. loads both saved revision snapshots
+2. compares the same field set used for current-vs-revision diffing
+3. reports changed and unchanged fields inline in the manager
+
+The current revision-to-revision comparison surface still uses the compact field-level diff model and does not yet provide visual block-by-block diffs.
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+- Diff helper: `awcms/src/lib/reusableSectionDiff.js`
+
+This phase does not yet add approval workflows or multi-user review around revision comparison.
 
 ## Phase 18 Revision Restore Confirmation
 

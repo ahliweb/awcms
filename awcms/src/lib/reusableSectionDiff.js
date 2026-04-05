@@ -51,3 +51,27 @@ export const compareReusableSectionRevision = (currentSection, revisionSnapshot)
     hasChanges: fields.some((field) => field.changed),
   };
 };
+
+export const compareReusableSectionRevisions = (leftSnapshot, rightSnapshot) => {
+  const left = leftSnapshot || {};
+  const right = rightSnapshot || {};
+
+  const fields = REVISION_FIELDS.map((field) => {
+    const leftValue = normalizeValue(left?.[field.key], field.json);
+    const rightValue = normalizeValue(right?.[field.key], field.json);
+
+    return {
+      key: field.key,
+      label: field.label,
+      currentValue: leftValue,
+      revisionValue: rightValue,
+      changed: leftValue !== rightValue,
+    };
+  });
+
+  return {
+    changedFields: fields.filter((field) => field.changed),
+    unchangedFields: fields.filter((field) => !field.changed),
+    hasChanges: fields.some((field) => field.changed),
+  };
+};

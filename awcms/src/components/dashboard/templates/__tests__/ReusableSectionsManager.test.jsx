@@ -149,7 +149,13 @@ describe('ReusableSectionsManager', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /compare/i })[0]);
 
     await waitFor(() => {
-      expect(screen.getByText(/Compare with revision 2/)).toBeInTheDocument();
+      expect(screen.getByText(/Compare current state with revision 2/)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /compare/i })[1]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Compare revision 2 to revision 1/)).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getAllByRole('button', { name: /restore/i })[0]);
