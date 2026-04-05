@@ -4,6 +4,8 @@ import { execa } from "execa";
 import { env } from "../lib/config.js";
 
 const dbUrl = env.SUPABASE_DB_URL;
+const edgeBaseUrl = env.VITE_LOCAL_EDGE_URL || env.VITE_EDGE_URL || env.PUBLIC_EDGE_URL;
+const operatorBearerToken = env.AWCMS_OPERATOR_BEARER_TOKEN;
 
 async function runSql(query: string) {
   if (!dbUrl) {
@@ -23,6 +25,45 @@ async function runSql(query: string) {
     return {
       output: all ?? stdout ?? stderr,
       isError: false,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      output: errorMessage,
+      isError: true,
+    };
+  }
+}
+
+async function callEdgeRoute(path: string, body: Record<string, unknown>) {
+  if (!edgeBaseUrl) {
+    return {
+      output: "VITE_LOCAL_EDGE_URL, VITE_EDGE_URL, or PUBLIC_EDGE_URL is required to call AWCMS Worker routes.",
+      isError: true,
+    };
+  }
+
+  if (!operatorBearerToken) {
+    return {
+      output: "AWCMS_OPERATOR_BEARER_TOKEN is required for write-capable site composition tools.",
+      isError: true,
+    };
+  }
+
+  try {
+    const response = await fetch(`${edgeBaseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${operatorBearerToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    return {
+      output: text,
+      isError: !response.ok,
     };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -88,6 +129,40 @@ export function registerSiteCompositionTools(server: McpServer) {
       WHERE deleted_at IS NULL AND ${whereClause}
       ORDER BY updated_at DESC;
     `);
+
+    return {
+      content: [{ type: "text", text: result.output }],
+      isError: result.isError,
+    };
+  });
+
+  server.tool("awcms_apply_site_blueprint", {
+    blueprint_id: z.string().trim().min(1).describe("Blueprint UUID to apply."),
+    tenant_id: z.string().trim().min(1).describe("Tenant UUID to apply the blueprint to."),
+  }, async ({ blueprint_id, tenant_id }) => {
+    const result = await callEdgeRoute("/functions/v1/site-blueprints", {
+      action: "apply",
+      blueprintId: blueprint_id,
+      tenantId: tenant_id,
+    });
+
+    return {
+      content: [{ type: "text", text: result.output }],
+      isError: result.isError,
+    };
+  });
+
+  server.tool("awcms_materialize_reusable_section", {
+    section_id: z.string().trim().min(1).describe("Reusable section UUID to materialize."),
+    tenant_id: z.string().trim().min(1).describe("Tenant UUID to receive the materialized template part."),
+    part_type: z.enum(["header", "footer", "sidebar", "widget_area"]).default("widget_area").describe("Template part type to create."),
+  }, async ({ section_id, tenant_id, part_type }) => {
+    const result = await callEdgeRoute("/functions/v1/reusable-sections", {
+      action: "materialize",
+      sectionId: section_id,
+      tenantId: tenant_id,
+      partType: part_type,
+    });
 
     return {
       content: [{ type: "text", text: result.output }],

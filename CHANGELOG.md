@@ -16,6 +16,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Public Portal: added Phase 7 reusable-section runtime lookup with a new `ReusableSection` visual block, tenant-aware public slug resolution, referenced `template_part` fallback support, recursion guarding, and focused public utility test coverage.
 - Visual Builder: added Phase 8 reusable-section picker support through a dedicated custom Puck field that loads active reusable sections and replaces manual slug entry in the `ReusableSection` block configuration, with focused field test coverage.
 - Visual Builder: added Phase 9 reusable-section preview support so selected reusable sections now show a compact resolved-content summary in the builder, including block count, leading block types, and source mode, with focused block-level preview test coverage.
+- Tooling: added Phase 10 write-capable MCP operator actions for applying site blueprints and materializing reusable sections through the existing Worker routes using a platform admin bearer token and configured edge URL.
 
 ### Changed
 

@@ -75,8 +75,17 @@ Current local MCP composition tools:
 - `awcms_list_site_blueprints`
 - `awcms_get_tenant_blueprint_state`
 - `awcms_list_reusable_sections`
+- `awcms_apply_site_blueprint`
+- `awcms_materialize_reusable_section`
 
 These tools are read-only and are intended to support AI/operator diagnostics and planning around the Phase 2 and Phase 3 composition flows.
+
+For write-capable composition actions, use the Worker-backed MCP tools rather than direct SQL:
+
+- `awcms_apply_site_blueprint`
+- `awcms_materialize_reusable_section`
+
+These require `AWCMS_OPERATOR_BEARER_TOKEN` plus a configured edge base URL.
 
 For extension sandbox planning, rely on manifest diagnostics and documented metadata rather than inventing new execution paths. Phase 5 currently supports metadata-only sandbox profiling, not live sandbox execution.
 

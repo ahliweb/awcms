@@ -42,6 +42,7 @@ npm run dev
 
 - Configure Supabase and Context7 keys in your local env files before starting tools that require external APIs.
 - Set `SUPABASE_DB_URL` when using the site composition MCP tools so the server can query local blueprint and reusable-section state.
+- Set `AWCMS_OPERATOR_BEARER_TOKEN` plus `VITE_LOCAL_EDGE_URL` or `VITE_EDGE_URL` when using write-capable site composition tools that call the Worker routes.
 - `mcp.json` is the repository source of truth for the active MCP server topology used by OpenCode.
 - Keep secret values out of Git-tracked files.
 
@@ -54,6 +55,13 @@ The Phase 4 operator surface currently exposes read-only MCP tools for the new t
 - `awcms_list_reusable_sections`
 
 These tools are intended for AI/operator workflows and diagnostics, not end-user editing.
+
+Write-capable operator tools:
+
+- `awcms_apply_site_blueprint`
+- `awcms_materialize_reusable_section`
+
+These tools call the existing Worker routes and require a valid platform admin bearer token.
 
 ## References
 
