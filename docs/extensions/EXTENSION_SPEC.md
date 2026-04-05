@@ -798,6 +798,36 @@ This keeps section-local approval context visible after a request is approved or
 
 This phase improves section-local approval observability only. It does not yet add a centralized cross-section approval queue or richer reviewer dashboards.
 
+## Phase 23 Centralized Approval Queue
+
+Phase 23 extends reusable section action request governance with a centralized approval queue/history view for approvers.
+
+### Queue Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionActionRequestsManager.jsx`
+- Templates workspace tab: `Section Approvals`
+
+The centralized queue now provides:
+
+1. pending requests across all reusable sections
+2. historical approved/rejected/completed requests across all reusable sections
+3. section-aware context for each request
+
+### Queue Behavior
+
+Approvers can now review reusable section bulk action requests from one place rather than navigating section-by-section.
+
+The queue currently shows:
+
+- action type
+- request status
+- section name
+- requested timestamp
+- reviewed timestamp
+- completed timestamp when available
+
+This phase still does not add richer reviewer attribution, filtering by reviewer, or a multi-stage approval pipeline.
+
 ## Phase 18 Revision Restore Confirmation
 
 Phase 18 adds a confirmation step and basic restore guardrails to the reusable section revision workflow.

@@ -4,12 +4,14 @@ import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/
 import TemplatesList from './templates/TemplatesList';
 import TemplatePartsList from './templates/TemplatePartsList';
 import ReusableSectionsManager from './templates/ReusableSectionsManager';
+import ReusableSectionActionRequestsManager from './templates/ReusableSectionActionRequestsManager';
 import TemplateAssignments from './templates/TemplateAssignments';
 import TemplateLanguageManager from './templates/TemplateLanguageManager';
 import SiteBlueprintsManager from './templates/SiteBlueprintsManager';
-import { Layout, Puzzle, Link2, Languages, Sparkles, Blocks, Globe, Lock, LibraryBig } from 'lucide-react';
+import { Layout, Puzzle, Link2, Languages, Sparkles, Blocks, Globe, Lock, LibraryBig, ClipboardList } from 'lucide-react';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { cn } from '@/lib/utils';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 /**
  * TemplatesManager - Manages admin templates and configurations.
@@ -18,8 +20,10 @@ import { cn } from '@/lib/utils';
  */
 const TemplatesManager = () => {
     const navigate = useNavigate();
+    const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
     const segments = useSplatSegments();
-    const tabValues = ['pages', 'parts', 'sections', 'assignments', 'languages', 'blueprints'];
+    const canViewApprovals = isPlatformAdmin || isFullAccess || hasPermission('platform.approvals.read') || hasPermission('platform.template.manage');
+    const tabValues = ['pages', 'parts', 'sections', 'assignments', 'languages', 'blueprints', ...(canViewApprovals ? ['section-approvals'] : [])];
     const hasTabSegment = tabValues.includes(segments[0]);
     const activeTab = hasTabSegment ? segments[0] : 'pages';
     const hasExtraSegment = segments.length > 1;
@@ -32,6 +36,7 @@ const TemplatesManager = () => {
         { value: 'assignments', label: 'Assignments', icon: Link2, color: 'emerald' },
         { value: 'languages', label: 'Languages', icon: Languages, color: 'amber' },
         { value: 'blueprints', label: 'Site Blueprints', icon: LibraryBig, color: 'rose' },
+        ...(canViewApprovals ? [{ value: 'section-approvals', label: 'Section Approvals', icon: ClipboardList, color: 'cyan' }] : []),
     ];
 
     const tabThemes = {
@@ -59,6 +64,10 @@ const TemplatesManager = () => {
             shell: 'from-rose-500/12 via-background/40 to-primary/12',
             badge: 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300',
         },
+        'section-approvals': {
+            shell: 'from-cyan-500/12 via-background/40 to-primary/12',
+            badge: 'border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+        },
     };
 
     const tabInsights = {
@@ -85,6 +94,10 @@ const TemplatesManager = () => {
         blueprints: {
             title: 'Tenant-safe site bootstrap presets',
             detail: 'Apply shared or tenant-authored blueprint payloads for template assignments, public module defaults, and site settings.',
+        },
+        'section-approvals': {
+            title: 'Centralized reusable section approvals',
+            detail: 'Review pending and historical bulk reusable section action requests across all sections in one place.',
         },
     };
 
@@ -232,6 +245,12 @@ const TemplatesManager = () => {
                         <TabsContent value="blueprints" className="mt-0">
                             <SiteBlueprintsManager />
                         </TabsContent>
+
+                        {canViewApprovals ? (
+                          <TabsContent value="section-approvals" className="mt-0">
+                            <ReusableSectionActionRequestsManager />
+                          </TabsContent>
+                        ) : null}
                     </PageTabs>
                 </div>
             </div>
