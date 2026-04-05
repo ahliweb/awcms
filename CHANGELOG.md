@@ -18,6 +18,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Visual Builder: added Phase 9 reusable-section preview support so selected reusable sections now show a compact resolved-content summary in the builder, including block count, leading block types, and source mode, with focused block-level preview test coverage.
 - Tooling: added Phase 10 write-capable MCP operator actions for applying site blueprints and materializing reusable sections through the existing Worker routes using a platform admin bearer token and configured edge URL.
 - Templates: added Phase 11 reusable-section usage tracking with mirrored `reusable_section_usages` schema, saved-content reference syncing during visual content saves, manager-side usage counts/source visibility, and focused usage extraction coverage.
+- Templates: added Phase 12 per-usage detach workflows for reusable sections, allowing tracked page/template/template-part/content-translation references to be converted into inline saved content with focused detach helper and manager interaction test coverage.
 
 ### Changed
 
@@ -29,6 +30,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Visual Builder: replaced manual reusable-section slug entry with a picker-backed custom field while preserving the same slug-based public/runtime contract.
 - Visual Builder: upgraded reusable-section authoring again by resolving selected sections into a summary preview inside the editor while intentionally avoiding nested live rendering.
 - Visual Builder / Templates: reusable sections now track their saved-content references and expose usage visibility in the manager so shared sections can be managed more deliberately.
+- Visual Builder / Templates: reusable section usages can now be detached from their source one instance at a time, converting the saved reference into inline content while preserving updated usage tracking.
 
 ## [v4.5.2] - 2026-04-04
 

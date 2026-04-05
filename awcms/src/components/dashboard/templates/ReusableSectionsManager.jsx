@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Blocks, CopyPlus, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { Blocks, CopyPlus, Sparkles, Trash2, Unlink2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,7 +15,7 @@ const DEFAULT_SECTION_CONTENT = {
 function ReusableSectionsManager() {
   const { currentTenant } = useTenant();
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
-  const { sections, usagesBySection, loading, saveSection, deleteSection, materializeSection } = useReusableSections();
+  const { sections, usagesBySection, loading, saveSection, deleteSection, materializeSection, detachUsage } = useReusableSections();
   const [draft, setDraft] = useState({
     name: '',
     slug: '',
@@ -80,9 +80,14 @@ function ReusableSectionsManager() {
                     {usages.length > 0 ? (
                       <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                         {usages.slice(0, 4).map((usage) => (
-                          <li key={usage.id}>
-                            {usage.source_type}: {usage.source_label || usage.source_id}
-                            {usage.locale ? ` (${usage.locale})` : ''}
+                          <li key={usage.id} className="flex items-center justify-between gap-3">
+                            <span>
+                              {usage.source_type}: {usage.source_label || usage.source_id}
+                              {usage.locale ? ` (${usage.locale})` : ''}
+                            </span>
+                            <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => detachUsage(usage)}>
+                              <Unlink2 className="mr-1 h-3.5 w-3.5" /> Detach
+                            </Button>
                           </li>
                         ))}
                         {usages.length > 4 ? <li>+ {usages.length - 4} more</li> : null}

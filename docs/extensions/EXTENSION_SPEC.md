@@ -489,7 +489,36 @@ The reusable sections manager now shows:
 - first linked sources
 - source type and locale when available
 
-This phase provides visibility and tracking only. It does not yet add bulk update, detach-from-source, or sync-back workflows.
+This phase provides visibility and tracking only. It does not yet add bulk update or sync-back workflows.
+
+## Phase 12 Detach from Source
+
+Phase 12 adds the first source-aware workflow for reusable section instances: detaching a tracked usage from its source by inlining the currently resolved reusable section content into the saved page/template data.
+
+### Detach Behavior
+
+For a tracked usage, AWCMS now:
+
+1. Loads the referenced reusable section content.
+2. Resolves direct `visual` content or referenced `template_part` content.
+3. Replaces the single `ReusableSection` block at the tracked `usage_path`.
+4. Saves the updated source content.
+5. Re-syncs reusable section usages for that source.
+
+### Supported Source Types
+
+- `page`
+- `template`
+- `template_part`
+- `content_translation`
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+Each tracked usage now exposes a per-usage `Detach` action.
+
+This phase is intentionally per-instance only. It does not yet add bulk detach, relink-to-source, or update-all-references workflows.
 
 ## Phase 5 Sandbox Readiness Metadata
 

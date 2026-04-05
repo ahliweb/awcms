@@ -3,6 +3,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useTenant } from '@/contexts/TenantContext';
 import { useToast } from '@/components/ui/use-toast';
 import { materializeReusableSection } from '@/lib/reusableSectionsApi';
+import { detachReusableSectionUsage } from '@/lib/reusableSectionUsage';
 
 export function useReusableSections() {
   const { currentTenant } = useTenant();
@@ -83,6 +84,12 @@ export function useReusableSections() {
     return result;
   }, [currentTenant?.id, toast]);
 
+  const detachUsage = useCallback(async (usage) => {
+    await detachReusableSectionUsage({ usage });
+    toast({ title: 'Detached', description: 'Reusable section usage was converted into inline content.' });
+    await fetchSections();
+  }, [fetchSections, toast]);
+
   return {
     sections,
     usagesBySection,
@@ -91,5 +98,6 @@ export function useReusableSections() {
     saveSection,
     deleteSection,
     materializeSection,
+    detachUsage,
   };
 }

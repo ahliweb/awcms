@@ -30,6 +30,167 @@ export const extractReusableSectionReferences = (content, path = 'root') => {
   return references;
 };
 
+const getReplacementBlocks = (content) => {
+  if (Array.isArray(content?.content)) return content.content;
+  if (Array.isArray(content?.root?.children)) return content.root.children;
+  if (Array.isArray(content?.zones?.content)) return content.zones.content;
+  return [];
+};
+
+const tokenizeUsagePath = (usagePath) => {
+  return usagePath
+    .replace(/^root\.?/, '')
+    .split('.')
+    .flatMap((segment) => {
+      const tokens = [];
+      const property = segment.match(/^([^[.]+)/)?.[1];
+      if (property) tokens.push(property);
+      const indexes = [...segment.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1]));
+      return [...tokens, ...indexes];
+    })
+    .filter((token) => token !== '');
+};
+
+export const detachReusableSectionAtPath = (content, usagePath, replacementContent) => {
+  const cloned = structuredClone(content);
+  const tokens = tokenizeUsagePath(usagePath);
+
+  if (tokens.length === 0) {
+    return cloned;
+  }
+
+  let parent = cloned;
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const token = tokens[index];
+    if (parent == null) {
+      return cloned;
+    }
+    parent = parent[token];
+  }
+
+  const lastToken = tokens[tokens.length - 1];
+  const replacementBlocks = getReplacementBlocks(replacementContent);
+
+  if (Array.isArray(parent) && typeof lastToken === 'number') {
+    parent.splice(lastToken, 1, ...(replacementBlocks.length > 0 ? replacementBlocks : []));
+    return cloned;
+  }
+
+  parent[lastToken] = replacementContent;
+  return cloned;
+};
+
+const resolveReusableSectionContent = async ({ reusableSectionId }) => {
+  const { data: section, error } = await supabase
+    .from('reusable_sections')
+    .select('id, section_mode, content, template_part_id')
+    .eq('id', reusableSectionId)
+    .is('deleted_at', null)
+    .single();
+
+  if (error) throw error;
+
+  if (section.section_mode === 'template_part_reference' && section.template_part_id) {
+    const { data: part, error: partError } = await supabase
+      .from('template_parts')
+      .select('content')
+      .eq('id', section.template_part_id)
+      .single();
+
+    if (partError) throw partError;
+    return part?.content || { content: [], root: { props: {} } };
+  }
+
+  return section.content || { content: [], root: { props: {} } };
+};
+
+const loadSourceContent = async ({ usage }) => {
+  if (usage.source_type === 'template') {
+    const { data, error } = await supabase.from('templates').select('data, tenant_id, name, slug').eq('id', usage.source_id).single();
+    if (error) throw error;
+    return {
+      tenantId: data.tenant_id,
+      content: data.data,
+      save: async (nextContent) => supabase.from('templates').update({ data: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id),
+      sourceLabel: data.name || data.slug || usage.source_label || 'Template',
+      locale: usage.locale || null,
+    };
+  }
+
+  if (usage.source_type === 'template_part') {
+    const { data, error } = await supabase.from('template_parts').select('content, tenant_id, name, slug').eq('id', usage.source_id).single();
+    if (error) throw error;
+    return {
+      tenantId: data.tenant_id,
+      content: data.content,
+      save: async (nextContent) => supabase.from('template_parts').update({ content: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id),
+      sourceLabel: data.name || data.slug || usage.source_label || 'Template Part',
+      locale: usage.locale || null,
+    };
+  }
+
+  if (usage.source_type === 'page') {
+    const { data, error } = await supabase.from('pages').select('content_draft, tenant_id, title, slug').eq('id', usage.source_id).single();
+    if (error) throw error;
+    return {
+      tenantId: data.tenant_id,
+      content: data.content_draft,
+      save: async (nextContent) => supabase.from('pages').update({ content_draft: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id),
+      sourceLabel: data.title || data.slug || usage.source_label || 'Page',
+      locale: null,
+    };
+  }
+
+  if (usage.source_type === 'content_translation') {
+    const { data, error } = await supabase
+      .from('content_translations')
+      .select('content, tenant_id, title, slug, locale')
+      .eq('content_id', usage.source_id)
+      .eq('locale', usage.locale)
+      .eq('content_type', 'page')
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const parsedContent = typeof data?.content === 'string' ? JSON.parse(data.content) : data?.content;
+
+    return {
+      tenantId: data?.tenant_id,
+      content: parsedContent,
+      save: async (nextContent) => supabase
+        .from('content_translations')
+        .update({ content: JSON.stringify(nextContent), updated_at: new Date().toISOString() })
+        .eq('content_id', usage.source_id)
+        .eq('locale', usage.locale)
+        .eq('content_type', 'page'),
+      sourceLabel: data?.title || data?.slug || usage.source_label || 'Content Translation',
+      locale: data?.locale || usage.locale || null,
+    };
+  }
+
+  throw new Error(`Unsupported usage source type: ${usage.source_type}`);
+};
+
+export const detachReusableSectionUsage = async ({ usage }) => {
+  const replacementContent = await resolveReusableSectionContent({ reusableSectionId: usage.reusable_section_id });
+  const source = await loadSourceContent({ usage });
+  const nextContent = detachReusableSectionAtPath(source.content, usage.usage_path, replacementContent);
+
+  const { error: saveError } = await source.save(nextContent);
+  if (saveError) throw saveError;
+
+  await syncReusableSectionUsages({
+    tenantId: source.tenantId,
+    sourceType: usage.source_type,
+    sourceId: usage.source_id,
+    sourceLabel: source.sourceLabel,
+    locale: source.locale,
+    content: nextContent,
+  });
+
+  return nextContent;
+};
+
 export const syncReusableSectionUsages = async ({
   tenantId,
   sourceType,
