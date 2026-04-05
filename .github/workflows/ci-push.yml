@@ -773,9 +773,9 @@ jobs:
       - name: Resolve smandapbun public env from env or secrets
         id: smandapbun-env
         env:
-          SECRET_PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] || vars['SMANDAPBUN_SUPABASE_URL'] || vars['PUBLIC_SUPABASE_URL'] || vars['VITE_SUPABASE_URL'] }}
-          SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] || vars['SMANDAPBUN_SUPABASE_KEY'] || vars['PUBLIC_SUPABASE_PUBLISHABLE_KEY'] || vars['VITE_SUPABASE_PUBLISHABLE_KEY'] || vars['VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY'] }}
-          SECRET_PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] || vars['SMANDAPBUN_TENANT_ID'] || vars['PUBLIC_TENANT_ID'] || vars['VITE_PUBLIC_TENANT_ID'] || vars['VITE_TENANT_ID'] }}
+          SECRET_PUBLIC_SUPABASE_URL: ${{ secrets['SMANDAPBUN_SUPABASE_URL'] || vars['SMANDAPBUN_SUPABASE_URL'] || secrets['PUBLIC_SUPABASE_URL'] || vars['PUBLIC_SUPABASE_URL'] || secrets['VITE_SUPABASE_URL'] || vars['VITE_SUPABASE_URL'] }}
+          SECRET_PUBLIC_SUPABASE_KEY: ${{ secrets['SMANDAPBUN_SUPABASE_KEY'] || vars['SMANDAPBUN_SUPABASE_KEY'] || secrets['PUBLIC_SUPABASE_PUBLISHABLE_KEY'] || vars['PUBLIC_SUPABASE_PUBLISHABLE_KEY'] || secrets['VITE_SUPABASE_PUBLISHABLE_KEY'] || vars['VITE_SUPABASE_PUBLISHABLE_KEY'] || secrets['VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY'] || vars['VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY'] }}
+          SECRET_PUBLIC_TENANT_ID: ${{ secrets['SMANDAPBUN_TENANT_ID'] || vars['SMANDAPBUN_TENANT_ID'] || secrets['PUBLIC_TENANT_ID'] || vars['PUBLIC_TENANT_ID'] || secrets['VITE_PUBLIC_TENANT_ID'] || vars['VITE_PUBLIC_TENANT_ID'] || secrets['VITE_TENANT_ID'] || vars['VITE_TENANT_ID'] }}
         run: node ../../scripts/resolve_smandapbun_public_env.mjs
 
       - name: Show smandapbun public env source
