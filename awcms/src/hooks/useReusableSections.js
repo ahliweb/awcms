@@ -3,7 +3,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useTenant } from '@/contexts/TenantContext';
 import { useToast } from '@/components/ui/use-toast';
 import { materializeReusableSection } from '@/lib/reusableSectionsApi';
-import { detachReusableSectionUsage, relinkReusableSectionDetachEvent } from '@/lib/reusableSectionUsage';
+import { detachReusableSectionUsage, relinkReusableSectionDetachEvent, updateAllLinkedReusableSectionReferences } from '@/lib/reusableSectionUsage';
 
 export function useReusableSections() {
   const { currentTenant } = useTenant();
@@ -137,6 +137,21 @@ export function useReusableSections() {
     await fetchSections();
   }, [detachEventsBySection, fetchSections, toast]);
 
+  const updateAllLinkedReferences = useCallback(async ({ sectionId }) => {
+    const usages = usagesBySection[sectionId] || [];
+    const updatedSources = await updateAllLinkedReusableSectionReferences({
+      reusableSectionId: sectionId,
+      usages,
+    });
+    toast({
+      title: 'Updated Linked References',
+      description: updatedSources > 0
+        ? `Updated ${updatedSources} source record(s) to the latest reusable section reference.`
+        : 'No linked references needed updating.',
+    });
+    await fetchSections();
+  }, [fetchSections, toast, usagesBySection]);
+
   return {
     sections,
     usagesBySection,
@@ -150,5 +165,6 @@ export function useReusableSections() {
     detachAllUsages,
     relinkDetachEvent,
     relinkAllDetachEvents,
+    updateAllLinkedReferences,
   };
 }

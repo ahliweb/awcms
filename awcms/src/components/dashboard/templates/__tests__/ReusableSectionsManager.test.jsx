@@ -39,6 +39,7 @@ describe('ReusableSectionsManager', () => {
   const detachAllUsages = vi.fn();
   const relinkDetachEvent = vi.fn();
   const relinkAllDetachEvents = vi.fn();
+  const updateAllLinkedReferences = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -78,6 +79,7 @@ describe('ReusableSectionsManager', () => {
       detachAllUsages,
       relinkDetachEvent,
       relinkAllDetachEvents,
+      updateAllLinkedReferences,
     });
   });
 
@@ -115,6 +117,12 @@ describe('ReusableSectionsManager', () => {
 
     await waitFor(() => {
       expect(relinkAllDetachEvents).toHaveBeenCalledWith({ sectionId: 'section-1' });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /update linked/i }));
+
+    await waitFor(() => {
+      expect(updateAllLinkedReferences).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
   });
 

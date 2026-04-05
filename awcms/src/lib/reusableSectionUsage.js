@@ -294,6 +294,63 @@ export const relinkReusableSectionDetachEvent = async ({ detachEvent }) => {
   return nextContent;
 };
 
+export const updateAllLinkedReusableSectionReferences = async ({ reusableSectionId, usages = [] }) => {
+  if (!reusableSectionId || !Array.isArray(usages) || usages.length === 0) {
+    return 0;
+  }
+
+  const { data: section, error: sectionError } = await supabase
+    .from('reusable_sections')
+    .select('id, slug, name')
+    .eq('id', reusableSectionId)
+    .is('deleted_at', null)
+    .single();
+
+  if (sectionError) throw sectionError;
+
+  const referenceBlock = buildReusableSectionReferenceBlock({
+    slug: section.slug,
+    title: section.name,
+  });
+
+  const usagesBySource = usages.reduce((accumulator, usage) => {
+    const key = `${usage.source_type}:${usage.source_id}:${usage.locale || ''}`;
+    if (!accumulator[key]) {
+      accumulator[key] = [];
+    }
+    accumulator[key].push(usage);
+    return accumulator;
+  }, {});
+
+  let updatedSources = 0;
+
+  for (const sourceUsages of Object.values(usagesBySource)) {
+    const source = await loadSourceContent({ usage: sourceUsages[0] });
+    let nextContent = structuredClone(source.content);
+
+    const sortedUsages = [...sourceUsages].sort((a, b) => String(b.usage_path).localeCompare(String(a.usage_path)));
+    for (const usage of sortedUsages) {
+      nextContent = relinkReusableSectionAtPath(nextContent, usage.usage_path, referenceBlock);
+    }
+
+    const { error: saveError } = await source.save(nextContent);
+    if (saveError) throw saveError;
+
+    await syncReusableSectionUsages({
+      tenantId: source.tenantId,
+      sourceType: sourceUsages[0].source_type,
+      sourceId: sourceUsages[0].source_id,
+      sourceLabel: source.sourceLabel,
+      locale: source.locale,
+      content: nextContent,
+    });
+
+    updatedSources += 1;
+  }
+
+  return updatedSources;
+};
+
 export const syncReusableSectionUsages = async ({
   tenantId,
   sourceType,

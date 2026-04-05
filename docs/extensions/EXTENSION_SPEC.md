@@ -580,6 +580,30 @@ Reusable sections now show pending detached instances and expose a per-instance 
 
 This phase still does not add update-all-linked-references workflows.
 
+## Phase 15 Update All Linked References
+
+Phase 15 adds a section-level workflow for refreshing all still-linked `ReusableSection` references from the current reusable section source without detaching them.
+
+### Update Behavior
+
+For a selected reusable section, AWCMS now:
+
+1. Loads all currently tracked linked usages.
+2. Groups usages by source record.
+3. Rewrites each tracked `ReusableSection` block at its saved `usage_path` using the current section slug/title.
+4. Saves the updated source record.
+5. Re-syncs usage tracking.
+
+This preserves linkage rather than converting the instance to inline content.
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+Sections with active tracked references now expose an `Update Linked` action.
+
+This phase does not yet add version-aware diff, review, or approval workflows for bulk propagation.
+
 ## Phase 5 Sandbox Readiness Metadata
 
 Phase 5 does not enable sandboxed extension execution. It adds sandbox-readiness metadata so extension manifests, diagnostics, and operator tooling can describe future isolation needs without changing the trusted runtime contract.

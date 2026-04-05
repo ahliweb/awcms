@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Blocks, CopyPlus, GitMerge, Sparkles, Trash2, Unlink2, Wand2 } from 'lucide-react';
+import { Blocks, CopyPlus, GitMerge, RefreshCcw, Sparkles, Trash2, Unlink2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,7 +15,7 @@ const DEFAULT_SECTION_CONTENT = {
 function ReusableSectionsManager() {
   const { currentTenant } = useTenant();
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
-  const { sections, usagesBySection, detachEventsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent, relinkAllDetachEvents } = useReusableSections();
+  const { sections, usagesBySection, detachEventsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent, relinkAllDetachEvents, updateAllLinkedReferences } = useReusableSections();
   const [draft, setDraft] = useState({
     name: '',
     slug: '',
@@ -131,6 +131,11 @@ function ReusableSectionsManager() {
                   {usages.length > 0 ? (
                     <Button size="sm" variant="outline" className="rounded-xl" onClick={() => detachAllUsages({ sectionId: section.id })}>
                       <Unlink2 className="mr-2 h-4 w-4" /> Detach All
+                    </Button>
+                  ) : null}
+                  {usages.length > 0 ? (
+                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateAllLinkedReferences({ sectionId: section.id })}>
+                      <RefreshCcw className="mr-2 h-4 w-4" /> Update Linked
                     </Button>
                   ) : null}
                   {(canManagePlatform || (canManageTenantVariant && section.owner_tenant_id === currentTenant?.id)) ? (
