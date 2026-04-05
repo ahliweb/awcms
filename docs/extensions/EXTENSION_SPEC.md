@@ -604,6 +604,48 @@ Sections with active tracked references now expose an `Update Linked` action.
 
 This phase does not yet add version-aware diff, review, or approval workflows for bulk propagation.
 
+## Phase 16 Reusable Section Revisions
+
+Phase 16 adds the first revision-history foundation for reusable sections.
+
+### Revision Table
+
+| Table | Scope | Purpose |
+| --- | --- | --- |
+| `reusable_section_revisions` | Platform or Tenant | Stores numbered snapshots of reusable section state at save time. |
+
+### Revision Behavior
+
+When a reusable section is saved, AWCMS now:
+
+1. Persists the current section row.
+2. Calculates the next revision number for that section.
+3. Stores a snapshot of the saved reusable section state.
+
+Stored revision snapshots currently include:
+
+- name
+- slug
+- description
+- section mode
+- status
+- content
+- metadata
+- template part reference
+- owner tenant id
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+The reusable sections manager now shows:
+
+- revision count
+- latest revision numbers
+- revision timestamps
+
+This phase provides revision storage and visibility only. It does not yet add restore, diff, compare, or approval workflows.
+
 ## Phase 5 Sandbox Readiness Metadata
 
 Phase 5 does not enable sandboxed extension execution. It adds sandbox-readiness metadata so extension manifests, diagnostics, and operator tooling can describe future isolation needs without changing the trusted runtime contract.

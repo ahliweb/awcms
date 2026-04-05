@@ -5,18 +5,31 @@ import { useToast } from '@/components/ui/use-toast';
 import { materializeReusableSection } from '@/lib/reusableSectionsApi';
 import { detachReusableSectionUsage, relinkReusableSectionDetachEvent, updateAllLinkedReusableSectionReferences } from '@/lib/reusableSectionUsage';
 
+const buildRevisionSnapshot = (section) => ({
+  name: section.name,
+  slug: section.slug,
+  description: section.description || null,
+  section_mode: section.section_mode,
+  status: section.status,
+  content: section.content || {},
+  metadata: section.metadata || {},
+  template_part_id: section.template_part_id || null,
+  owner_tenant_id: section.owner_tenant_id || null,
+});
+
 export function useReusableSections() {
   const { currentTenant } = useTenant();
   const { toast } = useToast();
   const [sections, setSections] = useState([]);
   const [usagesBySection, setUsagesBySection] = useState({});
   const [detachEventsBySection, setDetachEventsBySection] = useState({});
+  const [revisionsBySection, setRevisionsBySection] = useState({});
   const [loading, setLoading] = useState(true);
 
   const fetchSections = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data, error }, { data: usageRows, error: usageError }, { data: detachRows, error: detachError }] = await Promise.all([
+      const [{ data, error }, { data: usageRows, error: usageError }, { data: detachRows, error: detachError }, { data: revisionRows, error: revisionError }] = await Promise.all([
         supabase
           .from('reusable_sections')
           .select('*')
@@ -33,11 +46,17 @@ export function useReusableSections() {
           .eq('status', 'pending')
           .is('deleted_at', null)
           .order('updated_at', { ascending: false }),
+        supabase
+          .from('reusable_section_revisions')
+          .select('*')
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (error) throw error;
       if (usageError) throw usageError;
       if (detachError) throw detachError;
+      if (revisionError) throw revisionError;
       setSections(data || []);
 
       const groupedUsages = (usageRows || []).reduce((accumulator, usage) => {
@@ -59,6 +78,16 @@ export function useReusableSections() {
       }, {});
 
       setDetachEventsBySection(groupedDetachEvents);
+
+      const groupedRevisions = (revisionRows || []).reduce((accumulator, revision) => {
+        if (!accumulator[revision.reusable_section_id]) {
+          accumulator[revision.reusable_section_id] = [];
+        }
+        accumulator[revision.reusable_section_id].push(revision);
+        return accumulator;
+      }, {});
+
+      setRevisionsBySection(groupedRevisions);
     } catch (error) {
       toast({ title: 'Error', description: error.message || 'Failed to load reusable sections', variant: 'destructive' });
     } finally {
@@ -71,6 +100,17 @@ export function useReusableSections() {
   }, [fetchSections]);
 
   const saveSection = useCallback(async (section) => {
+    let existingSection = null;
+    if (section.id) {
+      const { data: existingRow, error: existingError } = await supabase
+        .from('reusable_sections')
+        .select('*')
+        .eq('id', section.id)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      existingSection = existingRow;
+    }
+
     const payload = {
       ...section,
       owner_tenant_id: section.owner_tenant_id ?? currentTenant?.id ?? null,
@@ -79,13 +119,36 @@ export function useReusableSections() {
     };
 
     const query = supabase.from('reusable_sections');
-    const { error } = section.id
+    const { data: savedRows, error } = section.id
       ? await query.update(payload).eq('id', section.id)
-      : await query.insert([{ ...payload, created_at: new Date().toISOString() }]);
+        .select('*')
+      : await query.insert([{ ...payload, created_at: new Date().toISOString() }]).select('*');
 
     if (error) throw error;
+
+    const savedSection = savedRows?.[0];
+    if (savedSection) {
+      const currentRevisions = revisionsBySection[savedSection.id] || [];
+      const nextRevisionNumber = currentRevisions.length > 0
+        ? Math.max(...currentRevisions.map((revision) => revision.revision_number || 0)) + 1
+        : 1;
+
+      const { error: revisionError } = await supabase
+        .from('reusable_section_revisions')
+        .insert({
+          tenant_id: savedSection.owner_tenant_id || currentTenant?.id || null,
+          reusable_section_id: savedSection.id,
+          revision_number: nextRevisionNumber,
+          snapshot: buildRevisionSnapshot(existingSection || savedSection),
+          created_at: new Date().toISOString(),
+          deleted_at: null,
+        });
+
+      if (revisionError) throw revisionError;
+    }
+
     await fetchSections();
-  }, [currentTenant?.id, fetchSections]);
+  }, [currentTenant?.id, fetchSections, revisionsBySection]);
 
   const deleteSection = useCallback(async (sectionId) => {
     const { error } = await supabase
@@ -156,6 +219,7 @@ export function useReusableSections() {
     sections,
     usagesBySection,
     detachEventsBySection,
+    revisionsBySection,
     loading,
     fetchSections,
     saveSection,

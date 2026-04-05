@@ -15,7 +15,7 @@ const DEFAULT_SECTION_CONTENT = {
 function ReusableSectionsManager() {
   const { currentTenant } = useTenant();
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
-  const { sections, usagesBySection, detachEventsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent, relinkAllDetachEvents, updateAllLinkedReferences } = useReusableSections();
+  const { sections, usagesBySection, detachEventsBySection, revisionsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent, relinkAllDetachEvents, updateAllLinkedReferences } = useReusableSections();
   const [draft, setDraft] = useState({
     name: '',
     slug: '',
@@ -63,6 +63,7 @@ function ReusableSectionsManager() {
           {sections.map((section) => {
             const usages = usagesBySection[section.id] || [];
             const detachEvents = detachEventsBySection[section.id] || [];
+            const revisions = revisionsBySection[section.id] || [];
 
             return (
             <div key={section.id} className="rounded-2xl border border-border/60 bg-card/75 p-4 shadow-sm">
@@ -120,6 +121,19 @@ function ReusableSectionsManager() {
                           <GitMerge className="mr-2 h-3.5 w-3.5" /> Relink All
                         </Button>
                       </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Revisions</p>
+                    <p className="mt-1 text-xs text-foreground">{revisions.length} revision(s)</p>
+                    {revisions.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        {revisions.slice(0, 4).map((revision) => (
+                          <li key={revision.id}>
+                            Revision {revision.revision_number} • {new Date(revision.created_at).toLocaleString()}
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
                   </div>
                 </div>

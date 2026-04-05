@@ -71,6 +71,12 @@ describe('ReusableSectionsManager', () => {
           { id: 'detach-1', source_type: 'page', source_label: 'Homepage', locale: null },
         ],
       },
+      revisionsBySection: {
+        'section-1': [
+          { id: 'revision-2', revision_number: 2, created_at: '2026-04-05T12:00:00.000Z' },
+          { id: 'revision-1', revision_number: 1, created_at: '2026-04-05T11:00:00.000Z' },
+        ],
+      },
       loading: false,
       saveSection,
       deleteSection,
@@ -89,6 +95,8 @@ describe('ReusableSectionsManager', () => {
     expect(screen.getByText('Hero Section')).toBeInTheDocument();
     expect(screen.getByText('2 reference(s)')).toBeInTheDocument();
     expect(screen.getAllByText('page: Homepage').length).toBeGreaterThan(0);
+    expect(screen.getByText('2 revision(s)')).toBeInTheDocument();
+    expect(screen.getByText(/Revision 2/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /materialize/i }));
 
     await waitFor(() => {
