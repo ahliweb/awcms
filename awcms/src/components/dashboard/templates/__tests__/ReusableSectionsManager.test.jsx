@@ -124,6 +124,9 @@ describe('ReusableSectionsManager', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /detach all/i }));
 
+    expect(screen.getByText(/Detach all linked usages/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
+
     await waitFor(() => {
       expect(detachAllUsages).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
@@ -136,11 +139,17 @@ describe('ReusableSectionsManager', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /relink all/i }));
 
+    expect(screen.getByText(/Relink all detached instances/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
+
     await waitFor(() => {
       expect(relinkAllDetachEvents).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
 
     fireEvent.click(screen.getByRole('button', { name: /update linked/i }));
+
+    expect(screen.getByText(/Update all linked references/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
 
     await waitFor(() => {
       expect(updateAllLinkedReferences).toHaveBeenCalledWith({ sectionId: 'section-1' });

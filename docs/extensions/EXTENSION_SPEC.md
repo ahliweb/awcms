@@ -707,6 +707,34 @@ The current revision-to-revision comparison surface still uses the compact field
 
 This phase does not yet add approval workflows or multi-user review around revision comparison.
 
+## Phase 20 Bulk Action Guardrails
+
+Phase 20 adds confirmation guardrails for reusable section bulk workflows so section-wide actions are no longer single-click operations.
+
+### Guarded Bulk Actions
+
+The reusable sections manager now confirmation-gates:
+
+- `Detach All`
+- `Relink All`
+- `Update Linked`
+
+### Confirmation Behavior
+
+Before executing a section-wide action, AWCMS now:
+
+1. opens a confirmation dialog
+2. shows the reusable section name
+3. shows the workflow being executed
+4. shows the tracked item count when available
+5. only executes the action after explicit confirmation
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+This phase improves safety for bulk actions only. It does not yet add approval chains or second-review workflows for bulk propagation actions.
+
 ## Phase 18 Revision Restore Confirmation
 
 Phase 18 adds a confirmation step and basic restore guardrails to the reusable section revision workflow.

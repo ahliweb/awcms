@@ -37,9 +37,28 @@ function ReusableSectionsManager() {
   });
   const [compareSelection, setCompareSelection] = useState(null);
   const [restoreConfirmation, setRestoreConfirmation] = useState(null);
+  const [bulkActionConfirmation, setBulkActionConfirmation] = useState(null);
 
   const canManagePlatform = isPlatformAdmin || isFullAccess || hasPermission('platform.template.manage');
   const canManageTenantVariant = hasPermission('tenant.setting.update');
+
+  const confirmBulkAction = () => {
+    if (!bulkActionConfirmation) return;
+
+    if (bulkActionConfirmation.action === 'detachAll') {
+      detachAllUsages({ sectionId: bulkActionConfirmation.sectionId });
+    }
+
+    if (bulkActionConfirmation.action === 'relinkAll') {
+      relinkAllDetachEvents({ sectionId: bulkActionConfirmation.sectionId });
+    }
+
+    if (bulkActionConfirmation.action === 'updateLinked') {
+      updateAllLinkedReferences({ sectionId: bulkActionConfirmation.sectionId });
+    }
+
+    setBulkActionConfirmation(null);
+  };
 
   const handleSave = async () => {
     const parsedContent = JSON.parse(draft.content || '{}');
@@ -141,7 +160,7 @@ function ReusableSectionsManager() {
                     ) : null}
                     {detachEvents.length > 0 ? (
                       <div className="mt-3">
-                        <Button size="sm" variant="outline" className="rounded-lg" onClick={() => relinkAllDetachEvents({ sectionId: section.id })}>
+                        <Button size="sm" variant="outline" className="rounded-lg" onClick={() => setBulkActionConfirmation({ action: 'relinkAll', sectionId: section.id, sectionName: section.name, count: detachEvents.length })}>
                           <GitMerge className="mr-2 h-3.5 w-3.5" /> Relink All
                         </Button>
                       </div>
@@ -231,12 +250,12 @@ function ReusableSectionsManager() {
                     <Wand2 className="mr-2 h-4 w-4" /> Materialize
                   </Button>
                   {usages.length > 0 ? (
-                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => detachAllUsages({ sectionId: section.id })}>
+                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setBulkActionConfirmation({ action: 'detachAll', sectionId: section.id, sectionName: section.name, count: usages.length })}>
                       <Unlink2 className="mr-2 h-4 w-4" /> Detach All
                     </Button>
                   ) : null}
                   {usages.length > 0 ? (
-                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateAllLinkedReferences({ sectionId: section.id })}>
+                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setBulkActionConfirmation({ action: 'updateLinked', sectionId: section.id, sectionName: section.name, count: usages.length })}>
                       <RefreshCcw className="mr-2 h-4 w-4" /> Update Linked
                     </Button>
                   ) : null}
@@ -306,6 +325,30 @@ function ReusableSectionsManager() {
             >
               Restore Revision
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(bulkActionConfirmation)} onOpenChange={(open) => !open && setBulkActionConfirmation(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkActionConfirmation?.action === 'detachAll' ? 'Detach all linked usages?' : null}
+              {bulkActionConfirmation?.action === 'relinkAll' ? 'Relink all detached instances?' : null}
+              {bulkActionConfirmation?.action === 'updateLinked' ? 'Update all linked references?' : null}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkActionConfirmation ? (
+                <>
+                  This will run the <strong>{bulkActionConfirmation.action}</strong> workflow for <strong>{bulkActionConfirmation.sectionName}</strong>
+                  {typeof bulkActionConfirmation.count === 'number' ? <> across <strong>{bulkActionConfirmation.count}</strong> tracked item(s)</> : null}.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkAction}>Confirm</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
