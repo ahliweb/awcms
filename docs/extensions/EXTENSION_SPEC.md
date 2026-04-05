@@ -679,6 +679,26 @@ Recent revisions now expose a `Compare` action and render the comparison inline 
 
 This phase does not yet add visual block diffs, compare-two-revisions mode, or approval workflows around restore.
 
+## Phase 18 Revision Restore Confirmation
+
+Phase 18 adds a confirmation step and basic restore guardrails to the reusable section revision workflow.
+
+### Restore Confirmation Behavior
+
+When a restore is triggered from the reusable sections manager, AWCMS now:
+
+1. opens a confirmation dialog before mutating live section state
+2. shows the section name being restored
+3. shows the revision number being restored
+4. shows the revision timestamp
+5. only performs the restore after explicit confirmation
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+
+This phase improves restore safety only. It does not yet add approval chains, audit-specific restore review, or diff-based conflict resolution.
+
 ## Phase 5 Sandbox Readiness Metadata
 
 Phase 5 does not enable sandboxed extension execution. It adds sandbox-readiness metadata so extension manifests, diagnostics, and operator tooling can describe future isolation needs without changing the trusted runtime contract.
