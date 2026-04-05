@@ -137,6 +137,7 @@ Current blueprint/bootstrap usage in app code:
 - `platform.template.manage` gates platform-managed site blueprint creation and apply flows
 - `tenant.setting.update` gates tenant-authored blueprint variants and tenant blueprint application
 - Phase 2 blueprints currently reuse existing template/settings permissions rather than introducing a new `tenant.blueprint.*` family
+- Phase 3 reusable sections also reuse `platform.template.manage` and `tenant.setting.update` rather than introducing a separate `tenant.sections.*` family in this iteration
 
 ### B. Tenant (Tenant Scope) - Standardized Pattern
 

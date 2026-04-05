@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/flowbite-admin';
 import TemplatesList from './templates/TemplatesList';
 import TemplatePartsList from './templates/TemplatePartsList';
+import ReusableSectionsManager from './templates/ReusableSectionsManager';
 import TemplateAssignments from './templates/TemplateAssignments';
 import TemplateLanguageManager from './templates/TemplateLanguageManager';
 import SiteBlueprintsManager from './templates/SiteBlueprintsManager';
@@ -18,7 +19,7 @@ import { cn } from '@/lib/utils';
 const TemplatesManager = () => {
     const navigate = useNavigate();
     const segments = useSplatSegments();
-    const tabValues = ['pages', 'parts', 'assignments', 'languages', 'blueprints'];
+    const tabValues = ['pages', 'parts', 'sections', 'assignments', 'languages', 'blueprints'];
     const hasTabSegment = tabValues.includes(segments[0]);
     const activeTab = hasTabSegment ? segments[0] : 'pages';
     const hasExtraSegment = segments.length > 1;
@@ -27,6 +28,7 @@ const TemplatesManager = () => {
     const tabs = [
         { value: 'pages', label: 'Page Templates', icon: Layout, color: 'blue' },
         { value: 'parts', label: 'Template Parts', icon: Puzzle, color: 'purple' },
+        { value: 'sections', label: 'Reusable Sections', icon: Blocks, color: 'indigo' },
         { value: 'assignments', label: 'Assignments', icon: Link2, color: 'emerald' },
         { value: 'languages', label: 'Languages', icon: Languages, color: 'amber' },
         { value: 'blueprints', label: 'Site Blueprints', icon: LibraryBig, color: 'rose' },
@@ -40,6 +42,10 @@ const TemplatesManager = () => {
         parts: {
             shell: 'from-amber-500/12 via-background/40 to-primary/12',
             badge: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+        },
+        sections: {
+            shell: 'from-indigo-500/12 via-background/40 to-primary/12',
+            badge: 'border-indigo-500/25 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300',
         },
         assignments: {
             shell: 'from-emerald-500/12 via-background/40 to-primary/12',
@@ -63,6 +69,10 @@ const TemplatesManager = () => {
         parts: {
             title: 'Reusable section modules',
             detail: 'Manage headers, footers, sidebars, and widget areas across template families.',
+        },
+        sections: {
+            title: 'Hybrid reusable section library',
+            detail: 'Manage reusable section records that can be materialized into template parts for the current tenant.',
         },
         assignments: {
             title: 'Controlled mapping orchestration',
@@ -205,6 +215,10 @@ const TemplatesManager = () => {
 
                         <TabsContent value="parts" className="mt-0">
                             <TemplatePartsList />
+                        </TabsContent>
+
+                        <TabsContent value="sections" className="mt-0">
+                            <ReusableSectionsManager />
                         </TabsContent>
 
                         <TabsContent value="assignments" className="mt-0">

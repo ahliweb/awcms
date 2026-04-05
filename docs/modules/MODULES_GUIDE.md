@@ -38,7 +38,7 @@ Where route aliases exist, prefer the canonical `MainRouter.jsx` path noted in p
 - **Pages** (`PagesManager.jsx`)
 - **Visual Pages** (`VisualPagesManager.jsx`)
 - **Widgets** (`WidgetsManager.jsx`)
-- **Templates** (`TemplatesManager.jsx`) - page templates, template parts, assignments, languages, and Phase 2 site blueprints for tenant-safe bootstrap payloads
+- **Templates** (`TemplatesManager.jsx`) - page templates, template parts, reusable sections, assignments, languages, and site blueprints for tenant-safe bootstrap and section materialization flows
 - **Portfolio** (`PortfolioManager.jsx`)
 - **Testimonials** (`TestimonyManager.jsx`)
 - **Announcements** (`AnnouncementsManager.jsx`)

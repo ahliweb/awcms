@@ -316,6 +316,52 @@ The current UI supports:
 
 The current UI does not yet provide a rich schema-aware editor; payload authoring is still JSON-based in this phase.
 
+## Phase 3 Reusable Sections
+
+Phase 3 adds a hybrid reusable section foundation that fits the existing template-parts and visual-builder pipeline instead of introducing a parallel runtime.
+
+### Reusable Sections Table
+
+| Table | Scope | Purpose |
+| --- | --- | --- |
+| `reusable_sections` | Platform or Tenant | Stores reusable section definitions that can either hold visual content directly or reference an existing `template_part`. |
+
+### Reusable Section Modes
+
+- `visual`: section stores visual content directly as JSON
+- `template_part_reference`: section points at an existing `template_part` and can be re-materialized for tenant use
+
+### Worker Materialization Path
+
+- Route: `POST /functions/v1/reusable-sections`
+- Supported action: `materialize`
+- Authority: Cloudflare Worker only
+- Permission model:
+  - platform-managed sections: `platform.template.manage`
+  - tenant-authored sections / tenant materialization: `tenant.setting.update`
+
+The materialization route:
+
+1. Validates tenant context and section ownership.
+2. Resolves content from the section record or referenced `template_part`.
+3. Creates a tenant `template_part` using the existing template-part model.
+4. Writes access audit metadata.
+
+### Admin Surface
+
+- Host UI: `awcms/src/components/dashboard/TemplatesManager.jsx`
+- Phase 3 tab: `Reusable Sections`
+- Backing hook: `awcms/src/hooks/useReusableSections.js`
+
+The current UI supports:
+
+- listing reusable sections
+- creating tenant-scoped variants
+- deleting reusable sections
+- materializing a section into a tenant `template_part`
+
+This phase does not yet add direct insertion into `VisualPageBuilder` or public runtime lookup-by-slug.
+
 ## Reference Extension
 
 `awcms-ext/ahliweb/events/` is the canonical example package.

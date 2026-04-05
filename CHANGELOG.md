@@ -9,11 +9,13 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 - Extensions: added Phase 1 extension validation and diagnostics hardening with explicit `runtime_mode`, strict `scope.resource.action` capability validation for new manifests, embedded diagnostics in the Extensions manager, and a repeatable local SQL verification snippet for extension lifecycle migration checks.
 - Templates: added the Phase 2 site blueprint foundation with mirrored `site_blueprints` / `tenant_site_blueprint_state` schema, a Worker-backed `/functions/v1/site-blueprints` apply route, a new Templates workspace blueprint tab, and focused admin/edge test coverage for the initial blueprint flow.
+- Templates: added the Phase 3 reusable sections foundation with mirrored `reusable_sections` schema, a Worker-backed `/functions/v1/reusable-sections` materialization route, a new Templates workspace reusable sections tab, and focused admin/edge test coverage for section materialization boundaries.
 
 ### Changed
 
 - Extensions: made `awcms-edge` `extensions-lifecycle` the authoritative validation/update path for catalog registration, persisted normalized validation state on catalog and tenant extension records, and automatically deactivated invalid updated installs while restoring previously active installs on later valid catalog updates.
 - Templates: extended the Templates workspace permission model to support both platform-managed and tenant-authored blueprint flows, and documented the new JSON-based blueprint payload path for settings, public module defaults, and template assignment bootstrap.
+- Templates: extended the Templates workspace again to support hybrid reusable sections that can be materialized into tenant `template_parts`, keeping the existing visual-builder and widget-area model as the runtime target instead of introducing a parallel section renderer.
 
 ## [v4.5.2] - 2026-04-04
 

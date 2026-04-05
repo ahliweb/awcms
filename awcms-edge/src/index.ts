@@ -2729,6 +2729,129 @@ app.post('/functions/v1/site-blueprints', async (c) => {
   }
 })
 
+app.post('/functions/v1/reusable-sections', async (c) => {
+  try {
+    const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)
+    const body = await c.req.json().catch(() => ({})) as Record<string, any>
+    const action = typeof body.action === 'string' ? body.action : null
+
+    if (action !== 'materialize') {
+      return c.json({ error: 'Unsupported action' }, 400)
+    }
+
+    const sectionId = typeof body.sectionId === 'string' ? body.sectionId : null
+    if (!sectionId) {
+      return c.json({ error: 'Missing sectionId' }, 400)
+    }
+
+    const userContext = await getUserContext(c.env, user.id)
+    const adminSupabase = getAdminSupabase(c.env)
+    const tenantId = resolveTenantId(typeof body.tenantId === 'string' ? body.tenantId : null, userContext)
+    if (!tenantId) {
+      return c.json({ error: 'Missing tenant context' }, 400)
+    }
+
+    const canManageSections = userContext.isPlatformAdmin
+      || userContext.isFullAccess
+      || await hasAnyPermission(callerClient, ['platform.template.manage', 'tenant.setting.update'])
+
+    if (!canManageSections) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    const { data: section, error: sectionError } = await adminSupabase
+      .from('reusable_sections')
+      .select('*')
+      .eq('id', sectionId)
+      .is('deleted_at', null)
+      .single()
+
+    if (sectionError || !section) {
+      return c.json({ error: sectionError?.message || 'Reusable section not found' }, 404)
+    }
+
+    if (!userContext.isPlatformAdmin && !userContext.isFullAccess && section.owner_tenant_id && section.owner_tenant_id !== tenantId) {
+      return c.json({ error: 'Reusable section does not belong to the active tenant' }, 403)
+    }
+
+    const partType = typeof body.partType === 'string' ? body.partType : section.metadata?.defaultPartType || 'widget_area'
+    if (!['header', 'footer', 'sidebar', 'widget_area'].includes(partType)) {
+      return c.json({ error: 'Unsupported partType' }, 400)
+    }
+
+    const now = new Date().toISOString()
+    const slugBase = String(section.slug || section.name || 'reusable-section').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'reusable-section'
+    const materializedSlug = `${slugBase}-${Date.now()}`
+    const content = section.section_mode === 'template_part_reference' && section.template_part_id
+      ? (await adminSupabase.from('template_parts').select('content').eq('id', section.template_part_id).maybeSingle()).data?.content || section.content || { content: [], root: {} }
+      : (section.content || { content: [], root: {} })
+
+    const { data: part, error: partError } = await adminSupabase
+      .from('template_parts')
+      .insert({
+        tenant_id: tenantId,
+        name: `${section.name} Part`,
+        type: partType,
+        slug: materializedSlug,
+        content,
+        is_active: true,
+        updated_at: now,
+        deleted_at: null,
+      })
+      .select('*')
+      .single()
+
+    if (partError || !part) {
+      return c.json({ error: partError?.message || 'Failed to materialize reusable section' }, 400)
+    }
+
+    await writeAccessAudit(adminSupabase, {
+      tenantId,
+      userId: user.id,
+      action: 'reusable_sections.materialize',
+      resource: 'reusable_section',
+      details: {
+        section_id: section.id,
+        section_slug: section.slug,
+        section_mode: section.section_mode,
+        materialized_part_id: part.id,
+        part_type: partType,
+      },
+      ipAddress: getRequestIp(c.req.raw),
+      channel: 'worker',
+      actorType: 'user',
+      authContext: { has_session: true },
+      moduleName: 'templates',
+      featureName: 'reusable_sections',
+      actionName: 'materialize',
+      resourceType: 'reusable_section',
+      resourceId: section.id,
+      routePath: '/functions/v1/reusable-sections',
+      url: c.req.raw.url,
+      userAgent: c.req.raw.headers.get('user-agent') || null,
+      purpose: 'materialize reusable section into template part',
+      triggerSource: 'awcms_edge_route',
+      businessIntent: 'reusable_section_materialization',
+      accessChannel: 'worker',
+      accessMechanism: 'worker_route',
+      authMethod: 'bearer_token',
+    })
+
+    return c.json({
+      ok: true,
+      section: {
+        id: section.id,
+        slug: section.slug,
+        name: section.name,
+        section_mode: section.section_mode,
+      },
+      part,
+    })
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to materialize reusable section')
+  }
+})
+
 app.get('/functions/v1/extensions/events/health', async (c) => {
   try {
     const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)
