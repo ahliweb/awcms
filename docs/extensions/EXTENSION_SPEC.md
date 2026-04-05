@@ -414,6 +414,26 @@ When the public portal encounters a `ReusableSection` block:
 
 This phase still does not add sync-back from inserted or rendered instances to the source section definition.
 
+## Phase 8 Visual Builder Section Picker
+
+Phase 8 improves authoring ergonomics by replacing manual reusable-section slug entry with a dedicated picker field inside the visual builder block configuration.
+
+### Picker Integration
+
+- Field component: `awcms/src/components/visual-builder/fields/ReusableSectionField.jsx`
+- Block definition: `awcms/src/components/visual-builder/blocks/ReusableSectionBlock.jsx`
+
+### Picker Behavior
+
+The field:
+
+1. Loads active `reusable_sections` rows.
+2. Shows platform-owned and tenant-owned sections in the same selector.
+3. Stores the chosen section slug in the `ReusableSection` block props.
+4. Leaves public/runtime slug resolution unchanged.
+
+This phase improves editor usability only; it does not change the runtime contract introduced in Phase 7.
+
 ## Phase 5 Sandbox Readiness Metadata
 
 Phase 5 does not enable sandboxed extension execution. It adds sandbox-readiness metadata so extension manifests, diagnostics, and operator tooling can describe future isolation needs without changing the trusted runtime contract.

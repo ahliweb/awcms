@@ -14,6 +14,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Extensions: added Phase 5 sandbox-readiness metadata support with optional `sandbox_profile` manifest fields, diagnostics visibility for requested sandbox capabilities, and focused validation/UI test coverage while keeping runtime execution trusted-only.
 - Templates: added Phase 6 visual-builder integration for reusable sections by extending the existing template selector to browse reusable sections and insert resolved section content directly into the visual builder, with focused selector test coverage.
 - Public Portal: added Phase 7 reusable-section runtime lookup with a new `ReusableSection` visual block, tenant-aware public slug resolution, referenced `template_part` fallback support, recursion guarding, and focused public utility test coverage.
+- Visual Builder: added Phase 8 reusable-section picker support through a dedicated custom Puck field that loads active reusable sections and replaces manual slug entry in the `ReusableSection` block configuration, with focused field test coverage.
 
 ### Changed
 
@@ -22,6 +23,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Templates: extended the Templates workspace again to support hybrid reusable sections that can be materialized into tenant `template_parts`, keeping the existing visual-builder and widget-area model as the runtime target instead of introducing a parallel section renderer.
 - Visual Builder: extended the existing template-application selector flow so reusable sections can be inserted through the same modal, keeping section insertion aligned with the current Puck builder and template-part resolution model.
 - Public Rendering: extended the Astro `PuckRenderer` path so reusable sections can be resolved and rendered by slug in the public portal without introducing a second rendering system.
+- Visual Builder: replaced manual reusable-section slug entry with a picker-backed custom field while preserving the same slug-based public/runtime contract.
 
 ## [v4.5.2] - 2026-04-04
 
