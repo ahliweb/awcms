@@ -2559,6 +2559,176 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
   }
 })
 
+app.post('/functions/v1/site-blueprints', async (c) => {
+  try {
+    const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)
+    const body = await c.req.json().catch(() => ({})) as Record<string, any>
+    const action = typeof body.action === 'string' ? body.action : null
+
+    if (action !== 'apply') {
+      return c.json({ error: 'Unsupported action' }, 400)
+    }
+
+    const blueprintId = typeof body.blueprintId === 'string' ? body.blueprintId : null
+    if (!blueprintId) {
+      return c.json({ error: 'Missing blueprintId' }, 400)
+    }
+
+    const userContext = await getUserContext(c.env, user.id)
+
+    const adminSupabase = getAdminSupabase(c.env)
+    const tenantId = resolveTenantId(typeof body.tenantId === 'string' ? body.tenantId : null, userContext)
+    if (!tenantId) {
+      return c.json({ error: 'Missing tenant context' }, 400)
+    }
+
+    const canApplyBlueprint = userContext.isPlatformAdmin
+      || userContext.isFullAccess
+      || await hasAnyPermission(callerClient, ['platform.template.manage', 'tenant.setting.update'])
+
+    if (!canApplyBlueprint) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    const { data: blueprint, error: blueprintError } = await adminSupabase
+      .from('site_blueprints')
+      .select('*')
+      .eq('id', blueprintId)
+      .is('deleted_at', null)
+      .single()
+
+    if (blueprintError || !blueprint) {
+      return c.json({ error: blueprintError?.message || 'Site blueprint not found' }, 404)
+    }
+
+    if (!userContext.isPlatformAdmin && !userContext.isFullAccess && blueprint.owner_tenant_id && blueprint.owner_tenant_id !== tenantId) {
+      return c.json({ error: 'Blueprint does not belong to the active tenant' }, 403)
+    }
+
+    const payload = blueprint.blueprint_payload || {}
+    const assignments = Array.isArray(payload.assignments) ? payload.assignments : []
+    const settingsPayload = payload.settings && typeof payload.settings === 'object' ? payload.settings : {}
+    const publicModules = Array.isArray(payload.publicModules) ? payload.publicModules : []
+    const now = new Date().toISOString()
+
+    const statePayload = {
+      tenant_id: tenantId,
+      blueprint_id: blueprint.id,
+      payload_snapshot: payload,
+      applied_by: user.id,
+      applied_at: now,
+      updated_at: now,
+      deleted_at: null,
+    }
+
+    const { error: stateError } = await adminSupabase
+      .from('tenant_site_blueprint_state')
+      .upsert(statePayload, { onConflict: 'tenant_id' })
+
+    if (stateError) {
+      return c.json({ error: stateError.message }, 400)
+    }
+
+    const settingsRows = [
+      {
+        tenant_id: tenantId,
+        key: 'site_blueprint.active',
+        value: JSON.stringify({ blueprint_id: blueprint.id, slug: blueprint.slug, applied_at: now }),
+        type: 'json',
+        deleted_at: null,
+      },
+      {
+        tenant_id: tenantId,
+        key: 'site_blueprint.public_modules',
+        value: JSON.stringify(publicModules),
+        type: 'json',
+        deleted_at: null,
+      },
+      {
+        tenant_id: tenantId,
+        key: 'site_blueprint.settings_payload',
+        value: JSON.stringify(settingsPayload),
+        type: 'json',
+        deleted_at: null,
+      },
+    ]
+
+    const { error: settingsError } = await adminSupabase
+      .from('settings')
+      .upsert(settingsRows, { onConflict: 'tenant_id,key' })
+
+    if (settingsError) {
+      return c.json({ error: settingsError.message }, 400)
+    }
+
+    for (const assignment of assignments) {
+      if (!assignment || typeof assignment !== 'object' || !assignment.route_type || !assignment.template_id) {
+        continue
+      }
+
+      const { error: assignmentError } = await adminSupabase
+        .from('template_assignments')
+        .upsert({
+          tenant_id: tenantId,
+          route_type: assignment.route_type,
+          template_id: assignment.template_id,
+          channel: typeof assignment.channel === 'string' ? assignment.channel : 'web',
+          updated_at: now,
+        }, { onConflict: 'tenant_id,channel,route_type' })
+
+      if (assignmentError) {
+        return c.json({ error: assignmentError.message }, 400)
+      }
+    }
+
+    await writeAccessAudit(adminSupabase, {
+      tenantId,
+      userId: user.id,
+      action: 'site_blueprints.apply',
+      resource: 'site_blueprint',
+      details: {
+        blueprint_id: blueprint.id,
+        blueprint_slug: blueprint.slug,
+        assignment_count: assignments.length,
+        public_module_count: publicModules.length,
+      },
+      ipAddress: getRequestIp(c.req.raw),
+      channel: 'worker',
+      actorType: 'user',
+      authContext: { has_session: true },
+      moduleName: 'templates',
+      featureName: 'site_blueprints',
+      actionName: 'apply',
+      resourceType: 'site_blueprint',
+      resourceId: blueprint.id,
+      routePath: '/functions/v1/site-blueprints',
+      url: c.req.raw.url,
+      userAgent: c.req.raw.headers.get('user-agent') || null,
+      purpose: 'apply tenant site blueprint',
+      triggerSource: 'awcms_edge_route',
+      businessIntent: 'site_blueprint_bootstrap',
+      accessChannel: 'worker',
+      accessMechanism: 'worker_route',
+      authMethod: 'bearer_token',
+    })
+
+    return c.json({
+      ok: true,
+      blueprint: {
+        id: blueprint.id,
+        slug: blueprint.slug,
+        name: blueprint.name,
+      },
+      applied: {
+        assignments: assignments.length,
+        publicModules: publicModules.length,
+      },
+    })
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to apply site blueprint')
+  }
+})
+
 app.get('/functions/v1/extensions/events/health', async (c) => {
   try {
     const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)

@@ -132,6 +132,12 @@ Current app-level permission checks that should be treated as implementation-spe
 - `platform.template.manage`
 - `platform.sidebar.update`
 
+Current blueprint/bootstrap usage in app code:
+
+- `platform.template.manage` gates platform-managed site blueprint creation and apply flows
+- `tenant.setting.update` gates tenant-authored blueprint variants and tenant blueprint application
+- Phase 2 blueprints currently reuse existing template/settings permissions rather than introducing a new `tenant.blueprint.*` family
+
 ### B. Tenant (Tenant Scope) - Standardized Pattern
 
 **Format**: `tenant.{module}.{action}`

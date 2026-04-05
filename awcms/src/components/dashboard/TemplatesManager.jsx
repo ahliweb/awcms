@@ -5,7 +5,8 @@ import TemplatesList from './templates/TemplatesList';
 import TemplatePartsList from './templates/TemplatePartsList';
 import TemplateAssignments from './templates/TemplateAssignments';
 import TemplateLanguageManager from './templates/TemplateLanguageManager';
-import { Layout, Puzzle, Link2, Languages, Sparkles, Blocks, Globe, Lock } from 'lucide-react';
+import SiteBlueprintsManager from './templates/SiteBlueprintsManager';
+import { Layout, Puzzle, Link2, Languages, Sparkles, Blocks, Globe, Lock, LibraryBig } from 'lucide-react';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { cn } from '@/lib/utils';
 
@@ -17,7 +18,7 @@ import { cn } from '@/lib/utils';
 const TemplatesManager = () => {
     const navigate = useNavigate();
     const segments = useSplatSegments();
-    const tabValues = ['pages', 'parts', 'assignments', 'languages'];
+    const tabValues = ['pages', 'parts', 'assignments', 'languages', 'blueprints'];
     const hasTabSegment = tabValues.includes(segments[0]);
     const activeTab = hasTabSegment ? segments[0] : 'pages';
     const hasExtraSegment = segments.length > 1;
@@ -28,6 +29,7 @@ const TemplatesManager = () => {
         { value: 'parts', label: 'Template Parts', icon: Puzzle, color: 'purple' },
         { value: 'assignments', label: 'Assignments', icon: Link2, color: 'emerald' },
         { value: 'languages', label: 'Languages', icon: Languages, color: 'amber' },
+        { value: 'blueprints', label: 'Site Blueprints', icon: LibraryBig, color: 'rose' },
     ];
 
     const tabThemes = {
@@ -47,6 +49,10 @@ const TemplatesManager = () => {
             shell: 'from-primary/12 via-background/40 to-sky-500/12',
             badge: 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300',
         },
+        blueprints: {
+            shell: 'from-rose-500/12 via-background/40 to-primary/12',
+            badge: 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+        },
     };
 
     const tabInsights = {
@@ -65,6 +71,10 @@ const TemplatesManager = () => {
         languages: {
             title: 'Localization governance',
             detail: 'Manage language-aware template strings for multi-region content delivery.',
+        },
+        blueprints: {
+            title: 'Tenant-safe site bootstrap presets',
+            detail: 'Apply shared or tenant-authored blueprint payloads for template assignments, public module defaults, and site settings.',
         },
     };
 
@@ -91,7 +101,7 @@ const TemplatesManager = () => {
 
     return (
         <AdminPageLayout
-            requiredPermission="platform.template.manage"
+            requiredPermission={['platform.template.manage', 'tenant.setting.update']}
             showTenantBadge={false}
         >
             {/* Page Header */}
@@ -174,7 +184,7 @@ const TemplatesManager = () => {
                             </span>
                             <span className="inline-flex items-center rounded-full border border-sky-500/25 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-700 dark:text-sky-300">
                                 <Globe className="mr-1.5 h-3.5 w-3.5" />
-                                Multi-language workflow
+                                Phase 2 blueprints ready
                             </span>
                         </div>
                     </div>
@@ -203,6 +213,10 @@ const TemplatesManager = () => {
 
                         <TabsContent value="languages" className="mt-0">
                             <TemplateLanguageManager />
+                        </TabsContent>
+
+                        <TabsContent value="blueprints" className="mt-0">
+                            <SiteBlueprintsManager />
                         </TabsContent>
                     </PageTabs>
                 </div>

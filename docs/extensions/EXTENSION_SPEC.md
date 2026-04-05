@@ -263,6 +263,59 @@ Expected result:
 - Public runtime: `awcms-public/primary/src/lib/extension_registry.ts` reads active tenant extensions and exposes `publicModules` only through the manifest contract.
 - Edge runtime: `awcms-edge/src/index.ts` exposes lifecycle orchestration and extension capability health routes.
 
+## Phase 2 Site Blueprints
+
+Phase 2 adds a tenant-safe site bootstrap foundation that complements the extension/runtime contract without replacing it.
+
+### Blueprint Tables
+
+| Table | Scope | Purpose |
+| --- | --- | --- |
+| `site_blueprints` | Platform or Tenant | Blueprint definitions. Platform-owned rows act as shared presets; tenant-owned rows act as tenant-authored variants. |
+| `tenant_site_blueprint_state` | Tenant | Records the currently applied blueprint payload snapshot per tenant. |
+
+### Blueprint Payload Shape
+
+The initial payload is intentionally minimal and additive:
+
+- `settings`: tenant-scoped settings payload stored through the existing `settings` table
+- `publicModules`: public module defaults stored as blueprint metadata for later public/runtime consumption
+- `assignments`: `template_assignments` rows to upsert during blueprint apply
+
+This phase does not seed arbitrary tenant business content or create runtime-defined schemas.
+
+### Worker Apply Path
+
+- Route: `POST /functions/v1/site-blueprints`
+- Supported action: `apply`
+- Authority: Cloudflare Worker only
+- Permission model:
+  - platform-managed blueprints: `platform.template.manage`
+  - tenant-authored variants / tenant apply: `tenant.setting.update`
+
+The apply route:
+
+1. Validates tenant context and blueprint ownership rules.
+2. Persists `tenant_site_blueprint_state`.
+3. Stores active blueprint metadata and payload snapshots in `settings`.
+4. Upserts declared `template_assignments`.
+5. Writes access audit metadata.
+
+### Admin Surface
+
+- Host UI: `awcms/src/components/dashboard/TemplatesManager.jsx`
+- Phase 2 tab: `Site Blueprints`
+- Backing hook: `awcms/src/hooks/useSiteBlueprints.js`
+
+The current UI supports:
+
+- listing platform and tenant-owned blueprints
+- creating tenant-scoped variants
+- deleting blueprint rows
+- applying a blueprint to the active tenant
+
+The current UI does not yet provide a rich schema-aware editor; payload authoring is still JSON-based in this phase.
+
 ## Reference Extension
 
 `awcms-ext/ahliweb/events/` is the canonical example package.
