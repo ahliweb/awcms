@@ -38,6 +38,7 @@ describe('ReusableSectionsManager', () => {
   const detachUsage = vi.fn();
   const detachAllUsages = vi.fn();
   const relinkDetachEvent = vi.fn();
+  const relinkAllDetachEvents = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,6 +77,7 @@ describe('ReusableSectionsManager', () => {
       detachUsage,
       detachAllUsages,
       relinkDetachEvent,
+      relinkAllDetachEvents,
     });
   });
 
@@ -103,10 +105,16 @@ describe('ReusableSectionsManager', () => {
       expect(detachAllUsages).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /relink/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /relink/i })[0]);
 
     await waitFor(() => {
       expect(relinkDetachEvent).toHaveBeenCalledWith(expect.objectContaining({ id: 'detach-1' }));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /relink all/i }));
+
+    await waitFor(() => {
+      expect(relinkAllDetachEvents).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
   });
 

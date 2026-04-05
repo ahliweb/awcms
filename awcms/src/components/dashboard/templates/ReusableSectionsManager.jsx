@@ -15,7 +15,7 @@ const DEFAULT_SECTION_CONTENT = {
 function ReusableSectionsManager() {
   const { currentTenant } = useTenant();
   const { hasPermission, isPlatformAdmin, isFullAccess } = usePermissions();
-  const { sections, usagesBySection, detachEventsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent } = useReusableSections();
+  const { sections, usagesBySection, detachEventsBySection, loading, saveSection, deleteSection, materializeSection, detachUsage, detachAllUsages, relinkDetachEvent, relinkAllDetachEvents } = useReusableSections();
   const [draft, setDraft] = useState({
     name: '',
     slug: '',
@@ -98,7 +98,7 @@ function ReusableSectionsManager() {
                   <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Detached Instances</p>
                     <p className="mt-1 text-xs text-foreground">{detachEvents.length} pending relink(s)</p>
-                    {detachEvents.length > 0 ? (
+                  {detachEvents.length > 0 ? (
                       <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                         {detachEvents.slice(0, 4).map((event) => (
                           <li key={event.id} className="flex items-center justify-between gap-3">
@@ -113,6 +113,13 @@ function ReusableSectionsManager() {
                         ))}
                         {detachEvents.length > 4 ? <li>+ {detachEvents.length - 4} more</li> : null}
                       </ul>
+                    ) : null}
+                    {detachEvents.length > 0 ? (
+                      <div className="mt-3">
+                        <Button size="sm" variant="outline" className="rounded-lg" onClick={() => relinkAllDetachEvents({ sectionId: section.id })}>
+                          <GitMerge className="mr-2 h-3.5 w-3.5" /> Relink All
+                        </Button>
+                      </div>
                     ) : null}
                   </div>
                 </div>

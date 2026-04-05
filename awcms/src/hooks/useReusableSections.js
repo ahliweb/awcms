@@ -126,6 +126,17 @@ export function useReusableSections() {
     await fetchSections();
   }, [fetchSections, toast]);
 
+  const relinkAllDetachEvents = useCallback(async ({ sectionId }) => {
+    const detachEvents = detachEventsBySection[sectionId] || [];
+    for (const detachEvent of detachEvents) {
+      // Sequential relink keeps source updates deterministic when several pending events belong to the same record.
+      // eslint-disable-next-line no-await-in-loop
+      await relinkReusableSectionDetachEvent({ detachEvent });
+    }
+    toast({ title: 'Relinked All', description: 'All pending detached instances were reconnected to the reusable section source.' });
+    await fetchSections();
+  }, [detachEventsBySection, fetchSections, toast]);
+
   return {
     sections,
     usagesBySection,
@@ -138,5 +149,6 @@ export function useReusableSections() {
     detachUsage,
     detachAllUsages,
     relinkDetachEvent,
+    relinkAllDetachEvents,
   };
 }
