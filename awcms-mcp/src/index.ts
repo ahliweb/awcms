@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerSupabaseTools } from "./tools/supabase.js";
 import { registerContext7Tools } from "./tools/context7.js";
 import { registerFlutterTools } from "./tools/flutter.js";
+import { registerSiteCompositionTools } from "./tools/site-composition.js";
 
 // Initialize Unified Server
 const server = new McpServer({
@@ -14,6 +15,7 @@ const server = new McpServer({
 registerSupabaseTools(server);
 registerContext7Tools(server);
 registerFlutterTools(server);
+registerSiteCompositionTools(server);
 
 async function main() {
   const transport = new StdioServerTransport();

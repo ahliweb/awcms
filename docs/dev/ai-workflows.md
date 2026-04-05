@@ -63,6 +63,21 @@ See `.agents/workflows/` for step-by-step procedures:
 - `ui-change-workflow.md` — UI component changes
 - `ci-validation-workflow.md` — Build/lint/test gate
 
+## 6.1 Operator Surfaces for Composition Features
+
+For the new template composition primitives, prefer operator tooling over direct ad hoc SQL when investigating state:
+
+- Site blueprints: use the local MCP tools for blueprint inventory and tenant applied-state inspection
+- Reusable sections: use the local MCP tools for section inventory before changing tenant runtime records manually
+
+Current local MCP composition tools:
+
+- `awcms_list_site_blueprints`
+- `awcms_get_tenant_blueprint_state`
+- `awcms_list_reusable_sections`
+
+These tools are read-only and are intended to support AI/operator diagnostics and planning around the Phase 2 and Phase 3 composition flows.
+
 ## 7. Available Rules
 
 See `.agents/rules/` for guardrail playbooks:
