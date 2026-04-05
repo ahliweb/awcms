@@ -1,7 +1,10 @@
+import { ReusableSectionField } from '../fields/ReusableSectionField';
+
 export const ReusableSectionBlockFields = {
   sectionSlug: {
-    type: 'text',
+    type: 'custom',
     label: 'Section Slug',
+    render: ReusableSectionField,
   },
   title: {
     type: 'text',
