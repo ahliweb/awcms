@@ -323,12 +323,14 @@ Tenant-level plugin pages and extension settings should use `tenant.setting.*` p
 - Audit log for all extension lifecycle events
 - Invalid catalog updates auto-deactivate affected active tenant installs immediately through the Worker lifecycle path
 - Later valid catalog updates automatically restore only installs that were previously active
+- Optional `sandbox_profile` metadata is now supported for future sandbox planning, but runtime execution remains trusted-only in the current phase
 
 ### Diagnostics
 
 - Extension diagnostics are embedded in the existing Extensions management screen.
 - Users with `platform.extensions.diagnostics.read` can view normalized structured validation detail.
 - Users without that permission still see a redacted diagnostics panel with status, timestamps, and generic reason categories.
+- Full diagnostics now also expose sandbox-readiness metadata when the manifest declares it.
 - Use the verification snippet in `docs/extensions/EXTENSION_SPEC.md` after `npx supabase db reset` when changing extension lifecycle SQL or validation behavior.
 
 ---

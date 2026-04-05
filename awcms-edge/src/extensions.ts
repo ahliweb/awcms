@@ -14,6 +14,7 @@ export type ExtensionManifest = {
   menus?: Array<Record<string, unknown>>
   publicModules?: Array<Record<string, unknown>>
   settingsSchema?: Record<string, unknown>
+  sandbox_profile?: Record<string, unknown>
   edgeRoutes?: Array<Record<string, unknown>>
   dependencies?: Record<string, string>
   widgets?: Array<Record<string, unknown>>
@@ -24,6 +25,8 @@ export type ExtensionManifest = {
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const CAPABILITY_PATTERN = /^[a-z]+(?:\.[a-z0-9_]+){2,}$/
 const RUNTIME_MODE_VALUES = ['trusted'] as const
+const SANDBOX_NETWORK_VALUES = ['none', 'outbound_http'] as const
+const SANDBOX_STORAGE_VALUES = ['none', 'tenant_settings', 'tenant_template_parts'] as const
 const REASON_CATEGORIES = [
   'invalid_manifest',
   'unsupported_runtime_mode',
@@ -77,6 +80,20 @@ export const validateExtensionManifest = (value: unknown) => {
     reasonCategories.add('unsupported_runtime_mode')
   }
 
+  const sandboxProfile = isObject(manifest.sandbox_profile) ? manifest.sandbox_profile : { requested: false }
+  const sandboxRequested = Boolean(sandboxProfile.requested)
+  if (sandboxProfile.network_access && !SANDBOX_NETWORK_VALUES.includes(String(sandboxProfile.network_access) as any)) {
+    errors.push(`sandbox_profile.network_access must be one of: ${SANDBOX_NETWORK_VALUES.join(', ')}`)
+    reasonCategories.add('invalid_manifest')
+  }
+  if (sandboxProfile.storage_access && !SANDBOX_STORAGE_VALUES.includes(String(sandboxProfile.storage_access) as any)) {
+    errors.push(`sandbox_profile.storage_access must be one of: ${SANDBOX_STORAGE_VALUES.join(', ')}`)
+    reasonCategories.add('invalid_manifest')
+  }
+  if (sandboxRequested) {
+    warnings.push('Sandbox execution is not enabled yet; sandbox_profile is metadata-only in this phase.')
+  }
+
   const invalidCapabilities = Array.isArray(manifest.capabilities)
     ? manifest.capabilities.filter((capability) => typeof capability !== 'string' || !CAPABILITY_PATTERN.test(capability))
     : []
@@ -118,6 +135,13 @@ export const validateExtensionManifest = (value: unknown) => {
     validationStatus: errors.length > 0 ? 'invalid' : warnings.length > 0 ? 'warning' : 'valid',
     runtimeMode: manifest.runtime_mode ?? null,
     compatibilityStatus: 'compatible',
+    sandboxReadinessStatus: sandboxRequested ? 'metadata_only' : 'not_requested',
+    sandboxProfile: {
+      requested: sandboxRequested,
+      network_access: sandboxRequested ? String(sandboxProfile.network_access || 'none') : 'none',
+      storage_access: sandboxRequested ? String(sandboxProfile.storage_access || 'none') : 'none',
+      worker_bindings: Array.isArray(sandboxProfile.worker_bindings) ? sandboxProfile.worker_bindings.filter((value): value is string => typeof value === 'string' && value.trim().length > 0) : [],
+    },
     reasonCategories: Array.from(reasonCategories).filter((value) => REASON_CATEGORIES.includes(value as any)),
     invalidCapabilities,
     missingArtifacts,

@@ -21,6 +21,8 @@ export const EXTENSION_REASON_CATEGORIES = [
 ];
 
 const CAPABILITY_PATTERN = /^[a-z]+(?:\.[a-z0-9_]+){2,}$/;
+const SANDBOX_NETWORK_VALUES = ['none', 'outbound_http'];
+const SANDBOX_STORAGE_VALUES = ['none', 'tenant_settings', 'tenant_template_parts'];
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -191,6 +193,9 @@ export const buildLegacyCompatibleManifest = (source = {}) => ({
     type: 'object',
     properties: isPlainObject(source.settings) ? source.settings : {},
   },
+  sandbox_profile: isPlainObject(source.sandbox_profile || source.sandboxProfile)
+    ? source.sandbox_profile || source.sandboxProfile
+    : { requested: false },
   edgeRoutes: asArray(source.edgeRoutes),
   dependencies: isPlainObject(source.dependencies) ? source.dependencies : {},
   widgets: asArray(source.widgets),
@@ -257,6 +262,9 @@ export const validateExtensionManifest = (manifestInput, options = {}) => {
     menus: [],
     publicModules: [],
     settingsSchema: isPlainObject(baseManifest.settingsSchema) ? baseManifest.settingsSchema : { type: 'object', properties: {} },
+    sandbox_profile: isPlainObject(baseManifest.sandbox_profile || baseManifest.sandboxProfile)
+      ? baseManifest.sandbox_profile || baseManifest.sandboxProfile
+      : { requested: false },
     edgeRoutes: [],
     dependencies: {},
     widgets: [],
@@ -289,6 +297,37 @@ export const validateExtensionManifest = (manifestInput, options = {}) => {
   if (manifest.compatibility.awcms && !/^>=?\d+\.\d+\.\d+/.test(String(manifest.compatibility.awcms))) {
     errors.push('compatibility.awcms must be a semver string or >= semver range');
     reasonCategories.add('compatibility_failed');
+  }
+
+  if (!isPlainObject(manifest.sandbox_profile)) {
+    errors.push('sandbox_profile must be an object when provided');
+    reasonCategories.add('invalid_manifest');
+  } else {
+    const requested = Boolean(manifest.sandbox_profile.requested);
+    const networkAccess = manifest.sandbox_profile.network_access;
+    const storageAccess = manifest.sandbox_profile.storage_access;
+    const workerBindings = asArray(manifest.sandbox_profile.worker_bindings).filter(isNonEmptyString).map((value) => value.trim());
+
+    if (networkAccess && !SANDBOX_NETWORK_VALUES.includes(String(networkAccess))) {
+      errors.push(`sandbox_profile.network_access must be one of: ${SANDBOX_NETWORK_VALUES.join(', ')}`);
+      reasonCategories.add('invalid_manifest');
+    }
+
+    if (storageAccess && !SANDBOX_STORAGE_VALUES.includes(String(storageAccess))) {
+      errors.push(`sandbox_profile.storage_access must be one of: ${SANDBOX_STORAGE_VALUES.join(', ')}`);
+      reasonCategories.add('invalid_manifest');
+    }
+
+    manifest.sandbox_profile = {
+      requested,
+      network_access: requested ? String(networkAccess || 'none') : 'none',
+      storage_access: requested ? String(storageAccess || 'none') : 'none',
+      worker_bindings: requested ? workerBindings : [],
+    };
+
+    if (requested) {
+      warnings.push('Sandbox execution is not enabled yet; sandbox_profile is metadata-only in this phase.');
+    }
   }
 
   if (!isPlainObject(manifest.resources)) {
@@ -389,6 +428,8 @@ export const validateExtensionManifest = (manifestInput, options = {}) => {
     validationStatus,
     runtimeMode: manifest.runtime_mode || null,
     compatibilityStatus: compatible ? 'compatible' : 'incompatible',
+    sandboxReadinessStatus: manifest.sandbox_profile?.requested ? 'metadata_only' : 'not_requested',
+    sandboxProfile: manifest.sandbox_profile,
     reasonCategories: Array.from(reasonCategories).filter((value) => EXTENSION_REASON_CATEGORIES.includes(value)),
     invalidCapabilities,
     missingArtifacts,

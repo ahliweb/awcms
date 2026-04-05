@@ -362,6 +362,37 @@ The current UI supports:
 
 This phase does not yet add direct insertion into `VisualPageBuilder` or public runtime lookup-by-slug.
 
+## Phase 5 Sandbox Readiness Metadata
+
+Phase 5 does not enable sandboxed extension execution. It adds sandbox-readiness metadata so extension manifests, diagnostics, and operator tooling can describe future isolation needs without changing the trusted runtime contract.
+
+### Manifest Metadata
+
+Extensions may now declare optional `sandbox_profile` metadata:
+
+- `requested`: boolean
+- `network_access`: `none` or `outbound_http`
+- `storage_access`: `none`, `tenant_settings`, or `tenant_template_parts`
+- `worker_bindings`: string array
+
+This metadata is stored as part of the manifest contract and surfaced through extension diagnostics.
+
+### Runtime Rule
+
+- `runtime_mode` remains `trusted` only in the live runtime
+- any sandbox metadata is treated as planning metadata only
+- diagnostics should show sandbox readiness as `metadata_only` when sandbox metadata is declared
+
+### Diagnostics
+
+The extension diagnostics panel now exposes:
+
+- sandbox readiness status
+- requested network/storage access
+- requested worker bindings
+
+This is informational only in the current phase; it does not grant execution privileges or change routing behavior.
+
 ## Reference Extension
 
 `awcms-ext/ahliweb/events/` is the canonical example package.

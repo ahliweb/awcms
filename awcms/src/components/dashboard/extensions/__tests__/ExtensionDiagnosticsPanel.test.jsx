@@ -13,6 +13,13 @@ const extension = {
   restored_by_catalog_version: '1.0.2',
   validation_summary: {
     compatibilityStatus: 'compatible',
+    sandboxReadinessStatus: 'metadata_only',
+    sandboxProfile: {
+      requested: true,
+      network_access: 'outbound_http',
+      storage_access: 'tenant_template_parts',
+      worker_bindings: ['EVENTS_KV'],
+    },
     reasonCategories: ['capability_validation_failed', 'missing_artifact'],
     invalidCapabilities: ['events:health'],
     missingArtifacts: ['adminRoutes:events'],
@@ -38,6 +45,9 @@ describe('ExtensionDiagnosticsPanel', () => {
 
     expect(screen.getByText('Invalid capabilities')).toBeInTheDocument();
     expect(screen.getByText('Missing artifacts')).toBeInTheDocument();
+    expect(screen.getByText('Sandbox profile')).toBeInTheDocument();
+    expect(screen.getByText(/Sandbox readiness metadata_only/)).toBeInTheDocument();
+    expect(screen.getByText('EVENTS_KV')).toBeInTheDocument();
     expect(screen.getByText('events:health')).toBeInTheDocument();
     expect(screen.getByText('adminRoutes:events')).toBeInTheDocument();
     expect(screen.queryByText('Redacted')).not.toBeInTheDocument();

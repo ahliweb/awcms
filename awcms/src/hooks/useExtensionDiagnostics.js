@@ -20,6 +20,8 @@ export default function useExtensionDiagnostics(extension, canViewDiagnostics) {
       validationStatus: extension?.validation_status || extension?.catalog_validation_status || 'valid',
       runtimeMode: extension?.runtime_mode || extension?.manifest?.runtime_mode || 'trusted',
       compatibilityStatus: summary.compatibilityStatus || 'compatible',
+      sandboxReadinessStatus: summary.sandboxReadinessStatus || 'not_requested',
+      sandboxProfile: summary.sandboxProfile || extension?.manifest?.sandbox_profile || { requested: false, network_access: 'none', storage_access: 'none', worker_bindings: [] },
       reasonCategories: REASON_CATEGORIES.map((category) => ({
         key: category,
         active: categories.includes(category) || extension?.deactivation_reason_category === category,

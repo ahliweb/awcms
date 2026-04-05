@@ -11,6 +11,7 @@ All notable changes to the **AWCMS** project will be documented in this file.
 - Templates: added the Phase 2 site blueprint foundation with mirrored `site_blueprints` / `tenant_site_blueprint_state` schema, a Worker-backed `/functions/v1/site-blueprints` apply route, a new Templates workspace blueprint tab, and focused admin/edge test coverage for the initial blueprint flow.
 - Templates: added the Phase 3 reusable sections foundation with mirrored `reusable_sections` schema, a Worker-backed `/functions/v1/reusable-sections` materialization route, a new Templates workspace reusable sections tab, and focused admin/edge test coverage for section materialization boundaries.
 - Tooling: added Phase 4 AI/operator MCP tools for listing site blueprints, inspecting tenant blueprint state, and listing reusable sections from the local AWCMS database using `SUPABASE_DB_URL`.
+- Extensions: added Phase 5 sandbox-readiness metadata support with optional `sandbox_profile` manifest fields, diagnostics visibility for requested sandbox capabilities, and focused validation/UI test coverage while keeping runtime execution trusted-only.
 
 ### Changed
 

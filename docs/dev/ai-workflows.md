@@ -78,6 +78,8 @@ Current local MCP composition tools:
 
 These tools are read-only and are intended to support AI/operator diagnostics and planning around the Phase 2 and Phase 3 composition flows.
 
+For extension sandbox planning, rely on manifest diagnostics and documented metadata rather than inventing new execution paths. Phase 5 currently supports metadata-only sandbox profiling, not live sandbox execution.
+
 ## 7. Available Rules
 
 See `.agents/rules/` for guardrail playbooks:

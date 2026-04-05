@@ -28,6 +28,9 @@ function ExtensionDiagnosticsPanel({ extension, canViewDiagnostics }) {
           <p className="mt-1 text-xs text-muted-foreground">
             Runtime `{diagnostics.runtimeMode}` • Compatibility {diagnostics.compatibilityStatus}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Sandbox readiness {diagnostics.sandboxReadinessStatus}
+          </p>
         </div>
         {!canViewDiagnostics ? (
           <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
@@ -79,6 +82,15 @@ function ExtensionDiagnosticsPanel({ extension, canViewDiagnostics }) {
                 {diagnostics.missingArtifacts.map((artifact) => <li key={artifact}>{artifact}</li>)}
               </ul>
             ) : <p className="text-xs text-muted-foreground">None</p>}
+          </div>
+          <div className="rounded-lg border border-border/60 bg-card/60 p-3 md:col-span-2">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Sandbox profile</p>
+            <div className="grid gap-2 text-xs text-foreground sm:grid-cols-2">
+              <div>Requested: <span className="font-medium">{diagnostics.sandboxProfile?.requested ? 'yes' : 'no'}</span></div>
+              <div>Network access: <span className="font-medium">{diagnostics.sandboxProfile?.network_access || 'none'}</span></div>
+              <div>Storage access: <span className="font-medium">{diagnostics.sandboxProfile?.storage_access || 'none'}</span></div>
+              <div>Worker bindings: <span className="font-medium">{diagnostics.sandboxProfile?.worker_bindings?.length ? diagnostics.sandboxProfile.worker_bindings.join(', ') : 'none'}</span></div>
+            </div>
           </div>
         </div>
       ) : (

@@ -73,4 +73,28 @@ describe('validateExtensionManifest', () => {
     expect(result.valid).toBe(false);
     expect(result.errors.join(' ')).toContain('runtime_mode is required');
   });
+
+  it('accepts sandbox metadata and marks it metadata-only', () => {
+    const result = validateExtensionManifest({
+      schemaVersion: 1,
+      slug: 'sandbox-events',
+      name: 'Sandbox Events',
+      vendor: 'ahliweb',
+      version: '1.0.0',
+      kind: 'bundled',
+      scope: 'tenant',
+      runtime_mode: 'trusted',
+      capabilities: ['tenant.events.read'],
+      sandbox_profile: {
+        requested: true,
+        network_access: 'outbound_http',
+        storage_access: 'tenant_template_parts',
+        worker_bindings: ['EVENTS_KV'],
+      },
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.diagnostics.sandboxReadinessStatus).toBe('metadata_only');
+    expect(result.diagnostics.sandboxProfile.worker_bindings).toContain('EVENTS_KV');
+  });
 });
