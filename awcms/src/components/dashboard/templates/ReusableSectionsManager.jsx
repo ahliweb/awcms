@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Blocks, CopyPlus, GitMerge, History, RefreshCcw, Sparkles, Trash2, Unlink2, Wand2 } from 'lucide-react';
+import { Blocks, CopyPlus, GitCompare, GitMerge, History, RefreshCcw, Sparkles, Trash2, Unlink2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { useReusableSections } from '@/hooks/useReusableSections';
+import { compareReusableSectionRevision } from '@/lib/reusableSectionDiff';
 
 const DEFAULT_SECTION_CONTENT = {
   content: [],
@@ -24,6 +25,7 @@ function ReusableSectionsManager() {
     status: 'draft',
     content: JSON.stringify(DEFAULT_SECTION_CONTENT, null, 2),
   });
+  const [compareSelection, setCompareSelection] = useState(null);
 
   const canManagePlatform = isPlatformAdmin || isFullAccess || hasPermission('platform.template.manage');
   const canManageTenantVariant = hasPermission('tenant.setting.update');
@@ -64,6 +66,12 @@ function ReusableSectionsManager() {
             const usages = usagesBySection[section.id] || [];
             const detachEvents = detachEventsBySection[section.id] || [];
             const revisions = revisionsBySection[section.id] || [];
+            const activeCompareRevision = compareSelection?.sectionId === section.id
+              ? revisions.find((revision) => revision.id === compareSelection.revisionId) || null
+              : null;
+            const comparison = activeCompareRevision
+              ? compareReusableSectionRevision(section, activeCompareRevision.snapshot)
+              : null;
 
             return (
             <div key={section.id} className="rounded-2xl border border-border/60 bg-card/75 p-4 shadow-sm">
@@ -133,14 +141,48 @@ function ReusableSectionsManager() {
                             <span>
                               Revision {revision.revision_number} • {new Date(revision.created_at).toLocaleString()}
                             </span>
-                            <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => restoreRevision({ sectionId: section.id, revisionId: revision.id })}>
-                              <History className="mr-1 h-3.5 w-3.5" /> Restore
-                            </Button>
+                            <span className="flex items-center gap-1">
+                              <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => setCompareSelection((current) => current?.revisionId === revision.id && current?.sectionId === section.id ? null : { sectionId: section.id, revisionId: revision.id })}>
+                                <GitCompare className="mr-1 h-3.5 w-3.5" /> Compare
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px]" onClick={() => restoreRevision({ sectionId: section.id, revisionId: revision.id })}>
+                                <History className="mr-1 h-3.5 w-3.5" /> Restore
+                              </Button>
+                            </span>
                           </li>
                         ))}
                       </ul>
                     ) : null}
                   </div>
+                  {comparison ? (
+                    <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Compare with revision {activeCompareRevision?.revision_number}
+                      </p>
+                      <p className="mt-1 text-xs text-foreground">
+                        {comparison.hasChanges ? `${comparison.changedFields.length} changed field(s)` : 'No differences detected'}
+                      </p>
+                      {comparison.changedFields.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {comparison.changedFields.slice(0, 4).map((field) => (
+                            <div key={field.key} className="rounded-lg border border-border/60 bg-background/70 p-2">
+                              <p className="text-[11px] font-medium text-foreground">{field.label}</p>
+                              <div className="mt-1 grid gap-2 md:grid-cols-2">
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Current</p>
+                                  <pre className="mt-1 whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-[10px] text-foreground">{field.currentValue}</pre>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Revision</p>
+                                  <pre className="mt-1 whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-[10px] text-foreground">{field.revisionValue}</pre>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap gap-2">

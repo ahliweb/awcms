@@ -646,6 +646,39 @@ The reusable sections manager now shows:
 
 This phase provides revision storage and visibility only. It does not yet add restore, diff, compare, or approval workflows.
 
+## Phase 17 Revision Comparison
+
+Phase 17 makes reusable section revisions inspectable before action by adding an inline compare view in the manager.
+
+### Comparison Behavior
+
+For a selected revision, AWCMS now compares the current reusable section state against the saved revision snapshot and reports:
+
+1. whether any fields changed
+2. the set of changed fields
+3. current vs revision values for each changed field
+
+The initial comparison surface covers:
+
+- name
+- slug
+- description
+- section mode
+- status
+- template part id
+- owner tenant id
+- metadata
+- content
+
+### Admin Surface
+
+- Manager UI: `awcms/src/components/dashboard/templates/ReusableSectionsManager.jsx`
+- Diff helper: `awcms/src/lib/reusableSectionDiff.js`
+
+Recent revisions now expose a `Compare` action and render the comparison inline in the reusable sections manager.
+
+This phase does not yet add visual block diffs, compare-two-revisions mode, or approval workflows around restore.
+
 ## Phase 5 Sandbox Readiness Metadata
 
 Phase 5 does not enable sandboxed extension execution. It adds sandbox-readiness metadata so extension manifests, diagnostics, and operator tooling can describe future isolation needs without changing the trusted runtime contract.

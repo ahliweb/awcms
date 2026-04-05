@@ -135,6 +135,12 @@ describe('ReusableSectionsManager', () => {
       expect(updateAllLinkedReferences).toHaveBeenCalledWith({ sectionId: 'section-1' });
     });
 
+    fireEvent.click(screen.getByRole('button', { name: /compare/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Compare with revision 2/)).toBeInTheDocument();
+    });
+
     fireEvent.click(screen.getAllByRole('button', { name: /restore/i })[0]);
 
     await waitFor(() => {
