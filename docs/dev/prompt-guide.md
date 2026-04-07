@@ -167,7 +167,7 @@ These details prevent the most common bad prompts and bad implementations.
 
 ### Stack And Runtime
 
-- `awcms/`: React 19.2.4, Vite `^8.0.1`, JavaScript only
+- `awcms/`: React 19.2.4, Vite `^8.0.5`, JavaScript only
 - `awcms-public/`: Astro 6.0.8, React 19.2.4 islands, TypeScript/TSX, static output by default
 - `awcms-edge/`: Cloudflare Workers + Hono, not Node.js server code
 - Supabase: source of truth for Auth, PostgreSQL, RLS, and ABAC

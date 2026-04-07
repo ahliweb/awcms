@@ -1,47 +1,81 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { getReusableSectionContentBySlug } from "../reusableSections";
+
+const createMock = <TArgs extends unknown[] = [], TResult = unknown>(
+  implementation?: (...args: TArgs) => TResult,
+) => {
+  const mockFn = (...args: TArgs) => implementation?.(...args);
+  mockFn.mockResolvedValue = (value: TResult) =>
+    createMock<TArgs, Promise<TResult>>(() => Promise.resolve(value));
+  return mockFn;
+};
+
+type QueryMock = {
+  select: () => QueryMock;
+  eq: () => QueryMock;
+  maybeSingle: () => Promise<unknown>;
+  is?: () => QueryMock;
+  or?: () => QueryMock;
+};
+
+type SupabaseMock = {
+  from: (table: string) => QueryMock;
+};
 
 describe("getReusableSectionContentBySlug", () => {
   it("returns direct visual content for visual sections", async () => {
-    const maybeSingle = vi.fn().mockResolvedValue({
+    const maybeSingle = createMock().mockResolvedValue({
       data: {
         section_mode: "visual",
-        content: { content: [{ type: "Heading", props: { text: "Hello" } }], root: { props: {} } },
+        content: {
+          content: [{ type: "Heading", props: { text: "Hello" } }],
+          root: { props: {} },
+        },
         template_part_id: null,
       },
       error: null,
     });
 
-    const query = {
-      select: vi.fn(() => query),
-      eq: vi.fn(() => query),
-      is: vi.fn(() => query),
-      or: vi.fn(() => query),
-      maybeSingle,
+    const query = {} as QueryMock;
+    query.select = createMock(() => query);
+    query.eq = createMock(() => query);
+    query.is = createMock(() => query);
+    query.or = createMock(() => query);
+    query.maybeSingle = maybeSingle;
+
+    const supabase: SupabaseMock = {
+      from: createMock(() => query),
     };
 
-    const supabase = {
-      from: vi.fn(() => query),
-    } as any;
+    const result = await getReusableSectionContentBySlug(
+      supabase,
+      "hero-section",
+      "tenant-1",
+    );
 
-    const result = await getReusableSectionContentBySlug(supabase, "hero-section", "tenant-1");
-
-    expect(result).toEqual({ content: [{ type: "Heading", props: { text: "Hello" } }], root: { props: {} } });
+    expect(result).toEqual({
+      content: [{ type: "Heading", props: { text: "Hello" } }],
+      root: { props: {} },
+    });
   });
 
   it("resolves template part content for template_part_reference sections", async () => {
-    const partMaybeSingle = vi.fn().mockResolvedValue({
-      data: { content: { content: [{ type: "Text", props: { text: "From part" } }], root: { props: {} } } },
+    const partMaybeSingle = createMock().mockResolvedValue({
+      data: {
+        content: {
+          content: [{ type: "Text", props: { text: "From part" } }],
+          root: { props: {} },
+        },
+      },
       error: null,
     });
 
-    const partQuery = {
-      select: vi.fn(() => partQuery),
-      eq: vi.fn(() => partQuery),
-      maybeSingle: partMaybeSingle,
-    };
+    const partQuery = {} as QueryMock;
+    partQuery.select = createMock(() => partQuery);
+    partQuery.eq = createMock(() => partQuery);
+    partQuery.maybeSingle = partMaybeSingle;
 
-    const sectionMaybeSingle = vi.fn().mockResolvedValue({
+    const sectionMaybeSingle = createMock().mockResolvedValue({
       data: {
         section_mode: "template_part_reference",
         content: null,
@@ -50,20 +84,28 @@ describe("getReusableSectionContentBySlug", () => {
       error: null,
     });
 
-    const sectionQuery = {
-      select: vi.fn(() => sectionQuery),
-      eq: vi.fn(() => sectionQuery),
-      is: vi.fn(() => sectionQuery),
-      or: vi.fn(() => sectionQuery),
-      maybeSingle: sectionMaybeSingle,
+    const sectionQuery = {} as QueryMock;
+    sectionQuery.select = createMock(() => sectionQuery);
+    sectionQuery.eq = createMock(() => sectionQuery);
+    sectionQuery.is = createMock(() => sectionQuery);
+    sectionQuery.or = createMock(() => sectionQuery);
+    sectionQuery.maybeSingle = sectionMaybeSingle;
+
+    const supabase: SupabaseMock = {
+      from: createMock((table: string) =>
+        table === "reusable_sections" ? sectionQuery : partQuery,
+      ),
     };
 
-    const supabase = {
-      from: vi.fn((table: string) => (table === "reusable_sections" ? sectionQuery : partQuery)),
-    } as any;
+    const result = await getReusableSectionContentBySlug(
+      supabase,
+      "hero-section",
+      "tenant-1",
+    );
 
-    const result = await getReusableSectionContentBySlug(supabase, "hero-section", "tenant-1");
-
-    expect(result).toEqual({ content: [{ type: "Text", props: { text: "From part" } }], root: { props: {} } });
+    expect(result).toEqual({
+      content: [{ type: "Text", props: { text: "From part" } }],
+      root: { props: {} },
+    });
   });
 });

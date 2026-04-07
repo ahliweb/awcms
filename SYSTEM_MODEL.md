@@ -14,7 +14,7 @@ Agents must respect the exact versions declared in the current workspace manifes
 ### 1.1 Admin Panel (`awcms`)
 
 * **Framework:** React 19.2.4 (Functional Components Only)
-* **Build Tool:** Vite `^8.0.1`
+* **Build Tool:** Vite `^8.0.5`
 * **Language:** JavaScript (ES2022+)
 * **Styling:** TailwindCSS `^4.2.2` (CSS-based config)
 * **State Management:** React Context + Hooks (No Redux/Zustand unless specified)

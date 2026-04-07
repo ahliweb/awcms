@@ -136,6 +136,11 @@ export default defineConfig({
     plugins: [tailwindcss(), optimizeWorkerdDeps()] as NonNullable<
       AstroUserConfig["vite"]
     >["plugins"],
+    optimizeDeps: {
+      // Vite 8 SSR dep optimization can lose this Cloudflare polyfill artifact
+      // during `astro check`, so keep it out of the optimizer path.
+      exclude: ["@cloudflare/unenv-preset/polyfill/performance"],
+    },
     resolve: {
       alias: {
         "~": path.resolve(__dirname, "./src"),

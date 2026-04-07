@@ -12,7 +12,7 @@ Describe the admin layout system and the shared template components.
 
 ## Prerequisites
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Admin Panel architecture (React 19.2.4, Vite `^8.0.1`, TailwindCSS 4)
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Admin Panel architecture (React 19.2.4, Vite `^8.0.5`, TailwindCSS 4)
 - [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
 - `docs/modules/COMPONENT_GUIDE.md`
 - `docs/security/abac.md`

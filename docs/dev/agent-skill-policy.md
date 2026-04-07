@@ -31,7 +31,7 @@ These stay in `.agents/skills/` because they map directly to the maintained stac
 | `gh-fix-ci` | Direct fit for GitHub Actions debugging in the maintained CI setup | `docs/dev/ci-cd.md`, GitHub MCP, `.github/workflows/*.yml` |
 | `react-19` | Direct fit for Admin + Public React 19 code generation | React 19.2.4 in `SYSTEM_MODEL.md`; Context7: `websites/react_dev` |
 | `supabase-usage` | Direct fit for Supabase Auth, schema, RLS, and query guidance | Supabase is the system of record; Context7: `supabase/supabase`, `supabase/supabase-js`, `supabase/cli` |
-| `vite` | Direct fit for Vite config/build/plugin work in the admin workspace | `awcms/` uses Vite `^8.0.1`; Context7: `vitejs/vite` |
+| `vite` | Direct fit for Vite config/build/plugin work in the admin workspace | `awcms/` uses Vite `^8.0.5`; Context7: `vitejs/vite` |
 | `vitest` | Direct fit for unit/integration testing in maintained JS/TS workspaces | Vitest is the maintained test framework in the repo |
 
 ## Remove From Repo, Install On Demand

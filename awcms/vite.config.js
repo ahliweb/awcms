@@ -115,7 +115,7 @@ export default defineConfig(({ mode }) => {
 			host: '::',
 			port: 3000,
 			cors: typeof corsAllowedOrigins === 'boolean' ? corsAllowedOrigins : { origin: corsAllowedOrigins },
-			// Vite 7 Warmup: Pre-transform critical modules to kill startup waterfall
+			// Pre-transform critical modules to reduce startup waterfall
 			warmup: {
 				clientFiles: [
 					'./src/main.jsx',
@@ -164,7 +164,7 @@ export default defineConfig(({ mode }) => {
 		// Build configuration
 		build: {
 			outDir: 'dist',
-			target: 'baseline-widely-available', // Vite 7 default for modern browsers
+			target: 'baseline-widely-available', // Modern browser baseline target
 			sourcemap: mode === 'development',
 			// Optimize chunk size
 			rollupOptions: {

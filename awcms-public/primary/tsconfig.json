@@ -10,5 +10,5 @@
     }
   },
   "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist/"]
+  "exclude": ["dist/", "src/**/__tests__/**"]
 }

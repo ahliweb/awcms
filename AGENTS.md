@@ -57,7 +57,7 @@ Agents must be aware of the exact versions in use:
 | Technology       | Version  | Notes                            |
 | ---------------- | -------- | -------------------------------- |
 | React            | 19.2.4   | Functional components only       |
-| Vite             | `^8.0.1` | Build tool & dev server (`awcms`) |
+| Vite             | `^8.0.5` | Build tool & dev server (`awcms`) |
 | TailwindCSS      | `^4.2.2` / `^4.2.2` | Admin / Primary public |
 | Supabase JS      | `^2.99.3` / `^2.99.3` | Admin / Primary public clients |
 | React Router DOM | 7.10.1   | Client-side routing              |
@@ -76,7 +76,7 @@ Agents must be aware of the exact versions in use:
 
 > [!IMPORTANT]
 > **React Version Alignment**: The Admin Panel and Public Portal both use React 19.2.4. Ensure full compatibility with all dependencies.
-> **Vite**: The admin workspace currently declares Vite `^8.0.1`; keep docs and implementation guidance aligned with the installed manifest version.
+> **Vite**: The admin workspace currently declares Vite `^8.0.5`; keep docs and implementation guidance aligned with the installed manifest version.
 > **Node.js**: Minimum required version is **24.14.1** (standardized Node LTS baseline across AWCMS and OpenClaw). Managed via `nvm`.
 
 ---
@@ -120,7 +120,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | Rule              | Requirement                                                               |
 | ----------------- | ------------------------------------------------------------------------- |
 | Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
-| **Admin Panel**   | React 19.2.4, Vite `^8.0.1`                                              |
+| **Admin Panel**   | React 19.2.4, Vite `^8.0.5`                                              |
 | **Public Portal** | Astro `6.0.8` (static output), React 19.2.4                              |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase (Auth, DB, RLS) + Cloudflare Workers (Edge Logic)                |

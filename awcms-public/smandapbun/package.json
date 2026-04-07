@@ -31,14 +31,6 @@
     "sharp": "^0.34.5",
     "swiper": "^12.1.0"
   },
-  "overrides": {
-    "lodash": "^4.17.23",
-    "wrangler": "^4.76.0",
-    "tar": "^7.5.7",
-    "undici": "^7.24.0",
-    "yauzl": "^3.2.1",
-    "h3": "^1.15.6"
-  },
   "devDependencies": {
     "@astrojs/check": "^0.9.8",
     "@eslint/js": "^10.0.1",
@@ -58,6 +50,16 @@
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.1",
+    "vite": "^8.0.5",
     "wrangler": "^4.76.0"
+  },
+  "overrides": {
+    "h3": "^1.15.6",
+    "lodash": "^4.17.23",
+    "tar": "^7.5.7",
+    "undici": "^7.24.0",
+    "vite": "^8.0.5",
+    "wrangler": "^4.76.0",
+    "yauzl": "^3.2.1"
   }
 }

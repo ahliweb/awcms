@@ -27,7 +27,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 | Directory | Description | Tech Stack |
 | --- | --- | --- |
-| `awcms/` | Admin Panel | React 19.2.4, Vite `^8.0.1`, Supabase |
+| `awcms/` | Admin Panel | React 19.2.4, Vite `^8.0.5`, Supabase |
 | `awcms-public/primary/` | Public Portal | Astro 6.0.8 (static), React 19.2.4 |
 | `awcms-mobile/primary/` | Mobile App | Flutter 3.38.5 |
 | `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
@@ -41,7 +41,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 ## Current Stack Versions (Core)
 
 - **React**: 19.2.4 (Admin + Public)
-- **Vite**: `^8.0.1` (Admin)
+- **Vite**: `^8.0.5` (Admin direct; public Astro workspaces align to Vite 8 through overrides)
 - **Astro**: `6.0.8` (Primary Public + SMANDAPBUN) - *Requires Node.js >=24.14.1*
 - **TailwindCSS**: `^4.2.2` (Admin + Public)
 - **Supabase JS**: `^2.99.3` (Admin + Public)

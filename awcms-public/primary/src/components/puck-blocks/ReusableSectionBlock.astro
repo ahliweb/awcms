@@ -13,7 +13,7 @@ interface Props {
 const { sectionSlug = "", title, reusableDepth = 0 } = Astro.props;
 
 const supabase = createClientFromEnv(import.meta.env);
-const tenantId = getPublicTenantId(import.meta.env);
+const tenantId = getPublicTenantId();
 
 let content: Record<string, unknown> | null = null;
 const canResolve = reusableDepth < 2 && Boolean(sectionSlug);

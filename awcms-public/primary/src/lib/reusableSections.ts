@@ -23,12 +23,18 @@ export async function getReusableSectionContentBySlug(
   const { data: section, error } = await query.maybeSingle();
   if (error || !section) {
     if (error) {
-      console.error("[ReusableSection] Error fetching reusable section:", error.message);
+      console.error(
+        "[ReusableSection] Error fetching reusable section:",
+        error.message,
+      );
     }
     return null;
   }
 
-  if (section.section_mode === "template_part_reference" && section.template_part_id) {
+  if (
+    section.section_mode === "template_part_reference" &&
+    section.template_part_id
+  ) {
     const { data: part, error: partError } = await supabase
       .from("template_parts")
       .select("content")
@@ -36,7 +42,10 @@ export async function getReusableSectionContentBySlug(
       .maybeSingle();
 
     if (partError) {
-      console.error("[ReusableSection] Error fetching referenced template part:", partError.message);
+      console.error(
+        "[ReusableSection] Error fetching referenced template part:",
+        partError.message,
+      );
       return null;
     }
 

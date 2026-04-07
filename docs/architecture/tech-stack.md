@@ -23,7 +23,7 @@ Provide authoritative versions and technology choices for all AWCMS packages.
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
 | Framework | React | 19.2.4 | UI framework |
-| Build tool | Vite | `^8.0.1` | SPA build and dev server |
+| Build tool | Vite | `^8.0.5` | SPA build and dev server |
 | Language | JavaScript | ES2022+ | Functional components |
 | Styling | TailwindCSS | `^4.2.2` | Utility-first CSS |
 | Visual editor | @puckeditor/core | 0.21.0 | Visual builder |
