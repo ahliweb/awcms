@@ -71,6 +71,7 @@ Name the category of change so the right rules and patterns get applied.
 | Migration | `new migration`, `alter table`, `new table`, `index`, `constraint` |
 | RLS / ABAC | `policy`, `permission`, `has_permission`, `tenant isolation` |
 | Edge route | `Worker route`, `queue consumer`, `R2`, `webhook`, `OpenAPI` |
+| CI / workflow | `GitHub Actions`, `workflow`, `deploy`, `Pages`, `credential preflight` |
 | Module work | `new module`, `sidebar item`, `resource registry`, `MainRouter` |
 | Extension work | `extension`, `extension.json`, `platform_extension_catalog`, `tenant_extensions` |
 | Mobile / IoT | `Flutter`, `ESP32`, `device config`, `realtime retrieval` |
@@ -113,6 +114,10 @@ Useful references include:
 - `docs/dev/admin.md`
 - `docs/dev/public.md`
 - `docs/dev/edge-functions.md`
+- `.github/workflows/ci-push.yml`
+- `.github/workflows/deploy-smandapbun.yml`
+- `scripts/resolve_cloudflare_credentials.mjs`
+- `scripts/resolve_smandapbun_public_env.mjs`
 - `.agents/workflows/migration-workflow.md`
 - `.agents/workflows/rls-change-workflow.md`
 - `.agents/workflows/ui-change-workflow.md`
@@ -168,11 +173,13 @@ These details prevent the most common bad prompts and bad implementations.
 ### Stack And Runtime
 
 - `awcms/`: React 19.2.4, Vite `^8.0.5`, JavaScript only
-- `awcms-public/`: Astro 6.0.8, React 19.2.4 islands, TypeScript/TSX, static output by default
+- `awcms-public/primary/`: Astro 6.1.4, React 19.2.4 islands, TypeScript/TSX, static output by default
+- `awcms-public/smandapbun/`: Astro 6.0.8, React 19.2.4 islands, TypeScript/TSX, static output by default
 - `awcms-edge/`: Cloudflare Workers + Hono, not Node.js server code
 - Supabase: source of truth for Auth, PostgreSQL, RLS, and ABAC
 - Cloudflare R2: object storage layer
 - Cloudflare Queues: background offload for media and notifications
+- Node.js baseline across active workspaces: `>=24.14.1`
 
 ### Security And Data Lifecycle
 
@@ -210,6 +217,14 @@ Prompts for docs work should say whether the change also needs to update:
 
 For repository-wide or cross-topic doc updates, explicitly ask for audit-plan and audit-tracker alignment.
 
+### CI And Deployment Guardrails
+
+- GitHub Actions workflow fixes should stay minimal and scoped to the failing job or shared duplicated logic.
+- For Cloudflare Pages deploy workflows, prompts should tell the agent to inspect both the workflow file and the target workspace manifest.
+- Cloudflare account resolution may come from env files, GitHub secrets/vars, or project-based auto-resolution in workflow preflight.
+- When a workspace already pins `wrangler`, the workflow `wranglerVersion` should stay aligned to avoid npm `EOVERRIDE` conflicts during `cloudflare/wrangler-action` installs.
+- Public CI prompts should mention deployment-env wrapper scripts when present, for example `scripts/run-with-deployment-env.mjs` and `scripts/resolve_smandapbun_public_env.mjs`.
+
 ## Workflow-Aware Prompting
 
 Use the workflow docs when the task crosses sensitive boundaries.
@@ -220,6 +235,7 @@ Use the workflow docs when the task crosses sensitive boundaries.
 | RLS / ABAC | `.agents/workflows/rls-change-workflow.md` |
 | UI changes | `.agents/workflows/ui-change-workflow.md` |
 | Validation gate | `.agents/workflows/ci-validation-workflow.md` |
+| CI failure fix | GitHub Actions workflow file + `gh run view ... --log` |
 | Planning discipline | [docs/dev/ai-planning-workflow.md](ai-planning-workflow.md) |
 | Review expectations | [docs/dev/review-checklist.md](review-checklist.md) |
 | Edge runtime changes | [docs/dev/edge-functions.md](edge-functions.md) |
@@ -360,7 +376,31 @@ Done when:
 <specific request>
 ```
 
-### Template G: Code Review Request
+### Template G: CI / Workflow Repair
+
+```text
+Working in the AWCMS monorepo.
+Task type: CI failure investigation and targeted fix.
+Start from the failing GitHub Actions run/job logs.
+Follow: `docs/dev/prompt-guide.md`, `docs/dev/ai-workflows.md`, the exact workflow file, and the affected workspace manifest/config.
+Investigation requirements:
+- use `gh` to inspect the run, job, and failed step logs
+- identify the exact failing command or action step
+- distinguish app failure, workflow/config failure, environment/toolchain issue, or upstream/external issue
+Constraints:
+- apply the smallest safe fix
+- do not weaken security, validation, or deployment safeguards
+- if Cloudflare Pages deploy is involved, inspect credential resolution, Pages project validation, and `wranglerVersion` alignment with the workspace
+Done when:
+- root cause is identified
+- the necessary workflow or workspace fix is applied
+- relevant local validation passes if reproducible locally
+- any remaining external dependency on a GitHub rerun is stated clearly
+
+<GitHub Actions URL or run/job id>
+```
+
+### Template H: Code Review Request
 
 ```text
 Review this change with a code-review mindset.
@@ -393,6 +433,7 @@ Use these when you want the agent to ground itself quickly:
 | `Add a feature.` | `Add a tenant-scoped manager screen in awcms/ for X following the existing dashboard manager pattern.` |
 | `Update the database.` | `Add a timestamped migration in both migration folders, preserve parity, and include RLS / deleted_at handling.` |
 | `Make an API endpoint.` | `Add a Cloudflare Worker route in awcms-edge/, validate Supabase auth context first, and keep Supabase as the authority.` |
+| `Fix CI.` | `Inspect the failing GitHub Actions job with gh, identify the exact failing step, and apply the smallest safe workflow or workspace fix.` |
 | `Show content publicly.` | `Render tenant-scoped published content in awcms-public/primary using build-time tenant resolution.` |
 | `Delete this item.` | `Soft-delete the business record via deleted_at and keep reads filtered to non-deleted rows.` |
 | `Add permissions.` | `Add permission keys using scope.resource.action and wire them through frontend and RLS patterns.` |
