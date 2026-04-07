@@ -1,192 +1,420 @@
-> **Documentation Authority**: [AGENTS.md](../../AGENTS.md) § Core Principles, [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
 
-# AWCMS Prompt Component Guide
+# AWCMS Prompt Guide
 
-A reference card for writing effective prompts for any coding work in the AWCMS ecosystem.
-Every prompt is more reliable when it answers these questions upfront.
+## Purpose
 
----
+Provide a current prompt-writing guide for AWCMS work so requests align with the live architecture, standards, modules, workflows, and documentation rules.
 
-## The 5 Essential Components
+## When To Use This Guide
 
-### 1. 🏗️ Workspace
+Use this guide when writing prompts for:
 
-Tell the agent **which workspace** the change lives in. This determines the tech stack, tooling, and constraints.
+- code changes
+- bug fixes
+- migrations
+- RLS / ABAC updates
+- Worker routes
+- public portal features
+- module additions
+- extension work
+- documentation updates
+- review requests
 
-| Workspace | When to name it |
-|---|---|
-| `awcms/` | Admin Panel (React 19, Vite 8, shadcn/ui) |
-| `awcms-public/primary/` | Public Portal (Astro 6, React Islands) |
-| `awcms-public/smandapbun/` | Smandapbun public site |
-| `awcms-edge/` | Cloudflare Worker (TypeScript, Wrangler) |
-| `awcms-mcp/` | Local MCP server |
-| `packages/awcms-shared/` | Shared package (TypeScript) |
-| `awcms-mobile/primary/` | Flutter mobile app |
-| `supabase/migrations/` | Database schema changes |
+## Start With Authority
 
-**Example:**
-> "Working in `awcms/` (Admin Panel)…"
+Before writing a detailed prompt, anchor it to the current documentation chain:
 
----
+1. [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) for architecture, stack versions, runtime boundaries, tenancy, and security mandates
+2. [AGENTS.md](../../AGENTS.md) for implementation rules, patterns, hooks, and guardrails
+3. [README.md](../../README.md) for the current repo layout, runtime summary, and operational commands
+4. [DOCS_INDEX.md](../../DOCS_INDEX.md) for canonical docs by topic
 
-### 2. 🎯 Task Type
+If the task is documentation-heavy, also name the exact canonical docs that should stay in sync.
 
-Name the **category of work** so the agent pulls the right patterns and constraints.
+## The 6 Essential Prompt Components
 
-| Task Type | Keywords to use |
-|---|---|
-| New UI component | `"new component"`, `"add page"`, `"add dialog"` |
-| Hook / data layer | `"new hook"`, `"update hook"`, `"data fetching"` |
-| Database migration | `"new migration"`, `"alter table"`, `"add column"` |
-| RLS / ABAC | `"RLS policy"`, `"permission"`, `"role check"` |
-| Edge Worker route | `"new Worker route"`, `"edge handler"` |
-| Extension/plugin | `"extension"`, `"plugin"`, `"addon"` |
-| Refactor | `"refactor"`, `"extract hook"`, `"rename"` |
-| Bug fix | `"bug"`, `"broken"`, `"error"`, `"regression"` |
-| Documentation | `"update docs"`, `"add to AGENTS.md"` |
+Every strong AWCMS prompt should answer these six questions up front.
 
----
+### 1. Workspace
 
-### 3. 🔒 Tenant & Permission Context
+State exactly where the change belongs.
 
-State **who this feature is for** and at what permission level. This prevents the agent from bypassing RLS or writing wrong permission keys.
+| Workspace | Use When The Request Is About |
+| --- | --- |
+| `awcms/` | Admin panel UI, hooks, contexts, routes, module screens, dashboard widgets |
+| `awcms-public/primary/` | Default public portal, Astro static pages, React islands |
+| `awcms-public/smandapbun/` | The dedicated SMANDAPBUN public portal |
+| `awcms-edge/` | Cloudflare Worker routes, edge validation, queue consumers, R2 flows |
+| `supabase/migrations/` | Canonical database migrations |
+| `awcms/supabase/migrations/` | Mirrored migration path that must stay in parity with root migrations |
+| `awcms-mcp/` | Local MCP server integrations and tooling |
+| `packages/awcms-shared/` | Shared TypeScript utilities used by public runtimes |
+| `awcms-mobile/primary/` | Flutter mobile app work |
+| `awcms-esp32/primary/` | ESP32 / PlatformIO firmware work |
+| `openclaw/` | AI gateway routing and tenant model configuration |
+| `docs/` | Documentation updates |
 
-**Platform-level feature (affects all tenants):**
-> "This is a Platform Admin feature — it uses `auth_is_admin()` and the `SUPABASE_SECRET_KEY` path."
+Example:
 
-**Tenant-scoped feature (most features):**
-> "This is tenant-scoped. Use `useTenant()` for `tenantId`. The required permission key is `tenant.post.publish`."
+> Working in `awcms-edge/` and `docs/dev/`.
 
-**Public (no auth):**
-> "This is a public-facing page — no auth, no RLS bypass."
+### 2. Task Type
 
-**⚠️ Note:** If you omit this component, the agent may default to the wrong isolation level or hardcode a `tenantId`.
+Name the category of change so the right rules and patterns get applied.
 
----
+| Task Type | Typical Keywords |
+| --- | --- |
+| Admin UI | `new component`, `manager screen`, `dialog`, `dashboard widget` |
+| Hook / context | `new hook`, `update context`, `tenant-aware data fetching` |
+| Public portal | `Astro page`, `island`, `static rendering`, `build-time content` |
+| Migration | `new migration`, `alter table`, `new table`, `index`, `constraint` |
+| RLS / ABAC | `policy`, `permission`, `has_permission`, `tenant isolation` |
+| Edge route | `Worker route`, `queue consumer`, `R2`, `webhook`, `OpenAPI` |
+| Module work | `new module`, `sidebar item`, `resource registry`, `MainRouter` |
+| Extension work | `extension`, `extension.json`, `platform_extension_catalog`, `tenant_extensions` |
+| Mobile / IoT | `Flutter`, `ESP32`, `device config`, `realtime retrieval` |
+| Documentation | `update docs`, `prompt guide`, `audit docs`, `release summary` |
+| Review | `review this change`, `find bugs`, `identify regressions` |
 
-### 4. 📋 Existing Patterns to Follow
+### 3. Scope, Tenant, And Permission Context
 
-Point the agent at **specific files** that demonstrate the established pattern. This is the most effective way to get consistent, idiomatic code.
+State who the feature is for and what security boundary applies.
 
-**Examples:**
-> "Follow the pattern in `src/hooks/useMedia.js` for the hook structure."
-> "Match the component style in `src/components/blogs/BlogList.jsx`."
-> "Use the same migration structure as `supabase/migrations/20260325120000_add_files_permanent_delete_permission.sql`."
+Use one of these patterns:
 
-If you don't know the reference file, say so:
-> "I don't have a reference file — please check existing patterns before generating."
+| Scope | Prompt Language To Use |
+| --- | --- |
+| Platform | `This is a platform-level feature. It may use approved server-side SUPABASE_SECRET_KEY paths and platform-authorized roles only.` |
+| Tenant | `This is tenant-scoped. Use useTenant() or equivalent tenant context. Permission key format must be scope.resource.action.` |
+| Public | `This is public-facing. No auth bypass, no secret key path, and only published non-deleted content may render.` |
+| Cross-tenant admin flow | `This touches multiple tenants and must preserve isolation, idempotency, and auditability.` |
 
----
+Examples:
 
-### 5. ✅ Acceptance Criteria / Constraints
+> Tenant-scoped. Use `useTenant()` for tenant context and `tenant.blog.update` for authorization.
+>
+> Platform-only onboarding flow. Validate platform permission before any write and audit the action.
 
-State **what done looks like** and any hard constraints the agent must not violate.
+### 4. Existing Patterns To Follow
 
-**Useful constraints to call out explicitly:**
+Point to real files or docs that should be treated as the pattern source.
 
-```text
-- Soft delete only (never .delete())
-- No TypeScript in awcms/ (JavaScript ES2022+ only)
-- No class components
-- Signed route params (encodeRouteParam / useSecureRouteParam) for edit routes
-- Mirror migration to awcms/supabase/migrations/ if touching supabase/migrations/
-- Both supabase/migrations/ and awcms/supabase/migrations/ must stay in parity
-- Toast notifications required for all user actions
-```
+Useful references include:
 
----
+- `awcms/src/hooks/useAdminMenu.js`
+- `awcms/src/hooks/useMedia.js`
+- `awcms/src/hooks/useTemplates.js`
+- `awcms/src/components/MainRouter.jsx`
+- `awcms/src/components/dashboard/widgets/DashboardWidgetHeader.jsx`
+- `awcms-edge/src/index.ts`
+- `awcms-edge/src/middleware/`
+- `docs/modules/MODULES_GUIDE.md`
+- `docs/dev/admin.md`
+- `docs/dev/public.md`
+- `docs/dev/edge-functions.md`
+- `.agents/workflows/migration-workflow.md`
+- `.agents/workflows/rls-change-workflow.md`
+- `.agents/workflows/ui-change-workflow.md`
+- `.agents/workflows/ci-validation-workflow.md`
 
-## Quick-Start Templates
+Example:
 
-Copy and fill in the blanks before writing your specific request.
+> Follow the route and tenant-validation pattern already used in `awcms-edge/src/index.ts` and the module registration pattern documented in `docs/modules/MODULES_GUIDE.md`.
 
-### Template A — New Admin UI Feature
+### 5. Constraints And Non-Negotiables
 
-```text
-Working in `awcms/` (Admin Panel).
-Task type: new component + hook.
-Tenant-scoped — use `useTenant()` for tenantId. Permission key: `tenant.<resource>.<action>`.
-Follow the pattern in `src/hooks/use<Similar>.js` and `src/components/<similar>/`.
-Constraints: JS only, soft delete, signed route params for edit URL, toast on success/error.
+State the rules the implementation must not violate.
 
-<your specific request here>
-```
-
----
-
-### Template B — New Database Migration
-
-```text
-Task type: database migration.
-This must be mirrored — create the SQL file in BOTH:
-  - supabase/migrations/<timestamp>_<name>.sql
-  - awcms/supabase/migrations/<timestamp>_<name>.sql
-RLS required. Use `tenant_id` for isolation. Soft delete column (`deleted_at`) if this is a content table.
-Follow the migration workflow at `.agents/workflows/migration-workflow.md`.
-
-<your specific request here>
-```
-
----
-
-### Template C — Edge Worker Route
+Common AWCMS constraints:
 
 ```text
-Working in `awcms-edge/` (Cloudflare Worker, TypeScript).
-Task type: new Worker route / edge handler.
-Auth: validate `Authorization: Bearer <supabase_access_token>` via SUPABASE_SECRET_KEY.
-No direct DB calls from the public client — use the admin client (`supabaseAdmin`).
-Constraints: no Node.js APIs (Workers runtime only), return JSON responses.
-
-<your specific request here>
+- Respect SYSTEM_MODEL.md and AGENTS.md as the primary authority.
+- Tenant-scoped tables must use tenant_id.
+- Soft delete only for business data; do not use .delete() for normal content lifecycle.
+- All reads must account for deleted_at is null where applicable.
+- Permission keys must use scope.resource.action.
+- Admin panel code in awcms/ is JavaScript ES2022+, not TypeScript.
+- Public portal code is TypeScript/TSX and static-first.
+- Public rendering must use published-only content and build-time tenant resolution.
+- Workers must validate Supabase auth context before protected work.
+- SUPABASE_SECRET_KEY is server-side only.
+- Cloudflare Workers are the supported edge runtime; no custom Node.js server.
+- Use signed route params for protected edit/detail routes when identifiers are exposed in admin URLs.
+- Use semantic theme variables; no hardcoded hex colors in UI work.
+- Toast feedback is required for significant admin user actions.
 ```
 
----
+### 6. Definition Of Done
 
-### Template D — RLS or Permission Change
+Say what success includes beyond just the code change.
+
+Good prompt additions:
+
+- which tests or validation commands to run
+- whether docs must be updated
+- whether both migration folders must stay in sync
+- whether OpenAPI artifacts need updating
+- whether a review summary is expected
+
+Example:
+
+> Done means the feature works, relevant docs are updated, root and mirrored migrations remain in parity, and the affected workspace build or typecheck passes.
+
+## AWCMS-Specific Guardrails To Call Out Explicitly
+
+These details prevent the most common bad prompts and bad implementations.
+
+### Stack And Runtime
+
+- `awcms/`: React 19.2.4, Vite `^8.0.1`, JavaScript only
+- `awcms-public/`: Astro 6.0.8, React 19.2.4 islands, TypeScript/TSX, static output by default
+- `awcms-edge/`: Cloudflare Workers + Hono, not Node.js server code
+- Supabase: source of truth for Auth, PostgreSQL, RLS, and ABAC
+- Cloudflare R2: object storage layer
+- Cloudflare Queues: background offload for media and notifications
+
+### Security And Data Lifecycle
+
+- RLS is mandatory
+- client code must never bypass RLS
+- `SUPABASE_SECRET_KEY` belongs only in approved server-side runtimes
+- `deleted_at` is the standard business-data deletion path
+- public queries must filter to published content and non-deleted rows
+- worker-side checks are additive; PostgreSQL RLS and permission functions remain authoritative
+
+### Current Module Surfaces
+
+When prompts target admin modules, use the current module names and locations from [docs/modules/MODULES_GUIDE.md](../modules/MODULES_GUIDE.md).
+
+High-frequency module groups:
+
+- Content: Blogs, Pages, Visual Pages, Widgets, Templates, Portfolio, Announcements, Services, Team
+- Media: Files / Media Library, gallery resources
+- Commerce: Products, Product Types, Orders, Promotions
+- Navigation: Menus, Categories, Tags
+- System and access: Users, Roles, Permissions, Policies, Settings, Branding, Email Settings, Notifications, Contacts, Themes, SEO
+- Platform and plugins: Tenants, Modules, Extensions, Sidebar Menus, Platform Settings, Platform Dashboard
+- Mobile and IoT: Mobile Users, Push Notifications, Devices, Mobile Config
+
+### Documentation Maintenance
+
+Prompts for docs work should say whether the change also needs to update:
+
+- `DOCS_INDEX.md`
+- `README.md`
+- `AGENTS.md`
+- `docs/dev/documentation-audit-plan.md`
+- `docs/dev/documentation-audit-tracker.md`
+- release summary docs in `docs/dev/`
+
+For repository-wide or cross-topic doc updates, explicitly ask for audit-plan and audit-tracker alignment.
+
+## Workflow-Aware Prompting
+
+Use the workflow docs when the task crosses sensitive boundaries.
+
+| Change Type | Workflow / Doc To Reference |
+| --- | --- |
+| Migration | `.agents/workflows/migration-workflow.md` |
+| RLS / ABAC | `.agents/workflows/rls-change-workflow.md` |
+| UI changes | `.agents/workflows/ui-change-workflow.md` |
+| Validation gate | `.agents/workflows/ci-validation-workflow.md` |
+| Planning discipline | [docs/dev/ai-planning-workflow.md](ai-planning-workflow.md) |
+| Review expectations | [docs/dev/review-checklist.md](review-checklist.md) |
+| Edge runtime changes | [docs/dev/edge-functions.md](edge-functions.md) |
+
+Also align with [docs/dev/ai-workflows.md](ai-workflows.md):
+
+- one objective per prompt when feasible
+- prefer atomic changes
+- verify after changes
+- plan first for migrations, RLS / ABAC, auth, storage, sanitization, and cross-tenant work
+
+## Prompt Templates
+
+### Template A: Admin Module Or UI Change
 
 ```text
-Task type: RLS policy / ABAC change.
-Follow the RLS change workflow at `.agents/workflows/rls-change-workflow.md`.
-Scope: [platform-level / tenant-level / public].
-Permission key format: `scope.resource.action` (e.g. `tenant.post.publish`).
-Mirror the migration to both migration folders.
+Working in `awcms/`.
+Task type: admin UI / module change.
+Scope: tenant-scoped.
+Permission key: `tenant.<resource>.<action>`.
+Follow: `awcms/src/components/MainRouter.jsx`, `awcms/src/hooks/useAdminMenu.js`, and the relevant manager pattern in `awcms/src/components/dashboard/`.
+Constraints:
+- JavaScript ES2022+ only
+- use tenant context, not hardcoded tenant IDs
+- soft delete only for business data
+- toast feedback for user-visible actions
+- use signed route params for protected edit/detail routes
+Done when:
+- route, menu, permission, and module behavior are aligned
+- affected build/tests pass
+- docs are updated if the module surface changes
 
-<your specific request here>
+<specific request>
 ```
 
----
-
-### Template E — Public Portal (Astro)
+### Template B: Public Portal Feature
 
 ```text
-Working in `awcms-public/primary/` (Astro 6, static output, React Islands).
-Task type: [new page / new island component / new layout].
-No auth, no RLS bypass. Tenant resolved via `VITE_PUBLIC_TENANT_ID` at build time.
-No Puck editor runtime — use `Render` from `@puckeditor/core` only if rendering Puck content.
-TypeScript/TSX only. Use Zod for prop validation if applicable.
+Working in `awcms-public/primary/`.
+Task type: Astro page / island / public rendering update.
+Scope: public-facing.
+Follow: `docs/dev/public.md` and existing tenant-scoped content-fetching patterns.
+Constraints:
+- Astro 6 static-first output
+- TypeScript/TSX only
+- resolve tenant at build time using PUBLIC_TENANT_ID or VITE_PUBLIC_TENANT_ID
+- render only published and non-deleted content
+- no secret key path
+- no Puck editor runtime; use Render only when rendering Puck content
+Done when:
+- build-time content flow is correct
+- no draft or cross-tenant leakage occurs
+- affected checks pass
 
-<your specific request here>
+<specific request>
 ```
 
----
+### Template C: Cloudflare Worker Route
 
-## Cheat Sheet — What to Always Avoid Saying
+```text
+Working in `awcms-edge/`.
+Task type: new or updated Worker route.
+Scope: protected server-side edge flow.
+Follow: `awcms-edge/src/index.ts`, `awcms-edge/src/middleware/`, and `docs/dev/edge-functions.md`.
+Constraints:
+- validate caller auth context before protected work
+- use publishable-key caller auth for session validation and SUPABASE_SECRET_KEY only for approved admin operations
+- preserve Supabase as the authority for Auth, RLS, and ABAC
+- validate request shape before writes
+- use tenant-aware filters and deleted_at guards where applicable
+- no Node.js-only APIs
+- update OpenAPI docs if this route is part of a documented surface
+Done when:
+- typecheck passes
+- negative auth and validation paths are covered
+- runtime docs are updated if needed
 
-These omissions cause the most agent errors:
+<specific request>
+```
 
-| ❌ Vague | ✅ Specific |
-|---|---|
-| "Add a feature" | "Add a hook + list component in `awcms/` for…" |
-| "Make it work for all users" | "Tenant-scoped, use `useTenant()`, permission key `tenant.x.y`" |
-| "Update the database" | "New migration in both migration folders, RLS required" |
-| "Add a button that deletes" | "Soft delete via `.update({ deleted_at })`, never `.delete()`" |
-| "Make an API call" | "Call the Edge Worker at `VITE_EDGE_URL/api/…` with Bearer token" |
+### Template D: Migration Or RLS Change
 
----
+```text
+Working in `supabase/migrations/` and `awcms/supabase/migrations/`.
+Task type: migration / RLS / ABAC change.
+Plan first before editing.
+Follow: `.agents/workflows/migration-workflow.md` and `.agents/workflows/rls-change-workflow.md`.
+Constraints:
+- keep root and mirrored migrations in parity
+- use tenant_id for tenant-scoped tables
+- include deleted_at for business-data lifecycle where appropriate
+- permission keys must use scope.resource.action
+- policies must preserve tenant isolation and soft-delete filtering
+Done when:
+- migration files match in both folders
+- validation commands are identified or run
+- any affected docs are updated
 
-## Reference
+<specific request>
+```
 
-- [AGENTS.md](../../AGENTS.md) — full tech stack table, hook reference, code patterns
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) — authoritative constraints and MCP topology
-- `.agents/workflows/` — step-by-step workflows for migrations, RLS, UI, CI (see [migration-workflow.md](../../.agents/workflows/migration-workflow.md), [rls-change-workflow.md](../../.agents/workflows/rls-change-workflow.md), [ui-change-workflow.md](../../.agents/workflows/ui-change-workflow.md), [ci-validation-workflow.md](../../.agents/workflows/ci-validation-workflow.md))
+### Template E: Extension Platform Work
+
+```text
+Working in `awcms/`, `awcms-edge/`, and/or extension docs as needed.
+Task type: extension platform / extension authoring update.
+Scope: platform catalog plus tenant activation model.
+Follow: `docs/modules/EXTENSIONS.md`, `docs/extensions/EXTENSION_SPEC.md`, and `docs/extensions/EXTENSION_AUTHORING_GUIDE.md`.
+Constraints:
+- extension.json is the manifest contract
+- platform package metadata belongs in platform_extension_catalog
+- tenant activation/config belongs in tenant_extensions
+- lifecycle events must remain auditable
+- avoid direct router mutation; compose through registries
+Done when:
+- extension ownership model remains correct
+- docs and manifests are aligned
+
+<specific request>
+```
+
+### Template F: Documentation Update
+
+```text
+Working in `docs/`.
+Task type: documentation update.
+Authority order: SYSTEM_MODEL.md -> AGENTS.md -> README.md -> DOCS_INDEX.md -> target doc.
+Constraints:
+- keep stack versions and runtime boundaries current
+- use relative links
+- update canonical references if topic routing changes
+- update audit plan/tracker if this is a repo-wide or cross-topic doc correction
+Done when:
+- the target doc is accurate
+- cross-references are aligned
+- related canonical docs are updated if needed
+
+<specific request>
+```
+
+### Template G: Code Review Request
+
+```text
+Review this change with a code-review mindset.
+Prioritize bugs, regressions, security risks, tenancy issues, permission mistakes, and missing tests.
+Check against: SYSTEM_MODEL.md, AGENTS.md, and the relevant workspace docs.
+Call out findings first with file references, then open questions, then a short summary.
+
+<PR, diff, or file list>
+```
+
+## High-Value References To Mention In Prompts
+
+Use these when you want the agent to ground itself quickly:
+
+- [docs/dev/admin.md](admin.md)
+- [docs/dev/public.md](public.md)
+- [docs/dev/edge-functions.md](edge-functions.md)
+- [docs/modules/MODULES_GUIDE.md](../modules/MODULES_GUIDE.md)
+- [docs/security/abac.md](../security/abac.md)
+- [docs/security/rls.md](../security/rls.md)
+- [docs/architecture/runtime-boundaries.md](../architecture/runtime-boundaries.md)
+- [docs/dev/ai-workflows.md](ai-workflows.md)
+- [docs/dev/review-checklist.md](review-checklist.md)
+- [docs/dev/context7-benchmark-playbook.md](context7-benchmark-playbook.md)
+
+## Vague Vs Useful Prompting
+
+| Avoid This | Prefer This |
+| --- | --- |
+| `Add a feature.` | `Add a tenant-scoped manager screen in awcms/ for X following the existing dashboard manager pattern.` |
+| `Update the database.` | `Add a timestamped migration in both migration folders, preserve parity, and include RLS / deleted_at handling.` |
+| `Make an API endpoint.` | `Add a Cloudflare Worker route in awcms-edge/, validate Supabase auth context first, and keep Supabase as the authority.` |
+| `Show content publicly.` | `Render tenant-scoped published content in awcms-public/primary using build-time tenant resolution.` |
+| `Delete this item.` | `Soft-delete the business record via deleted_at and keep reads filtered to non-deleted rows.` |
+| `Add permissions.` | `Add permission keys using scope.resource.action and wire them through frontend and RLS patterns.` |
+
+## Checklist Before Sending A Prompt
+
+1. Did you name the workspace?
+2. Did you state whether the work is platform, tenant, public, or cross-tenant?
+3. Did you name the permission model if authorization matters?
+4. Did you point to an existing pattern or canonical doc?
+5. Did you state hard constraints like soft delete, static output, or Worker-only runtime?
+6. Did you say how the result should be verified?
+7. Did you say whether docs or mirrored migrations must also be updated?
+
+## References
+
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md)
+- [AGENTS.md](../../AGENTS.md)
+- [README.md](../../README.md)
+- [DOCS_INDEX.md](../../DOCS_INDEX.md)
+- [docs/dev/ai-workflows.md](ai-workflows.md)
+- [docs/dev/admin.md](admin.md)
+- [docs/dev/public.md](public.md)
+- [docs/dev/edge-functions.md](edge-functions.md)
+- [docs/modules/MODULES_GUIDE.md](../modules/MODULES_GUIDE.md)
