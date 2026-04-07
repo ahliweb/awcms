@@ -153,10 +153,40 @@ jobs:
               if len(allowed_accounts) == 1:
                   account_id = next(iter(allowed_accounts))
               else:
-                  raise SystemExit(
-                      'CLOUDFLARE_ACCOUNT_ID is not set and the token can access multiple accounts. '
-                      f'Please set CLOUDFLARE_ACCOUNT_ID explicitly. Token can access: {sorted(allowed_accounts)}'
-                  )
+                  matching_accounts = []
+                  for candidate_account_id in sorted(allowed_accounts):
+                      try:
+                          candidate_project = request_json(
+                              f'https://api.cloudflare.com/client/v4/accounts/{candidate_account_id}/pages/projects/{project_name}'
+                          )
+                      except urllib.error.HTTPError as error:
+                          if error.code in {403, 404}:
+                              continue
+                          body = error.read().decode('utf-8', errors='ignore')
+                          raise SystemExit(
+                              'Cloudflare Pages project validation failed while auto-resolving '
+                              'CLOUDFLARE_ACCOUNT_ID. '
+                              'Confirm the token has Cloudflare Pages:Edit permission and the project '
+                              f'name is correct. Response: {error.code} {body}'
+                          )
+
+                      if candidate_project.get('success'):
+                          matching_accounts.append(candidate_account_id)
+
+                  if len(matching_accounts) == 1:
+                      account_id = matching_accounts[0]
+                  elif len(matching_accounts) > 1:
+                      raise SystemExit(
+                          'CLOUDFLARE_ACCOUNT_ID is not set and the configured Pages project was found '
+                          'in multiple accessible accounts. '
+                          f'Please set CLOUDFLARE_ACCOUNT_ID explicitly. Matching accounts: {matching_accounts}'
+                      )
+                  else:
+                      raise SystemExit(
+                          'CLOUDFLARE_ACCOUNT_ID is not set and the configured Pages project could not be '
+                          'found in any account accessible by the token. '
+                          f'Token can access: {sorted(allowed_accounts)}; project: {project_name}'
+                      )
 
           if account_id not in allowed_accounts:
               raise SystemExit(
