@@ -1,0 +1,25 @@
+{
+  "seed": {
+    "templateSlug": "portfolio",
+    "portfolio": {
+      "items": [
+        {
+          "sourceId": "portfolio:brand-refresh",
+          "title": "Brand Refresh",
+          "slug": "brand-refresh",
+          "description": "A portfolio case study for a multi-channel brand refresh.",
+          "client": "Acme Co",
+          "projectDate": "2026-03-12",
+          "images": [
+            "https://example.com/portfolio/brand-refresh-1.jpg",
+            "https://example.com/portfolio/brand-refresh-2.jpg"
+          ],
+          "tags": [
+            "branding",
+            "design"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -15,7 +15,7 @@ import { useToast } from '@/components/ui/use-toast';
 const defaultForm = {
   templateSlug: 'blog',
   importType: 'seed',
-  sourceLocator: 'emdash/templates/blog/seed/seed.json',
+  sourceLocator: './docs/examples/emdash/blog/seed.json',
 };
 
 function EmdashImportsManager() {
@@ -73,9 +73,9 @@ function EmdashImportsManager() {
       templateSlug: form.templateSlug,
       dryRun,
       parameters: {
-        source_system: 'emdash',
-        parity_target: form.templateSlug,
-        public_target: 'awcms-public/primary',
+              source_system: 'emdash',
+              parity_target: form.templateSlug,
+              public_target: 'awcms-public/primary',
       },
       source: {
         sourceKey: `${form.templateSlug}:seed`,
@@ -129,7 +129,7 @@ function EmdashImportsManager() {
           <CardHeader>
             <CardTitle>Create Import Job</CardTitle>
             <CardDescription>
-              Foundation flow for EmDash tenant imports. Dry runs remain auditable, and the blog seed path can now materialize tenant content, widget areas, and a single-post template.
+              Foundation flow for EmDash tenant imports. Dry runs remain auditable, and the blog plus marketing seed paths can now materialize tenant content for the active tenant.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -139,7 +139,7 @@ function EmdashImportsManager() {
                 <Select value={form.templateSlug} onValueChange={(value) => setForm((current) => ({
                   ...current,
                   templateSlug: value,
-                  sourceLocator: `emdash/templates/${value}/seed/seed.json`,
+                  sourceLocator: `./docs/examples/emdash/${value}/seed.json`,
                 }))}>
                   <SelectTrigger id="templateSlug">
                     <SelectValue placeholder="Select template" />
@@ -175,7 +175,7 @@ function EmdashImportsManager() {
                   onChange={(event) => setForm((current) => ({ ...current, sourceLocator: event.target.value }))}
                 />
                 <p className="text-xs text-slate-500">
-                  External imports now accept an `http(s)` `seed.json` URL. Non-URL locators continue to use the built-in fallback seed.
+                  External imports accept `http(s)` URLs plus local file paths such as `./docs/examples/emdash/marketing/seed.json`.
                 </p>
               </div>
 
@@ -229,10 +229,9 @@ function EmdashImportsManager() {
                       <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
                         {job.result_summary.imported_counts ? (
                           <div className="flex flex-wrap gap-3">
-                            <span>Blogs: {job.result_summary.imported_counts.blogs || 0}</span>
-                            <span>Pages: {job.result_summary.imported_counts.pages || 0}</span>
-                            <span>Widget areas: {job.result_summary.imported_counts.widget_areas || 0}</span>
-                            <span>Widgets: {job.result_summary.imported_counts.widgets || 0}</span>
+                            {Object.entries(job.result_summary.imported_counts).map(([key, value]) => (
+                              <span key={key}>{key.replace(/_/g, ' ')}: {value || 0}</span>
+                            ))}
                           </div>
                         ) : null}
                         {job.result_summary.error ? (

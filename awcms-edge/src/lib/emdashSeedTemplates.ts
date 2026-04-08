@@ -33,6 +33,62 @@ export type EmdashSeedBlog = {
   rawPayload: Record<string, unknown>
 }
 
+export type EmdashMarketingPage = {
+  sourceId: string
+  title: string
+  slug: string
+  excerpt: string
+  content: Record<string, unknown>
+  rawPayload: Record<string, unknown>
+}
+
+export type EmdashMarketingService = {
+  sourceId: string
+  title: string
+  slug: string
+  description: string
+  icon?: string | null
+  image?: string | null
+  link?: string | null
+  displayOrder: number
+  rawPayload: Record<string, unknown>
+}
+
+export type EmdashMarketingTeamMember = {
+  sourceId: string
+  name: string
+  slug: string
+  role: string
+  image?: string | null
+  socialLinks: unknown[]
+  displayOrder: number
+  rawPayload: Record<string, unknown>
+}
+
+export type EmdashMarketingTestimony = {
+  sourceId: string
+  title: string
+  slug: string
+  content: string
+  authorName: string
+  authorPosition: string
+  authorImage?: string | null
+  rating?: number | null
+  rawPayload: Record<string, unknown>
+}
+
+export type EmdashPortfolioItem = {
+  sourceId: string
+  title: string
+  slug: string
+  description: string
+  client: string
+  projectDate?: string | null
+  images: unknown[]
+  tags: unknown
+  rawPayload: Record<string, unknown>
+}
+
 export type EmdashSeedTemplate = {
   sourceKey: string
   sourceVersion: string
@@ -47,6 +103,15 @@ export type EmdashSeedTemplate = {
   }
   blogs: EmdashSeedBlog[]
   widgetAreas: EmdashSeedWidgetArea[]
+  marketing: {
+    pages: EmdashMarketingPage[]
+    services: EmdashMarketingService[]
+    team: EmdashMarketingTeamMember[]
+    testimonies: EmdashMarketingTestimony[]
+  }
+  portfolio: {
+    items: EmdashPortfolioItem[]
+  }
 }
 
 const isRecord = (value: unknown): value is JsonRecord => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -218,6 +283,15 @@ const BUILTIN_BLOG_SEED_TEMPLATE: EmdashSeedTemplate = {
       ],
     },
   ],
+  marketing: {
+    pages: [],
+    services: [],
+    team: [],
+    testimonies: [],
+  },
+  portfolio: {
+    items: [],
+  },
 }
 
 const normalizeWidget = (input: unknown, index: number): EmdashSeedWidget | null => {
@@ -279,6 +353,89 @@ const normalizeBlog = (input: unknown, index: number): EmdashSeedBlog | null => 
     excerpt: asString(input.excerpt),
     content: asString(input.content),
     featuredImage: asOptionalString(input.featuredImage || input.featured_image),
+    rawPayload: toRecord(input.rawPayload, input),
+  }
+}
+
+const normalizeMarketingPage = (input: unknown, index: number): EmdashMarketingPage | null => {
+  if (!isRecord(input)) return null
+  const title = asString(input.title, `Marketing Page ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `marketing-page-${index + 1}`)
+  return {
+    sourceId: asString(input.sourceId, `marketing-page:${slug}`),
+    title,
+    slug,
+    excerpt: asString(input.excerpt),
+    content: toRecord(input.content),
+    rawPayload: toRecord(input.rawPayload, input),
+  }
+}
+
+const normalizeMarketingService = (input: unknown, index: number): EmdashMarketingService | null => {
+  if (!isRecord(input)) return null
+  const title = asString(input.title, `Service ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `service-${index + 1}`)
+  return {
+    sourceId: asString(input.sourceId, `service:${slug}`),
+    title,
+    slug,
+    description: asString(input.description),
+    icon: asOptionalString(input.icon),
+    image: asOptionalString(input.image),
+    link: asOptionalString(input.link),
+    displayOrder: asNumber(input.displayOrder ?? input.display_order, index),
+    rawPayload: toRecord(input.rawPayload, input),
+  }
+}
+
+const normalizeMarketingTeamMember = (input: unknown, index: number): EmdashMarketingTeamMember | null => {
+  if (!isRecord(input)) return null
+  const name = asString(input.name, `Team Member ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, name), `team-member-${index + 1}`)
+  return {
+    sourceId: asString(input.sourceId, `team:${slug}`),
+    name,
+    slug,
+    role: asString(input.role),
+    image: asOptionalString(input.image),
+    socialLinks: Array.isArray(input.socialLinks) ? input.socialLinks : Array.isArray(input.social_links) ? input.social_links : [],
+    displayOrder: asNumber(input.displayOrder ?? input.display_order, index),
+    rawPayload: toRecord(input.rawPayload, input),
+  }
+}
+
+const normalizeMarketingTestimony = (input: unknown, index: number): EmdashMarketingTestimony | null => {
+  if (!isRecord(input)) return null
+  const title = asString(input.title, `Testimony ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `testimony-${index + 1}`)
+  const ratingValue = input.rating
+  const rating = typeof ratingValue === 'number' && Number.isFinite(ratingValue) ? ratingValue : null
+  return {
+    sourceId: asString(input.sourceId, `testimony:${slug}`),
+    title,
+    slug,
+    content: asString(input.content),
+    authorName: asString(input.authorName ?? input.author_name),
+    authorPosition: asString(input.authorPosition ?? input.author_position),
+    authorImage: asOptionalString(input.authorImage ?? input.author_image),
+    rating,
+    rawPayload: toRecord(input.rawPayload, input),
+  }
+}
+
+const normalizePortfolioItem = (input: unknown, index: number): EmdashPortfolioItem | null => {
+  if (!isRecord(input)) return null
+  const title = asString(input.title, `Portfolio Item ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `portfolio-item-${index + 1}`)
+  return {
+    sourceId: asString(input.sourceId, `portfolio:${slug}`),
+    title,
+    slug,
+    description: asString(input.description),
+    client: asString(input.client),
+    projectDate: asOptionalString(input.projectDate ?? input.project_date),
+    images: Array.isArray(input.images) ? input.images : [],
+    tags: input.tags ?? [],
     rawPayload: toRecord(input.rawPayload, input),
   }
 }
@@ -354,7 +511,40 @@ const normalizeSeedTemplate = (input: unknown, fallbackTemplateSlug: string): Em
     .map((blog, index) => normalizeBlog(blog, index))
     .filter(Boolean) as EmdashSeedBlog[]
 
-  if (!blogs.length) return null
+  const marketingRoot = isRecord(importData.marketing) ? importData.marketing : {}
+  const portfolioRoot = isRecord(importData.portfolio) ? importData.portfolio : {}
+  const marketingPages = (Array.isArray(marketingRoot.pages) ? marketingRoot.pages : [])
+    .map((page, index) => normalizeMarketingPage(page, index))
+    .filter(Boolean) as EmdashMarketingPage[]
+  const marketingServices = (Array.isArray(marketingRoot.services) ? marketingRoot.services : [])
+    .map((service, index) => normalizeMarketingService(service, index))
+    .filter(Boolean) as EmdashMarketingService[]
+  const marketingTeam = (Array.isArray(marketingRoot.team) ? marketingRoot.team : Array.isArray(marketingRoot.teams) ? marketingRoot.teams : [])
+    .map((member, index) => normalizeMarketingTeamMember(member, index))
+    .filter(Boolean) as EmdashMarketingTeamMember[]
+  const marketingTestimonies = (Array.isArray(marketingRoot.testimonies) ? marketingRoot.testimonies : [])
+    .map((testimony, index) => normalizeMarketingTestimony(testimony, index))
+    .filter(Boolean) as EmdashMarketingTestimony[]
+  const portfolioItems = (Array.isArray(portfolioRoot.items) ? portfolioRoot.items : Array.isArray(portfolioRoot.portfolio) ? portfolioRoot.portfolio : [])
+    .map((item, index) => normalizePortfolioItem(item, index))
+    .filter(Boolean) as EmdashPortfolioItem[]
+
+  const hasBlogContent = blogs.length > 0
+  const hasMarketingContent = marketingPages.length > 0
+    || marketingServices.length > 0
+    || marketingTeam.length > 0
+    || marketingTestimonies.length > 0
+  const hasPortfolioContent = portfolioItems.length > 0
+
+  const hasSupportedContent = templateSlug === 'blog'
+    ? hasBlogContent
+    : templateSlug === 'marketing'
+      ? hasMarketingContent
+      : templateSlug === 'portfolio'
+        ? hasPortfolioContent
+        : hasBlogContent || hasMarketingContent || hasPortfolioContent
+
+  if (!hasSupportedContent) return null
 
   return {
     sourceKey: asString(importData.sourceKey || templateRoot.sourceKey, `${templateSlug}:seed`),
@@ -363,6 +553,15 @@ const normalizeSeedTemplate = (input: unknown, fallbackTemplateSlug: string): Em
     pageTemplate: normalizePageTemplate(importData.pageTemplate || importData.page_template || templateRoot.pageTemplate, templateSlug, widgetAreas),
     blogs,
     widgetAreas,
+    marketing: {
+      pages: marketingPages,
+      services: marketingServices,
+      team: marketingTeam,
+      testimonies: marketingTestimonies,
+    },
+    portfolio: {
+      items: portfolioItems,
+    },
   }
 }
 

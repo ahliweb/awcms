@@ -8,8 +8,12 @@ Define the canonical external `seed.json` payload accepted by the EmDash tenant 
 
 ## Current Scope
 
-- This schema is for the blog import wave only.
-- The importer currently normalizes blog content, one visual `single_post` page template, widget areas, and widgets.
+- Blog and marketing execution are materialized import waves today.
+- The external seed contract also reserves a forward-compatible `portfolio` section.
+- The importer currently materializes:
+  - blog content, one visual `single_post` page template, widget areas, and widgets
+  - marketing pages, services, team members, and testimonies
+- Portfolio sections are normalized and preserved by the contract, but they are not executed into tenant records yet.
 - External `seed.json` can be loaded from an `http(s)` URL or a local file-path `sourceLocator`.
 - Unsupported non-URL locators still fall back to the built-in seed used for local foundation validation.
 
@@ -21,6 +25,8 @@ Copyable fixture:
 
 - [`docs/examples/emdash/blog/seed.json`](../examples/emdash/blog/seed.json)
 - [`docs/examples/emdash/blog/seed.minimal.json`](../examples/emdash/blog/seed.minimal.json)
+- [`docs/examples/emdash/marketing/seed.json`](../examples/emdash/marketing/seed.json)
+- [`docs/examples/emdash/portfolio/seed.json`](../examples/emdash/portfolio/seed.json)
 
 ```json
 {
@@ -151,12 +157,37 @@ Copyable fixture:
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `seed.templateSlug` | Yes | Must currently be `blog` for the implemented executor wave. |
+| `seed.templateSlug` | Yes | Supported executable values today: `blog`, `marketing`. |
 | `seed.sourceKey` | Recommended | Stored in import artifacts for traceability. |
 | `seed.sourceVersion` | Recommended | Stored in import artifacts and used in audit/debug output. |
-| `seed.pageTemplate` | Optional | If omitted, the importer falls back to the built-in `single_post` visual page template. |
-| `seed.blogs` | Yes | Must contain at least one blog entry or the loader rejects the payload. |
-| `seed.widgetAreas` | Optional | When omitted, the blog import still succeeds but no widget areas are materialized. |
+| `seed.pageTemplate` | Optional | Used by the blog wave. If omitted, the importer falls back to the built-in `single_post` visual page template. |
+| `seed.blogs` | Conditional | Required for `templateSlug = blog`. |
+| `seed.widgetAreas` | Optional | When omitted, blog or marketing imports still succeed but no widget areas are materialized. |
+| `seed.marketing` | Conditional | Required for `templateSlug = marketing`. |
+| `seed.portfolio` | Optional | Forward-compatible contract section for future portfolio waves. |
+
+## Future Wave Sections
+
+### `seed.marketing`
+
+This section is now executable when `seed.templateSlug = marketing`.
+
+The contract recognizes these optional subsections:
+
+| Field | Target shape | Notes |
+| --- | --- | --- |
+| `marketing.pages` | visual/landing page definitions | Materialized into visual `pages` records. |
+| `marketing.services` | `services`-like records | Uses `title`, `slug`, `description`, `icon`, `image`, `link`, `displayOrder`. |
+| `marketing.team` or `marketing.teams` | `teams`-like records | Uses `name`, `role`, `image`, `socialLinks`, `displayOrder`. |
+| `marketing.testimonies` | `testimonies`-like records | Uses `title`, `slug`, `content`, `authorName`, `authorPosition`, `authorImage`, `rating`. |
+
+### `seed.portfolio`
+
+The contract recognizes these optional subsections:
+
+| Field | Target shape | Notes |
+| --- | --- | --- |
+| `portfolio.items` | `portfolio`-like records | Uses `title`, `slug`, `description`, `client`, `projectDate`, `images`, and `tags`. |
 
 ## Widget Rules
 
@@ -191,6 +222,8 @@ Other `core:*` values are normalized by stripping the prefix and replacing `-` w
   - tenant widget areas in `template_parts`
   - tenant widgets in `widgets`
   - published blog rows in `blogs`
+- The executor also materializes marketing pages, services, team members, and testimonies when `templateSlug = marketing`.
+- The loader also normalizes optional `portfolio` sections for future waves.
 - `raw_emdash_payload` is preserved on widget areas and widgets.
 - Import replayability is enforced through `tenant_import_mappings`.
 
@@ -200,5 +233,5 @@ Other `core:*` values are normalized by stripping the prefix and replacing `-` w
 - If `sourceLocator` is not a supported URL or local path, the external loader is skipped and the built-in fallback seed may be used.
 - If the external URL returns non-2xx, the import fails.
 - If the local file cannot be read or parsed, the import fails.
-- If the JSON does not normalize into at least one blog entry, the import fails.
+- If the JSON does not normalize into at least one supported content section for the requested template wave, the import fails.
 - If a required materialization step fails, the job is marked `failed` and the error is recorded in `result_summary`.

@@ -13,6 +13,8 @@ test('getEmdashSeedTemplate returns builtin blog seed', () => {
   assert.equal(seed?.templateSlug, 'blog')
   assert.equal(seed?.blogs.length, 1)
   assert.equal(seed?.widgetAreas[0]?.slug, 'emdash-blog-sidebar')
+  assert.deepEqual(seed?.marketing, { pages: [], services: [], team: [], testimonies: [] })
+  assert.deepEqual(seed?.portfolio, { items: [] })
 })
 
 test('loadEmdashExternalSeedTemplate loads relative local seed paths', async () => {
@@ -128,6 +130,41 @@ test('loadEmdashExternalSeedTemplate normalizes external seed.json payloads', as
           ],
         },
       ],
+      marketing: {
+        services: [
+          {
+            title: 'Strategy',
+            slug: 'strategy',
+            description: 'Marketing strategy service',
+          },
+        ],
+        team: [
+          {
+            name: 'Alya Rahman',
+            role: 'Creative Director',
+          },
+        ],
+        testimonies: [
+          {
+            title: 'Client Feedback',
+            slug: 'client-feedback',
+            content: 'Great work',
+            authorName: 'Client One',
+            rating: 5,
+          },
+        ],
+      },
+      portfolio: {
+        items: [
+          {
+            title: 'Brand Refresh',
+            slug: 'brand-refresh',
+            description: 'Portfolio case study',
+            client: 'Acme Co',
+            images: ['https://example.com/portfolio.jpg'],
+          },
+        ],
+      },
     },
   }), {
     status: 200,
@@ -146,6 +183,10 @@ test('loadEmdashExternalSeedTemplate normalizes external seed.json payloads', as
     assert.equal(seed?.widgetAreas[0]?.slug, 'remote-sidebar')
     assert.equal(seed?.widgetAreas[0]?.widgets[0]?.type, 'search')
     assert.equal(seed?.pageTemplate.slug, 'remote-single-post')
+    assert.equal(seed?.marketing.services[0]?.slug, 'strategy')
+    assert.equal(seed?.marketing.team[0]?.slug, 'alya-rahman')
+    assert.equal(seed?.marketing.testimonies[0]?.authorName, 'Client One')
+    assert.equal(seed?.portfolio.items[0]?.slug, 'brand-refresh')
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -166,6 +207,49 @@ test('loadEmdashExternalSeedTemplate rejects malformed remote payloads', async (
       }),
       /invalid or missing blog seed content/,
     )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('loadEmdashExternalSeedTemplate accepts marketing template payloads without blogs', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    seed: {
+      templateSlug: 'marketing',
+      marketing: {
+        pages: [
+          {
+            title: 'Landing Home',
+            slug: 'landing-home',
+            content: { root: { children: [] } },
+          },
+        ],
+        services: [
+          {
+            title: 'Strategy',
+            slug: 'strategy',
+            description: 'Marketing strategy service',
+          },
+        ],
+      },
+    },
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+
+  try {
+    const seed = await loadEmdashExternalSeedTemplate({
+      sourceLocator: 'https://example.com/emdash/marketing/seed.json',
+      templateSlug: 'marketing',
+    })
+
+    assert.ok(seed)
+    assert.equal(seed?.templateSlug, 'marketing')
+    assert.equal(seed?.blogs.length, 0)
+    assert.equal(seed?.marketing.pages[0]?.slug, 'landing-home')
+    assert.equal(seed?.marketing.services[0]?.slug, 'strategy')
   } finally {
     globalThis.fetch = originalFetch
   }

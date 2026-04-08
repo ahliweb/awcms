@@ -1169,6 +1169,350 @@ const upsertImportedBlog = async (adminSupabase: any, params: {
   return blogResult.data.id as string
 }
 
+const upsertImportedMarketingPage = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  page: {
+    sourceId: string
+    title: string
+    slug: string
+    excerpt: string
+    content: Record<string, unknown>
+    rawPayload: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'marketing_page',
+    sourceId: params.page.sourceId,
+    targetTable: 'pages',
+  })
+
+  let existingPage = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('pages')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingPage = data || null
+  }
+
+  if (!existingPage) {
+    const { data } = await adminSupabase
+      .from('pages')
+      .select('id')
+      .eq('tenant_id', params.tenantId)
+      .eq('slug', params.page.slug)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingPage = data || null
+  }
+
+  const pageType = typeof params.page.rawPayload.pageType === 'string'
+    ? params.page.rawPayload.pageType
+    : 'regular'
+  const template = typeof params.page.rawPayload.template === 'string'
+    ? params.page.rawPayload.template
+    : 'default'
+  const now = new Date().toISOString()
+  const payload = {
+    tenant_id: params.tenantId,
+    title: params.page.title,
+    slug: params.page.slug,
+    excerpt: params.page.excerpt,
+    status: 'published',
+    workflow_state: 'published',
+    editor_type: 'visual',
+    template,
+    page_type: pageType,
+    is_public: true,
+    is_active: true,
+    content_draft: params.page.content,
+    content_published: params.page.content,
+    published_at: now,
+    updated_at: now,
+  }
+
+  const pageResult = existingPage?.id
+    ? await adminSupabase.from('pages').update(payload).eq('id', existingPage.id).select('id').single()
+    : await adminSupabase.from('pages').insert(payload).select('id').single()
+
+  if (pageResult.error || !pageResult.data?.id) {
+    throw new Error(pageResult.error?.message || `Failed to materialize EmDash marketing page ${params.page.slug}`)
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'marketing_page',
+    sourceId: params.page.sourceId,
+    targetTable: 'pages',
+    targetId: pageResult.data.id,
+    mappingPayload: {
+      slug: params.page.slug,
+      page_type: pageType,
+      template,
+    },
+  })
+
+  return pageResult.data.id as string
+}
+
+const upsertImportedMarketingService = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  userId: string
+  service: {
+    sourceId: string
+    title: string
+    slug: string
+    description: string
+    icon?: string | null
+    image?: string | null
+    link?: string | null
+    displayOrder: number
+    rawPayload: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'marketing_service',
+    sourceId: params.service.sourceId,
+    targetTable: 'services',
+  })
+
+  let existingService = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('services')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingService = data || null
+  }
+
+  if (!existingService) {
+    const { data } = await adminSupabase
+      .from('services')
+      .select('id')
+      .eq('tenant_id', params.tenantId)
+      .eq('title', params.service.title)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingService = data || null
+  }
+
+  const payload = {
+    tenant_id: params.tenantId,
+    created_by: params.userId,
+    updated_by: params.userId,
+    title: params.service.title,
+    description: params.service.description,
+    icon: params.service.icon || null,
+    image: params.service.image || null,
+    link: params.service.link || null,
+    display_order: params.service.displayOrder,
+    status: 'published',
+    updated_at: new Date().toISOString(),
+  }
+
+  const serviceResult = existingService?.id
+    ? await adminSupabase.from('services').update(payload).eq('id', existingService.id).select('id').single()
+    : await adminSupabase.from('services').insert(payload).select('id').single()
+
+  if (serviceResult.error || !serviceResult.data?.id) {
+    throw new Error(serviceResult.error?.message || `Failed to materialize EmDash marketing service ${params.service.slug}`)
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'marketing_service',
+    sourceId: params.service.sourceId,
+    targetTable: 'services',
+    targetId: serviceResult.data.id,
+    mappingPayload: {
+      slug: params.service.slug,
+      title: params.service.title,
+    },
+  })
+
+  return serviceResult.data.id as string
+}
+
+const upsertImportedMarketingTeamMember = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  userId: string
+  member: {
+    sourceId: string
+    name: string
+    slug: string
+    role: string
+    image?: string | null
+    socialLinks: unknown[]
+    displayOrder: number
+    rawPayload: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'marketing_team',
+    sourceId: params.member.sourceId,
+    targetTable: 'teams',
+  })
+
+  let existingTeamMember = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('teams')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingTeamMember = data || null
+  }
+
+  if (!existingTeamMember) {
+    const { data } = await adminSupabase
+      .from('teams')
+      .select('id')
+      .eq('tenant_id', params.tenantId)
+      .eq('name', params.member.name)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingTeamMember = data || null
+  }
+
+  const payload = {
+    tenant_id: params.tenantId,
+    created_by: params.userId,
+    updated_by: params.userId,
+    name: params.member.name,
+    role: params.member.role,
+    image: params.member.image || null,
+    social_links: params.member.socialLinks || [],
+    display_order: params.member.displayOrder,
+    status: 'published',
+    updated_at: new Date().toISOString(),
+  }
+
+  const teamResult = existingTeamMember?.id
+    ? await adminSupabase.from('teams').update(payload).eq('id', existingTeamMember.id).select('id').single()
+    : await adminSupabase.from('teams').insert(payload).select('id').single()
+
+  if (teamResult.error || !teamResult.data?.id) {
+    throw new Error(teamResult.error?.message || `Failed to materialize EmDash team member ${params.member.slug}`)
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'marketing_team',
+    sourceId: params.member.sourceId,
+    targetTable: 'teams',
+    targetId: teamResult.data.id,
+    mappingPayload: {
+      slug: params.member.slug,
+      name: params.member.name,
+    },
+  })
+
+  return teamResult.data.id as string
+}
+
+const upsertImportedMarketingTestimony = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  userId: string
+  testimony: {
+    sourceId: string
+    title: string
+    slug: string
+    content: string
+    authorName: string
+    authorPosition: string
+    authorImage?: string | null
+    rating?: number | null
+    rawPayload: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'marketing_testimony',
+    sourceId: params.testimony.sourceId,
+    targetTable: 'testimonies',
+  })
+
+  let existingTestimony = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('testimonies')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingTestimony = data || null
+  }
+
+  if (!existingTestimony) {
+    const { data } = await adminSupabase
+      .from('testimonies')
+      .select('id')
+      .eq('tenant_id', params.tenantId)
+      .eq('slug', params.testimony.slug)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingTestimony = data || null
+  }
+
+  const now = new Date().toISOString()
+  const payload = {
+    tenant_id: params.tenantId,
+    created_by: params.userId,
+    title: params.testimony.title,
+    slug: params.testimony.slug,
+    content: params.testimony.content,
+    author_name: params.testimony.authorName,
+    author_position: params.testimony.authorPosition || null,
+    author_image: params.testimony.authorImage || null,
+    rating: params.testimony.rating || null,
+    status: 'published',
+    published_at: now,
+    updated_at: now,
+  }
+
+  const testimonyResult = existingTestimony?.id
+    ? await adminSupabase.from('testimonies').update(payload).eq('id', existingTestimony.id).select('id').single()
+    : await adminSupabase.from('testimonies').insert(payload).select('id').single()
+
+  if (testimonyResult.error || !testimonyResult.data?.id) {
+    throw new Error(testimonyResult.error?.message || `Failed to materialize EmDash testimony ${params.testimony.slug}`)
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'marketing_testimony',
+    sourceId: params.testimony.sourceId,
+    targetTable: 'testimonies',
+    targetId: testimonyResult.data.id,
+    mappingPayload: {
+      slug: params.testimony.slug,
+      author_name: params.testimony.authorName,
+    },
+  })
+
+  return testimonyResult.data.id as string
+}
+
 const executeEmdashImportJob = async (params: {
   adminSupabase: any
   tenantId: string
@@ -1204,13 +1548,6 @@ const executeEmdashImportJob = async (params: {
     .eq('id', params.job.id)
 
   try {
-    const pageId = await upsertImportedPage(adminSupabase, {
-      tenantId: params.tenantId,
-      jobId: params.job.id,
-      sourceId: seedTemplate.pageTemplate.sourceId,
-      page: seedTemplate.pageTemplate,
-    })
-
     const widgetSnapshots: Array<Record<string, unknown>> = []
     for (const area of seedTemplate.widgetAreas) {
       const areaId = await upsertImportedWidgetArea(adminSupabase, {
@@ -1238,14 +1575,70 @@ const executeEmdashImportJob = async (params: {
     }
 
     const blogIds: string[] = []
-    for (const blog of seedTemplate.blogs) {
-      const blogId = await upsertImportedBlog(adminSupabase, {
+    const marketingPageIds: string[] = []
+    const marketingServiceIds: string[] = []
+    const marketingTeamIds: string[] = []
+    const marketingTestimonyIds: string[] = []
+    let pageId: string | null = null
+
+    if (params.templateSlug === 'blog') {
+      pageId = await upsertImportedPage(adminSupabase, {
         tenantId: params.tenantId,
         jobId: params.job.id,
-        authorId: params.userId,
-        blog,
+        sourceId: seedTemplate.pageTemplate.sourceId,
+        page: seedTemplate.pageTemplate,
       })
-      blogIds.push(blogId)
+
+      for (const blog of seedTemplate.blogs) {
+        const blogId = await upsertImportedBlog(adminSupabase, {
+          tenantId: params.tenantId,
+          jobId: params.job.id,
+          authorId: params.userId,
+          blog,
+        })
+        blogIds.push(blogId)
+      }
+    } else if (params.templateSlug === 'marketing') {
+      for (const marketingPage of seedTemplate.marketing.pages) {
+        const marketingPageId = await upsertImportedMarketingPage(adminSupabase, {
+          tenantId: params.tenantId,
+          jobId: params.job.id,
+          page: marketingPage,
+        })
+        marketingPageIds.push(marketingPageId)
+      }
+
+      for (const service of seedTemplate.marketing.services) {
+        const serviceId = await upsertImportedMarketingService(adminSupabase, {
+          tenantId: params.tenantId,
+          jobId: params.job.id,
+          userId: params.userId,
+          service,
+        })
+        marketingServiceIds.push(serviceId)
+      }
+
+      for (const member of seedTemplate.marketing.team) {
+        const teamId = await upsertImportedMarketingTeamMember(adminSupabase, {
+          tenantId: params.tenantId,
+          jobId: params.job.id,
+          userId: params.userId,
+          member,
+        })
+        marketingTeamIds.push(teamId)
+      }
+
+      for (const testimony of seedTemplate.marketing.testimonies) {
+        const testimonyId = await upsertImportedMarketingTestimony(adminSupabase, {
+          tenantId: params.tenantId,
+          jobId: params.job.id,
+          userId: params.userId,
+          testimony,
+        })
+        marketingTestimonyIds.push(testimonyId)
+      }
+    } else {
+      throw new Error(`EmDash import execution is not implemented yet for template ${params.templateSlug}`)
     }
 
     await writeTenantImportArtifact(adminSupabase, {
@@ -1265,10 +1658,11 @@ const executeEmdashImportJob = async (params: {
       tenantId: params.tenantId,
       jobId: params.job.id,
       artifactKind: 'visual_snapshot',
-      artifactKey: seedTemplate.pageTemplate.slug,
+      artifactKey: params.templateSlug === 'blog' ? seedTemplate.pageTemplate.slug : `${params.templateSlug}:pages`,
       artifactPayload: {
         page_id: pageId,
-        content: seedTemplate.pageTemplate.content,
+        page_ids: marketingPageIds,
+        content: params.templateSlug === 'blog' ? seedTemplate.pageTemplate.content : null,
       },
     })
 
@@ -1290,19 +1684,58 @@ const executeEmdashImportJob = async (params: {
       },
     })
 
+    if (params.templateSlug === 'marketing') {
+      await writeTenantImportArtifact(adminSupabase, {
+        tenantId: params.tenantId,
+        jobId: params.job.id,
+        artifactKind: 'marketing_snapshot',
+        artifactKey: seedTemplate.sourceKey,
+        artifactPayload: {
+          pages: seedTemplate.marketing.pages.map((page, index) => ({
+            sourceId: page.sourceId,
+            slug: page.slug,
+            targetId: marketingPageIds[index] || null,
+          })),
+          services: seedTemplate.marketing.services.map((service, index) => ({
+            sourceId: service.sourceId,
+            slug: service.slug,
+            targetId: marketingServiceIds[index] || null,
+          })),
+          team: seedTemplate.marketing.team.map((member, index) => ({
+            sourceId: member.sourceId,
+            slug: member.slug,
+            targetId: marketingTeamIds[index] || null,
+          })),
+          testimonies: seedTemplate.marketing.testimonies.map((testimony, index) => ({
+            sourceId: testimony.sourceId,
+            slug: testimony.slug,
+            targetId: marketingTestimonyIds[index] || null,
+          })),
+        },
+      })
+    }
+
     const completedAt = new Date().toISOString()
     const resultSummary = {
       mode: 'execute',
       template_slug: seedTemplate.templateSlug,
       imported_counts: {
         blogs: blogIds.length,
+        marketing_pages: marketingPageIds.length,
+        services: marketingServiceIds.length,
+        team_members: marketingTeamIds.length,
+        testimonies: marketingTestimonyIds.length,
         widget_areas: seedTemplate.widgetAreas.length,
         widgets: widgetSnapshots.length,
-        pages: 1,
+        pages: params.templateSlug === 'blog' ? 1 : marketingPageIds.length,
       },
       source_mode: externalSeedTemplate ? 'external_seed_json' : 'builtin_fallback',
       page_id: pageId,
+      page_ids: marketingPageIds,
       blog_ids: blogIds,
+      service_ids: marketingServiceIds,
+      team_ids: marketingTeamIds,
+      testimony_ids: marketingTestimonyIds,
     }
 
     await adminSupabase

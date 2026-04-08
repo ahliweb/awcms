@@ -86,6 +86,64 @@ const createTenantImportFetch = (state) => async (input, init) => {
     })
   }
 
+  if (url.hostname === 'marketing.example.com') {
+    return jsonResponse({
+      seed: {
+        templateSlug: 'marketing',
+        sourceVersion: 'marketing-v1',
+        sourceKey: 'marketing:remote-seed',
+        marketing: {
+          pages: [
+            {
+              sourceId: 'marketing-page:landing-home',
+              title: 'Landing Home',
+              slug: 'landing-home',
+              excerpt: 'Primary landing page',
+              rawPayload: { pageType: 'homepage', template: 'marketing' },
+              content: {
+                root: {
+                  children: [
+                    { type: 'Hero', props: { headline: 'Remote marketing page' } },
+                  ],
+                },
+              },
+            },
+          ],
+          services: [
+            {
+              sourceId: 'service:strategy',
+              title: 'Strategy',
+              slug: 'strategy',
+              description: 'Marketing strategy service',
+              icon: 'briefcase',
+              displayOrder: 0,
+            },
+          ],
+          team: [
+            {
+              sourceId: 'team:alya-rahman',
+              name: 'Alya Rahman',
+              role: 'Creative Director',
+              displayOrder: 0,
+              socialLinks: [{ platform: 'linkedin', url: 'https://example.com/alya' }],
+            },
+          ],
+          testimonies: [
+            {
+              sourceId: 'testimony:client-feedback',
+              title: 'Client Feedback',
+              slug: 'client-feedback',
+              content: 'Excellent collaboration',
+              authorName: 'Client One',
+              authorPosition: 'CMO',
+              rating: 5,
+            },
+          ],
+        },
+      },
+    })
+  }
+
   if (url.pathname.endsWith('/auth/v1/user')) {
     return jsonResponse({
       user: {
@@ -211,9 +269,12 @@ const createTenantImportFetch = (state) => async (input, init) => {
         const id = parseEq(url.searchParams.get('id'))
         const tenantId = parseEq(url.searchParams.get('tenant_id'))
         const pageType = parseEq(url.searchParams.get('page_type'))
+        const slug = parseEq(url.searchParams.get('slug'))
         const page = id
           ? state.pages.find((item) => item.id === id)
-          : state.pages.find((item) => item.tenant_id === tenantId && item.page_type === pageType)
+          : slug
+            ? state.pages.find((item) => item.tenant_id === tenantId && item.slug === slug)
+            : state.pages.find((item) => item.tenant_id === tenantId && item.page_type === pageType)
         return jsonResponse(page || null)
       }
 
@@ -306,6 +367,84 @@ const createTenantImportFetch = (state) => async (input, init) => {
       break
     }
 
+    case 'services': {
+      if (method === 'GET') {
+        const id = parseEq(url.searchParams.get('id'))
+        const tenantId = parseEq(url.searchParams.get('tenant_id'))
+        const title = parseEq(url.searchParams.get('title'))
+        const service = id
+          ? state.services.find((item) => item.id === id)
+          : state.services.find((item) => item.tenant_id === tenantId && item.title === title)
+        return jsonResponse(service || null)
+      }
+
+      if (method === 'POST') {
+        const row = { id: `service-${state.services.length + 1}`, ...body }
+        state.services.push(row)
+        return jsonResponse({ id: row.id }, 201)
+      }
+
+      if (method === 'PATCH') {
+        const id = parseEq(url.searchParams.get('id'))
+        const service = state.services.find((item) => item.id === id)
+        Object.assign(service, body)
+        return jsonResponse({ id: service.id })
+      }
+      break
+    }
+
+    case 'teams': {
+      if (method === 'GET') {
+        const id = parseEq(url.searchParams.get('id'))
+        const tenantId = parseEq(url.searchParams.get('tenant_id'))
+        const name = parseEq(url.searchParams.get('name'))
+        const team = id
+          ? state.teams.find((item) => item.id === id)
+          : state.teams.find((item) => item.tenant_id === tenantId && item.name === name)
+        return jsonResponse(team || null)
+      }
+
+      if (method === 'POST') {
+        const row = { id: `team-${state.teams.length + 1}`, ...body }
+        state.teams.push(row)
+        return jsonResponse({ id: row.id }, 201)
+      }
+
+      if (method === 'PATCH') {
+        const id = parseEq(url.searchParams.get('id'))
+        const team = state.teams.find((item) => item.id === id)
+        Object.assign(team, body)
+        return jsonResponse({ id: team.id })
+      }
+      break
+    }
+
+    case 'testimonies': {
+      if (method === 'GET') {
+        const id = parseEq(url.searchParams.get('id'))
+        const tenantId = parseEq(url.searchParams.get('tenant_id'))
+        const slug = parseEq(url.searchParams.get('slug'))
+        const testimony = id
+          ? state.testimonies.find((item) => item.id === id)
+          : state.testimonies.find((item) => item.tenant_id === tenantId && item.slug === slug)
+        return jsonResponse(testimony || null)
+      }
+
+      if (method === 'POST') {
+        const row = { id: `testimony-${state.testimonies.length + 1}`, ...body }
+        state.testimonies.push(row)
+        return jsonResponse({ id: row.id }, 201)
+      }
+
+      if (method === 'PATCH') {
+        const id = parseEq(url.searchParams.get('id'))
+        const testimony = state.testimonies.find((item) => item.id === id)
+        Object.assign(testimony, body)
+        return jsonResponse({ id: testimony.id })
+      }
+      break
+    }
+
     default:
       break
   }
@@ -327,6 +466,9 @@ test('tenant-imports executes external seed.json import with mocked fetch', asyn
     templateParts: [],
     widgets: [],
     blogs: [],
+    services: [],
+    teams: [],
+    testimonies: [],
     importAudit: [],
     accessAudit: [],
   }
@@ -373,6 +515,77 @@ test('tenant-imports executes external seed.json import with mocked fetch', asyn
     assert.equal(state.widgets.length, 1)
     assert.equal(state.sources[0].source_locator, 'https://seed.example.com/emdash/blog/seed.json')
     assert.equal(state.artifacts.find((item) => item.artifact_kind === 'seed')?.artifact_payload?.source_mode, 'external_seed_json')
+    assert.equal(state.mappings.length, 4)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('tenant-imports executes marketing seed import with mocked fetch', async () => {
+  const state = {
+    user: {
+      id: '00000000-0000-0000-0000-000000000001',
+      tenant_id: 'tenant-1',
+    },
+    jobs: [],
+    sources: [],
+    mappings: [],
+    artifacts: [],
+    pages: [],
+    templateParts: [],
+    widgets: [],
+    blogs: [],
+    services: [],
+    teams: [],
+    testimonies: [],
+    importAudit: [],
+    accessAudit: [],
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = createTenantImportFetch(state)
+
+  try {
+    const response = await app.fetch(new Request('https://edge.example.com/functions/v1/tenant-imports', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer valid-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'create-job',
+        tenantId: 'tenant-1',
+        importType: 'seed',
+        templateSlug: 'marketing',
+        dryRun: false,
+        parameters: {
+          source_system: 'emdash',
+        },
+        source: {
+          sourceKey: 'marketing:remote-seed',
+          sourceKind: 'seed',
+          sourceLocator: 'https://marketing.example.com/emdash/marketing/seed.json',
+          sourceVersion: 'marketing-v1',
+        },
+      }),
+    }), tenantImportsEnv)
+
+    assert.equal(response.status, 200)
+    const payload = await response.json()
+
+    assert.equal(payload.ok, true)
+    assert.equal(payload.job.status, 'succeeded')
+    assert.equal(payload.job.result_summary.source_mode, 'external_seed_json')
+    assert.equal(payload.job.result_summary.imported_counts.marketing_pages, 1)
+    assert.equal(payload.job.result_summary.imported_counts.services, 1)
+    assert.equal(payload.job.result_summary.imported_counts.team_members, 1)
+    assert.equal(payload.job.result_summary.imported_counts.testimonies, 1)
+    assert.equal(state.pages.length, 1)
+    assert.equal(state.services.length, 1)
+    assert.equal(state.teams.length, 1)
+    assert.equal(state.testimonies.length, 1)
+    assert.equal(state.blogs.length, 0)
+    assert.equal(state.artifacts.find((item) => item.artifact_kind === 'marketing_snapshot')?.artifact_payload?.services?.length, 1)
     assert.equal(state.mappings.length, 4)
   } finally {
     globalThis.fetch = originalFetch

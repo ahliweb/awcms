@@ -1,0 +1,63 @@
+{
+  "seed": {
+    "templateSlug": "marketing",
+    "marketing": {
+      "pages": [
+        {
+          "sourceId": "marketing-page:landing-home",
+          "title": "Landing Home",
+          "slug": "landing-home",
+          "excerpt": "Marketing landing page shell.",
+          "content": {
+            "root": {
+              "children": [
+                {
+                  "type": "Hero",
+                  "props": {
+                    "headline": "Launch faster with EmDash",
+                    "subheadline": "Forward-compatible marketing payload example for AWCMS import waves."
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "services": [
+        {
+          "sourceId": "service:strategy",
+          "title": "Strategy",
+          "slug": "strategy",
+          "description": "Audience research, positioning, and campaign planning.",
+          "icon": "briefcase",
+          "displayOrder": 0
+        }
+      ],
+      "team": [
+        {
+          "sourceId": "team:alya-rahman",
+          "name": "Alya Rahman",
+          "role": "Creative Director",
+          "displayOrder": 0,
+          "socialLinks": [
+            {
+              "platform": "linkedin",
+              "url": "https://example.com/alya"
+            }
+          ]
+        }
+      ],
+      "testimonies": [
+        {
+          "sourceId": "testimony:client-feedback",
+          "title": "Client Feedback",
+          "slug": "client-feedback",
+          "content": "Excellent collaboration and clear delivery.",
+          "authorName": "Client One",
+          "authorPosition": "CMO",
+          "rating": 5
+        }
+      ]
+    }
+  }
+}
