@@ -1,5 +1,9 @@
 type JsonRecord = Record<string, unknown>
 
+type ProcessLike = {
+  cwd?: () => string
+}
+
 export type EmdashSeedWidget = {
   sourceId: string
   name: string
@@ -370,12 +374,50 @@ export const getEmdashSeedTemplate = (templateSlug: string, importType: string):
   return null
 }
 
+const isLikelyLocalPath = (locator: string) => {
+  if (!locator) return false
+  if (locator.startsWith('file://')) return true
+  if (locator.startsWith('./') || locator.startsWith('../')) return true
+  if (locator.startsWith('/')) return true
+  return /^[A-Za-z]:[\\/]/.test(locator)
+}
+
+const readLocalSeedFile = async (locator: string) => {
+  const runtimeProcess = (globalThis as typeof globalThis & { process?: ProcessLike }).process
+  const cwd = typeof runtimeProcess?.cwd === 'function' ? runtimeProcess.cwd() : null
+  if (!cwd) {
+    throw new Error('Local file-path seed locators require a Node-compatible runtime with process.cwd()')
+  }
+
+  const [{ readFile }, pathModule, urlModule] = await Promise.all([
+    (0, eval)("import('node:fs/promises')"),
+    (0, eval)("import('node:path')"),
+    (0, eval)("import('node:url')"),
+  ])
+
+  const resolvedPath = locator.startsWith('file://')
+    ? urlModule.fileURLToPath(locator)
+    : pathModule.resolve(cwd, locator)
+
+  return readFile(resolvedPath, 'utf8')
+}
+
 export const loadEmdashExternalSeedTemplate = async (params: {
   sourceLocator: string | null
   templateSlug: string
 }): Promise<EmdashSeedTemplate | null> => {
   const locator = asString(params.sourceLocator).trim()
   if (!locator) return null
+
+  if (isLikelyLocalPath(locator)) {
+    const payload = JSON.parse(await readLocalSeedFile(locator))
+    const normalized = normalizeSeedTemplate(payload, params.templateSlug)
+    if (!normalized) {
+      throw new Error('Local EmDash seed.json is invalid or missing blog seed content')
+    }
+
+    return normalized
+  }
 
   let url: URL
   try {

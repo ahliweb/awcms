@@ -1,5 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { getEmdashSeedTemplate, loadEmdashExternalSeedTemplate } from '../src/lib/emdashSeedTemplates.ts'
 
 test('getEmdashSeedTemplate returns builtin blog seed', () => {
@@ -11,7 +15,64 @@ test('getEmdashSeedTemplate returns builtin blog seed', () => {
   assert.equal(seed?.widgetAreas[0]?.slug, 'emdash-blog-sidebar')
 })
 
-test('loadEmdashExternalSeedTemplate ignores non-url locators', async () => {
+test('loadEmdashExternalSeedTemplate loads relative local seed paths', async () => {
+  const fixtureDir = await mkdtemp(path.join(tmpdir(), 'emdash-seed-'))
+  const fixturePath = path.join(fixtureDir, 'seed.json')
+  await writeFile(fixturePath, JSON.stringify({
+    seed: {
+      templateSlug: 'blog',
+      blogs: [
+        {
+          title: 'Local Relative Seed',
+          slug: 'local-relative-seed',
+          content: '<p>Relative file path import</p>',
+        },
+      ],
+    },
+  }))
+
+  const originalCwd = process.cwd()
+  process.chdir(fixtureDir)
+
+  try {
+    const result = await loadEmdashExternalSeedTemplate({
+      sourceLocator: './seed.json',
+      templateSlug: 'blog',
+    })
+
+    assert.ok(result)
+    assert.equal(result?.blogs[0]?.slug, 'local-relative-seed')
+  } finally {
+    process.chdir(originalCwd)
+  }
+})
+
+test('loadEmdashExternalSeedTemplate loads file url locators', async () => {
+  const fixtureDir = await mkdtemp(path.join(tmpdir(), 'emdash-seed-url-'))
+  const fixturePath = path.join(fixtureDir, 'seed.json')
+  await writeFile(fixturePath, JSON.stringify({
+    seed: {
+      templateSlug: 'blog',
+      blogs: [
+        {
+          title: 'Local File URL Seed',
+          slug: 'local-file-url-seed',
+          content: '<p>File URL import</p>',
+        },
+      ],
+    },
+  }))
+
+  const result = await loadEmdashExternalSeedTemplate({
+    sourceLocator: pathToFileURL(fixturePath).toString(),
+    templateSlug: 'blog',
+  })
+
+  assert.ok(result)
+  assert.equal(result?.blogs[0]?.slug, 'local-file-url-seed')
+})
+
+test('loadEmdashExternalSeedTemplate ignores unsupported non-url locators', async () => {
   const result = await loadEmdashExternalSeedTemplate({
     sourceLocator: 'emdash/templates/blog/seed/seed.json',
     templateSlug: 'blog',

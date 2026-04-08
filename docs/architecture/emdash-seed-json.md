@@ -10,8 +10,8 @@ Define the canonical external `seed.json` payload accepted by the EmDash tenant 
 
 - This schema is for the blog import wave only.
 - The importer currently normalizes blog content, one visual `single_post` page template, widget areas, and widgets.
-- External `seed.json` is fetched from an `http(s)` `sourceLocator`.
-- Non-URL locators fall back to the built-in seed used for local foundation validation.
+- External `seed.json` can be loaded from an `http(s)` URL or a local file-path `sourceLocator`.
+- Unsupported non-URL locators still fall back to the built-in seed used for local foundation validation.
 
 ## Canonical Shape
 
@@ -179,7 +179,12 @@ Other `core:*` values are normalized by stripping the prefix and replacing `-` w
 
 ## Import Behavior
 
-- The Worker fetches the external JSON from `sourceLocator`.
+- The Worker loads external JSON from `sourceLocator`.
+- Supported locator forms are:
+  - `https://example.com/emdash/blog/seed.json`
+  - `file:///absolute/path/to/seed.json`
+  - `/absolute/path/to/seed.json`
+  - `./relative/path/to/seed.json`
 - The loader normalizes the payload into the internal `EmdashSeedTemplate` contract.
 - The executor materializes:
   - a `single_post` visual page template in `pages`
@@ -191,7 +196,9 @@ Other `core:*` values are normalized by stripping the prefix and replacing `-` w
 
 ## Failure Cases
 
-- If `sourceLocator` is not an `http(s)` URL, the external loader is skipped and the built-in fallback seed may be used.
+- If `sourceLocator` is a supported local file path, the loader reads the local JSON file directly.
+- If `sourceLocator` is not a supported URL or local path, the external loader is skipped and the built-in fallback seed may be used.
 - If the external URL returns non-2xx, the import fails.
+- If the local file cannot be read or parsed, the import fails.
 - If the JSON does not normalize into at least one blog entry, the import fails.
 - If a required materialization step fails, the job is marked `failed` and the error is recorded in `result_summary`.
