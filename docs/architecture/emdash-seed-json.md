@@ -8,12 +8,11 @@ Define the canonical external `seed.json` payload accepted by the EmDash tenant 
 
 ## Current Scope
 
-- Blog and marketing execution are materialized import waves today.
-- The external seed contract also reserves a forward-compatible `portfolio` section.
+- Blog, marketing, and portfolio execution are materialized import waves today.
 - The importer currently materializes:
   - blog content, one visual `single_post` page template, widget areas, and widgets
   - marketing pages, services, team members, and testimonies
-- Portfolio sections are normalized and preserved by the contract, but they are not executed into tenant records yet.
+  - portfolio items into tenant `portfolio` records
 - External `seed.json` can be loaded from an `http(s)` URL or a local file-path `sourceLocator`.
 - Unsupported non-URL locators still fall back to the built-in seed used for local foundation validation.
 
@@ -164,7 +163,7 @@ Copyable fixture:
 | `seed.blogs` | Conditional | Required for `templateSlug = blog`. |
 | `seed.widgetAreas` | Optional | When omitted, blog or marketing imports still succeed but no widget areas are materialized. |
 | `seed.marketing` | Conditional | Required for `templateSlug = marketing`. |
-| `seed.portfolio` | Optional | Forward-compatible contract section for future portfolio waves. |
+| `seed.portfolio` | Conditional | Required for `templateSlug = portfolio`. |
 
 ## Future Wave Sections
 
@@ -187,7 +186,7 @@ The contract recognizes these optional subsections:
 
 | Field | Target shape | Notes |
 | --- | --- | --- |
-| `portfolio.items` | `portfolio`-like records | Uses `title`, `slug`, `description`, `client`, `projectDate`, `images`, and `tags`. |
+| `portfolio.items` | `portfolio`-like records | Executable today. Uses `title`, `slug`, `description`, `client`, `projectDate`, `images`, and `tags`. |
 
 ## Widget Rules
 
@@ -223,7 +222,7 @@ Other `core:*` values are normalized by stripping the prefix and replacing `-` w
   - tenant widgets in `widgets`
   - published blog rows in `blogs`
 - The executor also materializes marketing pages, services, team members, and testimonies when `templateSlug = marketing`.
-- The loader also normalizes optional `portfolio` sections for future waves.
+- The executor also materializes portfolio items when `templateSlug = portfolio`.
 - `raw_emdash_payload` is preserved on widget areas and widgets.
 - Import replayability is enforced through `tenant_import_mappings`.
 

@@ -1513,6 +1513,90 @@ const upsertImportedMarketingTestimony = async (adminSupabase: any, params: {
   return testimonyResult.data.id as string
 }
 
+const upsertImportedPortfolioItem = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  userId: string
+  item: {
+    sourceId: string
+    title: string
+    slug: string
+    description: string
+    client: string
+    projectDate?: string | null
+    images: unknown[]
+    tags: unknown
+    rawPayload: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'portfolio_item',
+    sourceId: params.item.sourceId,
+    targetTable: 'portfolio',
+  })
+
+  let existingItem = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('portfolio')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingItem = data || null
+  }
+
+  if (!existingItem) {
+    const { data } = await adminSupabase
+      .from('portfolio')
+      .select('id')
+      .eq('tenant_id', params.tenantId)
+      .eq('slug', params.item.slug)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingItem = data || null
+  }
+
+  const payload = {
+    tenant_id: params.tenantId,
+    created_by: params.userId,
+    title: params.item.title,
+    slug: params.item.slug,
+    description: params.item.description,
+    images: params.item.images || [],
+    client: params.item.client || null,
+    project_date: params.item.projectDate || null,
+    tags: params.item.tags ?? [],
+    status: 'published',
+    updated_at: new Date().toISOString(),
+  }
+
+  const portfolioResult = existingItem?.id
+    ? await adminSupabase.from('portfolio').update(payload).eq('id', existingItem.id).select('id').single()
+    : await adminSupabase.from('portfolio').insert(payload).select('id').single()
+
+  if (portfolioResult.error || !portfolioResult.data?.id) {
+    throw new Error(portfolioResult.error?.message || `Failed to materialize EmDash portfolio item ${params.item.slug}`)
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'portfolio_item',
+    sourceId: params.item.sourceId,
+    targetTable: 'portfolio',
+    targetId: portfolioResult.data.id,
+    mappingPayload: {
+      slug: params.item.slug,
+      client: params.item.client,
+    },
+  })
+
+  return portfolioResult.data.id as string
+}
+
 const executeEmdashImportJob = async (params: {
   adminSupabase: any
   tenantId: string
@@ -1579,6 +1663,7 @@ const executeEmdashImportJob = async (params: {
     const marketingServiceIds: string[] = []
     const marketingTeamIds: string[] = []
     const marketingTestimonyIds: string[] = []
+    const portfolioItemIds: string[] = []
     let pageId: string | null = null
 
     if (params.templateSlug === 'blog') {
@@ -1636,6 +1721,16 @@ const executeEmdashImportJob = async (params: {
           testimony,
         })
         marketingTestimonyIds.push(testimonyId)
+      }
+    } else if (params.templateSlug === 'portfolio') {
+      for (const item of seedTemplate.portfolio.items) {
+        const portfolioItemId = await upsertImportedPortfolioItem(adminSupabase, {
+          tenantId: params.tenantId,
+          jobId: params.job.id,
+          userId: params.userId,
+          item,
+        })
+        portfolioItemIds.push(portfolioItemId)
       }
     } else {
       throw new Error(`EmDash import execution is not implemented yet for template ${params.templateSlug}`)
@@ -1715,6 +1810,22 @@ const executeEmdashImportJob = async (params: {
       })
     }
 
+    if (params.templateSlug === 'portfolio') {
+      await writeTenantImportArtifact(adminSupabase, {
+        tenantId: params.tenantId,
+        jobId: params.job.id,
+        artifactKind: 'portfolio_snapshot',
+        artifactKey: seedTemplate.sourceKey,
+        artifactPayload: {
+          items: seedTemplate.portfolio.items.map((item, index) => ({
+            sourceId: item.sourceId,
+            slug: item.slug,
+            targetId: portfolioItemIds[index] || null,
+          })),
+        },
+      })
+    }
+
     const completedAt = new Date().toISOString()
     const resultSummary = {
       mode: 'execute',
@@ -1725,6 +1836,7 @@ const executeEmdashImportJob = async (params: {
         services: marketingServiceIds.length,
         team_members: marketingTeamIds.length,
         testimonies: marketingTestimonyIds.length,
+        portfolio_items: portfolioItemIds.length,
         widget_areas: seedTemplate.widgetAreas.length,
         widgets: widgetSnapshots.length,
         pages: params.templateSlug === 'blog' ? 1 : marketingPageIds.length,
@@ -1736,6 +1848,7 @@ const executeEmdashImportJob = async (params: {
       service_ids: marketingServiceIds,
       team_ids: marketingTeamIds,
       testimony_ids: marketingTestimonyIds,
+      portfolio_item_ids: portfolioItemIds,
     }
 
     await adminSupabase

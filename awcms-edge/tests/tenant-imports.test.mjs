@@ -144,6 +144,30 @@ const createTenantImportFetch = (state) => async (input, init) => {
     })
   }
 
+  if (url.hostname === 'portfolio.example.com') {
+    return jsonResponse({
+      seed: {
+        templateSlug: 'portfolio',
+        sourceVersion: 'portfolio-v1',
+        sourceKey: 'portfolio:remote-seed',
+        portfolio: {
+          items: [
+            {
+              sourceId: 'portfolio:brand-refresh',
+              title: 'Brand Refresh',
+              slug: 'brand-refresh',
+              description: 'Portfolio case study',
+              client: 'Acme Co',
+              projectDate: '2026-03-12',
+              images: ['https://portfolio.example.com/brand-refresh-1.jpg'],
+              tags: ['branding', 'design'],
+            },
+          ],
+        },
+      },
+    })
+  }
+
   if (url.pathname.endsWith('/auth/v1/user')) {
     return jsonResponse({
       user: {
@@ -445,6 +469,32 @@ const createTenantImportFetch = (state) => async (input, init) => {
       break
     }
 
+    case 'portfolio': {
+      if (method === 'GET') {
+        const id = parseEq(url.searchParams.get('id'))
+        const tenantId = parseEq(url.searchParams.get('tenant_id'))
+        const slug = parseEq(url.searchParams.get('slug'))
+        const item = id
+          ? state.portfolio.find((entry) => entry.id === id)
+          : state.portfolio.find((entry) => entry.tenant_id === tenantId && entry.slug === slug)
+        return jsonResponse(item || null)
+      }
+
+      if (method === 'POST') {
+        const row = { id: `portfolio-${state.portfolio.length + 1}`, ...body }
+        state.portfolio.push(row)
+        return jsonResponse({ id: row.id }, 201)
+      }
+
+      if (method === 'PATCH') {
+        const id = parseEq(url.searchParams.get('id'))
+        const item = state.portfolio.find((entry) => entry.id === id)
+        Object.assign(item, body)
+        return jsonResponse({ id: item.id })
+      }
+      break
+    }
+
     default:
       break
   }
@@ -469,6 +519,7 @@ test('tenant-imports executes external seed.json import with mocked fetch', asyn
     services: [],
     teams: [],
     testimonies: [],
+    portfolio: [],
     importAudit: [],
     accessAudit: [],
   }
@@ -538,6 +589,7 @@ test('tenant-imports executes marketing seed import with mocked fetch', async ()
     services: [],
     teams: [],
     testimonies: [],
+    portfolio: [],
     importAudit: [],
     accessAudit: [],
   }
@@ -587,6 +639,73 @@ test('tenant-imports executes marketing seed import with mocked fetch', async ()
     assert.equal(state.blogs.length, 0)
     assert.equal(state.artifacts.find((item) => item.artifact_kind === 'marketing_snapshot')?.artifact_payload?.services?.length, 1)
     assert.equal(state.mappings.length, 4)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('tenant-imports executes portfolio seed import with mocked fetch', async () => {
+  const state = {
+    user: {
+      id: '00000000-0000-0000-0000-000000000001',
+      tenant_id: 'tenant-1',
+    },
+    jobs: [],
+    sources: [],
+    mappings: [],
+    artifacts: [],
+    pages: [],
+    templateParts: [],
+    widgets: [],
+    blogs: [],
+    services: [],
+    teams: [],
+    testimonies: [],
+    portfolio: [],
+    importAudit: [],
+    accessAudit: [],
+  }
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = createTenantImportFetch(state)
+
+  try {
+    const response = await app.fetch(new Request('https://edge.example.com/functions/v1/tenant-imports', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer valid-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'create-job',
+        tenantId: 'tenant-1',
+        importType: 'seed',
+        templateSlug: 'portfolio',
+        dryRun: false,
+        parameters: {
+          source_system: 'emdash',
+        },
+        source: {
+          sourceKey: 'portfolio:remote-seed',
+          sourceKind: 'seed',
+          sourceLocator: 'https://portfolio.example.com/emdash/portfolio/seed.json',
+          sourceVersion: 'portfolio-v1',
+        },
+      }),
+    }), tenantImportsEnv)
+
+    assert.equal(response.status, 200)
+    const payload = await response.json()
+
+    assert.equal(payload.ok, true)
+    assert.equal(payload.job.status, 'succeeded')
+    assert.equal(payload.job.result_summary.source_mode, 'external_seed_json')
+    assert.equal(payload.job.result_summary.imported_counts.portfolio_items, 1)
+    assert.equal(state.portfolio.length, 1)
+    assert.equal(state.blogs.length, 0)
+    assert.equal(state.pages.length, 0)
+    assert.equal(state.artifacts.find((item) => item.artifact_kind === 'portfolio_snapshot')?.artifact_payload?.items?.length, 1)
+    assert.equal(state.mappings.length, 1)
   } finally {
     globalThis.fetch = originalFetch
   }

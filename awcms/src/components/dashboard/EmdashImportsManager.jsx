@@ -129,7 +129,7 @@ function EmdashImportsManager() {
           <CardHeader>
             <CardTitle>Create Import Job</CardTitle>
             <CardDescription>
-              Foundation flow for EmDash tenant imports. Dry runs remain auditable, and the blog plus marketing seed paths can now materialize tenant content for the active tenant.
+              Foundation flow for EmDash tenant imports. Dry runs remain auditable, and the blog, marketing, and portfolio seed paths can now materialize tenant content for the active tenant.
             </CardDescription>
           </CardHeader>
           <CardContent>
