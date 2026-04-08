@@ -1,5 +1,6 @@
 ---
 import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
 import WidgetRenderer from "../common/WidgetRenderer.astro";
 import { getWidgetsByAreaSlug } from "~/lib/widgets";
 import type { WidgetData } from "~/lib/widgets";
@@ -13,11 +14,12 @@ interface Props {
 const { area, title } = Astro.props;
 
 const supabase = createClientFromEnv(import.meta.env);
+const tenantId = getPublicTenantId();
 let widgets: WidgetData[] = [];
 
 if (supabase && area) {
   try {
-    widgets = await getWidgetsByAreaSlug(supabase, area);
+    widgets = await getWidgetsByAreaSlug(supabase, area, tenantId);
   } catch (e) {
     console.error("[WidgetAreaBlock] Error fetching widgets:", e);
   }

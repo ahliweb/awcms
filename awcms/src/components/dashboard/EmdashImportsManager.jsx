@@ -23,7 +23,7 @@ function EmdashImportsManager() {
   const { toast } = useToast();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingMode, setSubmittingMode] = useState(null);
   const [form, setForm] = useState(defaultForm);
   const [error, setError] = useState(null);
 
@@ -58,21 +58,20 @@ function EmdashImportsManager() {
     loadJobs();
   }, [loadJobs]);
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const handleCreateJob = async (dryRun) => {
     if (!currentTenant?.id) {
       toast({ variant: 'destructive', title: 'Missing tenant context', description: 'Select a tenant before creating an import job.' });
       return;
     }
 
-    setSubmitting(true);
+    setSubmittingMode(dryRun ? 'dry-run' : 'execute');
     setError(null);
     const payload = {
       action: 'create-job',
       tenantId: currentTenant.id,
       importType: form.importType,
       templateSlug: form.templateSlug,
-      dryRun: true,
+      dryRun,
       parameters: {
         source_system: 'emdash',
         parity_target: form.templateSlug,
@@ -91,7 +90,7 @@ function EmdashImportsManager() {
     };
 
     const { data, error: invokeError } = await supabase.functions.invoke('tenant-imports', { body: payload });
-    setSubmitting(false);
+    setSubmittingMode(null);
 
     if (invokeError || data?.error) {
       const message = invokeError?.message || data?.error || 'Failed to create import job';
@@ -100,7 +99,12 @@ function EmdashImportsManager() {
       return;
     }
 
-    toast({ title: 'Import job created', description: `Queued dry-run import for ${form.templateSlug}.` });
+    toast({
+      title: dryRun ? 'Import dry run created' : 'Import executed',
+      description: dryRun
+        ? `Queued dry-run import for ${form.templateSlug}.`
+        : `Executed seeded ${form.templateSlug} import for the active tenant.`,
+    });
     await loadJobs();
   };
 
@@ -125,11 +129,11 @@ function EmdashImportsManager() {
           <CardHeader>
             <CardTitle>Create Import Job</CardTitle>
             <CardDescription>
-              Foundation flow for EmDash tenant imports. This currently creates auditable dry-run jobs for seeded template migration work.
+              Foundation flow for EmDash tenant imports. Dry runs remain auditable, and the blog seed path can now materialize tenant content, widget areas, and a single-post template.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form className="grid gap-4 md:grid-cols-3" onSubmit={handleSubmit}>
+            <form className="grid gap-4 md:grid-cols-3" onSubmit={(event) => event.preventDefault()}>
               <div className="space-y-2">
                 <Label htmlFor="templateSlug">Template</Label>
                 <Select value={form.templateSlug} onValueChange={(value) => setForm((current) => ({
@@ -166,15 +170,23 @@ function EmdashImportsManager() {
                 <Label htmlFor="sourceLocator">Source Locator</Label>
                 <Input
                   id="sourceLocator"
+                  placeholder="https://example.com/emdash/blog/seed.json"
                   value={form.sourceLocator}
                   onChange={(event) => setForm((current) => ({ ...current, sourceLocator: event.target.value }))}
                 />
+                <p className="text-xs text-slate-500">
+                  External imports now accept an `http(s)` `seed.json` URL. Non-URL locators continue to use the built-in fallback seed.
+                </p>
               </div>
 
               <div className="md:col-span-3 flex items-center gap-3">
-                <Button type="submit" disabled={submitting}>
-                  {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                <Button type="button" variant="outline" disabled={Boolean(submittingMode)} onClick={() => handleCreateJob(true)}>
+                  {submittingMode === 'dry-run' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Queue Dry Run
+                </Button>
+                <Button type="button" disabled={Boolean(submittingMode)} onClick={() => handleCreateJob(false)}>
+                  {submittingMode === 'execute' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Run Seed Import
                 </Button>
                 <Button type="button" variant="outline" onClick={loadJobs} disabled={loading}>
                   <RefreshCw className="mr-2 h-4 w-4" />
@@ -208,9 +220,31 @@ function EmdashImportsManager() {
                         <div className="font-medium text-slate-900">{job.template_slug || 'unnamed import'} </div>
                         <div className="text-xs text-slate-500">{job.import_type} • {job.source_system} • {job.id}</div>
                       </div>
-                      <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-700">
-                        {job.status}
+                        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-700">
+                          {job.status}
+                        </div>
+                    </div>
+
+                    {job.result_summary && Object.keys(job.result_summary).length > 0 ? (
+                      <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+                        {job.result_summary.imported_counts ? (
+                          <div className="flex flex-wrap gap-3">
+                            <span>Blogs: {job.result_summary.imported_counts.blogs || 0}</span>
+                            <span>Pages: {job.result_summary.imported_counts.pages || 0}</span>
+                            <span>Widget areas: {job.result_summary.imported_counts.widget_areas || 0}</span>
+                            <span>Widgets: {job.result_summary.imported_counts.widgets || 0}</span>
+                          </div>
+                        ) : null}
+                        {job.result_summary.error ? (
+                          <div className="text-red-600">{job.result_summary.error}</div>
+                        ) : null}
                       </div>
+                    ) : null}
+
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+                      <span>Sources: {Array.isArray(job.sources) ? job.sources.length : 0}</span>
+                      <span>Mappings: {Array.isArray(job.mappings) ? job.mappings.length : 0}</span>
+                      <span>Artifacts: {Array.isArray(job.artifacts) ? job.artifacts.length : 0}</span>
                     </div>
                   </div>
                 ))}

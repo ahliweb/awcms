@@ -20,6 +20,7 @@ import type { AppEnv, Bindings, UserContext } from './lib/runtime-types'
 import { getJsonBody, handleRouteError, requireJsonBody, requireString } from './lib/http'
 import { requireBearerSession, resolveBearerOrServiceActor } from './lib/auth'
 import { issueTenantRouteToken, resolveTenantRouteToken } from './lib/tenantRouteTokens'
+import { getEmdashSeedTemplate, loadEmdashExternalSeedTemplate } from './lib/emdashSeedTemplates'
 
 export const app = new Hono<AppEnv>()
 
@@ -759,6 +760,609 @@ const syncTenantExtensionRoutes = async (params: {
         deleted_at: null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'tenant_extension_id,route_key' })
+  }
+}
+
+const slugifyImportValue = (value: string, fallback: string) => {
+  const normalized = String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return normalized || fallback
+}
+
+const getTenantImportMapping = async (adminSupabase: any, params: {
+  tenantId: string
+  sourceKind: string
+  sourceId: string
+  targetTable: string
+}) => {
+  const { data } = await adminSupabase
+    .from('tenant_import_mappings')
+    .select('*')
+    .eq('tenant_id', params.tenantId)
+    .eq('source_kind', params.sourceKind)
+    .eq('source_id', params.sourceId)
+    .eq('target_table', params.targetTable)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  return data || null
+}
+
+const writeTenantImportMapping = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  sourceKind: string
+  sourceId: string
+  targetTable: string
+  targetId: string
+  mappingPayload?: Record<string, unknown>
+}) => {
+  await adminSupabase
+    .from('tenant_import_mappings')
+    .upsert({
+      tenant_id: params.tenantId,
+      job_id: params.jobId,
+      source_kind: params.sourceKind,
+      source_id: params.sourceId,
+      target_table: params.targetTable,
+      target_id: params.targetId,
+      mapping_payload: params.mappingPayload || {},
+      deleted_at: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'tenant_id,source_kind,source_id,target_table' })
+}
+
+const writeTenantImportArtifact = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  artifactKind: string
+  artifactKey: string
+  artifactPayload: Record<string, unknown>
+}) => {
+  await adminSupabase
+    .from('tenant_import_artifacts')
+    .upsert({
+      tenant_id: params.tenantId,
+      job_id: params.jobId,
+      artifact_kind: params.artifactKind,
+      artifact_key: params.artifactKey,
+      artifact_payload: params.artifactPayload,
+      deleted_at: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'job_id,artifact_kind,artifact_key' })
+}
+
+const upsertImportedPage = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  sourceId: string
+  page: {
+    title: string
+    slug: string
+    excerpt: string
+    rawPayload: Record<string, unknown>
+    content: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'page',
+    sourceId: params.sourceId,
+    targetTable: 'pages',
+  })
+
+  let existingPage = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('pages')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingPage = data || null
+  }
+
+  if (!existingPage) {
+    const { data } = await adminSupabase
+      .from('pages')
+      .select('id')
+      .eq('tenant_id', params.tenantId)
+      .eq('page_type', 'single_post')
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    existingPage = data || null
+  }
+
+  const payload = {
+    tenant_id: params.tenantId,
+    title: params.page.title,
+    slug: params.page.slug,
+    excerpt: params.page.excerpt,
+    status: 'published',
+    workflow_state: 'published',
+    editor_type: 'visual',
+    page_type: 'single_post',
+    is_public: true,
+    is_active: true,
+    content_draft: params.page.content,
+    content_published: params.page.content,
+    published_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+
+  const pageResult = existingPage?.id
+    ? await adminSupabase.from('pages').update(payload).eq('id', existingPage.id).select('id').single()
+    : await adminSupabase.from('pages').insert(payload).select('id').single()
+
+  if (pageResult.error || !pageResult.data?.id) {
+    throw new Error(pageResult.error?.message || 'Failed to materialize EmDash single-post page template')
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'page',
+    sourceId: params.sourceId,
+    targetTable: 'pages',
+    targetId: pageResult.data.id,
+    mappingPayload: {
+      page_type: 'single_post',
+      editor_type: 'visual',
+    },
+  })
+
+  return pageResult.data.id as string
+}
+
+const upsertImportedWidgetArea = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  area: {
+    sourceId: string
+    slug: string
+    name: string
+    rawPayload: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'widget_area',
+    sourceId: params.area.sourceId,
+    targetTable: 'template_parts',
+  })
+
+  let existingPart = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('template_parts')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingPart = data || null
+  }
+
+  if (!existingPart) {
+    const { data } = await adminSupabase
+      .from('template_parts')
+      .select('id')
+      .eq('tenant_id', params.tenantId)
+      .eq('type', 'widget_area')
+      .eq('slug', params.area.slug)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingPart = data || null
+  }
+
+  const payload = {
+    tenant_id: params.tenantId,
+    name: params.area.name,
+    type: 'widget_area',
+    slug: params.area.slug,
+    content: { content: [], root: {} },
+    is_active: true,
+    source_system: 'emdash',
+    source_version: 'emdash-template-v1',
+    normalization_status: 'normalized',
+    last_normalized_at: new Date().toISOString(),
+    raw_emdash_payload: params.area.rawPayload,
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+  }
+
+  const partResult = existingPart?.id
+    ? await adminSupabase.from('template_parts').update(payload).eq('id', existingPart.id).select('id').single()
+    : await adminSupabase.from('template_parts').insert(payload).select('id').single()
+
+  if (partResult.error || !partResult.data?.id) {
+    throw new Error(partResult.error?.message || `Failed to materialize EmDash widget area ${params.area.slug}`)
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'widget_area',
+    sourceId: params.area.sourceId,
+    targetTable: 'template_parts',
+    targetId: partResult.data.id,
+    mappingPayload: {
+      slug: params.area.slug,
+      type: 'widget_area',
+    },
+  })
+
+  return partResult.data.id as string
+}
+
+const upsertImportedWidget = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  areaId: string
+  areaSlug: string
+  widget: {
+    sourceId: string
+    name: string
+    type: string
+    order: number
+    showTitle?: boolean
+    content?: string | null
+    config?: Record<string, unknown>
+    rawPayload: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'widget',
+    sourceId: params.widget.sourceId,
+    targetTable: 'widgets',
+  })
+
+  let existingWidget = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('widgets')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingWidget = data || null
+  }
+
+  const payload = {
+    tenant_id: params.tenantId,
+    area_id: params.areaId,
+    area: params.areaSlug,
+    name: params.widget.name,
+    type: params.widget.type,
+    config: params.widget.config || {},
+    content: params.widget.content || null,
+    order: params.widget.order,
+    sort_order: params.widget.order,
+    is_active: true,
+    show_title: params.widget.showTitle !== false,
+    source_system: 'emdash',
+    source_version: 'emdash-template-v1',
+    normalization_status: 'normalized',
+    last_normalized_at: new Date().toISOString(),
+    raw_emdash_payload: params.widget.rawPayload,
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+  }
+
+  const widgetResult = existingWidget?.id
+    ? await adminSupabase.from('widgets').update(payload).eq('id', existingWidget.id).select('id').single()
+    : await adminSupabase.from('widgets').insert(payload).select('id').single()
+
+  if (widgetResult.error || !widgetResult.data?.id) {
+    throw new Error(widgetResult.error?.message || `Failed to materialize EmDash widget ${params.widget.sourceId}`)
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'widget',
+    sourceId: params.widget.sourceId,
+    targetTable: 'widgets',
+    targetId: widgetResult.data.id,
+    mappingPayload: {
+      area_slug: params.areaSlug,
+      widget_type: params.widget.type,
+      order: params.widget.order,
+    },
+  })
+
+  return widgetResult.data.id as string
+}
+
+const upsertImportedBlog = async (adminSupabase: any, params: {
+  tenantId: string
+  jobId: string
+  authorId: string
+  blog: {
+    sourceId: string
+    title: string
+    slug: string
+    excerpt: string
+    content: string
+    featuredImage?: string | null
+    rawPayload: Record<string, unknown>
+  }
+}) => {
+  const mapping = await getTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    sourceKind: 'blog',
+    sourceId: params.blog.sourceId,
+    targetTable: 'blogs',
+  })
+
+  let existingBlog = null
+  if (mapping?.target_id) {
+    const { data } = await adminSupabase
+      .from('blogs')
+      .select('id')
+      .eq('id', mapping.target_id)
+      .eq('tenant_id', params.tenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingBlog = data || null
+  }
+
+  if (!existingBlog) {
+    const { data } = await adminSupabase
+      .from('blogs')
+      .select('id')
+      .eq('tenant_id', params.tenantId)
+      .eq('slug', params.blog.slug)
+      .is('deleted_at', null)
+      .maybeSingle()
+    existingBlog = data || null
+  }
+
+  const publishedAt = new Date().toISOString()
+  const payload = {
+    tenant_id: params.tenantId,
+    title: params.blog.title,
+    slug: params.blog.slug,
+    excerpt: params.blog.excerpt,
+    content: params.blog.content,
+    featured_image: params.blog.featuredImage || null,
+    author_id: params.authorId,
+    created_by: params.authorId,
+    status: 'published',
+    workflow_state: 'published',
+    is_active: true,
+    is_public: true,
+    published_at: publishedAt,
+    updated_at: publishedAt,
+  }
+
+  const blogResult = existingBlog?.id
+    ? await adminSupabase.from('blogs').update(payload).eq('id', existingBlog.id).select('id').single()
+    : await adminSupabase.from('blogs').insert(payload).select('id').single()
+
+  if (blogResult.error || !blogResult.data?.id) {
+    throw new Error(blogResult.error?.message || `Failed to materialize EmDash blog ${params.blog.slug}`)
+  }
+
+  await writeTenantImportMapping(adminSupabase, {
+    tenantId: params.tenantId,
+    jobId: params.jobId,
+    sourceKind: 'blog',
+    sourceId: params.blog.sourceId,
+    targetTable: 'blogs',
+    targetId: blogResult.data.id,
+    mappingPayload: {
+      slug: params.blog.slug,
+      status: 'published',
+    },
+  })
+
+  return blogResult.data.id as string
+}
+
+const executeEmdashImportJob = async (params: {
+  adminSupabase: any
+  tenantId: string
+  job: any
+  userId: string
+  templateSlug: string
+  importType: string
+  sourceLocator: string | null
+}) => {
+  const externalSeedTemplate = await loadEmdashExternalSeedTemplate({
+    sourceLocator: params.sourceLocator,
+    templateSlug: params.templateSlug,
+  })
+  const seedTemplate = externalSeedTemplate || getEmdashSeedTemplate(params.templateSlug, params.importType)
+  if (!seedTemplate) {
+    throw new Error(`No built-in EmDash seed is available for ${params.templateSlug}/${params.importType}`)
+  }
+
+  const adminSupabase = params.adminSupabase
+  const startedAt = new Date().toISOString()
+
+  await adminSupabase
+    .from('tenant_import_jobs')
+    .update({
+      status: 'running',
+      started_at: startedAt,
+      updated_at: startedAt,
+      result_summary: {
+        mode: 'execute',
+        template_slug: params.templateSlug,
+      },
+    })
+    .eq('id', params.job.id)
+
+  try {
+    const pageId = await upsertImportedPage(adminSupabase, {
+      tenantId: params.tenantId,
+      jobId: params.job.id,
+      sourceId: seedTemplate.pageTemplate.sourceId,
+      page: seedTemplate.pageTemplate,
+    })
+
+    const widgetSnapshots: Array<Record<string, unknown>> = []
+    for (const area of seedTemplate.widgetAreas) {
+      const areaId = await upsertImportedWidgetArea(adminSupabase, {
+        tenantId: params.tenantId,
+        jobId: params.job.id,
+        area,
+      })
+
+      for (const widget of area.widgets) {
+        const widgetId = await upsertImportedWidget(adminSupabase, {
+          tenantId: params.tenantId,
+          jobId: params.job.id,
+          areaId,
+          areaSlug: area.slug,
+          widget,
+        })
+
+        widgetSnapshots.push({
+          id: widgetId,
+          sourceId: widget.sourceId,
+          type: widget.type,
+          areaSlug: area.slug,
+        })
+      }
+    }
+
+    const blogIds: string[] = []
+    for (const blog of seedTemplate.blogs) {
+      const blogId = await upsertImportedBlog(adminSupabase, {
+        tenantId: params.tenantId,
+        jobId: params.job.id,
+        authorId: params.userId,
+        blog,
+      })
+      blogIds.push(blogId)
+    }
+
+    await writeTenantImportArtifact(adminSupabase, {
+      tenantId: params.tenantId,
+      jobId: params.job.id,
+      artifactKind: 'seed',
+      artifactKey: seedTemplate.sourceKey,
+      artifactPayload: {
+        source_locator: params.sourceLocator,
+        source_version: seedTemplate.sourceVersion,
+        template_slug: seedTemplate.templateSlug,
+        source_mode: externalSeedTemplate ? 'external_seed_json' : 'builtin_fallback',
+      },
+    })
+
+    await writeTenantImportArtifact(adminSupabase, {
+      tenantId: params.tenantId,
+      jobId: params.job.id,
+      artifactKind: 'visual_snapshot',
+      artifactKey: seedTemplate.pageTemplate.slug,
+      artifactPayload: {
+        page_id: pageId,
+        content: seedTemplate.pageTemplate.content,
+      },
+    })
+
+    await writeTenantImportArtifact(adminSupabase, {
+      tenantId: params.tenantId,
+      jobId: params.job.id,
+      artifactKind: 'widget_snapshot',
+      artifactKey: seedTemplate.widgetAreas[0]?.slug || 'widget-area',
+      artifactPayload: {
+        widget_areas: seedTemplate.widgetAreas.map((area) => ({
+          sourceId: area.sourceId,
+          slug: area.slug,
+          widgets: area.widgets.map((widget) => ({
+            sourceId: widget.sourceId,
+            type: widget.type,
+          })),
+        })),
+        materialized_widgets: widgetSnapshots,
+      },
+    })
+
+    const completedAt = new Date().toISOString()
+    const resultSummary = {
+      mode: 'execute',
+      template_slug: seedTemplate.templateSlug,
+      imported_counts: {
+        blogs: blogIds.length,
+        widget_areas: seedTemplate.widgetAreas.length,
+        widgets: widgetSnapshots.length,
+        pages: 1,
+      },
+      source_mode: externalSeedTemplate ? 'external_seed_json' : 'builtin_fallback',
+      page_id: pageId,
+      blog_ids: blogIds,
+    }
+
+    await adminSupabase
+      .from('tenant_import_jobs')
+      .update({
+        status: 'succeeded',
+        completed_at: completedAt,
+        updated_at: completedAt,
+        result_summary: resultSummary,
+      })
+      .eq('id', params.job.id)
+
+    await adminSupabase.from('tenant_import_audit').insert({
+      tenant_id: params.tenantId,
+      job_id: params.job.id,
+      actor_user_id: params.userId,
+      action: 'execute-job',
+      status: 'succeeded',
+      metadata: resultSummary,
+    })
+
+    const { data: refreshedJob } = await adminSupabase
+      .from('tenant_import_jobs')
+      .select('*, sources:tenant_import_sources(*), artifacts:tenant_import_artifacts(*), mappings:tenant_import_mappings(*)')
+      .eq('id', params.job.id)
+      .maybeSingle()
+
+    return refreshedJob || { ...params.job, status: 'succeeded', result_summary: resultSummary }
+  } catch (error) {
+    const completedAt = new Date().toISOString()
+    const message = error instanceof Error ? error.message : 'EmDash import execution failed'
+
+    await adminSupabase
+      .from('tenant_import_jobs')
+      .update({
+        status: 'failed',
+        completed_at: completedAt,
+        updated_at: completedAt,
+        result_summary: {
+          mode: 'execute',
+          template_slug: params.templateSlug,
+          error: message,
+        },
+      })
+      .eq('id', params.job.id)
+
+    await adminSupabase.from('tenant_import_audit').insert({
+      tenant_id: params.tenantId,
+      job_id: params.job.id,
+      actor_user_id: params.userId,
+      action: 'execute-job',
+      status: 'failed',
+      metadata: {
+        templateSlug: params.templateSlug,
+        importType: params.importType,
+        error: message,
+      },
+    })
+
+    throw error
   }
 }
 
@@ -2966,7 +3570,7 @@ app.post('/functions/v1/tenant-imports', async (c) => {
 
       const { data, error } = await adminSupabase
         .from('tenant_import_jobs')
-        .select('*, sources:tenant_import_sources(*), artifacts:tenant_import_artifacts(*)')
+        .select('*, sources:tenant_import_sources(*), artifacts:tenant_import_artifacts(*), mappings:tenant_import_mappings(*)')
         .eq('tenant_id', tenantId)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -3057,7 +3661,27 @@ app.post('/functions/v1/tenant-imports', async (c) => {
         authMethod: 'bearer_token',
       })
 
-      return c.json({ ok: true, job })
+      if (!body.dryRun) {
+        const executedJob = await executeEmdashImportJob({
+          adminSupabase,
+          tenantId,
+          job,
+          userId: user.id,
+          templateSlug: templateSlug || 'blog',
+          importType,
+          sourceLocator: typeof source?.sourceLocator === 'string' ? source.sourceLocator : null,
+        })
+
+        return c.json({ ok: true, job: executedJob })
+      }
+
+      const { data: refreshedJob } = await adminSupabase
+        .from('tenant_import_jobs')
+        .select('*, sources:tenant_import_sources(*), artifacts:tenant_import_artifacts(*), mappings:tenant_import_mappings(*)')
+        .eq('id', job.id)
+        .maybeSingle()
+
+      return c.json({ ok: true, job: refreshedJob || job })
     }
 
     return c.json({ error: `Unsupported action: ${action}` }, 400)
