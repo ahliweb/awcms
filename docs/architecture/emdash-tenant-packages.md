@@ -74,3 +74,7 @@ Rules:
 - extension namespace auth and tenant mismatch tests
 - public build/check for `awcms-public/primary`
 - visual snapshot parity for marketing and portfolio phases
+
+## Related Docs
+
+- [EmDash seed.json](./emdash-seed-json.md)

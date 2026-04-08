@@ -1,0 +1,12 @@
+{
+  "seed": {
+    "templateSlug": "blog",
+    "blogs": [
+      {
+        "title": "Minimal EmDash Blog Seed",
+        "slug": "minimal-emdash-blog-seed",
+        "content": "<p>This is the smallest valid external seed payload for the current blog import wave.</p>"
+      }
+    ]
+  }
+}
