@@ -4,7 +4,7 @@
 >
 > Status: Active - content accuracy reconciliation remains in progress across the current `docs/**/*.md` surface. Re-verify counts at the start of each audit pass.
 >
-> Last Updated: 2026-04-01
+> Last Updated: 2026-04-09
 
 ## Current Phase Status
 
@@ -57,6 +57,7 @@
 | DOCSYNC-NEW-13 | Low | `docs/modules/EMAIL_INTEGRATION.md`, `docs/dev/api-usage.md`, `docs/dev/ci-cd.md`, `docs/dev/testing.md`, and `docs/dev/versioning.md` had lower-priority command/path/model drift | Resolved 2026-03-29 | Corrected Mailketing service path, public client example priority, DB parity command, mobile test commands, and versioning wording about dependency coordination | Re-run during the next dev/module docs sweep |
 | DOCSYNC-2026-04-01-01 | Medium | Security and tenancy docs still contained small authority drifts around platform-admin helper naming, notification permission examples, and source-of-truth wording | Resolved 2026-04-01 | `docs/security/rls.md`, `docs/security/abac.md`, `docs/security/overview.md`, `docs/tenancy/supabase.md`, and `docs/architecture/platform-tenant-separation.md` updated | Re-check when auth helpers, permissions, or notification migrations change |
 | DOCSYNC-2026-04-01-02 | Medium | Module and user docs still had stale extension-manifest naming, legacy extension-table setup guidance, incomplete role coverage, and notification permission-family ambiguity | Resolved 2026-04-01 | `docs/modules/EXTENSIONS.md`, `docs/modules/USER_MANAGEMENT.md`, `docs/security/abac.md`, and `docs/architecture/database.md` updated | Re-check when extension lifecycle, role model, or notification permissions change |
+| DOCSYNC-2026-04-09-01 | Low | `docs/dev/prompt-guide.md` had drifted behind the current repo condition and no longer reflected the live stack/runtime framing, current validation commands, or the now-executable EmDash import waves | Resolved 2026-04-09 | `docs/dev/prompt-guide.md` rewritten and re-aligned to current workspace boundaries, validation expectations, import surfaces, and prompt templates; `cd awcms && npm run docs:check` passed | Re-check when prompt workflows, validation commands, or major executable surfaces change |
 
 ## Commands Run During This Cycle
 
