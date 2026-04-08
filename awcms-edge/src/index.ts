@@ -19,6 +19,7 @@ import { requireDocsAccess } from './middleware/docs/require-docs-access'
 import type { AppEnv, Bindings, UserContext } from './lib/runtime-types'
 import { getJsonBody, handleRouteError, requireJsonBody, requireString } from './lib/http'
 import { requireBearerSession, resolveBearerOrServiceActor } from './lib/auth'
+import { issueTenantRouteToken, resolveTenantRouteToken } from './lib/tenantRouteTokens'
 
 export const app = new Hono<AppEnv>()
 
@@ -689,6 +690,76 @@ const writeAccessAudit = async (adminSupabase: any, payload: {
     p_access_mechanism: payload.accessMechanism || 'worker_route',
     p_auth_method: payload.authMethod || null,
   })
+}
+
+const getExtensionRouteSecret = (env: Bindings) => env.EXTENSION_ROUTE_SECRET || env.SUPABASE_SECRET_KEY
+
+const normalizeExtensionRoutePath = (routePath: string, vendor: string, slug: string) => {
+  const normalized = String(routePath || '').trim().replace(/^\/+/, '')
+  const legacyPrefixes = [
+    `functions/v1/ext/:tenantRoute/${vendor}/${slug}/`,
+    `functions/v1/extensions/${vendor}/${slug}/`,
+    `functions/v1/extensions/${slug}/`,
+  ]
+
+  for (const prefix of legacyPrefixes) {
+    if (normalized.startsWith(prefix)) {
+      return normalized.slice(prefix.length).replace(/^\/+|\/+$/g, '') || 'index'
+    }
+  }
+
+  return normalized.replace(/^\/+|\/+$/g, '') || 'index'
+}
+
+const syncTenantExtensionRoutes = async (params: {
+  adminSupabase: any
+  tenantId: string
+  catalog: any
+  tenantExtensionId: string
+  manifest: any
+}) => {
+  const routes = Array.isArray(params.manifest?.edgeRoutes) ? params.manifest.edgeRoutes : []
+  await params.adminSupabase
+    .from('tenant_extension_routes')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('tenant_extension_id', params.tenantExtensionId)
+
+  for (const route of routes) {
+    const routeMethod = String(route?.method || 'POST').toUpperCase()
+    const routePath = normalizeExtensionRoutePath(String(route?.path || ''), params.catalog.vendor, params.catalog.slug)
+    if (!routePath || !route?.capability) continue
+
+    const routeKey = `${routeMethod}:${routePath}`
+    const metadata = typeof route?.metadata === 'object' && route.metadata ? route.metadata : {}
+    const resolvedMetadata = {
+      ...metadata,
+      original_path: route.path,
+      handler:
+        metadata.handler
+        || (params.catalog.vendor === 'ahliweb' && params.catalog.slug === 'events' && routePath === 'health' ? 'events.health' : null)
+        || (params.catalog.vendor === 'ahliweb' && params.catalog.slug === 'events' && routePath === 'public' ? 'events.public' : null),
+    }
+
+    await params.adminSupabase
+      .from('tenant_extension_routes')
+      .upsert({
+        tenant_id: params.tenantId,
+        catalog_id: params.catalog.id,
+        tenant_extension_id: params.tenantExtensionId,
+        vendor: params.catalog.vendor,
+        extension_slug: params.catalog.slug,
+        route_key: routeKey,
+        route_path: routePath,
+        route_method: routeMethod,
+        visibility: route?.visibility === 'public' ? 'public' : 'authenticated',
+        capability: route.capability,
+        permission: typeof route?.permission === 'string' ? route.permission : null,
+        metadata: resolvedMetadata,
+        is_active: true,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'tenant_extension_id,route_key' })
+  }
 }
 
 // Local-dev proxy upload route.
@@ -2383,6 +2454,14 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
           }, { onConflict: 'name' })
         }
 
+        await syncTenantExtensionRoutes({
+          adminSupabase,
+          tenantId,
+          catalog,
+          tenantExtensionId: tenantExtension.id,
+          manifest: validation.manifest,
+        })
+
         await finalizeTenantExtensionLifecycle({
           adminSupabase,
           tenantId,
@@ -2471,6 +2550,21 @@ app.post('/functions/v1/extensions-lifecycle', async (c) => {
             metadata: { message: error?.message || `${action} failed` },
           })
           return c.json({ error: error?.message || `${action} failed` }, 400)
+        }
+
+        if (action === 'deactivate' || action === 'uninstall') {
+          await adminSupabase
+            .from('tenant_extension_routes')
+            .update({ is_active: false, updated_at: now })
+            .eq('tenant_extension_id', tenantExtension.id)
+        } else {
+          await syncTenantExtensionRoutes({
+            adminSupabase,
+            tenantId,
+            catalog,
+            tenantExtensionId: tenantExtension.id,
+            manifest: catalog?.manifest || {},
+          })
         }
 
         await finalizeTenantExtensionLifecycle({
@@ -2849,6 +2943,286 @@ app.post('/functions/v1/reusable-sections', async (c) => {
     })
   } catch (error) {
     return handleRouteError(c, error, 'Failed to materialize reusable section')
+  }
+})
+
+app.post('/functions/v1/tenant-imports', async (c) => {
+  try {
+    const startedAt = Date.now()
+    const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)
+    const body = await requireJsonBody(c.req.raw)
+    const action = requireString(body.action, 'Missing action')
+    const adminSupabase = getAdminSupabase(c.env)
+    const userContext = await getUserContext(c.env, user.id)
+    const tenantId = resolveTenantId(typeof body.tenantId === 'string' ? body.tenantId : null, userContext)
+
+    if (!tenantId) {
+      return c.json({ error: 'Missing tenant context' }, 400)
+    }
+
+    if (action === 'list') {
+      const canRead = userContext.isPlatformAdmin || userContext.isFullAccess || await hasAnyPermission(callerClient, ['tenant.emdash_import.read'])
+      if (!canRead) return c.json({ error: 'Forbidden' }, 403)
+
+      const { data, error } = await adminSupabase
+        .from('tenant_import_jobs')
+        .select('*, sources:tenant_import_sources(*), artifacts:tenant_import_artifacts(*)')
+        .eq('tenant_id', tenantId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(25)
+
+      if (error) return c.json({ error: error.message }, 400)
+      return c.json({ ok: true, jobs: data || [] })
+    }
+
+    if (action === 'create-job') {
+      const canCreate = userContext.isPlatformAdmin || userContext.isFullAccess || await hasAnyPermission(callerClient, ['tenant.emdash_import.create'])
+      if (!canCreate) return c.json({ error: 'Forbidden' }, 403)
+
+      const importType = typeof body.importType === 'string' ? body.importType : 'seed'
+      const templateSlug = typeof body.templateSlug === 'string' ? body.templateSlug : null
+      const parameters = typeof body.parameters === 'object' && body.parameters ? body.parameters : {}
+      const source = typeof body.source === 'object' && body.source ? body.source as Record<string, unknown> : null
+      const status = body.dryRun ? 'dry_run' : 'queued'
+      const now = new Date().toISOString()
+
+      const { data: job, error: jobError } = await adminSupabase
+        .from('tenant_import_jobs')
+        .insert({
+          tenant_id: tenantId,
+          source_system: 'emdash',
+          import_type: importType,
+          template_slug: templateSlug,
+          status,
+          requested_by: user.id,
+          parameters,
+          result_summary: body.dryRun ? { mode: 'dry_run' } : {},
+          updated_at: now,
+        })
+        .select('*')
+        .single()
+
+      if (jobError || !job) {
+        return c.json({ error: jobError?.message || 'Failed to create import job' }, 400)
+      }
+
+      if (source) {
+        await adminSupabase.from('tenant_import_sources').upsert({
+          tenant_id: tenantId,
+          job_id: job.id,
+          source_key: typeof source.sourceKey === 'string' ? source.sourceKey : `${templateSlug || 'emdash'}:${job.id}`,
+          source_kind: typeof source.sourceKind === 'string' ? source.sourceKind : 'seed',
+          source_locator: typeof source.sourceLocator === 'string' ? source.sourceLocator : null,
+          source_version: typeof source.sourceVersion === 'string' ? source.sourceVersion : null,
+          checksum: typeof source.checksum === 'string' ? source.checksum : null,
+          source_payload: typeof source.sourcePayload === 'object' && source.sourcePayload ? source.sourcePayload : {},
+          updated_at: now,
+        }, { onConflict: 'job_id,source_key,source_kind' })
+      }
+
+      await adminSupabase.from('tenant_import_audit').insert({
+        tenant_id: tenantId,
+        job_id: job.id,
+        actor_user_id: user.id,
+        action: 'create-job',
+        status: 'succeeded',
+        metadata: { importType, templateSlug, dryRun: Boolean(body.dryRun) },
+      })
+
+      await writeAccessAudit(adminSupabase, {
+        tenantId,
+        userId: user.id,
+        action: 'tenant_imports.create_job',
+        resource: 'tenant_import_job',
+        details: { importType, templateSlug, dryRun: Boolean(body.dryRun) },
+        ipAddress: getRequestIp(c.req.raw),
+        channel: 'worker',
+        actorType: 'user',
+        authContext: { has_session: true },
+        moduleName: 'emdash_imports',
+        featureName: 'import_jobs',
+        actionName: 'create_job',
+        resourceType: 'tenant_import_job',
+        resourceId: job.id,
+        requestDurationMs: Date.now() - startedAt,
+        routePath: '/functions/v1/tenant-imports',
+        url: c.req.url,
+        userAgent: c.req.header('user-agent') || null,
+        purpose: 'create tenant import job',
+        triggerSource: 'awcms_edge_route',
+        businessIntent: 'emdash_tenant_import',
+        accessChannel: 'worker',
+        accessMechanism: 'worker_route',
+        authMethod: 'bearer_token',
+      })
+
+      return c.json({ ok: true, job })
+    }
+
+    return c.json({ error: `Unsupported action: ${action}` }, 400)
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to process tenant import request', 400)
+  }
+})
+
+app.post('/functions/v1/extensions/tenant-route-token', async (c) => {
+  try {
+    const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)
+    const body = await requireJsonBody(c.req.raw)
+    const userContext = await getUserContext(c.env, user.id)
+    const tenantId = resolveTenantId(typeof body.tenantId === 'string' ? body.tenantId : null, userContext)
+    if (!tenantId) {
+      return c.json({ error: 'Missing tenant context' }, 400)
+    }
+
+    const canRead = userContext.isPlatformAdmin || userContext.isFullAccess || await hasAnyPermission(callerClient, ['tenant.setting.read', 'tenant.emdash_import.read'])
+    if (!canRead) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    const token = await issueTenantRouteToken({
+      tenantId,
+      secret: getExtensionRouteSecret(c.env),
+      ttlSeconds: Number.parseInt(String(body.ttlSeconds || ''), 10) || 900,
+    })
+
+    return c.json({ ok: true, tenantId, tenantRoute: token })
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to issue tenant route token', 400)
+  }
+})
+
+app.all('/functions/v1/ext/:tenantRoute/:vendor/:extension/*', async (c) => {
+  try {
+    const tenantRoute = c.req.param('tenantRoute')
+    const vendor = c.req.param('vendor')
+    const extensionSlug = c.req.param('extension')
+    const routeTail = normalizeExtensionRoutePath(c.req.param('*') || 'index', vendor, extensionSlug)
+    const routeMethod = c.req.method.toUpperCase()
+    const resolvedTenant = await resolveTenantRouteToken({ token: tenantRoute, secret: getExtensionRouteSecret(c.env) })
+    if (!resolvedTenant?.tenantId) {
+      return c.json({ error: 'Invalid tenant route token' }, 401)
+    }
+
+    const adminSupabase = getAdminSupabase(c.env)
+    const { data: routeRow, error: routeError } = await adminSupabase
+      .from('tenant_extension_routes')
+      .select('*, tenant_extension:tenant_extensions(id, activation_state, catalog:platform_extension_catalog(id, slug, vendor, manifest))')
+      .eq('tenant_id', resolvedTenant.tenantId)
+      .eq('vendor', vendor)
+      .eq('extension_slug', extensionSlug)
+      .eq('route_method', routeMethod)
+      .eq('route_path', routeTail)
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (routeError) {
+      return c.json({ error: routeError.message }, 400)
+    }
+    if (!routeRow) {
+      return c.json({ error: 'Extension route not found' }, 404)
+    }
+
+    const visibility = routeRow.visibility || 'authenticated'
+    let callerClient: any = null
+    let user: any = null
+    let userContext: UserContext | null = null
+
+    if (visibility !== 'public') {
+      const session = await requireBearerSession(c.env, c.req.raw)
+      callerClient = session.callerClient
+      user = session.user
+      userContext = await getUserContext(c.env, user.id)
+      const tenantId = resolveTenantId(resolvedTenant.tenantId, userContext)
+      if (tenantId !== resolvedTenant.tenantId) {
+        return c.json({ error: 'Tenant mismatch' }, 403)
+      }
+      if (routeRow.permission) {
+        const allowed = userContext.isPlatformAdmin || userContext.isFullAccess || await hasAnyPermission(callerClient, [routeRow.permission])
+        if (!allowed) {
+          return c.json({ error: 'Forbidden' }, 403)
+        }
+      }
+    }
+
+    const handler = routeRow.metadata?.handler
+    if (handler === 'events.health') {
+      const { data: extensionRows, error: extensionError } = await adminSupabase
+        .from('tenant_extensions')
+        .select('id, catalog:platform_extension_catalog(slug, vendor)')
+        .eq('tenant_id', resolvedTenant.tenantId)
+        .eq('activation_state', 'active')
+        .is('deleted_at', null)
+
+      if (extensionError) return c.json({ error: 'Failed to load events extension status' }, 500)
+      const isInstalled = (extensionRows || []).some((row: any) => {
+        const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+        return catalog?.slug === 'events' && catalog?.vendor === 'ahliweb'
+      })
+      if (!isInstalled) return c.json({ error: 'Events extension is not active for this tenant' }, 404)
+
+      const [{ count: upcomingCount }, { count: publishedCount }] = await Promise.all([
+        adminSupabase.from('events').select('id', { count: 'exact', head: true }).eq('tenant_id', resolvedTenant.tenantId).eq('status', 'published').gte('start_at', new Date().toISOString()).is('deleted_at', null),
+        adminSupabase.from('events').select('id', { count: 'exact', head: true }).eq('tenant_id', resolvedTenant.tenantId).eq('status', 'published').is('deleted_at', null),
+      ])
+
+      return c.json({
+        ok: true,
+        tenantId: resolvedTenant.tenantId,
+        extension: `${vendor}/${extensionSlug}`,
+        capability: routeRow.capability,
+        counts: { published: publishedCount || 0, upcoming: upcomingCount || 0 },
+      })
+    }
+
+    if (handler === 'events.public') {
+      const limit = Number.parseInt(c.req.query('limit') || '12', 10)
+      const slug = c.req.query('slug') || ''
+      const { data: extensionRows, error: extensionError } = await adminSupabase
+        .from('tenant_extensions')
+        .select('id, catalog:platform_extension_catalog(slug, vendor)')
+        .eq('tenant_id', resolvedTenant.tenantId)
+        .eq('activation_state', 'active')
+        .is('deleted_at', null)
+
+      if (extensionError) return c.json({ error: 'Failed to load events extension status' }, 500)
+      const hasEventsExtension = (extensionRows || []).some((row: any) => {
+        const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+        return catalog?.slug === 'events' && catalog?.vendor === 'ahliweb'
+      })
+      if (!hasEventsExtension) return c.json({ ok: true, events: [] })
+
+      let query = adminSupabase
+        .from('events')
+        .select('id, title, slug, summary, location, start_at, end_at, published_at, status')
+        .eq('tenant_id', resolvedTenant.tenantId)
+        .eq('status', 'published')
+        .is('deleted_at', null)
+
+      if (slug) {
+        query = query.eq('slug', slug)
+      } else {
+        query = query.order('start_at', { ascending: true }).limit(Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 48) : 12)
+      }
+
+      const { data: events, error } = await query
+      if (error) return c.json({ error: 'Failed to load events' }, 500)
+      if (slug) return c.json({ ok: true, event: Array.isArray(events) ? (events[0] || null) : null })
+      return c.json({ ok: true, events: events || [] })
+    }
+
+    return c.json({
+      ok: false,
+      message: 'Extension route is registered but no runtime handler is implemented yet.',
+      tenantId: resolvedTenant.tenantId,
+      extension: `${vendor}/${extensionSlug}`,
+      route: routeTail,
+      capability: routeRow.capability,
+    }, 501)
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to execute extension route', 400)
   }
 })
 

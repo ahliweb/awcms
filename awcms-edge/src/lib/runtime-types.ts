@@ -15,6 +15,7 @@ export type Bindings = {
   GITHUB_REBUILD_REPO?: string
   GITHUB_REBUILD_EVENT_TYPE?: string
   SMANDAPBUN_REBUILD_WEBHOOK_SECRET?: string
+  EXTENSION_ROUTE_SECRET?: string
   TURNSTILE_SECRET_KEY?: string
   CORS_ALLOWED_ORIGINS?: string
   MEDIA_EVENTS_QUEUE: Queue<unknown>

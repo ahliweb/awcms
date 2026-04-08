@@ -17,6 +17,36 @@ export interface Props {
 const { widget, class: className = "" } = Astro.props;
 
 const { type, name, config, content, show_title, custom_classes } = widget;
+const rawEmdashPayload = widget.raw_emdash_payload || null;
+const emdashComponentId = rawEmdashPayload && typeof rawEmdashPayload === 'object' ? rawEmdashPayload.componentId : null;
+type PortableTextChild = { text?: string };
+type PortableTextBlock = { children?: PortableTextChild[] };
+
+const getPortableTextText = (value: PortableTextBlock[] | unknown) => {
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((block) => Array.isArray(block?.children)
+      ? block.children.map((child: PortableTextChild) => child?.text || "").join("")
+      : "")
+    .filter(Boolean)
+    .join("\n\n");
+};
+
+const effectiveType = emdashComponentId === "core:archives"
+  ? "archives"
+  : emdashComponentId === "core:recent-posts"
+    ? "recent_posts"
+    : emdashComponentId === "core:categories"
+      ? "categories"
+      : emdashComponentId === "core:tags"
+        ? "tags"
+        : emdashComponentId === "core:search"
+          ? "search"
+          : type;
+
+const contentText = type === "content"
+  ? getPortableTextText(content || rawEmdashPayload?.content)
+  : "";
 
 // Prepare typed data for specific widgets to avoid casting in template
 const linkItems =
@@ -49,7 +79,7 @@ function getContainerClasses(widgetType: string): string {
 }
 ---
 
-<div class:list={[getContainerClasses(type), custom_classes, className]}>
+<div class:list={[getContainerClasses(effectiveType), custom_classes, className]}>
   {
     show_title && name && (
       <h3 class="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
@@ -60,7 +90,7 @@ function getContainerClasses(widgetType: string): string {
 
   <div class="widget-content">
     {
-      type === "text" && (
+      effectiveType === "text" && (
         <div
           class="prose prose-sm dark:prose-invert max-w-none"
           set:html={content || ""}
@@ -68,10 +98,37 @@ function getContainerClasses(widgetType: string): string {
       )
     }
 
-    {type === "html" && <div set:html={content || ""} />}
+      {effectiveType === "html" && <div set:html={content || ""} />}
+
+      {
+        effectiveType === "content" && contentText && (
+          <div class="space-y-3 text-sm leading-6 text-slate-600 dark:text-slate-300 whitespace-pre-line">
+            {contentText}
+          </div>
+        )
+      }
+
+      {
+        effectiveType === "search" && (
+          <form action="/search" method="GET" class="space-y-3">
+            <input
+              type="search"
+              name="q"
+              placeholder="Search posts"
+              class="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+            <button
+              type="submit"
+              class="inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+            >
+              Search
+            </button>
+          </form>
+        )
+      }
 
     {
-      type === "image" && config?.src && (
+      effectiveType === "image" && config?.src && (
         <figure>
           <img
             src={config.src as string}
@@ -89,7 +146,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "links" && linkItems.length > 0 && (
+      effectiveType === "links" && linkItems.length > 0 && (
         <ul class="space-y-2">
           {linkItems.map((item) => (
             <li>
@@ -107,7 +164,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "recent_posts" && (
+      effectiveType === "recent_posts" && (
         <div class="space-y-3">
           <p class="text-sm text-slate-500 dark:text-slate-400 italic">
             Recent posts will load dynamically...
@@ -117,7 +174,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "categories" && (
+      effectiveType === "categories" && (
         <div class="flex flex-wrap gap-2">
           <p class="text-sm text-slate-500 dark:text-slate-400 italic">
             Categories will load dynamically...
@@ -127,7 +184,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "tags" && (
+      effectiveType === "tags" && (
         <div class="flex flex-wrap gap-2">
           <p class="text-sm text-slate-500 dark:text-slate-400 italic">
             Tags will load dynamically...
@@ -137,7 +194,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "social" && socialLinks.length > 0 && (
+      effectiveType === "social" && socialLinks.length > 0 && (
         <div class="flex gap-3">
           {socialLinks.map((social) => (
             <a
@@ -157,7 +214,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "cta" && (
+      effectiveType === "cta" && (
         <div class="text-center">
           {config?.description && (
             <p class="mb-4 text-white/90">{config.description}</p>
@@ -175,7 +232,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "newsletter" && (
+      effectiveType === "newsletter" && (
         <form class="space-y-3">
           {config?.description && (
             <p class="text-sm text-slate-600 dark:text-slate-400">
@@ -200,7 +257,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "map" && config?.embed_url && (
+      effectiveType === "map" && config?.embed_url && (
         <div class="aspect-video rounded-lg overflow-hidden">
           <iframe
             src={config.embed_url as string}
@@ -213,7 +270,7 @@ function getContainerClasses(widgetType: string): string {
     }
 
     {
-      type === "contact" && (
+      effectiveType === "contact" && (
         <div class="space-y-3 text-sm">
           {config?.address && (
             <div class="flex items-start gap-2">
@@ -249,15 +306,28 @@ function getContainerClasses(widgetType: string): string {
       )
     }
 
+      {
+        effectiveType === "archives" && (
+          <div class="space-y-3">
+            <p class="text-sm text-slate-500 dark:text-slate-400 italic">
+              Archive widget is preserved through the EmDash compatibility layer.
+            </p>
+          </div>
+        )
+      }
+
     {/* Fallback for unknown types */}
     {
       ![
         "text",
         "html",
+        "content",
+        "search",
         "image",
         "links",
         "recent_posts",
         "categories",
+        "archives",
         "tags",
         "social",
         "cta",

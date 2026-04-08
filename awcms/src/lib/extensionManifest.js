@@ -149,6 +149,7 @@ const normalizeEdgeRoute = (route, index, errors) => {
     method: isNonEmptyString(route.method) ? route.method.trim().toUpperCase() : 'POST',
     capability: route.capability.trim(),
     permission: isNonEmptyString(route.permission) ? route.permission.trim() : null,
+    visibility: isNonEmptyString(route.visibility) ? route.visibility.trim() : 'authenticated',
   };
 };
 

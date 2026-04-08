@@ -162,13 +162,18 @@ const AreaEditor = ({ areaId, areaName, isPlatformAdmin }) => {
                                     <div className="p-2 bg-slate-100 rounded">
                                         <Icon className="w-5 h-5 text-slate-600" />
                                     </div>
-                                    <div>
-                                        <div className="font-medium text-slate-900">{def?.name || widget.type}</div>
-                                        {isPlatformAdmin && (
-                                            <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded mr-2">
-                                                {widget.tenant?.name || t('widgets_manager.unknown_tenant')}
-                                            </span>
-                                        )}
+                                        <div>
+                                            <div className="font-medium text-slate-900">{def?.name || widget.type}</div>
+                                            {widget.raw_emdash_payload ? (
+                                                <span className="mr-2 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                                                    EmDash raw preserved
+                                                </span>
+                                            ) : null}
+                                            {isPlatformAdmin && (
+                                                <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded mr-2">
+                                                    {widget.tenant?.name || t('widgets_manager.unknown_tenant')}
+                                                </span>
+                                            )}
                                         <div className="text-xs text-slate-500 truncate max-w-[300px]">
                                             {/* Preview config values */}
                                             {Object.values(widget.config || {}).filter(v => typeof v === 'string').join(', ') || 'No content'}

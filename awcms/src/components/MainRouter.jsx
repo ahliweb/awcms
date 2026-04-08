@@ -92,6 +92,7 @@ const NotificationDispatchLog = lazy(() => import('@/pages/cmspanel/Notification
 // ESP32 IoT (Lazy Loaded)
 const DevicesManager = lazy(() => import('@/pages/cmspanel/DevicesManager'));
 const DeviceDetail = lazy(() => import('@/pages/cmspanel/DeviceDetail'));
+const EmdashImportsManager = lazy(() => import('@/components/dashboard/EmdashImportsManager'));
 
 // Mobile Admin (Lazy Loaded)
 const MobileUsersManager = lazy(() => import('@/pages/cmspanel/MobileUsersManager'));
@@ -314,6 +315,7 @@ const MainRouter = () => {
           <Route path="admin-navigation/*" element={<SidebarMenuManager />} />
           <Route path="modules" element={<ModulesManager />} />
           <Route path="tenants" element={<TenantsManager />} />
+          <Route path="emdash/imports" element={<EmdashImportsManager />} />
 
           <Route path="notifications" element={<NotificationsManager />} />
           <Route path="notifications/:id" element={<NotificationDetail />} />

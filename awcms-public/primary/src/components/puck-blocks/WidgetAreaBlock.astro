@@ -1,6 +1,8 @@
 ---
 import { createClientFromEnv } from "~/lib/supabase";
 import WidgetRenderer from "../common/WidgetRenderer.astro";
+import { getWidgetsByAreaSlug } from "~/lib/widgets";
+import type { WidgetData } from "~/lib/widgets";
 
 interface Props {
   area?: string;
@@ -11,20 +13,11 @@ interface Props {
 const { area, title } = Astro.props;
 
 const supabase = createClientFromEnv(import.meta.env);
-let widgets = [];
+let widgets: WidgetData[] = [];
 
 if (supabase && area) {
   try {
-    const { data } = await supabase
-      .from("widgets")
-      .select("*")
-      .eq("area", area)
-      .eq("is_active", true)
-      .order("order", { ascending: true });
-
-    if (data) {
-      widgets = data;
-    }
+    widgets = await getWidgetsByAreaSlug(supabase, area);
   } catch (e) {
     console.error("[WidgetAreaBlock] Error fetching widgets:", e);
   }

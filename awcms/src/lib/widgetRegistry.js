@@ -76,6 +76,12 @@ export const CORE_WIDGETS = [
         name: 'Tags',
         icon: Hash,
         defaultConfig: {}
+    },
+    {
+        type: 'archives',
+        name: 'Archives',
+        icon: Newspaper,
+        defaultConfig: { type: 'monthly', limit: 12 }
     }
 ];
 

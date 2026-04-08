@@ -27,6 +27,7 @@ const CAPABILITY_PATTERN = /^[a-z]+(?:\.[a-z0-9_]+){2,}$/
 const RUNTIME_MODE_VALUES = ['trusted'] as const
 const SANDBOX_NETWORK_VALUES = ['none', 'outbound_http'] as const
 const SANDBOX_STORAGE_VALUES = ['none', 'tenant_settings', 'tenant_template_parts'] as const
+const EDGE_ROUTE_VISIBILITY_VALUES = ['public', 'authenticated'] as const
 const REASON_CATEGORIES = [
   'invalid_manifest',
   'unsupported_runtime_mode',
@@ -114,6 +115,19 @@ export const validateExtensionManifest = (value: unknown) => {
     manifest.widgets.forEach((widget, index) => {
       if (!isObject(widget) || typeof widget.component !== 'string' || !widget.component.trim()) {
         missingArtifacts.push(`widgets:${index}`)
+      }
+    })
+  }
+  if (Array.isArray(manifest.edgeRoutes)) {
+    manifest.edgeRoutes.forEach((route, index) => {
+      if (!isObject(route) || typeof route.path !== 'string' || !route.path.trim() || typeof route.capability !== 'string' || !route.capability.trim()) {
+        errors.push(`edgeRoutes[${index}] requires path and capability`)
+        missingArtifacts.push(`edgeRoutes:${index}`)
+        return
+      }
+      if (route.visibility && !EDGE_ROUTE_VISIBILITY_VALUES.includes(String(route.visibility) as any)) {
+        errors.push(`edgeRoutes[${index}].visibility must be one of: ${EDGE_ROUTE_VISIBILITY_VALUES.join(', ')}`)
+        reasonCategories.add('invalid_manifest')
       }
     })
   }

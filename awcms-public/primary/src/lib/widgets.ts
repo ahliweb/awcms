@@ -9,13 +9,62 @@ export interface WidgetData {
   name: string;
   type: string;
   area: string;
+  area_id?: string | null;
   config: Record<string, unknown>;
   content?: string;
   sort_order: number;
   is_active: boolean;
   show_title: boolean;
   custom_classes?: string;
+  raw_emdash_payload?: Record<string, unknown> | null;
+  source_system?: string | null;
+  source_version?: string | null;
+  normalization_status?: string | null;
 }
+
+const asString = (value: unknown, fallback = ""): string =>
+  typeof value === "string" ? value : fallback;
+
+const asNullableString = (value: unknown): string | null =>
+  typeof value === "string" ? value : null;
+
+const asBoolean = (value: unknown, fallback = false): boolean =>
+  typeof value === "boolean" ? value : fallback;
+
+const asNumber = (value: unknown, fallback = 0): number =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const normalizeWidgetRow = (widget: Record<string, unknown>): WidgetData => ({
+  id: asString(widget.id),
+  name: asString(widget.name, asString(widget.type, "Widget")),
+  type: asString(widget.type),
+  area: asString(
+    widget.area,
+    asString(asRecord(widget.template_part)?.slug, "default"),
+  ),
+  area_id: asNullableString(widget.area_id),
+  config:
+    typeof widget.config === "string"
+      ? JSON.parse(widget.config)
+      : widget.config || {},
+  content: asNullableString(widget.content) || undefined,
+  sort_order: asNumber(widget.sort_order, asNumber(widget.order, 0)),
+  is_active: asBoolean(widget.is_active, true),
+  show_title: asBoolean(widget.show_title, true),
+  custom_classes: asNullableString(widget.custom_classes) || undefined,
+  raw_emdash_payload:
+    typeof widget.raw_emdash_payload === "string"
+      ? JSON.parse(widget.raw_emdash_payload)
+      : widget.raw_emdash_payload || null,
+  source_system: asNullableString(widget.source_system),
+  source_version: asNullableString(widget.source_version),
+  normalization_status: asNullableString(widget.normalization_status),
+});
 
 /**
  * Fetch widgets by area (sidebar, footer-1, footer-2, etc.)
@@ -47,21 +96,53 @@ export async function getWidgetsByArea(
     return [];
   }
 
-  return (data || []).map((widget) => ({
-    id: widget.id,
-    name: widget.name,
-    type: widget.type,
-    area: widget.area,
-    config:
-      typeof widget.config === "string"
-        ? JSON.parse(widget.config)
-        : widget.config || {},
-    content: widget.content,
-    sort_order: widget.sort_order || 0,
-    is_active: widget.is_active,
-    show_title: widget.show_title ?? true,
-    custom_classes: widget.custom_classes,
-  }));
+  return (data || []).map(normalizeWidgetRow);
+}
+
+export async function getWidgetsByAreaSlug(
+  supabase: SupabaseClient,
+  areaSlug: string,
+  tenantId?: string | null,
+): Promise<WidgetData[]> {
+  let partQuery = supabase
+    .from("template_parts")
+    .select("id, slug")
+    .eq("slug", areaSlug)
+    .eq("type", "widget_area")
+    .is("deleted_at", null)
+    .limit(1);
+
+  if (tenantId) {
+    partQuery = partQuery.eq("tenant_id", tenantId);
+  }
+
+  const { data: part, error: partError } = await partQuery.maybeSingle();
+  if (partError || !part?.id) {
+    return [];
+  }
+
+  let widgetQuery = supabase
+    .from("widgets")
+    .select("*, template_part:template_parts(slug)")
+    .eq("area_id", part.id)
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .order("order", { ascending: true });
+
+  if (tenantId) {
+    widgetQuery = widgetQuery.eq("tenant_id", tenantId);
+  }
+
+  const { data, error } = await widgetQuery;
+  if (error) {
+    console.error(
+      `[Widget] Error fetching widgets for area slug "${areaSlug}":`,
+      error.message,
+    );
+    return [];
+  }
+
+  return (data || []).map(normalizeWidgetRow);
 }
 
 /**
@@ -97,21 +178,7 @@ export async function getAllWidgetsByArea(
     if (!grouped[area]) {
       grouped[area] = [];
     }
-    grouped[area].push({
-      id: widget.id,
-      name: widget.name,
-      type: widget.type,
-      area: widget.area,
-      config:
-        typeof widget.config === "string"
-          ? JSON.parse(widget.config)
-          : widget.config || {},
-      content: widget.content,
-      sort_order: widget.sort_order || 0,
-      is_active: widget.is_active,
-      show_title: widget.show_title ?? true,
-      custom_classes: widget.custom_classes,
-    });
+    grouped[area].push(normalizeWidgetRow(widget));
   }
 
   return grouped;
