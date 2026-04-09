@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import slugify from "limax";
 
-import { SITE, APP_BLOG } from "astrowind:config";
+import { SITE } from "astrowind:config";
 
 import { trim } from "~/utils/utils";
 
@@ -22,13 +22,7 @@ export const cleanSlug = (text = "") =>
     .map((slug) => slugify(slug))
     .join("/");
 
-export const BLOG_BASE = cleanSlug(APP_BLOG?.list?.pathname);
-export const CATEGORY_BASE = cleanSlug(APP_BLOG?.category?.pathname);
-export const TAG_BASE = cleanSlug(APP_BLOG?.tag?.pathname) || "tag";
-
-export const POST_PERMALINK_PATTERN = trimSlash(
-  APP_BLOG?.post?.permalink || `${BLOG_BASE}/%slug%`,
-);
+export const BLOG_BASE = "blogs";
 
 /** */
 export const getCanonical = (path = ""): string | URL => {
@@ -101,11 +95,14 @@ export const getPermalink = (slug = "", type = "page"): string => {
       break;
 
     case "category":
-      permalink = createPath(CATEGORY_BASE, trimSlash(slug));
+      permalink =
+        createPath(BLOG_BASE) +
+        `?category=${encodeURIComponent(trimSlash(slug))}`;
       break;
 
     case "tag":
-      permalink = createPath(TAG_BASE, trimSlash(slug));
+      permalink =
+        createPath(BLOG_BASE) + `?tag=${encodeURIComponent(trimSlash(slug))}`;
       break;
 
     case "post":

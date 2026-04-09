@@ -1,4 +1,4 @@
-import { getPermalink, getAsset } from "./utils/permalinks";
+import { getPermalink } from "./utils/permalinks";
 import type { HeaderLink } from "./lib/menu";
 import type { CallToAction } from "./types";
 
@@ -206,7 +206,6 @@ export const footerData = {
       icon: "tabler:brand-facebook",
       href: "https://www.facebook.com/ahliwebcom",
     },
-    { ariaLabel: "RSS", icon: "tabler:rss", href: getAsset("/rss.xml") },
     {
       ariaLabel: "Youtube",
       icon: "tabler:brand-youtube",

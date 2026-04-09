@@ -95,6 +95,7 @@ Current primary-portal composition now follows a more EmDash-style public struct
   - `/{locale}/events`
 - remaining non-localized legacy AstroWind demo surfaces are being reduced to compatibility redirects where appropriate rather than maintained as a parallel public content model
 - legacy bundled Astro content-demo posts and their page-local marketing widget assemblies are no longer part of the maintained `primary` public surface; tenant content now comes from AWCMS public data flows and the shared `src/components/public/*` section system
+- the empty Astro `src/data/post` content collection and its related sample-blog static path utilities/routes have been removed; canonical blog behavior now flows through tenant-backed `/{locale}/blogs` routes and `src/lib/content.ts`
 
 Important live helper surfaces include:
 
