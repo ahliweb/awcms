@@ -366,7 +366,7 @@
           "Operational"
         ],
         "summary": "Invoke the Mailketing integration via API alias",
-        "description": "Operational Mailketing integration alias for send, subscribe, credits, and lists actions. Kept out of public/admin runtime docs because runtime auth is not yet explicitly constrained by bearer middleware.",
+        "description": "Operational Mailketing integration alias for send, subscribe, credits, and lists actions. The `send` action now requires a bearer session plus tenant context that resolves to the authenticated user and permission to send or manage notifications; non-send actions remain synchronous compatibility helpers.",
         "deprecated": false,
         "requestBody": {
           "required": true,
@@ -400,6 +400,36 @@
             "description": "Mailketing send action queued"
           },
           "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Error response",
             "content": {
               "application/json": {
@@ -446,7 +476,7 @@
           "Operational"
         ],
         "summary": "Invoke the Mailketing integration via compatibility alias",
-        "description": "Compatibility alias for the Mailketing integration with the same operational trust boundary as `/api/mailketing`.",
+        "description": "Compatibility alias for the Mailketing integration with the same operational trust boundary as `/api/mailketing`. The `send` action requires a bearer session, matching tenant context, and notification send/manage permission.",
         "deprecated": false,
         "requestBody": {
           "required": true,
@@ -480,6 +510,36 @@
             "description": "Mailketing send action queued"
           },
           "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Error response",
             "content": {
               "application/json": {

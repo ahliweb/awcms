@@ -118,14 +118,14 @@
           "Public Delivery"
         ],
         "summary": "Serve a public media object",
-        "description": "Returns a public R2-backed media object when the metadata row is uploaded, public, and not soft-deleted.",
+        "description": "Returns a public R2-backed media object when the metadata row is uploaded, public, and not soft-deleted. The route only accepts canonical tenant-prefixed keys under `tenants/<tenant_id>/...` and rejects malformed keys, traversal-like segments, and the reserved protected namespace.",
         "deprecated": false,
         "parameters": [
           {
             "name": "storageKey",
             "in": "path",
             "required": true,
-            "description": "Canonical storage key path under `/public/media/*`.",
+            "description": "Canonical public storage key under `/public/media/*`, for example `tenants/<tenant_id>/<file>`. Keys under `tenants/<tenant_id>/protected/...` are never valid on this route.",
             "schema": {
               "type": "string"
             }
@@ -134,6 +134,21 @@
         "responses": {
           "200": {
             "description": "Media object stream"
+          },
+          "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "404": {
             "description": "Error response",
@@ -165,14 +180,14 @@
           "Public Delivery"
         ],
         "summary": "Generate tenant sitemap XML",
-        "description": "Builds a sitemap for a tenant using published, public, and non-deleted content only.",
+        "description": "Builds a sitemap for a tenant using published, public, and non-deleted content only. Tenant identity may be resolved from `tenant_id` or `domain`; when both are supplied they must resolve to the same tenant or the route fails closed.",
         "deprecated": false,
         "parameters": [
           {
             "name": "domain",
             "in": "query",
             "required": false,
-            "description": "Tenant domain used to resolve the sitemap tenant.",
+            "description": "Tenant domain used to resolve the sitemap tenant. If combined with `tenant_id`, both values must resolve to the same tenant.",
             "schema": {
               "type": "string"
             }
@@ -181,7 +196,7 @@
             "name": "tenant_id",
             "in": "query",
             "required": false,
-            "description": "Tenant UUID used to resolve the sitemap tenant.",
+            "description": "Tenant UUID used to resolve the sitemap tenant. If combined with `domain`, both values must resolve to the same tenant.",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -191,6 +206,16 @@
         "responses": {
           "200": {
             "description": "XML sitemap",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Tenant/domain mismatch or invalid tenant context",
             "content": {
               "application/xml": {
                 "schema": {
@@ -331,16 +356,26 @@
           "Public Delivery"
         ],
         "summary": "Read published public events extension content",
-        "description": "Returns published event records for tenants with the Events extension active.",
+        "description": "Returns published event records for tenants with the Events extension active. Tenant identity may be resolved from `tenantId`, `tenant_id`, or `domain`; when both tenant and domain inputs are supplied they must resolve to the same tenant.",
         "deprecated": false,
         "parameters": [
           {
             "name": "tenantId",
             "in": "query",
-            "required": true,
+            "required": false,
+            "description": "Tenant UUID used to resolve public events. May be used together with `domain` only when both resolve to the same tenant.",
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "description": "Tenant domain used to resolve public events. May be used instead of `tenantId`.",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -381,6 +416,21 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "x-awcms-boundary": "public",
@@ -398,16 +448,26 @@
           "Public Delivery"
         ],
         "summary": "Read tenant public extension modules",
-        "description": "Returns public module descriptors for extensions active on the requested tenant.",
+        "description": "Returns public module descriptors for extensions active on the requested tenant. Tenant identity may be resolved from `tenantId`, `tenant_id`, or `domain`; when both tenant and domain inputs are supplied they must resolve to the same tenant.",
         "deprecated": false,
         "parameters": [
           {
             "name": "tenantId",
             "in": "query",
-            "required": true,
+            "required": false,
+            "description": "Tenant UUID used to resolve public modules. May be used together with `domain` only when both resolve to the same tenant.",
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "description": "Tenant domain used to resolve public modules. May be used instead of `tenantId`.",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -416,6 +476,21 @@
             "description": "Public module manifest payload"
           },
           "400": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
             "description": "Error response",
             "content": {
               "application/json": {
