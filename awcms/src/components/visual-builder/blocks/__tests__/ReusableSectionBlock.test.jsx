@@ -11,13 +11,17 @@ vi.mock('@/lib/customSupabaseClient', () => ({
   },
 }));
 
+vi.mock('@/contexts/TenantContext', () => ({
+  useTenant: () => ({ currentTenant: { id: 'tenant-1', name: 'Tenant One' } }),
+}));
+
 describe('ReusableSectionBlock', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('shows preview summary for visual section content', async () => {
-    const maybeSingle = vi.fn().mockResolvedValue({
+    const resolved = Promise.resolve({
       data: {
         section_mode: 'visual',
         content: {
@@ -35,7 +39,8 @@ describe('ReusableSectionBlock', () => {
       select: vi.fn(() => query),
       eq: vi.fn(() => query),
       is: vi.fn(() => query),
-      maybeSingle,
+      or: vi.fn(() => query),
+      maybeSingle: vi.fn(() => resolved),
     };
 
     fromMock.mockReturnValue(query);
@@ -48,7 +53,7 @@ describe('ReusableSectionBlock', () => {
   });
 
   it('shows preview summary for referenced template part content', async () => {
-    const partMaybeSingle = vi.fn().mockResolvedValue({
+    const partResolved = Promise.resolve({
       data: { content: { content: [{ type: 'Feature' }] } },
       error: null,
     });
@@ -56,10 +61,12 @@ describe('ReusableSectionBlock', () => {
     const partQuery = {
       select: vi.fn(() => partQuery),
       eq: vi.fn(() => partQuery),
-      maybeSingle: partMaybeSingle,
+      is: vi.fn(() => partQuery),
+      or: vi.fn(() => partQuery),
+      maybeSingle: vi.fn(() => partResolved),
     };
 
-    const sectionMaybeSingle = vi.fn().mockResolvedValue({
+    const sectionResolved = Promise.resolve({
       data: {
         section_mode: 'template_part_reference',
         content: null,
@@ -72,7 +79,8 @@ describe('ReusableSectionBlock', () => {
       select: vi.fn(() => sectionQuery),
       eq: vi.fn(() => sectionQuery),
       is: vi.fn(() => sectionQuery),
-      maybeSingle: sectionMaybeSingle,
+      or: vi.fn(() => sectionQuery),
+      maybeSingle: vi.fn(() => sectionResolved),
     };
 
     fromMock.mockImplementation((table) => (table === 'reusable_sections' ? sectionQuery : partQuery));

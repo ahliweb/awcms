@@ -133,11 +133,14 @@ function buildModulesSelectChain(rows = modulesRows) {
 
 function buildAdminMenuSelectChain(rows = adminMenuRows) {
   const chain = {};
+  const resolved = Promise.resolve({ data: rows, error: null });
   chain.select = vi.fn(() => chain);
-  chain.order = vi.fn((field) => {
-    if (field === 'group_order') return chain;
-    return Promise.resolve({ data: rows, error: null });
-  });
+  chain.or = vi.fn(() => chain);
+  chain.is = vi.fn(() => chain);
+  chain.order = vi.fn(() => chain);
+  chain.then = resolved.then.bind(resolved);
+  chain.catch = resolved.catch.bind(resolved);
+  chain.finally = resolved.finally.bind(resolved);
   return chain;
 }
 
@@ -150,8 +153,13 @@ function buildResourcesSelectChain(rows = resourcesRows) {
 
 function buildExtensionMenuSelectChain(rows = extensionMenuRows) {
   const chain = {};
+  const resolved = Promise.resolve({ data: rows, error: null });
   chain.select = vi.fn(() => chain);
-  chain.is = vi.fn(() => Promise.resolve({ data: rows, error: null }));
+  chain.is = vi.fn(() => chain);
+  chain.or = vi.fn(() => chain);
+  chain.then = resolved.then.bind(resolved);
+  chain.catch = resolved.catch.bind(resolved);
+  chain.finally = resolved.finally.bind(resolved);
   return chain;
 }
 

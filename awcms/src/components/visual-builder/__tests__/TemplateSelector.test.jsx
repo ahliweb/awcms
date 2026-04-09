@@ -11,6 +11,10 @@ vi.mock('@/lib/customSupabaseClient', () => ({
   },
 }));
 
+vi.mock('@/contexts/TenantContext', () => ({
+  useTenant: () => ({ currentTenant: { id: 'tenant-1', name: 'Tenant One' } }),
+}));
+
 vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ children }) => <div>{children}</div>,
   DialogContent: ({ children, ...props }) => <div {...props}>{children}</div>,
@@ -36,44 +40,64 @@ describe('TemplateSelector', () => {
 
     fromMock.mockImplementation((table) => {
       if (table === 'templates') {
+        const resolved = Promise.resolve({ data: [], error: null });
+        const chain = {
+          eq: vi.fn(() => chain),
+          is: vi.fn(() => chain),
+          order: vi.fn(() => chain),
+          or: vi.fn(() => chain),
+          then: resolved.then.bind(resolved),
+          catch: resolved.catch.bind(resolved),
+          finally: resolved.finally.bind(resolved),
+        };
+
         return {
-          select: () => ({
-            eq: () => ({
-              order: async () => ({ data: [], error: null }),
-            }),
-          }),
+          select: () => chain,
         };
       }
 
       if (table === 'reusable_sections') {
+        const resolved = Promise.resolve({
+          data: [
+            {
+              id: 'section-1',
+              name: 'Hero Section',
+              description: 'Reusable hero',
+              section_mode: 'visual',
+              owner_tenant_id: null,
+              content: { content: [{ type: 'Hero', props: { title: 'Hello' } }], root: { props: {} } },
+            },
+          ],
+          error: null,
+        });
+        const chain = {
+          eq: vi.fn(() => chain),
+          is: vi.fn(() => chain),
+          order: vi.fn(() => chain),
+          or: vi.fn(() => chain),
+          then: resolved.then.bind(resolved),
+          catch: resolved.catch.bind(resolved),
+          finally: resolved.finally.bind(resolved),
+        };
+
         return {
-          select: () => ({
-            eq: () => ({
-              is: () => ({
-                order: async () => ({
-                  data: [
-                    {
-                      id: 'section-1',
-                      name: 'Hero Section',
-                      description: 'Reusable hero',
-                      section_mode: 'visual',
-                      owner_tenant_id: null,
-                      content: { content: [{ type: 'Hero', props: { title: 'Hello' } }], root: { props: {} } },
-                    },
-                  ],
-                  error: null,
-                }),
-              }),
-            }),
-          }),
+          select: () => chain,
         };
       }
 
       if (table === 'template_parts') {
+        const resolved = Promise.resolve({ data: [], error: null });
+        const chain = {
+          in: vi.fn(() => chain),
+          is: vi.fn(() => chain),
+          or: vi.fn(() => chain),
+          then: resolved.then.bind(resolved),
+          catch: resolved.catch.bind(resolved),
+          finally: resolved.finally.bind(resolved),
+        };
+
         return {
-          select: () => ({
-            in: async () => ({ data: [], error: null }),
-          }),
+          select: () => chain,
         };
       }
 

@@ -17,17 +17,40 @@ vi.mock('@/lib/customSupabaseClient', () => ({
   },
 }));
 
+vi.mock('@/contexts/TenantContext', () => ({
+  useTenant: () => ({ currentTenant: { id: 'tenant-1', name: 'Tenant One' } }),
+}));
+
+vi.mock('@/components/ui/select', () => ({
+  Select: ({ children }) => <div>{children}</div>,
+  SelectTrigger: ({ children, ...props }) => <button type="button" {...props}>{children}</button>,
+  SelectValue: ({ placeholder }) => <span>{placeholder}</span>,
+  SelectContent: ({ children }) => <div>{children}</div>,
+  SelectGroup: ({ children }) => <div>{children}</div>,
+  SelectLabel: ({ children }) => <div>{children}</div>,
+  SelectItem: ({ children }) => <div>{children}</div>,
+}));
+
 describe('ReusableSectionField', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    orderMock.mockResolvedValue({
+    const resolved = Promise.resolve({
       data: [
         { id: 'section-1', name: 'Hero Section', slug: 'hero-section', owner_tenant_id: null, status: 'active' },
       ],
       error: null,
     });
-    isMock.mockReturnValue({ order: orderMock });
-    eqMock.mockReturnValue({ is: isMock });
+    const chain = {
+      is: isMock,
+      order: orderMock,
+      or: vi.fn(() => chain),
+      then: resolved.then.bind(resolved),
+      catch: resolved.catch.bind(resolved),
+      finally: resolved.finally.bind(resolved),
+    };
+    orderMock.mockReturnValue(chain);
+    isMock.mockReturnValue(chain);
+    eqMock.mockReturnValue(chain);
   });
 
   it('loads reusable section options and shows the current slug', async () => {
