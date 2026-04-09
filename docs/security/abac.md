@@ -119,6 +119,10 @@ order by name;
 | `platform.setting.*` | read, create, update, delete | web |
 ### A. Platform (Platform Scope) - Canonical Migration-Backed Families
 
+#### A1. Statically Enumerated Platform Families
+
+These families are part of the long-lived canonical baseline and are directly represented in the main migration/documentation path rather than only being introduced by later UI-oriented permission seed migrations.
+
 | Permission Prefix | Notes | Channel |
 | :---------------- | :---- | :------ |
 | `platform.extensions.*` | Platform extension catalog CRUD and lifecycle management surface. | web |
@@ -127,9 +131,16 @@ order by name;
 | `platform.module.read`, `platform.module.manage` | Platform module visibility and global module-management actions. | web |
 | `platform.reporting.read` | Platform reporting visibility. | web |
 | `platform.setting.read`, `platform.setting.create`, `platform.setting.update`, `platform.setting.delete` | Platform settings management surface. | web |
+| `platform.tenant.read`, `platform.tenant.create`, `platform.tenant.update` | Platform tenant-management actions. | web |
+
+#### A2. Dynamically Seeded Platform Families
+
+These families are canonical and migration-backed, but they are introduced or completed through supplemental permission-seed migrations rather than only the earlier static baseline.
+
+| Permission Prefix | Notes | Channel |
+| :---------------- | :---- | :------ |
 | `platform.sidebar.read`, `platform.sidebar.update` | Platform sidebar-management visibility and edit actions. | web |
 | `platform.template.manage` | Platform-managed blueprint and reusable-section authoring flows. | web |
-| `platform.tenant.read`, `platform.tenant.create`, `platform.tenant.update` | Platform tenant-management actions. | web |
 | `platform.approvals.read` | Platform approval visibility surface. | web |
 
 ### B. Platform - App Logic Only
@@ -162,20 +173,29 @@ Current blueprint/bootstrap usage in app code:
 
 #### Content Modules
 
+##### B1. Statically Enumerated Tenant Content Families
+
 | Module        | Permission Prefix        | Actions                                                          |
 | :------------ | :----------------------- | :--------------------------------------------------------------- |
 | Blogs         | `tenant.blog.*`          | read, create, update, delete, restore, permanent_delete, publish |
 | Pages         | `tenant.page.*`          | read, create, update, delete, restore, permanent_delete, publish |
 | Visual Pages  | `tenant.visual_pages.*`  | read, create, update, delete, restore, permanent_delete          |
 | Portfolio     | `tenant.portfolio.*`     | read, create, update, delete, restore, permanent_delete          |
-| Partners      | `tenant.partners.*`      | read, create, update, delete                                     |
-| Fun Facts     | `tenant.funfacts.*`      | read, create, update, delete                                     |
-| Services      | `tenant.services.*`      | read, create, update, delete                                     |
-| Team Members  | `tenant.teams.*`         | read, create, update, delete                                     |
 | Testimonies   | `tenant.testimonies.*`   | read, create, update, delete, restore, permanent_delete          |
 | Announcements | `tenant.announcements.*` | read, create, update, delete, restore, permanent_delete          |
 | Promotions    | `tenant.promotions.*`    | read, create, update, delete, restore, permanent_delete          |
 | Widgets       | `tenant.widgets.*`       | read, create, update, delete                                     |
+
+##### B2. Dynamically Seeded Tenant Content Families
+
+These families are now canonical and migration-backed, but were completed through targeted seed migrations during the ABAC normalization pass rather than only the older baseline.
+
+| Module        | Permission Prefix        | Actions                                                          |
+| :------------ | :----------------------- | :--------------------------------------------------------------- |
+| Partners      | `tenant.partners.*`      | read, create, update, delete                                     |
+| Fun Facts     | `tenant.funfacts.*`      | read, create, update, delete                                     |
+| Services      | `tenant.services.*`      | read, create, update, delete                                     |
+| Team Members  | `tenant.teams.*`         | read, create, update, delete                                     |
 | Templates     | No migration-backed `tenant.templates.*` family is verified in the current root baseline. Current template screens mainly gate through `tenant.setting.update`, with some app-level `platform.template.manage` usage. | Verify exact target screen before documenting new template permissions |
 
 #### Media Modules
@@ -204,13 +224,22 @@ Current blueprint/bootstrap usage in app code:
 
 #### User Management
 
+##### B3. Statically Enumerated Tenant User/Policy Families
+
 | Module   | Permission Prefix | Actions                      |
 | :------- | :---------------- | :--------------------------- |
 | Users    | `tenant.user.*`   | read, create, update, delete |
+
+##### B4. Dynamically Seeded Tenant User/Policy Families
+
+| Module   | Permission Prefix | Actions                      |
+| :------- | :---------------- | :--------------------------- |
 | Roles    | `tenant.role.*`   | read, create, update, delete |
 | Policies | `tenant.policy.*` | read, create, update, delete |
 
 #### System
+
+##### B5. Statically Enumerated Tenant System Families
 
 | Module           | Permission Prefix           | Actions                                                 |
 | :--------------- | :-------------------------- | :------------------------------------------------------ |
@@ -221,24 +250,36 @@ Current blueprint/bootstrap usage in app code:
 | Modules          | `tenant.modules.read`       | read only                                               |
 | Contacts         | `tenant.contacts.*`         | read, create, update, delete, restore, permanent_delete |
 | Contact Messages | `tenant.contact_messages.*` | read, create, update, delete, restore, permanent_delete |
-| Regions          | `tenant.region.*`           | read, create, update, delete                            |
 | SEO              | `tenant.seo.*`              | read, update                                            |
 | SSO              | `tenant.sso.*`              | read, update                                            |
 | Languages        | `tenant.languages.*`        | read, update                                            |
 | School Pages     | `tenant.school_pages.*`     | read, update                                            |
 | Backups          | No root-migration-backed backup permission family is verified in this pass. | Verify the feature implementation before documenting backup permissions |
 
+##### B6. Dynamically Seeded Tenant System Families
+
+| Module           | Permission Prefix           | Actions                                                 |
+| :--------------- | :-------------------------- | :------------------------------------------------------ |
+| Regions          | `tenant.region.*`           | read, create, update, delete                            |
+
 #### Mobile, IoT & Platform Extensions
+
+##### B7. Statically Enumerated Mobile / IoT / Extension Families
+
+| Module             | Permission Prefix             | Actions                      |
+| :----------------- | :---------------------------- | :--------------------------- |
+| Mobile Config      | `tenant.mobile.*`             | read, update |
+| Platform Extensions | `platform.extensions.*`      | read, create, update, delete  |
+| Analytics          | `tenant.analytics.*`          | read                         |
+| Events             | `tenant.events.*`             | read, create, update, delete, publish |
+
+##### B8. Dynamically Seeded Mobile / IoT Families
 
 | Module             | Permission Prefix             | Actions                      |
 | :----------------- | :---------------------------- | :--------------------------- |
 | Mobile Users       | `tenant.mobile_users.*`       | read, create, update, delete |
-| Mobile Config      | `tenant.mobile.*`             | read, update |
 | Push Notifications | `tenant.push_notifications.*` | read, create, update, delete |
 | IoT Devices        | `tenant.iot.*`                | read, create, update, delete |
-| Platform Extensions | `platform.extensions.*`      | read, create, update, delete  |
-| Analytics          | `tenant.analytics.*`          | read                         |
-| Events             | `tenant.events.*`             | read, create, update, delete, publish |
 
 Known normalization drift still visible in current app code:
 
