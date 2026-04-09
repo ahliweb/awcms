@@ -1,49 +1,45 @@
 # Component Guide
 
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.4 - Styling & Theming  
-> **Context7 Reference**: `websites/tailwindcss`, `websites/react_dev` - See [AGENTS.md](../../AGENTS.md)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 ## Purpose
 
-Define UI component patterns for the admin panel and shared components.
+Define the current component patterns for the admin app and related shared UI surfaces: primitives, layout conventions, permission-aware rendering, styling rules, and common implementation expectations.
 
-## Audience
+## Current Component Model
 
-- Frontend developers working in `awcms/`
+Current AWCMS component work in `awcms/` is built around:
 
-## Prerequisites
+- shadcn/ui-style primitives under `awcms/src/components/ui`
+- Tailwind/CSS-variable-based styling
+- layout/page wrappers used by manager screens
+- `cn()` for conditional classes
+- toast-driven feedback for important user actions
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - Styling and theming standards
-- [AGENTS.md](../../AGENTS.md) - UI patterns and Context7 references
-- [docs/architecture/standards.md](../architecture/standards.md) - Core implementation standards
-- [docs/architecture/tech-stack.md](../architecture/tech-stack.md) - Technology versions
+## Current Styling Rules
 
-## Core Concepts
+- use semantic Tailwind utilities and CSS variables
+- avoid hardcoded hex colors in component code
+- preserve white-labeling and dark-mode compatibility
+- use current tenant theme variables where the feature depends on tenant branding
 
-- Use shadcn/ui primitives from `awcms/src/components/ui`.
-- Use TailwindCSS tokens and CSS variables (no hardcoded colors).
-- Use `useToast` for user feedback.
-- Use `cn()` from `awcms/src/lib/utils.js` for conditional class names.
-- Use Framer Motion variants for coordinated animations when needed.
+## Current Utility Rules
 
-## How It Works
+- use `cn()` from the current utils layer for class composition
+- use the current shared UI primitives before inventing local one-off replacements
+- use toasts for meaningful success/error feedback rather than silent failures
 
-- UI primitives are composed into dashboard and module components.
-- Shared utilities live in `awcms/src/lib/utils.js`.
-- Layout components from `flowbite-admin` provide consistent page structure.
+## Current Permission And Tenant Rules
 
-### Context7 Guidance (Tailwind)
+- permission-sensitive components should use `usePermissions()`
+- tenant-aware rendering/data operations should use `useTenant()` or the current hook/context path for the surface being edited
+- UI checks are not the final authority, but they should still be present where the UX depends on them
 
-- Tailwind v4 uses CSS-first configuration: import Tailwind with `@import "tailwindcss"` and define tokens in `@theme`.
-- Prefer CSS-first tokens via `@theme` and map them to utilities.
-- Use CSS variables for brand colors and fonts (e.g., `--primary`, `--font-sans`).
-
-### Context7 Guidance (Motion)
-
-- Use `motion` components with explicit `initial`/`animate`/`transition` props.
-- Wrap shared layout transitions in `LayoutGroup` when coordinating sibling animations.
-
-## Implementation Patterns
+## Current Common Patterns
 
 ### Button
 
@@ -95,73 +91,39 @@ import { useToast } from '@/components/ui/use-toast';
 
 const { toast } = useToast();
 
-// Success
 toast({ title: 'Saved', description: 'Changes saved successfully' });
-
-// Error
 toast({ variant: 'destructive', title: 'Error', description: 'Failed to save' });
 ```
 
-### Card
+## Current Layout Integration
 
-```jsx
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+Component work should align with the current admin shell and manager patterns instead of drifting into isolated page-specific structures.
 
-<Card>
-  <CardHeader>
-    <CardTitle>Settings</CardTitle>
-  </CardHeader>
-  <CardContent>
-    {/* Card content */}
-  </CardContent>
-</Card>
-```
+Current practical rule:
 
-### Tabs
+- if a component is part of a manager/module surface, keep it compatible with the current shared page/layout/header structure
 
-```jsx
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+## Current Motion / Interaction Guidance
 
-<Tabs defaultValue="general">
-  <TabsList>
-    <TabsTrigger value="general">General</TabsTrigger>
-    <TabsTrigger value="advanced">Advanced</TabsTrigger>
-  </TabsList>
-  <TabsContent value="general">General settings</TabsContent>
-  <TabsContent value="advanced">Advanced settings</TabsContent>
-</Tabs>
-```
+- use current motion patterns deliberately where interaction benefits from them
+- avoid gratuitous animation or overly custom motion systems when current shared patterns suffice
 
-## Permissions and Access
+## Current Data/Mutation Guardrails
 
-- Components must use `usePermissions()` for access checks:
+- validate and normalize user-visible errors
+- keep tenant scoping explicit in data flows
+- keep destructive actions aligned with current soft-delete and permission rules
 
-```jsx
-const { hasPermission, userRole, isPlatformAdmin, tenantId } = usePermissions();
+## Validation Guidance
 
-if (hasPermission('tenant.blog.create')) {
-  // Show create button
-}
-```
+| Surface | Validation |
+| --- | --- |
+| admin component changes | `cd awcms && npm run build` |
+| maintained docs | `cd awcms && npm run docs:check` |
+| public/shared implications | run the relevant workspace validation when the component pattern crosses workspace boundaries |
 
-- Use `useTenant()` for tenant context when rendering tenant data:
+## Related Docs
 
-```jsx
-const { currentTenant } = useTenant();
-```
-
-## Security and Compliance Notes
-
-- Avoid hardcoded colors; use Tailwind tokens or CSS variables.
-- Validate input and handle errors with destructive toasts.
-- Always scope data queries to the current tenant.
-
-## Operational Concerns
-
-- Keep component structure aligned with `docs/architecture/folder-structure.md`.
-- Follow naming conventions: `*Manager.jsx` for admin modules.
-
-## References
-
-- `docs/modules/ADMIN_UI_ARCHITECTURE.md`
-- `docs/security/abac.md`
+- [docs/modules/ADMIN_UI_ARCHITECTURE.md](./ADMIN_UI_ARCHITECTURE.md)
+- [docs/security/abac.md](../security/abac.md)
+- [docs/architecture/standards.md](../architecture/standards.md)
