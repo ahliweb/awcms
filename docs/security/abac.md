@@ -117,21 +117,35 @@ order by name;
 | :-------------------- | :--------------------------- | :------ |
 | `platform.tenant.*` | read, create, update, delete | web |
 | `platform.setting.*` | read, create, update, delete | web |
-| `platform.module.read`, `platform.module.manage` | Platform module visibility and global module-management actions. Verify exact coverage from `public.permissions` before documenting new flows. | web |
-| `platform.extensions.*` | read, create, update, delete | web |
-| `platform.extensions.manage` | Platform extension catalog/lifecycle orchestration | web |
+### A. Platform (Platform Scope) - Canonical Migration-Backed Families
+
+| Permission Prefix | Notes | Channel |
+| :---------------- | :---- | :------ |
+| `platform.extensions.*` | Platform extension catalog CRUD and lifecycle management surface. | web |
+| `platform.extensions.manage` | Platform extension catalog/lifecycle orchestration. | web |
+| `platform.extensions.diagnostics.read` | Platform diagnostics surface for extensions. | web |
+| `platform.module.read`, `platform.module.manage` | Platform module visibility and global module-management actions. | web |
+| `platform.reporting.read` | Platform reporting visibility. | web |
+| `platform.setting.read`, `platform.setting.create`, `platform.setting.update`, `platform.setting.delete` | Platform settings management surface. | web |
 | `platform.sidebar.read`, `platform.sidebar.update` | Platform sidebar-management visibility and edit actions. | web |
-| `platform.reporting.read` | Platform reporting visibility | web |
-| `platform.billing.*` | Use only if the live `permissions` table exposes these keys. | web |
-| `platform.user.*` | Use only if the live `permissions` table exposes these keys. | web |
+| `platform.template.manage` | Platform-managed blueprint and reusable-section authoring flows. | web |
+| `platform.tenant.read`, `platform.tenant.create`, `platform.tenant.update` | Platform tenant-management actions. | web |
+| `platform.approvals.read` | Platform approval visibility surface. | web |
 
-Current app-level permission checks that should be treated as implementation-specific until they are verified in root migrations:
+### B. Platform - App Logic Only
 
-- No additional app-only platform permission families are being treated as canonical in this pass.
+These are not currently canonical migration-backed families, but they are still part of current runtime behavior:
 
-Current platform permission catalog behavior:
+- The permissions catalog screen is gated by platform-admin / super-admin state in app logic rather than a migration-backed `platform.permissions.*` family.
 
-- The permissions catalog screen is currently gated by platform-admin / super-admin state in app logic rather than a migration-backed `platform.permissions.*` family.
+### C. Platform - Placeholder / Verify Before Use
+
+These families should not be treated as canonical unless the live `permissions` table and migration baseline explicitly expose them:
+
+| Permission Prefix | Notes | Channel |
+| :---------------- | :---- | :------ |
+| `platform.billing.*` | Placeholder only; verify before implementation or documentation. | web |
+| `platform.user.*` | Placeholder only; verify before implementation or documentation. | web |
 
 Current blueprint/bootstrap usage in app code:
 
