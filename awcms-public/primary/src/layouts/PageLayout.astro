@@ -12,6 +12,7 @@ import { createClientFromEnv } from "~/lib/supabase";
 import {
   getFooterMenu,
   getHeaderMenu,
+  localizePublicUrl,
   type HeaderLink,
   mapMenuItemsToFooterLinks,
   mapMenuItemsToHeaderLinks,
@@ -47,17 +48,23 @@ const pageContext = createPublicPageContext({
 
 let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 let footerLinks = fallbackFooterData.links;
+const localizedFallbackSecondaryLinks = fallbackFooterData.secondaryLinks.map(
+  (link) => ({
+    ...link,
+    href: localizePublicUrl(link.href, locale),
+  }),
+);
 
 if (supabase && tenantId) {
   const headerItems = await getHeaderMenu(supabase, tenantId, locale);
   const footerItems = await getFooterMenu(supabase, tenantId, locale);
 
   if (headerItems.length > 0) {
-    headerLinks = mapMenuItemsToHeaderLinks(headerItems);
+    headerLinks = mapMenuItemsToHeaderLinks(headerItems, locale);
   }
 
   if (footerItems.length > 0) {
-    footerLinks = mapMenuItemsToFooterLinks(footerItems);
+    footerLinks = mapMenuItemsToFooterLinks(footerItems, locale);
   }
 
   const publicModules = await getActivePublicModules(supabase, tenantId);
@@ -66,7 +73,7 @@ if (supabase && tenantId) {
     .filter((module: Partial<PublicModuleLink> | null | undefined): module is PublicModuleLink => Boolean(module?.url && module?.label))
     .map((module: PublicModuleLink) => ({
       text: module.label,
-      href: module.url,
+      href: localizePublicUrl(module.url, locale),
     }));
 
   if (moduleLinks.length > 0) {
@@ -102,11 +109,11 @@ if (supabase && tenantId) {
     <slot />
   </main>
   <slot name="footer">
-    <Footer
-      links={footerLinks}
-      secondaryLinks={fallbackFooterData.secondaryLinks}
-      socialLinks={fallbackFooterData.socialLinks}
-      footNote={fallbackFooterData.footNote}
-    />
+      <Footer
+        links={footerLinks}
+        secondaryLinks={localizedFallbackSecondaryLinks}
+        socialLinks={fallbackFooterData.socialLinks}
+        footNote={fallbackFooterData.footNote}
+      />
   </slot>
 </Layout>

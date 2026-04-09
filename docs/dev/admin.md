@@ -237,6 +237,19 @@ For tenant content forms and manager mutations:
 - default to draft/non-destructive lifecycle behavior when publish/delete actions require stronger permission
 - provide success/error toast feedback
 
+### Public-Facing Admin Changes
+
+If an admin change updates primary-tenant public behavior, prefer using the existing rebuild notification path instead of assuming static public output will update itself.
+
+Current public-facing admin surfaces that should participate in rebuild signaling include:
+
+- published page changes
+- published blog changes
+- menu changes
+- public-facing settings such as `site_info`
+- tenant SEO defaults
+- tenant branding changes that affect the primary public portal
+
 ## Current Reference Pattern: Tenant Content Form
 
 ### Objective

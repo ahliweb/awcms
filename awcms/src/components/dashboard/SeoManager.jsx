@@ -4,6 +4,7 @@ import { useToast } from '@/components/ui/use-toast';
 import SettingsFormRenderer from '@/components/dashboard/settings/SettingsFormRenderer';
 import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell';
 import { useSettingsRecord } from '@/components/dashboard/settings/useSettingsManager';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 
 const SEO_SCHEMA = {
   fields: [
@@ -138,6 +139,7 @@ function SeoManager() {
   const handleSave = async () => {
     try {
       await settings.save();
+      await triggerPublicRebuild({ tenantId: settings.tenantId, resource: 'seo_global', action: 'update' });
       toast({ title: 'Saved', description: 'SEO defaults updated successfully.' });
     } catch (error) {
       toast({ variant: 'destructive', title: 'Save failed', description: error.message });

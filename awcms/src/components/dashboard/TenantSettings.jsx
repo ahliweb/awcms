@@ -14,6 +14,7 @@ import TenantSettingsErrorState from '@/components/dashboard/tenant-settings/Ten
 import TenantSettingsOverviewCards from '@/components/dashboard/tenant-settings/TenantSettingsOverviewCards';
 import TenantBrandingFormCard from '@/components/dashboard/tenant-settings/TenantBrandingFormCard';
 import PortalSitesManager from '@/components/dashboard/PortalSitesManager';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 
 export default function TenantSettings() {
   const { t } = useTranslation();
@@ -73,6 +74,8 @@ export default function TenantSettings() {
         .eq('id', tenant.id);
 
       if (error) throw error;
+
+      await triggerPublicRebuild({ tenantId: tenant.id, resource: 'tenant_branding', action: 'update' });
 
       toast({
         title: t('tenant_settings.toasts.saved_title'),

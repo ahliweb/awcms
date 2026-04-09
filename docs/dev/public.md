@@ -100,10 +100,22 @@ Current primary-portal composition now follows a more EmDash-style public struct
 Important live helper surfaces include:
 
 - `awcms-public/primary/src/lib/content.ts`
+- `awcms-public/primary/src/lib/menu.ts`
 - `awcms-public/primary/src/lib/widgets.ts`
 - `awcms-public/primary/src/lib/search.ts`
 - `awcms-public/primary/src/lib/sitemap.ts`
+- `awcms-public/primary/src/lib/publicSettings.ts`
 - `awcms-public/primary/src/components/puck-blocks/WidgetAreaBlock.astro`
+
+Current admin/public integration expectations for the primary tenant include:
+
+- public navigation should prefer tenant-authored `menus` records from admin over fallback config links
+- public menu and extension-module URLs should resolve onto canonical locale-prefixed public routes where appropriate
+- public site identity should prefer tenant-managed admin data from:
+  - `seo_metadata` for canonical site SEO defaults
+  - `settings.site_info` for general public identity/contact defaults
+  - `tenants.config.theme` / `tenants.config.settings` as branding fallback for the primary tenant
+- admin updates to public-facing settings, SEO defaults, branding, published pages, published blogs, and menus should trigger the existing public rebuild flow rather than relying on manual refresh assumptions
 
 ### `awcms-public/smandapbun/`
 

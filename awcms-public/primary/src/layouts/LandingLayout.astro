@@ -4,7 +4,10 @@ import Header from "~/components/widgets/Header.astro";
 
 import { headerData as fallbackHeaderData } from "~/navigation";
 import { createClientFromEnv } from "~/lib/supabase";
-import { getHeaderMenu, mapMenuItemsToHeaderLinks } from "~/lib/menu";
+import {
+  getHeaderMenu,
+  mapMenuItemsToHeaderLinks,
+} from "~/lib/menu";
 import type { HeaderLink } from "~/lib/menu";
 import type { MetaData } from "~/types";
 import { getPublicTenantId } from "~/lib/publicTenant";
@@ -26,7 +29,7 @@ let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 if (supabase && tenantId) {
   const headerItems = await getHeaderMenu(supabase, tenantId, locale);
   if (headerItems.length > 0) {
-    headerLinks = mapMenuItemsToHeaderLinks(headerItems);
+    headerLinks = mapMenuItemsToHeaderLinks(headerItems, locale);
   }
 }
 ---

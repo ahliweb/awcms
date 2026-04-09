@@ -48,6 +48,40 @@ interface MenuLocationOptions {
   includeRestricted?: boolean;
 }
 
+const LOCALIZED_PREFIXES = ["/en", "/id"];
+
+export function localizePublicUrl(
+  href: string | null | undefined,
+  locale?: string,
+): string {
+  if (!href) return "#";
+  if (!locale) return href;
+  if (
+    href.startsWith("http://") ||
+    href.startsWith("https://") ||
+    href.startsWith("mailto:") ||
+    href.startsWith("tel:") ||
+    href.startsWith("#") ||
+    href.startsWith("//")
+  ) {
+    return href;
+  }
+
+  const [pathPart, suffix = ""] = href.split(/(?=[?#])/);
+  if (!pathPart || pathPart === "/") {
+    return `/${locale}${suffix}`;
+  }
+  if (
+    LOCALIZED_PREFIXES.some(
+      (prefix) => pathPart === prefix || pathPart.startsWith(`${prefix}/`),
+    )
+  ) {
+    return href;
+  }
+  const normalizedPath = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
+  return `/${locale}${normalizedPath}${suffix}`;
+}
+
 /**
  * Fetch menu by location (header, footer, sidebar, etc.)
  */
@@ -285,22 +319,25 @@ function buildMenuTree(rows: MenuRow[]): MenuItem[] {
   return roots;
 }
 
-export function mapMenuItemsToHeaderLinks(items: MenuItem[]): HeaderLink[] {
+export function mapMenuItemsToHeaderLinks(
+  items: MenuItem[],
+  locale?: string,
+): HeaderLink[] {
   return items.map((item) => ({
     text: item.title,
-    href: item.url || "#",
+    href: localizePublicUrl(item.url, locale),
     links: item.children?.map((child) => ({
       text: child.title,
-      href: child.url || "#",
+      href: localizePublicUrl(child.url, locale),
       links: child.children?.map((grandchild) => ({
         text: grandchild.title,
-        href: grandchild.url || "#",
+        href: localizePublicUrl(grandchild.url, locale),
       })),
     })),
   }));
 }
 
-export function mapMenuItemsToFooterLinks(items: MenuItem[]) {
+export function mapMenuItemsToFooterLinks(items: MenuItem[], locale?: string) {
   const isPopupPage = (href?: string) =>
     Boolean(
       href &&
@@ -330,9 +367,11 @@ export function mapMenuItemsToFooterLinks(items: MenuItem[]) {
 
       return {
         text: child.title,
-        href: child.url || "#",
-        target: isPopupPage(childUrl) ? "_blank" : undefined,
-        popup: isPopupPage(childUrl),
+        href: localizePublicUrl(child.url, locale),
+        target: isPopupPage(localizePublicUrl(childUrl, locale))
+          ? "_blank"
+          : undefined,
+        popup: isPopupPage(localizePublicUrl(childUrl, locale)),
       };
     }),
   }));

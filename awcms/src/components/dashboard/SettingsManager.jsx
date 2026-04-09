@@ -3,6 +3,7 @@ import { useToast } from '@/components/ui/use-toast';
 import SettingsFormRenderer from '@/components/dashboard/settings/SettingsFormRenderer';
 import SettingsPageShell from '@/components/dashboard/settings/SettingsPageShell';
 import { useSettingsRecord } from '@/components/dashboard/settings/useSettingsManager';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 
 const GENERAL_SETTINGS_SCHEMA = {
   slots: {
@@ -72,6 +73,7 @@ function SettingsManager() {
   const handleSave = async () => {
     try {
       await settings.save();
+      await triggerPublicRebuild({ tenantId: settings.tenantId, resource: 'site_info', action: 'update' });
       toast({ title: 'Saved', description: 'General settings updated successfully.' });
     } catch (error) {
       toast({ variant: 'destructive', title: 'Save failed', description: error.message });
