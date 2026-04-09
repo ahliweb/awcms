@@ -1,105 +1,133 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 3 (Modules)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Blogs Module Documentation
 
 ## Purpose
 
-Describe the blog workflows and data model used by the CMS (legacy index/constraint names may still reference "articles").
+Describe the current blogs module in AWCMS: authoring workflow, tenant-scoped/public query behavior, localized overlays, and the current Pages-owned presentation model for blog detail layouts.
 
-## Audience
+## Current Blogs Model
 
-- Admin panel developers
-- Content workflow maintainers
+The current blogs module is focused on article/content management, not page-level visual presentation ownership.
 
-## Prerequisites
+Current important concepts include:
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for content module architecture
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/architecture/database.md`
-- `docs/security/abac.md`
+- structured authoring and metadata on `blogs`
+- workflow/publish-state behavior
+- categories/tags/taxonomy support
+- localized overlays through `content_translations`
+- Pages-owned visual presentation for single-post layouts
 
-The Blogs module is a full-featured blogging and news management system designed for high-performance publishing. It integrates a headless TipTap editor with a strict publishing workflow.
+## Current Data Model
 
-## Core Concepts
+Current important `blogs` concepts still include:
 
-1. **Rich Text Editor**: TipTap-based editor (`tiptap_doc_jsonb`) ensuring clean, XSS-safe JSON output.
-2. **Workflow State Machine**: `draft` -> `reviewed` -> `approved` -> `published`.
-3. **SEO Management**: Custom Meta Title/Description and OpenGraph support.
-4. **Taxonomy**: Categorization and tagging for content.
-5. **Pages-Owned Layouts**: Visual presentation is composed through Pages module templates (for example `single_post`) instead of direct blog-level Visual Builder editing.
+- `slug` for routing
+- structured body fields such as `tiptap_doc_jsonb`
+- optional HTML fallback/content surfaces where present
+- publish/workflow metadata
+- tenant scope and soft-delete lifecycle
 
-## How It Works
+Current important rule:
 
-Stored in `blogs` table:
+- public blog reads must stay published-only and non-deleted
 
-- `slug`: Unique identifier for routing (e.g., `/blogs/my-post`).
-- `tiptap_doc_jsonb`: The source of truth for content.
-- `content`: HTML fallback (optional).
+## Current Workflow Model
 
-Visual layouts are now managed from the Pages module so blog rows stay focused on article content and metadata.
+The checked-in module still supports a staged publishing workflow.
 
-## Admin UI
+Current practical flow remains conceptually:
 
-| Route | Purpose | Notes |
-| --- | --- | --- |
-| `/cmspanel/blogs` | Blog list | Default blog tab. |
-| `/cmspanel/blogs/categories` | Blog categories | Tabs map to sub-slugs. |
-| `/cmspanel/blogs/tags` | Blog tags | Tabs map to sub-slugs. |
-| `/cmspanel/blogs/queue` | Review queue | Filters `workflow_state = reviewed`. |
-| `/cmspanel/blogs/trash` | Trash view | Soft-deleted blogs only. |
-| `/cmspanel/blogs/edit/:id` | Edit blog | `:id` uses signed route params (`{uuid}.{signature}`). |
+1. draft authoring
+2. review-oriented queue state
+3. approval/publish readiness
+4. published public visibility
 
-## Implementation Patterns
+Exact state values and queue behaviors should follow the current implementation and migration baseline rather than an older static diagram.
 
-1. **Draft**: Author creates content. Visible only to authorized tenant users.
-2. **Reviewed**: Content enters the review queue (`/cmspanel/blogs/queue`).
-3. **Approved**: Content is approved and ready for publish/scheduling workflows.
-4. **Published**: Publicly visible through tenant-scoped `blogs` queries filtered to `status = 'published'` and `deleted_at IS NULL`.
+## Current Admin Surface
 
-## Localization Notes
+Important current blog-related admin routes include:
 
-- New blogs are authored in the base/default locale first (`id`).
-- English content is stored as a translation overlay in `content_translations`.
-- Blog translation rows use `content_type = 'article'` to match the current database constraint and public rendering queries.
+- `/cmspanel/blogs`
+- `/cmspanel/blogs/categories`
+- `/cmspanel/blogs/tags`
+- `/cmspanel/blogs/queue`
+- `/cmspanel/blogs/trash`
+- `/cmspanel/blogs/edit/:id`
 
-## Operational Concerns
+Current route note:
 
-The Public Portal currently fetches posts directly from `blogs` to ensure:
+- edit routes follow the current signed-route-param conventions
 
-1. Only `status = 'published'` items are fetched.
-2. Tenant scoping is explicit in the query path.
-3. Rendering uses article content inside Pages-managed visual templates where configured.
+## Current Presentation Model
 
-### Operator Note
+Blog presentation is currently owned by the Pages/template composition system rather than by direct blog-row visual-builder editing.
 
-- Choose the `single_post` Pages template when you want to control how blog detail pages render.
-- Choose `single_page` for regular page detail layouts; it is not intended to style blog entries.
-- Editors should manage article body and metadata in the Blogs module, then manage presentation in the Pages-owned visual template.
+Current practical implications:
 
-`published_blogs_view` remains part of schema history and can still be useful for restricted read surfaces,
-but it is not the current public-portal fetch path.
+- article body/metadata is managed in the Blogs module
+- single-post visual presentation is managed via Pages-owned templates such as `single_post`
+- editors should change content in Blogs and presentation in the template/page composition system
 
-### TipTap JSON
+## Current Localization Model
 
-`tiptap_doc_jsonb` stores structured content. If you enable TipTap JSON rendering, ensure it is converted to safe semantic HTML (no raw HTML injection).
+Localized blog overlays currently use `content_translations`.
 
-### Context7 Guidance (TipTap)
+Current important rule:
 
-- Use `StarterKit` as the base extension set.
-- Configure built-in extensions via `StarterKit.configure({ ... })`, and additional extensions with `Extension.configure({ ... })` (for example `Image`, `Table`, `TextAlign`).
-- Avoid rendering untrusted HTML; prefer JSON-to-HTML mapping or sanitized HTML output.
+- localized overlay rows for blogs should continue to follow the current content-type conventions used by the live query/render paths
 
----
+## Current Public Query Model
 
-## Permissions and Access
+Public portals currently fetch blogs directly from `blogs` using tenant-aware, published-only, non-deleted query paths.
 
-- Use `tenant.blog.*` permission keys for blog actions.
+Current important rules:
 
-## Security and Compliance Notes
+- tenant scoping is explicit
+- published filtering is explicit
+- deleted filtering is explicit
+- blog detail rendering may combine blog content with Pages-owned template composition
 
-- Always filter `deleted_at` and enforce RLS.
+## Current TipTap Note
 
-## References
+Where `tiptap_doc_jsonb` or structured content is used, it should continue to render through safe structured/rendered paths rather than unsafe raw HTML assumptions.
 
-- `docs/security/abac.md`
-- `docs/architecture/database.md`
+## Current Permission Guidance
+
+Blog actions should align with canonical `tenant.blog.*` permission families.
+
+Current practical examples include:
+
+- read
+- create
+- update
+- publish
+- delete / restore behavior where applicable
+
+## Current Security Notes
+
+- keep tenant filtering explicit
+- keep `deleted_at` filtering explicit for normal reads
+- keep public visibility limited to published rows
+- preserve RLS and ABAC boundaries in admin and public query paths
+
+## Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| admin/blog changes | `cd awcms && npm run build` |
+| public blog/rendering changes | `cd awcms-public/primary && npm run check:astro` |
+| edge/public route implications | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+| maintained docs | `cd awcms && npm run docs:check` |
+
+## Related Docs
+
+- [docs/security/abac.md](../security/abac.md)
+- [docs/architecture/database.md](../architecture/database.md)
+- [docs/modules/VISUAL_BUILDER.md](./VISUAL_BUILDER.md)
+- [docs/modules/TEMPLATE_SYSTEM.md](./TEMPLATE_SYSTEM.md)

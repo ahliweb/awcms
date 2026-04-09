@@ -1,272 +1,127 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.4 (Internationalization)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Internationalization (i18n)
 
 ## Purpose
 
-Describe how AWCMS handles translations and locale detection for multi-language support.
+Describe the current internationalization model across the AWCMS admin app, public portals, and database-backed localized content surfaces.
 
-## Audience
+## Current i18n Model
 
-- Admin panel developers
-- Frontend developers
-- Extension authors
+AWCMS currently uses a split i18n model.
 
-## Prerequisites
+Current major surfaces:
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for i18n implementation patterns
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/architecture/folder-structure.md`
+- admin runtime translations through i18next
+- public locale resolution and public locale files/helpers
+- database-backed localized content overlays such as `content_translations`
+- template/composition localization through `template_strings`
 
----
+This means “i18n” in AWCMS is not just static JSON translation files.
 
-## Available Languages
+## Current Admin i18n Model
 
-| Language   | Code | Status                |
-| :--------- | :--- | :-------------------- |
-| English    | `en` | **Primary** (Default) |
-| Indonesian | `id` | Secondary             |
+The admin app still uses i18next-based runtime translation.
 
----
+Current important behaviors include:
 
-## Core Concepts
+- admin translation resources in `awcms/src/locales/`
+- browser/local storage driven language detection
+- current admin i18n setup in `awcms/src/lib/i18n.js`
+- user preference persistence through the user data model where applicable
 
-- **Admin**: i18next provides runtime translation.
-- **Public**: `awcms-public/primary/src/utils/i18n.ts` provides lightweight locale resolution.
-- Translation files live in `awcms/src/locales/` (admin) and `awcms-public/primary/src/locales/` (public).
-- Admin language detection uses browser settings, with localStorage override.
-- User preferences are persisted to the `users.language` database column.
+## Current Public i18n Model
 
----
+Public portals use a lighter locale-resolution and locale-file model than the admin app.
 
-## Configuration
+Current important behaviors include:
 
-### File: `awcms/src/lib/i18n.js`
+- locale-aware public routes
+- URL-driven locale resolution for public pages
+- workspace-specific public locale helpers/files
+- static-first rendering expectations
 
-```javascript
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
+Current practical rule:
 
-import en from '@/locales/en.json';
-import id from '@/locales/id.json';
+- public i18n should remain compatible with static-first rendering and tenant-scoped content resolution
 
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources: {
-      en: { translation: en },
-      id: { translation: id }
-    },
-    fallbackLng: 'en', // Default to English
-    interpolation: {
-      escapeValue: false // React already escapes from XSS
-    },
-    detection: {
-      order: ['localStorage', 'navigator'],
-      caches: ['localStorage']
-    }
-  });
+## Current Database-Backed Localization Model
 
-export default i18n;
-```
+AWCMS currently uses database-backed overlays for localized content in places such as:
 
-### Detection Order
+- `content_translations`
+- `template_strings`
 
-1. **localStorage**: Checks for `i18nextLng` key.
-2. **navigator**: Falls back to browser language settings.
-3. **fallbackLng**: Uses English if no match found.
+Current practical implications:
 
-**Context7 note**: i18next recommends supporting querystring/cookie detection when needed (`querystring`, `cookie`, `localStorage`, `navigator`). AWCMS keeps admin detection minimal to avoid extra state but can expand the `order` when deep-linking or SSR localization is required.
+- module-specific content may have a base/default locale plus overlay rows
+- public/admin query paths must keep localization reads aligned with tenant scope and deleted/published rules
+- localization is not limited to flat JSON message catalogs
 
----
+## Current Available Languages Note
 
-## Usage in Components
+Current commonly documented/admin-supported languages remain:
 
-### Using the `useTranslation` Hook
+- English (`en`)
+- Indonesian (`id`)
+
+Do not assume this list is the only possible locale set for every tenant/workspace without checking the current implementation and settings surfaces.
+
+## Current Admin Usage Pattern
+
+Representative admin usage still follows the current `useTranslation()` path:
 
 ```jsx
 import { useTranslation } from 'react-i18next';
 
 function MyComponent() {
   const { t } = useTranslation();
-  
-  return (
-    <div>
-      <h1>{t('common.welcome_back')}</h1>
-      <p>{t('common.loading')}</p>
-    </div>
-  );
+  return <h1>{t('common.loading')}</h1>;
 }
 ```
 
-### Changing Language Programmatically
+## Current Language Preference Guidance
 
-```jsx
-import { useTranslation } from 'react-i18next';
+- user-visible language switching should continue to use the current i18n stack
+- user language preference persistence belongs in the current user/settings model where implemented
+- locale switching should not bypass the existing public/admin route and state conventions
 
-function LanguageSwitcher() {
-  const { i18n } = useTranslation();
-  
-  const handleChange = (lang) => {
-    i18n.changeLanguage(lang);
-    localStorage.setItem('i18nextLng', lang);
-  };
+## Current Translation Key Guidance
 
-  return (
-    <button onClick={() => handleChange('id')}>Switch to Indonesian</button>
-  );
-}
-```
+- keep key naming consistent and descriptive
+- do not store secrets or sensitive data in translation resources
+- use module/namespace-oriented keys when they improve maintainability
 
-### Reference Implementations
+## Current Cross-Channel Guidance
 
-For complex examples involving dynamic column headers, form labels, and tab translations, refer to:
+Current i18n behavior differs by channel:
 
-- **`BlogsManager.jsx`**: Demonstrates full i18n for a content module with categories and tags.
-- **`ProductsManager.jsx`**: Demonstrates i18n for commerce products with tabs and status options.
-- **`GenericContentManager.jsx`**: Demonstrates shared i18n patterns for search, deletion, and common actions.
+- admin: i18next runtime translation
+- public: static-first locale-aware rendering and helper-based resolution
+- database-backed content/template overlays: tenant-scoped localized content rows
+- other channels such as mobile/ESP32 may have their own localized asset paths and should not be assumed to share the same runtime model as admin/public
 
----
+## Current Security Notes
 
-## Translation File Structure
+- do not render user-provided HTML through translations without sanitization
+- keep localized database reads tenant-scoped
+- keep public localized content published-only and non-deleted where applicable
 
-### File: `awcms/src/locales/en.json`
+## Validation Guidance
 
-```json
-{
-  "common": {
-    "loading": "Loading...",
-    "save": "Save",
-    "cancel": "Cancel"
-  },
-  "menu": {
-    "dashboard": "Dashboard",
-    "blogs": "Blogs"
-  }
-}
-```
+| Surface | Validation |
+| --- | --- |
+| admin i18n changes | `cd awcms && npm run build` |
+| public i18n changes | `cd awcms-public/primary && npm run check:astro` |
+| maintained docs | `cd awcms && npm run docs:check` |
 
-### Key Naming Conventions
+## Related Docs
 
-| Pattern | Example | Use Case |
-| :------ | :------ | :------- |
-| `{namespace}.{key}` | `common.loading` | Shared UI elements |
-| `{module}.form.{field}` | `blogs.form.excerpt` | Form labels for module-specific fields |
-
----
-
-## Adding New Translations
-
-### Step 1: Add to English File
-
-Edit `awcms/src/locales/en.json`:
-
-```json
-{
-  "my_module": {
-    "welcome": "Welcome to My Module"
-  }
-}
-```
-
-### Step 2: Add to Indonesian File
-
-Edit `awcms/src/locales/id.json`:
-
-```json
-{
-  "my_module": {
-    "welcome": "Selamat Datang di Modul Saya"
-  }
-}
-```
-
-### Step 3: Use in Component
-
-```jsx
-const { t } = useTranslation();
-return <h1>{t('my_module.welcome')}</h1>;
-```
-
----
-
-## Database Persistence
-
-User language preferences are stored in the `users` table:
-
-| Column | Type | Description |
-| :----- | :--- | :---------- |
-| `language` | `text` | ISO language code (`en`, `id`) |
-
-When a user changes their language in `LanguageSettings`, it is saved to the database and will persist across sessions and devices.
-
----
-
-## UI Components
-
-| Component | Path | Purpose |
-| :-------- | :--- | :------ |
-| `LanguageSelector` | `awcms/src/components/ui/LanguageSelector.jsx` | Dropdown in header |
-| `LanguageSettings` | `awcms/src/components/dashboard/LanguageSettings.jsx` | Full settings page |
-
----
-
-## Security and Compliance Notes
-
-- Do not render user-provided HTML without sanitization.
-- Translation keys should not contain sensitive data.
-- Localization data is tenant-scoped when stored in the database.
-
----
-
-## References
-
-- [i18next Documentation](https://www.i18next.com/)
-- [react-i18next Documentation](https://react.i18next.com/)
-- `awcms/src/lib/i18n.js`
-- `awcms/src/locales/en.json`
-- `awcms/src/locales/id.json`
-- `awcms-public/primary/src/utils/i18n.ts`
-
-### Public Portal Namespaces (awcms-public)
-
-The public portal uses the following namespaces in `src/locales/` and resolves locale via `awcms-public/primary/src/utils/i18n.ts`.
-
-Locale resolution order (public):
-
-1. URL path prefix (`/id` or `/en`).
-2. `lang` query parameter.
-3. Default to `en`.
-
-| Namespace | Usage |
-| :--- | :--- |
-| `common` | General UI elements (buttons, labels) |
-| `nav`, `footer` | Navigation and footer links |
-| `hero` | Landing page hero section |
-| `about` | About page content |
-| `services_page` | Services page content |
-| `pricing_page` | Pricing page content |
-| `contact_page` | Contact page content |
-| `blog_page` | Blog listing and categories |
-| `blog_post` | Single blog post specific labels |
-| `error_page` | 404 and other error messages |
-| `homes` | For landing page content (startup, saas, mobile-app, personal). |
-| `landing` | For landing page demos (click-through, lead-generation, pre-launch, product, sales, subscription). |
-
----
-
-## Cross-Channel i18n
-
-For multi-language implementation across all AWCMS channels, see:
-
-- `docs/dev/multi-language.md`
-
-### Other Channels
-
-| Channel | Technology | Locale Path |
-| :------ | :--------- | :---------- |
-| awcms-public | Astro | `src/locales/` |
-| awcms-mobile | Flutter | `lib/l10n/` |
-| awcms-esp32 | C++ | `include/lang_*.h` |
+- [docs/dev/public.md](../dev/public.md)
+- [docs/dev/admin.md](../dev/admin.md)
+- [docs/modules/TEMPLATE_SYSTEM.md](./TEMPLATE_SYSTEM.md)
+- [docs/dev/multi-language.md](../dev/multi-language.md)
