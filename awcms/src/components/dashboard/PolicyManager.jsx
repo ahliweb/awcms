@@ -17,7 +17,10 @@ export default function PolicyManager() {
     const [policies, setPolicies] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    const canManage = isPlatformAdmin || hasPermission('tenant.policy.create'); // Simplified for now, usually create/update/delete separate
+    const canManage = isPlatformAdmin
+        || hasPermission('tenant.policy.create')
+        || hasPermission('tenant.policy.update')
+        || hasPermission('tenant.policy.delete');
     const canView = isPlatformAdmin || hasPermission('tenant.policy.read');
 
     // Editor State
