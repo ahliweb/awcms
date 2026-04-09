@@ -1,110 +1,115 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 (Permissions)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Role Hierarchy (ABAC Framework)
 
 ## Purpose
 
-Define the *default* role definitions and hierarchy used by AWCMS.
-> **Note:** With the ABAC system, "Hierarchy" is conceptual. In practice, roles are mutable collections of permissions. An "Editor" could theoretically have more permissions than an "Admin" if customized.
+Describe the current role model in AWCMS: default role templates, role flags, conceptual hierarchy, staff-level hierarchy, and how roles interact with the ABAC permission system.
 
-## Audience
+This is a current-state guide. In the checked-in repo, roles are still meaningful defaults, but ABAC permissions and role flags are the real enforcement surface.
 
-- Policy designers
-- Admin panel developers
+## Current Role Model
 
-## Prerequisites
+AWCMS currently uses roles as permission bundles plus metadata flags.
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for role hierarchy and permission system
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/security/abac.md`
+Current important rule:
 
-## Default Role Definitions (Baselines)
+- roles are not the final authorization authority by name alone
+- ABAC permissions and role flags determine real runtime behavior
 
-These are the standard templates provided in the "Roles" manager.
+That means the “hierarchy” is conceptual and operational, not a guarantee that role names alone define power in every tenant.
 
-| Role | Scope | Description |
-| ---- | ----- | ----------- |
-| **Owner** | Platform | **Supreme Authority**. Full system access across all tenants. Cannot be restricted. |
-| **Super Admin** | Platform | **Platform Admin**. Manages tenants, billing, and global settings (flagged via `is_platform_admin`). |
-| **Admin** | Tenant | **Tenant Manager**. Full access *within* their tenant. Can manage tenant users and roles. |
-| **Auditor** | Tenant | **Compliance**. Read-only access to all tenant resources. |
-| **Editor** | Tenant | **Content Manager**. Can review, approve, and publish content. Cannot manage users/settings. |
-| **Author** | Tenant | **Creator**. Can create and edit *own* content. Needs approval to publish. |
-| **Member** | Tenant | **User**. Registered end-user with basic profile access. |
-| **Subscriber** | Tenant | **Customer**. Read-only access to premium/gated content. |
-| **Public** | Tenant | **Visitor**. Anonymous read-only access to public content. |
-| **No Access** | Tenant | **Suspended**. Explicitly denies all access permissions. |
+## Current Default Role Baselines
 
----
+Representative default role baselines still include:
 
-## Conceptual Hierarchy
+- Owner
+- Super Admin
+- Admin
+- Auditor
+- Editor
+- Author
+- Member
+- Subscriber
+- Public
+- No Access
+
+Current practical rule:
+
+- these should be treated as baseline templates for common behavior, not as a replacement for inspecting live permissions and role flags
+
+## Current Scope Model
+
+Roles currently participate in the same scope model used by ABAC:
+
+- `platform`
+- `tenant`
+- reserved/specialized scopes such as `content` and `module` only where the live product surface requires them
+
+Current important note:
+
+- platform roles are identified by flags such as `is_platform_admin` and `is_full_access`, not just by human-readable role names
+
+## Current Role Flags
+
+The roles model currently includes important flag-driven behavior such as:
+
+- `is_platform_admin`
+- `is_full_access`
+- `is_tenant_admin`
+- `is_public`
+- `is_guest`
+- `is_staff`
+- `staff_level`
+- `is_default_public_registration`
+- `is_default_invite`
+
+These flags are part of the real runtime model used by contexts, policies, and admin logic.
+
+## Current Conceptual Hierarchy
+
+Conceptually, current role templates still map roughly like this:
 
 ```mermaid
 graph TD
     A[Owner] --> B[Super Admin]
-    B --> C[Admin (Tenant)]
-    C --> D[Editor]
+    B --> C[Admin]
+    C --> D[Auditor / Editor]
     D --> E[Author]
-    E --> F[Member]
+    E --> F[Member / Subscriber / Public]
 ```
 
-## Permission Matrix (Default Templates)
+Current important caveat:
 
-The following matrix represents the *default* configuration for new tenants.
+- custom role permissions can diverge from this conceptual order
+- ABAC remains the authoritative action-level control model
 
-### Content Operations
+## Current Permission Relationship
 
-| Role | Create | Read | Update | Publish | Delete | Restore | Permanent Delete |
-| ---- | :----: | :--: | :----: | :-----: | :----: | :-----: | :----------: |
-| Owner | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Admin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Editor | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Author | ✅ | ✅ | Own Only* | ❌ | ❌ | ❌ | ❌ |
+Current role usage still works through:
 
-*Own Only = `tenant_id` + `created_by` checks (enforced in RLS and UI).*
+- `roles`
+- `permissions`
+- `role_permissions`
+- policy- and UI-level permission checks using canonical keys
 
-### System Operations
+Current practical rule:
 
-| Role | User Mgmt | Role Mgmt | Settings | Audit Logs |
-| ---- | :-------: | :-------: | :------: | :--------: |
-| Owner | ✅ | ✅ | ✅ | ✅ |
-| Admin | ✅ | ✅ | ✅ | ✅ |
-| Editor | ❌ | ❌ | ❌ | ❌ |
+- use role names for baseline understanding and UX copy
+- use permission checks for implementation
 
----
+## Current Staff Hierarchy
 
-## Database Implementation
+The current data model still includes staff-level hierarchy support through `staff_level`.
 
-### Roles Table
-
-```sql
-CREATE TABLE roles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  tenant_id UUID REFERENCES tenants(id),
-  scope TEXT DEFAULT 'tenant', -- platform | tenant | content | module
-  is_system BOOLEAN DEFAULT FALSE,
-  is_platform_admin BOOLEAN DEFAULT FALSE,
-  is_full_access BOOLEAN DEFAULT FALSE,
-  is_tenant_admin BOOLEAN DEFAULT FALSE,
-  is_public BOOLEAN DEFAULT FALSE,
-  is_guest BOOLEAN DEFAULT FALSE,
-  is_staff BOOLEAN DEFAULT FALSE,
-  staff_level INTEGER,
-  is_default_public_registration BOOLEAN DEFAULT FALSE,
-  is_default_invite BOOLEAN DEFAULT FALSE
-);
-```
-
-### Global vs Tenant Roles
-
-- **Global Roles** (`tenant_id` is NULL): Visible to all, managed by Platform Admins.
-- **Tenant Roles** (`tenant_id` is set): Visible only to that tenant.
-
-### Staff Hierarchy (Per Tenant)
+Representative current ordering remains:
 
 | Level | Name |
-| ----- | ---- |
+| --- | --- |
 | 10 | super_manager |
 | 9 | senior_manager |
 | 8 | manager |
@@ -116,31 +121,51 @@ CREATE TABLE roles (
 | 2 | assistant |
 | 1 | internship |
 
-### Default Onboarding Roles
+Current important note:
 
-- `is_default_public_registration` marks the role used for public signups.
-- `is_default_invite` marks the role used for invite-based onboarding.
+- staff hierarchy is a structured tenant role attribute used by current workflows and should not be confused with the broader ABAC permission matrix
 
-### Tenant Role Inheritance
+## Current Onboarding Role Flags
 
-- Tenants can inherit roles/permissions from a parent tenant in **auto** mode.
-- In **linked** mode, inheritance occurs only for explicitly linked roles in `tenant_role_links`.
-- The inheritance mode is stored on `tenants.role_inheritance_mode`.
+Roles may still be marked for onboarding defaults such as:
 
-## DB Helper Functions
+- `is_default_public_registration`
+- `is_default_invite`
 
-> **Warning:** These functions are strictly for **Platform Administration** logic. Do not use them for feature access (use `has_permission` instead).
+These are current data-model features and should be preferred over hardcoding onboarding role names in app logic.
 
-- `is_platform_admin()`: Returns true for platform admin/full access roles.
-- `is_admin_or_above()`: **Deprecated** for feature checks.
+## Current Tenant Role Inheritance Note
 
-**Action key note**: Use `permanent_delete` for destructive actions in permission keys (e.g., `tenant.blog.permanent_delete`).
+Current tenancy still supports role inheritance modes such as:
 
-**Context7 note**: Prefer permission checks (`has_permission`) in both UI and RLS policies instead of role-name comparisons.
+- `auto`
+- `linked`
 
-> Platform admin access is determined by role flags (`is_platform_admin`/`is_full_access`), not role names.
+Role inheritance behavior should be understood as a tenancy/data-model feature, not as a simple fixed hierarchy rule.
 
-## References
+## Current Implementation Guidance
 
-- `docs/security/abac.md`
-- `docs/security/rls.md`
+- use role flags for platform/full-access/admin state checks where the current runtime expects them
+- use canonical permission checks (`hasPermission`, `has_permission`) for feature access
+- do not implement new feature access with role-name-only checks when a permission family already exists
+- keep role-management and policy-management permissions aligned with the current migration-backed baseline
+
+## Current Security Notes
+
+- platform admin access is determined by flags, not role names alone
+- tenant authorization remains permission- and policy-driven
+- role customization can change practical access, so docs and code should not over-promise fixed role-name behavior
+
+## Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| maintained docs | `cd awcms && npm run docs:check` |
+| role/permission runtime implications | `cd awcms && npm run build` and related edge/migration validation when relevant |
+
+## Related Docs
+
+- [docs/security/abac.md](../security/abac.md)
+- [docs/security/rls.md](../security/rls.md)
+- [docs/tenancy/overview.md](../tenancy/overview.md)
+- [docs/dev/admin.md](../dev/admin.md)
