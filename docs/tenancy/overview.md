@@ -1,290 +1,172 @@
 # Multi-Tenancy Architecture
 
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.1 - Multi-Tenancy & Isolation
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 ## Purpose
 
-Define how tenant isolation is resolved and enforced across AWCMS.
+Define the current multi-tenancy model for AWCMS across admin, public, Worker, database, and hierarchy/resource-sharing surfaces.
 
-## Audience
+This guide is a current-state architectural overview, not just a tenant-id primer.
 
-- Developers implementing tenant-aware features
-- Operators configuring tenant domains
+## Current Tenancy Model
 
-## Prerequisites
+AWCMS currently uses logical isolation on a shared data model with layered enforcement.
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for multi-tenancy architecture
-- [AGENTS.md](../../AGENTS.md) - Tenant context patterns and RLS guidelines
-- [docs/architecture/standards.md](../architecture/standards.md) - Core implementation standards
-- [docs/security/rls.md](../security/rls.md) - Row Level Security policies
+Current tenancy behavior depends on:
 
-## Core Concepts
+- tenant-scoped tables with mandatory `tenant_id`
+- RLS enforcement in PostgreSQL
+- SQL tenant resolution through `current_tenant_id()`
+- explicit tenant-aware query patterns in admin/public/Worker code
+- controlled platform-admin scope override behavior
+- optional hierarchy-aware resource-sharing rules for selected resources
 
-- AWCMS uses logical isolation on a shared database.
-- Tenant context is mandatory for all reads and writes.
-- RLS enforces isolation at the database layer.
-- Tenants can be nested up to 5 levels using `parent_tenant_id` and `hierarchy_path`.
-- Resource sharing is configurable per tenant via `tenant_resource_rules`.
+## Current Scope Layers
 
-## How It Works
+### Platform Scope
 
-### Admin Panel (React)
+- platform roles can operate across the system through approved platform paths
+- platform-wide visibility does not imply arbitrary client-side cross-tenant querying
+- platform-admin tenant override is an explicit feature, not a reason to remove tenant scoping from app code
 
-- Tenant context is resolved by domain in `awcms/src/contexts/TenantContext.jsx`.
-- Resolution calls RPC `get_tenant_by_domain` and sets `setGlobalTenantId()`.
-- Local development uses `VITE_DEV_TENANT_SLUG` to force a tenant.
-- `usePermissions()` exposes `tenantId` for permission-scoped operations.
+### Tenant Scope
 
-### Public Portal (Astro)
+- tenant scope applies to most business data and tenant-managed behavior
+- tenant-scoped tables should explicitly preserve tenant filtering in query code even when RLS is active
 
-- Static builds resolve tenant at build time using `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID` / `VITE_TENANT_ID`).
-- Tenant-specific routes are generated with `getStaticPaths` when needed.
-- Middleware-based resolution is reserved for SSR/runtime deployments.
+### Public Scope
 
-#### Smandapbun Variant
+- public scope is still tenant-aware where applicable
+- static public builds resolve tenant at build time
+- public Worker compatibility routes may resolve tenant by tenant id or domain depending on the route contract
 
-- `awcms-public/smandapbun` is a single-tenant static portal.
-- Tenant resolution is fixed at build time in `src/lib/api.ts`.
-- See `docs/tenancy/smandapbun.md` for tenant-specific behavior and migration status.
+## Current Admin Tenancy Model
 
-### Data Layer (Supabase)
+The admin app no longer uses a simplistic single-value tenant model.
 
-- `x-tenant-id` is injected into requests by the admin client, scoped public clients when needed, and Cloudflare Worker compatibility routes that need request-scoped tenant context.
-- SQL functions resolve tenant context through `current_tenant_id()`, which reads the authenticated `public.users` row first and falls back to `app.current_tenant_id` for request-scoped/public flows.
-- Hierarchy functions (`is_tenant_descendant`, `tenant_can_access_resource`) enforce shared vs isolated resources.
-- Public aggregates (e.g., `analytics_daily`) are readable only when scoped to the tenant id.
-- Build-time public tenant fallback order is implemented in `awcms-public/primary/src/lib/publicTenant.ts`.
-- Media objects use tenant-prefixed storage keys (`tenants/{tenant_id}/...`) and the admin media library now scopes listing/statistics to the active tenant even for platform admins; cross-tenant review requires switching tenant context first.
+Current admin behavior includes:
 
-## Implementation Details
+- hostname-based tenant resolution through `TenantContext`
+- a richer resolved tenant object
+- `currentTenant` vs `resolvedTenant` distinction
+- platform tenant-scope override behavior for platform users
+- tenant propagation through the global Supabase client header contract
 
-### Tenant Onboarding and Isolation (Benchmark-Ready)
+Admin changes should account for the active scoped tenant, not just a guessed global tenant id.
 
-#### Objective
+## Current Public Tenancy Model
 
-Provision a new tenant using a privileged, idempotent flow that seeds default roles/content and guarantees isolation via RLS from first use.
+### Static-First Public Builds
 
-#### Required Inputs
+Canonical public builds resolve tenant at build time using:
 
-| Field | Source | Required | Notes |
-| --- | --- | --- | --- |
-| `actor` | `auth.getUser()` | Yes | Must hold `platform.tenant.create` |
-| `name` | Onboarding payload | Yes | Human-readable tenant name |
-| `slug` | Onboarding payload | Yes | Unique tenant identifier |
-| `domain` | Onboarding payload | Conditional | Required for custom domain mode |
-| `admin_email` | Onboarding payload | Yes | Initial tenant admin invite |
-| `p_tier` | Onboarding payload | Optional | `free`/`pro`/`enterprise` |
-| `p_parent_tenant_id` | Onboarding payload | Optional | Hierarchy parent |
-| `role_inheritance_mode` | Onboarding payload | Optional | `auto` or `linked` |
+- `PUBLIC_TENANT_ID`
+- `VITE_PUBLIC_TENANT_ID`
+- `VITE_TENANT_ID`
 
-#### Workflow
+Static builds should fail closed when tenant identity is missing for a tenant-specific build.
 
-1. Authenticate caller and enforce `platform.tenant.create` before any writes.
-2. Normalize and uniqueness-check `slug`/`domain` for non-deleted tenants.
-3. Call `create_tenant_with_defaults()` using `SUPABASE_SECRET_KEY` and the current 6-argument hierarchy-aware signature.
-4. Invite the initial tenant admin via `auth.admin.inviteUserByEmail` with `tenant_id` metadata.
-5. Write an audit log entry with actor, tenant, and invite status.
-6. Verify isolation: cross-tenant read denies, default roles/pages exist, headers resolve tenant correctly.
-7. Return idempotent response on retries (409 on duplicate slug or 202 on invite failure).
-
-#### Reference Blueprint (Example Cloudflare Worker Route)
-
-> This is a benchmark-ready compatibility blueprint for the maintained Cloudflare Worker gateway in `awcms-edge/`.
-
-```ts
-// awcms-edge/src/index.ts
-import { Hono } from "hono";
-import { createClient } from "@supabase/supabase-js";
-
-const app = new Hono();
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Content-Type": "application/json",
-};
-
-app.post("/functions/v1/platform-tenant-onboard", async (c) => {
-  const req = c.req.raw;
-
-  const supabaseUrl = c.env.VITE_SUPABASE_URL ?? "";
-  const publishableKey = c.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
-  const secretKey = c.env.SUPABASE_SECRET_KEY ?? "";
-
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const caller = createClient(supabaseUrl, publishableKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const { data: authData } = await caller.auth.getUser();
-  if (!authData?.user) return c.json({ error: "Unauthorized" }, 401);
-
-  const { data: canCreate } = await caller.rpc("has_permission", {
-    permission_name: "platform.tenant.create",
-  });
-  if (!canCreate) return c.json({ error: "Forbidden" }, 403);
-
-  const payload = await req.json();
-  if (!payload?.name || !payload?.slug || !payload?.admin_email) {
-    return c.json({ error: "Missing required payload" }, 400);
-  }
-
-  const admin = createClient(supabaseUrl, secretKey);
-
-  const { data: existing } = await admin
-    .from("tenants")
-    .select("id")
-    .eq("slug", payload.slug)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (existing?.id) {
-    return c.json({ error: "Slug already exists", tenant_id: existing.id }, 409);
-  }
-
-  const { data: tenant, error: tenantError } = await admin.rpc("create_tenant_with_defaults", {
-    p_name: payload.name,
-    p_slug: payload.slug,
-    p_domain: payload.domain ?? null,
-    p_tier: payload.tier ?? "free",
-    p_parent_tenant_id: payload.parent_tenant_id ?? null,
-    p_role_inheritance_mode: payload.role_inheritance_mode ?? "auto",
-  });
-
-  if (tenantError || !tenant?.tenant_id) {
-    return c.json({ error: tenantError?.message ?? "Create tenant failed" }, 400);
-  }
-
-  const invite = await admin.auth.admin.inviteUserByEmail(payload.admin_email, {
-    data: { tenant_id: tenant.tenant_id, role: "admin" },
-  });
-
-  await admin.from("audit_logs").insert({
-    tenant_id: tenant.tenant_id,
-    user_id: authData.user.id,
-    action: "platform.tenant.create",
-    details: { slug: payload.slug, invite_status: invite.error ? "failed" : "sent" },
-  });
-
-  return new Response(JSON.stringify({
-    tenant_id: tenant.tenant_id,
-    invite_status: invite.error ? "failed" : "sent",
-  }), { status: invite.error ? 202 : 201, headers: corsHeaders });
-});
-```
-
-#### Reference Implementation (Database RPC)
-
-```sql
-CREATE OR REPLACE FUNCTION public.create_tenant_with_defaults(
-  p_name text,
-  p_slug text,
-  p_domain text DEFAULT NULL,
-  p_tier text DEFAULT 'free',
-  p_parent_tenant_id uuid DEFAULT NULL,
-  p_role_inheritance_mode text DEFAULT 'auto'
-) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
-DECLARE
-  v_tenant_id uuid;
-BEGIN
-  INSERT INTO public.tenants (name, slug, domain, subscription_tier, status, parent_tenant_id, role_inheritance_mode)
-  VALUES (p_name, p_slug, p_domain, p_tier, 'active', p_parent_tenant_id, p_role_inheritance_mode)
-  RETURNING id INTO v_tenant_id;
+### Public Worker-Mediated Tenancy
 
-  INSERT INTO public.roles (name, description, tenant_id, is_system, scope, is_tenant_admin)
-  VALUES ('admin', 'Tenant Administrator', v_tenant_id, true, 'tenant', true);
+Some public-compatible Worker routes now support guarded tenant resolution using:
 
-  INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
-  VALUES ('editor', 'Content Editor', v_tenant_id, true, 'tenant');
+- `tenantId`
+- `tenant_id`
+- `domain`
 
-  INSERT INTO public.roles (name, description, tenant_id, is_system, scope)
-  VALUES ('author', 'Content Author', v_tenant_id, true, 'tenant');
+When tenant and domain are both supplied, they must resolve to the same tenant.
 
-  PERFORM public.seed_staff_roles(v_tenant_id);
-  PERFORM public.seed_tenant_resource_rules(v_tenant_id);
-  PERFORM public.apply_tenant_role_inheritance(v_tenant_id);
+## Current Data-Layer Tenancy Model
 
-  INSERT INTO public.pages (tenant_id, title, slug, content, status, is_active, page_type, created_by)
-  VALUES (v_tenant_id, 'Home', 'home', '{"root":{"props":{"title":"Home"},"children":[]}}', 'published', true, 'homepage', (SELECT auth.uid()));
+### SQL Resolution
 
-  INSERT INTO public.menus (tenant_id, name, label, url, group_label, is_active, is_public, "order")
-  VALUES (v_tenant_id, 'home', 'Home', '/', 'header', true, true, 1);
+`current_tenant_id()` is the current SQL-side tenant resolver.
 
-  RETURN jsonb_build_object('tenant_id', v_tenant_id, 'message', 'Tenant created with default data.');
-END;
-$$;
-```
+It matters for:
 
-#### Validation Checklist
+- authenticated user flows
+- request-scoped/public flows that use approved tenant context propagation
+- RLS enforcement on tenant-scoped tables
 
-- New tenant has default roles (`admin`, `editor`, `author`) and baseline pages/menus.
-- `x-tenant-id` resolves and `current_tenant_id()` returns the new tenant.
-- Cross-tenant reads are denied by RLS.
-- Invite email includes `tenant_id` metadata for first-login role assignment.
+### Hierarchy And Resource Sharing
 
-#### Failure Modes and Guardrails
+AWCMS still supports hierarchy-aware tenancy and selective resource sharing.
 
-- Invite fails after tenant creation: return 202 with retry guidance and audit log.
-- Duplicate slug/domain: return 409 and do not re-create tenant.
-- Missing tenant header: deny reads/writes until resolved.
-- Non-admin caller: 403 with audit entry.
+Current concepts include:
 
----
+- `parent_tenant_id`
+- hierarchy depth limits
+- `is_tenant_descendant(...)`
+- `tenant_can_access_resource(...)`
+- `tenant_resource_rules` and related registry/rule tables for shared-vs-isolated behavior
 
-### Admin Portal Context
+Not all resources are shared equally.
 
-- Uses subdomain resolution or path prefixes (e.g. `awcms.test/dinkes`).
-- The tenant ID is intercepted globally via React Context. All subsequent Supabase calls in `customSupabaseClient.js` attach `headers: { "x-tenant-id": activeTenantId }`.
+## Current Shared Vs Isolated Resource Model
 
-### Public Portal Context
+Directionally, current behavior remains:
 
-- Uses static output by default; SSR/runtime behavior is non-canonical unless explicitly enabled.
-- Loads context via `PUBLIC_TENANT_ID`.
-- Passes the resolved identifier dynamically into Supabase client instantiation `createClientFromEnv()`.
+- shared/configurable-by-rule resources: selected settings/branding/module-style surfaces
+- isolated-by-default resources: users, content, media, commerce, and other core tenant-owned business data
 
-### Data Layer Security Notes
+Do not generalize one resource-sharing rule across unrelated table groups without checking the current migrations and runtime behavior.
 
-- Privileged server-side edge handlers are required for cross-tenant data operations (for example, Super Administrators managing global tenants).
-- Direct client SQL queries are automatically blocked or clipped to the scope of `current_tenant_id()`.
-- **Shared by default**: `settings`, `branding`, `modules` (descendants). Tenant admins and full-access roles have read/write access across levels based on `tenant_resource_rules`.
-- **Isolated by default**: `content` (blogs, pages), `media` (`media_objects`, `media_upload_sessions`), `users`, and `orders`. These resources are strictly scoped to a single `tenant_id`.
-- **Rules Storage**: Configured in `tenant_resource_registry` and enforced via `tenant_resource_rules`.
+## Current Tenant Onboarding Model
 
-## Security and Compliance Notes
+Tenant onboarding remains a privileged flow.
 
-### Row Level Security (RLS)
+Current expectations include:
 
-- **Strict Enforcement**: RLS is mandatory for all tables.
-- **Bypass Prohibition**: Client-side code must NEVER bypass RLS. Elevation is restricted to server-side `SUPABASE_SECRET_KEY` paths in Cloudflare Workers or trusted operational scripts.
+- privileged caller auth and permission check
+- uniqueness checks for slug/domain
+- hierarchy-aware `create_tenant_with_defaults(...)` usage
+- initial role/bootstrap seeding
+- audit logging
+- idempotent error handling around duplicate or partial-failure states
 
-### Data Lifecycle (Soft Delete)
+Treat onboarding as a platform-managed operational flow, not a generic browser-side insert pattern.
 
-- **Mechanism**: All tenant-scoped tables must use the "Soft Delete" pattern.
-- **Schema Requirement**: Tables must include a `deleted_at` (TIMESTAMPTZ, nullable) column.
-- **Operations**:
-  - **Delete**: Implemented as `UPDATE table SET deleted_at = NOW() ...`.
-  - **Read**: Queries must explicitly filter `.is('deleted_at', null)`.
-- **Foreign Keys**: Prefer `ON DELETE RESTRICT` or `SET NULL` for business-owned records. `ON DELETE CASCADE` is acceptable for bridge/join rows or explicitly disposable associations where audit history is preserved elsewhere.
+## Current Media And Storage Tenancy Rules
 
-### Query Requirements
+- media metadata remains tenant-owned in Postgres
+- storage keys remain tenant-prefixed
+- public media is served through guarded Worker routes
+- protected/session-bound media is not part of the public object namespace
+- admin media library behavior is now tenant-scoped even for platform users unless they intentionally switch tenant scope
 
-- **Tenant Filter**: All queries must include `.eq('tenant_id', tenantId)` even if RLS is enabled, to ensure query planner optimization and leak prevention.
-- **Cross-Tenant Access**: Allowed only for resources marked as shared in the registry.
+## Current Query Rules
 
-## Operational Concerns
+When writing tenant-aware code, current best practice remains:
 
-- Tenant domains are configured in the `tenants` table (host/subdomain fields).
-- New tenant creation seeds default roles, staff hierarchy, and resource rules via SQL/RPC.
-- Tenant-scoped feature flags and structured settings remain isolated through `tenant_id` and `deleted_at IS NULL` constraints in the shared `settings` store.
+- explicitly filter by tenant where the surface is tenant-scoped
+- explicitly filter `deleted_at IS NULL` for normal reads
+- explicitly filter public reads to published state where relevant
+- do not assume Worker/admin/public code can loosen query scope because RLS exists
 
-## Troubleshooting
+## Security Notes
 
-- 404 on public portal: confirm `PUBLIC_TENANT_ID` and build-time `getStaticPaths` output.
-- Missing data in admin: verify `setGlobalTenantId()` and Supabase headers.
+- RLS is mandatory
+- client-side RLS bypass is forbidden
+- privileged cross-tenant work belongs only in approved server-side paths using `SUPABASE_SECRET_KEY`
+- public route tenant/domain guardrails are part of the tenancy model now, not just edge-route implementation detail
 
-## References
+## Validation Guidance
 
-- `docs/tenancy/supabase.md`
-- `docs/security/rls.md`
-- `docs/security/abac.md`
+| Surface | Validation |
+| --- | --- |
+| maintained docs | `cd awcms && npm run docs:check` |
+| Worker/public tenancy contract changes | `cd awcms-edge && npm test && npm run typecheck` |
+| migration/tenant-rule changes | `scripts/verify_supabase_migration_consistency.sh` plus relevant migration validation |
+
+## Related Docs
+
+- [docs/tenancy/supabase.md](./supabase.md)
+- [docs/security/rls.md](../security/rls.md)
+- [docs/security/abac.md](../security/abac.md)
+- [docs/dev/admin.md](../dev/admin.md)
+- [docs/dev/public.md](../dev/public.md)
+- [docs/architecture/runtime-boundaries.md](../architecture/runtime-boundaries.md)
