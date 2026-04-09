@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import UserApprovalManager from '@/components/dashboard/UserApprovalManager';
-import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
+import { PageTabs, TabsContent } from '@/templates/emdash-admin';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { udm } from '@/lib/data/UnifiedDataManager';
@@ -404,8 +404,8 @@ function UsersManager() {
           <li className="inline-flex items-center gap-1.5">
             <div
               className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors ${activeTab === 'approvals'
-                ? 'cursor-pointer bg-muted text-muted-foreground hover:bg-muted/80'
-                : 'bg-primary text-primary-foreground shadow-sm'
+                ? 'cursor-pointer border border-slate-900/10 bg-white/75 text-muted-foreground hover:bg-white dark:border-white/10 dark:bg-slate-900/55'
+                : 'bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950'
                 }`}
               onClick={activeTab === 'approvals' ? () => navigate('/cmspanel/users', { replace: true }) : undefined}
             >
@@ -416,7 +416,7 @@ function UsersManager() {
             <>
               <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
               <li className="inline-flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                <div className="flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1 font-medium text-white shadow-sm dark:bg-white dark:text-slate-950">
                   <span>{t('users.breadcrumbs.approvals')}</span>
                 </div>
               </li>
@@ -455,22 +455,22 @@ function UsersManager() {
           {canView ? (
             <>
               {isPlatformAdmin ? (
-                <div className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
+                <div className="emdash-panel space-y-4 p-5">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                       <h3 className="text-lg font-semibold text-foreground">{t('roles.platform_cards_title', 'Platform-Scope Role Card Management')}</h3>
                       <p className="text-sm text-muted-foreground">{t('roles.platform_cards_desc', 'Platform-owned user access and privileged assignments stay visible here above the tenant-dependent user management section so global role governance remains independent of active tenant filtering.')}</p>
                     </div>
-                    <div className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                    <div className="inline-flex items-center rounded-full border border-slate-900/10 bg-white/78 px-3 py-1.5 text-xs font-medium text-muted-foreground dark:border-white/10 dark:bg-slate-950/45">
                       {platformRolesTotal} {t('roles.platform_scope_count', 'platform-scope roles')}
                     </div>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {platformRolesLoading ? Array.from({ length: platformRolesPerPage }).map((_, index) => (
-                      <div key={index} className="h-44 animate-pulse rounded-2xl border border-border/60 bg-muted/40" />
+                      <div key={index} className="h-44 animate-pulse rounded-[1.5rem] border border-border/60 bg-muted/40" />
                     )) : platformRoles.map((role) => (
-                      <div key={role.id} className="rounded-2xl border border-border/60 bg-background/90 p-4 shadow-sm">
+                      <div key={role.id} className="rounded-[1.5rem] border border-slate-900/10 bg-white/84 p-4 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-slate-950/45">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-foreground">{role.name || '-'}</p>
@@ -500,7 +500,7 @@ function UsersManager() {
                         <div className="mt-4 flex items-center justify-between gap-2">
                           <span className="text-[11px] text-muted-foreground">{t('common.created', 'Created')} {role.created_at ? new Date(role.created_at).toLocaleDateString() : '-'}</span>
                           {canEdit ? (
-                            <Button size="sm" variant="outline" className="rounded-xl" onClick={() => navigate('/cmspanel/roles')}>
+                            <Button size="sm" variant="outline" className="rounded-2xl" onClick={() => navigate('/cmspanel/roles')}>
                               {t('common.edit', 'Edit')}
                             </Button>
                           ) : null}

@@ -308,8 +308,8 @@ function BlogsManager() {
           <li className="inline-flex items-center gap-1.5">
             <div
               className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors ${(activeTab !== 'blogs' || activeView)
-                ? 'cursor-pointer bg-muted text-muted-foreground hover:bg-muted/80'
-                : 'bg-primary text-primary-foreground shadow-sm'
+                ? 'cursor-pointer border border-slate-900/10 bg-white/75 text-muted-foreground hover:bg-white dark:border-white/10 dark:bg-slate-900/55'
+                : 'bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950'
                 }`}
               onClick={(activeTab !== 'blogs' || activeView) ? () => navigate('/cmspanel/blogs', { replace: true }) : undefined}
             >
@@ -320,7 +320,7 @@ function BlogsManager() {
             <>
               <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
               <li className="inline-flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                <div className="flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1 font-medium text-white shadow-sm dark:bg-white dark:text-slate-950">
                   <span>{t('common.review_queue', 'Review Queue')}</span>
                 </div>
               </li>
@@ -340,7 +340,7 @@ function BlogsManager() {
             <>
               <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
               <li className="inline-flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                <div className="flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1 font-medium text-white shadow-sm dark:bg-white dark:text-slate-950">
                   <span>{t('menu.categories')}</span>
                 </div>
               </li>
@@ -350,7 +350,7 @@ function BlogsManager() {
             <>
               <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
               <li className="inline-flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                <div className="flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1 font-medium text-white shadow-sm dark:bg-white dark:text-slate-950">
                   <span>{t('menu.tags')}</span>
                 </div>
               </li>

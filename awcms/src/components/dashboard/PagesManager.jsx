@@ -322,8 +322,8 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
             <li className="inline-flex items-center gap-1.5">
               <div
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition-colors ${((activeTab !== 'pages') || isTrashView)
-                  ? 'cursor-pointer bg-muted text-muted-foreground hover:bg-muted/80'
-                  : 'bg-primary text-primary-foreground shadow-sm'
+                  ? 'cursor-pointer border border-slate-900/10 bg-white/75 text-muted-foreground hover:bg-white dark:border-white/10 dark:bg-slate-900/55'
+                  : 'bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950'
                   }`}
                 onClick={(activeTab !== 'pages' || isTrashView) ? () => navigate('/cmspanel/pages', { replace: true }) : undefined}
               >
@@ -344,7 +344,7 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
               <>
                 <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
                 <li className="inline-flex items-center gap-1.5">
-                  <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                  <div className="flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1 font-medium text-white shadow-sm dark:bg-white dark:text-slate-950">
                     <span>{t('pages.breadcrumbs.categories')}</span>
                   </div>
                 </li>
@@ -354,7 +354,7 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
               <>
                 <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
                 <li className="inline-flex items-center gap-1.5">
-                  <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                  <div className="flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1 font-medium text-white shadow-sm dark:bg-white dark:text-slate-950">
                     <span>{t('pages.tabs.tags') || 'Tags'}</span>
                   </div>
                 </li>
@@ -397,22 +397,22 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
       )}
 
       {!embedded && !onlyVisual && activeTab === 'pages' && isPlatformAdmin ? (
-        <div className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
+        <div className="emdash-panel space-y-4 p-5">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-foreground">Platform-Scope Page Cards</h3>
               <p className="text-sm text-muted-foreground">Global pages remain manageable here even when the tenant-dependent pages section below is scoped to the active tenant.</p>
             </div>
-            <div className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+            <div className="inline-flex items-center rounded-full border border-slate-900/10 bg-white/78 px-3 py-1.5 text-xs font-medium text-muted-foreground dark:border-white/10 dark:bg-slate-950/45">
               {platformPagesTotal} platform-scope pages
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {platformPagesLoading ? Array.from({ length: platformPagesPerPage }).map((_, index) => (
-              <div key={index} className="h-44 animate-pulse rounded-2xl border border-border/60 bg-muted/40" />
+              <div key={index} className="h-44 animate-pulse rounded-[1.5rem] border border-border/60 bg-muted/40" />
             )) : platformPages.map((page) => (
-              <div key={page.id} className="rounded-2xl border border-border/60 bg-background/90 p-4 shadow-sm">
+              <div key={page.id} className="rounded-[1.5rem] border border-slate-900/10 bg-white/84 p-4 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-slate-950/45">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">{page.title || '-'}</p>

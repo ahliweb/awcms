@@ -158,22 +158,22 @@ function RolesManager() {
       />
 
       {isPlatformAdmin ? (
-        <div className="space-y-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
+        <div className="emdash-panel space-y-4 p-5">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-foreground">{t('roles.platform_cards_heading', 'Platform-Scope Role Cards')}</h3>
               <p className="text-sm text-muted-foreground">{t('roles.platform_cards_hint', 'Global and privileged roles stay available here even when tenant-dependent role management is scoped to the current tenant.')}</p>
             </div>
-            <div className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+            <div className="inline-flex items-center rounded-full border border-slate-900/10 bg-white/78 px-3 py-1.5 text-xs font-medium text-muted-foreground dark:border-white/10 dark:bg-slate-950/45">
               {platformRolesTotal} {t('roles.platform_scope_count', 'platform-scope roles')}
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {platformRolesLoading ? Array.from({ length: platformRolesPerPage }).map((_, index) => (
-              <div key={index} className="h-44 animate-pulse rounded-2xl border border-border/60 bg-muted/40" />
+              <div key={index} className="h-44 animate-pulse rounded-[1.5rem] border border-border/60 bg-muted/40" />
             )) : platformRoles.map((role) => (
-              <div key={role.id} className="rounded-2xl border border-border/60 bg-background/90 p-4 shadow-sm">
+              <div key={role.id} className="rounded-[1.5rem] border border-slate-900/10 bg-white/84 p-4 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-slate-950/45">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">{role.name}</p>
@@ -202,7 +202,7 @@ function RolesManager() {
 
                 <div className="mt-4 flex items-center justify-between gap-2">
                   <span className="text-[11px] text-muted-foreground">{t('common.created', 'Created')} {role.created_at ? new Date(role.created_at).toLocaleDateString() : '-'}</span>
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => handleOpenRole(role)}>
+                  <Button size="sm" variant="outline" className="rounded-2xl" onClick={() => handleOpenRole(role)}>
                     {t('common.edit', 'Edit')}
                   </Button>
                 </div>
