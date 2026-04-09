@@ -28,7 +28,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 | Directory | Description | Tech Stack |
 | --- | --- | --- |
 | `awcms/` | Admin Panel | React 19.2.4, Vite `^8.0.5`, Supabase |
-| `awcms-public/primary/` | Public Portal | Astro 6.0.8 (static), React 19.2.4 |
+| `awcms-public/primary/` | Public Portal | Astro 6.1.4 (static), React 19.2.4 |
 | `awcms-mobile/primary/` | Mobile App | Flutter 3.38.5 |
 | `awcms-esp32/primary/` | IoT Firmware | ESP32, PlatformIO |
 | `awcms-ext/` | External Extensions | JavaScript modules |
@@ -42,7 +42,7 @@ This repository follows a strict documentation hierarchy aligned with the **Cont
 
 - **React**: 19.2.4 (Admin + Public)
 - **Vite**: `^8.0.5` (Admin direct; public Astro workspaces align to Vite 8 through overrides)
-- **Astro**: `6.0.8` (Primary Public + SMANDAPBUN) - *Requires Node.js >=24.14.1*
+- **Astro**: `6.1.4` in `awcms-public/primary/` and `6.0.8` in `awcms-public/smandapbun/` - *Requires Node.js >=24.14.1*
 - **TailwindCSS**: `^4.2.2` (Admin + Public)
 - **Supabase JS**: `^2.99.3` (Admin + Public)
 - **React Router DOM**: 7.10.1
@@ -55,7 +55,7 @@ Notes:
 
 - `awcms/`, `awcms-public/primary/`, `awcms-public/smandapbun/`, and `awcms-edge/` currently declare `@supabase/supabase-js` `^2.99.3`.
 - `awcms/` currently declares `framer-motion` `^12.38.0`, `i18next` `^25.10.3`, and `tailwindcss` `^4.2.2`.
-- `awcms-public/primary/` and `awcms-public/smandapbun/` currently pin Astro `6.0.8`.
+- `awcms-public/primary/` currently pins Astro `6.1.4` and `awcms-public/smandapbun/` currently pins Astro `6.0.8`.
 
 ## Runtime Architecture
 

@@ -16,7 +16,7 @@ Current AWCMS-specific operator coverage includes:
 
 ## Prerequisites
 
-- Node.js >= 22.12.0
+- Node.js >= 24.14.1
 - npm 10+
 
 ## Quick Start

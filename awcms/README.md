@@ -16,7 +16,7 @@ Manage tenant content, users, templates, configuration, and IoT/Mobile devices.
 
 ## Prerequisites
 
-* Node.js >= 22.12.0
+* Node.js >= 24.14.1
 * npm 10+
 
 ## Quick Start

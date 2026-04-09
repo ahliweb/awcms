@@ -8,7 +8,7 @@ Tenant-specific public portal package for SMAN 2 Pangkalan Bun, built with Astro
 - React 19.2.4
 - Tailwind CSS ^4.2.2
 - Supabase JS ^2.99.3
-- Node.js >= 22.12.0
+- Node.js >= 24.14.1
 
 ## Quick Start
 
