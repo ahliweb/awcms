@@ -1,60 +1,66 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Versioning System
 
 ## Purpose
 
-Define how AWCMS versions are managed across code and documentation.
+Describe the current versioning model for AWCMS modules/workspaces and how versioned package/application releases relate to module-level documentation.
 
-## Audience
+This module doc is intentionally concise. The primary strategic detail now lives in [docs/dev/versioning.md](../dev/versioning.md).
 
-- Release managers
-- Maintainers updating versions
+## Current Versioning Model
 
-## Prerequisites
+AWCMS is currently a multi-workspace monorepo with independently versioned maintained applications and packages.
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for versioning standards
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `CHANGELOG.md`
+Current important rules:
 
-## Core Concepts
+- package manifests are the canonical version source for each workspace
+- the root `CHANGELOG.md` remains the canonical project-wide release history
+- versioning should remain SemVer-based
+- not every doc/module change implies every workspace version must move together
 
-- AWCMS follows Semantic Versioning.
-- Package manifests are the canonical release/version source for each maintained workspace.
-- `awcms/src/lib/version.js` is a UI/version-display helper for the admin panel.
-- If `version.js` is still used in a release path, update it intentionally after bumping the relevant package manifest.
-- Documentation-only releases should use a patch bump.
-- `awcms-public/primary/package.json` tracks the public portal template version and may differ from the admin version.
-- If `version.js` drifts from `package.json`, the UI will display a stale version.
+## Current Canonical Version Sources
 
-## How It Works
+Representative current sources include:
 
-### Version Format
+- `awcms/package.json`
+- `awcms-public/*/package.json`
+- `awcms-edge/package.json`
+- `awcms-mcp/package.json`
+- `packages/awcms-shared/package.json`
+- mobile/firmware equivalents in their respective workspace metadata files
 
-```text
-MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
-```
+`awcms/src/lib/version.js` may still matter for admin UI display paths and should not drift from the intended surfaced version where it is still used.
 
-### Source Files
+## Current SemVer Guidance
 
-| File | Purpose |
+- `MAJOR` for breaking changes
+- `MINOR` for backward-compatible features
+- `PATCH` for backward-compatible fixes and narrow maintenance changes
+
+Current important note:
+
+- documentation-only changes may justify a patch bump when they ship as a release-relevant artifact, but they do not automatically require every workspace to version-bump together
+
+## Current Module-Level Versioning Implication
+
+For module docs and module-level features:
+
+- treat module changes as part of the owning workspace release unless the module is shipped independently as its own package/runtime surface
+- keep release notes/changelog entries aligned with the actual workspace(s) affected
+
+## Current Validation Guidance
+
+| Surface | Validation |
 | --- | --- |
-| `awcms/package.json` | Canonical Admin package version |
-| `awcms-public/*/package.json` | Canonical public-portal package versions |
-| `awcms-mcp/package.json` / other workspace manifests | Canonical package versions for those workspaces |
-| `awcms/src/lib/version.js` | Admin UI display helper (keep aligned when used) |
-| `CHANGELOG.md` | Release history |
+| maintained docs | `cd awcms && npm run docs:check` |
+| release/versioning workflow detail | use the current guidance in `docs/dev/versioning.md` |
 
-## Implementation Patterns
+## Related Docs
 
-```javascript
-import { getVersionInfo, getDisplayVersion } from '@/lib/version';
-```
-
-## Security and Compliance Notes
-
-- Version bumps are required for documented changes in releases.
-
-## References
-
-- `../../CHANGELOG.md`
+- [docs/dev/versioning.md](../dev/versioning.md)
+- [../../CHANGELOG.md](../../CHANGELOG.md)
