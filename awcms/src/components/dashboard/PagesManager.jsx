@@ -37,7 +37,7 @@ function PagesManager({ onlyVisual = false, embedded = false }) {
   const [platformPagesPage, setPlatformPagesPage] = useState(1);
   const [platformPagesPerPage, setPlatformPagesPerPage] = useState(6);
   const [platformPagesTotal, setPlatformPagesTotal] = useState(0);
-  const canView = hasPermission(onlyVisual ? 'tenant.visual_pages.read' : 'tenant.pages.read');
+  const canView = hasPermission(onlyVisual ? 'tenant.visual_pages.read' : 'tenant.page.read');
   const platformPagesTotalPages = Math.max(1, Math.ceil(platformPagesTotal / platformPagesPerPage));
 
   // Tab definitions

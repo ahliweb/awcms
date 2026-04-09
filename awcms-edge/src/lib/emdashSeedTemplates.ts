@@ -479,8 +479,225 @@ const normalizePageTemplate = (input: unknown, templateSlug: string, widgetAreas
   }
 }
 
+const escapeHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+const portableTextBlocksToHtml = (value: unknown) => {
+  if (!Array.isArray(value)) return ''
+
+  return value
+    .map((block) => {
+      if (!isRecord(block)) return ''
+      const children = Array.isArray(block.children) ? block.children : []
+      const text = children
+        .map((child) => (isRecord(child) ? asString(child.text) : ''))
+        .join('')
+        .trim()
+
+      if (!text) return ''
+
+      const escaped = escapeHtml(text)
+      const style = asString(block.style, 'normal')
+      if (style === 'h1' || style === 'h2' || style === 'h3' || style === 'h4') {
+        return `<${style}>${escaped}</${style}>`
+      }
+
+      return `<p>${escaped}</p>`
+    })
+    .filter(Boolean)
+    .join('')
+}
+
+const resolveMediaUrl = (value: unknown) => {
+  if (typeof value === 'string') return value
+  if (!isRecord(value)) return null
+  if (typeof value.url === 'string') return value.url
+  if (isRecord(value.$media) && typeof value.$media.url === 'string') return value.$media.url
+  return null
+}
+
+const normalizeNativeWidgetArea = (input: unknown, index: number): EmdashSeedWidgetArea | null => {
+  if (!isRecord(input)) return null
+  const slug = slugifySeedValue(asString(input.slug || input.name || input.label, `widget-area-${index}`), `widget-area-${index}`)
+  const widgets = (Array.isArray(input.widgets) ? input.widgets : [])
+    .map((widget, widgetIndex) => {
+      if (!isRecord(widget)) return null
+      const componentId = asString(widget.componentId)
+      return normalizeWidget({
+        sourceId: `widget:${slug}:${widgetIndex}`,
+        name: asString(widget.title || widget.name, componentId || 'widget'),
+        componentId,
+        type: componentId ? undefined : asString(widget.type),
+        order: widgetIndex,
+        showTitle: typeof widget.title === 'string' ? true : asBoolean(widget.showTitle, true),
+        content: typeof widget.content === 'string' ? widget.content : Array.isArray(widget.content) ? portableTextBlocksToHtml(widget.content) : null,
+        config: toRecord(widget.settings),
+        rawPayload: widget,
+      }, widgetIndex)
+    })
+    .filter(Boolean) as EmdashSeedWidget[]
+
+  return {
+    sourceId: asString(input.sourceId, `widget-area:${slug}`),
+    slug,
+    name: asString(input.label || input.name, slug),
+    widgets,
+    rawPayload: toRecord(input.rawPayload, input),
+  }
+}
+
+const normalizeNativeBlogPost = (input: unknown, index: number): EmdashSeedBlog | null => {
+  if (!isRecord(input) || !isRecord(input.data)) return null
+  const title = asString(input.data.title, `Imported Blog ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `imported-blog-${index + 1}`)
+  return {
+    sourceId: asString(input.id, `blog:${slug}`),
+    title,
+    slug,
+    excerpt: asString(input.data.excerpt),
+    content: portableTextBlocksToHtml(input.data.content),
+    featuredImage: resolveMediaUrl(input.data.featured_image),
+    rawPayload: input,
+  }
+}
+
+const normalizeNativeMarketingPage = (input: unknown, index: number): EmdashMarketingPage | null => {
+  if (!isRecord(input) || !isRecord(input.data)) return null
+  const title = asString(input.data.title, `Marketing Page ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `marketing-page-${index + 1}`)
+  return {
+    sourceId: asString(input.id, `marketing-page:${slug}`),
+    title,
+    slug,
+    excerpt: asString(input.data.excerpt),
+    content: {
+      source: 'emdash_native',
+      blocks: Array.isArray(input.data.content) ? input.data.content : [],
+    },
+    rawPayload: input,
+  }
+}
+
+const normalizeNativeMarketingServiceFromFeature = (input: unknown, index: number): EmdashMarketingService | null => {
+  if (!isRecord(input)) return null
+  const title = asString(input.title, `Service ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `service-${index + 1}`)
+  return {
+    sourceId: asString(input.id, `service:${slug}`),
+    title,
+    slug,
+    description: asString(input.description),
+    icon: asOptionalString(input.icon),
+    image: asOptionalString(input.image),
+    link: asOptionalString(input.link),
+    displayOrder: index,
+    rawPayload: input,
+  }
+}
+
+const normalizeNativeMarketingTestimonyFromBlock = (input: unknown, index: number): EmdashMarketingTestimony | null => {
+  if (!isRecord(input)) return null
+  const title = asString(input.title || input.author || input.company, `Testimony ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `testimony-${index + 1}`)
+  return {
+    sourceId: asString(input.id, `testimony:${slug}`),
+    title,
+    slug,
+    content: asString(input.content || input.quote),
+    authorName: asString(input.authorName || input.author),
+    authorPosition: [asString(input.authorPosition || input.role), asString(input.company)].filter(Boolean).join(' - '),
+    authorImage: asOptionalString(input.authorImage || input.image),
+    rating: typeof input.rating === 'number' ? input.rating : null,
+    rawPayload: input,
+  }
+}
+
+const normalizeNativePortfolioItem = (input: unknown, index: number): EmdashPortfolioItem | null => {
+  if (!isRecord(input) || !isRecord(input.data)) return null
+  const title = asString(input.data.title, `Portfolio Item ${index + 1}`)
+  const slug = slugifySeedValue(asString(input.slug, title), `portfolio-item-${index + 1}`)
+  const featuredImage = resolveMediaUrl(input.data.featured_image)
+  const gallery = Array.isArray(input.data.gallery) ? input.data.gallery : []
+  const images = [featuredImage, ...gallery.map(resolveMediaUrl)].filter(Boolean)
+  return {
+    sourceId: asString(input.id, `portfolio:${slug}`),
+    title,
+    slug,
+    description: asString(input.data.summary),
+    client: asString(input.data.client),
+    projectDate: asOptionalString(input.data.project_date || input.data.year),
+    images,
+    tags: isRecord(input.taxonomies) ? (input.taxonomies.tag ?? []) : [],
+    rawPayload: input,
+  }
+}
+
+const normalizeNativeEmdashSeedTemplate = (input: JsonRecord, fallbackTemplateSlug: string): EmdashSeedTemplate | null => {
+  const hasNativeShape = typeof input.version === 'string'
+    && Array.isArray(input.collections)
+    && (Array.isArray(input.widgetAreas) || isRecord(input.content) || Array.isArray(input.taxonomies))
+
+  if (!hasNativeShape) return null
+
+  const templateSlug = fallbackTemplateSlug || 'blog'
+  const contentRoot = isRecord(input.content) ? input.content : {}
+  const widgetAreas = (Array.isArray(input.widgetAreas) ? input.widgetAreas : [])
+    .map((area, index) => normalizeNativeWidgetArea(area, index))
+    .filter(Boolean) as EmdashSeedWidgetArea[]
+  const blogs = (Array.isArray(contentRoot.posts) ? contentRoot.posts : [])
+    .map((post, index) => normalizeNativeBlogPost(post, index))
+    .filter(Boolean) as EmdashSeedBlog[]
+  const nativePages = (Array.isArray(contentRoot.pages) ? contentRoot.pages : []).filter(isRecord) as JsonRecord[]
+  const marketingPages = nativePages
+    .map((page, index) => normalizeNativeMarketingPage(page, index))
+    .filter(Boolean) as EmdashMarketingPage[]
+
+  const homePage = nativePages.find((page) => asString(page.slug) === 'home') || nativePages[0] || null
+  const homePageData = homePage && isRecord(homePage.data) ? homePage.data : null
+  const homePageBlocks = homePageData && Array.isArray(homePageData.content) ? homePageData.content : []
+  const featureBlock = homePageBlocks.find((block) => isRecord(block) && asString(block._type) === 'marketing.features')
+  const testimonialBlock = homePageBlocks.find((block) => isRecord(block) && asString(block._type) === 'marketing.testimonials')
+
+  const marketingServices = (isRecord(featureBlock) && Array.isArray(featureBlock.features) ? featureBlock.features : [])
+    .map((feature, index) => normalizeNativeMarketingServiceFromFeature(feature, index))
+    .filter(Boolean) as EmdashMarketingService[]
+  const marketingTestimonies = (isRecord(testimonialBlock) && Array.isArray(testimonialBlock.testimonials) ? testimonialBlock.testimonials : [])
+    .map((testimonial, index) => normalizeNativeMarketingTestimonyFromBlock(testimonial, index))
+    .filter(Boolean) as EmdashMarketingTestimony[]
+  const portfolioItems = (Array.isArray(contentRoot.projects) ? contentRoot.projects : [])
+    .map((item, index) => normalizeNativePortfolioItem(item, index))
+    .filter(Boolean) as EmdashPortfolioItem[]
+
+  const seed = {
+    sourceKey: `${templateSlug}:native-seed`,
+    sourceVersion: asString(input.version, '1'),
+    templateSlug,
+    pageTemplate: normalizePageTemplate(null, templateSlug, widgetAreas),
+    blogs,
+    widgetAreas,
+    marketing: {
+      pages: templateSlug === 'marketing' ? marketingPages : [],
+      services: templateSlug === 'marketing' ? marketingServices : [],
+      team: [],
+      testimonies: templateSlug === 'marketing' ? marketingTestimonies : [],
+    },
+    portfolio: {
+      items: templateSlug === 'portfolio' ? portfolioItems : [],
+    },
+  } satisfies EmdashSeedTemplate
+
+  return seed
+}
+
 const normalizeSeedTemplate = (input: unknown, fallbackTemplateSlug: string): EmdashSeedTemplate | null => {
   if (!isRecord(input)) return null
+
+  const nativeTemplate = normalizeNativeEmdashSeedTemplate(input, fallbackTemplateSlug)
+  if (nativeTemplate) return nativeTemplate
 
   const templateRoot = isRecord(input.seed)
     ? input.seed
@@ -581,14 +798,14 @@ const isLikelyLocalPath = (locator: string) => {
   return /^[A-Za-z]:[\\/]/.test(locator)
 }
 
-const readLocalSeedFile = async (locator: string) => {
+const resolveLocalSeedPath = async (locator: string, templateSlug: string) => {
   const runtimeProcess = (globalThis as typeof globalThis & { process?: ProcessLike }).process
   const cwd = typeof runtimeProcess?.cwd === 'function' ? runtimeProcess.cwd() : null
   if (!cwd) {
     throw new Error('Local file-path seed locators require a Node-compatible runtime with process.cwd()')
   }
 
-  const [{ readFile }, pathModule, urlModule] = await Promise.all([
+  const [{ stat, access }, pathModule, urlModule] = await Promise.all([
     (0, eval)("import('node:fs/promises')"),
     (0, eval)("import('node:path')"),
     (0, eval)("import('node:url')"),
@@ -597,6 +814,46 @@ const readLocalSeedFile = async (locator: string) => {
   const resolvedPath = locator.startsWith('file://')
     ? urlModule.fileURLToPath(locator)
     : pathModule.resolve(cwd, locator)
+
+  const pathStat = await stat(resolvedPath)
+  if (pathStat.isFile()) {
+    return resolvedPath
+  }
+
+  if (!pathStat.isDirectory()) {
+    throw new Error(`Unsupported local EmDash sourceLocator: ${resolvedPath}`)
+  }
+
+  const candidates = [
+    pathModule.join(resolvedPath, 'templates', templateSlug, 'seed', 'seed.json'),
+    pathModule.join(resolvedPath, 'templates', `${templateSlug}-cloudflare`, 'seed', 'seed.json'),
+    pathModule.join(resolvedPath, 'demos', 'simple', 'seed', 'seed.json'),
+    pathModule.join(resolvedPath, 'demos', 'playground', 'seed', 'seed.json'),
+    pathModule.join(resolvedPath, 'demos', 'cloudflare', 'seed', 'seed.json'),
+    pathModule.join(resolvedPath, 'seed', 'seed.json'),
+    pathModule.join(resolvedPath, '.emdash', 'seed.json'),
+    pathModule.join(resolvedPath, 'e2e', 'fixture', '.emdash', 'seed.json'),
+    pathModule.join(resolvedPath, 'packages', 'core', 'tests', 'integration', 'fixture', '.emdash', 'seed.json'),
+  ]
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate)
+      return candidate
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error(`No compatible EmDash seed.json was found for template ${templateSlug} under ${resolvedPath}`)
+}
+
+const readLocalSeedFile = async (locator: string, templateSlug: string) => {
+  const [{ readFile }] = await Promise.all([
+    (0, eval)("import('node:fs/promises')"),
+  ])
+
+  const resolvedPath = await resolveLocalSeedPath(locator, templateSlug)
 
   return readFile(resolvedPath, 'utf8')
 }
@@ -609,10 +866,10 @@ export const loadEmdashExternalSeedTemplate = async (params: {
   if (!locator) return null
 
   if (isLikelyLocalPath(locator)) {
-    const payload = JSON.parse(await readLocalSeedFile(locator))
+    const payload = JSON.parse(await readLocalSeedFile(locator, params.templateSlug))
     const normalized = normalizeSeedTemplate(payload, params.templateSlug)
     if (!normalized) {
-      throw new Error('Local EmDash seed.json is invalid or missing blog seed content')
+      throw new Error(`Local EmDash seed.json is invalid or missing supported ${params.templateSlug} seed content`)
     }
 
     return normalized
@@ -642,7 +899,7 @@ export const loadEmdashExternalSeedTemplate = async (params: {
   const payload = await response.json()
   const normalized = normalizeSeedTemplate(payload, params.templateSlug)
   if (!normalized) {
-    throw new Error('External EmDash seed.json is invalid or missing blog seed content')
+    throw new Error(`External EmDash seed.json is invalid or missing supported ${params.templateSlug} seed content`)
   }
 
   return normalized

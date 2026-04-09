@@ -82,8 +82,8 @@ function PageEditor({ page, onClose, onSuccess, translationConfig = null, select
     const isEditMode = !!page;
 
     // Permissions
-    const canEdit = hasPermission('tenant.pages.update') || (user?.id === page?.created_by);
-    const canPublish = hasPermission('tenant.pages.publish');
+    const canEdit = hasPermission('tenant.page.update') || (user?.id === page?.created_by);
+    const canPublish = hasPermission('tenant.page.publish');
 
     const [parentPages, setParentPages] = useState([]);
 

@@ -175,7 +175,7 @@ function EmdashImportsManager() {
                   onChange={(event) => setForm((current) => ({ ...current, sourceLocator: event.target.value }))}
                 />
                 <p className="text-xs text-slate-500">
-                  External imports accept `http(s)` URLs plus local file paths such as `./docs/examples/emdash/marketing/seed.json`.
+                  External imports accept `http(s)` URLs, local `seed.json` file paths, and EmDash repo roots such as `/home/data/dev_react/emdash-awcms/`.
                 </p>
               </div>
 

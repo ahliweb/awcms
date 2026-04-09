@@ -14,6 +14,7 @@ Define the canonical external `seed.json` payload accepted by the EmDash tenant 
   - marketing pages, services, team members, and testimonies
   - portfolio items into tenant `portfolio` records
 - External `seed.json` can be loaded from an `http(s)` URL or a local file-path `sourceLocator`.
+- A local `sourceLocator` may point either to a direct `seed.json` file or to an EmDash repository root that contains template seed files such as `templates/blog/seed/seed.json`.
 - Unsupported non-URL locators still fall back to the built-in seed used for local foundation validation.
 
 ## Canonical Shape
@@ -215,7 +216,9 @@ Other `core:*` values are normalized by stripping the prefix and replacing `-` w
   - `file:///absolute/path/to/seed.json`
   - `/absolute/path/to/seed.json`
   - `./relative/path/to/seed.json`
+  - `/home/data/dev_react/emdash-awcms/`
 - The loader normalizes the payload into the internal `EmdashSeedTemplate` contract.
+- When a local directory is provided, the loader attempts to discover a compatible EmDash seed source for the requested template wave, preferring `templates/<templateSlug>/seed/seed.json`.
 - The executor materializes:
   - a `single_post` visual page template in `pages`
   - tenant widget areas in `template_parts`
@@ -229,8 +232,10 @@ Other `core:*` values are normalized by stripping the prefix and replacing `-` w
 ## Failure Cases
 
 - If `sourceLocator` is a supported local file path, the loader reads the local JSON file directly.
+- If `sourceLocator` is a supported local directory, the loader resolves a compatible EmDash seed file for the requested template wave.
 - If `sourceLocator` is not a supported URL or local path, the external loader is skipped and the built-in fallback seed may be used.
 - If the external URL returns non-2xx, the import fails.
 - If the local file cannot be read or parsed, the import fails.
+- If a local directory does not contain a compatible seed file for the requested template wave, the import fails.
 - If the JSON does not normalize into at least one supported content section for the requested template wave, the import fails.
 - If a required materialization step fails, the job is marked `failed` and the error is recorded in `result_summary`.

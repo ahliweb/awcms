@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -47,6 +47,55 @@ test('loadEmdashExternalSeedTemplate loads relative local seed paths', async () 
   } finally {
     process.chdir(originalCwd)
   }
+})
+
+test('loadEmdashExternalSeedTemplate resolves native EmDash repo roots for blog templates', async () => {
+  const fixtureDir = await mkdtemp(path.join(tmpdir(), 'emdash-native-blog-'))
+  const seedDir = path.join(fixtureDir, 'templates', 'blog', 'seed')
+  await mkdir(seedDir, { recursive: true })
+  await writeFile(path.join(seedDir, 'seed.json'), JSON.stringify({
+    version: '1',
+    collections: [{ slug: 'posts' }],
+    widgetAreas: [
+      {
+        name: 'Sidebar',
+        widgets: [
+          { type: 'component', componentId: 'core:search', title: 'Search' },
+        ],
+      },
+    ],
+    content: {
+      posts: [
+        {
+          id: 'post-1',
+          slug: 'native-post',
+          data: {
+            title: 'Native Post',
+            excerpt: 'Native excerpt',
+            featured_image: { $media: { url: 'https://example.com/native.jpg' } },
+            content: [
+              {
+                _type: 'block',
+                style: 'normal',
+                children: [{ _type: 'span', text: 'Native content body' }],
+              },
+            ],
+          },
+        },
+      ],
+    },
+  }))
+
+  const seed = await loadEmdashExternalSeedTemplate({
+    sourceLocator: fixtureDir,
+    templateSlug: 'blog',
+  })
+
+  assert.ok(seed)
+  assert.equal(seed?.templateSlug, 'blog')
+  assert.equal(seed?.blogs[0]?.slug, 'native-post')
+  assert.equal(seed?.blogs[0]?.featuredImage, 'https://example.com/native.jpg')
+  assert.equal(seed?.widgetAreas[0]?.slug, 'sidebar')
 })
 
 test('loadEmdashExternalSeedTemplate loads file url locators', async () => {
@@ -205,7 +254,7 @@ test('loadEmdashExternalSeedTemplate rejects malformed remote payloads', async (
         sourceLocator: 'https://example.com/emdash/blog/seed.json',
         templateSlug: 'blog',
       }),
-      /invalid or missing blog seed content/,
+      /invalid or missing supported blog seed content/,
     )
   } finally {
     globalThis.fetch = originalFetch
@@ -253,4 +302,50 @@ test('loadEmdashExternalSeedTemplate accepts marketing template payloads without
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+test('loadEmdashExternalSeedTemplate resolves native EmDash repo roots for marketing templates', async () => {
+  const fixtureDir = await mkdtemp(path.join(tmpdir(), 'emdash-native-marketing-'))
+  const seedDir = path.join(fixtureDir, 'templates', 'marketing', 'seed')
+  await mkdir(seedDir, { recursive: true })
+  await writeFile(path.join(seedDir, 'seed.json'), JSON.stringify({
+    version: '1',
+    collections: [{ slug: 'pages' }],
+    content: {
+      pages: [
+        {
+          id: 'home',
+          slug: 'home',
+          data: {
+            title: 'Home',
+            content: [
+              {
+                _type: 'marketing.features',
+                features: [
+                  { title: 'Fast', description: 'Fast feature' },
+                ],
+              },
+              {
+                _type: 'marketing.testimonials',
+                testimonials: [
+                  { author: 'Client One', quote: 'Great', role: 'Founder', company: 'Acme' },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    },
+  }))
+
+  const seed = await loadEmdashExternalSeedTemplate({
+    sourceLocator: fixtureDir,
+    templateSlug: 'marketing',
+  })
+
+  assert.ok(seed)
+  assert.equal(seed?.templateSlug, 'marketing')
+  assert.equal(seed?.marketing.pages[0]?.slug, 'home')
+  assert.equal(seed?.marketing.services[0]?.slug, 'fast')
+  assert.equal(seed?.marketing.testimonies[0]?.authorName, 'Client One')
 })

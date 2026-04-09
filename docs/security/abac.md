@@ -223,7 +223,6 @@ Current blueprint/bootstrap usage in app code:
 
 Known normalization drift still visible in current app code:
 
-- Some page-management screens still reference `tenant.pages.*`, while the migration-backed canonical family is `tenant.page.*`.
 - Some feature screens reference app-level permissions that are not yet verified in the root migration baseline. Keep new documentation and new policy work aligned to migration-backed names first.
 
 ---
