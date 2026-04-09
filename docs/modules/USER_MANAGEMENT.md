@@ -1,119 +1,89 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 (Permissions)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # User Management Documentation
 
 ## Purpose
 
-Describe user identity, profile sync, and role assignment patterns.
+Describe the current user-management model in AWCMS: auth, account-request approval flow, tenant scoping, role assignment, profile synchronization, encrypted admin-only profile fields, and the Worker-backed invite/delete contract.
 
-## Audience
+This is a current-state guide, not a generic Supabase Auth overview.
 
-- Admin panel developers
-- Operators managing user provisioning
+## Current User Management Model
 
-## Prerequisites
+Current user management is split across:
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for user management and role system
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/security/abac.md`
-- `docs/security/overview.md`
+- Supabase Auth for identity/session primitives
+- `public.users` for tenant membership and role linkage
+- `public.user_profiles` for extended profile data
+- `public.user_profile_admin` for encrypted admin-only metadata
+- `account_requests` for multi-stage registration approval
+- Worker-backed `manage-users` compatibility routes for privileged operational actions
 
-## Authentication
+## Current Authentication Model
 
-AWCMS relies on **Supabase Auth** (GoTrue) for identity management.
+- email/password sign-in remains the standard path
+- session handling is provided by Supabase Auth and the current auth context
+- login flow still checks soft-deleted user state
+- Turnstile and 2FA support may participate depending on the environment and enabled features
 
-- **Sign In**: Email & Password.
-- **Session**: JWT (JSON Web Token) stored in LocalStorage/Cookies. Handled automatically by `@supabase/supabase-js`.
+## Current Registration And Approval Model
 
-## Benchmark-Ready Login and Registration Flow
+AWCMS currently uses an approval-oriented registration flow rather than unrestricted client-side privileged account creation.
 
-### Objective
+Current flow:
 
-Implement a secure login and registration flow that respects tenant context, approval gates, and RLS policies.
+1. public registration creates an `account_requests` row
+2. tenant admin review moves the request through tenant-stage approval
+3. platform/admin final approval triggers the approved invite path
+4. the invite path creates the Auth-side invitation and completes the onboarding state
 
-### Required Inputs
+Current important rule:
 
-| Field | Source | Required | Notes |
-| --- | --- | --- | --- |
-| Email/Password | Login form | Yes | Turnstile validated in admin UI |
-| `tenant_id` | Tenant resolver | Yes | Required for registration requests |
-| `account_requests` | Public registration | Yes | Approval workflow table |
-| Admin invite | Approved server-side Worker handler | Optional | `manage-users` is invoked through the maintained Cloudflare Worker compatibility route |
+- privileged user creation/invite operations should go through approved server-side Worker handlers, not direct client-side privileged auth APIs
 
-### Workflow
+## Current Invite / Worker Model
 
-1. Login uses Supabase Auth (`signInWithPassword`) and checks for soft-deleted users.
-2. Public registration writes to `account_requests` with `pending_admin` status.
-3. Tenant admin approval moves status to `pending_super_admin`.
-4. Platform admin approval invokes `inviteUserByEmail` and marks request `completed`.
-5. DB triggers create `public.users` and `public.user_profiles` for the invited user.
+Privileged user-management operations currently use the maintained Worker compatibility route pattern.
 
-### Reference Implementation
+Example:
 
 ```javascript
-// Login
-const { data, error } = await supabase.auth.signInWithPassword({
-  email,
-  password,
-});
-
-if (error) throw error;
-```
-
-```javascript
-// Public registration request
-await supabase.from("account_requests").insert({
-  tenant_id,
-  email,
-  full_name,
-  status: "pending_admin",
+await supabase.functions.invoke('manage-users', {
+  body: { action: 'invite', email, role_id, tenant_id },
 });
 ```
 
-```javascript
-// Admin invite (Worker-backed compatibility route)
-await supabase.functions.invoke("manage-users", {
-  body: { action: "invite", email, role_id, tenant_id },
-});
-```
+Current meaning of that example:
 
-### Validation Checklist
+- in maintained clients this bridges to the Worker runtime
+- it is not a recommendation to rely on Supabase-hosted Edge Functions as the maintained backend
 
-- Users cannot access the admin portal until approved and invited.
-- `public.users` and `user_profiles` are created after invite acceptance.
-- Soft-deleted users cannot sign in.
+## Current Profile Sync Model
 
-### Failure Modes and Guardrails
+Current separation of concerns:
 
-- Direct client creation of privileged users: enforce invites via approved server-side Worker handlers (currently `manage-users`).
-- Missing default role flags: ensure `is_default_invite` and `is_default_public_registration` are set.
-- Approval bypass: restrict `account_requests` updates to admins via RLS.
+- `auth.users`: credentials and identity primitives
+- `public.users`: application-level user row with role/tenant linkage
+- `public.user_profiles`: extended profile fields
+- `public.user_profile_admin`: encrypted admin-only profile metadata
 
-## User Profile Sync
+Current repo behavior still relies on database-side sync/creation mechanisms so that application profile rows exist after the auth/invite lifecycle completes.
 
-Supabase separates Auth Users (`auth.users`) from Application Data. AWCMS bridges this using a public table:
+## Current Admin-Only Profile Fields
 
-1. **`auth.users`**: Stores credentials, encrypted passwords, and recovery data.
-2. **`public.users`**: Stores application profile (Full Name, Role ID, Language).
-3. **`public.user_profiles`**: Stores extended profile details (bio, job title, contact, socials).
-4. **`public.user_profile_admin`**: Stores admin-only profile metadata (encrypted).
+Sensitive admin-only metadata remains stored in `user_profile_admin` and accessed through RPC rather than ordinary client-side direct table writes.
 
-**Sync Mechanism**:
-
-- A Database Trigger `on_auth_user_created` automatically inserts a row into `public.users` when a new user signs up via Supabase Auth.
-- A Database Trigger `create_user_profile` ensures `public.user_profiles` is created for each user.
-
-### Admin-Only Profile Fields
-
-Sensitive administrative fields are stored in `user_profile_admin` and encrypted via pgcrypto. The passphrase is derived from the user profile description and a per-user salt, with re-keying on description updates.
+Example pattern:
 
 ```javascript
-// Read admin-only fields (requires tenant.user.update)
 const { data, error } = await supabase.rpc('get_user_profile_admin_fields', {
   p_user_id: userId,
 });
 
-// Update admin-only fields (encrypted server-side)
 await supabase.rpc('set_user_profile_admin_fields', {
   p_user_id: userId,
   p_admin_notes: notes,
@@ -121,159 +91,85 @@ await supabase.rpc('set_user_profile_admin_fields', {
 });
 ```
 
-### Region Assignment (Hierarchy)
+## Current Role And Tenant Scope Rules
 
-To support administrative boundaries, users can be assigned to a specific **Region** (Level 1-10) or **Administrative Region** (Indonesia specifics) via the `users` table.
+- ordinary tenant users are scoped to a single tenant
+- platform admin/full-access roles may be global (`tenant_id` nullable)
+- role-driven access is determined by role flags and ABAC permissions, not by role-name assumptions alone
+- changing roles is a privileged user-management action and must respect current permission and RLS boundaries
 
-- **Field**: `users.region_id` (Standard 10-level)
-- **Field**: `users.administrative_region_id` (Indonesian specific)
-- **Lookup Tables**: `regions`, `administrative_regions`
-- **Validation**:
-  - Users can only be assigned to *one* region at a time.
-  - Assignment is controlled by the `tenant.user.update` permission.
+## Current Region Assignment Notes
 
-### ABAC Enforcement
+User records may still be associated with region hierarchies where the relevant module/configuration is enabled.
 
-User management actions are strictly controlled by Attribute-Based Access Control (ABAC) permissions.
+Current rule of thumb:
 
-| Action | Permission Required | RLS Policy |
-| :--- | :--- | :--- |
-| **View Users** | `tenant.user.read` | `users_select_hierarchy` |
-| **Update User (Profile)** | `tenant.user.update` | `users_update_hierarchy` |
-| **Assign Region** | `tenant.user.update` | `users_update_hierarchy` |
-| **Admin Profile Fields** | `tenant.user.update` | `user_profile_admin_*` policies |
-| **Delete User** | `tenant.user.delete` | Soft-delete via update workflow (no direct `DELETE` policy path) |
+- region assignment belongs to tenant/user management workflows
+- updates remain permission-gated through current user-management permissions
 
-> **Security Note**: The RLS policy `users_update_hierarchy` explicitly checks for the `tenant.user.update` permission for any intra-tenant user modification.
+## Current ABAC Expectations
 
-## Role Assignment
+User-management actions should align with canonical permission families such as:
 
-Roles are assigned via the `role_id` Foreign Key in `public.users`.
+- `tenant.user.read`
+- `tenant.user.update`
+- `tenant.user.delete`
 
-- **Default Role**: New users are assigned by `handle_new_user()` using role flags (`is_default_public_registration` or `is_default_invite`).
-- **Changing Roles**: Only platform admins (full access) or tenant admins with `tenant.user.update` can update the `role_id` via the User Manager module.
+Current important rules:
 
-## Admin Routes
+- deletion remains a soft-delete workflow
+- privileged operational actions should go through the approved Worker-backed path where required
+- UI permission checks are not the final authority
 
-| Route | Purpose | Notes |
-| --- | --- | --- |
-| `/cmspanel/users` | User list | Default tab for active users. |
-| `/cmspanel/users/new` | Create user | Opens the user editor. |
-| `/cmspanel/users/edit/:id/*` | Edit user | `:id` uses signed route params (`{uuid}.{signature}`) and supports tab sub-slugs. |
-| `/cmspanel/users/approvals/:status` | Registration approvals | Route tabs use `pending`, `completed`, `rejected`; the backing records may still carry workflow states such as `pending_admin` and `pending_super_admin`. |
+## Current Routes
 
-## Tenant Roles (Multi-Tenancy)
+Important current admin user-management routes include:
 
-Users are strictly scoped to a single `tenant_id`. Platform admin/full-access roles may be global (`tenant_id` NULL).
+- `/cmspanel/users`
+- `/cmspanel/users/new`
+- `/cmspanel/users/edit/:id/*`
+- `/cmspanel/users/approvals/:status`
 
-| Role | Scope | Default Permissions |
-| --- | --- | --- |
-| **Owner** | Platform | Full platform access |
-| **Super Admin** | Platform | Platform management |
-| **Admin** | Tenant | Full tenant management |
-| **Auditor** | Tenant | Read-only tenant audit and inspection workflows |
-| **Editor** | Tenant | Content review and publish workflows |
-| **Author** | Tenant | Create and update own content |
-| **Member** | Tenant | Limited authenticated tenant access |
-| **Subscriber** | Tenant | Subscriber/premium-content access where enabled |
-| **Public** | Tenant/Public | Read-only public-facing access |
-| **No Access** | Tenant | Disabled or blocked access |
+Current route-security note:
 
-> Platform admin access is determined by role flags (`is_platform_admin`/`is_full_access`), not role names.
+- edit/detail routes use signed route params and may use sub-slugs for refresh-safe tabs/views
 
-### Invitation Flow
+## Current Deletion Safety Model
 
-1. Admin enters email in **User Manager**.
-2. System triggers the approved server-side invite handler (`manage-users` through the Cloudflare Worker compatibility route).
-3. New user is created in `auth.users` with `tenant_id` metadata.
-4. Invite email sent.
+User deletion remains guarded.
 
-### Default Role Resolution
+Current expectations:
 
-- Public registrations use the role flagged `is_default_public_registration` (fallback to `is_public`/`is_guest`).
-- Invites use the role flagged `is_default_invite` (fallback to a tenant role).
+- use soft delete, not direct `DELETE`
+- respect tenant scope
+- if the delete path depends on Worker-managed safety logic, use the approved Worker-backed flow
+- preserve permission checks and role/assignment guardrails before deletion completes
 
-## Security
+## Current Login / Recovery Notes
 
-- **Password Reset**: Handled via Supabase's built-in email recovery flow.
-- **Account Locking**: Managed by Supabase (rate limiting).
-- **Data Access**: Users can only see their own profile data unless they have the required `tenant.user.read` permission.
-- **Admin Notes**: Encrypted at rest via pgcrypto; access is only via RPC and admin permissions.
+- login uses Supabase Auth sign-in flows
+- password reset uses Supabase recovery flows
+- Turnstile may participate in login/recovery flows depending on the environment and current runtime availability
+- 2FA remains a supported security layer where enabled
 
-## Registration & Approval Workflow
+## Security Notes
 
-AWCMS implements a multi-stage approval process for new account requests (Option B).
+- do not create privileged users directly from client-only paths
+- keep soft-deleted users from re-entering ordinary active flows
+- keep admin-only profile metadata encrypted and RPC-mediated
+- keep user-management actions aligned with ABAC and RLS, not role-name shortcuts
 
-1. **Public Registration**:
-    - Users submit an application via `/register`.
-    - Data is stored in `account_requests` table.
-    - Status is initially `pending_admin`.
+## Validation Guidance
 
-2. **Admin Approval**:
-    - Tenant Admins (or Platform Admins) review applications in the CMS.
-    - Approving moves status to `pending_super_admin` (platform admin).
+| Surface | Validation |
+| --- | --- |
+| admin/user-management code | `cd awcms && npm run build` |
+| Worker-backed invite/delete behavior | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+| maintained docs | `cd awcms && npm run docs:check` |
 
-3. **Platform Admin Approval**:
-    - Platform Admins perform final review.
-    - Upon approval, the system:
-        - Creates a Supabase Auth user via `inviteUserByEmail`.
-        - Sends an email invitation so the user can complete account/password setup.
-        - Marks the request as `completed`.
-        - Captures approval timestamps.
+## Related Docs
 
-4. **Rejection**:
-    - Admins can reject applications with a reason.
-    - Status moves to `rejected`.
-
-5. **User Onboarding**:
-    - Users click the invitation link to set their password and gain access.
-    - Access is strictly denied until this process is complete.
-
-## Login Flow
-
-The login process (`/login`) includes:
-
-- Email/Password authentication via Supabase Auth.
-- Turnstile CAPTCHA verification (server-side Worker verification in normal environments; localhost test-key flow skips Worker verification when the local edge runtime is unavailable).
-- Two-Factor Authentication (2FA) support if enabled.
-- Checks for soft-deleted users (`deleted_at`).
-
-## Password Reset
-
-1. User navigates to `/forgot-password`.
-2. Enters email and completes Turnstile verification.
-3. Receives email with reset link.
-4. Clicks link → redirected to `/cmspanel/update-password`.
-5. Sets new password and logs in.
-
----
-
-## Permissions and Access
-
-- User management requires `tenant.user.*` permissions.
-- User deletion is soft-delete only and validated via the approved server-side Worker-backed user-management handler (`manage-users`).
-
-### Deletion Safety Check
-
-Before deleting a user, the system checks if their role still has active permissions:
-
-```javascript
-const { count } = await supabaseAdmin
-  .from('role_permissions')
-  .select('*', { count: 'exact', head: true })
-  .eq('role_id', targetUser.role_id);
-
-if (count > 0) {
-  throw new Error('User has active permissions. Change role first.');
-}
-```
-
-## Security and Compliance Notes
-
-- Soft delete applies to users.
-- Secret-key access is restricted to approved server-side edge runtimes.
-
-## References
-
-- `docs/modules/ROLE_HIERARCHY.md`
-- `docs/security/overview.md`
+- [docs/security/abac.md](../security/abac.md)
+- [docs/security/overview.md](../security/overview.md)
+- [docs/dev/admin.md](../dev/admin.md)
+- [docs/tenancy/overview.md](../tenancy/overview.md)

@@ -1,41 +1,69 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.4 (Styling)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Multi-Tenant Theming
 
 ## Purpose
 
-Describe how tenant branding is stored and applied across the admin UI.
+Describe how tenant branding and theme variables are currently applied across AWCMS admin and related public surfaces.
 
-## Audience
+This guide focuses on the current runtime behavior rather than an abstract design-system theory.
 
-- Admin panel developers
-- Designers defining tenant branding
+## Current Theming Model
 
-## Prerequisites
+Current tenant theming relies on:
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for theming and styling system
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/tenancy/overview.md`
+- tenant-stored branding/theme configuration
+- runtime application of CSS variables
+- semantic Tailwind utility usage built on those variables
+- shared expectation that components avoid hardcoded brand colors
 
-## Core Concepts
+## Current Source Of Theme Data
 
-- Branding lives in `tenants.config` (JSONB).
-- `useTenantTheme()` applies CSS variables at runtime.
-- Components use Tailwind tokens that map to CSS variables.
-- Public portal widgets follow the same CSS variable tokens for consistent theming.
-- Tailwind v4 uses CSS-first tokens via `@theme` in the public portal.
+Tenant branding currently lives in tenant configuration data and is applied from the current active tenant context.
 
-## How It Works
+Current important rule:
 
-- Hook: `awcms/src/hooks/useTenantTheme.js`.
-- Variables set on `document.documentElement`:
-  - `--primary`
-  - `--font-sans`
-- `brandColor` expects a hex `#RRGGBB` value and is validated before being applied.
+- the active scoped tenant determines which theme values are applied in admin flows
 
-## Implementation Patterns
+## Current Runtime Hook
 
-### Tenant Config Example
+`awcms/src/hooks/useTenantTheme.js` is the current hook that applies tenant theme variables to `document.documentElement`.
+
+Current behavior includes:
+
+- reading `tenant.config?.theme`
+- applying `--primary` when `brandColor` is a valid `#RRGGBB` hex value
+- applying `--font-sans` when `fontFamily` survives basic sanitization
+- cleaning up variables when tenant context changes/unmounts
+
+## Current Theme Variable Expectations
+
+Current variables applied by the tenant theme hook include:
+
+- `--primary`
+- `--font-sans`
+
+Other theme tokens may still be defined elsewhere in the design system, but these are the current tenant-applied runtime variables documented directly by the hook.
+
+## Current Usage Pattern
+
+Components should continue to use semantic utility classes rather than hardcoded theme values.
+
+Example:
+
+```jsx
+<Button className="bg-primary text-primary-foreground">
+  Action
+</Button>
+```
+
+## Current Config Shape
+
+Representative tenant config shape:
 
 ```json
 {
@@ -46,29 +74,44 @@ Describe how tenant branding is stored and applied across the admin UI.
 }
 ```
 
-### Usage in Components
+This is an orientation example, not a guarantee that no additional tenant config keys exist.
 
-```jsx
-<Button className="bg-primary text-primary-foreground">
-  Action
-</Button>
-```
+## Current Public Surface Note
 
-### Context7 Guidance (Tailwind)
+Public portals are expected to preserve the same semantic theming approach even though their runtime/build behavior differs from the admin app.
 
-- Define design tokens using `@theme` and CSS variables.
-- Apply tenant tokens via `--primary` and `--font-sans` to keep utilities consistent.
+Current rule:
 
-## Permissions and Access
+- use semantic theme variables and tokens consistently across admin/public surfaces instead of introducing hardcoded brand-specific color values in components
 
-- Theme editing is guarded by tenant settings permissions.
+## Current Security And Validation Notes
 
-## Security and Compliance Notes
+The current hook performs basic input hardening before applying theme values:
 
-- No hardcoded colors in components; use tokens or CSS variables.
-- Validate font and color input before applying.
+- `brandColor` must match strict hex format
+- `fontFamily` is sanitized before applying it to `--font-sans`
 
-## References
+Current important rule:
 
-- `docs/modules/COMPONENT_GUIDE.md`
-- `../../awcms/src/hooks/useTenantTheme.js`
+- do not widen the accepted input shape casually without considering style injection risk
+
+## Current Styling Standards
+
+- no hardcoded hex values in component code when semantic tokens should be used
+- use CSS variables and semantic Tailwind tokens
+- preserve white-labeling and dark-mode compatibility
+
+## Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| admin/theming code | `cd awcms && npm run build` |
+| public theming changes | `cd awcms-public/primary && npm run check:astro` when relevant |
+| maintained docs | `cd awcms && npm run docs:check` |
+
+## Related Docs
+
+- [docs/modules/COMPONENT_GUIDE.md](./COMPONENT_GUIDE.md)
+- [docs/dev/admin.md](../dev/admin.md)
+- [docs/dev/public.md](../dev/public.md)
+- [../../awcms/src/hooks/useTenantTheme.js](../../awcms/src/hooks/useTenantTheme.js)

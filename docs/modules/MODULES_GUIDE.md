@@ -1,140 +1,197 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 (Permissions) and Section 3 (Modules)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Modules Guide
 
 ## Purpose
 
-Describe how admin modules are organized, where to find them, and how they map to permissions.
+Describe how admin-facing modules are currently organized, routed, permissioned, surfaced in menus, and synchronized into the tenant-scoped module inventory.
 
-## Audience
+This is a current-state guide for the checked-in admin/runtime behavior, not a promise that every resource always has a one-to-one manager screen.
 
-- Admin panel developers
-- Extension authors
+## Current Module Model
 
-## Prerequisites
+The current module system is a blend of:
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for module architecture and permissions
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
+- route-backed manager screens in `awcms/src/components/dashboard/`
+- entries in `resources_registry`
+- scope-aware admin menu items
+- tenant-scoped `modules` rows
+- extension-provided resources and menus
 
-## Module Structure
+That means “module” can refer to more than one implementation surface:
 
-| Component Type     | Location                                                    | Naming           |
-| :----------------- | :---------------------------------------------------------- | :--------------- |
-| Manager Components | `awcms/src/components/dashboard/`                           | `*Manager.jsx`   |
-| Route Definitions  | `awcms/src/components/MainRouter.jsx`                       | `/cmspanel/<module>/*` |
-| Sidebar Config     | `awcms/src/hooks/useAdminMenu.js`                           | `admin_menus`    |
-| Sidebar Rendering  | `awcms/src/templates/flowbite-admin/components/Sidebar.jsx` | menu renderer    |
+- a dedicated manager component
+- a dynamic resource rendered through generic runtime machinery
+- an extension-backed feature exposed through menus/resources
 
-Route paths use `*` splats so sub-slugs (tabs, trash views, approvals) are URL-backed and survive refreshes.
+## Current Core Surfaces
 
-## Available Modules (Core List)
+| Concern | Current Source |
+| --- | --- |
+| manager components | `awcms/src/components/dashboard/` |
+| route definitions | `awcms/src/components/MainRouter.jsx` |
+| menu loading | `awcms/src/hooks/useAdminMenu.js` |
+| module inventory/toggles | `awcms/src/hooks/useModules.js` |
+| resource metadata | `resources_registry` |
+| extension module visibility | `extension_menu_items`, extension manifests, runtime injection |
 
-Modules are categorized to match the **Permission Matrix**. The canonical source of truth is the `admin_menus` table and `resources_registry`.
-Where route aliases exist, prefer the canonical `MainRouter.jsx` path noted in parentheses.
+## Current Routing Model
 
-### 1. Content
+- canonical admin routes live in `MainRouter.jsx`
+- route paths commonly use splats (`*`) for sub-slugs like tabs, trash views, approvals, and nested modes
+- protected edit/detail routes should follow current signed-id route-security expectations where applicable
 
-- **Blogs** (`BlogsManager.jsx`)
-- **Pages** (`PagesManager.jsx`)
-- **Visual Pages** (`VisualPagesManager.jsx`)
-- **Widgets** (`WidgetsManager.jsx`)
-- **Templates** (`TemplatesManager.jsx`) - page templates, template parts, reusable sections, assignments, languages, and site blueprints for tenant-safe bootstrap, section materialization, direct visual-builder section insertion, picker-based reusable-section authoring, preview-aware reusable-section editing, saved-content usage tracking, detach/relink workflows, update-linked propagation, revision history, current-vs-revision and revision-vs-revision comparison, restore confirmation, bulk-action confirmation guardrails, approval-requested bulk actions with history, centralized section approvals, and public reusable-section rendering by slug
-- **Portfolio** (`PortfolioManager.jsx`)
-- **Testimonials** (`TestimonyManager.jsx`)
-- **Announcements** (`AnnouncementsManager.jsx`)
-- **Fun Facts** (`FunFactsManager.jsx`)
-- **Services** (`ServicesManager.jsx`)
-- **Team** (`TeamManager.jsx`)
-- **Partners** (`PartnersManager.jsx`)
+Do not document route aliases as canonical when `MainRouter.jsx` already makes the real route contract clear.
 
-### 2. Media
+## Current Module Inventory Model
 
-- **Media Library** (`FilesManager.jsx`, routes: `media/*`, `files/*`)
-- **Photo Gallery** (resource exists in `resources_registry`; currently served through dynamic resource patterns rather than a dedicated route-backed manager component)
-- **Video Gallery** (resource exists in `resources_registry`; currently served through dynamic resource patterns rather than a dedicated route-backed manager component)
+The `modules` table is tenant-scoped even when the platform-level Modules screen is used.
 
-### 3. Commerce
+Current behavior in `useModules()` includes:
 
-- **Products** (`ProductsManager.jsx`)
-- **Product Types** (`ProductTypesManager.jsx`)
-- **Orders** (`OrdersManager.jsx`)
-- **Promotions** (`PromotionsManager.jsx`)
+- per-tenant module reads for tenant-scoped users
+- platform-wide reads for platform/full-access users where RLS allows it
+- module sync through `sync_modules_from_sidebar(...)`
+- realtime refresh plus browser-event refresh after toggles/sync
+- fail-open `isModuleEnabled(slug)` behavior when a slug is not yet represented in the DB inventory
 
-### 4. Navigation
+This means the module inventory is synchronized state, not the only source of truth for whether a feature exists.
 
-- **Menus** (`MenusManager.jsx`)
-- **Categories** (`CategoriesManager.jsx`)
-- **Tags** (`TagsManager.jsx`)
+## Current Available Module Families
 
-### 5. System & Access
+### Content
 
-- **Users** (`UsersManager.jsx`)
-- **Roles** (`RolesManager.jsx`)
-- **Permissions** (`PermissionsManager.jsx`)
-- **Policies** (`PolicyManager.jsx`)
-- **Settings** (`SettingsManager.jsx`)
-- **Branding Settings** (`TenantSettings.jsx`, route: `settings/branding`)
-- **Email Settings** (`EmailSettingsManager.jsx`, route: `email-settings`)
-- **Email Logs** (`EmailLogsManager.jsx`, route: `email-logs`)
-- **Audit Logs** (`AuditLogsManager.jsx`)
-- **Visitor Statistics** (`VisitorStatisticsManager.jsx`)
-- **SEO** (`SeoManager.jsx`)
-- **Languages** (`LanguageSettings.jsx`)
-- **SSO** (`SSOManager.jsx`)
-- **Notifications** (`NotificationsManager.jsx`)
-- **Contacts** (`ContactsManager.jsx`)
-- **Contact Messages** (`ContactMessagesManager.jsx`)
-- **Themes** (`ThemesManager.jsx`)
-- **School Pages** (`SchoolPagesManager.jsx`)
-- **Site Images** (`SiteImagesManager.jsx`)
+- Blogs
+- Pages
+- Visual Pages
+- Widgets
+- Templates
+- Portfolio
+- Testimonials
+- Announcements
+- Fun Facts
+- Services
+- Team
+- Partners
 
-### 6. Platform & Plugins
+### Media
 
-- **Tenants** (`TenantsManager.jsx`)
-- **Modules** (`ModulesManager.jsx`)
-- **Extensions** (`ExtensionsManager.jsx`)
-- **Sidebar Menus** (`SidebarMenuManager.jsx`, route: `admin-navigation/*`)
-- **Platform Settings** (`PlatformSettingsManager.jsx`, route: `platform/settings`)
-- **Platform Dashboard** (`PlatformDashboard.jsx`, route: `platform`)
-- **Dynamic Resources** (`DynamicResourceManager.jsx`)
+- Media Library
+- resource-backed gallery-style features where implemented through dynamic resource patterns
 
-## Module Registry Behavior
+### Commerce
 
-- The `modules` table is tenant-scoped even when viewed from the platform Modules screen.
-- `sync_modules_from_sidebar()` builds a canonical module inventory from global admin menus, active resources, and active extension menus, then writes one row per tenant.
-- Platform operators can sync all tenants from the Modules screen; tenant-scoped consumers such as `useAdminMenu()` still read only the active tenant's rows.
-- Module toggles update the row for the specific tenant/module pair and immediately notify sidebar consumers through realtime plus the shared `awcms:modules-changed` browser event.
+- Products
+- Product Types
+- Orders
+- Promotions
 
-### 7. Mobile & IoT
+### Navigation
 
-- **Mobile Users** (`MobileUsersManager.jsx`)
-- **Push Notifications** (`PushNotificationsManager.jsx`, route: `mobile/push`)
-- **Mobile Config** (`MobileAppConfig.jsx`, route: `mobile/config`)
-- **Devices** (`DevicesManager.jsx`, route: `devices`)
+- Menus
+- Categories
+- Tags
 
-## Implementation Pattern
+### System And Access
 
-To add a new module, ensure you implement:
+- Users
+- Roles
+- Permissions
+- Policies
+- Settings
+- Branding settings
+- Email settings/logs
+- Audit logs
+- Visitor statistics
+- SEO
+- Languages
+- SSO
+- Notifications
+- Contacts / contact messages
+- Themes
+- school/site-image style tenant settings surfaces where present
 
-1. **Manager Component**: Using `AdminPageLayout` and checking `requiredPermission`.
-2. **Routes**: Add to `MainRouter.jsx`.
-3. **Sidebar**: Add to `admin_menus` (seed via `awcms/src/scripts/seed-sidebar.js`) and render via `useAdminMenu`.
-4. **Database**: Add to `permissions` table if new resource type.
-5. **RLS / ABAC**: Ensure backing tables have `tenant_id`, `deleted_at` where applicable, and policies aligned to the resource permission prefix.
-6. **Dynamic Resources**: If a resource is intended to use the generic runtime, ensure `resources_registry`, `ui_configs`, and `DynamicResourceManager` can render it before documenting it as route-backed.
+### Platform And Extension Surfaces
 
-## Permission Mapping
+- Tenants
+- Modules
+- Extensions
+- Sidebar/admin-navigation management
+- Platform settings/dashboard
+- Dynamic resource surfaces
 
-Every module *must* map to a permission key:
+### Mobile And IoT
+
+- Mobile Users
+- Push Notifications
+- Mobile Config
+- Devices
+
+Treat this list as a current orientation map, not as a guarantee that every item has the exact same implementation depth.
+
+## Current Module Sync Behavior
+
+`sync_modules_from_sidebar()` currently builds tenant module inventory from live navigation/resource sources.
+
+Current implications:
+
+- module rows are synchronized per tenant
+- platform operators can sync across tenants
+- tenant-scoped consumers still read the active tenant view only
+- toggle state is stored on the tenant/module pair, not on a single global module record
+
+## Current Add-A-Module Pattern
+
+When adding or updating a module today, review whether the feature needs all of these surfaces or only a subset:
+
+1. manager component or dynamic-resource rendering support
+2. route entry in `MainRouter.jsx`
+3. menu visibility through the current menu system
+4. `resources_registry` entry or update
+5. canonical permission family and ABAC alignment
+6. tenant-scoped inventory sync behavior if it should participate in the Modules screen
+7. docs updates if the module surface becomes user-visible or contract-relevant
+
+## Current Permission Mapping Rules
+
+- every module-visible surface should align to canonical permission keys
+- use `scope.resource.action`
+- do not invent app-only module permissions without checking the current migration-backed baseline
+- route/layout permission gates should align with backend authority, not replace it
+
+Example:
 
 ```jsx
-// Example: Widgets Manager
 <AdminPageLayout requiredPermission="tenant.widgets.read">
   <WidgetsManager />
 </AdminPageLayout>
 ```
 
-## References
+## Current Dynamic Resource Caveat
 
-- `docs/security/abac.md`
-- `docs/modules/ROLE_HIERARCHY.md`
+Some resources exist in the registry and the module inventory without a dedicated manager component.
+
+Before documenting a module as fully route-backed, verify whether it is currently implemented via:
+
+- a dedicated `*Manager.jsx`
+- `DynamicResourceManager`
+- extension/runtime injection
+
+## Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| admin/module code changes | `cd awcms && npm run build` |
+| maintained docs | `cd awcms && npm run docs:check` |
+| edge/admin route contract changes tied to a module | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+
+## Related Docs
+
+- [docs/security/abac.md](../security/abac.md)
+- [docs/modules/MENU_SYSTEM.md](./MENU_SYSTEM.md)
+- [docs/dev/admin.md](../dev/admin.md)
+- [docs/modules/ROLE_HIERARCHY.md](./ROLE_HIERARCHY.md)
