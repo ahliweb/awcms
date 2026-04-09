@@ -2836,21 +2836,30 @@ const MAILKETING_API = 'https://api.mailketing.co.id/api/v1';
 
 const handleMailketing = async (c: any) => {
   try {
-    const apiToken = c.env.MAILKETING_API_TOKEN
-    if (!apiToken) {
-      throw new Error('MAILKETING_API_TOKEN not configured')
-    }
-
     const body = await requireJsonBody(c.req.raw)
     const action = requireString(body.action, 'Missing action')
 
     // For "send" action: enqueue asynchronously and return 202
     if (action === 'send') {
+      const { callerClient, user } = await requireBearerSession(c.env, c.req.raw)
+      const userContext = await getUserContext(c.env, user.id)
+      const tenantId = resolveTenantId(c.req.header('x-tenant-id') ?? null, userContext)
+      const canSendNotifications = userContext.isPlatformAdmin
+        || userContext.isFullAccess
+        || await hasAnyPermission(callerClient, ['tenant.notifications.send', 'tenant.notifications.manage'])
+
+      if (!tenantId) {
+        return c.json({ error: 'Missing x-tenant-id header' }, 400)
+      }
+
+      if (!canSendNotifications) {
+        return c.json({ error: 'Forbidden' }, 403)
+      }
+
       const recipient = requireString(body.recipient, 'Missing recipient')
       const subject = requireString(body.subject, 'Missing subject')
       const content = requireString(body.content, 'Missing content')
       const traceId = c.req.header('x-trace-id') || crypto.randomUUID()
-      const tenantId = c.req.header('x-tenant-id') || 'platform'
 
       const msg = buildEmailSendMessage({
         tenant_id: tenantId,
@@ -2870,6 +2879,11 @@ const handleMailketing = async (c: any) => {
     }
 
     // All other actions (subscribe, credits, lists) remain synchronous
+    const apiToken = c.env.MAILKETING_API_TOKEN
+    if (!apiToken) {
+      throw new Error('MAILKETING_API_TOKEN not configured')
+    }
+
     let endpoint = ''
     let params: Record<string, string | number> = {}
 

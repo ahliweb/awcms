@@ -87,6 +87,42 @@ test('mailketing-webhook rejects invalid JSON', async () => {
   assert.deepEqual(await response.json(), { error: 'Invalid JSON body' })
 })
 
+test('mailketing send rejects anonymous requests', async () => {
+  const response = await app.request('/functions/v1/mailketing', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'send',
+      recipient: 'person@example.com',
+      subject: 'Hello',
+      content: 'World',
+    }),
+  })
+
+  assert.equal(response.status, 401)
+  assert.deepEqual(await response.json(), { error: 'Unauthorized' })
+})
+
+test('mailketing send rejects invalid bearer token', async () => {
+  const response = await withStubbedFetch(() => app.fetch(new Request('https://edge.example.com/functions/v1/mailketing', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer invalid-token',
+      'Content-Type': 'application/json',
+      'x-tenant-id': 'tenant-123',
+    },
+    body: JSON.stringify({
+      action: 'send',
+      recipient: 'person@example.com',
+      subject: 'Hello',
+      content: 'World',
+    }),
+  }), authOnlyEnv))
+
+  assert.equal(response.status, 401)
+  assert.deepEqual(await response.json(), { error: 'Unauthorized' })
+})
+
 test('verify-turnstile rejects invalid JSON with success false envelope', async () => {
   const response = await app.request('/functions/v1/verify-turnstile', {
     method: 'POST',
