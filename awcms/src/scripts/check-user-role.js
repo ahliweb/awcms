@@ -29,10 +29,16 @@ async function checkUserAndRole() {
         console.log(`Tenant ID: ${tenantId}`);
 
         // 2. Check for Owner Role
-        const roleRes = await client.query("SELECT id, name FROM public.roles WHERE tenant_id = $1", [tenantId]);
-        console.log('Existing Roles:', roleRes.rows.map(r => r.name));
+        const roleRes = await client.query(
+            `SELECT id, name, tenant_id, scope, is_platform_admin, is_full_access, is_tenant_admin
+             FROM public.roles
+             WHERE lower(name) = $1 AND deleted_at IS NULL
+             ORDER BY tenant_id NULLS FIRST, created_at ASC`,
+            [TARGET_ROLE_NAME]
+        );
+        console.log('Matching owner roles:', roleRes.rows);
 
-        const ownerRole = roleRes.rows.find(r => r.name.toLowerCase() === TARGET_ROLE_NAME);
+        const ownerRole = roleRes.rows.find(r => r.tenant_id === null) || roleRes.rows.find(r => r.tenant_id === tenantId);
         let ownerRoleId;
 
         if (!ownerRole) {
@@ -40,31 +46,40 @@ async function checkUserAndRole() {
         } else {
             ownerRoleId = ownerRole.id;
             console.log(`Found '${TARGET_ROLE_NAME}' Role ID: ${ownerRoleId}`);
-            // Check permissions for owner role
             const permRes = await client.query("SELECT count(*) FROM public.role_permissions WHERE role_id = $1", [ownerRoleId]);
             console.log(`Owner role has ${permRes.rows[0].count} permissions.`);
         }
 
         // 3. Get User
-        const userRes = await client.query("SELECT id, email, role FROM public.users WHERE email = $1", [EMAIL]);
+        const userRes = await client.query(
+            `SELECT u.id, u.email, u.full_name, u.tenant_id, r.id AS role_id, r.name AS role_name,
+                    r.scope, r.is_platform_admin, r.is_full_access, r.is_tenant_admin
+             FROM public.users u
+             LEFT JOIN public.roles r ON r.id = u.role_id
+             WHERE u.email = $1`,
+            [EMAIL]
+        );
         if (userRes.rows.length === 0) {
             console.error(`User '${EMAIL}' not found in public.users.`);
             return;
         }
         const user = userRes.rows[0];
-        console.log(`User Found: ID=${user.id}, Current Role Field=${user.role}`);
+        console.log('User row:', user);
 
-        // 4. Check Tenant Role Links
-        // Check if tenant_role_links table exists first? It should.
-        const linkRes = await client.query("SELECT * FROM public.tenant_role_links WHERE user_id = $1 AND tenant_id = $2", [user.id, tenantId]);
-        console.log('Current Tenant Role Links:', linkRes.rows);
+        const authUserRes = await client.query(
+            `SELECT id, email, email_confirmed_at IS NOT NULL AS email_confirmed
+             FROM auth.users
+             WHERE email = $1`,
+            [EMAIL]
+        );
+        console.log('Auth row:', authUserRes.rows[0] || null);
 
-        if (linkRes.rows.length > 0) {
-            const linkedRoleId = linkRes.rows[0].role_id;
-            const linkedRoleRes = await client.query("SELECT name FROM public.roles WHERE id = $1", [linkedRoleId]);
-            if (linkedRoleRes.rows.length > 0) {
-                console.log(`User is linked to role: ${linkedRoleRes.rows[0].name}`);
-            }
+        if (user.tenant_id !== tenantId) {
+            console.warn(`Expected tenant_id ${tenantId}, found ${user.tenant_id}`);
+        }
+
+        if (ownerRoleId && user.role_id !== ownerRoleId) {
+            console.warn(`Expected role_id ${ownerRoleId}, found ${user.role_id}`);
         }
 
     } catch (err) {

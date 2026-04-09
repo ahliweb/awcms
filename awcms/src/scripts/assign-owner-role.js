@@ -18,6 +18,7 @@ async function assignOwnerRole() {
     let client;
     try {
         client = await pool.connect();
+        await client.query('BEGIN');
 
         // Fail queries fast if locked
         await client.query("SET statement_timeout = 5000");
@@ -72,7 +73,10 @@ async function assignOwnerRole() {
 
         // 4. Update Public Users Role ID
         console.log(`Updating public.users role_id to '${ownerRoleId}'...`);
-        await client.query("UPDATE public.users SET role_id = $1 WHERE id = $2", [ownerRoleId, userId]);
+        await client.query(
+            "UPDATE public.users SET role_id = $1, tenant_id = $2, full_name = COALESCE(full_name, 'System Owner') WHERE id = $3",
+            [ownerRoleId, tenantId, userId]
+        );
         console.log(`Updated public.users role_id.`);
 
         // 6. Grant All Permissions to Owner Role
@@ -88,7 +92,12 @@ async function assignOwnerRole() {
         `, [ownerRoleId]);
         console.log(`Granted ${grantRes.rowCount} new permissions to Owner role.`);
 
+        await client.query('COMMIT');
+
     } catch (err) {
+        if (client) {
+            await client.query('ROLLBACK');
+        }
         console.error('Error assigning owner role:', err);
     } finally {
         if (client) client.release();
