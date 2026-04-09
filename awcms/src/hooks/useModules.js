@@ -18,6 +18,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { dispatchModulesChanged, subscribeToModulesChanged } from '@/lib/moduleEvents';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 
 export function useModules() {
   const { toast } = useToast();
@@ -108,6 +109,7 @@ export function useModules() {
 
         if (syncError) throw syncError;
         dispatchModulesChanged({ tenantId: targetTenantId, source: 'sync' });
+        await triggerPublicRebuild({ tenantId: targetTenantId, resource: 'modules', action: 'sync' });
       }
 
       toast({
@@ -158,6 +160,8 @@ export function useModules() {
         status: nextStatus,
         source: 'toggle',
       });
+
+      await triggerPublicRebuild({ tenantId: moduleTenantId, resource: 'modules', action: nextStatus });
 
       toast({
         title: nextStatus === 'active' ? 'Module enabled' : 'Module disabled',

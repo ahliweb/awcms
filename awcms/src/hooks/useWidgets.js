@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 
 export const useWidgets = (areaId) => {
     const { toast } = useToast();
@@ -55,6 +56,7 @@ export const useWidgets = (areaId) => {
 
             if (error) throw error;
             await fetchWidgets();
+            await triggerPublicRebuild({ tenantId, resource: 'widgets', action: 'create' });
             return data;
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -76,6 +78,7 @@ export const useWidgets = (areaId) => {
 
             if (error) throw error;
             await fetchWidgets();
+            await triggerPublicRebuild({ tenantId, resource: 'widgets', action: 'update' });
             toast({ title: "Saved", description: "Widget updated." });
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -97,6 +100,7 @@ export const useWidgets = (areaId) => {
 
             if (error) throw error;
             await fetchWidgets();
+            await triggerPublicRebuild({ tenantId, resource: 'widgets', action: 'delete' });
             toast({ title: "Deleted", description: "Widget removed." });
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -127,6 +131,7 @@ export const useWidgets = (areaId) => {
                 .upsert(updates, { onConflict: 'id' }); // Assuming 'id' is PK
 
             if (error) throw error;
+            await triggerPublicRebuild({ tenantId, resource: 'widgets', action: 'reorder' });
             // No need to fetch if successful, we already optimistic updated
         } catch (error) {
             console.error(error);

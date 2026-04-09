@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useTenant } from '@/contexts/TenantContext';
+import { triggerPublicRebuild } from '@/lib/publicRebuild';
 
 export const useTemplates = () => {
     const { toast } = useToast();
@@ -92,6 +93,7 @@ export const useTemplates = () => {
             if (error) throw error;
             toast({ title: "Success", description: "Template created successfully." });
             fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'templates', action: 'create' });
             return data;
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -110,6 +112,7 @@ export const useTemplates = () => {
             if (error) throw error;
             toast({ title: "Success", description: "Template updated successfully." });
             fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'templates', action: 'update' });
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
             throw error;
@@ -127,6 +130,7 @@ export const useTemplates = () => {
             if (error) throw error;
             toast({ title: "Deleted", description: "Template removed." });
             fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'templates', action: 'delete' });
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         }
@@ -147,6 +151,7 @@ export const useTemplates = () => {
 
             toast({ title: "Success", description: "Template duplicated." });
             fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'templates', action: 'duplicate' });
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         }
@@ -165,6 +170,7 @@ export const useTemplates = () => {
             if (error) throw error;
             toast({ title: "Success", description: "Part created." });
             fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'template_parts', action: 'create' });
             return data;
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -183,6 +189,7 @@ export const useTemplates = () => {
             if (error) throw error;
             toast({ title: "Success", description: "Part updated successfully." });
             fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'template_parts', action: 'update' });
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
             throw error;
@@ -200,6 +207,7 @@ export const useTemplates = () => {
             if (error) throw error;
             toast({ title: "Deleted", description: "Part removed." });
             fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'template_parts', action: 'delete' });
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         }
@@ -227,6 +235,7 @@ export const useTemplates = () => {
             });
             // Background refresh
             fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'template_assignments', action: 'update' });
             toast({ title: "Success", description: "Assignment updated" });
         } catch (error) {
             console.error("Error updating assignment:", error);
@@ -271,6 +280,7 @@ export const useTemplates = () => {
                 if (error) throw error;
             }
             await fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'template_strings', action: 'update' });
             toast({ title: "Saved", description: "Translation saved." });
             return true;
         } catch (error) {
@@ -288,6 +298,7 @@ export const useTemplates = () => {
 
             if (error) throw error;
             await fetchData();
+            await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'template_strings', action: 'delete' });
             toast({ title: "Deleted", description: "Translation removed." });
         } catch (error) {
             toast({ title: "Error", description: error.message, variant: "destructive" });

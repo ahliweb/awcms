@@ -4,6 +4,7 @@ import Header from "~/components/widgets/Header.astro";
 
 import { headerData as fallbackHeaderData } from "~/navigation";
 import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicSettings } from "~/lib/publicSettings";
 import {
   getHeaderMenu,
   mapMenuItemsToHeaderLinks,
@@ -23,8 +24,27 @@ const { metadata, pageType = "landing" } = Astro.props;
 const tenantId = getPublicTenantId();
 const supabase = createClientFromEnv(import.meta.env);
 const locale = getLocale(Astro.url);
+const { siteInfo } = await getPublicSettings();
 
 let headerLinks: HeaderLink[] = fallbackHeaderData.links;
+let headerActions = fallbackHeaderData.actions;
+
+const configuredPrimaryCtaLabel =
+  (siteInfo?.primary_cta_label as string | undefined) ||
+  (siteInfo?.primaryCtaLabel as string | undefined);
+const configuredPrimaryCtaUrl =
+  (siteInfo?.primary_cta_url as string | undefined) ||
+  (siteInfo?.primaryCtaUrl as string | undefined);
+
+if (configuredPrimaryCtaLabel && configuredPrimaryCtaUrl) {
+  headerActions = [
+    {
+      text: configuredPrimaryCtaLabel,
+      href: configuredPrimaryCtaUrl,
+      target: configuredPrimaryCtaUrl.startsWith("http") ? "_blank" : undefined,
+    },
+  ];
+}
 
 if (supabase && tenantId) {
   const headerItems = await getHeaderMenu(supabase, tenantId, locale);
@@ -42,12 +62,7 @@ if (supabase && tenantId) {
     <slot name="header">
       <Header
         links={headerLinks?.[2] ? [headerLinks[2]] : headerLinks}
-        actions={[
-          {
-            text: "Download",
-            href: "https://ahliweb.co.id",
-          },
-        ]}
+        actions={headerActions}
         showToggleTheme
         position="right"
       />
