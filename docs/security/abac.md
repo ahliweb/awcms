@@ -157,6 +157,7 @@ Current blueprint/bootstrap usage in app code:
 | Partners      | `tenant.partners.*`      | read, create, update, delete                                     |
 | Fun Facts     | `tenant.funfacts.*`      | read, create, update, delete                                     |
 | Services      | `tenant.services.*`      | read, create, update, delete                                     |
+| Team Members  | `tenant.teams.*`         | read, create, update, delete                                     |
 | Testimonies   | `tenant.testimonies.*`   | read, create, update, delete, restore, permanent_delete          |
 | Announcements | `tenant.announcements.*` | read, create, update, delete, restore, permanent_delete          |
 | Promotions    | `tenant.promotions.*`    | read, create, update, delete, restore, permanent_delete          |
