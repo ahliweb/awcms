@@ -169,6 +169,24 @@ test('public modules route rejects mismatched tenant and domain context', async 
   assert.deepEqual(await response.json(), { error: 'Tenant/domain mismatch' })
 })
 
+test('public media rejects protected storage namespace', async () => {
+  const response = await app.fetch(new Request('https://edge.example.com/public/media/tenants%2Ftenant-1%2Fprotected%2Fsecret-file.jpg', {
+    method: 'GET',
+  }), authOnlyEnv)
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'Invalid public storage key' })
+})
+
+test('public media rejects malformed storage key traversal', async () => {
+  const response = await app.fetch(new Request('https://edge.example.com/public/media/tenants%2Ftenant-1%2F..%2Fsecret-file.jpg', {
+    method: 'GET',
+  }), authOnlyEnv)
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'Invalid public storage key' })
+})
+
 test('mailketing-webhook rejects invalid JSON', async () => {
   const response = await app.request('/functions/v1/mailketing-webhook', {
     method: 'POST',

@@ -44,6 +44,15 @@ The Worker currently provides maintained routes for:
 
 Compatibility routes continue to use `/functions/v1/<name>` so existing clients can target the Worker API without depending on Supabase Edge Functions.
 
+## Public Route Guardrails
+
+- Public tenant-aware routes must resolve tenant identity from either `tenantId`/`tenant_id` or `domain`.
+- When both `tenantId` and `domain` are provided, they must resolve to the same tenant; otherwise the Worker returns `400 Tenant/domain mismatch`.
+- Public extension compatibility routes such as `/functions/v1/extensions/events/public` and `/functions/v1/extensions/public-modules` now support `domain` as an alternative to `tenantId`.
+- `/public/sitemap` fails closed when tenant context is missing or mismatched and returns an XML error payload instead of proceeding with an unresolved tenant.
+- `/public/media/*` serves only canonical tenant-prefixed public object keys in the form `tenants/<tenant_id>/...`.
+- `/public/media/*` rejects malformed keys, traversal-like segments, and the reserved protected namespace `tenants/<tenant_id>/protected/...` before metadata or storage lookup.
+
 ## Local Development
 
 Run from the Worker workspace:
@@ -135,8 +144,10 @@ npm run deploy
 
 - Worker routes respond from the configured `VITE_EDGE_URL` / `PUBLIC_EDGE_URL`.
 - Worker routes validate Supabase Auth context before protected operations.
+- Public tenant-aware routes reject missing tenant context and reject mismatched `tenantId` + `domain` combinations.
 - Privileged operations use `SUPABASE_SECRET_KEY` only inside approved Worker code.
 - Media flows use Cloudflare R2 and `media_objects` / `media_upload_sessions` metadata tables.
+- Public media delivery accepts only canonical tenant-prefixed public storage keys and never serves protected/session-bound paths through `/public/media/*`.
 - Finalize route returns `202 Accepted` and a `job_id`; finalization completes asynchronously via the `awcms-media-events` queue consumer.
 - Queue consumer does not trust message payload as authoritative; it re-reads from Supabase before writing.
 - Notifications consumer handles `site.rebuild.requested` and `email.send.requested` events from `awcms-notifications` queue.
@@ -149,6 +160,8 @@ npm run deploy
 
 - `Missing VITE_EDGE_URL`: configure the Worker URL for the client workspace.
 - `401 Unauthorized`: verify the caller has a valid Supabase session and the Worker forwards the bearer token.
+- `400 Tenant/domain mismatch`: verify the supplied `tenantId` and `domain` resolve to the same tenant record.
+- `400 Invalid public storage key`: verify the requested public media path uses a canonical key like `tenants/<tenant_id>/<file>` and does not target `/protected/` or traversal segments.
 - `5xx` from media routes: check R2 bindings and required Worker env values.
 - `403` from protected routes: verify the user's role flags and ABAC grants in Supabase.
 - Stale storage helper behavior: if an older caller still invokes `sync_storage_files()`, it now returns a deprecation payload because maintained media flows use Cloudflare R2 plus `public.media_objects`.

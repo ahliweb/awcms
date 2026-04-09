@@ -209,6 +209,32 @@ const buildPublicMediaUrl = (requestUrl: string, storageKey: string) => {
   return new URL(`/public/media/${encodedKey}`, requestUrl).toString()
 }
 
+const isCanonicalPublicMediaStorageKey = (storageKey: string) => {
+  const normalized = String(storageKey || '').trim()
+  if (!normalized || normalized.startsWith('/') || normalized.endsWith('/')) {
+    return false
+  }
+
+  const segments = normalized.split('/')
+  if (segments.length < 3 || segments[0] !== 'tenants') {
+    return false
+  }
+
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+    return false
+  }
+
+  if (segments[1] === 'protected') {
+    return false
+  }
+
+  if (segments[2] === 'protected') {
+    return false
+  }
+
+  return true
+}
+
 const getUserContext = async (env: Bindings, userId: string): Promise<UserContext> => {
   const adminSupabase = getAdminSupabase(env)
   const { data, error } = await adminSupabase
@@ -2652,7 +2678,17 @@ app.get('/public/media/*', async (c) => {
     return c.json({ error: 'Missing storage key' }, 400);
   }
 
-  const storageKey = decodeURIComponent(storageKeyParam);
+  let storageKey = ''
+  try {
+    storageKey = decodeURIComponent(storageKeyParam)
+  } catch {
+    return c.json({ error: 'Invalid storage key' }, 400)
+  }
+
+  if (!isCanonicalPublicMediaStorageKey(storageKey)) {
+    return c.json({ error: 'Invalid public storage key' }, 400)
+  }
+
   // Public reads rely on the public-read policy; a publishable key is enough here.
   const supabase = createClient(c.env.VITE_SUPABASE_URL, c.env.VITE_SUPABASE_PUBLISHABLE_KEY);
   
@@ -2672,7 +2708,7 @@ app.get('/public/media/*', async (c) => {
 
   let object
   try {
-    object = await getStoredObject(c.env, storageKey)
+    object = await getStoredObject(c.env, media.storage_key)
   } catch {
     object = null
   }
