@@ -17,27 +17,27 @@ const SidebarItem = ({ href, icon: Icon, label, active, onClick }) => (
             className={cn(
                 "group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all",
                 active
-                    ? "border-primary/25 bg-primary/10 text-primary shadow-sm"
-                    : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-accent/60 hover:text-foreground"
+                    ? "border-white/12 bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
+                    : "border-transparent text-slate-300/82 hover:border-white/10 hover:bg-white/6 hover:text-white"
             )}
         >
             {active && (
-                <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-primary" />
+                <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-sky-400" />
             )}
 
             <span
                 className={cn(
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors",
                     active
-                        ? "border-primary/20 bg-primary/15"
-                        : "border-border/50 bg-card/70 group-hover:border-border"
+                        ? "border-white/12 bg-white/10"
+                        : "border-white/8 bg-white/[0.035] group-hover:border-white/12"
                 )}
             >
                 {Icon && (
                     <Icon
                         className={cn(
                             "h-4 w-4 transition-colors",
-                            active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                            active ? "text-sky-300" : "text-slate-400 group-hover:text-white"
                         )}
                     />
                 )}
@@ -47,7 +47,7 @@ const SidebarItem = ({ href, icon: Icon, label, active, onClick }) => (
             <ChevronRight
                 className={cn(
                     "ml-auto h-4 w-4 shrink-0 transition-opacity",
-                    active ? "opacity-100 text-primary" : "opacity-0 text-muted-foreground group-hover:opacity-100"
+                    active ? "opacity-100 text-sky-300" : "opacity-0 text-slate-500 group-hover:opacity-100"
                 )}
             />
         </Link>
@@ -134,21 +134,21 @@ const Sidebar = ({ isOpen, onClose }) => {
                 id="sidebar"
                 className={cn(
                     "fixed left-0 z-30 w-64 transition-transform duration-200",
-                    "border-r border-border/70 bg-card/85 text-foreground shadow-xl shadow-slate-900/5 backdrop-blur-xl dark:shadow-black/25",
+                    "emdash-rail border-r border-white/8 backdrop-blur-xl",
                     isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
                 )}
-                style={{ top: 'var(--header-h)', height: 'calc(100vh - var(--header-h))' }}
+                style={{ top: 'calc(var(--header-h) + 0.75rem)', height: 'calc(100vh - var(--header-h) - 1.5rem)' }}
                 aria-label="Sidebar"
             >
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[radial-gradient(240px_80px_at_10%_0%,rgba(59,130,246,0.16),transparent_70%)] dark:bg-[radial-gradient(240px_80px_at_10%_0%,rgba(37,99,235,0.26),transparent_70%)]" />
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[radial-gradient(260px_120px_at_10%_0%,rgba(56,189,248,0.22),transparent_60%),radial-gradient(220px_120px_at_100%_100%,rgba(129,140,248,0.18),transparent_55%)]" />
 
                 <div className="relative flex h-full min-h-0 flex-col">
-                    <div className="flex h-11 items-center justify-between px-4 border-b border-border/40 lg:hidden">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Menu</span>
+                    <div className="flex h-11 items-center justify-between px-4 border-b border-white/10 lg:hidden">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Sections</span>
                         <button
                             type="button"
                             onClick={onClose}
-                            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/8 hover:text-white"
                             aria-label="Close sidebar"
                         >
                             <X className="h-4 w-4" />
@@ -159,13 +159,13 @@ const Sidebar = ({ isOpen, onClose }) => {
                         <label htmlFor="sidebar-search" className="sr-only">Search</label>
                         <div className="relative">
                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <Search className="h-4 w-4 text-muted-foreground" />
+                                <Search className="h-4 w-4 text-slate-500" />
                             </div>
                             <input
                                 type="text"
                                 name="search"
                                 id="sidebar-search"
-                                className="block w-full rounded-xl border border-border/70 bg-muted/40 p-2.5 pl-10 text-sm text-foreground placeholder:text-muted-foreground/80 transition-colors focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                className="block w-full rounded-2xl border border-white/10 bg-white/[0.045] p-2.5 pl-10 text-sm text-white placeholder:text-slate-500 transition-colors focus:border-sky-400/50 focus:outline-none focus:ring-2 focus:ring-sky-400/20"
                                 placeholder={t('sidebar.search_placeholder', 'Search')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -189,12 +189,12 @@ const Sidebar = ({ isOpen, onClose }) => {
                                 return (
                                     <div key={topGroupKey} className="pt-2 mb-4">
                                         <div className="mb-2 px-2">
-                                            <h2 className="text-xs font-bold uppercase tracking-widest text-primary/80 dark:text-primary/70">
+                                            <h2 className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500">
                                                 {topGroup.label}
                                             </h2>
                                         </div>
 
-                                        <div className="pt-1 mb-2 pl-2 border-l border-border/50 ml-2">
+                                        <div className="pt-1 mb-2 pl-2 border-l border-white/8 ml-2">
                                             <ul className="space-y-1">
                                                 {topGroup.items.map(item => {
                                                     const Icon = getIconComponent(item.icon);

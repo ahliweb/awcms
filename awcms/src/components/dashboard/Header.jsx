@@ -58,8 +58,8 @@ function Header({ toggleSidebar, _onNavigate }) {
   };
 
   return (
-    <header className="relative sticky top-0 z-[60] h-16 border-b border-border/60 bg-background/80 shadow-[0_8px_24px_-24px_rgba(15,23,42,0.8)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
+    <header className="relative sticky top-0 z-[60] h-16 border-b border-slate-900/10 bg-background/70 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/55 dark:border-white/10">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
 
       <div className="flex h-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         {/* Left: branding + mobile menu */}
@@ -68,19 +68,19 @@ function Header({ toggleSidebar, _onNavigate }) {
             variant="ghost"
             size="icon"
             onClick={toggleSidebar}
-            className="h-10 w-10 rounded-xl border border-border/60 bg-card/80 text-muted-foreground hover:bg-accent hover:text-foreground lg:hidden"
+            className="h-10 w-10 rounded-2xl border border-slate-900/10 bg-white/80 text-muted-foreground hover:bg-accent hover:text-foreground lg:hidden dark:border-white/10 dark:bg-slate-900/70"
           >
             <Menu className="w-6 h-6" />
           </Button>
 
           <div className="flex min-w-0 items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-600 p-2 text-white shadow-md shadow-blue-500/30">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/60 bg-slate-950 text-white shadow-[0_16px_35px_-20px_rgba(15,23,42,0.9)] dark:border-white/10">
               <ShieldCheck className="h-full w-full" />
             </div>
             <div className="min-w-0 hidden sm:block">
-              <p className="truncate text-sm font-semibold tracking-tight text-foreground">AWCMS Admin</p>
-              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                <span>Control Center</span>
+              <p className="truncate text-sm font-semibold tracking-[0.02em] text-foreground">AWCMS / EmDash</p>
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <span>Editorial Command</span>
                 <span className="text-[10px] tracking-[0.12em] text-muted-foreground/80">{RELEASE_LABEL}</span>
               </div>
             </div>
@@ -90,13 +90,13 @@ function Header({ toggleSidebar, _onNavigate }) {
         {/* Center: Tenant Switcher (Platform Admins only) */}
         {isPlatformAdmin && currentTenant && (
           <div className="hidden xl:flex flex-1 items-center justify-center px-6">
-            <div className="flex items-center gap-2.5 rounded-2xl border border-primary/20 bg-primary/8 px-3.5 py-1.5 shadow-sm ring-1 ring-primary/10 dark:bg-primary/15 dark:ring-primary/20 w-full max-w-[480px]">
+            <div className="flex items-center gap-2.5 rounded-[1.35rem] border border-slate-900/10 bg-white/78 px-3.5 py-1.5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.55)] ring-1 ring-slate-900/5 dark:border-white/10 dark:bg-slate-900/72 dark:ring-white/5 w-full max-w-[520px]">
               <div className="flex shrink-0 items-center gap-2 text-primary">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-primary/15 bg-primary/12">
                   <Building2 className="h-3.5 w-3.5" />
                 </div>
                 <div className="leading-none">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/60">Viewing Tenant</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/60">Active Scope</p>
                 </div>
               </div>
               <div className="h-4 w-px shrink-0 bg-primary/20" />
@@ -106,7 +106,7 @@ function Header({ toggleSidebar, _onNavigate }) {
                   switchTenantScope(value);
                 }}
               >
-                <SelectTrigger className="h-8 flex-1 rounded-xl border-0 bg-transparent px-2 text-sm font-semibold text-foreground shadow-none focus:ring-0 focus:ring-offset-0 hover:bg-primary/5">
+                <SelectTrigger className="h-9 flex-1 rounded-2xl border-0 bg-transparent px-2 text-sm font-semibold text-foreground shadow-none focus:ring-0 focus:ring-offset-0 hover:bg-primary/5">
                   <SelectValue placeholder="Select tenant scope" />
                 </SelectTrigger>
                 <SelectContent align="center" className="min-w-[320px]">
@@ -132,7 +132,7 @@ function Header({ toggleSidebar, _onNavigate }) {
         {!(isPlatformAdmin && currentTenant) && <div className="flex-1" />}
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-card/75 px-1.5 py-1 shadow-sm backdrop-blur-sm">
+          <div className="flex items-center gap-1 rounded-[1.15rem] border border-slate-900/10 bg-white/76 px-1.5 py-1 shadow-[0_12px_28px_-22px_rgba(15,23,42,0.55)] backdrop-blur-sm dark:border-white/10 dark:bg-slate-900/72">
             <DarkModeToggle />
             <LanguageSelector />
             <NotificationDropdown />
@@ -140,7 +140,7 @@ function Header({ toggleSidebar, _onNavigate }) {
 
           <DropdownMenu>
             <DropdownMenuTrigger className="relative flex h-10 w-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-opacity hover:opacity-90">
-              <Avatar className="h-10 w-10 cursor-pointer border-2 border-primary/25 ring-2 ring-background shadow-md transition-colors hover:border-primary/60">
+              <Avatar className="h-10 w-10 cursor-pointer border-2 border-slate-950/10 ring-2 ring-background shadow-md transition-colors hover:border-primary/60 dark:border-white/10">
                 {(user?.user_metadata?.avatar_url) ? (
                   <AvatarImage
                     src={user.user_metadata.avatar_url}
@@ -148,20 +148,20 @@ function Header({ toggleSidebar, _onNavigate }) {
                     className="object-cover"
                   />
                 ) : (
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                    <AvatarFallback className="bg-slate-950 text-white font-bold dark:bg-primary/20">
                     {getInitials(user?.email)}
                   </AvatarFallback>
                 )}
               </Avatar>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="z-[100] mt-2 w-64 overflow-hidden rounded-xl border border-border/70 bg-popover/95 p-0 shadow-2xl backdrop-blur-xl" align="end" forceMount>
+            <DropdownMenuContent className="z-[100] mt-2 w-64 overflow-hidden rounded-[1.5rem] border border-slate-900/10 bg-popover/96 p-0 shadow-[0_30px_80px_-30px_rgba(15,23,42,0.6)] backdrop-blur-2xl dark:border-white/10" align="end" forceMount>
               {/* Profile Header Section */}
-              <div className="flex flex-col items-center gap-2 border-b border-border/50 bg-muted/30 px-6 py-5 text-center">
+              <div className="flex flex-col items-center gap-2 border-b border-border/50 bg-[linear-gradient(180deg,rgba(15,23,42,0.04),transparent)] px-6 py-5 text-center dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent)]">
                 <Avatar className="h-16 w-16 mb-2 border-4 border-background shadow-sm">
                   {(user?.user_metadata?.avatar_url) ? (
                     <AvatarImage src={user.user_metadata.avatar_url} className="object-cover" />
                   ) : (
-                    <AvatarFallback className="text-xl bg-primary/10 text-primary font-bold">
+                    <AvatarFallback className="text-xl bg-slate-950 text-white font-bold dark:bg-primary/20">
                       {getInitials(user?.email)}
                     </AvatarFallback>
                   )}

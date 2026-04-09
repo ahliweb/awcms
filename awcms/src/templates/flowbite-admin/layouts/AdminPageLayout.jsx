@@ -29,7 +29,7 @@ const AdminPageLayout = ({
     if (!permLoading && !hasAccess) {
         return (
             <div
-                className="mb-4 rounded-2xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-sm"
+                className="mb-4 rounded-[1.5rem] border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-sm"
                 role="alert"
             >
                 <span className="font-semibold">Access denied.</span> You do not have permission to view this page.
@@ -39,7 +39,7 @@ const AdminPageLayout = ({
 
     if (isLoading) {
         return (
-            <div className="grid min-h-[420px] place-items-center rounded-2xl border border-border/60 bg-card/55 p-8 backdrop-blur-sm">
+            <div className="emdash-panel grid min-h-[420px] place-items-center p-8">
                 <div className="text-center text-muted-foreground">
                     <div role="status">
                         <svg aria-hidden="true" className="inline w-8 h-8 text-muted-foreground animate-spin fill-primary" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -59,13 +59,13 @@ const AdminPageLayout = ({
     }
 
     return (
-        <div
-            className={cn(
-                "relative space-y-8 overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-6 shadow-sm backdrop-blur-sm sm:p-8",
+            <div
+                className={cn(
+                "emdash-panel relative space-y-8 overflow-hidden p-6 sm:p-8",
                 className
             )}
         >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.12),_transparent_60%)] dark:bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.18),_transparent_55%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.14),_transparent_42%),radial-gradient(circle_at_top_right,_rgba(129,140,248,0.12),_transparent_38%)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_40%),radial-gradient(circle_at_top_right,_rgba(129,140,248,0.16),_transparent_35%)]" />
             <div className="relative z-10">
                 {children}
             </div>

@@ -26,7 +26,7 @@ export function PageTabs({ value, onValueChange, tabs, children, className }) {
             <div className={cn("w-full", className)}>
                 {/* Tab List */}
                 {tabs && tabs.length > 0 && (
-                    <div className="mb-6 overflow-x-auto rounded-2xl border border-border/60 bg-card/60 p-1.5 shadow-sm">
+                    <div className="mb-6 overflow-x-auto rounded-[1.4rem] border border-slate-900/10 bg-white/78 p-1.5 shadow-[0_18px_34px_-24px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-slate-950/52">
                         <div className="flex min-w-max items-center gap-1">
                             {tabs.map((tab) => {
                                 const isActive = value === tab.value;
@@ -41,8 +41,8 @@ export function PageTabs({ value, onValueChange, tabs, children, className }) {
                                             "relative flex items-center gap-2 whitespace-nowrap rounded-xl border px-4 py-2.5 text-sm font-medium transition-all",
                                             "focus:outline-none focus:ring-2 focus:ring-primary/20",
                                             isActive
-                                                ? "border-border/70 bg-background text-foreground shadow-sm"
-                                                : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-accent/60 hover:text-foreground"
+                                                ? "border-slate-900/10 bg-slate-950 text-white shadow-[0_18px_34px_-26px_rgba(15,23,42,0.65)] dark:border-white/10 dark:bg-white dark:text-slate-950"
+                                                : "border-transparent text-muted-foreground hover:border-slate-900/10 hover:bg-accent/60 hover:text-foreground dark:hover:border-white/10"
                                         )}
                                     >
                                         {Icon && <Icon className="w-4 h-4" />}
@@ -88,7 +88,7 @@ export function TabsContent({ value, children, className }) {
 export function TabsList({ children, className }) {
     return (
         <div className={cn(
-            "mb-6 flex overflow-x-auto rounded-2xl border border-border/60 bg-card/60 p-1.5 shadow-sm",
+            "mb-6 flex overflow-x-auto rounded-[1.4rem] border border-slate-900/10 bg-white/78 p-1.5 shadow-[0_18px_34px_-24px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-slate-950/52",
             className
         )}>
             {children}
@@ -114,8 +114,8 @@ export function TabsTrigger({ value, children, className }) {
                 "relative whitespace-nowrap rounded-xl border px-4 py-2.5 text-sm font-medium transition-all",
                 "focus:outline-none focus:ring-2 focus:ring-primary/20",
                 isActive
-                    ? "border-border/70 bg-background text-foreground shadow-sm"
-                    : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-accent/60 hover:text-foreground",
+                    ? "border-slate-900/10 bg-slate-950 text-white shadow-[0_18px_34px_-26px_rgba(15,23,42,0.65)] dark:border-white/10 dark:bg-white dark:text-slate-950"
+                    : "border-transparent text-muted-foreground hover:border-slate-900/10 hover:bg-accent/60 hover:text-foreground dark:hover:border-white/10",
                 className
             )}
         >

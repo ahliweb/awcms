@@ -9,8 +9,8 @@
 @plugin "flowbite/plugin";
 
 @theme {
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-heading: 'Inter', system-ui, sans-serif;
+  --font-sans: 'Segoe UI Variable Text', 'Inter', system-ui, sans-serif;
+  --font-heading: 'Segoe UI Variable Display', 'Inter', system-ui, sans-serif;
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -77,33 +77,33 @@
 
 /* Default Theme (OKLCH - Neutral/Slate Equivalent) */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --background: oklch(0.978 0.004 95);
+  --foreground: oklch(0.22 0.02 255);
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(0.996 0.003 95);
+  --card-foreground: oklch(0.22 0.02 255);
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(0.996 0.003 95);
+  --popover-foreground: oklch(0.22 0.02 255);
 
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.56 0.18 255);
   --primary-foreground: oklch(0.985 0 0);
 
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.94 0.007 85);
+  --secondary-foreground: oklch(0.28 0.02 255);
 
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted: oklch(0.952 0.006 85);
+  --muted-foreground: oklch(0.5 0.015 255);
 
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.92 0.02 250);
+  --accent-foreground: oklch(0.24 0.02 255);
 
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
 
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.87 0 0);
+  --border: oklch(0.89 0.01 255);
+  --input: oklch(0.89 0.01 255);
+  --ring: oklch(0.7 0.03 255);
 
   --radius: 0.5rem;
 
@@ -130,34 +130,33 @@
 }
 
 .dark {
-  /* Dark mode theme variables - UPDATED v2 */
-  --background: oklch(0.145 0.04 264);
-  --foreground: oklch(0.98 0.005 264);
+  --background: oklch(0.165 0.02 255);
+  --foreground: oklch(0.965 0.006 95);
 
-  --card: oklch(0.18 0.035 264);
-  --card-foreground: oklch(0.98 0.005 264);
+  --card: oklch(0.205 0.02 255);
+  --card-foreground: oklch(0.965 0.006 95);
 
-  --popover: oklch(0.18 0.035 264);
-  --popover-foreground: oklch(0.98 0.005 264);
+  --popover: oklch(0.205 0.02 255);
+  --popover-foreground: oklch(0.965 0.006 95);
 
-  --primary: oklch(0.55 0.2 255);
+  --primary: oklch(0.7 0.15 245);
   --primary-foreground: oklch(0.98 0 0);
 
-  --secondary: oklch(0.28 0.02 264);
-  --secondary-foreground: oklch(0.95 0.005 264);
+  --secondary: oklch(0.26 0.015 255);
+  --secondary-foreground: oklch(0.95 0.006 95);
 
-  --muted: oklch(0.25 0.02 264);
-  --muted-foreground: oklch(0.75 0.01 264);
+  --muted: oklch(0.24 0.012 255);
+  --muted-foreground: oklch(0.76 0.008 95);
 
-  --accent: oklch(0.28 0.02 264);
-  --accent-foreground: oklch(0.95 0.005 264);
+  --accent: oklch(0.3 0.02 245);
+  --accent-foreground: oklch(0.95 0.006 95);
 
   --destructive: oklch(0.55 0.2 25);
   --destructive-foreground: oklch(0.98 0.005 264);
 
-  --border: oklch(0.35 0.015 264);
-  --input: oklch(0.28 0.02 264);
-  --ring: oklch(0.55 0.02 264);
+  --border: oklch(0.33 0.015 255);
+  --input: oklch(0.28 0.015 255);
+  --ring: oklch(0.62 0.04 245);
 }
 
 @layer base {
@@ -169,6 +168,9 @@
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
+    background-image:
+      radial-gradient(circle at top left, color-mix(in oklab, var(--primary) 14%, transparent) 0%, transparent 38%),
+      linear-gradient(180deg, color-mix(in oklab, var(--background) 92%, white 8%) 0%, var(--background) 100%);
   }
 
   h1,
@@ -203,11 +205,21 @@
 
 @layer utilities {
   .dashboard-surface {
-    @apply rounded-2xl border border-slate-200/60 bg-white/80 shadow-sm backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/60;
+    @apply rounded-[1.75rem] border border-slate-300/70 bg-white/88 shadow-[0_20px_45px_-30px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-slate-700/70 dark:bg-slate-950/72;
   }
 
   .dashboard-surface-hover {
     @apply transition-shadow transition-transform hover:-translate-y-0.5 hover:shadow-md;
+  }
+
+  .emdash-panel {
+    @apply rounded-[1.75rem] border shadow-[0_24px_60px_-36px_rgba(15,23,42,0.55)] backdrop-blur-xl;
+    background-color: color-mix(in oklab, var(--card) 82%, transparent);
+    border-color: color-mix(in oklab, var(--border) 70%, transparent);
+  }
+
+  .emdash-rail {
+    @apply border border-slate-900/10 bg-slate-950 text-slate-50 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.7)] dark:border-white/10 dark:bg-slate-950;
   }
 }
 

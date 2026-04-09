@@ -1,7 +1,7 @@
 /**
- * Flowbite Admin Template
+ * EmDash Admin Shell
  * 
- * Replaces awadmintemplate01.
+ * Backward-compatible export surface for the current shared admin shell.
  * @module flowbite-admin
  */
 
@@ -25,5 +25,5 @@ export { PageTabs, TabsList, TabsTrigger, TabsContent } from './components/PageT
 // Access Control Components (Legacy/Shared) - REMOVED
 // export { default as NotAuthorized } from './components/legacy/NotAuthorized';
 
-export const TEMPLATE_VERSION = '1.0.0';
-export const TEMPLATE_NAME = 'flowbite-admin-react';
+export const TEMPLATE_VERSION = '2.0.0';
+export const TEMPLATE_NAME = 'emdash-admin-react';

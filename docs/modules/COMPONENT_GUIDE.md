@@ -17,6 +17,7 @@ Current AWCMS component work in `awcms/` is built around:
 - shadcn/ui-style primitives under `awcms/src/components/ui`
 - Tailwind/CSS-variable-based styling
 - layout/page wrappers used by manager screens
+- an EmDash-aligned shared admin shell visual language implemented through the existing shared template layer
 - `cn()` for conditional classes
 - toast-driven feedback for important user actions
 

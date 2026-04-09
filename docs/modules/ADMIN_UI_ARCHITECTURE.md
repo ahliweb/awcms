@@ -43,6 +43,8 @@ Current admin pages typically compose around shared wrappers such as:
 - `PageHeader`
 - shared content/table/form components
 
+The current checked-in shell keeps the existing shared template module path for compatibility, but its visual system is EmDash-aligned rather than the older Flowbite-branded presentation.
+
 These provide the current consistent shell behavior for permission-gated manager screens.
 
 ## Current Manager Pattern
