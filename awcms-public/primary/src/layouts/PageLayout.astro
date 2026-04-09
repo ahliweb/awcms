@@ -52,12 +52,47 @@ let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 let footerLinks = fallbackFooterData.links;
 let headerActions = fallbackHeaderData.actions;
 let socialLinks = fallbackFooterData.socialLinks;
-const localizedFallbackSecondaryLinks = fallbackFooterData.secondaryLinks.map(
+let secondaryLinks = fallbackFooterData.secondaryLinks.map(
   (link) => ({
     ...link,
     href: localizePublicUrl(link.href, locale),
   }),
 );
+let footNote = fallbackFooterData.footNote;
+
+const parseJsonArray = (value: unknown) => {
+  if (!value) return null;
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+const normalizedHeaderActions = parseJsonArray(
+  siteInfo?.header_actions_json || siteInfo?.headerActions,
+)
+  ?.map((action) => {
+    if (!action || typeof action !== "object") return null;
+    const text = typeof action.text === "string" ? action.text : "";
+    const href = typeof action.href === "string" ? action.href : "";
+    if (!text || !href) return null;
+    return {
+      text,
+      href: localizePublicUrl(href, locale),
+      target: typeof action.target === "string" ? action.target : undefined,
+    };
+  })
+  .filter(Boolean);
+
+if (normalizedHeaderActions && normalizedHeaderActions.length > 0) {
+  headerActions = normalizedHeaderActions;
+}
 
 const configuredPrimaryCtaLabel =
   (siteInfo?.primary_cta_label as string | undefined) ||
@@ -74,6 +109,61 @@ if (configuredPrimaryCtaLabel && configuredPrimaryCtaUrl) {
       target: configuredPrimaryCtaUrl.startsWith("http") ? "_blank" : undefined,
     },
   ];
+}
+
+const configuredFooterColumns = parseJsonArray(
+  siteInfo?.footer_columns_json || siteInfo?.footerColumns,
+)
+  ?.map((column) => {
+    if (!column || typeof column !== "object") return null;
+    const title = typeof column.title === "string" ? column.title : "";
+    const links = Array.isArray(column.links)
+      ? column.links
+          .map((link) => {
+            if (!link || typeof link !== "object") return null;
+            const text = typeof link.text === "string" ? link.text : "";
+            const href = typeof link.href === "string" ? link.href : "";
+            if (!text || !href) return null;
+            return {
+              text,
+              href: localizePublicUrl(href, locale),
+              ariaLabel:
+                typeof link.ariaLabel === "string" ? link.ariaLabel : undefined,
+              target: typeof link.target === "string" ? link.target : undefined,
+              popup: Boolean(link.popup),
+            };
+          })
+          .filter(Boolean)
+      : [];
+    if (!title && links.length === 0) return null;
+    return { title, links };
+  })
+  .filter(Boolean);
+
+if (configuredFooterColumns && configuredFooterColumns.length > 0) {
+  footerLinks = configuredFooterColumns;
+}
+
+const configuredSecondaryLinks = parseJsonArray(
+  siteInfo?.footer_secondary_links_json || siteInfo?.footerSecondaryLinks,
+)
+  ?.map((link) => {
+    if (!link || typeof link !== "object") return null;
+    const text = typeof link.text === "string" ? link.text : "";
+    const href = typeof link.href === "string" ? link.href : "";
+    if (!text || !href) return null;
+    return {
+      text,
+      href: localizePublicUrl(href, locale),
+      target: typeof link.target === "string" ? link.target : undefined,
+      popup: Boolean(link.popup),
+      ariaLabel: typeof link.ariaLabel === "string" ? link.ariaLabel : undefined,
+    };
+  })
+  .filter(Boolean);
+
+if (configuredSecondaryLinks && configuredSecondaryLinks.length > 0) {
+  secondaryLinks = configuredSecondaryLinks;
 }
 
 const configuredSocialLinks = [
@@ -117,6 +207,30 @@ const configuredSocialLinks = [
 
 if (configuredSocialLinks.length > 0) {
   socialLinks = configuredSocialLinks;
+}
+
+const configuredSocialLinksJson = parseJsonArray(
+  siteInfo?.social_links_json || siteInfo?.socialLinks,
+)
+  ?.map((link) => {
+    if (!link || typeof link !== "object") return null;
+    const href = typeof link.href === "string" ? link.href : "";
+    const ariaLabel = typeof link.ariaLabel === "string" ? link.ariaLabel : "";
+    const icon = typeof link.icon === "string" ? link.icon : "";
+    if (!href || !ariaLabel || !icon) return null;
+    return { href, ariaLabel, icon };
+  })
+  .filter(
+    (item): item is { ariaLabel: string; icon: string; href: string } =>
+      Boolean(item),
+  );
+
+if (configuredSocialLinksJson && configuredSocialLinksJson.length > 0) {
+  socialLinks = configuredSocialLinksJson;
+}
+
+if (typeof siteInfo?.footer_footnote === "string" && siteInfo.footer_footnote) {
+  footNote = siteInfo.footer_footnote;
 }
 
 if (supabase && tenantId) {
@@ -175,9 +289,9 @@ if (supabase && tenantId) {
   <slot name="footer">
       <Footer
         links={footerLinks}
-        secondaryLinks={localizedFallbackSecondaryLinks}
+        secondaryLinks={secondaryLinks}
         socialLinks={socialLinks}
-        footNote={fallbackFooterData.footNote}
+        footNote={footNote}
       />
   </slot>
 </Layout>

@@ -115,6 +115,12 @@ Current admin/public integration expectations for the primary tenant include:
   - `seo_metadata` for canonical site SEO defaults
   - `settings.site_info` for general public identity/contact defaults
   - `tenants.config.theme` / `tenants.config.settings` as branding fallback for the primary tenant
+- public chrome fallback data may now also be sourced from `settings.site_info` for:
+  - header CTA actions
+  - footer columns
+  - footer secondary links
+  - footer social links
+  - footer footnote
 - admin updates to public-facing settings, SEO defaults, branding, published pages, published blogs, and menus should trigger the existing public rebuild flow rather than relying on manual refresh assumptions
 
 ### `awcms-public/smandapbun/`

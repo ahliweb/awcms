@@ -29,6 +29,40 @@ const { siteInfo } = await getPublicSettings();
 let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 let headerActions = fallbackHeaderData.actions;
 
+const parseJsonArray = (value: unknown) => {
+  if (!value) return null;
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+const normalizedHeaderActions = parseJsonArray(
+  siteInfo?.header_actions_json || siteInfo?.headerActions,
+)
+  ?.map((action) => {
+    if (!action || typeof action !== "object") return null;
+    const text = typeof action.text === "string" ? action.text : "";
+    const href = typeof action.href === "string" ? action.href : "";
+    if (!text || !href) return null;
+    return {
+      text,
+      href,
+      target: typeof action.target === "string" ? action.target : undefined,
+    };
+  })
+  .filter(Boolean);
+
+if (normalizedHeaderActions && normalizedHeaderActions.length > 0) {
+  headerActions = normalizedHeaderActions;
+}
+
 const configuredPrimaryCtaLabel =
   (siteInfo?.primary_cta_label as string | undefined) ||
   (siteInfo?.primaryCtaLabel as string | undefined);

@@ -249,6 +249,9 @@ Current public-facing admin surfaces that should participate in rebuild signalin
 - public-facing settings such as `site_info`
 - tenant SEO defaults
 - tenant branding changes that affect the primary public portal
+- widget changes for tenant widget areas
+- tenant module activation changes that affect public module exposure
+- template parts, template assignments, and template string changes that affect public rendering/layout fallback behavior
 
 ## Current Reference Pattern: Tenant Content Form
 
