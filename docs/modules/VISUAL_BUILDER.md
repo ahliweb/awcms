@@ -1,63 +1,70 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 3 (Modules)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Visual Builder
 
 ## Purpose
 
-Explain the Visual Page Builder architecture and integration with public rendering.
+Explain the current visual-builder architecture in AWCMS: admin editing with Puck, template/page/part modes, reusable section composition, template-owned public rendering, and the current route/permission model around visual content editing.
 
-## Audience
+## Current Visual Builder Model
 
-- Admin panel developers
-- Public portal developers
+The current visual-builder system is broader than a single page editor.
 
-## Prerequisites
+Current concepts include:
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Visual Builder architecture
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/modules/TEMPLATE_SYSTEM.md`
-- `docs/security/abac.md`
+- page visual editing
+- template editing
+- template-part editing
+- reusable sections
+- site blueprints and template composition primitives
+- public render-only Puck output
 
-## Core Concepts
+## Current Storage Model
 
-- Admin uses `@puckeditor/core` editor components to build layouts.
-- Output is stored in `puck_layout_jsonb`.
-- Public portal renders JSON via `PuckRenderer` with an allow-list registry.
-- `editor_type` controls whether public pages render Puck JSON (`visual`) or HTML (`richtext`).
+- visual content is stored as Puck JSON/layout data
+- public output is render-only
+- blog presentation is currently owned by template/page composition patterns rather than direct Puck editing on `blogs` rows
 
-## How It Works
+## Current Admin Surfaces
 
-### Admin Components
+Current important admin files include:
 
 - `awcms/src/components/dashboard/VisualPagesManager.jsx`
 - `awcms/src/components/visual-builder/VisualPageBuilder.jsx`
-- `awcms/src/components/visual-builder/config.js`
-- `awcms/src/components/visual-builder/blocks/ContentReferenceBlocks.jsx`
+- visual-builder config/block files under `awcms/src/components/visual-builder/`
 
-### Admin Routes
+Current composition-related helper surfaces also include reusable-section and template-assignment behavior around the visual-builder flow.
 
-| Route | Purpose | Notes |
-| --- | --- | --- |
-| `/cmspanel/visual-pages` | Visual page list | Canonical route for visual content pages; supports `pages` and `layouts` tab sub-slugs. |
-| `/cmspanel/visual-editor/:mode/:id/*` | Edit a visual layout | `:mode` specifies the type of layout: `template`, `part`, or `page`. `:id` uses signed route parameters (`{uuid}.{signature}`), and the route supports editor sub-slugs. Legacy links using `?templateId` or `?partId` will redirect here. |
+## Current Route Model
 
-Modes:
+Important current routes include:
 
-- `template`: template layout editor
-- `part`: template part editor
-- `page`: visual page layout editor
+- `/cmspanel/visual-pages`
+- `/cmspanel/visual-editor/:mode/:id/*`
 
-Blog presentation is owned by Pages-managed visual templates such as `single_post`, not by direct Visual Builder editing on `blogs` rows.
+Current route notes:
 
-### Public Rendering
+- `:mode` currently distinguishes template/part/page editing contexts
+- `:id` follows current signed route-param behavior
+- visual-editor routes support sub-slugs for refresh-safe editor views/modes
 
-- `awcms-public/primary/src/components/common/PuckRenderer.astro`
-- `awcms-public/primary/src/components/common/WidgetRenderer.astro`
-- `awcms-public/primary/src/pages/[locale]/blogs/[slug].astro`
+## Current Public Rendering Model
 
-## Implementation Patterns
+- public portals use the render-only Puck path
+- public portals must never load the Puck editor runtime
+- unknown blocks should not render outside the current allow-list/registry-driven path
 
-### Registering Blocks
+Current important public surfaces include public Puck/render components and widget renderers in `awcms-public/primary`.
+
+## Current Composition APIs
+
+Visual-builder/runtime composition still relies on current registration and hook patterns such as template block registration.
+
+Example:
 
 ```javascript
 import { registerTemplateBlock } from '@/lib/templateExtensions';
@@ -66,50 +73,63 @@ registerTemplateBlock({
   type: 'my_plugin/chart',
   label: 'Interactive Chart',
   render: ChartComponent,
-  fields: { data: { type: 'object' } }
+  fields: { data: { type: 'object' } },
 });
 ```
 
-### Context7 Guidance (Puck)
+Current important rule:
 
-Puck components should define explicit fields and render functions in a config object.
-Note the following patterns:
+- extension/composition blocks should enter through the current template extension APIs and allow-list-driven render path
 
-- Import `@puckeditor/core/puck.css` in the editor UI.
-- Use `<Puck>` for editing and `<Render config={config} data={data} />` for public output.
-- The Astro `PuckRenderer` wraps `<Render>` with an allow-list component registry.
-- Avoid rendering unknown blocks on the public portal.
-- Prefer Pages-owned content reference blocks when a layout needs to render page/blog title, excerpt, body, image, or metadata.
+## Current Permission Model
 
-## Permissions and Access
+Visual-builder access currently depends on the current page/theme/template permission model rather than a single isolated permission family.
 
-Current UI checks include:
+Current practical expectations:
 
-- Menu access: `tenant.page.read`
-- Visual list: `tenant.visual_pages.read`
-- Edit/publish: `checkAccess('edit', 'pages', page)` and `checkAccess('publish', 'pages', page)`
+- list/editor access must still align with the active admin route/menu/manager permission gates
+- template/part editing currently intersects with theme/template-update capabilities
+- publish/edit behavior should continue to respect the current page-oriented access checks
 
-Theme/template editing inside the visual builder currently gates on `tenant.theme.update` for `template` and `part` modes.
+## Current Reusable Sections And Templates Note
 
-Refer to `docs/security/abac.md` for key conventions.
+The visual-builder system now overlaps more directly with:
 
-## Security and Compliance Notes
+- reusable sections
+- site blueprints
+- template parts
+- template assignments
 
-- Public portal must never load the Puck editor runtime.
-- Unknown blocks are ignored by the registry allow-list.
+This means the visual-builder doc should be read together with template-system and public-architecture docs instead of treated as an isolated editor feature.
 
-## Operational Concerns
+## Current Security Notes
 
-- Ensure templates and parts are assigned for the `web` channel.
+- public portal must never ship the editor runtime
+- unknown/unregistered blocks must remain ignored or blocked by the current render registry
+- visual-builder edits should preserve tenant scope and current permission checks
 
-## Operator Note
+## Current Operator Notes
 
-- Use `single_page` when the layout should render standard Pages-module records and page-owned content references.
-- Use `single_post` when the layout should render Blog-module records inside the Pages-owned visual system.
-- Both template types now open with starter layouts so editors can refine structure instead of building from an empty canvas.
-- For `single_post`, prefer content-reference blocks with `source = blog`; for `single_page`, prefer `source = page`.
+Current template/page composition guidance still includes distinctions such as:
 
-## References
+- page-oriented templates for standard page records
+- post-oriented templates for blog presentation inside the page-owned visual system
+- starter layouts for template types where the current editor flow provides them
 
-- `docs/modules/TEMPLATE_SYSTEM.md`
-- `docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md`
+Treat these as current composition conventions, not arbitrary editor choices.
+
+## Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| admin visual-builder changes | `cd awcms && npm run build` |
+| public render-path changes | `cd awcms-public/primary && npm run check:astro` |
+| edge/public route implications | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+| maintained docs | `cd awcms && npm run docs:check` |
+
+## Related Docs
+
+- [docs/modules/TEMPLATE_SYSTEM.md](./TEMPLATE_SYSTEM.md)
+- [docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md](./PUBLIC_PORTAL_ARCHITECTURE.md)
+- [docs/dev/public.md](../dev/public.md)
+- [docs/dev/admin.md](../dev/admin.md)

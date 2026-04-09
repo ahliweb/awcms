@@ -1,101 +1,152 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Public Portal Architecture
 
 ## Purpose
 
-Describe how the public portal renders tenant content and enforces security constraints.
+Describe the current public portal architecture for AWCMS: static-first Astro rendering, tenant-scoped content resolution, public Worker compatibility routes, sanitization rules, and the relationship between `awcms-public/*` and `awcms-edge/`.
 
-## Audience
+## Current Public Architecture Model
 
-- Public portal developers
-- Operators deploying Astro to Cloudflare Pages
+Current public delivery is split across:
 
-## Prerequisites
+- Astro-based public portal workspaces in `awcms-public/`
+- build-time tenant resolution for canonical static builds
+- public Supabase client reads for published/non-deleted tenant content
+- Worker-backed compatibility routes for selected public runtime behavior
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for Public Portal architecture (Astro 6.0.8, React 19.2.4, static output)
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/tenancy/overview.md`
-- `docs/tenancy/supabase.md`
+Current important rule:
 
-## Core Concepts
+- the maintained public model is static-first, not request-time SSR by default
 
-- Astro static output on Cloudflare Pages with React islands where interactivity is needed.
-- Tenant resolution at build time via `PUBLIC_TENANT_ID` and `getStaticPaths`.
-- `@awcms/shared` is the canonical shared helper layer for public Supabase env resolution, tenant IDs, and sanitization.
-- `PuckRenderer` (wraps `@puckeditor/core` `<Render>`) for rendering Puck JSON with a server-side allow-list.
-- View transitions are enabled via `astro:transitions` `ClientRouter` in `Layout.astro`.
+## Current Core Stack
 
-## How It Works
+- Astro 6.0.8
+- React 19.2.4 islands
+- TypeScript / TSX
+- Supabase JS for approved public data access
+- Worker-backed public compatibility routes where server-side mediation is needed
 
-### Tenant Resolution
+## Current Workspace Model
 
-- Build-time tenant resolution uses `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID` / `VITE_TENANT_ID` as fallbacks).
-- Tenant-specific routes use `getStaticPaths` to generate output.
-- Middleware-based resolution is not part of the canonical static deployment path.
+### `awcms-public/primary/`
 
-### Rendering Pipeline
+This remains the main public reference implementation.
 
-- `Layout.astro` wires core metadata, plugin loaders, and the consent notice.
-- `PageLayout.astro` fetches header/footer menus from `menus` with a navigation fallback.
-- `PuckRenderer`: `awcms-public/primary/src/components/common/PuckRenderer.astro`.
-- Widget mapping: `awcms-public/primary/src/components/common/WidgetRenderer.astro`.
-- Shared types: `awcms-public/primary/src/types.d.ts`.
-- Plugin scripts: `awcms-public/primary/src/components/common/PluginLoader.astro` (via `plugins` table).
-- Public client/env resolution flows through `@awcms/shared/supabase` and `@awcms/shared/tenant` before page-level queries run.
+Typical current responsibilities:
 
-### Rich Text
+- locale-aware public routes
+- page/blog content rendering
+- widget rendering
+- search/sitemap helpers
+- shared public content-fetching patterns
 
-- Public pages render stored content via server-side components or markdown pipelines.
-- TipTap editor runtime is never used on the public portal.
+### `awcms-public/smandapbun/`
 
-### Routes
+This remains a dedicated/specialized public portal variant and should not be assumed to follow `primary` internals exactly.
 
-- `/`: `src/pages/index.astro` redirects to the default locale.
-- `/en` and `/id`: locale-prefixed home routes.
-- `/p/[slug]`: dynamic pages from `pages` table.
-- `/blogs` and `/blogs/[slug]`: default-locale dynamic blog list and post routes from Supabase.
-- `/[locale]/blogs` and `/[locale]/blogs/[slug]`: locale-prefixed blog list and post routes.
-- `src/pages/[...blog]/*`: static AstroWind blog routes (content collections).
-- `src/pages/[tenant]/visitor-stats.astro` handles the public analytics page for path-based tenants.
-- `src/pages/visitor-stats.astro` handles host-based tenants.
+## Current Tenant Resolution Model
 
-## Implementation Patterns
+### Static Builds
 
-- Use `createClientFromEnv` with `import.meta.env` for static builds.
-- Use `createScopedClient` with `x-tenant-id` headers for tenant-scoped reads when needed.
-- Use `tenantUrl` from `src/lib/url.ts` for internal links.
-- Canonical static deployments do not depend on middleware-based analytics logging.
-- Primary builds commonly use `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, while `PUBLIC_SUPABASE_*` remains a supported deployment fallback.
-- Public forms that render Turnstile require `PUBLIC_TURNSTILE_SITE_KEY` at build time.
+Canonical tenant resolution for static builds uses build-time env values such as:
 
-## Permissions and Access
+- `PUBLIC_TENANT_ID`
+- `VITE_PUBLIC_TENANT_ID`
+- `VITE_TENANT_ID`
 
-- Public portal only renders published content.
-- No runtime use of `@puckeditor/core` editor; only `PuckRenderer` is allowed.
+Current important rule:
 
-## Security and Compliance Notes
+- canonical static builds should fail closed when tenant identity is missing for tenant-specific output
 
-- Registry allow-list prevents unknown components from rendering.
-- All data access must be RLS-scoped and filtered for `deleted_at`.
-- Consent notices are rendered in `awcms-public/primary/src/components/common/ConsentNotice.astro`.
-- HTML content rendered via `set:html` must pass through `awcms-public/primary/src/utils/sanitize.ts`.
-- `PuckRenderer` sanitizes `Html`/`RawHTML` fallback blocks before rendering.
+### Public Worker Routes
 
-## Operational Concerns
+Some public-compatible runtime routes now support guarded tenant resolution via:
 
-- Cloudflare Pages uses build-time env variables for static output.
-- Ensure `PUBLIC_TENANT_ID` is set and that either `VITE_SUPABASE_*` or `PUBLIC_SUPABASE_*` env pairs are available for the build.
-- `src/pages/index.astro` currently redirects immediately to the default locale, so root-path behavior should be documented as a redirect rather than a direct content page.
+- `tenantId`
+- `tenant_id`
+- `domain`
 
-## Tenant Variants
+When both tenant and domain inputs are supplied, they must resolve to the same tenant.
 
-- `awcms-public/smandapbun` is a dedicated single-tenant static portal.
-- It uses a fixed build-time tenant plus JSON fallbacks for selected content areas during migration.
-- See `docs/tenancy/smandapbun.md` for its data sources and migration path.
+## Current Rendering Model
 
-## References
+- pages render statically where possible
+- interactivity is added through React islands only where needed
+- Puck content is rendered through the public render-only path
+- TipTap editor runtime is not used on the public portal
 
-- `docs/modules/TEMPLATE_MIGRATION.md`
-- `docs/tenancy/overview.md`
-- `../../awcms-public/primary/README.md`
+## Current Rendering Components And Helpers
+
+Current important public surfaces include:
+
+- `PuckRenderer`
+- widget renderers and widget-area blocks
+- content/search/sitemap helpers in `awcms-public/primary/src/lib/`
+- public env/client helpers in the public workspaces/shared package
+
+## Current Security And Content Rules
+
+- public content must remain published-only
+- public content must remain non-deleted
+- tenant scope must remain explicit where applicable
+- raw HTML rendering must continue through the current sanitization path
+- unknown/unregistered render blocks should not render freely in the public portal
+
+## Current Public Worker / Compatibility Rules
+
+Public portal work now intersects more directly with Worker route contracts than older docs implied.
+
+Current examples include:
+
+- `/public/sitemap`
+- `/public/media/*`
+- public extension compatibility routes
+- Turnstile verification and other edge-mediated public flows
+
+Current important rules:
+
+- public Worker routes must preserve tenant/domain mismatch guardrails
+- public media routes only accept canonical public storage keys
+- protected/session-bound media is not part of the public object namespace
+
+## Current Route Notes
+
+Current public routing includes locale-aware pages and blog routes plus portal-specific helper routes where implemented.
+
+Rather than depending on an old static list alone, verify the current `src/pages/` tree in the targeted public workspace before documenting a route as canonical.
+
+## Current Implementation Guidance
+
+- use the current env-driven client helpers for public reads
+- keep tenant filtering explicit
+- keep published/deleted filters explicit
+- use `PuckRenderer`/render-only Puck paths for visual content
+- update edge/OpenAPI docs when public Worker contracts change
+
+## Current Operational Notes
+
+- Cloudflare Pages remains the expected deployment target for the static public portals
+- build-time env configuration must be present for the target tenant/public workspace
+- root-path behavior may redirect to a locale or other canonical path depending on the current workspace implementation
+
+## Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| public primary changes | `cd awcms-public/primary && npm run check:astro` |
+| public Worker contract changes | `cd awcms-edge && npm test && npm run typecheck` |
+| documented public route metadata changes | `cd awcms-edge && npm run openapi:build && npm run openapi:validate && npm run openapi:diff` when relevant |
+| maintained docs | `cd awcms && npm run docs:check` |
+
+## Related Docs
+
+- [docs/dev/public.md](../dev/public.md)
+- [docs/tenancy/overview.md](../tenancy/overview.md)
+- [docs/tenancy/supabase.md](../tenancy/supabase.md)
+- [docs/dev/edge-functions.md](../dev/edge-functions.md)
+- [../../awcms-public/primary/README.md](../../awcms-public/primary/README.md)

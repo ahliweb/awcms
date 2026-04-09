@@ -1,434 +1,164 @@
 # AWCMS Extension System
 
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - Architecture and Extension Guidelines  
-> **Related**: [AGENTS.md](../../AGENTS.md) Section 3 - Extension System Patterns
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 ## Purpose
 
-Describe the plugin and extension architecture for AWCMS.
+Describe the current extension/platform-module model in AWCMS: platform catalog ownership, tenant activation, runtime composition, route/menu/widget integration, and the current constraints on how extensions may interact with admin, public, and edge surfaces.
 
-## Audience
+## Current Extension Model
 
-- Admin panel developers
-- Extension authors
+AWCMS now uses a normalized extension ownership split.
 
-## Prerequisites
+Current core concepts:
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for architecture
-- [AGENTS.md](../../AGENTS.md) - Extension implementation patterns
-- [docs/architecture/standards.md](../architecture/standards.md) - Core standards
+- platform-managed package metadata belongs in `platform_extension_catalog`
+- tenant activation/configuration belongs in `tenant_extensions`
+- lifecycle actions are auditable
+- runtime composition happens through registries, hooks, route metadata, and UI slots rather than direct router mutation everywhere
 
-AWCMS now uses Extension Specification v1 with a normalized split between platform catalog ownership and tenant activation ownership.
+Current terminology:
 
-Compatibility note:
+- **Plugin** = bundled/core runtime feature living inside the main app
+- **Extension** = externally packaged or extension-mode feature following the extension contract
 
-- Extension admin/public runtimes compose into the maintained Cloudflare Worker + Cloudflare R2 architecture; new extension features should not introduce Supabase Storage or Supabase-hosted Edge Function dependencies.
+## Current Runtime Ownership Rules
 
-> [!IMPORTANT]
-> **Terminology**: "Plugin" = Core bundled modules. "Extension" = External dynamic modules.
+- admin/public extension behavior must fit the maintained Cloudflare Worker + Supabase + R2 architecture
+- new extension features must not introduce Supabase Storage dependencies
+- new extension features must not introduce Supabase-hosted Edge Function dependencies as the maintained runtime
+- documented extension routes and public/admin route contracts should stay aligned with current edge/OpenAPI guidance when relevant
 
-## Core Concepts
+## Current Extension Surfaces
 
-| Type | Location | Loading | Use Case |
-| ---- | -------- | ------- | -------- |
-| **Platform Catalog Entry** | `platform_extension_catalog` + `awcms-ext/` | Platform-owned | Installable package metadata |
-| **Tenant Activation** | `tenant_extensions` | Tenant-owned | Per-tenant state and config |
-| **Bundled Runtime** | `awcms/src/plugins/`, `awcms/src/extensions/` | Bundled at build | First-party/admin-safe modules |
-| **External Runtime** | `awcms-ext/` workspaces served from `/ext/...` | Dynamic at runtime | Third-party modules |
+| Surface | Current Role |
+| --- | --- |
+| `platform_extension_catalog` | platform-owned installable package metadata |
+| `tenant_extensions` | tenant-owned activation/configuration state |
+| `extension_lifecycle_audit` | lifecycle audit log |
+| `awcms/src/plugins/` | bundled/core plugin runtime |
+| `awcms-ext/` | external extension workspaces/packages |
+| `awcms/src/lib/hooks.js` | actions/filters runtime |
+| `awcms/src/lib/templateExtensions.js` | block/widget/page-type composition APIs |
 
-See `docs/extensions/EXTENSION_SPEC.md` for the canonical v1 contract and `docs/extensions/EXTENSION_AUTHORING_GUIDE.md` for authoring steps.
+Legacy compatibility tables may still exist, but new production guidance should point at the canonical catalog + tenant activation model first.
 
----
+## Current Runtime Composition Model
 
-## How It Works
+Extensions currently compose into the app through patterns such as:
 
-## Hook System
+- hook/filter injection
+- admin menu item registration
+- admin route registration
+- dashboard widget registration
+- template block registration
+- widget-area registration
+- page-type registration
 
-### Actions
+Current important rule:
 
-Execute custom code at specific points:
+- prefer composition through registries and hooks instead of ad hoc direct mutations of core runtime structures
 
-```javascript
-addAction('dashboard_top', 'my_widget', () => console.log('Dashboard loaded!'));
-doAction('dashboard_top');
-```
+## Current Hook Surface
 
-### Filters
+Examples of current extension-oriented hooks include:
 
-Modify data passing through:
+- `dashboard_widgets`
+- `admin_menu_items`
+- `admin_sidebar_menu`
+- `admin_routes`
+- lifecycle actions around extension loading
 
-```javascript
-addFilter('admin_sidebar_menu', 'add_menu', (items) => [
-  ...items, 
-  { label: 'My Plugin', path: '/my-plugin' }
-]);
-const menuItems = applyFilters('admin_sidebar_menu', defaultItems);
-```
+Current menu guidance:
 
-Use `admin_menu_items` to append base menu entries and `admin_sidebar_menu` for last-mile adjustments.
+- use `admin_menu_items` for base additions
+- use `admin_sidebar_menu` for last-mile menu adjustment behavior
 
----
+## Current Template / Widget Composition APIs
 
-## Core Plugins
+`awcms/src/lib/templateExtensions.js` currently exposes extension-oriented helpers such as:
 
-Located in `src/plugins/`. Bundled at build time.
+- `registerTemplateBlock(...)`
+- `registerWidgetArea(...)`
+- `registerPageType(...)`
 
-### Structure
+These APIs feed current admin/public composition behavior through the existing hook/registry path.
 
-```text
-src/plugins/{slug}/
-├── plugin.json       # Manifest
-├── index.js          # Entry with lifecycle
-└── Components.jsx
-```
-
-### Manifest (`plugin.json`)
-
-```json
-{
-  "name": "Backup Manager",
-  "slug": "backup",
-  "version": "1.0.0",
-  "type": "core",
-  "routes": [{ "path": "/cmspanel/backup", "component": "BackupSettings" }],
-  "menu": { "label": "Backup", "icon": "Database", "path": "backup" },
-  "permissions": ["tenant.setting.read"]
-}
-```
-
-### Lifecycle (`index.js`)
+### Current Pattern Example
 
 ```javascript
-import manifest from './plugin.json';
+import { registerTemplateBlock } from '@/lib/templateExtensions';
 
-export { manifest };
-
-export const register = ({ addAction, addFilter, supabase, pluginConfig }) => {
-  addFilter('dashboard_widgets', 'backup', (widgets) => [...widgets, MyWidget]);
-};
-
-export const activate = async (supabase, tenantId) => { /* per-tenant setup */ };
-export const deactivate = async (supabase, tenantId) => { /* cleanup */ };
-```
-
----
-
-## External Extensions
-
-Source packages live under `awcms-ext/` and are served from the external extensions path configured by `VITE_EXTERNAL_EXTENSIONS_PATH` (default `/ext`). The loader resolves:
-
-```text
-{basePath}/awcms-ext-{vendor}-{slug}/{entry}
-```
-
-**Runtime Loading Notes (Vite)**:
-
-- `VITE_EXTERNAL_EXTENSIONS_PATH` must use the `VITE_` prefix to be readable in the client bundle.
-- If `manifest.external_path` is present, it overrides the computed `{basePath}` path.
-- If `entry` is omitted, the loader defaults to `dist/index.js`.
-- Extension bundles must be ESM and export either `register` or a `default` component (the loader validates this).
-
-### Directory Structure
-
-```text
-awcms-ext/
-  primary-analytics/
-  ├── extension.json    # Extension manifest (NOT plugin.json)
-  ├── package.json
-  └── src/
-      ├── index.js      # Entry point
-      └── components/
-```
-
-The in-repo workspace path does not need to match the runtime-served folder name. The loader derives the
-runtime bundle path from `vendor`, `slug`, `entry`, and `VITE_EXTERNAL_EXTENSIONS_PATH`.
-
-### Manifest (`extension.json`)
-
-```json
-{
-  "name": "Analytics Dashboard",
-  "slug": "analytics",
-  "vendor": "ahliweb",
-  "version": "1.0.0",
-  "type": "external",
-  "entry": "src/index.js",
-  "awcms_version": ">=2.0.0",
-  "routes": [{ "path": "analytics", "component": "AnalyticsDashboard" }],
-  "menu": { "label": "Analytics", "icon": "BarChart2", "path": "analytics" },
-  "permissions": ["tenant.analytics.read"]
-}
-```
-
-### Entry Point (`index.js`)
-
-```javascript
-export const register = ({ addAction, addFilter, supabase, tenantId }) => {
-  // tenantId is provided for multi-tenant context
-  addFilter('dashboard_widgets', 'analytics', (widgets) => [...widgets, AnalyticsWidget]);
-};
-
-export const activate = async (supabase, tenantId) => {
-  // Called when extension is activated for a tenant
-};
-
-export const deactivate = async (supabase, tenantId) => {
-  // Called when extension is deactivated
-};
-
-// Export components for routing
-export { default as AnalyticsDashboard } from './components/AnalyticsDashboard';
-```
-
-**Compatibility Rule**: `awcms_version` supports exact matches (for example `4.5.1`) or minimum constraints (for example `>=4.0.0`). Prefer ranges that reflect the actual compatibility window you have tested.
-
----
-
-## Available Hooks
-
-| Hook Name | Type | Description |
-| --------- | ---- | ----------- |
-| `plugins_loaded` | Action | All plugins/extensions loaded |
-| `dashboard_widgets` | Filter | Dashboard widgets array |
-| `admin_menu_items` | Filter | Sidebar menu items |
-| `admin_sidebar_menu` | Filter | Sidebar menu items (post-processed) |
-| `admin_routes` | Filter | Admin panel routes |
-| `before_extension_load` | Action | Before external extension loads |
-| `after_extension_load` | Action | After external extension loads |
-
----
-
-## Route Security (Signed Params)
-
-If an extension route includes editable identifiers (for example `:id`), declare which params must be signed so the admin shell can enforce non-guessable URLs.
-
-```javascript
-addFilter('admin_routes', 'analytics_routes', (routes) => [
-  ...routes,
-  {
-    path: 'analytics/reports/:id',
-    element: AnalyticsReport,
-    permission: 'ext.analytics.reports',
-    secureParams: ['id'],
-    secureScope: 'ext.analytics.reports'
-  }
-]);
-```
-
-Inside the routed component, read decoded params via `useRouteSecurityParams()` or use `useSecureRouteParam()` for direct access.
-
-```javascript
-import useRouteSecurityParams from '@/hooks/useRouteSecurityParams';
-
-const AnalyticsReport = () => {
-  const { id } = useRouteSecurityParams();
-  // id is the decoded UUID
-};
-```
-
-Signed IDs follow the `{uuid}.{signature}` pattern and redirect legacy raw UUIDs on first load.
-
-## Dashboard Widget Headers
-
-Dashboard widgets can opt into the standard card header UI by supplying `title`, `icon`, or a `header` configuration. The dashboard will render a consistent header bar and handle padding automatically.
-
-```javascript
-addFilter('dashboard_widgets', 'mailketing_stats', (widgets) => [
-  ...widgets,
-  {
-    id: 'mailketing_credits',
-    title: 'Email Credits',
-    icon: CreditCard,
-    badge: 'Live',
-    component: 'mailketing:MailketingCreditsWidget',
-    position: 'sidebar'
-  }
-]);
-```
-
-Use `header` for finer control:
-
-```javascript
-{
-  id: 'analytics-overview',
-  component: 'analytics:Widget',
-  header: {
-    title: 'Analytics Overview',
-    subtitle: 'Last 24 hours',
-    badge: 'Today',
-    icon: BarChart3
-  }
-}
-```
-
-## Database Tables
-
-### Legacy `extensions`
-
-`public.extensions` remains a compatibility surface for historical rows only. New production flows must use:
-
-- `public.platform_extension_catalog`
-- `public.tenant_extensions`
-- `public.extension_lifecycle_audit`
-
-### Registry Tables
-
-| Table | Notes |
-| ----- | ----- |
-| `platform_extension_catalog` | Canonical package catalog |
-| `tenant_extensions` | Canonical tenant activation/config store |
-| `extension_lifecycle_audit` | Canonical lifecycle audit store |
-| `extension_menu_items` | Legacy compatibility only |
-| `extension_routes_registry` | Legacy compatibility only |
-| `extension_permissions` | Legacy compatibility only |
-
-### External Path Overrides
-
-- `manifest.external_path` can override the default loader path.
-- Default path uses `VITE_EXTERNAL_EXTENSIONS_PATH` and the folder name `awcms-ext-{vendor}-{slug}`.
-
-### `extension_logs`
-
-Audit trail with RLS for all extension actions:
-
-- `install`, `uninstall`, `activate`, `deactivate`, `config_change`, `error`
-
----
-
-## Security
-
-### RLS Policies
-
-- Tenant isolation on `extensions` table
-- Platform admins can view all extensions
-
-### ABAC Permissions
-
-| Permission | Description |
-| ---------- | ----------- |
-| `platform.extensions.read` | View extensions registry, routes, and logs |
-| `platform.extensions.create` | Install/upload extensions |
-| `platform.extensions.update` | Activate/deactivate and update extension metadata |
-| `platform.extensions.delete` | Uninstall/remove extensions |
-| `platform.extensions.diagnostics.read` | View full extension validation diagnostics inside the extension manager |
-
-Tenant-level plugin pages and extension settings should use `tenant.setting.*` permissions (for example `tenant.setting.read`).
-
-### Requirements
-
-- Extensions must declare required permissions in manifest
-- New manifests must declare explicit `runtime_mode: "trusted"`
-- New manifest capabilities must use direct `scope.resource.action` identifiers
-- Permission check before extension activation
-- Audit log for all extension lifecycle events
-- Invalid catalog updates auto-deactivate affected active tenant installs immediately through the Worker lifecycle path
-- Later valid catalog updates automatically restore only installs that were previously active
-- Optional `sandbox_profile` metadata is now supported for future sandbox planning, but runtime execution remains trusted-only in the current phase
-
-### Diagnostics
-
-- Extension diagnostics are embedded in the existing Extensions management screen.
-- Users with `platform.extensions.diagnostics.read` can view normalized structured validation detail.
-- Users without that permission still see a redacted diagnostics panel with status, timestamps, and generic reason categories.
-- Full diagnostics now also expose sandbox-readiness metadata when the manifest declares it.
-- Use the verification snippet in `docs/extensions/EXTENSION_SPEC.md` after `npx supabase db reset` when changing extension lifecycle SQL or validation behavior.
-
----
-
-## Quick Start: Core Plugin
-
-1. Create `src/plugins/{slug}/plugin.json`
-2. Create `src/plugins/{slug}/index.js` with `register()`
-3. Add import to `pluginRegistry.js`
-4. Register the plugin through the maintained bundled/plugin registry flow; avoid documenting new writes to legacy `public.extensions` as the primary setup path
-
-## Quick Start: External Extension
-
-1. Create a workspace under `awcms-ext/` (for example `awcms-ext/my-extension/`)
-2. Create `extension.json` with the v1 manifest fields
-3. Create `src/index.js` with `register()` export
-4. Register the package in `platform_extension_catalog`, then activate/configure it per tenant through `tenant_extensions`
-
----
-
-## API Reference
-
-```javascript
-// In React components
-import { usePlugins, PluginSlot } from '@/contexts/PluginContext';
-
-const { addAction, addFilter, applyFilters, doAction } = usePlugins();
-
-// Render plugin slot
-<PluginSlot name="dashboard_top" args={{ user, tenantId }} />
-```
-
-### External Extension Loader
-
-```javascript
-import { loadExternalExtension, validateManifest } from '@/lib/externalExtensionLoader';
-
-// Load extension dynamically
-const extension = await loadExternalExtension(manifest);
-
-// Validate manifest
-const { valid, errors } = validateManifest(manifest);
-```
-
----
-
-## Template Extension APIs
-
-Extensions can integrate with the Template System using these APIs:
-
-```javascript
-import { 
-  registerTemplateBlock, 
-  registerWidgetArea, 
-  registerPageType 
-} from '@/lib/templateExtensions';
-
-// Register a custom Puck block for Visual Builder
 registerTemplateBlock({
-  type: 'my_plugin/carousel',
-  label: 'Image Carousel',
-  render: CarouselComponent,
-  fields: { images: { type: 'array' } }
-});
-
-// Register a new widget type for Widget Areas
-registerWidgetArea({
-  type: 'my_plugin/social_links',
-  name: 'Social Links',
-  icon: ShareIcon,
-  defaultConfig: { networks: [] }
-});
-
-// Register a new page type for Route Assignments
-registerPageType({
-  type: 'product_archive',
-  label: 'Product Archive'
+  type: 'my_plugin/chart',
+  label: 'Interactive Chart',
+  render: ChartComponent,
+  fields: { data: { type: 'object' } },
 });
 ```
 
-These APIs use the WordPress-style hooks system internally. Registered blocks will be available in both the Admin Panel's Visual Builder and the Public Portal's component registry.
+## Current Core Plugin Model
 
----
+Bundled/core plugin-style features still live inside the main app runtime and are build-time bundled.
 
-## Permissions and Access
+Current practical rule:
 
-- Extensions must use `usePermissions()` for access checks.
-- Tenant context is required for any data operations.
+- bundled/core features should behave like first-party runtime surfaces and follow the same tenancy, ABAC, and route/menu constraints as the rest of the app
 
-## Security and Compliance Notes
+## Current External Extension Model
 
-- Platform manages package registration; tenants manage activation/configuration.
-- Public runtime only consumes manifest-declared `publicModules` through the approved registry helper.
-- Worker lifecycle routes are the privileged orchestration boundary.
+External extension packages still live under `awcms-ext/` and are loaded using the current external path/runtime conventions.
 
-## References
+Current important rules:
 
-- `docs/modules/PUBLIC_PORTAL_ARCHITECTURE.md`
-- `docs/architecture/standards.md`
-- `docs/extensions/EXTENSION_SPEC.md`
-- `docs/extensions/EXTENSION_AUTHORING_GUIDE.md`
+- `extension.json` is the contract document for external extensions
+- external loader behavior depends on the current path/runtime resolution model
+- runtime bundle assumptions should match the current loader implementation, not older speculative packaging rules
+
+## Current Route Security Expectations
+
+If an extension contributes admin routes with identifiers, current route-security expectations still apply.
+
+That means extension routes should declare their secure params/secure scope when they accept protected identifiers, and routed components should read decoded params through the current route-security helpers.
+
+## Current Dashboard Widget Expectations
+
+Extension-contributed widgets should align with the current dashboard/widget system rather than inventing separate visual conventions.
+
+Current best practice:
+
+- use the shared widget header conventions
+- provide widget metadata (`title`, `icon`, `header`, etc.) in the current expected format
+
+## Current Permission Expectations
+
+- platform extension-management surfaces align to platform-scoped extension permissions
+- tenant-visible extension settings/pages should use canonical tenant permission families where appropriate
+- extension docs should not invent placeholder permission keys without migration-backed support
+
+## Current Security Notes
+
+- extension runtime should preserve tenant isolation
+- extension routes should preserve current auth/permission boundaries
+- extension-provided public/admin behavior must respect the maintained runtime boundaries
+- legacy compatibility tables may exist, but new contract guidance should prefer canonical extension ownership tables
+
+## Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| admin/extension runtime changes | `cd awcms && npm run build` |
+| edge/public route implications | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+| maintained docs | `cd awcms && npm run docs:check` |
+| documented route metadata changes | `cd awcms-edge && npm run openapi:build && npm run openapi:validate && npm run openapi:diff` when relevant |
+
+## Related Docs
+
+- [docs/extensions/EXTENSION_SPEC.md](../extensions/EXTENSION_SPEC.md)
+- [docs/extensions/EXTENSION_AUTHORING_GUIDE.md](../extensions/EXTENSION_AUTHORING_GUIDE.md)
+- [docs/modules/MODULES_GUIDE.md](./MODULES_GUIDE.md)
+- [docs/dev/edge-functions.md](../dev/edge-functions.md)
