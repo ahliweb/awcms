@@ -1,6 +1,9 @@
 ---
 import Layout from "../../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
+import PageHero from "../../../components/public/PageHero.astro";
+import PageContentShell from "../../../components/public/PageContentShell.astro";
+import RichContentCard from "../../../components/public/RichContentCard.astro";
 import {
   t,
   getLocalizedValue,
@@ -32,51 +35,21 @@ const upcomingEvents = sortedEvents.filter(
 const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
 ---
 
-<Layout title={agendaPage?.title || getLocalizedValue(agenda.title, locale)}>
-  <!-- Hero -->
-  <section
-    class="hero-gradient text-white py-16 md:py-20"
-    style="--hero-image: url('/images/backgrounds/hero-ceremony.webp');"
-    data-testid="agenda-hero"
-  >
-    <div class="container-custom">
-      <nav class="text-sm text-blue-200 mb-4">
-        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
-          >{t("nav.home", locale)}</a
-        >
-        <span class="mx-2">/</span>
-        <a href={getLocalizedPath("/blogs", locale)} class="hover:text-white"
-          >{t("blogs.title", locale)}</a
-        >
-        <span class="mx-2">/</span>
-        <span class="text-white">{t("blogs.agenda", locale)}</span>
-      </nav>
-      <h1 class="text-3xl md:text-4xl font-bold font-heading">
-        {agendaPage?.title || getLocalizedValue(agenda.title, locale)}
-      </h1>
-      {
-        agendaPage?.excerpt && (
-          <p class="text-xl text-blue-100 mt-4 max-w-3xl">{agendaPage.excerpt}</p>
-        )
-      }
-    </div>
-  </section>
+<Layout title={agendaPage?.title || getLocalizedValue(agenda.title, locale)} description={agendaPage?.excerpt || undefined} pageType="agenda_archive">
+  <PageHero
+    title={agendaPage?.title || getLocalizedValue(agenda.title, locale)}
+    description={agendaPage?.excerpt || undefined}
+    image="/images/backgrounds/hero-ceremony.webp"
+    breadcrumbs={[
+      { href: getLocalizedPath("/", locale), label: t("nav.home", locale) },
+      { href: getLocalizedPath("/blogs", locale), label: t("blogs.title", locale) },
+      { label: t("blogs.agenda", locale) },
+    ]}
+    testId="agenda-hero"
+  />
 
-  <!-- Agenda Content -->
-  <section
-    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
-    style="--section-image: url('/images/backgrounds/section-field.webp');"
-    data-testid="agenda-content"
-  >
-    <div class="container-custom">
-      <div class="max-w-4xl mx-auto">
-        {
-          agendaPage?.content && (
-            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 md:p-8 mb-10 border border-gray-100 dark:border-slate-700 prose dark:prose-invert max-w-none">
-              <div set:html={sanitizeHTML(agendaPage.content)} />
-            </div>
-          )
-        }
+  <PageContentShell backgroundImage="/images/backgrounds/section-field.webp" testId="agenda-content" width="narrow">
+        <RichContentCard html={agendaPage?.content ? sanitizeHTML(agendaPage.content) : null} class="mb-10 shadow-lg border border-gray-100 dark:border-slate-700" />
         <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 md:p-8 mb-10 border border-gray-100 dark:border-slate-700">
           <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div class="flex items-start gap-4">
@@ -217,7 +190,5 @@ const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
             {t("common.back", locale)}
           </a>
         </div>
-      </div>
-    </div>
-  </section>
+  </PageContentShell>
 </Layout>

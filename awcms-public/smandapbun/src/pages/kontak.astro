@@ -1,6 +1,9 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
+import PageHero from "../components/public/PageHero.astro";
+import PageContentShell from "../components/public/PageContentShell.astro";
+import RichContentCard from "../components/public/RichContentCard.astro";
 import { getLocale, t, getLocalizedValue, type Locale } from "../utils/i18n";
 import { getAdminPageBySlug, getContactPageData, getTenantId } from "../lib/api";
 import Toast from "../components/ui/Toast.astro";
@@ -20,41 +23,22 @@ const supabasePublishableKey =
 const turnstileSiteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || "";
 ---
 
-<Layout title={adminPage?.title || t("contact.title", locale)}>
+<Layout
+  title={adminPage?.title || t("contact.title", locale)}
+  description={adminPage?.excerpt || getLocalizedValue(contactPage.description, locale)}
+  pageType="contact"
+>
   <Toast />
-  <!-- Hero -->
-  <section
-    class="hero-gradient text-white py-16 md:py-24"
-    style="--hero-image: url('/images/backgrounds/hero-campus.webp');"
-    data-testid="contact-hero"
-  >
-    <div class="container-custom">
-      <p class="text-secondary-300 font-medium mb-2">
-        {t("nav.contact", locale)}
-      </p>
-      <h1 class="text-4xl md:text-5xl font-bold font-heading">
-        {adminPage?.title || getLocalizedValue(contactPage.title, locale)}
-      </h1>
-      <p class="text-xl text-blue-100 mt-4 max-w-2xl">
-        {adminPage?.excerpt || getLocalizedValue(contactPage.description, locale)}
-      </p>
-    </div>
-  </section>
+  <PageHero
+    eyebrow={t("nav.contact", locale)}
+    title={adminPage?.title || getLocalizedValue(contactPage.title, locale)}
+    description={adminPage?.excerpt || getLocalizedValue(contactPage.description, locale)}
+    image="/images/backgrounds/hero-campus.webp"
+    testId="contact-hero"
+  />
 
-  <!-- Contact Content -->
-  <section
-    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
-    style="--section-image: url('/images/backgrounds/section-campus.webp');"
-    data-testid="contact-content"
-  >
-    <div class="container-custom">
-      {
-        adminPage?.content && (
-          <div class="mb-10 rounded-2xl bg-white dark:bg-slate-800 shadow-sm p-8 prose prose-lg dark:prose-invert max-w-none transition-colors duration-200">
-            <div set:html={sanitizeHTML(adminPage.content)} />
-          </div>
-        )
-      }
+  <PageContentShell backgroundImage="/images/backgrounds/section-campus.webp" testId="contact-content">
+      <RichContentCard html={adminPage?.content ? sanitizeHTML(adminPage.content) : null} class="mb-10 prose-lg" />
       <div class="grid lg:grid-cols-2 gap-12">
         <!-- Contact Info -->
         <div>

@@ -1,0 +1,22 @@
+---
+interface Props {
+  backgroundImage?: string;
+  testId?: string;
+  width?: "default" | "narrow";
+}
+
+const { backgroundImage, testId, width = "default" } = Astro.props;
+const widthClass = width === "narrow" ? "max-w-4xl mx-auto" : "";
+---
+
+<section
+  class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
+  style={backgroundImage ? `--section-image: url('${backgroundImage}');` : undefined}
+  data-testid={testId}
+>
+  <div class="container-custom">
+    <div class={widthClass}>
+      <slot />
+    </div>
+  </div>
+</section>
