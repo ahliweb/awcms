@@ -2,6 +2,9 @@
 import Layout from "../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
 import { Image } from "astro:assets";
+import PageHero from "../../components/public/PageHero.astro";
+import PageContentShell from "../../components/public/PageContentShell.astro";
+import RichContentCard from "../../components/public/RichContentCard.astro";
 import {
   getLocale,
   t,
@@ -16,6 +19,8 @@ const locale = getLocale(Astro.url) as Locale;
 const galleryData = await getGalleryData();
 const galleryPage = await getAdminPageBySlug("galeri", locale);
 const { gallery } = galleryData;
+const pageTitle = galleryPage?.title || getLocalizedValue(gallery.title, locale) || t("blogs.gallery", locale);
+const pageDescription = galleryPage?.excerpt || undefined;
 
 // Load local images
 const localImagesGlob = import.meta.glob<{ default: ImageMetadata }>(
@@ -62,50 +67,21 @@ const albums: Album[] = [
 ];
 ---
 
-<Layout title={galleryPage?.title || getLocalizedValue(gallery.title, locale)}>
-  <!-- Hero -->
-  <section
-    class="hero-gradient text-white py-16 md:py-20"
-    style="--hero-image: url('/images/backgrounds/hero-activity.webp');"
-    data-testid="gallery-hero"
-  >
-    <div class="container-custom">
-      <nav class="text-sm text-blue-200 mb-4">
-        <a href={getLocalizedPath("/", locale)} class="hover:text-white"
-          >Beranda</a
-        >
-        <span class="mx-2">/</span>
-        <a href={getLocalizedPath("/blogs", locale)} class="hover:text-white"
-          >{t("blogs.title", locale)}</a
-        >
-        <span class="mx-2">/</span>
-        <span class="text-white">{t("blogs.gallery", locale)}</span>
-      </nav>
-      <h1 class="text-3xl md:text-4xl font-bold font-heading">
-        {galleryPage?.title || getLocalizedValue(gallery.title, locale)}
-      </h1>
-      {
-        galleryPage?.excerpt && (
-          <p class="text-xl text-blue-100 mt-4 max-w-3xl">{galleryPage.excerpt}</p>
-        )
-      }
-    </div>
-  </section>
+<Layout title={pageTitle} description={pageDescription} pageType="gallery_archive">
+  <PageHero
+    title={pageTitle}
+    description={pageDescription}
+    image="/images/backgrounds/hero-activity.webp"
+    breadcrumbs={[
+      { href: getLocalizedPath("/", locale), label: "Beranda" },
+      { href: getLocalizedPath("/blogs", locale), label: t("blogs.title", locale) },
+      { label: t("blogs.gallery", locale) },
+    ]}
+    testId="gallery-hero"
+  />
 
-  <!-- Gallery -->
-  <section
-    class="section-photo py-16 bg-gray-50 dark:bg-slate-900 transition-colors duration-200"
-    style="--section-image: url('/images/backgrounds/section-green.webp');"
-    data-testid="gallery-content"
-  >
-    <div class="container-custom">
-      {
-        galleryPage?.content && (
-          <div class="mb-10 rounded-2xl bg-white dark:bg-slate-800 shadow-sm p-8 prose dark:prose-invert max-w-none transition-colors duration-200">
-            <div set:html={sanitizeHTML(galleryPage.content)} />
-          </div>
-        )
-      }
+  <PageContentShell backgroundImage="/images/backgrounds/section-green.webp" testId="gallery-content">
+      <RichContentCard html={galleryPage?.content ? sanitizeHTML(galleryPage.content) : null} class="mb-10" />
       <!-- Category Filter -->
       <div
         class="flex flex-wrap justify-center gap-3 mb-10"
@@ -222,8 +198,7 @@ const albums: Album[] = [
           {t("common.back", locale)}
         </a>
       </div>
-    </div>
-  </section>
+  </PageContentShell>
 
   <!-- Lightbox Modal -->
   <div

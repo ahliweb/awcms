@@ -15,6 +15,9 @@ const contactData = await getContactPageData();
 const tenantId = await getTenantId();
 const adminPage = await getAdminPageBySlug("kontak", locale, tenantId);
 const { contactPage, contactInfo, socialMedia, mapEmbed } = contactData;
+const pageTitle = adminPage?.title || getLocalizedValue(contactPage.title, locale) || t("contact.title", locale);
+const pageDescription =
+  adminPage?.excerpt || getLocalizedValue(contactPage.description, locale) || undefined;
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || "";
 const supabasePublishableKey =
   import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -24,15 +27,15 @@ const turnstileSiteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || "";
 ---
 
 <Layout
-  title={adminPage?.title || t("contact.title", locale)}
-  description={adminPage?.excerpt || getLocalizedValue(contactPage.description, locale)}
+  title={pageTitle}
+  description={pageDescription}
   pageType="contact"
 >
   <Toast />
   <PageHero
     eyebrow={t("nav.contact", locale)}
-    title={adminPage?.title || getLocalizedValue(contactPage.title, locale)}
-    description={adminPage?.excerpt || getLocalizedValue(contactPage.description, locale)}
+    title={pageTitle}
+    description={pageDescription}
     image="/images/backgrounds/hero-campus.webp"
     testId="contact-hero"
   />

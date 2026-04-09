@@ -19,6 +19,8 @@ const locale = getLocale(Astro.url) as Locale;
 const agendaData = await getAgendaData();
 const agendaPage = await getAdminPageBySlug("agenda", locale);
 const { agenda } = agendaData;
+const pageTitle = agendaPage?.title || getLocalizedValue(agenda.title, locale) || t("blogs.agenda", locale);
+const pageDescription = agendaPage?.excerpt || undefined;
 
 // Sort events by date
 const sortedEvents = [...agenda.events].sort(
@@ -30,10 +32,10 @@ const upcomingEvents = sortedEvents.filter(
 const pastEvents = sortedEvents.filter((e) => new Date(e.date) < new Date());
 ---
 
-<Layout title={agendaPage?.title || getLocalizedValue(agenda.title, locale)} description={agendaPage?.excerpt || undefined} pageType="agenda_archive">
+<Layout title={pageTitle} description={pageDescription} pageType="agenda_archive">
   <PageHero
-    title={agendaPage?.title || getLocalizedValue(agenda.title, locale)}
-    description={agendaPage?.excerpt || undefined}
+    title={pageTitle}
+    description={pageDescription}
     image="/images/backgrounds/hero-ceremony.webp"
     breadcrumbs={[
       { href: getLocalizedPath("/", locale), label: "Beranda" },

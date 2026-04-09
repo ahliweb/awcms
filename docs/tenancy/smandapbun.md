@@ -42,6 +42,8 @@ Document the tenant-specific Astro implementation for **smandapbun**, including 
   - `src/components/common/WidgetArea.astro`
   - `src/components/common/WidgetRenderer.astro`
 - Blog detail pages and the tenant footer now expose widget-area insertion points while preserving the sovereign `smandapbun` route structure and branding.
+- Shared public composition primitives now live under `src/components/public/` and are used by the homepage, blog surfaces, profile/settings-backed routes, agenda, gallery, and contact pages.
+- The current primitive layer includes shell/content helpers such as `PageHero`, `PageContentShell`, `RichContentCard`, `Section`, `SplitSection`, `StatGrid`, `BlogCard`, `BlogSidebar`, and profile-content primitives like `MetricCardGrid`, `TimelineList`, `NumberedPanelList`, and `BadgeCardGrid`.
 
 ### Settings Keys (Supabase)
 

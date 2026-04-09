@@ -24,6 +24,8 @@ const { locale } = Astro.params as { locale: Locale };
 const galleryData = await getGalleryData();
 const galleryPage = await getAdminPageBySlug("galeri", locale);
 const { gallery } = galleryData;
+const pageTitle = galleryPage?.title || getLocalizedValue(gallery.title, locale) || t("blogs.gallery", locale);
+const pageDescription = galleryPage?.excerpt || undefined;
 
 // Load local images
 const localImagesGlob = import.meta.glob<{ default: ImageMetadata }>(
@@ -59,10 +61,10 @@ const albums: Album[] = [
 ];
 ---
 
-<Layout title={galleryPage?.title || getLocalizedValue(gallery.title, locale)} description={galleryPage?.excerpt || undefined} pageType="gallery_archive">
+<Layout title={pageTitle} description={pageDescription} pageType="gallery_archive">
   <PageHero
-    title={galleryPage?.title || getLocalizedValue(gallery.title, locale)}
-    description={galleryPage?.excerpt || undefined}
+    title={pageTitle}
+    description={pageDescription}
     image="/images/backgrounds/hero-activity.webp"
     breadcrumbs={[
       { href: getLocalizedPath("/", locale), label: t("nav.home", locale) },
