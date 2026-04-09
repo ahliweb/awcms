@@ -39,7 +39,7 @@ export function SystemHealth({ health }) {
     <Card className="dashboard-surface dashboard-surface-hover col-span-1 min-w-0">
       <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
         <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100/70 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-200">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-900/10 bg-slate-950 text-white dark:border-white/10 dark:bg-white/10 dark:text-sky-200">
             <Activity className="w-4 h-4" />
           </span>
           System Health

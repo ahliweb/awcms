@@ -25,7 +25,7 @@ export function PlatformOverview() {
     return (
         <div className="space-y-8 mb-10 overflow-hidden">
             <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-900/10 bg-slate-950 text-white shadow-[0_20px_35px_-26px_rgba(15,23,42,0.7)] dark:border-white/10 dark:bg-white/10 dark:text-sky-200">
                     <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
@@ -36,7 +36,6 @@ export function PlatformOverview() {
                 </div>
             </div>
 
-            {/* Top Stats - Neo Glass */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card className="dashboard-surface dashboard-surface-hover">
                     <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
@@ -46,10 +45,10 @@ export function PlatformOverview() {
                     <CardContent>
                         <div className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalTenants}</div>
                         <div className="mt-2 text-xs flex gap-2">
-                            <Badge variant="outline" className="bg-blue-50/50 text-blue-700 border-blue-200">
+                            <Badge variant="outline" className="border-blue-200 bg-blue-50/70 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
                                 {stats.tenantsByTier.pro} {t('dashboard.platform.tier_pro')}
                             </Badge>
-                            <Badge variant="outline" className="bg-purple-50/50 text-purple-700 border-purple-200">
+                            <Badge variant="outline" className="border-purple-200 bg-purple-50/70 text-purple-700 dark:border-purple-500/20 dark:bg-purple-500/10 dark:text-purple-200">
                                 {stats.tenantsByTier.enterprise} {t('dashboard.platform.tier_ent')}
                             </Badge>
                         </div>
@@ -81,8 +80,8 @@ export function PlatformOverview() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white border-0 shadow-lg shadow-indigo-500/25 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 transition-transform duration-700 group-hover:scale-150"></div>
+                <Card className="relative overflow-hidden rounded-[1.75rem] border-0 bg-[linear-gradient(135deg,#0f172a,#111827_55%,#1d4ed8)] text-white shadow-[0_30px_70px_-35px_rgba(37,99,235,0.7)] group">
+                    <div className="absolute top-0 right-0 h-32 w-32 rounded-full bg-white/10 blur-2xl -mr-10 -mt-10 transition-transform duration-700 group-hover:scale-150"></div>
 
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
                         <CardTitle className="text-sm font-medium text-indigo-100">{t('dashboard.platform.health')}</CardTitle>
@@ -95,7 +94,6 @@ export function PlatformOverview() {
                 </Card>
             </div>
 
-            {/* Recent Tenants Table - Glass Pane */}
             <Card className="dashboard-surface dashboard-surface-hover">
                 <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/80 pb-3 dark:border-slate-700/60">
                     <CardTitle className="text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -108,7 +106,7 @@ export function PlatformOverview() {
                 <CardContent>
                     <div className="space-y-4">
                         {stats.recentTenants.map(tenant => (
-                            <div key={tenant.id} className="group flex items-center justify-between border-b border-slate-100/50 dark:border-slate-700/50 last:border-0 pb-4 last:pb-0 hover:bg-white/50 dark:hover:bg-slate-700/50 p-2 rounded-lg transition-colors">
+                            <div key={tenant.id} className="group flex items-center justify-between border-b border-slate-100/50 dark:border-slate-700/50 last:border-0 pb-4 last:pb-0 hover:bg-white/60 dark:hover:bg-slate-700/40 p-2 rounded-xl transition-colors">
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 shadow-inner">
                                         <Building2 className="w-5 h-5" />

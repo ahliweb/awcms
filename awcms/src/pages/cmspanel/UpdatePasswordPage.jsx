@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Eye, EyeOff, Loader2, Lock } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
+import AuthShell from '@/components/auth/AuthShell';
 
 const UpdatePasswordPage = () => {
   const { t } = useTranslation();
@@ -103,33 +104,32 @@ const UpdatePasswordPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <AuthShell
+      title={t('update_password.title')}
+      subtitle={t('update_password.subtitle')}
+      badge={t('update_password.badge', 'Credential Reset')}
+      sideTitle={t('update_password.shell_title', 'Credential Recovery')}
+      sideSubtitle={t('update_password.shell_subtitle', 'Finalize your secure password reset and return to the EmDash admin workspace.')}
+    >
       <Helmet>
         <title>{t('update_password.title')} - {t('login.app_name')}</title>
       </Helmet>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200"
+        className="w-full"
       >
-        <div className="p-8 md:p-10 space-y-8">
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('update_password.title')}</h1>
-            <p className="text-slate-500">
-              {t('update_password.subtitle')}
-            </p>
-          </div>
-
+        <div className="space-y-8">
           <form onSubmit={handleUpdatePassword} className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="password">{t('update_password.new_password_label')}</Label>
+                <Label htmlFor="password" className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('update_password.new_password_label')}</Label>
                 <div className="relative">
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
-                    className="h-11 pr-10 pl-10"
+                    className="h-11 rounded-2xl border-slate-200/70 bg-white/92 pl-10 pr-10 shadow-sm focus:border-sky-500/50 focus:ring-sky-500/20 dark:border-slate-700/70 dark:bg-slate-950/60"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -138,7 +138,7 @@ const UpdatePasswordPage = () => {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors dark:hover:text-slate-200"
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -146,13 +146,13 @@ const UpdatePasswordPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-600 dark:text-slate-300">Confirm Password</Label>
                 <div className="relative">
                   <Input
                     id="confirmPassword"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
-                    className="h-11 pr-10 pl-10"
+                    className="h-11 rounded-2xl border-slate-200/70 bg-white/92 pl-10 pr-10 shadow-sm focus:border-sky-500/50 focus:ring-sky-500/20 dark:border-slate-700/70 dark:bg-slate-950/60"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
@@ -164,7 +164,7 @@ const UpdatePasswordPage = () => {
 
             <Button
               type="submit"
-              className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium"
+              className="h-11 w-full rounded-2xl bg-slate-950 text-white font-medium hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -176,7 +176,7 @@ const UpdatePasswordPage = () => {
           </form>
         </div>
       </motion.div>
-    </div>
+    </AuthShell>
   );
 };
 

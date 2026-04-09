@@ -115,7 +115,7 @@ function AdminDashboard() {
                     </li>
                     <li aria-hidden="true" className="[&>svg]:size-3.5"><ChevronRight /></li>
                     <li className="inline-flex items-center gap-1.5">
-                        <div className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm">
+                        <div className="flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-1 font-medium text-white shadow-sm dark:bg-white dark:text-slate-950">
                             <span>Overview</span>
                         </div>
                     </li>
@@ -172,7 +172,7 @@ function AdminDashboard() {
                             <SystemHealth health={data.systemHealth} />
                         </div>
 
-                        {/* Quick Links / Top Content - Neo-Glass style */}
+                        {/* Quick Links / Top Content */}
                         <div className="min-w-0">
                             <TopBlogsWidget data={data.topContent} loading={loading} />
                         </div>

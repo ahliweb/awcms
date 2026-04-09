@@ -139,8 +139,8 @@ const LoginPage = () => {
         badge={t('login_page.restoring_badge', 'Authenticating')}
         {...shellProps}
       >
-        <div className="flex flex-col items-center gap-5 text-center">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <div className="flex flex-col items-center gap-5 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-[1.6rem] border border-white/70 bg-slate-950 text-white shadow-[0_24px_45px_-28px_rgba(15,23,42,0.75)] dark:border-white/10">
             <Loader2 className="h-6 w-6 animate-spin text-white" />
           </div>
           <div className="space-y-2">
@@ -152,7 +152,7 @@ const LoginPage = () => {
             </p>
           </div>
           <div className="h-2 w-full max-w-[240px] overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-800/70">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-400" />
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500" />
           </div>
         </div>
       </AuthShell>

@@ -114,15 +114,15 @@ const ForgotPasswordPage = () => {
     >
       {isSuccess ? (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-6 text-center text-emerald-700">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+          <div className="rounded-[1.5rem] border border-emerald-200/70 bg-emerald-50/80 p-6 text-center text-emerald-700 shadow-sm dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/20">
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <p className="text-sm">
               {t('forgot_password.sent_message')} <span className="font-semibold text-emerald-900">{email}</span>.
             </p>
           </div>
-          <Button asChild className="h-11 w-full bg-indigo-600 text-white hover:bg-indigo-700">
+          <Button asChild className="h-11 w-full rounded-2xl bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100">
             <Link to="/cmspanel/login">{t('forgot_password.back_to_login')}</Link>
           </Button>
         </div>
@@ -137,7 +137,7 @@ const ForgotPasswordPage = () => {
                   id="email"
                   type="email"
                   placeholder="admin@example.com"
-                  className="h-11 rounded-xl border-slate-200/70 bg-white/90 pl-10 shadow-sm focus:border-indigo-500/60 focus:ring-indigo-500/30 dark:border-slate-700/70 dark:bg-slate-950/60"
+                  className="h-11 rounded-2xl border-slate-200/70 bg-white/92 pl-10 shadow-sm focus:border-sky-500/50 focus:ring-sky-500/20 dark:border-slate-700/70 dark:bg-slate-950/60"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -145,7 +145,7 @@ const ForgotPasswordPage = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-dashed border-slate-200/70 bg-slate-50/70 px-4 py-3">
+            <div className="rounded-[1.4rem] border border-dashed border-slate-200/70 bg-slate-50/75 px-4 py-3 dark:border-slate-700/70 dark:bg-slate-900/35">
               <Turnstile
                 siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
                 onVerify={(token) => {
@@ -162,7 +162,7 @@ const ForgotPasswordPage = () => {
 
           <Button
             type="submit"
-            className="h-11 w-full bg-indigo-600 text-white hover:bg-indigo-700"
+            className="h-11 w-full rounded-2xl bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
             disabled={isLoading || (!turnstileToken && !turnstileError)}
           >
             {isLoading ? (
