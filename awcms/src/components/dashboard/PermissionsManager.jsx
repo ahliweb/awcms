@@ -202,7 +202,7 @@ function PermissionsManager() {
   }
 
   return (
-    <AdminPageLayout requiredPermission="platform.permissions.read">
+    <AdminPageLayout>
       <PageHeader
         title={t('permissions.manager.title')}
         description="Manage the platform ABAC permission catalog, keep the permission matrix aligned with active resources, and preserve refresh-safe admin behavior."

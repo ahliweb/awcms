@@ -127,7 +127,11 @@ order by name;
 
 Current app-level permission checks that should be treated as implementation-specific until they are verified in root migrations:
 
-- `platform.permissions.read`
+- No additional app-only platform permission families are being treated as canonical in this pass.
+
+Current platform permission catalog behavior:
+
+- The permissions catalog screen is currently gated by platform-admin / super-admin state in app logic rather than a migration-backed `platform.permissions.*` family.
 
 Current blueprint/bootstrap usage in app code:
 
@@ -195,7 +199,7 @@ Current blueprint/bootstrap usage in app code:
 | Settings         | `tenant.setting.*`          | read, update                                            |
 | Themes           | `tenant.theme.*`            | read, create, update, delete                            |
 | Audit Logs       | `tenant.audit.*`            | read                                                    |
-| Notifications    | `tenant.notification.*` for in-app notification CRUD, and `tenant.notifications.*` for notification channels/templates/dispatch logs | Verify the target feature surface before choosing the prefix |
+| Notifications    | `tenant.notification.*` for the in-app inbox and notification CRUD, and `tenant.notifications.*` for notification channels, templates, send actions, and dispatch logs | This split is intentional in the current migration baseline and app code |
 | Modules          | `tenant.modules.read`       | read only                                               |
 | Contacts         | `tenant.contacts.*`         | read, create, update, delete, restore, permanent_delete |
 | Contact Messages | `tenant.contact_messages.*` | read, create, update, delete, restore, permanent_delete |

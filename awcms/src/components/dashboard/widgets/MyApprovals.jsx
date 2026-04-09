@@ -17,7 +17,7 @@ export function MyApprovals() {
     const [approvals, setApprovals] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    const canApprove = hasPermission('tenant.post.publish'); // Simpler check for now
+    const canApprove = hasPermission('tenant.blog.publish');
 
     useEffect(() => {
         if (canApprove) {
