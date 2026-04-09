@@ -1,57 +1,75 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1.3 (Backend & Database)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Cloudflare Edge API
 
 ## Purpose
 
-Document the maintained edge runtime for AWCMS: Cloudflare Workers in `awcms-edge/` as the only supported server-side edge API layer.
+Document the maintained edge runtime for AWCMS: Cloudflare Workers in `awcms-edge/` as the only supported server-side HTTP/API runtime for privileged orchestration, public compatibility routes, R2-backed media flows, queue processing, and generated API documentation surfaces.
 
-## Audience
+This guide is intentionally current-state focused and should be read together with:
 
-- Backend and integration developers
-- Operators deploying Cloudflare Workers
-
-## Prerequisites
-
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md)
-- [AGENTS.md](../../AGENTS.md)
-- `awcms-edge/` workspace dependencies installed
+- [docs/architecture/runtime-boundaries.md](../architecture/runtime-boundaries.md)
+- [docs/architecture/edge-openapi-spec.md](../architecture/edge-openapi-spec.md)
+- [docs/dev/openapi-quality-checklist.md](openapi-quality-checklist.md)
 
 ## Current Edge Runtime Model
 
 - Cloudflare Workers in `awcms-edge/` are the maintained edge HTTP gateway.
-- Client applications may keep using Supabase Auth sessions, but protected server-side workflows should execute through Worker routes.
-- Supabase remains the authority for Auth, PostgreSQL, RLS, and ABAC.
+- Client applications may continue to use Supabase Auth sessions, but protected server-side workflows should execute through Worker routes.
+- Supabase remains authoritative for Auth, PostgreSQL, RLS, and ABAC.
 - Cloudflare R2 is the maintained object storage layer for file/media delivery.
-- Cloudflare Queues (`awcms-media-events`, `awcms-notifications`, `awcms-media-events-dlq`, `awcms-notifications-dlq`) are used to offload long-tail background work from the synchronous HTTP path. Queue consumers re-read authoritative state from Supabase before writing. See [docs/architecture/queue-topology.md](../architecture/queue-topology.md).
+- Cloudflare Queues are the maintained async offload layer.
 - Supabase Edge Functions are not part of the maintained runtime or repo layout.
+- OpenAPI artifacts for public/admin/internal surfaces are generated from the Worker route catalog.
 
-## Runtime Coverage
+## Current Runtime Coverage
 
-The Worker currently provides maintained routes for:
+The Worker currently covers maintained surfaces such as:
 
-- media upload, finalize (async via `awcms-media-events` queue), access, and public delivery
-- site rebuild and email fan-out (async via `awcms-notifications` queue)
-- dead letter queue processing (via `awcms-media-events-dlq` and `awcms-notifications-dlq` consumers)
-- admin dead-letter replay (`POST /api/admin/queue/replay`)
-- `verify-turnstile`
-- `get-client-ip`
-- `manage-users`
-- `mailketing`
-- `mailketing-webhook`
-- `content-transform`
-- `serve-sitemap`
+- media upload/session/finalize/access/public delivery
+- site rebuild and email fan-out queue paths
+- dead-letter capture and replay
+- Turnstile verification
+- client IP lookup
+- user-management compatibility flows
+- Mailketing integration flows
+- content-transform helper routes
+- sitemap/public compatibility routes
+- extension public compatibility routes
+- import/materialization routes including `tenant-imports`
 
-Compatibility routes continue to use `/functions/v1/<name>` so existing clients can target the Worker API without depending on Supabase Edge Functions.
+Compatibility routes continue to use `/functions/v1/<name>` so existing clients can target the Worker runtime without relying on Supabase-hosted Edge Functions.
 
-## Public Route Guardrails
+## Current Public Route Guardrails
 
-- Public tenant-aware routes must resolve tenant identity from either `tenantId`/`tenant_id` or `domain`.
-- When both `tenantId` and `domain` are provided, they must resolve to the same tenant; otherwise the Worker returns `400 Tenant/domain mismatch`.
-- Public extension compatibility routes such as `/functions/v1/extensions/events/public` and `/functions/v1/extensions/public-modules` now support `domain` as an alternative to `tenantId`.
-- `/public/sitemap` fails closed when tenant context is missing or mismatched and returns an XML error payload instead of proceeding with an unresolved tenant.
-- `/public/media/*` serves only canonical tenant-prefixed public object keys in the form `tenants/<tenant_id>/...`.
-- `/public/media/*` rejects malformed keys, traversal-like segments, and the reserved protected namespace `tenants/<tenant_id>/protected/...` before metadata or storage lookup.
+Public Worker routes now have explicit, documented guardrails.
+
+### Tenant / Domain Guardrails
+
+- Public tenant-aware routes may resolve tenant identity from `tenantId`, `tenant_id`, or `domain`, depending on the route.
+- When both tenant and domain inputs are supplied, they must resolve to the same tenant.
+- Mismatch is an explicit request failure (`400 Tenant/domain mismatch`).
+- Public compatibility routes such as `/functions/v1/extensions/events/public` and `/functions/v1/extensions/public-modules` support `domain` as an alternative to tenant id inputs.
+- `/public/sitemap` fails closed on missing or mismatched tenant context.
+
+### Public Media Guardrails
+
+- `/public/media/*` serves only canonical tenant-prefixed public object keys shaped like `tenants/<tenant_id>/...`.
+- The route rejects malformed keys.
+- The route rejects traversal-like segments.
+- The route rejects the reserved protected namespace `tenants/<tenant_id>/protected/...`.
+- Public media delivery should be documented as a guarded Worker contract, not as arbitrary object access.
+
+### Mailketing Guardrails
+
+- `mailketing` `send` is no longer an anonymous compatibility action.
+- `send` requires bearer auth.
+- `send` requires tenant context consistent with the authenticated user’s scope.
+- notification send/manage permission boundaries still apply.
 
 ## Local Development
 
@@ -64,13 +82,13 @@ cp .dev.vars.example .dev.vars
 npm run dev:local
 ```
 
-Notes:
+Current local-dev notes:
 
-- `dev:local` loads local secrets from `awcms-edge/.dev.vars`.
-- Worker bindings and runtime settings live in `awcms-edge/wrangler.jsonc`.
-- Local validation should exercise Worker routes directly. Supabase Edge Function tooling/config is not part of the supported runtime.
-- Local `wrangler dev` uses the local `STORAGE` binding and `.wrangler/state/` by default; it does not read or mutate remote Cloudflare R2 automatically.
-- Production secrets belong in Cloudflare via `npx wrangler secret put <SECRET_NAME>`.
+- `dev:local` loads local secrets from `awcms-edge/.dev.vars`
+- Worker bindings and runtime settings live in `awcms-edge/wrangler.jsonc`
+- local validation should exercise Worker routes directly
+- local `wrangler dev` storage is isolated from remote R2 by default
+- production secrets belong in Cloudflare via `npx wrangler secret put <SECRET_NAME>`
 
 ## Operational Commands
 
@@ -81,99 +99,112 @@ Run from `awcms-edge/`:
 | `npm run dev` | Start Wrangler in default local dev mode |
 | `npm run dev:local` | Start the Worker on `127.0.0.1:8787` |
 | `npm run typecheck` | Validate the Worker TypeScript surface |
+| `npm test` | Run route/spec/import regression tests |
+| `npm run openapi:build` | Regenerate public/admin/internal OpenAPI artifacts |
+| `npm run openapi:validate` | Validate generated OpenAPI artifacts |
+| `npm run openapi:diff` | Check generated artifact sync state |
 | `npm run deploy` | Deploy the Worker |
-| `npm run sync:r2:remote` | Reconcile local tenant media into remote R2 plus remote `media_objects` metadata |
-| `npm run sync:r2:local` | Pull remote tenant media back into local Worker storage plus local `media_objects` metadata |
-| `npm run sync:r2:cleanup-local` | Soft-delete duplicate local metadata rows and remove duplicate local objects after exact-key import |
-| `npm run sync:r2:cleanup-remote` | Soft-delete duplicate remote metadata rows and remove duplicate remote objects |
+| `npm run sync:r2:remote` | Reconcile local tenant media into remote R2 plus metadata |
+| `npm run sync:r2:local` | Pull remote tenant media into local Worker storage plus metadata |
+| `npm run sync:r2:cleanup-local` | Remove/soft-delete local duplicate media after exact-key import |
+| `npm run sync:r2:cleanup-remote` | Remove/soft-delete remote duplicate media |
 
 ## Preferred Route Implementation Pattern
 
-For new or modified Worker routes, prefer this sequence:
+For new or modified Worker routes, current preferred order is:
 
-1. authenticate the caller early for protected routes
-2. parse and validate request shape before database writes or sensitive reads
+1. authenticate early for protected routes
+2. parse and validate request shape before writes or sensitive reads
 3. resolve tenant and permission context explicitly
-4. perform database or storage work
-5. normalize user-facing success and error responses
-6. add or update OpenAPI docs when the route is part of a documented surface
+4. perform database/storage/integration work
+5. normalize success and error responses
+6. update OpenAPI metadata when the route is part of a documented surface
+7. update edge/runtime docs when the documented route contract changed
 
-Current reusable middleware already available in `awcms-edge/src/middleware/` includes:
+## Middleware And Shared Helpers
+
+Current reusable middleware in `awcms-edge/src/middleware/` includes:
 
 - `auth/require-session.ts`
 - `auth/require-permission.ts`
 - `auth/require-platform-scope.ts`
 - `docs/require-docs-access.ts`
 
+Current shared runtime helpers also include route-level validation/tenant-resolution patterns inside `awcms-edge/src/index.ts` and related libs.
+
+## OpenAPI And Documented Surface Rules
+
+If a documented Worker route changes, the change may need to update:
+
+- `awcms-edge/src/lib/openapi/route-catalog.ts`
+- generated artifacts in `awcms-edge/openapi/*.json`
+- [docs/architecture/edge-openapi-spec.md](../architecture/edge-openapi-spec.md)
+- [docs/dev/openapi-quality-checklist.md](openapi-quality-checklist.md)
+- this document when the runtime contract or trust boundary changed
+
+Important current rule:
+
+- public/admin specs must describe runtime reality, not aspirational behavior
+
 ## Validation And Error Rules
 
 - Do not let request bodies flow into writes without shape validation.
 - Reflect critical database constraints in edge validation for user-controlled fields.
 - Return normalized `400`, `401`, `403`, and `404` responses where applicable.
-- Avoid returning raw database error text directly to end users unless it has been intentionally normalized.
-- Keep validation logic shared where it is reused across routes instead of copying request checks into every handler.
+- Avoid surfacing raw database errors directly unless intentionally normalized.
+- Keep reusable validation logic shared when multiple routes depend on the same trust boundary.
 
 ## Review Expectations For Edge Changes
 
-For Worker route changes, reviewers should confirm:
+For Worker changes, reviewers should confirm:
 
 - validation runs before writes or sensitive reads
-- auth middleware is used where appropriate
+- auth middleware or equivalent auth checks are used where appropriate
 - permission checks remain additive guardrails and do not replace Supabase authority
-- OpenAPI artifacts and docs are updated when the route is on a documented runtime surface
-- negative-path verification includes malformed input and auth failures
+- public route guardrails remain explicit
+- public media restrictions remain intact where applicable
+- route catalog/docs/artifacts are updated when the route is on a documented surface
+- negative-path verification includes malformed input and auth/permission failures
 
 ## R2 Reconciliation Model
 
 - Local and remote R2 are intentionally separate surfaces.
-- `sync:r2:remote` reads local `media_objects`, downloads the authoritative file through the local Worker, uploads the same `storage_key` to remote R2, then upserts the remote metadata row.
+- `sync:r2:remote` reads local `media_objects`, downloads the authoritative file through the local Worker, uploads the same `storage_key` to remote R2, then upserts remote metadata.
 - `sync:r2:local` reads remote `media_objects`, downloads the authoritative file from remote R2, then imports the exact object and metadata into the local Worker/runtime.
-- `sync:r2:cleanup-local` and `sync:r2:cleanup-remote` enforce the current canonical duplicate rule: for the same `tenant_id + file_name`, keep the lexicographically smallest `storage_key` and soft-delete/remove the other copies.
-- Reverse-sync exact-key import is handled by the local-only Worker route `POST /api/media/import-local`.
-- Local duplicate cleanup is handled by the local-only Worker route `POST /api/media/cleanup-local-duplicates`.
-
-## Deployment
-
-```bash
-cd awcms-edge
-npm run typecheck
-npm run deploy
-```
+- `sync:r2:cleanup-local` and `sync:r2:cleanup-remote` enforce the current duplicate rule for the same `tenant_id + file_name`.
+- Reverse-sync exact-key import is handled by local-only reconciliation routes.
 
 ## Validation Checklist
 
-- Worker routes respond from the configured `VITE_EDGE_URL` / `PUBLIC_EDGE_URL`.
-- Worker routes validate Supabase Auth context before protected operations.
-- Public tenant-aware routes reject missing tenant context and reject mismatched `tenantId` + `domain` combinations.
-- Privileged operations use `SUPABASE_SECRET_KEY` only inside approved Worker code.
-- Media flows use Cloudflare R2 and `media_objects` / `media_upload_sessions` metadata tables.
-- Public media delivery accepts only canonical tenant-prefixed public storage keys and never serves protected/session-bound paths through `/public/media/*`.
-- Finalize route returns `202 Accepted` and a `job_id`; finalization completes asynchronously via the `awcms-media-events` queue consumer.
-- Queue consumer does not trust message payload as authoritative; it re-reads from Supabase before writing.
-- Notifications consumer handles `site.rebuild.requested` and `email.send.requested` events from `awcms-notifications` queue.
-- Notifications infrastructure is backed by `tenant_notification_channels`, `notification_templates`, and `notification_dispatches`; tenants manage channel/template configuration through RLS, while the Worker queue path records dispatch outcomes.
-- Failed messages exhaust retries and route to the DLQ (`awcms-media-events-dlq` / `awcms-notifications-dlq`); the DLQ consumer persists entries to `queue_dead_letters` in Supabase.
-- Platform admins can replay a dead-letter entry via `POST /api/admin/queue/replay`.
-- Local-only reconciliation routes reject non-local mode (`R2_ACCOUNT_ID !== local-dev`) and are not part of the deployed production API surface.
+- Worker routes resolve from the configured edge URL.
+- Protected routes validate Supabase Auth context before protected work.
+- Public tenant-aware routes reject missing tenant context where required.
+- Public tenant-aware routes reject mismatched tenant/domain combinations.
+- Privileged operations use `SUPABASE_SECRET_KEY` only in approved Worker code.
+- Media flows use Cloudflare R2 and `media_objects` / `media_upload_sessions` metadata.
+- Public media delivery accepts only canonical public storage keys and never serves protected/session-bound paths through `/public/media/*`.
+- queue consumers re-read authoritative state from Supabase before writing side effects.
+- generated OpenAPI artifacts remain in sync when route metadata changed.
 
 ## Troubleshooting
 
-- `Missing VITE_EDGE_URL`: configure the Worker URL for the client workspace.
-- `401 Unauthorized`: verify the caller has a valid Supabase session and the Worker forwards the bearer token.
-- `400 Tenant/domain mismatch`: verify the supplied `tenantId` and `domain` resolve to the same tenant record.
-- `400 Invalid public storage key`: verify the requested public media path uses a canonical key like `tenants/<tenant_id>/<file>` and does not target `/protected/` or traversal segments.
-- `5xx` from media routes: check R2 bindings and required Worker env values.
-- `403` from protected routes: verify the user's role flags and ABAC grants in Supabase.
-- Stale storage helper behavior: if an older caller still invokes `sync_storage_files()`, it now returns a deprecation payload because maintained media flows use Cloudflare R2 plus `public.media_objects`.
-- `sync:r2:local` fails: verify `awcms-edge/.dev.vars` and `awcms/.env.remote` both exist, the local Worker is running on `127.0.0.1:8787`, and the sync user can authenticate in both environments.
-- Local media exists but remote does not: `wrangler dev` storage is isolated by default; run `npm run sync:r2:remote` explicitly.
+- `Missing VITE_EDGE_URL`: configure the Worker URL for the calling workspace.
+- `401 Unauthorized`: verify the caller has a valid Supabase session and forwards the bearer token.
+- `403 Forbidden`: verify ABAC grants and role flags in Supabase.
+- `400 Tenant/domain mismatch`: verify the supplied tenant and domain resolve to the same tenant.
+- `400 Invalid public storage key`: verify the requested public media key uses a canonical public path and does not target `/protected/` or traversal segments.
+- `5xx` from media routes: verify R2 bindings and required Worker env values.
+- `sync:r2:local` failures: verify `.dev.vars`, remote env files, local Worker availability, and auth in both environments.
+- local media exists but remote does not: local `wrangler dev` storage is isolated by default; use the explicit sync commands.
 
-## References
+## Related Docs
 
-- `docs/deploy/overview.md`
-- `docs/deploy/cloudflare.md`
-- `docs/tenancy/supabase.md`
-- `docs/dev/openapi-quality-checklist.md`
-- `docs/dev/review-checklist.md`
-- `docs/architecture/queue-topology.md`
-- `awcms-edge/README.md`
+- [docs/deploy/overview.md](../deploy/overview.md)
+- [docs/deploy/cloudflare.md](../deploy/cloudflare.md)
+- [docs/tenancy/supabase.md](../tenancy/supabase.md)
+- [docs/dev/api-usage.md](api-usage.md)
+- [docs/architecture/runtime-boundaries.md](../architecture/runtime-boundaries.md)
+- [docs/architecture/edge-openapi-spec.md](../architecture/edge-openapi-spec.md)
+- [docs/dev/openapi-quality-checklist.md](openapi-quality-checklist.md)
+- [docs/dev/review-checklist.md](review-checklist.md)
+- [docs/architecture/queue-topology.md](../architecture/queue-topology.md)
