@@ -151,15 +151,26 @@ export function useAdminMenu() {
     return isPlatformMenuItem(item);
   }, []);
 
+  const applyTenantMenuScope = useCallback((query) => {
+    if (currentTenant?.id) {
+      return query.or(`tenant_id.eq.${currentTenant.id},tenant_id.is.null`);
+    }
+    return query.is('tenant_id', null);
+  }, [currentTenant?.id]);
+
   const fetchMenu = useCallback(async () => {
     setLoading(true);
     try {
       // 1. Fetch Core Admin Menus
-      const { data: coreMenus, error: coreError } = await supabase
+      const coreMenusQuery = applyTenantMenuScope(
+        supabase
         .from('admin_menus')
         .select('*')
         .order('group_order', { ascending: true })
-        .order('order', { ascending: true });
+        .order('order', { ascending: true })
+      );
+
+      const { data: coreMenus, error: coreError } = await coreMenusQuery;
 
       if (coreError) throw coreError;
 
@@ -173,10 +184,14 @@ export function useAdminMenu() {
 
       // 3. Fetch Extension Menus (if any)
       // We join with extensions to get the group label (extension name)
-      const { data: extMenus, error: extError } = await supabase
+      const extMenusQuery = applyTenantMenuScope(
+        supabase
         .from('extension_menu_items')
         .select('*, extension:extensions(name, slug, manifest, is_active, deleted_at)')
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+      );
+
+      const { data: extMenus, error: extError } = await extMenusQuery;
 
       if (extError) {
         console.warn('Error fetching extension menus:', extError);
@@ -402,7 +417,7 @@ export function useAdminMenu() {
     } finally {
       setLoading(false);
     }
-  }, [isPlatformUser, currentTenant?.id, isPlatformScopedMenuItem]);
+  }, [applyTenantMenuScope, isPlatformUser, currentTenant?.id, isPlatformScopedMenuItem]);
 
   // Initial fetch
   useEffect(() => {
@@ -465,6 +480,7 @@ export function useAdminMenu() {
             // Existing database row - just update order
             coreUpdates.push({
               id: item.id,
+              tenant_id: item.tenant_id || null,
               order: newOrder,
               updated_at: new Date().toISOString()
             });
@@ -475,9 +491,11 @@ export function useAdminMenu() {
               label: item.label,
               path: item.path || '',
               icon: item.icon || 'FolderOpen',
+              tenant_id: item.tenant_id || currentTenant?.id || null,
+              scope: item.scope || (isPlatformMenuItem(item) ? 'platform' : (currentTenant?.id ? 'tenant' : 'shared')),
               permission: item.permission,
                group_label: resolveMenuGroupMeta(item, item.group_order || 100).label,
-               group_order: resolveMenuGroupMeta(item, item.group_order || 100).order,
+                group_order: resolveMenuGroupMeta(item, item.group_order || 100).order,
               order: newOrder,
               is_visible: item.is_visible !== false,
               created_at: new Date().toISOString(),
@@ -519,6 +537,7 @@ export function useAdminMenu() {
             .from('admin_menus')
             .update({ order: update.order, updated_at: update.updated_at })
             .eq('id', update.id)
+            .eq('tenant_id', update.tenant_id)
         );
 
         const results = await Promise.all(updatePromises);
@@ -587,10 +606,12 @@ export function useAdminMenu() {
         ));
         return true;
       } else if (isUUID) {
+        const existingItem = menuItems.find(item => item.id === id);
         const { error } = await supabase
           .from('admin_menus')
           .update({ is_visible: !currentVisibility })
-          .eq('id', id);
+          .eq('id', id)
+          .match(existingItem?.tenant_id ? { tenant_id: existingItem.tenant_id } : { tenant_id: null });
         if (error) throw error;
       } else {
         // Fallback item - find it and insert first, then update
@@ -603,6 +624,8 @@ export function useAdminMenu() {
               label: item.label,
               path: item.path || '',
               icon: item.icon || 'FolderOpen',
+              tenant_id: item.tenant_id || currentTenant?.id || null,
+              scope: item.scope || (isPlatformMenuItem(item) ? 'platform' : (currentTenant?.id ? 'tenant' : 'shared')),
               permission: item.permission,
                group_label: resolveMenuGroupMeta(item, item.group_order || 100).label,
                group_order: resolveMenuGroupMeta(item, item.group_order || 100).order,
@@ -639,10 +662,12 @@ export function useAdminMenu() {
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
       if (isUUID) {
+        const existingItem = menuItems.find(item => item.id === id);
         const { error } = await supabase
           .from('admin_menus')
           .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq('id', id);
+          .eq('id', id)
+          .match(existingItem?.tenant_id ? { tenant_id: existingItem.tenant_id } : { tenant_id: null });
         if (error) throw error;
       } else {
         // Fallback item - find it and insert with updates
@@ -655,6 +680,8 @@ export function useAdminMenu() {
               label: updates.label || item.label,
               path: item.path || '',
               icon: item.icon || 'FolderOpen',
+              tenant_id: item.tenant_id || currentTenant?.id || null,
+              scope: item.scope || (isPlatformMenuItem(item) ? 'platform' : (currentTenant?.id ? 'tenant' : 'shared')),
               permission: item.permission,
                group_label: resolveMenuGroupMeta({ ...item, group_label: updates.group_label || item.group_label }, updates.group_order || item.group_order || 100).label,
                group_order: resolveMenuGroupMeta({ ...item, group_label: updates.group_label || item.group_label }, updates.group_order || item.group_order || 100).order,
@@ -696,7 +723,8 @@ export function useAdminMenu() {
       const { error } = await supabase
         .from('admin_menus')
         .update(updates)
-        .eq('group_label', oldLabel);
+        .eq('group_label', oldLabel)
+        .match(currentTenant?.id ? { tenant_id: currentTenant.id } : { tenant_id: null });
 
       if (error) throw error;
 

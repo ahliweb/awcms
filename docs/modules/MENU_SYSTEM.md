@@ -23,7 +23,7 @@ Describe how admin menus are stored, loaded, and extended.
 - The UI falls back to `awcms/src/hooks/useAdminMenu.js` defaults.
 - Extensions and plugins can inject menu items at runtime.
 - Menu items are linked to `resources_registry` via `resource_id` for ABAC metadata.
-- `admin_menus` is global (no `tenant_id`); RLS restricts insert/update/delete to platform admins.
+- `admin_menus` supports scoped rows via `tenant_id` and `scope` (`platform`, `tenant`, `shared`). `useAdminMenu` resolves the current tenant/platform view and should not treat the table as globally tenantless.
 - Grouping uses `group_label` and `group_order`, while `is_core` flags core items.
 
 ## How It Works
