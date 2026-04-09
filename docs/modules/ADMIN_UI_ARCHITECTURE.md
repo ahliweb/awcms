@@ -43,7 +43,12 @@ Current admin pages typically compose around shared wrappers such as:
 - `PageHeader`
 - shared content/table/form components
 
-The current checked-in shell keeps the existing shared template module path for compatibility, but its visual system is EmDash-aligned rather than the older Flowbite-branded presentation.
+The current checked-in shell is owned by `awcms/src/templates/emdash-admin/`.
+
+Current practical rule:
+
+- use `@/templates/emdash-admin` as the supported admin shell import surface
+- do not reintroduce `flowbite-admin` as a live template path
 
 These provide the current consistent shell behavior for permission-gated manager screens.
 

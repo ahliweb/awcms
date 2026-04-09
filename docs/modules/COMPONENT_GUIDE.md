@@ -17,7 +17,7 @@ Current AWCMS component work in `awcms/` is built around:
 - shadcn/ui-style primitives under `awcms/src/components/ui`
 - Tailwind/CSS-variable-based styling
 - layout/page wrappers used by manager screens
-- an EmDash-aligned shared admin shell visual language implemented through the existing shared template layer
+- an EmDash-aligned shared admin shell visual language owned by `awcms/src/templates/emdash-admin/`
 - `cn()` for conditional classes
 - toast-driven feedback for important user actions
 
@@ -103,6 +103,7 @@ Component work should align with the current admin shell and manager patterns in
 Current practical rule:
 
 - if a component is part of a manager/module surface, keep it compatible with the current shared page/layout/header structure
+- use `@/templates/emdash-admin` as the supported admin shell import surface
 
 ## Current Motion / Interaction Guidance
 
