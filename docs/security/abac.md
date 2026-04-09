@@ -218,10 +218,10 @@ Current blueprint/bootstrap usage in app code:
 
 | Module             | Permission Prefix             | Actions                      |
 | :----------------- | :---------------------------- | :--------------------------- |
-| Mobile Users       | `tenant.mobile_users.*`       | Present in current role-assignment snapshots; re-verify seed source before broad policy documentation |
+| Mobile Users       | `tenant.mobile_users.*`       | read, create, update, delete |
 | Mobile Config      | `tenant.mobile.*`             | read, update |
-| Push Notifications | `tenant.push_notifications.*` | Present in current role-assignment snapshots; re-verify seed source before broad policy documentation |
-| IoT Devices        | `tenant.iot.*`                | Present in current role-assignment snapshots; re-verify seed source before broad policy documentation |
+| Push Notifications | `tenant.push_notifications.*` | read, create, update, delete |
+| IoT Devices        | `tenant.iot.*`                | read, create, update, delete |
 | Platform Extensions | `platform.extensions.*`      | read, create, update, delete  |
 | Analytics          | `tenant.analytics.*`          | read                         |
 | Events             | `tenant.events.*`             | read, create, update, delete, publish |
