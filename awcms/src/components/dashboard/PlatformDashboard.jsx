@@ -4,7 +4,7 @@ import {
     Activity, ArrowRight, LayoutGrid, Globe, CloudCog, Database
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
@@ -30,6 +30,27 @@ function PlatformDashboard() {
                 icon={Globe}
                 breadcrumbs={[]}
             />
+
+            <div className="mb-6 overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+                <div className="bg-gradient-to-r from-primary/12 via-background/40 to-sky-500/12 p-4 sm:p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <h3 className="text-base font-semibold text-foreground">Platform control plane</h3>
+                            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Review global tenancy, system guarantees, and infrastructure ownership without leaving the platform shell.</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                                {isPlatformAdmin || isFullAccess ? 'Platform ABAC active' : 'Tenant-scoped visibility'}
+                            </span>
+                            <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                <Database className="mr-1.5 h-3.5 w-3.5" />
+                                R2 + Edge runtime ownership
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div className="mb-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {mockStats.map((stat, i) => {

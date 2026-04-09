@@ -1,4 +1,4 @@
-import { AdminPageLayout } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/emdash-admin';
 
 function TenantSettingsErrorState({ title, description }) {
   return (

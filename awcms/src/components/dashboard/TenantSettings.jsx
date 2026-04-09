@@ -8,7 +8,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Form } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 import TenantSettingsLoadingState from '@/components/dashboard/tenant-settings/TenantSettingsLoadingState';
 import TenantSettingsErrorState from '@/components/dashboard/tenant-settings/TenantSettingsErrorState';
 import TenantSettingsOverviewCards from '@/components/dashboard/tenant-settings/TenantSettingsOverviewCards';
@@ -125,6 +125,31 @@ export default function TenantSettings() {
         breadcrumbs={[{ label: 'Settings' }, { label: 'Branding' }]}
       />
 
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Tenant</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{tenant.name}</p>
+          <p className="text-xs text-muted-foreground">Current branding target</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Site Name</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{watchedSiteName || tenant.name}</p>
+          <p className="text-xs text-muted-foreground">Live label preview in this form state</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Brand Color</p>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="h-8 w-8 rounded-xl border border-border/60" style={{ backgroundColor: watchedBrandColor }} />
+            <span className="text-sm font-semibold text-foreground">{watchedBrandColor}</span>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Font Family</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{watchedFontFamily}</p>
+          <p className="text-xs text-muted-foreground">Tenant theme typography baseline</p>
+        </div>
+      </div>
+
       <TenantSettingsOverviewCards
         tenant={tenant}
         watchedSiteName={watchedSiteName}
@@ -134,13 +159,29 @@ export default function TenantSettings() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <TenantBrandingFormCard
-            form={form}
-            t={t}
-            colorPickerId={colorPickerId}
-          />
+          <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+            <div className="border-b border-border/70 bg-gradient-to-r from-primary/12 via-background/40 to-sky-500/12 p-4 sm:p-5">
+              <h3 className="text-base font-semibold text-foreground">Branding workspace</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Update tenant-facing identity and keep portal branding aligned with the current tenant scope.</p>
+            </div>
+            <div className="p-4 sm:p-5">
+              <TenantBrandingFormCard
+                form={form}
+                t={t}
+                colorPickerId={colorPickerId}
+              />
+            </div>
+          </div>
 
-          <PortalSitesManager />
+          <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+            <div className="border-b border-border/70 bg-gradient-to-r from-emerald-500/12 via-background/40 to-primary/12 p-4 sm:p-5">
+              <h3 className="text-base font-semibold text-foreground">Portal site bindings</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Review tenant site mappings and public portal wiring without leaving the settings workflow.</p>
+            </div>
+            <div className="p-4 sm:p-5">
+              <PortalSitesManager />
+            </div>
+          </div>
 
           <div className="flex justify-end">
             <Button type="submit" disabled={saving} className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-sm hover:opacity-95">

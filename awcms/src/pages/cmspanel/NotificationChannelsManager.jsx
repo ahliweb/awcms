@@ -9,8 +9,10 @@ import {
   EyeOff,
   Save,
   Trash2,
+  ShieldCheck,
+  Activity,
 } from 'lucide-react';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -294,6 +296,8 @@ export default function NotificationChannelsManager() {
   } = useNotificationChannels();
 
   const { isModuleEnabled } = useModules();
+  const activeModuleCount = Object.values(CHANNEL_META).filter((meta) => isModuleEnabled(meta.moduleSlug)).length;
+  const configuredChannels = Object.keys(CHANNEL_META).filter((channelType) => Boolean(getChannelByType(channelType))).length;
 
   if (!canRead) {
     return (
@@ -322,38 +326,81 @@ export default function NotificationChannelsManager() {
         }
       />
 
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Available modules</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{activeModuleCount}</p>
+          <p className="text-xs text-muted-foreground">Channel modules enabled for this tenant</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Configured</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{configuredChannels}</p>
+          <p className="text-xs text-muted-foreground">Channels with saved credentials</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Access</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{canManage ? 'Manage credentials' : 'Read-only visibility'}</p>
+          <p className="text-xs text-muted-foreground">Credential storage stays tenant-scoped</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Dispatch path</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">Queued outbound delivery</p>
+          <p className="text-xs text-muted-foreground">Edge and queue workers fan out channel sends</p>
+        </div>
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
         </div>
       ) : (
-        <div className="space-y-6">
-          {Object.keys(CHANNEL_META).map((channelType) => {
-            const meta = CHANNEL_META[channelType];
-            const moduleActive = isModuleEnabled(meta.moduleSlug);
-            const channel = getChannelByType(channelType);
+        <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+          <div className="border-b border-border/70 bg-gradient-to-r from-primary/12 via-background/40 to-emerald-500/12 p-4 sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-foreground">Channel configuration workspace</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Configure stored credentials for enabled notification modules and keep dispatch visibility one click away.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                  <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                  Tenant-scoped secrets
+                </span>
+                <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  <Activity className="mr-1.5 h-3.5 w-3.5" />
+                  Dispatch log linked
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-6 p-4 sm:p-5">
+            {Object.keys(CHANNEL_META).map((channelType) => {
+              const meta = CHANNEL_META[channelType];
+              const moduleActive = isModuleEnabled(meta.moduleSlug);
+              const channel = getChannelByType(channelType);
 
-            if (!moduleActive) {
+              if (!moduleActive) {
+                return (
+                  <div key={channelType}>
+                    <ModuleDisabledNotice channelType={channelType} />
+                  </div>
+                );
+              }
+
               return (
-                <div key={channelType}>
-                  <ModuleDisabledNotice channelType={channelType} />
-                </div>
+                <ChannelForm
+                  key={channelType}
+                  channelType={channelType}
+                  channel={channel}
+                  canManage={canManage}
+                  saving={saving}
+                  onSave={saveChannel}
+                  onToggle={toggleChannel}
+                  onDelete={deleteChannel}
+                />
               );
-            }
-
-            return (
-              <ChannelForm
-                key={channelType}
-                channelType={channelType}
-                channel={channel}
-                canManage={canManage}
-                saving={saving}
-                onSave={saveChannel}
-                onToggle={toggleChannel}
-                onDelete={deleteChannel}
-              />
-            );
-          })}
+            })}
+          </div>
         </div>
       )}
     </AdminPageLayout>

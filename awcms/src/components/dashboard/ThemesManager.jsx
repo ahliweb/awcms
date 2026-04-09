@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useTranslation } from 'react-i18next';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 import { usePermissions } from '@/contexts/PermissionContext';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 import ThemesHeaderActions from '@/components/dashboard/themes/ThemesHeaderActions';
 import ThemesSearchBar from '@/components/dashboard/themes/ThemesSearchBar';
 import ThemesGrid from '@/components/dashboard/themes/ThemesGrid';
@@ -206,6 +206,9 @@ const ThemesManager = () => {
     (theme.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const activeThemes = themes.filter((theme) => theme.is_active).length;
+  const tenantThemes = themes.filter((theme) => theme.tenant?.name).length;
+
   return (
     <AdminPageLayout requiredPermission="tenant.theme.read">
       <PageHeader
@@ -222,19 +225,50 @@ const ThemesManager = () => {
         )}
       />
 
-      <ThemesSearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Themes</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{themes.length}</p>
+          <p className="text-xs text-muted-foreground">Available theme records in scope</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Active</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{activeThemes}</p>
+          <p className="text-xs text-muted-foreground">Currently enabled theme variants</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Tenant-bound</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{tenantThemes}</p>
+          <p className="text-xs text-muted-foreground">Themes associated with a tenant record</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Privileges</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{isPlatformAdmin ? 'Platform theme governance' : 'Tenant theme governance'}</p>
+          <p className="text-xs text-muted-foreground">Activation and mutation remain permission-gated</p>
+        </div>
+      </div>
 
-      <ThemesGrid
-        loading={loading}
-        filteredThemes={filteredThemes}
-        isPlatformAdmin={isPlatformAdmin}
-        canUpdate={canUpdate}
-        onEdit={handleEdit}
-        onActivate={handleActivate}
-        onExport={handleExport}
-        onDuplicate={handleDuplicate}
-        onDeleteRequest={setThemeToDelete}
-      />
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+        <div className="border-b border-border/70 bg-gradient-to-r from-primary/12 via-background/40 to-violet-500/12 p-4 sm:p-5">
+          <h3 className="text-base font-semibold text-foreground">Theme workspace</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Search, duplicate, activate, export, or delete theme packs while preserving current permission boundaries.</p>
+        </div>
+        <div className="space-y-6 p-4 sm:p-5">
+          <ThemesSearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+
+          <ThemesGrid
+            loading={loading}
+            filteredThemes={filteredThemes}
+            isPlatformAdmin={isPlatformAdmin}
+            canUpdate={canUpdate}
+            onEdit={handleEdit}
+            onActivate={handleActivate}
+            onExport={handleExport}
+            onDuplicate={handleDuplicate}
+            onDeleteRequest={setThemeToDelete}
+          />
+        </div>
+      </div>
 
       <ThemeDeleteDialog
         open={!!themeToDelete}

@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react';
-import { AdminPageLayout } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/emdash-admin';
 
 function TenantSettingsLoadingState() {
   return (
