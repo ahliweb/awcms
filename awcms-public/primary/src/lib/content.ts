@@ -534,7 +534,8 @@ export async function getBlogs(
       categoryQuery = categoryQuery.eq("tenant_id", tenantId);
     }
 
-    const { data: categoryData, error: categoryError } = await categoryQuery.maybeSingle();
+    const { data: categoryData, error: categoryError } =
+      await categoryQuery.maybeSingle();
 
     if (categoryError) {
       console.error(

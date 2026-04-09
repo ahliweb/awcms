@@ -114,6 +114,13 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
     const [page, setPage] = useState(initialPage || null);
     const [translationSlugCheckKey, setTranslationSlugCheckKey] = useState(0);
 
+    const applyTenantGuard = (query) => {
+        if (!isPlatformAdmin && currentTenant?.id) {
+            return query.eq('tenant_id', currentTenant.id);
+        }
+        return query;
+    };
+
     // Initial data setup
     const initialData = initialPage?.content_draft || { content: [], root: { props: { title: '' } } };
 
@@ -188,16 +195,9 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                 // CHANGED: Added tenant isolation to queries
                 // If not platform admin, enforce tenant_id
 
-                const applyTenantFilter = (q) => {
-                    if (!isPlatformAdmin && currentTenant?.id) {
-                        return q.eq('tenant_id', currentTenant.id);
-                    }
-                    return q;
-                };
-
                 if (mode === 'template' && templateId) {
                     let q = udm.from('templates').select('*').eq('id', templateId);
-                    q = applyTenantFilter(q);
+                    q = applyTenantGuard(q);
                     const { data: tpl, error } = await q.single();
                     if (error) throw error;
 
@@ -218,7 +218,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
                 } else if (mode === 'part' && partId) {
                     let q = udm.from('template_parts').select('*').eq('id', partId);
-                    q = applyTenantFilter(q);
+                    q = applyTenantGuard(q);
                     const { data: part, error } = await q.single();
                     if (error) throw error;
 
@@ -239,7 +239,7 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
                 } else if (mode === 'page' && pageId) {
                     let q = udm.from('pages').select('*').eq('id', pageId);
-                    q = applyTenantFilter(q);
+                    q = applyTenantGuard(q);
                     const { data: pg, error } = await q.single();
                     if (error) throw error;
                     fetchedData = pg;

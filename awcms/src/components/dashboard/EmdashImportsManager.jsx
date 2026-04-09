@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Loader2, RefreshCw } from 'lucide-react';
 import AdminPageLayout from '@/templates/flowbite-admin/layouts/AdminPageLayout';
 import { PageHeader } from '@/templates/flowbite-admin';
@@ -21,15 +21,17 @@ const defaultForm = {
 function EmdashImportsManager() {
   const { currentTenant } = useTenant();
   const { toast } = useToast();
+  const activeTenantId = currentTenant?.id || null;
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submittingMode, setSubmittingMode] = useState(null);
   const [form, setForm] = useState(defaultForm);
   const [error, setError] = useState(null);
 
-  const loadJobs = useCallback(async () => {
-    if (!currentTenant?.id) {
+  const loadJobs = async (tenantId = activeTenantId) => {
+    if (!tenantId) {
       setJobs([]);
+      setError(null);
       setLoading(false);
       return;
     }
@@ -39,7 +41,7 @@ function EmdashImportsManager() {
     const { data, error: invokeError } = await supabase.functions.invoke('tenant-imports', {
       body: {
         action: 'list',
-        tenantId: currentTenant.id,
+        tenantId,
       },
     });
 
@@ -52,14 +54,55 @@ function EmdashImportsManager() {
 
     setJobs(Array.isArray(data?.jobs) ? data.jobs : []);
     setLoading(false);
-  }, [currentTenant?.id]);
+  };
 
   useEffect(() => {
-    loadJobs();
-  }, [loadJobs]);
+    let cancelled = false;
+
+    const syncJobs = async () => {
+      if (!activeTenantId) {
+        if (!cancelled) {
+          setJobs([]);
+          setError(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setLoading(true);
+        setError(null);
+      }
+
+      const { data, error: invokeError } = await supabase.functions.invoke('tenant-imports', {
+        body: {
+          action: 'list',
+          tenantId: activeTenantId,
+        },
+      });
+
+      if (cancelled) return;
+
+      if (invokeError || data?.error) {
+        setError(invokeError?.message || data?.error || 'Failed to load EmDash imports');
+        setJobs([]);
+        setLoading(false);
+        return;
+      }
+
+      setJobs(Array.isArray(data?.jobs) ? data.jobs : []);
+      setLoading(false);
+    };
+
+    void syncJobs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTenantId]);
 
   const handleCreateJob = async (dryRun) => {
-    if (!currentTenant?.id) {
+    if (!activeTenantId) {
       toast({ variant: 'destructive', title: 'Missing tenant context', description: 'Select a tenant before creating an import job.' });
       return;
     }
@@ -68,7 +111,7 @@ function EmdashImportsManager() {
     setError(null);
     const payload = {
       action: 'create-job',
-      tenantId: currentTenant.id,
+      tenantId: activeTenantId,
       importType: form.importType,
       templateSlug: form.templateSlug,
       dryRun,
