@@ -72,19 +72,21 @@ const normalizeWidgetRow = (widget: Record<string, unknown>): WidgetData => ({
 export async function getWidgetsByArea(
   supabase: SupabaseClient,
   area: string,
-  tenantId?: string | null,
+  tenantId: string,
 ): Promise<WidgetData[]> {
-  let query = supabase
+  if (!tenantId) {
+    console.error(`[Widget] Missing tenant scope for area "${area}".`);
+    return [];
+  }
+
+  const query = supabase
     .from("widgets")
     .select("*")
     .eq("area", area)
+    .eq("tenant_id", tenantId)
     .eq("is_active", true)
     .is("deleted_at", null)
     .order("sort_order", { ascending: true });
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
 
   const { data, error } = await query;
 
@@ -102,36 +104,35 @@ export async function getWidgetsByArea(
 export async function getWidgetsByAreaSlug(
   supabase: SupabaseClient,
   areaSlug: string,
-  tenantId?: string | null,
+  tenantId: string,
 ): Promise<WidgetData[]> {
-  let partQuery = supabase
+  if (!tenantId) {
+    console.error(`[Widget] Missing tenant scope for area slug "${areaSlug}".`);
+    return [];
+  }
+
+  const partQuery = supabase
     .from("template_parts")
     .select("id, slug")
     .eq("slug", areaSlug)
     .eq("type", "widget_area")
+    .eq("tenant_id", tenantId)
     .is("deleted_at", null)
     .limit(1);
-
-  if (tenantId) {
-    partQuery = partQuery.eq("tenant_id", tenantId);
-  }
 
   const { data: part, error: partError } = await partQuery.maybeSingle();
   if (partError || !part?.id) {
     return [];
   }
 
-  let widgetQuery = supabase
+  const widgetQuery = supabase
     .from("widgets")
     .select("*, template_part:template_parts(slug)")
     .eq("area_id", part.id)
+    .eq("tenant_id", tenantId)
     .eq("is_active", true)
     .is("deleted_at", null)
     .order("order", { ascending: true });
-
-  if (tenantId) {
-    widgetQuery = widgetQuery.eq("tenant_id", tenantId);
-  }
 
   const { data, error } = await widgetQuery;
   if (error) {
@@ -150,19 +151,21 @@ export async function getWidgetsByAreaSlug(
  */
 export async function getAllWidgetsByArea(
   supabase: SupabaseClient,
-  tenantId?: string | null,
+  tenantId: string,
 ): Promise<Record<string, WidgetData[]>> {
-  let query = supabase
+  if (!tenantId) {
+    console.error("[Widget] Missing tenant scope for grouped widget fetch.");
+    return {};
+  }
+
+  const query = supabase
     .from("widgets")
     .select("*")
+    .eq("tenant_id", tenantId)
     .eq("is_active", true)
     .is("deleted_at", null)
     .order("area")
     .order("sort_order", { ascending: true });
-
-  if (tenantId) {
-    query = query.eq("tenant_id", tenantId);
-  }
 
   const { data, error } = await query;
 
@@ -189,7 +192,7 @@ export async function getAllWidgetsByArea(
  */
 export async function getSidebarWidgets(
   supabase: SupabaseClient,
-  tenantId?: string | null,
+  tenantId: string,
 ): Promise<WidgetData[]> {
   return getWidgetsByArea(supabase, "sidebar", tenantId);
 }
@@ -200,7 +203,7 @@ export async function getSidebarWidgets(
 export async function getFooterWidgets(
   supabase: SupabaseClient,
   column: number | string,
-  tenantId?: string | null,
+  tenantId: string,
 ): Promise<WidgetData[]> {
   const area = typeof column === "number" ? `footer-${column}` : column;
   return getWidgetsByArea(supabase, area, tenantId);

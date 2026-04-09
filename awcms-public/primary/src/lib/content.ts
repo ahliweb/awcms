@@ -437,39 +437,61 @@ export async function getBlogBySlug(
   // Fetch category separately
   let category = null;
   if (data.category_id) {
-    const { data: categoryData } = await supabase
+    let categoryQuery = supabase
       .from("categories")
       .select("id, name, slug")
       .eq("id", data.category_id)
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      categoryQuery = categoryQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: categoryData } = await categoryQuery.maybeSingle();
     category = categoryData || null;
   }
 
   let author = null;
   if (data.author_id) {
-    const { data: authorData } = await supabase
+    let authorQuery = supabase
       .from("users")
       .select("full_name")
       .eq("id", data.author_id)
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      authorQuery = authorQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: authorData } = await authorQuery.maybeSingle();
     author = authorData || null;
   }
 
   let tags: Array<{ id: string; name: string; slug: string }> = [];
-  const { data: blogTagRows } = await supabase
+  let blogTagsQuery = supabase
     .from("blog_tags")
     .select("tag_id")
     .eq("blog_id", data.id);
 
+  if (tenantId) {
+    blogTagsQuery = blogTagsQuery.eq("tenant_id", tenantId);
+  }
+
+  const { data: blogTagRows } = await blogTagsQuery;
+
   const tagIds = (blogTagRows || []).map((row) => row.tag_id).filter(Boolean);
   if (tagIds.length > 0) {
-    const { data: tagRows } = await supabase
+    let tagsQuery = supabase
       .from("tags")
       .select("id, name, slug")
       .in("id", tagIds)
       .is("deleted_at", null);
+
+    if (tenantId) {
+      tagsQuery = tagsQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: tagRows } = await tagsQuery;
     tags = (tagRows || []) as Array<{ id: string; name: string; slug: string }>;
   }
 
@@ -502,12 +524,17 @@ export async function getBlogs(
 
   let categoryId: string | null = null;
   if (categorySlug) {
-    const { data: categoryData, error: categoryError } = await supabase
+    let categoryQuery = supabase
       .from("categories")
       .select("id")
       .eq("slug", categorySlug)
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      categoryQuery = categoryQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: categoryData, error: categoryError } = await categoryQuery.maybeSingle();
 
     if (categoryError) {
       console.error(
@@ -526,12 +553,17 @@ export async function getBlogs(
 
   let taggedBlogIds: string[] | null = null;
   if (tagSlug) {
-    const { data: tagData, error: tagError } = await supabase
+    let tagQuery = supabase
       .from("tags")
       .select("id")
       .eq("slug", tagSlug)
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      tagQuery = tagQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: tagData, error: tagError } = await tagQuery.maybeSingle();
 
     if (tagError) {
       console.error("[Content] Error resolving blog tag:", tagError.message);
@@ -611,11 +643,17 @@ export async function getBlogs(
   ) as string[];
 
   if (categoryIds.length > 0) {
-    const { data: categoriesData } = await supabase
+    let categoriesQuery = supabase
       .from("categories")
       .select("id, name, slug")
       .is("deleted_at", null)
       .in("id", categoryIds);
+
+    if (tenantId) {
+      categoriesQuery = categoriesQuery.eq("tenant_id", tenantId);
+    }
+
+    const { data: categoriesData } = await categoriesQuery;
 
     const categoryMap = new Map(
       (categoriesData || []).map((category) => [category.id, category]),

@@ -17,7 +17,7 @@ const supabase = createClientFromEnv(import.meta.env);
 const tenantId = getPublicTenantId();
 let widgets: WidgetData[] = [];
 
-if (supabase && area) {
+if (supabase && area && tenantId) {
   try {
     widgets = await getWidgetsByAreaSlug(supabase, area, tenantId);
   } catch (e) {
