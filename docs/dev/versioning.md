@@ -193,11 +193,11 @@ Because each client app has its own `package.json` with an independent `version`
 ```bash
 # Bump only the Admin Panel (e.g., after a UI-only change)
 npm version minor --prefix awcms
-# → awcms/package.json: "version": "4.5.1" (example current admin version)
+# → awcms/package.json: "version": "4.6.0" (example current admin version at the time of writing)
 
 # Bump only the Public Portal
 npm version patch --prefix awcms-public/primary
-# → awcms-public/primary/package.json: "version": "4.4.1" (example patch target)
+# → awcms-public/primary/package.json: "version": "4.5.0" (example current public version at the time of writing)
 ```
 
 ### Keeping the Monorepo in Sync

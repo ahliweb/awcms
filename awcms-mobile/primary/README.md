@@ -5,7 +5,7 @@ Primary Flutter client for AWCMS end users.
 ## Prerequisites
 
 - Flutter SDK 3.38.5+
-- Dart SDK 3+
+- Dart SDK ^3.10.0
 
 ## Quick Start
 
@@ -28,6 +28,7 @@ flutter run
 ```env
 SUPABASE_URL=...
 SUPABASE_PUBLISHABLE_KEY=...
+CLOUDFLARE_ACCOUNT_ID=...
 DEFAULT_TENANT_ID=...
 ```
 
