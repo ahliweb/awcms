@@ -3,10 +3,9 @@ import Layout from "../../../layouts/Layout.astro";
 import { Icon } from "astro-icon/components";
 import Section from "../../../components/public/Section.astro";
 import BlogCard from "../../../components/public/BlogCard.astro";
-import WidgetArea from "../../../components/common/WidgetArea.astro";
+import BlogSidebar from "../../../components/public/BlogSidebar.astro";
 import {
   t,
-  getLocalizedPath,
   type Locale,
 } from "../../../utils/i18n";
 import { getPosts } from "../../../lib/api";
@@ -22,7 +21,11 @@ const posts = await getPosts(100, locale);
 // posts are already sorted by default from API
 ---
 
-<Layout title={t("blogs.title", locale)} pageType="blog_archive">
+<Layout
+  title={t("blogs.title", locale)}
+  description={t("home.latest_blogs", locale)}
+  pageType="blog_archive"
+>
   <!-- Hero -->
   <section
     class="hero-gradient text-white py-16 md:py-24"
@@ -43,24 +46,22 @@ const posts = await getPosts(100, locale);
   <Section class="section-photo transition-colors duration-200" data-testid="blogs-list">
     <div class="grid lg:grid-cols-3 gap-8">
       <div class="lg:col-span-2">
-        <div class="grid md:grid-cols-2 gap-6">
-          {posts.map((blog: any) => <BlogCard blog={blog} locale={locale} />)}
-        </div>
+        {
+          posts.length > 0 ? (
+            <div class="grid md:grid-cols-2 gap-6">
+              {posts.map((blog: any) => <BlogCard blog={blog} locale={locale} />)}
+            </div>
+          ) : (
+            <div class="rounded-2xl border border-dashed border-gray-300 dark:border-slate-700 bg-white/80 dark:bg-slate-800 p-10 text-center">
+              <Icon name="tabler:news-off" class="w-14 h-14 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">No published posts yet</h2>
+              <p class="mt-2 text-gray-600 dark:text-gray-300">Check back later for the latest updates from this tenant.</p>
+            </div>
+          )
+        }
       </div>
 
-      <div class="space-y-6">
-        <WidgetArea area="sidebar" />
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 transition-colors duration-200">
-          <a href={getLocalizedPath("/blogs/agenda", locale)} class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-            <span class="text-gray-700 dark:text-gray-300">{t("blogs.agenda", locale)}</span>
-            <Icon name="tabler:chevron-right" class="w-5 h-5 text-gray-400" />
-          </a>
-          <a href={getLocalizedPath("/blogs/galeri", locale)} class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-            <span class="text-gray-700 dark:text-gray-300">{t("blogs.gallery", locale)}</span>
-            <Icon name="tabler:chevron-right" class="w-5 h-5 text-gray-400" />
-          </a>
-        </div>
-      </div>
+      <BlogSidebar locale={locale} />
     </div>
   </Section>
 </Layout>
