@@ -1,6 +1,7 @@
 ---
-import Features2 from "~/components/widgets/Features2.astro";
-import Content from "~/components/widgets/Content.astro";
+import BlockShell from "~/components/puck-blocks/BlockShell.astro";
+import FeatureGrid from "~/components/public/FeatureGrid.astro";
+import SplitSection from "~/components/public/SplitSection.astro";
 
 interface Props {
     layout?: "grid" | "image-side";
@@ -22,6 +23,12 @@ interface Props {
     bg?: string;
 }
 
+type FeatureItem = {
+  title: string;
+  description?: string;
+  icon: string;
+};
+
 const {
     layout = "grid",
     title,
@@ -37,49 +44,27 @@ const {
     bg,
 } = Astro.props;
 
-// Map items to ensure icon defaults
-const mappedItems = items.map((item) => ({
-    title: item.title,
-    description: item.description,
-    icon: item.icon || "tabler:check",
-    // callToAction: item.link ? { href: item.link, text: 'Learn more' } : undefined
-    // Features2/Content might support callToAction in items differently or via slot.
-    // Standard ItemGrid usually takes icon, title, description.
-    // If link is present, we might want to append it to description or handle it if widget supports it.
-    // Current ItemGrid implementation in Features2 might not support links per item directly unless extended.
-    // For now, we map basic fields.
-}));
+const mappedItems: FeatureItem[] = items
+    .filter((item) => item.title)
+    .map((item) => ({
+        title: item.title as string,
+        description: item.description,
+        icon: item.icon || "feature",
+    }));
 ---
 
-{
-    layout === "grid" && (
-        <Features2
-            title={title}
-            subtitle={subtitle}
-            tagline={tagline}
-            items={mappedItems}
-            columns={columns}
-            id={id}
-            isDark={isDark}
-            classes={classes}
-            bg={bg}
-        />
+<BlockShell id={id} title={title} subtitle={subtitle} tagline={tagline} isDark={isDark} classes={classes} bg={bg}>
+  {
+    layout === "image-side" ? (
+      <SplitSection
+        title={title || ""}
+        description={subtitle}
+        items={mappedItems}
+        image={image ? { src: image, alt: title || "Feature Image" } : undefined}
+        reverse={isReversed}
+      />
+    ) : (
+      <FeatureGrid items={mappedItems} columns={columns === 2 ? 2 : columns === 4 ? 4 : 3} />
     )
-}
-
-{
-    layout === "image-side" && (
-        <Content
-            title={title}
-            subtitle={subtitle}
-            tagline={tagline}
-            items={mappedItems}
-            image={{ src: image || "", alt: title || "Feature Image" }}
-            isReversed={isReversed}
-            id={id}
-            isDark={isDark}
-            classes={classes}
-            bg={bg}
-        />
-    )
-}
+  }
+</BlockShell>

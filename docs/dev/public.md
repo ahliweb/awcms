@@ -87,6 +87,7 @@ Current primary-portal composition now follows a more EmDash-style public struct
   - `FaqList.astro`
   - `CtaBanner.astro`
 - these section primitives now back the core localized marketing pages, the main showcase home variants, and the maintained landing pages, replacing most page-local AstroWind widget assemblies in `primary`
+- Puck compatibility wrappers in `src/components/puck-blocks/` now also render through the shared public/block section layer instead of depending on the retired AstroWind marketing widgets
 - canonical tenant-facing content routes now live under locale-prefixed public paths such as:
   - `/{locale}/blogs`
   - `/{locale}/blogs/[slug]`

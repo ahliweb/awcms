@@ -2,7 +2,8 @@
 import { createClientFromEnv } from "~/lib/supabase";
 import { getPublicTenantId } from "~/lib/publicTenant";
 import { getLocale, t } from "~/utils/i18n";
-import Testimonials from "~/components/widgets/Testimonials.astro";
+import BlockShell from "~/components/puck-blocks/BlockShell.astro";
+import TestimonialGrid from "~/components/public/TestimonialGrid.astro";
 import type { Testimonial } from "~/types";
 
 interface Props {
@@ -50,12 +51,9 @@ if (tenantId && supabase) {
 
 {
     testimonials.length > 0 ? (
-        <Testimonials
-            title={title || t("home.testimonials.title", locale)}
-            subtitle={subtitle || t("home.testimonials.subtitle", locale)}
-            tagline={tagline || t("home.testimonials.tagline", locale)}
-            testimonials={testimonials}
-        />
+        <BlockShell title={title || t("home.testimonials.title", locale)} subtitle={subtitle || t("home.testimonials.subtitle", locale)} tagline={tagline || t("home.testimonials.tagline", locale)}>
+            <TestimonialGrid items={testimonials.map((item) => ({ quote: item.testimonial || "", name: item.name || "", role: item.job }))} />
+        </BlockShell>
     ) : (
         <div class="text-center p-8 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
             No testimonials found.

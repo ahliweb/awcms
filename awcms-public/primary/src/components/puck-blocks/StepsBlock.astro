@@ -1,5 +1,7 @@
 ---
-import Steps from "~/components/widgets/Steps.astro";
+import BlockShell from "~/components/puck-blocks/BlockShell.astro";
+import FeatureGrid from "~/components/public/FeatureGrid.astro";
+import SplitSection from "~/components/public/SplitSection.astro";
 
 const {
     title,
@@ -21,26 +23,38 @@ type StepItem = {
     [key: string]: unknown;
 };
 
+type NormalizedStep = {
+    title: string;
+    description?: string;
+    icon: string;
+};
+
 // Map Puck items to Steps widget props if needed
 // Puck items: { title, description, icon }
 // Steps items: { title, description, icon } (Compatible)
 
 const safeItems = Array.isArray(items) ? (items as StepItem[]) : [];
-const mappedItems = safeItems.map((item) => ({
-    ...item,
-    icon: item.icon || "tabler:check", // Ensure default icon
-}));
+const mappedItems: NormalizedStep[] = safeItems
+    .filter((item) => item.title)
+    .map((item) => ({
+        title: item.title as string,
+        description: item.description,
+        icon: item.icon || "tabler:check",
+    }));
 ---
 
-<Steps
-    title={title}
-    subtitle={subtitle}
-    tagline={tagline}
-    items={mappedItems}
-    image={image}
-    isReversed={isReversed}
-    id={id}
-    isDark={isDark}
-    classes={classes}
-    bg={bg}
-/>
+<BlockShell title={title} subtitle={subtitle} tagline={tagline} id={id} isDark={isDark} classes={classes} bg={bg}>
+  {
+    image ? (
+      <SplitSection
+        title={title || ""}
+        description={subtitle}
+        items={mappedItems}
+        image={{ src: image, alt: title || "Steps image" }}
+        reverse={isReversed}
+      />
+    ) : (
+      <FeatureGrid items={mappedItems.map((item) => ({ title: item.title, description: item.description, icon: item.icon }))} columns={3} />
+    )
+  }
+</BlockShell>

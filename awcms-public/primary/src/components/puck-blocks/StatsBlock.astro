@@ -1,5 +1,6 @@
 ---
-import Stats from "~/components/widgets/Stats.astro";
+import BlockShell from "~/components/puck-blocks/BlockShell.astro";
+import StatGrid from "~/components/public/StatGrid.astro";
 
 const { items = [], id, isDark, classes, bg } = Astro.props;
 
@@ -18,4 +19,6 @@ const stats = safeItems.map((item) => ({
 }));
 ---
 
-<Stats stats={stats} id={id} isDark={isDark} classes={classes} bg={bg} />
+<BlockShell id={id} isDark={isDark} classes={classes} bg={bg}>
+  <StatGrid items={stats.map((item) => ({ value: String(item.amount ?? ""), label: item.title }))} />
+</BlockShell>

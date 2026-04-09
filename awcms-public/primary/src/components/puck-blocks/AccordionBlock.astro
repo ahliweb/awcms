@@ -1,12 +1,12 @@
 ---
-import FAQs from "~/components/widgets/FAQs.astro";
+import BlockShell from "~/components/puck-blocks/BlockShell.astro";
+import FaqList from "~/components/public/FaqList.astro";
 
 const {
   title,
   subtitle,
   tagline,
   items = [],
-  columns = 1,
   id,
   isDark,
   classes,
@@ -18,25 +18,23 @@ type AccordionItem = {
   content?: string;
 };
 
+type FaqEntry = {
+  question: string;
+  answer: string;
+};
+
 // Map Puck items to FAQs widget props
 // Puck items: { title, content }
 // FAQs items: { title, description }
 const safeItems = Array.isArray(items) ? (items as AccordionItem[]) : [];
-const mappedItems = safeItems.map((item) => ({
-  title: item.title,
-  description: item.content,
-  icon: "tabler:chevron-right", // Default icon
-}));
+const faqItems: FaqEntry[] = safeItems
+  .filter((item) => item.title && item.content)
+  .map((item) => ({
+    question: item.title as string,
+    answer: item.content as string,
+  }));
 ---
 
-<FAQs
-  title={title}
-  subtitle={subtitle}
-  tagline={tagline}
-  items={mappedItems}
-  columns={columns}
-  id={id}
-  isDark={isDark}
-  classes={classes}
-  bg={bg}
-/>
+<BlockShell title={title} subtitle={subtitle} tagline={tagline} id={id} isDark={isDark} classes={classes} bg={bg}>
+  <FaqList items={faqItems} />
+</BlockShell>
