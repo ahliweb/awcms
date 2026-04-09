@@ -5,6 +5,21 @@ import TemplateSelector from '../TemplateSelector';
 
 const fromMock = vi.fn();
 
+function createThenableChain(result) {
+  const resolved = Promise.resolve(result);
+  const chain = {
+    eq: vi.fn(() => chain),
+    is: vi.fn(() => chain),
+    order: vi.fn(() => chain),
+    or: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    then: resolved.then.bind(resolved),
+    catch: resolved.catch.bind(resolved),
+    finally: resolved.finally.bind(resolved),
+  };
+  return chain;
+}
+
 vi.mock('@/lib/customSupabaseClient', () => ({
   supabase: {
     from: (...args) => fromMock(...args),
@@ -40,16 +55,7 @@ describe('TemplateSelector', () => {
 
     fromMock.mockImplementation((table) => {
       if (table === 'templates') {
-        const resolved = Promise.resolve({ data: [], error: null });
-        const chain = {
-          eq: vi.fn(() => chain),
-          is: vi.fn(() => chain),
-          order: vi.fn(() => chain),
-          or: vi.fn(() => chain),
-          then: resolved.then.bind(resolved),
-          catch: resolved.catch.bind(resolved),
-          finally: resolved.finally.bind(resolved),
-        };
+        const chain = createThenableChain({ data: [], error: null });
 
         return {
           select: () => chain,
@@ -57,7 +63,7 @@ describe('TemplateSelector', () => {
       }
 
       if (table === 'reusable_sections') {
-        const resolved = Promise.resolve({
+        const chain = createThenableChain({
           data: [
             {
               id: 'section-1',
@@ -70,15 +76,6 @@ describe('TemplateSelector', () => {
           ],
           error: null,
         });
-        const chain = {
-          eq: vi.fn(() => chain),
-          is: vi.fn(() => chain),
-          order: vi.fn(() => chain),
-          or: vi.fn(() => chain),
-          then: resolved.then.bind(resolved),
-          catch: resolved.catch.bind(resolved),
-          finally: resolved.finally.bind(resolved),
-        };
 
         return {
           select: () => chain,
@@ -86,15 +83,7 @@ describe('TemplateSelector', () => {
       }
 
       if (table === 'template_parts') {
-        const resolved = Promise.resolve({ data: [], error: null });
-        const chain = {
-          in: vi.fn(() => chain),
-          is: vi.fn(() => chain),
-          or: vi.fn(() => chain),
-          then: resolved.then.bind(resolved),
-          catch: resolved.catch.bind(resolved),
-          finally: resolved.finally.bind(resolved),
-        };
+        const chain = createThenableChain({ data: [], error: null });
 
         return {
           select: () => chain,

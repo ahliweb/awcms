@@ -2,18 +2,25 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { ReusableSectionField } from '../ReusableSectionField';
+import { supabase } from '@/lib/customSupabaseClient';
 
-const eqMock = vi.fn();
-const isMock = vi.fn();
-const orderMock = vi.fn();
+function createThenableChain(result) {
+  const resolved = Promise.resolve(result);
+  const chain = {
+    eq: vi.fn(() => chain),
+    is: vi.fn(() => chain),
+    order: vi.fn(() => chain),
+    or: vi.fn(() => chain),
+    then: resolved.then.bind(resolved),
+    catch: resolved.catch.bind(resolved),
+    finally: resolved.finally.bind(resolved),
+  };
+  return chain;
+}
 
 vi.mock('@/lib/customSupabaseClient', () => ({
   supabase: {
-    from: vi.fn(() => ({
-      select: () => ({
-        eq: eqMock,
-      }),
-    })),
+    from: vi.fn(),
   },
 }));
 
@@ -34,23 +41,13 @@ vi.mock('@/components/ui/select', () => ({
 describe('ReusableSectionField', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    const resolved = Promise.resolve({
+    const chain = createThenableChain({
       data: [
         { id: 'section-1', name: 'Hero Section', slug: 'hero-section', owner_tenant_id: null, status: 'active' },
       ],
       error: null,
     });
-    const chain = {
-      is: isMock,
-      order: orderMock,
-      or: vi.fn(() => chain),
-      then: resolved.then.bind(resolved),
-      catch: resolved.catch.bind(resolved),
-      finally: resolved.finally.bind(resolved),
-    };
-    orderMock.mockReturnValue(chain);
-    isMock.mockReturnValue(chain);
-    eqMock.mockReturnValue(chain);
+    supabase.from.mockReturnValue({ select: () => chain });
   });
 
   it('loads reusable section options and shows the current slug', async () => {

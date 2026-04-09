@@ -5,6 +5,18 @@ import { ReusableSectionBlock } from '../ReusableSectionBlock';
 
 const fromMock = vi.fn();
 
+function createSectionChain(result) {
+  const resolved = Promise.resolve(result);
+  const chain = {
+    select: vi.fn(() => chain),
+    eq: vi.fn(() => chain),
+    is: vi.fn(() => chain),
+    or: vi.fn(() => chain),
+    maybeSingle: vi.fn(() => resolved),
+  };
+  return chain;
+}
+
 vi.mock('@/lib/customSupabaseClient', () => ({
   supabase: {
     from: (...args) => fromMock(...args),
@@ -21,7 +33,7 @@ describe('ReusableSectionBlock', () => {
   });
 
   it('shows preview summary for visual section content', async () => {
-    const resolved = Promise.resolve({
+    const query = createSectionChain({
       data: {
         section_mode: 'visual',
         content: {
@@ -35,14 +47,6 @@ describe('ReusableSectionBlock', () => {
       error: null,
     });
 
-    const query = {
-      select: vi.fn(() => query),
-      eq: vi.fn(() => query),
-      is: vi.fn(() => query),
-      or: vi.fn(() => query),
-      maybeSingle: vi.fn(() => resolved),
-    };
-
     fromMock.mockReturnValue(query);
 
     render(<ReusableSectionBlock sectionSlug="hero-section" title="Reusable Section" puck={{ isEditing: true }} />);
@@ -53,20 +57,12 @@ describe('ReusableSectionBlock', () => {
   });
 
   it('shows preview summary for referenced template part content', async () => {
-    const partResolved = Promise.resolve({
+    const partQuery = createSectionChain({
       data: { content: { content: [{ type: 'Feature' }] } },
       error: null,
     });
 
-    const partQuery = {
-      select: vi.fn(() => partQuery),
-      eq: vi.fn(() => partQuery),
-      is: vi.fn(() => partQuery),
-      or: vi.fn(() => partQuery),
-      maybeSingle: vi.fn(() => partResolved),
-    };
-
-    const sectionResolved = Promise.resolve({
+    const sectionQuery = createSectionChain({
       data: {
         section_mode: 'template_part_reference',
         content: null,
@@ -74,14 +70,6 @@ describe('ReusableSectionBlock', () => {
       },
       error: null,
     });
-
-    const sectionQuery = {
-      select: vi.fn(() => sectionQuery),
-      eq: vi.fn(() => sectionQuery),
-      is: vi.fn(() => sectionQuery),
-      or: vi.fn(() => sectionQuery),
-      maybeSingle: vi.fn(() => sectionResolved),
-    };
 
     fromMock.mockImplementation((table) => (table === 'reusable_sections' ? sectionQuery : partQuery));
 
