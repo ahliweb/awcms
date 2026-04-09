@@ -25,7 +25,7 @@ Current important rule:
 
 ## Current Core Stack
 
-- Astro 6.0.8
+- Astro 6.1.4 in `awcms-public/primary` and Astro 6.0.8 in `awcms-public/smandapbun`
 - React 19.2.4 islands
 - TypeScript / TSX
 - Supabase JS for approved public data access

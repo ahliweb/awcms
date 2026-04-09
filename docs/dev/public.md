@@ -25,7 +25,7 @@ This guide is meant to be practical and repo-state-aware. It should help contrib
 - The maintained public portals live in `awcms-public/`.
 - `awcms-public/primary/` is the reusable Astro portal and the main reference implementation.
 - `awcms-public/smandapbun/` is a dedicated sovereign public portal with its own implementation constraints documented in [docs/tenancy/smandapbun.md](../tenancy/smandapbun.md).
-- Astro 6.0.8 with React 19.2.4 islands is the current public stack.
+- The current public stack is Astro 6.1.4 in `awcms-public/primary`, Astro 6.0.8 in `awcms-public/smandapbun`, and React 19.2.4 islands in both.
 - Public builds are static-first (`output: "static"`) unless a task explicitly introduces or targets a different deployment/runtime mode.
 - Supabase JS remains the public data client.
 - Cloudflare Workers in `awcms-edge/` are the only maintained server-side HTTP runtime for public compatibility routes, guarded media access, tenant/domain-mediated public route logic, and other edge-managed flows.
@@ -133,7 +133,7 @@ Do not assume `smandapbun` follows the exact same internal helper layout as `pri
 
 ### Stack
 
-- Astro 6.0.8
+- Astro 6.1.4 in `awcms-public/primary` and Astro 6.0.8 in `awcms-public/smandapbun`
 - React 19.2.4 islands
 - TypeScript / TSX
 - TailwindCSS `^4.2.2`

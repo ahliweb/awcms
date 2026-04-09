@@ -11,7 +11,7 @@ The AWCMS GitHub wiki (`awcms.wiki/`) has been successfully updated with the lat
 1. **SYSTEM_MODEL.md** - Primary architecture authority
    - Updated with Context7-verified stack versions
    - Normalized terminology (Astro ID to `withastro/docs`)
-   - Aligned with current Node.js >= 22.12.0 requirement
+   - Aligned with the current Node.js >= 24.14.1 requirement
 
 2. **AGENTS.md** - Execution and implementation rules
    - Includes Context7 benchmark remediation sections
@@ -38,8 +38,8 @@ The AWCMS GitHub wiki (`awcms.wiki/`) has been successfully updated with the lat
 
 ### Development Docs Updated
 
-- **dev/admin.md** - Admin panel form patterns (React 19 + Vite 7)
-- **dev/ci-cd.md** - CI/CD pipeline with Node 22.12.0 runtime
+- **dev/admin.md** - Admin panel form patterns (React 19 + Vite 8)
+- **dev/ci-cd.md** - CI/CD pipeline with Node 24.14.1 runtime
 - **dev/documentation-audit-plan.md** - Full re-audit plan (Phases 0-5)
 - **dev/documentation-audit-tracker.md** - Complete audit evidence and drift register
 - **dev/edge-functions.md** - Edge function deployment lifecycle

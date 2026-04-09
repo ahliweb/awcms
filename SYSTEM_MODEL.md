@@ -29,7 +29,7 @@ Agents must respect the exact versions declared in the current workspace manifes
 
 ### 1.2 Public Portal (`awcms-public`)
 
-* **Meta-Framework:** Astro `6.0.8`
+* **Meta-Framework:** Astro `6.1.4` in `awcms-public/primary` and Astro `6.0.8` in `awcms-public/smandapbun`
 * **Interactive Islands:** React 19.2.4
 * **Language:** TypeScript 5.x / TSX
 * **Styling:** TailwindCSS `^4.2.2` in both `awcms-public/primary` and `awcms-public/smandapbun`

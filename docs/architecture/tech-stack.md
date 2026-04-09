@@ -43,7 +43,7 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 
 | Category | Technology | Version | Purpose |
 | --- | --- | --- | --- |
-| Meta-framework | Astro | `6.0.8` | Static output + islands |
+| Meta-framework | Astro | `6.1.4` (primary), `6.0.8` (smandapbun) | Static output + islands |
 | UI library | React | 19.2.4 | Island rendering |
 | Language | TypeScript | `^5.8.3` (primary), `^5.9.3` (smandapbun) | Typed components |
 | Styling | TailwindCSS | `^4.2.2` | Utility-first CSS |
@@ -51,6 +51,8 @@ Admin styling uses TailwindCSS 4 with CSS-based configuration.
 | Node.js | Node.js | >=24.14.1 | Runtime baseline for AWCMS and OpenClaw |
 
 Public styling uses TailwindCSS 4 via `@tailwindcss/vite`.
+
+`awcms-public/primary` now aligns on Astro `6.1.4`, Tailwind `^4.2.2`, and `@supabase/supabase-js` `^2.99.3`.
 
 `awcms-public/smandapbun` now aligns on Astro `6.0.8`, Tailwind `^4.2.2`, and `@supabase/supabase-js` `^2.99.3`.
 

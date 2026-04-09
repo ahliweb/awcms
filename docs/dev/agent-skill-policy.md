@@ -23,7 +23,7 @@ These stay in `.agents/skills/` because they map directly to the maintained stac
 
 | Skill | Why it stays local | AWCMS / Context7 basis |
 | --- | --- | --- |
-| `astro` | Primary public portal framework skill | `awcms-public/*` uses Astro 6.0.8; Context7: `withastro/docs` |
+| `astro` | Primary public portal framework skill | `awcms-public/primary` uses Astro 6.1.4 and `awcms-public/smandapbun` uses Astro 6.0.8; Context7: `withastro/docs` |
 | `cloudflare` | Primary edge/pages/storage platform skill | `awcms-edge/`, Cloudflare Pages, Workers, R2; Context7: `cloudflare/cloudflare-docs` |
 | `code-reviewer` | Direct fit for JS/TS review work in admin/public/edge packages | `AGENTS.md` requires code-review behavior for review tasks |
 | `create-plan` | Matches the repo’s explicit plan-first workflow when users ask for a plan | `docs/dev/ai-planning-workflow.md` |

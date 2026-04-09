@@ -77,7 +77,7 @@ This document is the practical standards summary for the checked-in repo. It is 
 
 ### Public
 
-- Astro 6.0.8 + React 19.2.4 islands
+- Astro 6.1.4 in `awcms-public/primary`, Astro 6.0.8 in `awcms-public/smandapbun`, and React 19.2.4 islands
 - static-first output for canonical public builds
 - build-time tenant resolution is the normal path
 - public Worker compatibility routes must preserve current tenant/domain/media guardrails

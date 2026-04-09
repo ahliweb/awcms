@@ -41,7 +41,7 @@ In the AWCMS ecosystem, AI Agents are treated as specialized team members. We de
 
 - **Focus**: Public Portal (`awcms-public`), Astro Islands, Performance.
 - **Capabilities**:
-  - Working with **Astro 6.0.8** and **React 19.2.4** (Static output + Islands).
+  - Working with **Astro 6.1.4** in `awcms-public/primary`, **Astro 6.0.8** in `awcms-public/smandapbun`, and **React 19.2.4** (Static output + Islands).
   - Implementing **Zod** schemas for component prop validation.
   - Optimizing for Cloudflare Pages static builds (cache headers, asset optimization).
 - **Constraints**:
@@ -71,7 +71,7 @@ Agents must be aware of the exact versions in use:
 | Leaflet          | 1.9.4    | Maps                             |
 | React Leaflet    | 5.0.0    | React bindings for Leaflet       |
 | Vitest           | 4.1.0    | Unit/Integration testing         |
-| Astro            | `6.0.8`  | Primary public portal            |
+| Astro            | `6.1.4` / `6.0.8`  | Primary / SMANDAPBUN public portals |
 | Wrangler         | `^4.77.0` | Cloudflare Worker CLI/dev server (`awcms-edge`) |
 
 > [!IMPORTANT]
@@ -121,7 +121,7 @@ To ensure successful code generation and integration, Agents must adhere to the 
 | ----------------- | ------------------------------------------------------------------------- |
 | Language          | Admin Panel: JavaScript ES2022+; Public Portal: TypeScript/TSX            |
 | **Admin Panel**   | React 19.2.4, Vite `^8.0.5`                                              |
-| **Public Portal** | Astro `6.0.8` (static output), React 19.2.4                              |
+| **Public Portal** | Astro `6.1.4` in `awcms-public/primary`, Astro `6.0.8` in `awcms-public/smandapbun` (static output), React 19.2.4 |
 | Styling           | TailwindCSS 4 utilities (Public uses Vite plugin + `tailwind.config.mjs`) |
 | Backend           | Supabase (Auth, DB, RLS) + Cloudflare Workers (Edge Logic)                |
 
