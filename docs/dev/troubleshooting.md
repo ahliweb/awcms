@@ -1,109 +1,98 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack) and Section 2 (Data Integrity)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Troubleshooting Guide
 
 ## Purpose
 
-Provide common fixes for local development and deployment issues.
+Provide current, repo-state-aware troubleshooting guidance for local development and common operational issues across admin, public, Worker, migration, and MCP surfaces.
 
-## Audience
-
-- Developers running the apps locally
-- Operators diagnosing production failures
-
-## Prerequisites
-
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for system architecture and troubleshooting context
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/dev/setup.md`
-
-## Steps
+## Current Troubleshooting Areas
 
 ### Missing Environment Variables
 
-- Confirm `awcms/.env.local` exists for the admin panel.
-- Confirm `awcms-public/primary/.env.local` (or the deployment-resolved env inputs used by the build wrapper) exists for the public portal, including `PUBLIC_TENANT_ID`.
-- Confirm `awcms-edge/.dev.vars` exists for local Worker development.
-- Confirm `VITE_EDGE_URL` / `VITE_LOCAL_EDGE_URL` are set when admin or public flows depend on Worker-backed routes.
+- verify `awcms/.env.local` for admin work
+- verify the relevant public workspace env inputs for public builds, including tenant envs where required
+- verify `awcms-edge/.dev.vars` for local Worker runtime
+- verify `VITE_EDGE_URL` / `VITE_LOCAL_EDGE_URL` / `PUBLIC_EDGE_URL` when client flows depend on Worker-backed routes
 
 ### Tenant Not Found (Admin)
 
-- Verify `VITE_DEV_TENANT_SLUG` in `awcms/.env.local` for local dev.
-- Confirm the tenant exists in `tenants` and domain matches.
-- Seed the default tenant if missing: `node awcms/src/scripts/seed-primary-tenant.js`.
+- verify `VITE_DEV_TENANT_SLUG`
+- confirm the tenant exists and the current local tenant/bootstrap path has been seeded
+- check current tenant-resolution behavior before inventing a workaround
 
 ### Tenant Not Found (Public)
 
-- Verify `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`) for static builds.
-- Rebuild after updating env values.
+- verify `PUBLIC_TENANT_ID` / `VITE_PUBLIC_TENANT_ID`
+- rebuild after env updates
+- remember canonical public builds are static-first and should fail closed on missing tenant context
 
-### RLS Errors (PGRST 42501)
+### RLS Errors (`42501`)
 
-- Check `x-tenant-id` header injection.
-- Confirm `tenant_id` matches the current tenant and `deleted_at` is null.
+- verify tenant header propagation/current tenant scope
+- confirm the row matches current tenant scope and soft-delete expectations
+- check ABAC/RLS docs before broadening query scope
 
-### Analytics Not Showing
+### Public Worker Route Failures
 
-- Confirm `analytics_events` and `analytics_daily` migrations are applied.
-- Canonical static builds do not log server-side analytics events; middleware-based logging applies only in non-canonical runtime experiments.
-- Ensure `x-tenant-id` is set for scoped public requests.
+- verify tenant/domain inputs match the documented route contract
+- verify public media keys use canonical `tenants/<tenant_id>/...` paths
+- verify malformed or protected media paths are not being requested through `/public/media/*`
+
+### Analytics / Monitoring Issues
+
+- verify analytics migrations/tables are present
+- confirm the correct tenant scope is being used
+- prefer aggregate tables/surfaces for dashboard expectations
 
 ### Migration History Mismatch
 
-- Use helper script (safe dry-run by default): `scripts/repair_supabase_migration_history.sh`.
-- Local repair execution: `scripts/repair_supabase_migration_history.sh --apply --local`.
-- Linked/remote repair execution: `scripts/repair_supabase_migration_history.sh --apply --linked`.
-- Re-run `npx supabase db push --local` after local repairs.
-- Re-run `scripts/verify_supabase_migration_consistency.sh` after repairs so root/mirror parity is still green.
+- use `scripts/repair_supabase_migration_history.sh` as the current repair helper
+- rerun `scripts/verify_supabase_migration_consistency.sh` after repair
 
-### Root/Mirror Supabase Drift (CI passes locally, fails in `db-check`)
+### Root / Mirror Migration Drift
 
-- CI lint runs from `awcms/supabase`, while local CLI defaults to root `supabase/`.
-- Run `scripts/verify_supabase_migration_consistency.sh` to detect missing or content-drifted migration files.
-- Mirror any changed files between `supabase/**` and `awcms/supabase/**`, then re-run verification.
-
-### Invalid Migration Filename Warning
-
-- Ensure files in `supabase/migrations/` follow `<timestamp>_name.sql`.
-- Move helper/manual SQL files into `supabase/manual/` to avoid CLI skip warnings.
-
-### Supabase DB Lint Warning (index_advisor)
-
-- `extensions.index_advisor` is owned by `supabase_admin` and requires a privileged patch.
-- After `supabase db reset`, re-apply `supabase/migrations/20260207123000_fix_index_advisor_text_array_init.sql` while connected as `supabase_admin`.
-- Helper script: `awcms/scripts/apply_index_advisor_fix.sh` (requires local Supabase running).
-
-### Supabase Performance Advisor Check (Local)
-
-- For a local FK index check, run: `psql "$SUPABASE_DB_URL" -f supabase/manual/check_advisors.sql`.
-- The result should return `0 rows` for missing FK indexes.
+- CI and local workflows can diverge if `supabase/` and `awcms/supabase/` are not kept in parity
+- use `scripts/verify_supabase_migration_consistency.sh`
 
 ### Turnstile Errors
 
-- Use the Cloudflare test key for localhost.
-- Set `VITE_TURNSTILE_SITE_KEY` in the admin environment.
-- Optionally set `VITE_TURNSTILE_TEST_SITE_KEY` to force the test key in local dev.
-- For multi-domain setups, use `VITE_TURNSTILE_SITE_KEY_MAP` to map hostnames to keys.
-- Ensure `TURNSTILE_SECRET_KEY` is set as a Cloudflare Worker secret for `verify-turnstile`.
-- For multi-domain secrets, set `TURNSTILE_SECRET_KEY_MAP` (JSON) and optionally `TURNSTILE_TEST_SECRET_KEY`.
+- verify public/admin site keys and Worker secret configuration
+- use the test key flow for localhost when appropriate
 
-### Cloudflare Runtime Env Missing
+### MCP Connectivity Problems
 
-- Runtime env access applies only when SSR/middleware is enabled.
+- check `opencode mcp list`
+- verify `mcp.json`
+- ensure Docker/tokens are available for GitHub MCP if used
 
-### MCP Servers Not Connected
+### Local Worker / R2 Confusion
 
-- Verify OpenCode MCP status with `opencode mcp list`.
-- Confirm repository MCP config is present in `mcp.json`.
-- For local Supabase MCP, start `awcms-mcp` (`cd awcms-mcp && npm run dev`) if needed.
-- For GitHub MCP, ensure Docker is running and one token env is set (`GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_MCP_PERSONAL_ACCESS_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`).
+- remember local `wrangler dev` R2 state is isolated from remote by default
+- use the current `sync:r2:*` commands when reconciliation is needed
 
-## Verification
+## Current Verification Guidance
 
-- Re-run `npm run dev` after env changes.
-- Use browser console logs to confirm tenant resolution.
+- rerun the smallest relevant workspace command after fixing the issue
+- do not assume a docs-only fix solved a runtime issue without rerunning the actual command
 
-## References
+Representative current commands:
 
-- `docs/tenancy/overview.md`
-- `docs/tenancy/supabase.md`
+```bash
+cd awcms && npm run build
+cd awcms && npm run docs:check
+cd awcms-public/primary && npm run check:astro
+cd awcms-edge && npm test && npm run typecheck
+scripts/verify_supabase_migration_consistency.sh
+```
+
+## Related Docs
+
+- [docs/dev/setup.md](./setup.md)
+- [docs/tenancy/overview.md](../tenancy/overview.md)
+- [docs/tenancy/supabase.md](../tenancy/supabase.md)
+- [docs/dev/edge-functions.md](./edge-functions.md)

@@ -1,281 +1,87 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # ESP32 Firmware Development
 
-## 1. Overview
+## Purpose
 
-AWCMS manages ESP32 devices through a mix of direct Supabase publishable-key flows and compatibility HTTP endpoints. The current firmware source:
+Describe the current ESP32 firmware development model for `awcms-esp32/primary`: toolchain, device configuration patterns, current Worker-backed compatibility expectations, and current cautions around documented device routes.
 
-- Connects to WiFi.
-- Polls a configured device-configuration endpoint.
-- Reports telemetry and status through publishable-key Supabase flows in the current firmware implementation.
-- **Never ships secrets**; it authenticates using a per-device publishable key.
+## Current ESP32 Model
 
----
-
-## 2. Toolchain
-
-| Tool | Purpose |
-|------|---------|
-| **PlatformIO** (VS Code) | Build system, env management, OTA |
-| **Arduino / ESP-IDF** | Framework |
-| `platformio.ini` | Environment configuration (`dev` / `prod`) |
-| `include/secrets.h` | Gitignored; holds WiFi SSID, device token |
-
----
-
-## 3. Project Structure
-
-```text
-awcms-esp32/primary/
-├── include/
-│   ├── config.h           # Endpoint URLs and polling intervals
-│   └── secrets.h          # WiFi + device token (gitignored!)
-├── src/
-│   └── main.cpp           # Entry point
-├── lib/
-│   └── ConfigManager/     # Fetches + applies AWCMS config
-└── platformio.ini
-```
-
----
-
-## 4. Receiving & Applying Configuration Changes (Benchmark-Ready)
-
-### Objective
-
-Deliver device configuration updates securely via a Cloudflare Worker route, apply settings locally, and persist a safe last-known configuration for offline boot.
-
-### Required Inputs
-
-| Field | Source | Required | Notes |
-| --- | --- | --- | --- |
-| `device_token` | Device provisioning | Yes | Publishable per-device token |
-| Config endpoint URL | Device config | Yes | Configure an actual endpoint before deployment; the example route below is illustrative |
-| `polling_interval_sec` | Config payload | Yes | Device checks interval |
-| Config schema | Server response | Yes | JSON payload with known keys |
-
-### Workflow
-
-1. Device boots, connects to WiFi, and loads last-known config from `Preferences`.
-2. Device polls its configured endpoint with `Authorization: Bearer <device_token>`.
-3. If a Worker-backed endpoint is used, it validates token, resolves tenant/device, and returns scoped config.
-4. Firmware applies config and persists it for offline recovery.
-5. When `firmware_version` increases, device triggers OTA update.
-
-### Reference Implementation
-
-The example below shows a compatibility HTTP endpoint pattern. Verify the live route before copying it into firmware because `awcms-edge/src/index.ts` does not currently expose a maintained `device-config` route.
-
-### 4.1 `ConfigManager.h`
-
-```cpp
-#pragma once
-#include <ArduinoJson.h>
-#include <HTTPClient.h>
-#include <Preferences.h>
-
-class ConfigManager {
-public:
-    struct DeviceConfig {
-        int     pollingIntervalSec;
-        bool    ledEnabled;
-        int     brightnessLevel;
-        String  firmwareVersion;
-    };
-
-    ConfigManager(const char* endpoint, const char* deviceToken) 
-        : _endpoint(endpoint), _token(deviceToken) {}
-
-    bool fetchAndApply(DeviceConfig& out) {
-        HTTPClient http;
-        http.begin(_endpoint);
-        http.addHeader("Authorization", String("Bearer ") + _token);
-        http.addHeader("Content-Type", "application/json");
-
-        int httpCode = http.GET();
-        if (httpCode != 200) {
-            Serial.printf("[Config] HTTP error: %d\n", httpCode);
-            return false;
-        }
-
-        String body = http.getString();
-        http.end();
-
-        StaticJsonDocument<512> doc;
-        DeserializationError err = deserializeJson(doc, body);
-        if (err) {
-            Serial.printf("[Config] JSON parse error: %s\n", err.c_str());
-            return false;
-        }
-
-        // Apply received config; persist with Preferences for offline boot
-        out.pollingIntervalSec = doc["polling_interval_sec"] | 60;
-        out.ledEnabled         = doc["led_enabled"] | true;
-        out.brightnessLevel    = doc["brightness_level"] | 50;
-        out.firmwareVersion    = doc["firmware_version"].as<String>();
-
-        _persist(out);
-        return true;
-    }
-
-private:
-    const char* _endpoint;
-    const char* _token;
-    Preferences _prefs;
-
-    void _persist(const DeviceConfig& cfg) {
-        _prefs.begin("awcms_cfg", false);
-        _prefs.putInt("poll_int", cfg.pollingIntervalSec);
-        _prefs.putBool("led_en", cfg.ledEnabled);
-        _prefs.putInt("brightness", cfg.brightnessLevel);
-        _prefs.end();
-    }
-};
-```
-
-### 4.2 `main.cpp` — Main Loop
-
-```cpp
-#include <Arduino.h>
-#include <WiFi.h>
-#include "secrets.h"     // WIFI_SSID, WIFI_PASS, DEVICE_TOKEN
-#include "config.h"      // CONFIG_ENDPOINT
-#include "ConfigManager.h"
-
-ConfigManager configMgr(CONFIG_ENDPOINT, DEVICE_TOKEN);
-ConfigManager::DeviceConfig activeConfig;
-
-void connectWifi() {
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-    Serial.print("[WiFi] Connecting");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.printf("\n[WiFi] Connected: %s\n", WiFi.localIP().toString().c_str());
-}
-
-void setup() {
-    Serial.begin(115200);
-    connectWifi();
-
-    // Boot with last known config from persistent storage
-    activeConfig.pollingIntervalSec = 60;
-
-    // Fetch current config from AWCMS on boot
-    configMgr.fetchAndApply(activeConfig);
-}
-
-void loop() {
-    // Re-fetch config on every polling interval
-    static unsigned long lastFetch = 0;
-    unsigned long now = millis();
-
-    if (now - lastFetch >= (unsigned long)activeConfig.pollingIntervalSec * 1000) {
-        lastFetch = now;
-        if (!configMgr.fetchAndApply(activeConfig)) {
-            Serial.println("[Config] Fetch failed; using last-known config.");
-        }
-    }
-
-    // Apply config to hardware
-    digitalWrite(LED_BUILTIN, activeConfig.ledEnabled ? HIGH : LOW);
-
-    delay(1000);
-}
-```
-
-### 4.3 `config.h`
-
-```cpp
-#pragma once
-
-// Example compatibility route for device configuration.
-// Replace this with the actual deployed endpoint you operate for devices.
-#define CONFIG_ENDPOINT "https://edge.example.com/functions/v1/device-config"
-```
-
-### 4.4 `secrets.h` (gitignored)
-
-```cpp
-#pragma once
-
-// WiFi credentials
-#define WIFI_SSID     "YourNetworkSSID"
-#define WIFI_PASS     "YourNetworkPassword"
-
-// Per-device Supabase publishable key (NOT the secret key)
-#define DEVICE_TOKEN  "sb_publishable_..."
-```
-
-### Validation Checklist
-
-- Device uses last-known config when the network is unavailable.
-- Config updates apply within one polling interval.
-- OTA update triggers only when `firmware_version` increases.
-- Token revocation prevents future config/telemetry updates.
-
-### Failure Modes and Guardrails
-
-- Token leaked: revoke token in AWCMS, block requests in the Worker route.
-- Invalid JSON payload: fall back to last-known settings and log parse error.
-- WiFi failures: keep device in safe mode and retry connection.
-- Breaking config changes: use versioned endpoints (for example `device-config-v2`).
-
----
-
-## 5. Reporting Telemetry Back
-
-The checked-in firmware still contains direct Supabase publishable-key telemetry/status helpers in `awcms-esp32/primary/include/supabase_client.h`. That is the implementation-backed baseline today. For new privileged device workflows, prefer a Worker-mediated endpoint.
-
-Current direct Supabase example:
-
-```cpp
-void reportTelemetry(float temperature, float humidity) {
-    HTTPClient http;
-    http.begin("https://<project>.supabase.co/rest/v1/iot_telemetry");
-    http.addHeader("Authorization", String("Bearer ") + DEVICE_TOKEN);
-    http.addHeader("apikey", DEVICE_TOKEN);
-    http.addHeader("Content-Type", "application/json");
-
-    String body = "{\"device_id\":\"" + String(DEVICE_ID) +
-                  "\",\"temperature\":" + String(temperature) +
-                  ",\"humidity\":" + String(humidity) + "}";
-
-    int code = http.POST(body);
-    Serial.printf("[Telemetry] POST status: %d\n", code);
-    http.end();
-}
-```
-
----
-
-## 6. Security Rules
-
-| Rule | Reason |
-|------|--------|
-| Only publishable keys on device | Secret keys must never leave the server |
-| `secrets.h` in `.gitignore` | Prevents credential exposure |
-| Worker route validates device token when used | Server-side control for privileged compatibility endpoints |
-| No plaintext WiFi fallback | Prefer WPA2 networks; log WiFi errors and halt |
-
----
-
-## 7. Build & Flash
-
-```bash
-# Using PlatformIO CLI
-cd awcms-esp32/primary
-pio run -e dev          # compile
-pio run -e dev -t upload # flash to connected device
-pio device monitor      # serial output at 115200 baud
-```
-
-Or use **PlatformIO → Project Tasks** in VS Code.
-
----
-
-## 8. OTA (Over-The-Air) Updates
-
-For firmware updates pushed via AWCMS, use the `Update.h` ESP32 Arduino library. The Worker route serves the binary and the device calls `Update.begin()` -> `Update.write()` -> `Update.end()` after verifying the new version against `activeConfig.firmwareVersion`.
+The ESP32 integration currently combines:
+
+- PlatformIO-based firmware development
+- WiFi-connected device polling/configuration behavior
+- per-device token-based auth patterns
+- compatibility HTTP endpoint examples for device config/update flows
+
+Current important rule:
+
+- the docs should not imply a maintained Worker route exists for every illustrative device example if the checked-in Worker runtime does not currently expose that exact endpoint
+
+## Current Toolchain
+
+- PlatformIO / PlatformIO Core
+- Arduino / ESP-IDF compatible firmware stack
+- `platformio.ini`
+- gitignored `include/secrets.h`
+
+## Current Project Shape
+
+Representative workspace layout:
+
+- `awcms-esp32/primary/include/`
+- `awcms-esp32/primary/src/`
+- `awcms-esp32/primary/lib/`
+- `awcms-esp32/primary/platformio.ini`
+
+## Current Device Configuration Pattern
+
+Current firmware guidance still centers on:
+
+1. boot device
+2. connect to WiFi
+3. load last-known persisted config
+4. fetch current config from a configured endpoint
+5. apply the received configuration
+6. persist safe local state for offline recovery
+
+## Current Runtime Boundary Note
+
+The example Worker-backed config endpoint pattern remains illustrative unless the live Worker runtime exposes the route being referenced.
+
+Current important rule:
+
+- verify the current `awcms-edge/src/index.ts` surface before documenting or shipping a device firmware endpoint as a maintained contract
+
+## Current Security Rules
+
+- never ship `SUPABASE_SECRET_KEY` in firmware
+- keep per-device tokens/device auth separate from server-side secrets
+- keep `secrets.h` gitignored
+- treat OTA/config endpoints as privileged operational surfaces
+
+## Current Offline / Recovery Guidance
+
+- keep last-known config persisted for offline boot
+- handle config-fetch failure gracefully
+- do not assume constant network availability
+
+## Current Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| firmware workspace changes | `cd awcms-esp32/primary && pio run -e dev` |
+| device flash/dev verification | `cd awcms-esp32/primary && pio run -e dev -t upload` and `pio device monitor` when hardware is available |
+| maintained docs | `cd awcms && npm run docs:check` |
+| Worker/runtime implications | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+
+## Related Docs
+
+- [docs/architecture/runtime-boundaries.md](../architecture/runtime-boundaries.md)
+- [docs/dev/edge-functions.md](./edge-functions.md)
+- [docs/dev/api-usage.md](./api-usage.md)
