@@ -5,6 +5,15 @@ All notable changes to the **AWCMS** project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-04-09
+
+Applies to: `awcms@4.6.0`, `@onwidget/astrowind@4.5.0`, `awcms-edge@1.1.0`, `awcms-mcp@4.5.0`, `@awcms/shared@1.1.0`
+
+### Changed
+
+- Documentation: completed a broad current-state documentation refresh across admin, public, edge, runtime, tenancy, security, versioning, troubleshooting, setup, mobile, ESP32, and module-level guides so the docs align with the current AWCMS monorepo, Worker-first runtime boundaries, ABAC/RLS conventions, and generated OpenAPI workflow.
+- Admin UI: realigned `awcms/src/lib/version.js` with the canonical admin package manifest so the surfaced admin release label now matches `awcms@4.6.0`.
+
 ### Added
 
 - Extensions: added Phase 1 extension validation and diagnostics hardening with explicit `runtime_mode`, strict `scope.resource.action` capability validation for new manifests, embedded diagnostics in the Extensions manager, and a repeatable local SQL verification snippet for extension lifecycle migration checks.
