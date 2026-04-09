@@ -4,7 +4,7 @@
 >
 > Status: Active - content accuracy reconciliation remains in progress across the current `docs/**/*.md` surface. Re-verify counts at the start of each audit pass.
 >
-> Last Updated: 2026-04-09
+> Last Updated: 2026-04-10
 
 ## Current Phase Status
 
@@ -13,8 +13,8 @@
 | Phase 0 - Inventory and Authority Re-baseline | Completed | Counts, migration inventory, and active MCP topology were refreshed against live manifests and `mcp.json` |
 | Phase 1 - Schema, Security, and Tenancy Reconciliation | In Progress | Migration parity is restored (`152/152`); schema, storage, and security docs are being reconciled against live migrations and runtime paths |
 | Phase 2 - Scripts, Tooling, Worker Runtime, and CI/CD Reconciliation | In Progress | Worker/runtime docs are being aligned to Cloudflare Workers, current env naming, and compatibility paths |
-| Phase 3 - Workspace and Package README Pass | In Progress | ESP32 and package-level README accuracy is under active review |
-| Phase 4 - Quality and Risk Closure | Pending | Critical/high drift remains open until parity and doc coverage are restored |
+| Phase 3 - Workspace and Package README Pass | Completed | Workspace README, authority-doc metadata, and lower-signal historical-summary drift were reconciled against live manifests and maintained-doc expectations |
+| Phase 4 - Quality and Risk Closure | In Progress | Broad content reconciliation remains open as an umbrella audit track, but the April 10 README and metadata pass is complete |
 
 ## Verified Baseline Snapshot
 
@@ -97,6 +97,7 @@
 | DOCSYNC-2026-04-09-38 | Low | `docs/dev/esp32.md` still had useful examples, but it needed a clearer current-state explanation of illustrative vs maintained device routes and the present firmware/runtime boundary rules | Resolved 2026-04-09 | `docs/dev/esp32.md` rewritten with the current ESP32 model, config/endpoint cautions, and validation guidance; `cd awcms && npm run docs:check` and `cd awcms-edge && npm test && npm run typecheck` passed | Re-check when firmware endpoint contracts, auth model, or supported device/runtime boundaries change |
 | DOCSYNC-2026-04-09-39 | Low | `docs/dev/troubleshooting.md` had become a useful list, but it needed a clearer current-state organization around public Worker guardrails, migration parity, and workspace-specific verification commands | Resolved 2026-04-09 | `docs/dev/troubleshooting.md` rewritten with current troubleshooting categories, public/tenant/runtime failure notes, and verification guidance; `cd awcms && npm run docs:check` and `cd awcms-edge && npm test && npm run typecheck` passed | Re-check when troubleshooting hotspots, public Worker contracts, or migration-repair workflows change |
 | DOCSYNC-2026-04-09-40 | Low | `docs/dev/setup.md` needed a current-state refresh to better reflect the current bootstrap path across admin/public/edge/MCP/mobile/ESP32 workspaces and the modern migration/runtime notes | Resolved 2026-04-09 | `docs/dev/setup.md` rewritten with the current monorepo bootstrap path, runtime commands, migration notes, and validation guidance; `cd awcms && npm run docs:check` and `cd awcms-edge && npm test && npm run typecheck` passed | Re-check when local bootstrap steps, workspace commands, or migration/runtime setup expectations change |
+| DOCSYNC-2026-04-10-01 | Low | Maintained README and summary surfaces still had residual version/env/header drift after the April 9 re-baseline, including Node/Astro version mismatches, env-example omissions, and archival docs that still read like current status | Resolved 2026-04-10 | Updated root/workspace README files, `SYSTEM_MODEL.md`, `AGENTS.md`, public architecture/dev docs, `docs/dev/versioning.md`, selected maintained-doc `Last Updated` headers, and marked `WIKI_UPDATE_SUMMARY.md` as archival; repeated `cd awcms && npm run docs:check` passes stayed green throughout the batch | Re-check on future manifest/env changes and keep archival summaries explicitly labeled |
 
 ## Commands Run During This Cycle
 
@@ -128,8 +129,8 @@
 
 ## Immediate Remediation Queue
 
-1. Re-run validation gates after the current documentation patch batch.
-2. Continue reviewing remaining workspace READMEs and lower-priority module docs for content-only drift.
+1. Keep `DOCSYNC-205` open as the broad content-accuracy umbrella and only close it after the next full-doc re-baseline.
+2. Re-check maintained README and authority-doc version/env statements on future manifest or workflow changes.
 3. Track the ESP32 direct-Supabase-vs-Worker-runtime split as an implementation follow-up if the firmware architecture is standardized later.
 
 ## Closure Criteria
