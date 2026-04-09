@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Package, Layers, FolderOpen } from 'lucide-react';
-import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/flowbite-admin';
+import { Package, Layers, FolderOpen, Sparkles, ShieldCheck } from 'lucide-react';
+import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/emdash-admin';
 import useSplatSegments from '@/hooks/useSplatSegments';
 import { restoreCategory, softDeleteCategory } from '@/lib/taxonomyMutations';
+import { cn } from '@/lib/utils';
 
 function ProductsManager() {
   const { t } = useTranslation();
@@ -169,6 +170,33 @@ function ProductsManager() {
     { value: 'categories', label: t('menu.categories'), icon: FolderOpen, color: 'emerald' },
   ];
 
+  const activeTabMeta = {
+    products: {
+      title: t('products.workspace.products_title', 'Product catalog workflow'),
+      detail: t('products.workspace.products_detail', 'Manage pricing, availability, publishing state, and storefront media from one tenant-safe workspace.'),
+      shell: 'from-primary/12 via-background/40 to-emerald-500/12',
+      badge: 'border-primary/25 bg-primary/10 text-primary',
+      icon: Package,
+    },
+    types: {
+      title: t('products.workspace.types_title', 'Product type taxonomy'),
+      detail: t('products.workspace.types_detail', 'Keep collections, brands, or product families consistent across forms and filters.'),
+      shell: 'from-violet-500/12 via-background/40 to-primary/12',
+      badge: 'border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300',
+      icon: Layers,
+    },
+    categories: {
+      title: t('products.workspace.categories_title', 'Category cleanup and storefront grouping'),
+      detail: t('products.workspace.categories_detail', 'Review product categories, restore archived taxonomy, and keep storefront navigation tidy.'),
+      shell: 'from-emerald-500/12 via-background/40 to-primary/12',
+      badge: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+      icon: FolderOpen,
+    },
+  };
+
+  const activeWorkspace = activeTabMeta[activeTab] || activeTabMeta.products;
+  const ActiveWorkspaceIcon = activeWorkspace.icon;
+
   // Breadcrumbs for PageHeader
   const breadcrumbs = [
     { label: t('menu.products'), icon: Package },
@@ -185,59 +213,140 @@ function ProductsManager() {
         breadcrumbs={breadcrumbs}
       />
 
-      <PageTabs
-        value={activeTab}
-        onValueChange={(value) => {
-          if (value === 'products') {
-            navigate('/cmspanel/products');
-          } else {
-            navigate(`/cmspanel/products/${value}`);
-          }
-        }}
-        tabs={tabs}
-      >
-        <TabsContent value="products" className="mt-0">
-          <GenericContentManager
-            tableName="products"
-            resourceName={t('menu.products')}
-            columns={productColumns}
-            formFields={productFormFields}
-            permissionPrefix="products"
-            customSelect="*, category:categories(name), product_type:product_types(name), owner:users!created_by(email, full_name), tenant:tenants(name)"
-            showBreadcrumbs={false}
-            showHeader={false}
-          />
-        </TabsContent>
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Active Area</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">{tabs.find((tab) => tab.value === activeTab)?.label || t('menu.products')}</p>
+              <p className="text-xs text-muted-foreground">Product operations workspace</p>
+            </div>
+            <span className={cn('rounded-xl border p-2', activeWorkspace.badge)}>
+              <ActiveWorkspaceIcon className="h-4 w-4" />
+            </span>
+          </div>
+        </div>
 
-        <TabsContent value="types" className="mt-0">
-          <GenericContentManager
-            tableName="product_types"
-            resourceName={t('menu.product_types')}
-            columns={typeColumns}
-            formFields={typeFormFields}
-            permissionPrefix="product_types"
-            showBreadcrumbs={false}
-            showHeader={false}
-          />
-        </TabsContent>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Sections</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{tabs.length}</p>
+              <p className="text-xs text-muted-foreground">Catalog, types, and categories</p>
+            </div>
+            <span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
+              <Sparkles className="h-4 w-4" />
+            </span>
+          </div>
+        </div>
 
-        <TabsContent value="categories" className="mt-0">
-          <GenericContentManager
-            tableName="categories"
-            resourceName={t('common.category')}
-            columns={categoryColumns}
-            formFields={categoryFormFields}
-            permissionPrefix="categories"
-            customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
-            defaultFilters={{ type: ['product', 'products'] }}
-            showBreadcrumbs={false}
-            showHeader={false}
-            restorePermission="tenant.categories.restore"
-            onSoftDeleteOverride={softDeleteCategory}
-            onRestoreOverride={restoreCategory}
-          />
-        </TabsContent>
-      </PageTabs>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Taxonomy Sync</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">Shared category hygiene</p>
+              <p className="text-xs text-muted-foreground">Restore and clean storefront taxonomy safely</p>
+            </div>
+            <span className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-2 text-emerald-700 dark:text-emerald-300">
+              <FolderOpen className="h-4 w-4" />
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Access Scope</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">Tenant ABAC</p>
+              <p className="text-xs text-muted-foreground">Read and mutation controls remain permission-gated</p>
+            </div>
+            <span className="rounded-xl border border-sky-500/25 bg-sky-500/10 p-2 text-sky-700 dark:text-sky-300">
+              <ShieldCheck className="h-4 w-4" />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+        <div className={cn('border-b border-border/70 bg-gradient-to-r p-4 sm:p-5', activeWorkspace.shell)}>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                Commerce Workspace
+              </div>
+              <h3 className="text-base font-semibold text-foreground">{activeWorkspace.title}</h3>
+              <p className="max-w-2xl text-sm text-muted-foreground">{activeWorkspace.detail}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                <Package className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                Product CRUD stays refresh-safe
+              </span>
+              <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+                Trash-aware taxonomy restore
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5">
+          <PageTabs
+            value={activeTab}
+            onValueChange={(value) => {
+              if (value === 'products') {
+                navigate('/cmspanel/products');
+              } else {
+                navigate(`/cmspanel/products/${value}`);
+              }
+            }}
+            tabs={tabs}
+          >
+            <TabsContent value="products" className="mt-0">
+              <GenericContentManager
+                tableName="products"
+                resourceName={t('menu.products')}
+                columns={productColumns}
+                formFields={productFormFields}
+                permissionPrefix="products"
+                customSelect="*, category:categories(name), product_type:product_types(name), owner:users!created_by(email, full_name), tenant:tenants(name)"
+                showBreadcrumbs={false}
+                showHeader={false}
+              />
+            </TabsContent>
+
+            <TabsContent value="types" className="mt-0">
+              <GenericContentManager
+                tableName="product_types"
+                resourceName={t('menu.product_types')}
+                columns={typeColumns}
+                formFields={typeFormFields}
+                permissionPrefix="product_types"
+                showBreadcrumbs={false}
+                showHeader={false}
+              />
+            </TabsContent>
+
+            <TabsContent value="categories" className="mt-0">
+              <GenericContentManager
+                tableName="categories"
+                resourceName={t('common.category')}
+                columns={categoryColumns}
+                formFields={categoryFormFields}
+                permissionPrefix="categories"
+                customSelect="*, owner:users!created_by(email, full_name), tenant:tenants(name)"
+                defaultFilters={{ type: ['product', 'products'] }}
+                showBreadcrumbs={false}
+                showHeader={false}
+                restorePermission="tenant.categories.restore"
+                onSoftDeleteOverride={softDeleteCategory}
+                onRestoreOverride={restoreCategory}
+              />
+            </TabsContent>
+          </PageTabs>
+        </div>
+      </div>
     </AdminPageLayout>
   );
 }

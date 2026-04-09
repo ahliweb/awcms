@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,7 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { encodeRouteParam } from '@/lib/routeSecurity';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 
 function NotificationsManager() {
     // Hooks
@@ -153,6 +153,18 @@ function NotificationsManager() {
         if (filterStatus === 'unread') return !n.is_read;
         return true;
     });
+
+    const notificationSummary = useMemo(() => {
+        const unread = notifications.filter((notification) => !notification.is_read).length;
+        const read = notifications.length - unread;
+        const priorityHigh = notifications.filter((notification) => notification.priority === 'high').length;
+
+        return {
+            unread,
+            read,
+            priorityHigh,
+        };
+    }, [notifications]);
 
     const columns = [
         { key: 'title', label: 'Title', className: 'w-1/4' },
@@ -371,6 +383,60 @@ function NotificationsManager() {
                 </div>}
             />
 
+            <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Inbox</p>
+                            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{totalCount}</p>
+                            <p className="text-xs text-muted-foreground">Notifications in the current query scope</p>
+                        </div>
+                        <span className="rounded-xl border border-primary/25 bg-primary/10 p-2 text-primary">
+                            <Bell className="h-4 w-4" />
+                        </span>
+                    </div>
+                </div>
+
+                <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Unread</p>
+                            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{notificationSummary.unread}</p>
+                            <p className="text-xs text-muted-foreground">Requires operator attention or user follow-up</p>
+                        </div>
+                        <span className="rounded-xl border border-sky-500/25 bg-sky-500/10 p-2 text-sky-700 dark:text-sky-300">
+                            <CheckCheck className="h-4 w-4" />
+                        </span>
+                    </div>
+                </div>
+
+                <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Read</p>
+                            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{notificationSummary.read}</p>
+                            <p className="text-xs text-muted-foreground">Already acknowledged in this result set</p>
+                        </div>
+                        <span className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-2 text-emerald-700 dark:text-emerald-300">
+                            <CheckCircle2 className="h-4 w-4" />
+                        </span>
+                    </div>
+                </div>
+
+                <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">High Priority</p>
+                            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{notificationSummary.priorityHigh}</p>
+                            <p className="text-xs text-muted-foreground">Messages marked for elevated urgency</p>
+                        </div>
+                        <span className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-2 text-amber-700 dark:text-amber-300">
+                            <Send className="h-4 w-4" />
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             <div className="dashboard-surface dashboard-surface-hover flex flex-wrap gap-4 items-center p-4">
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
@@ -412,7 +478,7 @@ function NotificationsManager() {
             </div>
 
             <Card className="dashboard-surface dashboard-surface-hover overflow-hidden">
-                <CardHeader className="border-b border-slate-200/60 bg-slate-50/70">
+                <CardHeader className="border-b border-border/60 bg-muted/30">
                     <CardTitle>Inbox</CardTitle>
                     <CardDescription>Your notifications history.</CardDescription>
                 </CardHeader>

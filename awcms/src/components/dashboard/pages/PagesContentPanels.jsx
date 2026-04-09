@@ -1,7 +1,7 @@
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import CategoriesManager from '@/components/dashboard/CategoriesManager';
 import TagsManager from '@/components/dashboard/TagsManager';
-import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
+import { PageTabs, TabsContent } from '@/templates/emdash-admin';
 
 function PagesContentPanels({
 	onlyVisual,

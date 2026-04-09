@@ -2,8 +2,8 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header';
-import Sidebar from '@/templates/flowbite-admin/components/Sidebar';
-import Footer from '@/templates/flowbite-admin/components/Footer';
+import Sidebar from '@/templates/emdash-admin/components/Sidebar';
+import Footer from '@/templates/emdash-admin/components/Footer';
 
 const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);

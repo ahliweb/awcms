@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader, PageTabs, TabsContent } from '@/templates/emdash-admin';
 import TemplatesList from './templates/TemplatesList';
 import TemplatePartsList from './templates/TemplatePartsList';
 import ReusableSectionsManager from './templates/ReusableSectionsManager';
