@@ -120,7 +120,7 @@ order by name;
 | `platform.module.read`, `platform.module.manage` | Platform module visibility and global module-management actions. Verify exact coverage from `public.permissions` before documenting new flows. | web |
 | `platform.extensions.*` | read, create, update, delete | web |
 | `platform.extensions.manage` | Platform extension catalog/lifecycle orchestration | web |
-| `platform.sidebar.read` | Platform sidebar-management visibility. | web |
+| `platform.sidebar.read`, `platform.sidebar.update` | Platform sidebar-management visibility and edit actions. | web |
 | `platform.reporting.read` | Platform reporting visibility | web |
 | `platform.billing.*` | Use only if the live `permissions` table exposes these keys. | web |
 | `platform.user.*` | Use only if the live `permissions` table exposes these keys. | web |
@@ -128,7 +128,6 @@ order by name;
 Current app-level permission checks that should be treated as implementation-specific until they are verified in root migrations:
 
 - `platform.permissions.read`
-- `platform.sidebar.update`
 
 Current blueprint/bootstrap usage in app code:
 
