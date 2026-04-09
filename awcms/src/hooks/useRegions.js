@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 /**
  * Hook for managing administrative regions
@@ -9,6 +10,14 @@ import { useToast } from '@/components/ui/use-toast';
 export function useRegions() {
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
+    const { tenantId } = usePermissions();
+
+    const requireTenantScope = useCallback(() => {
+        if (!tenantId) {
+            throw new Error('Missing tenant context');
+        }
+        return tenantId;
+    }, [tenantId]);
 
     /**
      * Get regions by level (optionally filtered by parent)
@@ -19,6 +28,7 @@ export function useRegions() {
      */
     const getRegions = useCallback(async ({ levelId, parentId = null, page = 1, pageSize = 20, searchQuery = '' }) => {
         try {
+            const activeTenantId = requireTenantScope();
             setLoading(true);
 
             let query = supabase
@@ -26,7 +36,9 @@ export function useRegions() {
                 .select(`
           *,
           level:region_levels(key, name, level_order)
-        `, { count: 'exact' });
+        `, { count: 'exact' })
+                .eq('tenant_id', activeTenantId)
+                .is('deleted_at', null);
 
             if (searchQuery && searchQuery.trim().length > 0) {
                 query = query.ilike('name', `%${searchQuery}%`);
@@ -64,7 +76,7 @@ export function useRegions() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [requireTenantScope, toast]);
 
     /**
      * Get all active levels
@@ -90,10 +102,11 @@ export function useRegions() {
      */
     const createRegion = useCallback(async (regionData) => {
         try {
+            const activeTenantId = requireTenantScope();
             setLoading(true);
             const { data, error } = await supabase
                 .from('regions')
-                .insert([regionData])
+                .insert([{ ...regionData, tenant_id: regionData.tenant_id || activeTenantId }])
                 .select()
                 .single();
 
@@ -108,18 +121,20 @@ export function useRegions() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [requireTenantScope, toast]);
 
     /**
      * Update a region
      */
     const updateRegion = useCallback(async (id, updates) => {
         try {
+            const activeTenantId = requireTenantScope();
             setLoading(true);
             const { data, error } = await supabase
                 .from('regions')
                 .update(updates)
                 .eq('id', id)
+                .eq('tenant_id', activeTenantId)
                 .select()
                 .single();
 
@@ -134,20 +149,20 @@ export function useRegions() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [requireTenantScope, toast]);
 
     /**
      * Delete a region
      */
     const deleteRegion = useCallback(async (id) => {
         try {
+            const activeTenantId = requireTenantScope();
             setLoading(true);
-            // Soft delete usually preferred, but using hard delete for now based on previous requests
-            // Or check if soft delete column exists. Schema has deleted_at.
             const { error } = await supabase
                 .from('regions')
                 .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id);
+                .eq('id', id)
+                .eq('tenant_id', activeTenantId);
 
             if (error) throw error;
 
@@ -159,7 +174,7 @@ export function useRegions() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [requireTenantScope, toast]);
 
     /**
      * Search regions
@@ -167,11 +182,14 @@ export function useRegions() {
     const searchRegions = useCallback(async (query) => {
         try {
             if (!query || query.length < 2) return [];
+            const activeTenantId = requireTenantScope();
             setLoading(true);
 
             const { data, error } = await supabase
                 .from('regions')
                 .select('*, level:region_levels(name)')
+                .eq('tenant_id', activeTenantId)
+                .is('deleted_at', null)
                 .ilike('name', `%${query}%`)
                 .limit(20);
 
@@ -183,7 +201,7 @@ export function useRegions() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [requireTenantScope]);
 
     return {
         loading,
