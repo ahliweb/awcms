@@ -1,4 +1,4 @@
-import { getPermalink, getBlogPermalink, getAsset } from "./utils/permalinks";
+import { getPermalink, getAsset } from "./utils/permalinks";
 import type { HeaderLink } from "./lib/menu";
 import type { CallToAction } from "./types";
 
@@ -97,26 +97,7 @@ export const headerData: HeaderData = {
       links: [
         {
           text: "nav.blog_list",
-          href: getBlogPermalink(),
-        },
-        {
-          text: "nav.blog",
-          href: getPermalink(
-            "get-started-website-with-astro-tailwind-css",
-            "post",
-          ),
-        },
-        {
-          text: "nav.blog",
-          href: getPermalink("markdown-elements-demo-post", "post"),
-        },
-        {
-          text: "nav.category_page",
-          href: getPermalink("tutorials", "category"),
-        },
-        {
-          text: "nav.tag_page",
-          href: getPermalink("astro", "tag"),
+          href: getPermalink("/blogs"),
         },
       ],
     },

@@ -1,6 +1,6 @@
 site:
-  name: AstroWind
-  site: "https://astrowind.vercel.app"
+  name: Primary Tenant
+  site: "https://primary.example.com"
   base: "/"
   trailingSlash: false
 
@@ -9,14 +9,14 @@ site:
 # Default SEO metadata
 metadata:
   title:
-    default: AstroWind
-    template: "%s — AstroWind"
-  description: "\U0001F680 Suitable for Startups, Small Business, Sass Websites, Professional Portfolios, Marketing Websites, Landing Pages & Blogs."
+    default: Primary Tenant
+    template: "%s | Primary Tenant"
+  description: "Multi-tenant public portal for published content, marketing pages, and tenant-aware experiences."
   robots:
     index: true
     follow: true
   openGraph:
-    site_name: AstroWind
+    site_name: Primary Tenant
     images:
       - url: "~/assets/images/default.png"
         width: 1200
@@ -35,7 +35,7 @@ i18n:
 
 apps:
   blog:
-    isEnabled: true
+    isEnabled: false
     postsPerPage: 6
 
     post:
