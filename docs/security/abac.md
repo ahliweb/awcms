@@ -128,16 +128,14 @@ order by name;
 Current app-level permission checks that should be treated as implementation-specific until they are verified in root migrations:
 
 - `platform.permissions.read`
-- `platform.approvals.read`
-- `platform.template.manage`
 - `platform.sidebar.update`
 
 Current blueprint/bootstrap usage in app code:
 
-- `platform.template.manage` gates platform-managed site blueprint creation and apply flows
+- `platform.template.manage` gates platform-managed site blueprint creation and apply flows and is now backed by the current root migration baseline
 - `tenant.setting.update` gates tenant-authored blueprint variants and tenant blueprint application
 - Phase 2 blueprints currently reuse existing template/settings permissions rather than introducing a new `tenant.blueprint.*` family
-- Phase 3 reusable sections also reuse `platform.template.manage` and `tenant.setting.update` rather than introducing a separate `tenant.sections.*` family in this iteration
+- Phase 3 reusable sections also reuse migration-backed `platform.template.manage` and `tenant.setting.update` rather than introducing a separate `tenant.sections.*` family in this iteration
 
 ### B. Tenant (Tenant Scope) - Standardized Pattern
 
