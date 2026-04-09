@@ -1,5 +1,14 @@
 import { supabase } from '@/lib/customSupabaseClient';
 
+const getExpectedTenantId = (usage) => usage?.tenant_id || usage?.tenantId || null;
+
+const assertTenantScopedRecord = (data, expectedTenantId, label) => {
+  if (!expectedTenantId) return;
+  if (!data?.tenant_id || data.tenant_id !== expectedTenantId) {
+    throw new Error(`${label} tenant mismatch`);
+  }
+};
+
 export const extractReusableSectionReferences = (content, path = 'root') => {
   const references = [];
 
@@ -116,22 +125,32 @@ export const relinkReusableSectionAtPath = (content, usagePath, referenceBlock) 
   return cloned;
 };
 
-const resolveReusableSectionContent = async ({ reusableSectionId }) => {
-  const { data: section, error } = await supabase
+const resolveReusableSectionContent = async ({ reusableSectionId, tenantId }) => {
+  let sectionQuery = supabase
     .from('reusable_sections')
-    .select('id, section_mode, content, template_part_id')
+    .select('id, section_mode, content, template_part_id, owner_tenant_id')
     .eq('id', reusableSectionId)
-    .is('deleted_at', null)
-    .single();
+    .is('deleted_at', null);
+
+  if (tenantId) {
+    sectionQuery = sectionQuery.or(`owner_tenant_id.eq.${tenantId},owner_tenant_id.is.null`);
+  }
+
+  const { data: section, error } = await sectionQuery.single();
 
   if (error) throw error;
 
   if (section.section_mode === 'template_part_reference' && section.template_part_id) {
-    const { data: part, error: partError } = await supabase
+    let partQuery = supabase
       .from('template_parts')
       .select('content')
-      .eq('id', section.template_part_id)
-      .single();
+      .eq('id', section.template_part_id);
+
+    if (tenantId) {
+      partQuery = partQuery.eq('tenant_id', tenantId);
+    }
+
+    const { data: part, error: partError } = await partQuery.single();
 
     if (partError) throw partError;
     return part?.content || { content: [], root: { props: {} } };
@@ -141,64 +160,97 @@ const resolveReusableSectionContent = async ({ reusableSectionId }) => {
 };
 
 const loadSourceContent = async ({ usage }) => {
+  const expectedTenantId = getExpectedTenantId(usage);
+
   if (usage.source_type === 'template') {
-    const { data, error } = await supabase.from('templates').select('data, tenant_id, name, slug').eq('id', usage.source_id).single();
+    let query = supabase.from('templates').select('data, tenant_id, name, slug').eq('id', usage.source_id);
+    if (expectedTenantId) query = query.eq('tenant_id', expectedTenantId);
+    const { data, error } = await query.single();
     if (error) throw error;
+    assertTenantScopedRecord(data, expectedTenantId, 'Template');
     return {
       tenantId: data.tenant_id,
       content: data.data,
-      save: async (nextContent) => supabase.from('templates').update({ data: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id),
+      save: async (nextContent) => {
+        let saveQuery = supabase.from('templates').update({ data: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id);
+        if (expectedTenantId) saveQuery = saveQuery.eq('tenant_id', expectedTenantId);
+        return saveQuery;
+      },
       sourceLabel: data.name || data.slug || usage.source_label || 'Template',
       locale: usage.locale || null,
     };
   }
 
   if (usage.source_type === 'template_part') {
-    const { data, error } = await supabase.from('template_parts').select('content, tenant_id, name, slug').eq('id', usage.source_id).single();
+    let query = supabase.from('template_parts').select('content, tenant_id, name, slug').eq('id', usage.source_id);
+    if (expectedTenantId) query = query.eq('tenant_id', expectedTenantId);
+    const { data, error } = await query.single();
     if (error) throw error;
+    assertTenantScopedRecord(data, expectedTenantId, 'Template part');
     return {
       tenantId: data.tenant_id,
       content: data.content,
-      save: async (nextContent) => supabase.from('template_parts').update({ content: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id),
+      save: async (nextContent) => {
+        let saveQuery = supabase.from('template_parts').update({ content: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id);
+        if (expectedTenantId) saveQuery = saveQuery.eq('tenant_id', expectedTenantId);
+        return saveQuery;
+      },
       sourceLabel: data.name || data.slug || usage.source_label || 'Template Part',
       locale: usage.locale || null,
     };
   }
 
   if (usage.source_type === 'page') {
-    const { data, error } = await supabase.from('pages').select('content_draft, tenant_id, title, slug').eq('id', usage.source_id).single();
+    let query = supabase.from('pages').select('content_draft, tenant_id, title, slug').eq('id', usage.source_id);
+    if (expectedTenantId) query = query.eq('tenant_id', expectedTenantId);
+    const { data, error } = await query.single();
     if (error) throw error;
+    assertTenantScopedRecord(data, expectedTenantId, 'Page');
     return {
       tenantId: data.tenant_id,
       content: data.content_draft,
-      save: async (nextContent) => supabase.from('pages').update({ content_draft: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id),
+      save: async (nextContent) => {
+        let saveQuery = supabase.from('pages').update({ content_draft: nextContent, updated_at: new Date().toISOString() }).eq('id', usage.source_id);
+        if (expectedTenantId) saveQuery = saveQuery.eq('tenant_id', expectedTenantId);
+        return saveQuery;
+      },
       sourceLabel: data.title || data.slug || usage.source_label || 'Page',
       locale: null,
     };
   }
 
   if (usage.source_type === 'content_translation') {
-    const { data, error } = await supabase
+    let query = supabase
       .from('content_translations')
       .select('content, tenant_id, title, slug, locale')
       .eq('content_id', usage.source_id)
       .eq('locale', usage.locale)
-      .eq('content_type', 'page')
-      .maybeSingle();
+      .eq('content_type', 'page');
+
+    if (expectedTenantId) query = query.eq('tenant_id', expectedTenantId);
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw error;
+    assertTenantScopedRecord(data, expectedTenantId, 'Content translation');
 
     const parsedContent = typeof data?.content === 'string' ? JSON.parse(data.content) : data?.content;
 
     return {
       tenantId: data?.tenant_id,
       content: parsedContent,
-      save: async (nextContent) => supabase
-        .from('content_translations')
-        .update({ content: JSON.stringify(nextContent), updated_at: new Date().toISOString() })
-        .eq('content_id', usage.source_id)
-        .eq('locale', usage.locale)
-        .eq('content_type', 'page'),
+      save: async (nextContent) => {
+        let saveQuery = supabase
+          .from('content_translations')
+          .update({ content: JSON.stringify(nextContent), updated_at: new Date().toISOString() })
+          .eq('content_id', usage.source_id)
+          .eq('locale', usage.locale)
+          .eq('content_type', 'page');
+
+        if (expectedTenantId) saveQuery = saveQuery.eq('tenant_id', expectedTenantId);
+
+        return saveQuery;
+      },
       sourceLabel: data?.title || data?.slug || usage.source_label || 'Content Translation',
       locale: data?.locale || usage.locale || null,
     };
@@ -208,7 +260,7 @@ const loadSourceContent = async ({ usage }) => {
 };
 
 export const detachReusableSectionUsage = async ({ usage }) => {
-  const replacementContent = await resolveReusableSectionContent({ reusableSectionId: usage.reusable_section_id });
+  const replacementContent = await resolveReusableSectionContent({ reusableSectionId: usage.reusable_section_id, tenantId: getExpectedTenantId(usage) });
   const source = await loadSourceContent({ usage });
   const nextContent = detachReusableSectionAtPath(source.content, usage.usage_path, replacementContent);
 
@@ -252,13 +304,19 @@ export const detachReusableSectionUsage = async ({ usage }) => {
 
 export const relinkReusableSectionDetachEvent = async ({ detachEvent }) => {
   const source = await loadSourceContent({ usage: detachEvent });
+  const expectedTenantId = getExpectedTenantId(detachEvent);
 
-  const { data: section, error: sectionError } = await supabase
+  let sectionQuery = supabase
     .from('reusable_sections')
     .select('id, slug, name')
     .eq('id', detachEvent.reusable_section_id)
-    .is('deleted_at', null)
-    .single();
+    .is('deleted_at', null);
+
+  if (expectedTenantId) {
+    sectionQuery = sectionQuery.or(`owner_tenant_id.eq.${expectedTenantId},owner_tenant_id.is.null`);
+  }
+
+  const { data: section, error: sectionError } = await sectionQuery.single();
 
   if (sectionError) throw sectionError;
 
@@ -299,12 +357,18 @@ export const updateAllLinkedReusableSectionReferences = async ({ reusableSection
     return 0;
   }
 
-  const { data: section, error: sectionError } = await supabase
+  const expectedTenantId = getExpectedTenantId(usages[0]);
+  let sectionQuery = supabase
     .from('reusable_sections')
     .select('id, slug, name')
     .eq('id', reusableSectionId)
-    .is('deleted_at', null)
-    .single();
+    .is('deleted_at', null);
+
+  if (expectedTenantId) {
+    sectionQuery = sectionQuery.or(`owner_tenant_id.eq.${expectedTenantId},owner_tenant_id.is.null`);
+  }
+
+  const { data: section, error: sectionError } = await sectionQuery.single();
 
   if (sectionError) throw sectionError;
 

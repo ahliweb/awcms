@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 
 export const useTemplates = () => {
     const { toast } = useToast();
+    const { currentTenant } = useTenant();
     const [templates, setTemplates] = useState([]);
     const [templateParts, setTemplateParts] = useState([]);
     const [assignments, setAssignments] = useState([]);
@@ -11,12 +13,22 @@ export const useTemplates = () => {
     const [loading, setLoading] = useState(true);
 
     const fetchData = useCallback(async () => {
+        if (!currentTenant?.id) {
+            setTemplates([]);
+            setTemplateParts([]);
+            setAssignments([]);
+            setTemplateStrings([]);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
             // Fetch templates
             const { data: templatesData, error: templatesError } = await supabase
                 .from('templates')
                 .select('*')
+                .eq('tenant_id', currentTenant.id)
                 .order('is_active', { ascending: false })
                 .order('created_at', { ascending: false })
                 .is('deleted_at', null);
@@ -27,6 +39,7 @@ export const useTemplates = () => {
             const { data: partsData, error: partsError } = await supabase
                 .from('template_parts')
                 .select('*')
+                .eq('tenant_id', currentTenant.id)
                 .order('created_at', { ascending: false })
                 .is('deleted_at', null);
 
@@ -36,6 +49,7 @@ export const useTemplates = () => {
             const { data: assignmentsData, error: assignmentsError } = await supabase
                 .from('template_assignments')
                 .select('route_type, template_id, channel')
+                .eq('tenant_id', currentTenant.id)
                 .order('created_at', { ascending: false });
 
             if (assignmentsError) throw assignmentsError;
@@ -44,6 +58,7 @@ export const useTemplates = () => {
             const { data: stringsData, error: stringsError } = await supabase
                 .from('template_strings')
                 .select('*')
+                .eq('tenant_id', currentTenant.id)
                 .is('deleted_at', null)
                 .order('key', { ascending: true });
 
@@ -62,7 +77,7 @@ export const useTemplates = () => {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [currentTenant?.id, toast]);
 
     // --- Template CRUD ---
 
@@ -70,7 +85,7 @@ export const useTemplates = () => {
         try {
             const { data, error } = await supabase
                 .from('templates')
-                .insert([templateData])
+                .insert([{ ...templateData, tenant_id: templateData.tenant_id || currentTenant?.id }])
                 .select()
                 .single();
 
@@ -89,7 +104,8 @@ export const useTemplates = () => {
             const { error } = await supabase
                 .from('templates')
                 .update(updates)
-                .eq('id', id);
+                .eq('id', id)
+                .eq('tenant_id', currentTenant?.id);
 
             if (error) throw error;
             toast({ title: "Success", description: "Template updated successfully." });
@@ -105,7 +121,8 @@ export const useTemplates = () => {
             const { error } = await supabase
                 .from('templates')
                 .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id);
+                .eq('id', id)
+                .eq('tenant_id', currentTenant?.id);
 
             if (error) throw error;
             toast({ title: "Deleted", description: "Template removed." });
@@ -122,7 +139,7 @@ export const useTemplates = () => {
                 ...rest,
                 name: `${template.name} (Copy)`,
                 slug: `${template.slug}-copy-${Date.now()}`,
-                tenant_id: undefined // Let DB/RLS handle it or ensure it's copied if needed
+                tenant_id: currentTenant?.id
             };
 
             const { error } = await supabase.from('templates').insert([newTemplate]);
@@ -141,7 +158,7 @@ export const useTemplates = () => {
         try {
             const { data, error } = await supabase
                 .from('template_parts')
-                .insert([partData])
+                .insert([{ ...partData, tenant_id: partData.tenant_id || currentTenant?.id }])
                 .select()
                 .single();
 
@@ -160,7 +177,8 @@ export const useTemplates = () => {
             const { error } = await supabase
                 .from('template_parts')
                 .update(updates)
-                .eq('id', id);
+                .eq('id', id)
+                .eq('tenant_id', currentTenant?.id);
 
             if (error) throw error;
             toast({ title: "Success", description: "Part updated successfully." });
@@ -176,7 +194,8 @@ export const useTemplates = () => {
             const { error } = await supabase
                 .from('template_parts')
                 .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id);
+                .eq('id', id)
+                .eq('tenant_id', currentTenant?.id);
 
             if (error) throw error;
             toast({ title: "Deleted", description: "Part removed." });
@@ -193,6 +212,7 @@ export const useTemplates = () => {
             const { error } = await supabase
                 .from('template_assignments')
                 .upsert({
+                    tenant_id: currentTenant?.id,
                     route_type: type,
                     template_id: templateId,
                     channel: channel,

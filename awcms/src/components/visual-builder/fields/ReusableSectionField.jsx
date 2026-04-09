@@ -3,8 +3,10 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { useTenant } from '@/contexts/TenantContext';
 
 export const ReusableSectionField = ({ name, value, onChange, field }) => {
+  const { currentTenant } = useTenant();
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -12,12 +14,20 @@ export const ReusableSectionField = ({ name, value, onChange, field }) => {
     const fetchSections = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('reusable_sections')
           .select('id, name, slug, owner_tenant_id, status')
           .eq('status', 'active')
           .is('deleted_at', null)
           .order('updated_at', { ascending: false });
+
+        if (currentTenant?.id) {
+          query = query.or(`owner_tenant_id.eq.${currentTenant.id},owner_tenant_id.is.null`);
+        } else {
+          query = query.is('owner_tenant_id', null);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
         setSections(data || []);
@@ -29,7 +39,7 @@ export const ReusableSectionField = ({ name, value, onChange, field }) => {
     };
 
     fetchSections();
-  }, []);
+  }, [currentTenant?.id]);
 
   return (
     <div className="space-y-3">

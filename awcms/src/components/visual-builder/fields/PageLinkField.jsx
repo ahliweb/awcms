@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { udm } from '@/lib/data/UnifiedDataManager';
 import { Loader2, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { useTenant } from '@/contexts/TenantContext';
 
 export const PageLinkField = ({ name, value, onChange, field }) => {
+    const { currentTenant } = useTenant();
     const initialIsInternal = Boolean(value) && value.startsWith('/') && !value.startsWith('//');
     const [activeTab, setActiveTab] = useState('internal');
     const [pages, setPages] = useState([]);
@@ -28,19 +30,29 @@ export const PageLinkField = ({ name, value, onChange, field }) => {
     // Fetch available pages and blogs
     useEffect(() => {
         const fetchPages = async () => {
+            if (!currentTenant?.id) {
+                setPages([]);
+                setLoading(false);
+                return;
+            }
+
             setLoading(true);
             try {
                 // Fetch Pages
                 const { data: pagesData, error: pagesError } = await udm.from('pages')
                     .select('id, title, slug, page_type')
-                    .eq('status', 'published');
+                    .eq('tenant_id', currentTenant.id)
+                    .eq('status', 'published')
+                    .is('deleted_at', null);
 
                 if (pagesError) console.error("Error fetching pages:", pagesError);
 
                 // Fetch Blogs
                 const { data: blogsData, error: blogsError } = await udm.from('blogs')
                     .select('id, title, slug')
-                    .eq('status', 'published');
+                    .eq('tenant_id', currentTenant.id)
+                    .eq('status', 'published')
+                    .is('deleted_at', null);
 
                 if (blogsError) console.error("Error fetching blogs:", blogsError);
 
@@ -67,7 +79,7 @@ export const PageLinkField = ({ name, value, onChange, field }) => {
         };
 
         fetchPages();
-    }, []);
+    }, [currentTenant?.id]);
 
     const handleInternalChange = (val) => {
         onChange(val);

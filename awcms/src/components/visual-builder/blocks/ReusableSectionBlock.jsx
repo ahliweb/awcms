@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ReusableSectionField } from '../fields/ReusableSectionField';
 import { supabase } from '@/lib/customSupabaseClient';
+import { useTenant } from '@/contexts/TenantContext';
 
 export const ReusableSectionBlockFields = {
   sectionSlug: {
@@ -15,6 +16,7 @@ export const ReusableSectionBlockFields = {
 };
 
 export const ReusableSectionBlock = ({ sectionSlug, title, puck }) => {
+  const { currentTenant } = useTenant();
   const [previewState, setPreviewState] = useState({ loading: false, summary: null, error: null });
   const label = sectionSlug || title || 'Reusable Section';
 
@@ -34,23 +36,37 @@ export const ReusableSectionBlock = ({ sectionSlug, title, puck }) => {
       }
 
       try {
-        const { data: section, error } = await supabase
+        let sectionQuery = supabase
           .from('reusable_sections')
-          .select('section_mode, content, template_part_id')
+          .select('section_mode, content, template_part_id, owner_tenant_id')
           .eq('slug', sectionSlug)
           .eq('status', 'active')
-          .is('deleted_at', null)
-          .maybeSingle();
+          .is('deleted_at', null);
+
+        if (currentTenant?.id) {
+          sectionQuery = sectionQuery.or(`owner_tenant_id.eq.${currentTenant.id},owner_tenant_id.is.null`);
+        } else {
+          sectionQuery = sectionQuery.is('owner_tenant_id', null);
+        }
+
+        const { data: section, error } = await sectionQuery.maybeSingle();
 
         if (error) throw error;
 
         let content = section?.content || null;
         if (section?.section_mode === 'template_part_reference' && section?.template_part_id) {
-          const { data: part, error: partError } = await supabase
+          let partQuery = supabase
             .from('template_parts')
             .select('content')
-            .eq('id', section.template_part_id)
-            .maybeSingle();
+            .eq('id', section.template_part_id);
+
+          if (currentTenant?.id) {
+            partQuery = partQuery.or(`tenant_id.eq.${currentTenant.id},tenant_id.is.null`);
+          } else {
+            partQuery = partQuery.is('tenant_id', null);
+          }
+
+          const { data: part, error: partError } = await partQuery.maybeSingle();
 
           if (partError) throw partError;
           content = part?.content || null;
@@ -88,7 +104,7 @@ export const ReusableSectionBlock = ({ sectionSlug, title, puck }) => {
     return () => {
       isActive = false;
     };
-  }, [sectionSlug]);
+  }, [sectionSlug, currentTenant?.id]);
 
   const previewLabel = useMemo(() => {
     if (previewState.loading) return 'Loading preview...';

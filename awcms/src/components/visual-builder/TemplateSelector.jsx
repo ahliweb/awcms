@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Check, Layout, Sparkles, Loader2, Blocks } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { useTenant } from '@/contexts/TenantContext';
 
 const TemplateSelector = ({ open, onOpenChange, onSelect }) => {
+    const { currentTenant } = useTenant();
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [selectedSection, setSelectedSection] = useState(null);
     const [templates, setTemplates] = useState([]);
@@ -23,23 +25,35 @@ const TemplateSelector = ({ open, onOpenChange, onSelect }) => {
         if (open) {
             fetchTemplates();
         }
-    }, [open]);
+    }, [open, currentTenant?.id]);
 
     const fetchTemplates = async () => {
         setLoading(true);
         try {
+            let templatesQuery = supabase
+                .from('templates')
+                .select('*')
+                .eq('is_active', true)
+                .order('created_at', { ascending: false });
+
+            let sectionsQuery = supabase
+                .from('reusable_sections')
+                .select('*')
+                .eq('status', 'active')
+                .is('deleted_at', null)
+                .order('updated_at', { ascending: false });
+
+            if (currentTenant?.id) {
+                templatesQuery = templatesQuery.eq('tenant_id', currentTenant.id);
+                sectionsQuery = sectionsQuery.or(`owner_tenant_id.eq.${currentTenant.id},owner_tenant_id.is.null`);
+            } else {
+                templatesQuery = templatesQuery.is('tenant_id', null);
+                sectionsQuery = sectionsQuery.is('owner_tenant_id', null);
+            }
+
             const [{ data: templateData, error: templateError }, { data: sectionData, error: sectionError }] = await Promise.all([
-                supabase
-                    .from('templates')
-                    .select('*')
-                    .eq('is_active', true)
-                    .order('created_at', { ascending: false }),
-                supabase
-                    .from('reusable_sections')
-                    .select('*')
-                    .eq('status', 'active')
-                    .is('deleted_at', null)
-                    .order('updated_at', { ascending: false }),
+                templatesQuery,
+                sectionsQuery,
             ]);
 
             if (templateError) throw templateError;
@@ -51,10 +65,18 @@ const TemplateSelector = ({ open, onOpenChange, onSelect }) => {
 
             let partMap = new Map();
             if (referenceIds.length > 0) {
-                const { data: partRows, error: partError } = await supabase
+                let partsQuery = supabase
                     .from('template_parts')
                     .select('id, content')
                     .in('id', referenceIds);
+
+                if (currentTenant?.id) {
+                    partsQuery = partsQuery.or(`tenant_id.eq.${currentTenant.id},tenant_id.is.null`);
+                } else {
+                    partsQuery = partsQuery.is('tenant_id', null);
+                }
+
+                const { data: partRows, error: partError } = await partsQuery;
 
                 if (partError) throw partError;
                 partMap = new Map((partRows || []).map((part) => [part.id, part.content]));
