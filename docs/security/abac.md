@@ -154,6 +154,8 @@ Current blueprint/bootstrap usage in app code:
 | Pages         | `tenant.page.*`          | read, create, update, delete, restore, permanent_delete, publish |
 | Visual Pages  | `tenant.visual_pages.*`  | read, create, update, delete, restore, permanent_delete          |
 | Portfolio     | `tenant.portfolio.*`     | read, create, update, delete, restore, permanent_delete          |
+| Partners      | `tenant.partners.*`      | read, create, update, delete                                     |
+| Fun Facts     | `tenant.funfacts.*`      | read, create, update, delete                                     |
 | Services      | `tenant.services.*`      | read, create, update, delete                                     |
 | Testimonies   | `tenant.testimonies.*`   | read, create, update, delete, restore, permanent_delete          |
 | Announcements | `tenant.announcements.*` | read, create, update, delete, restore, permanent_delete          |
