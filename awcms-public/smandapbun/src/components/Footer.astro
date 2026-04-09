@@ -3,6 +3,7 @@ import { Icon } from "astro-icon/components";
 import { t, getLocalizedPath, getLocalizedValue, type Locale } from "../utils/i18n";
 import navigation from "../data/navigation.json";
 import { getMenuTree, getSiteData } from "../lib/api";
+import WidgetArea from "./common/WidgetArea.astro";
 
 export interface Props {
   locale: Locale;
@@ -224,3 +225,9 @@ function resolveHref(href: string): string {
     </div>
   </div>
 </footer>
+
+<div class="bg-gray-950 px-4 py-10">
+  <div class="container-custom">
+    <WidgetArea area="footer" />
+  </div>
+</div>

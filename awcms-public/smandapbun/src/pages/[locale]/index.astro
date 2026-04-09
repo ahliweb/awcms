@@ -53,7 +53,7 @@ const images = import.meta.glob<{ default: ImageMetadata }>(
 const heroImages = Object.values(images).map((img) => img.default);
 ---
 
-<Layout title={siteName}>
+<Layout title={siteName} description={siteDescription} pageType="home">
   <!-- Hero Section -->
   <section
     class="text-white relative overflow-hidden"

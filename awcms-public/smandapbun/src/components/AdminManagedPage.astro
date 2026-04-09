@@ -33,6 +33,9 @@ const resolvedBackHref = backHref || getLocalizedPath("/", locale);
   title={page?.meta_title || page?.title || (locale === "id" ? "Halaman tidak ditemukan" : "Page not found")}
   description={page?.meta_description || page?.excerpt || ""}
   image={page?.og_image || page?.featured_image || "/images/og-image.jpg"}
+  canonical={page?.canonical_url || undefined}
+  pageType="page"
+  contentRef={page ? { collection: "pages", id: page.id, slug: page.slug } : undefined}
 >
   {
     page ? (

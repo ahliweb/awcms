@@ -6,6 +6,7 @@ import { t, getLocalizedValue, getLocalizedPath, type Locale } from "../../../ut
 
 import { getPosts } from "../../../lib/api";
 import { sanitizeHTML } from "~/utils/sanitize";
+import WidgetArea from "../../../components/common/WidgetArea.astro";
 
 export const prerender = true;
 
@@ -31,7 +32,13 @@ const relatedBlogs = allPosts
   .slice(0, 3);
 ---
 
-<Layout title={getLocalizedValue(post.title, locale)}>
+<Layout
+  title={getLocalizedValue(post.title, locale)}
+  description={getLocalizedValue(post.excerpt, locale) || ""}
+  image={post.image || "/images/og-image.jpg"}
+  pageType="post"
+  contentRef={{ collection: "blogs", id: post.id, slug: post.slug }}
+>
   <!-- Hero -->
   <section
     class="hero-gradient text-white py-16 md:py-20"
@@ -174,8 +181,10 @@ const relatedBlogs = allPosts
         </div>
 
         <!-- Sidebar -->
-        <div class="space-y-6">
-          <!-- Related Blogs -->
+          <div class="space-y-6">
+            <WidgetArea area="sidebar" />
+
+            <!-- Related Blogs -->
           {
             relatedBlogs.length > 0 && (
               <div

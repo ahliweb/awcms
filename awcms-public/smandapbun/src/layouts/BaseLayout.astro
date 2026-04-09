@@ -1,0 +1,83 @@
+---
+import "../assets/styles/global.css";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import ConsentNotice from "../components/ConsentNotice.astro";
+import PublicHead from "../components/common/PublicHead.astro";
+import PublicBodyStart from "../components/common/PublicBodyStart.astro";
+import PublicBodyEnd from "../components/common/PublicBodyEnd.astro";
+import { defaultLocale, getLocalizedPath, supportedLocales, type Locale } from "../utils/i18n";
+import type { PublicMetadata, PublicPageContext } from "../lib/publicPageContext";
+
+export interface Props {
+  locale: Locale;
+  metadata: PublicMetadata;
+  pageContext?: PublicPageContext;
+  analyticsConsent?: Record<string, unknown> | null;
+  favicon?: string | null;
+}
+
+const {
+  locale,
+  metadata,
+  pageContext,
+  analyticsConsent = null,
+  favicon = "/images/favicon.png",
+} = Astro.props;
+
+const siteBase = Astro.site ?? new URL(Astro.url.origin);
+const canonicalUrl = new URL(metadata.canonical || getLocalizedPath(Astro.url.pathname, locale), siteBase);
+const defaultLocaleUrl = new URL(getLocalizedPath(Astro.url.pathname, defaultLocale), siteBase);
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    {metadata.description && <meta name="description" content={metadata.description} />}
+    <meta name="generator" content={Astro.generator} />
+    <link rel="canonical" href={canonicalUrl.toString()} />
+    {
+      supportedLocales.map((lang) => (
+        <link rel="alternate" hreflang={lang} href={new URL(getLocalizedPath(Astro.url.pathname, lang), siteBase).toString()} />
+      ))
+    }
+    <link rel="alternate" hreflang="x-default" href={defaultLocaleUrl.toString()} />
+    {metadata.title && <meta property="og:title" content={metadata.title} />}
+    {metadata.description && <meta property="og:description" content={metadata.description} />}
+    {metadata.openGraph?.images?.[0]?.url && <meta property="og:image" content={metadata.openGraph.images[0].url} />}
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalUrl.toString()} />
+    <meta name="twitter:card" content="summary_large_image" />
+    {metadata.title && <meta name="twitter:title" content={metadata.title} />}
+    {metadata.description && <meta name="twitter:description" content={metadata.description} />}
+    {metadata.openGraph?.images?.[0]?.url && <meta name="twitter:image" content={metadata.openGraph.images[0].url} />}
+    <link rel="icon" type="image/png" href={favicon || "/images/favicon.png"} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <title>{metadata.title}</title>
+    <PublicHead metadata={metadata} pageContext={pageContext} />
+    <script is:inline>
+      if (
+        localStorage.getItem("color-theme") === "dark" ||
+        (!("color-theme" in localStorage) && window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    </script>
+  </head>
+  <body class="min-h-screen flex flex-col bg-white dark:bg-slate-900 text-slate-900 dark:text-white transition-colors duration-200">
+    <PublicBodyStart pageContext={pageContext} />
+    <Header locale={locale} />
+    <main class="flex-grow">
+      <slot />
+    </main>
+    <Footer locale={locale} />
+    <ConsentNotice consentConfig={analyticsConsent || undefined} locale={locale} />
+    <PublicBodyEnd pageContext={pageContext} />
+  </body>
+</html>

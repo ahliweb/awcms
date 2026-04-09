@@ -26,9 +26,22 @@ Document the tenant-specific Astro implementation for **smandapbun**, including 
 - **Supabase client**: `createClientFromEnv` via `import.meta.env`
 - **Output**: Astro static build
 - **Sessions**: Not used (static output)
-- **Layouts**: `src/layouts/Layout.astro` with global CSS, custom header/footer, no plugin loader
+- **Layouts**: EmDash-style public shell built around `src/layouts/BaseLayout.astro` and `src/layouts/Layout.astro`, with custom header/footer plus plugin head/body and widget-area loaders
 
 ## Data Sources
+
+## Public Shell And Plugin Surfaces
+
+- `src/layouts/BaseLayout.astro` now provides the EmDash-style public shell for the tenant.
+- `src/layouts/Layout.astro` remains the route-facing wrapper that derives metadata and public page context.
+- Public plugin fragment injection is now resolved through:
+  - `src/components/common/PublicHead.astro`
+  - `src/components/common/PublicBodyStart.astro`
+  - `src/components/common/PublicBodyEnd.astro`
+- Public widget-area rendering is now available through:
+  - `src/components/common/WidgetArea.astro`
+  - `src/components/common/WidgetRenderer.astro`
+- Blog detail pages and the tenant footer now expose widget-area insertion points while preserving the sovereign `smandapbun` route structure and branding.
 
 ### Settings Keys (Supabase)
 

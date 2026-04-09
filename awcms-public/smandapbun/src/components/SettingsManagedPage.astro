@@ -37,6 +37,7 @@ const resolvedBackHref = backHref || getLocalizedPath("/", locale);
   title={title || (locale === "id" ? "Halaman tidak ditemukan" : "Page not found")}
   description={excerpt || ""}
   image={image || "/images/og-image.jpg"}
+  pageType="page"
 >
   {
     data ? (
