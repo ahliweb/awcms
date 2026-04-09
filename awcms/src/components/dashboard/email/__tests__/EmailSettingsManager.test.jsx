@@ -15,13 +15,6 @@ vi.mock('@/contexts/PluginContext', () => ({
   usePlugins: () => usePluginsMock(),
 }));
 
-vi.mock('@/templates/flowbite-admin', () => ({
-  AdminPageLayout: ({ children, requiredPermission }) => (
-    <div data-testid="admin-layout" data-required-permission={requiredPermission}>{children}</div>
-  ),
-  PageHeader: ({ title }) => <h1>{title}</h1>,
-}));
-
 vi.mock('@/templates/emdash-admin', () => ({
   AdminPageLayout: ({ children, requiredPermission }) => (
     <div data-testid="admin-layout" data-required-permission={requiredPermission}>{children}</div>

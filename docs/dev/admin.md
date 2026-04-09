@@ -20,8 +20,8 @@ This guide is intentionally current-state focused. It is meant to help contribut
 - It is a React 19.2.4 SPA built with Vite `^8.0.5`.
 - Admin code is JavaScript ES2022+, not TypeScript.
 - TailwindCSS 4 and shadcn/ui patterns are the current UI foundation.
-- The current shared admin shell now uses an EmDash-style visual system through the existing shared template layer under `awcms/src/templates/flowbite-admin/`.
-- `awcms/src/templates/emdash-admin/` now exists as the preferred compatibility export surface for the EmDash-aligned shell while legacy `flowbite-admin` imports remain valid.
+- The current shared admin shell uses an EmDash-style visual system owned by `awcms/src/templates/emdash-admin/`.
+- `awcms/src/templates/emdash-admin/` is the supported admin template import surface.
 - Supabase remains the source of truth for Auth, PostgreSQL, RLS, and ABAC.
 - Cloudflare Workers in `awcms-edge/` are the only maintained server-side HTTP runtime for privileged orchestration, signed media access, integrations, and compatibility routes.
 

@@ -50,29 +50,6 @@ vi.mock('@/lib/customSupabaseClient', () => ({
     }
 }));
 
-// Mock AdminPageLayout to capture props
-vi.mock('@/templates/flowbite-admin', () => ({
-    AdminPageLayout: ({ children, requiredPermission }) => {
-        const permissions = usePermissions();
-        const required = Array.isArray(requiredPermission)
-            ? requiredPermission.filter(Boolean)
-            : [requiredPermission].filter(Boolean);
-        const allowed = required.length === 0
-            || required.some((permission) => permissions?.hasPermission?.(permission));
-
-        if (!allowed) {
-            return <div>common.access_denied</div>;
-        }
-
-        return (
-            <div data-testid="admin-layout" data-required-permission={requiredPermission}>
-                {children}
-            </div>
-        );
-    },
-    PageHeader: ({ title }) => <h1>{title}</h1>,
-}));
-
 vi.mock('@/templates/emdash-admin', () => ({
     AdminPageLayout: ({ children, requiredPermission }) => {
         const permissions = usePermissions();
