@@ -435,13 +435,16 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
 
             const timestamp = new Date().toISOString();
 
-            // applyTenantFilter logic for update is handled by .eq('id', ...) RLS, 
-            // but for offline safety we could check tenant match if we had full object. 
-            // Assuming loaded 'page' object has tenant_id correct from loadData.
+            const applyTenantGuard = (query) => {
+                if (!isPlatformAdmin && currentTenant?.id) {
+                    return query.eq('tenant_id', currentTenant.id);
+                }
+                return query;
+            };
 
             if (mode === 'template') {
                 console.log('Saving template:', templateId);
-                const { error: err } = await udm
+                let query = udm
                     .from('templates')
                     .update({
                         data: contentData,
@@ -453,10 +456,12 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         is_active: pageMetadata.status === 'published'
                     })
                     .eq('id', templateId);
+                query = applyTenantGuard(query);
+                const { error: err } = await query;
                 error = err;
             } else if (mode === 'part') {
                 console.log('Saving part:', partId);
-                const { error: err } = await udm
+                let query = udm
                     .from('template_parts')
                     .update({
                         content: contentData,
@@ -467,11 +472,13 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                         is_active: pageMetadata.status === 'published'
                     })
                     .eq('id', partId);
+                query = applyTenantGuard(query);
+                const { error: err } = await query;
                 error = err;
             } else {
                 console.log('Saving page:', page.id);
                 if (pageMetadata.locale === defaultContentLocale) {
-                    const { error: err } = await udm
+                    let query = udm
                         .from('pages')
                         .update({
                             content_draft: contentData,
@@ -484,6 +491,8 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                             published_at: pageMetadata.published_at || null
                         })
                         .eq('id', page.id);
+                    query = applyTenantGuard(query);
+                    const { error: err } = await query;
                     error = err;
                 } else {
                     if (pageMetadata.slug) {
@@ -704,10 +713,14 @@ const VisualPageBuilder = ({ page: initialPage, mode: initialMode, onClose, onSu
                     published_at: publishedAt
                 };
 
-                const { error: publishError } = await udm
+                let publishQuery = udm
                     .from('pages')
                     .update(publishPayload)
                     .eq('id', page.id);
+
+                publishQuery = applyTenantGuard(publishQuery);
+
+                const { error: publishError } = await publishQuery;
 
                 error = publishError;
             }

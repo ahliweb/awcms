@@ -109,6 +109,8 @@ async function searchPages(
 
     if (tenantId) {
       translationQuery = translationQuery.eq("tenant_id", tenantId);
+    } else {
+      translationQuery = translationQuery.is("tenant_id", null);
     }
 
     const { data: translationData, error: translationError } =
@@ -123,16 +125,52 @@ async function searchPages(
     }
 
     const translationRows = (translationData || []) as TranslationSearchRow[];
+    const contentIds = translationRows
+      .map((page) => page.content_id)
+      .filter(Boolean);
 
-    return translationRows.map((page) => ({
-      id: page.content_id,
-      type: "page" as const,
-      title: page.title || "Untitled Page",
-      slug: page.slug || "",
-      excerpt: page.excerpt || undefined,
-      url: `/${locale}/p/${page.slug || ""}`,
-      score: calculateScore(page.title || "", searchTerm),
-    }));
+    if (contentIds.length === 0) {
+      return [];
+    }
+
+    let backingPagesQuery = supabase
+      .from("pages")
+      .select("id")
+      .in("id", contentIds)
+      .eq("status", "published")
+      .eq("is_active", true)
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      backingPagesQuery = backingPagesQuery.eq("tenant_id", tenantId);
+    } else {
+      backingPagesQuery = backingPagesQuery.is("tenant_id", null);
+    }
+
+    const { data: backingPages, error: backingPagesError } =
+      await backingPagesQuery;
+
+    if (backingPagesError) {
+      console.error(
+        "[Search] Error validating page translation backing rows:",
+        backingPagesError.message,
+      );
+      return [];
+    }
+
+    const validPageIds = new Set((backingPages || []).map((page) => page.id));
+
+    return translationRows
+      .filter((page) => validPageIds.has(page.content_id))
+      .map((page) => ({
+        id: page.content_id,
+        type: "page" as const,
+        title: page.title || "Untitled Page",
+        slug: page.slug || "",
+        excerpt: page.excerpt || undefined,
+        url: `/${locale}/p/${page.slug || ""}`,
+        score: calculateScore(page.title || "", searchTerm),
+      }));
   }
 
   let query = supabase
@@ -148,6 +186,8 @@ async function searchPages(
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
+  } else {
+    query = query.is("tenant_id", null);
   }
 
   const { data, error } = await query;
@@ -190,6 +230,8 @@ async function searchBlogs(
 
     if (tenantId) {
       translationQuery = translationQuery.eq("tenant_id", tenantId);
+    } else {
+      translationQuery = translationQuery.is("tenant_id", null);
     }
 
     const { data: translationData, error: translationError } =
@@ -204,16 +246,51 @@ async function searchBlogs(
     }
 
     const translationRows = (translationData || []) as TranslationSearchRow[];
+    const contentIds = translationRows
+      .map((blog) => blog.content_id)
+      .filter(Boolean);
 
-    return translationRows.map((blog) => ({
-      id: blog.content_id,
-      type: "blog" as const,
-      title: blog.title || "Untitled Blog",
-      slug: blog.slug || "",
-      excerpt: blog.excerpt || undefined,
-      url: `/${locale}/blogs/${blog.slug || ""}`,
-      score: calculateScore(blog.title || "", searchTerm),
-    }));
+    if (contentIds.length === 0) {
+      return [];
+    }
+
+    let backingBlogsQuery = supabase
+      .from("blogs")
+      .select("id")
+      .in("id", contentIds)
+      .eq("status", "published")
+      .is("deleted_at", null);
+
+    if (tenantId) {
+      backingBlogsQuery = backingBlogsQuery.eq("tenant_id", tenantId);
+    } else {
+      backingBlogsQuery = backingBlogsQuery.is("tenant_id", null);
+    }
+
+    const { data: backingBlogs, error: backingBlogsError } =
+      await backingBlogsQuery;
+
+    if (backingBlogsError) {
+      console.error(
+        "[Search] Error validating blog translation backing rows:",
+        backingBlogsError.message,
+      );
+      return [];
+    }
+
+    const validBlogIds = new Set((backingBlogs || []).map((blog) => blog.id));
+
+    return translationRows
+      .filter((blog) => validBlogIds.has(blog.content_id))
+      .map((blog) => ({
+        id: blog.content_id,
+        type: "blog" as const,
+        title: blog.title || "Untitled Blog",
+        slug: blog.slug || "",
+        excerpt: blog.excerpt || undefined,
+        url: `/${locale}/blogs/${blog.slug || ""}`,
+        score: calculateScore(blog.title || "", searchTerm),
+      }));
   }
 
   let query = supabase
@@ -228,6 +305,8 @@ async function searchBlogs(
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
+  } else {
+    query = query.is("tenant_id", null);
   }
 
   const { data, error } = await query;
@@ -293,6 +372,8 @@ export async function getSearchSuggestions(
 
   if (tenantId) {
     queryBuilder = queryBuilder.eq("tenant_id", tenantId);
+  } else {
+    queryBuilder = queryBuilder.is("tenant_id", null);
   }
 
   const { data, error } = await queryBuilder;

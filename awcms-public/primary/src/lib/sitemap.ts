@@ -36,6 +36,8 @@ export async function getPagesSitemapEntries(
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
+  } else {
+    query = query.is("tenant_id", null);
   }
 
   const { data, error } = await query;
@@ -58,6 +60,8 @@ export async function getPagesSitemapEntries(
 
     if (tenantId) {
       translationQuery = translationQuery.eq("tenant_id", tenantId);
+    } else {
+      translationQuery = translationQuery.is("tenant_id", null);
     }
 
     const { data: translations, error: translationsError } =
@@ -110,6 +114,8 @@ export async function getBlogsSitemapEntries(
 
   if (tenantId) {
     query = query.eq("tenant_id", tenantId);
+  } else {
+    query = query.is("tenant_id", null);
   }
 
   const { data, error } = await query;
@@ -132,6 +138,8 @@ export async function getBlogsSitemapEntries(
 
     if (tenantId) {
       translationQuery = translationQuery.eq("tenant_id", tenantId);
+    } else {
+      translationQuery = translationQuery.is("tenant_id", null);
     }
 
     const { data: translations, error: translationsError } =
