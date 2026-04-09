@@ -1,221 +1,128 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2 (Data Integrity)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Audit Trail System
 
 ## Purpose
 
-Document audit logging behavior and schema usage.
+Document the current audit-trail model in AWCMS across business audit logs, extension lifecycle auditing, and related operational event history.
 
-## Audience
+This is a current-state guide, not a promise that every historical table or trigger pattern is still the preferred path for new work.
 
-- Admin panel developers
-- Compliance and security reviewers
+## Current Audit Model
 
-## Prerequisites
+AWCMS currently uses multiple audit/event-history surfaces rather than a single all-purpose log.
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for audit logging and compliance
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/security/overview.md`
+Current important audit families include:
 
-AWCMS implements comprehensive audit logging for compliance and security monitoring.
+- `audit_logs` for business and operational accountability events
+- `extension_lifecycle_audit` for extension lifecycle activity
+- feature-specific audit-style tables such as SSO/2FA audit logs where applicable
+- queue/dead-letter and notification dispatch history for operational troubleshooting
 
----
+## Current `audit_logs` Role
 
-## Overview
+`audit_logs` remains the main cross-cutting application audit surface.
 
-The audit trail captures all significant system actions, providing:
+Current important fields/concepts still include:
 
-- **Who** performed the action (user_id)
-- **What** action was performed (action type)
-- **Where** the action occurred (table, record, channel)
-- **When** the action happened (timestamp)
-- **How** the data changed (before/after snapshots)
-- **Context** (tenant, channel, IP where available)
+- tenant scope
+- acting user
+- action name
+- resource/table identifier
+- details payload
+- request/context metadata where available
+- event timestamp
 
----
+## Current Audit Semantics
 
-## Database Schema
+Audit events should still answer the practical questions:
 
-### audit_logs Table
+- who acted
+- what happened
+- which resource/surface was involved
+- when it happened
+- which tenant/channel/context applied
 
-| Column | Type | Description |
-| ------ | ---- | ----------- |
-| `id` | UUID | Primary key |
-| `tenant_id` | UUID | Tenant isolation |
-| `user_id` | UUID | User who performed action |
-| `action` | TEXT | Action type (CREATE/UPDATE/DELETE) |
-| `resource` | TEXT | Table name (`TG_TABLE_NAME`) |
-| `details` | JSONB | Snapshot payload (new or old row) |
-| `ip_address` | TEXT | Request origin IP |
-| `channel` | TEXT | web, mobile, api |
-| `created_at` | TIMESTAMPTZ | Timestamp |
-| `deleted_at` | TIMESTAMPTZ | Soft delete marker |
+Current guidance:
 
----
+- action names should be meaningful and normalized
+- details payloads should be useful for review/debugging without leaking secrets
 
-## Action Types
+## Current Write Patterns
 
-| Action | Description | Captures |
-| ------ | ----------- | -------- |
-| `CREATE` | New record created | details payload |
-| `UPDATE` | Record modified | details payload |
-| `DELETE` | Record soft-deleted | details payload |
-| `RESTORE` | Record restored | details payload |
-| `HARD_DELETE` | Reserved (permanent delete disabled) | details payload |
-| `LOGIN` | User authentication | details payload |
-| `LOGOUT` | User session ended | details payload |
-| `PERMISSION_CHANGE` | Role/permission modified | details payload |
-| `CONFIG_CHANGE` | System settings modified | details payload |
+Audit writes currently happen through a combination of:
 
----
+- database-side helpers/triggers for selected lifecycle events
+- explicit server-side inserts from Worker/admin flows where the operation is orchestration-heavy
+- feature-specific audit hooks and operational event writers
 
-## Implementation
+That means new work should follow the existing audited flow for the surface being changed instead of assuming one trigger function covers everything.
 
-### Database Trigger
+## Current UI And Hook Surfaces
 
-Audit logs are created via PostgreSQL triggers:
+Current admin/runtime audit-related helpers include:
 
-```sql
-CREATE OR REPLACE FUNCTION log_audit_event()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO audit_logs (
-    tenant_id, user_id, action, resource, details, created_at
-  )
-  VALUES (
-    COALESCE(NEW.tenant_id, OLD.tenant_id),
-    auth.uid(),
-    TG_OP,
-    TG_TABLE_NAME,
-    COALESCE(to_jsonb(NEW), to_jsonb(OLD)),
-    now()
-  );
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-```
+- `useAuditLog()` for audit log consumption
+- `useExtensionAudit()` for extension-oriented audit surfaces
 
-**Context7 note**: When reading audit logs in the UI, prefer filtered queries and indexes (`tenant_id`, `created_at`) to avoid full-table scans.
+Audit-style history may also surface indirectly through:
 
-### Applying Trigger
+- notification dispatch logs
+- queue dead-letter inspection/replay tooling
+- feature-specific history views
 
-```sql
-CREATE TRIGGER trg_articles_audit
-  AFTER INSERT OR UPDATE OR DELETE ON blogs
-  FOR EACH ROW EXECUTE FUNCTION log_audit_event();
-```
+## Current Extension Audit Note
 
-Legacy trigger names still use the `trg_articles_audit` prefix even though they target `blogs`.
+Extension lifecycle events now have a canonical audit destination in `extension_lifecycle_audit`.
 
----
+Current important rule:
 
-## Frontend Viewing
+- extension lifecycle history should be documented against the canonical lifecycle audit table rather than older ad hoc `extension_logs` assumptions
 
-### Audit Logs Page
+## Current RLS / Access Expectations
 
-Access via Admin Panel: `/cmspanel/logs` (canonical) or `/cmspanel/audit-logs` (alias)
+- audit/history tables remain scoped and protected
+- tenant-scoped audit reads must preserve tenant isolation
+- platform/global audit visibility is an explicit privileged behavior, not a default client-side assumption
+- admin UI permissions still gate visibility where the feature requires it
 
-Features:
+## Current Data-Handling Rules
 
-- **Filters**: User, action, table, date range
-- **Diff Viewer**: Side-by-side comparison of old/new values
-- **Export**: CSV/JSON download for compliance
+- do not log secrets, tokens, passwords, or equivalent sensitive values
+- details payloads should be filtered/sanitized when necessary
+- soft-delete lifecycle context may appear in audit history, but the audit record itself is not just a copy of business lifecycle logic
 
-### API Usage
+## Current Operational Audit Surfaces
 
-```javascript
-const { data: logs } = await supabase
-  .from('audit_logs')
-  .select('*, user:users(email)')
-  .eq('tenant_id', tenantId)
-  .order('created_at', { ascending: false })
-  .limit(100);
-```
+In the current repo, operational observability also includes adjacent history surfaces such as:
 
----
+- `queue_dead_letters`
+- `notification_dispatches`
+- extension lifecycle history
 
-## RLS Policies
+These should be documented as complementary operational history, not all collapsed into `audit_logs`.
 
-Audit logs are protected by Row Level Security. Current policies are tenant-scoped; admin UI permissions (`tenant.audit.read`) are enforced at the application layer.
+## Current Retention Guidance
 
-```sql
--- Insert policy used by log_audit_event()
-CREATE POLICY "audit_logs_insert" ON audit_logs
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    tenant_id = current_tenant_id()
-    OR (tenant_id IS NULL AND auth.uid() IS NOT NULL)
-  );
+Retention/cleanup policy should follow the live operational and compliance expectations of the deployed environment.
 
--- Select policy (tenant-scoped)
-CREATE POLICY "audit_logs_select" ON audit_logs
-  FOR SELECT TO authenticated
-  USING (
-    tenant_id = current_tenant_id()
-    OR tenant_id IS NULL
-  );
+Do not treat an old fixed-day deletion snippet as the authoritative policy without checking the latest migrations/ops guidance.
 
--- No direct modifications (insert only via triggers)
-```
+## Validation Guidance
 
----
+| Surface | Validation |
+| --- | --- |
+| maintained docs | `cd awcms && npm run docs:check` |
+| Worker/audit route implications | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+| migration/audit-policy changes | `scripts/verify_supabase_migration_consistency.sh` plus relevant migration validation |
 
-## Retention Policy
+## Related Docs
 
-### Default Retention
-
-- Production: 365 days
-- Development: 30 days
-
-### Cleanup Job
-
-```sql
--- Run periodically via pg_cron
-DELETE FROM audit_logs 
-WHERE created_at < NOW() - INTERVAL '365 days';
-```
-
----
-
-## Compliance Features
-
-### GDPR Support
-
-- Export user activity on request
-- Anonymize user data after deletion
-- Track data access for reporting
-
-### SOC 2 Alignment
-
-- Immutable log entries
-- Timestamp integrity
-- Access controls on log viewing
-
----
-
-## Best Practices
-
-1. **Don't Log Sensitive Data**: Exclude passwords, tokens in new_value
-2. **Enable on Critical Tables**: blogs, users, roles, settings
-3. **Monitor Log Growth**: Large tables need retention policies
-4. **Index Appropriately**: Index `tenant_id`, `created_at`, `user_id`, `resource`
-
----
-
-## Related Documentation
-
-- `docs/security/overview.md`
-- `docs/security/abac.md`
-- `docs/modules/MONITORING.md`
-
----
-
-## Security and Compliance Notes
-
-- Audit logs are tenant-scoped and use RLS.
-- Soft delete applies where applicable.
-
-## References
-
-- `docs/architecture/database.md`
-- `docs/security/overview.md`
+- [docs/security/overview.md](../security/overview.md)
+- [docs/security/abac.md](../security/abac.md)
+- [docs/modules/MONITORING.md](./MONITORING.md)
+- [docs/architecture/database.md](../architecture/database.md)

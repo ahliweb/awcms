@@ -1,59 +1,103 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Performance Guide
 
 ## Purpose
 
-Summarize performance strategies implemented in AWCMS.
+Summarize the current performance model in AWCMS across admin shell loading, public rendering, data caching, and query/observability behavior.
 
-## Audience
+## Current Performance Model
 
-- Admin panel developers
-- Operators tuning performance
+Current performance strategy is practical and layered rather than based on a single framework feature.
 
-## Prerequisites
+Current important themes include:
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for performance optimization patterns
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/architecture/overview.md`
+- route-level code splitting in the admin shell
+- static-first public rendering where possible
+- client-side caching through the current data utility layer where applicable
+- aggregate/filtered reads for dashboards and observability surfaces
+- keeping tenant/public/auth guardrails intact while optimizing
 
-## Core Concepts
+## Current Admin Performance Model
 
-- Route-level code splitting with `React.lazy`.
-- Local caching via `UnifiedDataManager` (60s TTL).
-- Vite 8 dev/build pipeline for current plugin compatibility and faster startup.
-- React Router data loaders are a recommended direction, but they are not yet a primary admin-panel data-loading primitive.
+Current admin shell behavior still relies on patterns such as:
 
-## How It Works
+- `React.lazy` code splitting in the router/shell
+- component/hook-level fetching patterns
+- current shared data helpers/utilities where adopted
 
-- Code splitting is defined in `awcms/src/components/MainRouter.jsx`.
-- `UnifiedDataManager` caches read operations and invalidates on writes.
-  - Cache entries are stored in localStorage with a 60s TTL (`udm_cache_` prefix).
+Current important note:
 
-## Implementation Patterns
+- the admin shell is still primarily `BrowserRouter` + component-driven data loading, not a full route-loader-first architecture
 
-```javascript
-const BlogsManager = lazy(() => import('@/components/dashboard/BlogsManager'));
-```
+## Current Client Caching Model
 
-### Context7 Guidance (React + Router)
+`UnifiedDataManager` remains a current client-side caching utility in relevant surfaces.
 
-- Prefer route-level loaders for future route-module migrations to reduce duplicate `useEffect` fetches.
-- Keep effects separated by concern and include full dependency arrays.
+Current practical guidance:
 
-The current admin shell still uses `BrowserRouter` + `Routes` with component-level fetching rather than
-`createBrowserRouter` / `useLoaderData` route modules.
+- use it where the existing data flow already expects it
+- keep cache invalidation aligned with writes
+- keep cache scope tenant-safe
 
-## Permissions and Access
+Do not document client caching as an excuse to widen trust boundaries or cache cross-tenant data.
 
-- Performance optimizations must not bypass ABAC or RLS.
+## Current Public Performance Model
 
-## Security and Compliance Notes
+Current public performance is driven primarily by:
 
-- Cached data must remain tenant-scoped.
-- Do not cache data across tenants.
+- Astro static output
+- build-time data fetching
+- limited purposeful React island hydration
+- allow-list-driven render paths for visual content/widgets
 
-## References
+Current important rule:
 
-- `docs/architecture/overview.md`
-- `docs/modules/SCALABILITY_GUIDE.md`
+- public performance work must not weaken published-only, non-deleted, or tenant-scoped rendering rules
+
+## Current Query Performance Guidance
+
+- prefer filtered/index-friendly queries
+- prefer aggregate tables or summarized hooks for dashboard/reporting views
+- avoid full scans of raw analytics/audit/event tables in ordinary UI paths
+- keep explicit tenant and deleted filters so optimization does not widen scope accidentally
+
+## Current Worker / Operational Performance Guidance
+
+- use queues for async offload where the current runtime already does so
+- prefer normalized route validation before expensive downstream work
+- keep documented route/OpenAPI metadata in sync when contract changes affect operational behavior
+
+## Current React/Router Guidance
+
+Current repo direction still allows future loader-oriented improvements, but the checked-in admin app is not yet primarily route-loader-driven.
+
+Current rule:
+
+- optimize within the current shell architecture unless the task explicitly includes a route-loader migration
+
+## Current Safety Rules
+
+- performance optimizations must not bypass ABAC or RLS
+- do not trade away tenant isolation for cache or query shortcuts
+- do not cache protected data across tenants/users
+- do not widen public route/media behavior in the name of performance
+
+## Validation Guidance
+
+| Surface | Validation |
+| --- | --- |
+| admin performance-related changes | `cd awcms && npm run build` |
+| public performance-related changes | `cd awcms-public/primary && npm run check:astro` when relevant |
+| Worker/runtime implications | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+| maintained docs | `cd awcms && npm run docs:check` |
+
+## Related Docs
+
+- [docs/architecture/overview.md](../architecture/overview.md)
+- [docs/modules/SCALABILITY_GUIDE.md](./SCALABILITY_GUIDE.md)
+- [docs/dev/testing.md](../dev/testing.md)
