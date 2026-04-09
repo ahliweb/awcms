@@ -1,50 +1,15 @@
 ---
 import Layout from "~/layouts/LandingLayout.astro";
-
-import Hero from "~/components/widgets/Hero.astro";
-import CallToAction from "~/components/widgets/CallToAction.astro";
-
+import PublicHero from "~/components/public/Hero.astro";
+import Section from "~/components/public/Section.astro";
+import CtaBanner from "~/components/public/CtaBanner.astro";
 import { getLocale, t } from "~/utils/i18n";
 
 const locale = getLocale(Astro.url);
-
-const metadata = {
-  title: t("landing.lead_generation.metadata.title", locale),
-};
+const metadata = { title: t("landing.lead_generation.metadata.title", locale) };
 ---
 
 <Layout metadata={metadata} pageType="landing_lead_generation">
-  <!-- Hero2 Widget ******************* -->
-
-  <Hero
-    tagline={t("landing.lead_generation.hero.tagline", locale)}
-    title={t("landing.lead_generation.hero.title", locale)}
-    subtitle={t("landing.lead_generation.hero.subtitle", locale)}
-    actions={[
-      {
-        variant: "primary",
-        text: t("landing.hero.actions.cta", locale),
-        href: "#",
-        icon: "tabler:square-rounded-arrow-right",
-      },
-      { text: t("landing.hero.actions.learn_more", locale), href: "#" },
-    ]}
-    image={{
-      src: "https://images.unsplash.com/photo-1597423498219-04418210827d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1674&q=80",
-      alt: t("landing.lead_generation.hero.image_alt", locale),
-    }}
-  />
-
-  <CallToAction
-    title={t("landing.coming_soon.title", locale)}
-    subtitle={t("landing.coming_soon.subtitle", locale)}
-    actions={[
-      {
-        variant: "primary",
-        text: t("landing.coming_soon.action", locale),
-        href: "https://ahliweb.co.id",
-        icon: "tabler:download",
-      },
-    ]}
-  />
+  <PublicHero eyebrow={t("landing.lead_generation.hero.tagline", locale)} title={t("landing.lead_generation.hero.title", locale)} description={t("landing.lead_generation.hero.subtitle", locale)} image={{ src: "https://images.unsplash.com/photo-1597423498219-04418210827d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1674&q=80", alt: t("landing.lead_generation.hero.image_alt", locale) }} actions={[{ label: t("landing.hero.actions.cta", locale), href: "#" }, { label: t("landing.hero.actions.learn_more", locale), href: "#", variant: "secondary" }]} align="center" />
+  <Section width="wide"><CtaBanner title={t("landing.coming_soon.title", locale)} description={t("landing.coming_soon.subtitle", locale)} action={{ label: t("landing.coming_soon.action", locale), href: "https://ahliweb.co.id" }} /></Section>
 </Layout>

@@ -1,345 +1,130 @@
 ---
 import Layout from "~/layouts/PageLayout.astro";
-
-import Header from "~/components/widgets/Header.astro";
-
-import Hero2 from "~/components/widgets/Hero2.astro";
-import CallToAction from "~/components/widgets/CallToAction.astro";
-import Features3 from "~/components/widgets/Features3.astro";
-import Content from "~/components/widgets/Content.astro";
-import Testimonials from "~/components/widgets/Testimonials.astro";
-import FAQs from "~/components/widgets/FAQs.astro";
-import Stats from "~/components/widgets/Stats.astro";
-
-import Button from "~/components/ui/Button.astro";
-import Image from "~/components/common/Image.astro";
+import PublicHero from "~/components/public/Hero.astro";
+import Section from "~/components/public/Section.astro";
+import FeatureGrid from "~/components/public/FeatureGrid.astro";
+import SplitSection from "~/components/public/SplitSection.astro";
+import StatGrid from "~/components/public/StatGrid.astro";
+import TestimonialGrid from "~/components/public/TestimonialGrid.astro";
+import FaqList from "~/components/public/FaqList.astro";
+import CtaBanner from "~/components/public/CtaBanner.astro";
 import { t, supportedLocales, type Locale } from "~/utils/i18n";
 
 export const prerender = true;
 
 export function getStaticPaths() {
-  return supportedLocales.map((locale) => ({
-    params: { locale },
-  }));
+  return supportedLocales.map((locale) => ({ params: { locale } }));
 }
 
 const { locale } = Astro.params as { locale: Locale };
 
-const appStoreImg = "~/assets/images/app-store.png";
 const appStoreDownloadLink = "https://ahliweb.co.id";
-
-const googlePlayImg = "~/assets/images/google-play.png";
 const googlePlayDownloadLink = "https://ahliweb.co.id";
 
 const metadata = {
   title: t("homes.mobile_app.metadata.title", locale),
+  description: `${t("homes.mobile_app.hero.subtitle", locale)} ${t("homes.mobile_app.hero.subtitle_continued", locale)}`,
 };
+
+const featureItems = [0, 1, 2, 3].map((index) => ({
+  title: t(`homes.mobile_app.features.items.${index}.title`, locale),
+  description: t(`homes.mobile_app.features.items.${index}.description`, locale),
+  icon: `0${index + 1}`,
+}));
+
+const mainFeatureItems = [0, 1, 2, 3].map((index) => ({
+  title: t(`homes.mobile_app.main_features.items.${index}.title`, locale),
+  description: t(`homes.mobile_app.main_features.items.${index}.description`, locale),
+}));
+
+const otherFeatureItems = [0, 1, 2, 3].map((index) => ({
+  title: t(`homes.mobile_app.other_features.items.${index}.title`, locale),
+  description: t(`homes.mobile_app.other_features.items.${index}.description`, locale),
+}));
+
+const testimonials = [0, 1, 2].map((index) => ({
+  quote: t(`homes.mobile_app.testimonials.items.${index}.testimonial`, locale),
+  name: t(`homes.mobile_app.testimonials.items.${index}.name`, locale),
+  role: t(`homes.mobile_app.testimonials.items.${index}.job`, locale),
+}));
+
+const faqs = [0, 1, 2, 3, 4].map((index) => ({
+  question: t(`homes.mobile_app.faqs.items.${index}.title`, locale),
+  answer: t(`homes.mobile_app.faqs.items.${index}.description`, locale),
+}));
 ---
 
 <Layout metadata={metadata} pageType="home_mobile_app">
-  <Fragment slot="announcement"></Fragment>
-  <Fragment slot="header">
-    <Header
-      position="left"
-      links={[
-        {
-          text: t("homes.mobile_app.header.links.services", locale),
-          href: "#",
-        },
-        {
-          text: t("homes.mobile_app.header.links.features", locale),
-          href: "#",
-        },
-        { text: t("homes.mobile_app.header.links.about", locale), href: "#" },
-      ]}
-      actions={[
-        {
-          text: t("homes.mobile_app.header.actions.download", locale),
-          href: "#download",
-        },
-      ]}
-      isSticky
-      showToggleTheme
-    />
-  </Fragment>
-
-  <!-- Hero2 Widget ******************* -->
-
-  <Hero2
-    tagline={t("homes.mobile_app.hero.tagline", locale)}
+  <PublicHero
+    eyebrow={t("homes.mobile_app.hero.tagline", locale)}
+    title={t("homes.mobile_app.hero.title_html", locale)}
+    description={`${t("homes.mobile_app.hero.subtitle", locale)} ${t("homes.mobile_app.hero.subtitle_continued", locale)}`}
     image={{
-      src: "https://images.unsplash.com/photo-1535303311164-664fc9ec6532?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=987&q=80",
-      alt: "AstroWind Hero Image",
+      src: "https://images.unsplash.com/photo-1535303311164-664fc9ec6532?ixlib=rb-4.0.3&auto=format&fit=crop&w=987&q=80",
+      alt: "Mobile app showcase",
     }}
-  >
-    <Fragment slot="title">
-      <span set:html={t("homes.mobile_app.hero.title_html", locale)} />
-    </Fragment>
+    actions={[
+      { label: "App Store", href: appStoreDownloadLink },
+      { label: "Google Play", href: googlePlayDownloadLink, variant: "secondary" },
+    ]}
+  />
 
-    <Fragment slot="subtitle">
-      <span class="hidden sm:inline">
-        {t("homes.mobile_app.hero.subtitle", locale)}
-      </span>
-      {t("homes.mobile_app.hero.subtitle_continued", locale)}
-    </Fragment>
-
-    <div slot="actions" class="flex max-w-sm gap-4">
-      <Button variant="link" href={appStoreDownloadLink}>
-        <Image src={appStoreImg} alt="App Store Image" width={200} />
-      </Button>
-
-      <Button variant="link" href={googlePlayDownloadLink}>
-        <Image src={googlePlayImg} alt="Google Play Image" width={200} />
-      </Button>
-    </div>
-  </Hero2>
-
-  <!-- Features3 Widget ************** -->
-
-  <Features3
+  <Section
     id="features"
+    eyebrow={t("homes.mobile_app.features.tagline", locale)}
     title={t("homes.mobile_app.features.title", locale)}
-    subtitle={t("homes.mobile_app.features.subtitle", locale)}
-    tagline={t("homes.mobile_app.features.tagline", locale)}
-    columns={2}
-    items={[
-      {
-        title: t("homes.mobile_app.features.items.0.title", locale),
-        description: t("homes.mobile_app.features.items.0.description", locale),
-        icon: "tabler:square-number-1",
-      },
-      {
-        title: t("homes.mobile_app.features.items.1.title", locale),
-        description: t("homes.mobile_app.features.items.1.description", locale),
-        icon: "tabler:square-number-2",
-      },
-      {
-        title: t("homes.mobile_app.features.items.2.title", locale),
-        description: t("homes.mobile_app.features.items.2.description", locale),
-        icon: "tabler:square-number-3",
-      },
-      {
-        title: t("homes.mobile_app.features.items.3.title", locale),
-        description: t("homes.mobile_app.features.items.3.description", locale),
-        icon: "tabler:square-number-4",
-      },
-    ]}
-    image={{
-      src: "https://images.unsplash.com/photo-1521517407911-565264e7d82d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2069&q=80",
-      alt: "Colorful Image",
-    }}
-  />
-
-  <!-- Content Widget **************** -->
-
-  <Content
-    isReversed
-    items={[
-      {
-        title: t("homes.mobile_app.main_features.items.0.title", locale),
-        description: t(
-          "homes.mobile_app.main_features.items.0.description",
-          locale,
-        ),
-        icon: "tabler:wand",
-      },
-      {
-        title: t("homes.mobile_app.main_features.items.1.title", locale),
-        description: t(
-          "homes.mobile_app.main_features.items.1.description",
-          locale,
-        ),
-        icon: "tabler:settings",
-      },
-      {
-        title: t("homes.mobile_app.main_features.items.2.title", locale),
-        description: t(
-          "homes.mobile_app.main_features.items.2.description",
-          locale,
-        ),
-        icon: "tabler:template",
-      },
-      {
-        title: t("homes.mobile_app.main_features.items.3.title", locale),
-        description: t(
-          "homes.mobile_app.main_features.items.3.description",
-          locale,
-        ),
-        icon: "tabler:carousel-horizontal",
-      },
-    ]}
-    image={{
-      src: "https://images.unsplash.com/photo-1576153192621-7a3be10b356e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1674&q=80",
-      alt: "Colorful Image",
-    }}
+    description={t("homes.mobile_app.features.subtitle", locale)}
+    width="wide"
   >
-    <Fragment slot="content">
-      <h3
-        class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
-      >
-        {t("homes.mobile_app.main_features.title", locale)}
-      </h3>
-    </Fragment>
-  </Content>
+    <FeatureGrid items={featureItems} columns={2} />
+  </Section>
 
-  <!-- Content Widget **************** -->
+  <Section width="wide" muted>
+    <SplitSection
+      title={t("homes.mobile_app.main_features.title", locale)}
+      items={mainFeatureItems}
+      image={{
+        src: "https://images.unsplash.com/photo-1576153192621-7a3be10b356e?ixlib=rb-4.0.3&auto=format&fit=crop&w=1674&q=80",
+        alt: "Main mobile features",
+      }}
+      reverse
+    />
+  </Section>
 
-  <Content
-    isAfterContent
-    items={[
-      {
-        title: t("homes.mobile_app.other_features.items.0.title", locale),
-        description: t(
-          "homes.mobile_app.other_features.items.0.description",
-          locale,
-        ),
-        icon: "tabler:wifi-off",
-      },
-      {
-        title: t("homes.mobile_app.other_features.items.1.title", locale),
-        description: t(
-          "homes.mobile_app.other_features.items.1.description",
-          locale,
-        ),
-        icon: "tabler:file-download",
-      },
-      {
-        title: t("homes.mobile_app.other_features.items.2.title", locale),
-        description: t(
-          "homes.mobile_app.other_features.items.2.description",
-          locale,
-        ),
-        icon: "tabler:refresh",
-      },
-      {
-        title: t("homes.mobile_app.other_features.items.3.title", locale),
-        description: t(
-          "homes.mobile_app.other_features.items.3.description",
-          locale,
-        ),
-        icon: "tabler:heart",
-      },
-    ]}
-    image={{
-      src: "https://images.unsplash.com/photo-1453738773917-9c3eff1db985?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80",
-      alt: "Vintage Image",
-    }}
-  >
-    <Fragment slot="content">
-      <h3
-        class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
-      >
-        {t("homes.mobile_app.other_features.title", locale)}
-      </h3>
-    </Fragment>
-  </Content>
+  <Section width="wide">
+    <SplitSection
+      title={t("homes.mobile_app.other_features.title", locale)}
+      items={otherFeatureItems}
+      image={{
+        src: "https://images.unsplash.com/photo-1453738773917-9c3eff1db985?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80",
+        alt: "Additional mobile features",
+      }}
+    />
+  </Section>
 
-  <!-- Stats Widget ****************** -->
+  <Section title={t("homes.mobile_app.stats.title", locale)} width="wide" muted>
+    <StatGrid
+      items={[
+        { value: "20K", label: "Downloads" },
+        { value: "18.5K", label: "Users" },
+        { value: "4.7", label: "Rating" },
+      ]}
+    />
+  </Section>
 
-  <Stats
-    title={t("homes.mobile_app.stats.title", locale)}
-    stats={[
-      { amount: "20K", icon: "tabler:download" },
-      { amount: "18.5K", icon: "tabler:users" },
-      { amount: "4.7", icon: "tabler:user-star" },
-    ]}
-  />
+  <Section title={t("homes.mobile_app.testimonials.title", locale)} width="wide">
+    <TestimonialGrid items={testimonials} />
+  </Section>
 
-  <!-- Testimonials Widget *********** -->
+  <Section title={t("homes.mobile_app.faqs.title", locale)} width="narrow" muted>
+    <FaqList items={faqs} />
+  </Section>
 
-  <Testimonials
-    title={t("homes.mobile_app.testimonials.title", locale)}
-    testimonials={[
-      {
-        testimonial: t(
-          "homes.mobile_app.testimonials.items.0.testimonial",
-          locale,
-        ),
-        name: t("homes.mobile_app.testimonials.items.0.name", locale),
-        job: t("homes.mobile_app.testimonials.items.0.job", locale),
-        image: {
-          src: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80",
-          alt: "Cary Kennedy Image",
-        },
-      },
-      {
-        testimonial: t(
-          "homes.mobile_app.testimonials.items.1.testimonial",
-          locale,
-        ),
-        name: t("homes.mobile_app.testimonials.items.1.name", locale),
-        job: t("homes.mobile_app.testimonials.items.1.job", locale),
-        image: {
-          src: "https://images.unsplash.com/flagged/photo-1570612861542-284f4c12e75f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80",
-          alt: "Josh Wilkinson Image",
-        },
-      },
-      {
-        testimonial: t(
-          "homes.mobile_app.testimonials.items.2.testimonial",
-          locale,
-        ),
-        name: t("homes.mobile_app.testimonials.items.2.name", locale),
-        job: t("homes.mobile_app.testimonials.items.2.job", locale),
-        image: {
-          src: "https://images.unsplash.com/photo-1512361436605-a484bdb34b5f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80",
-          alt: "Sidney Hansen Image",
-        },
-      },
-    ]}
-    callToAction={{
-      target: "_blank",
-      text:
-        t("homes.mobile_app.testimonials.read_more", locale) ||
-        "Read more testimonials",
-      href: "https://ahliweb.co.id",
-      icon: "tabler:chevron-right",
-    }}
-  />
-
-  <!-- FAQs Widget ******************* -->
-
-  <FAQs
-    title={t("homes.mobile_app.faqs.title", locale)}
-    items={[
-      {
-        title: t("homes.mobile_app.faqs.items.0.title", locale),
-        description: t("homes.mobile_app.faqs.items.0.description", locale),
-      },
-      {
-        title: t("homes.mobile_app.faqs.items.1.title", locale),
-        description: t("homes.mobile_app.faqs.items.1.description", locale),
-      },
-      {
-        title: t("homes.mobile_app.faqs.items.2.title", locale),
-        description: t("homes.mobile_app.faqs.items.2.description", locale),
-      },
-      {
-        title: t("homes.mobile_app.faqs.items.3.title", locale),
-        description: t("homes.mobile_app.faqs.items.3.description", locale),
-      },
-      {
-        title: t("homes.mobile_app.faqs.items.4.title", locale),
-        description: t("homes.mobile_app.faqs.items.4.description", locale),
-      },
-    ]}
-  />
-
-  <!-- CallToAction Widget *********** -->
-
-  <CallToAction
-    id="download"
-    title={t("homes.mobile_app.cta.title", locale)}
-    subtitle={t("homes.mobile_app.cta.subtitle", locale)}
-  >
-    <div slot="actions" class="flex max-w-sm gap-4">
-      <Button variant="link" href={appStoreDownloadLink}>
-        <Image src={appStoreImg} alt="App Store Image" width={200} />
-      </Button>
-
-      <Button variant="link" href={googlePlayDownloadLink}>
-        <Image src={googlePlayImg} alt="Google Play Image" width={200} />
-      </Button>
-    </div>
-  </CallToAction>
+  <Section width="wide">
+    <CtaBanner
+      title={t("homes.mobile_app.cta.title", locale)}
+      description={t("homes.mobile_app.cta.subtitle", locale)}
+      action={{ label: "App Store", href: appStoreDownloadLink }}
+    />
+  </Section>
 </Layout>

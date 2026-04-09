@@ -1,485 +1,153 @@
 ---
 import Layout from "~/layouts/PageLayout.astro";
-
-import Header from "~/components/widgets/Header.astro";
-import Hero from "~/components/widgets/Hero.astro";
-import Content from "~/components/widgets/Content.astro";
-import CallToAction from "~/components/widgets/CallToAction.astro";
-import Features3 from "~/components/widgets/Features3.astro";
-import Testimonials from "~/components/widgets/Testimonials.astro";
-import Steps from "~/components/widgets/Steps.astro";
-import BlogLatestPosts from "~/components/widgets/BlogLatestPosts.astro";
+import PublicHero from "~/components/public/Hero.astro";
+import Section from "~/components/public/Section.astro";
+import FeatureGrid from "~/components/public/FeatureGrid.astro";
+import SplitSection from "~/components/public/SplitSection.astro";
+import TestimonialGrid from "~/components/public/TestimonialGrid.astro";
+import CtaBanner from "~/components/public/CtaBanner.astro";
 import { t, supportedLocales, type Locale } from "~/utils/i18n";
-import { getPermalink } from "~/utils/permalinks";
 
 export const prerender = true;
 
 export function getStaticPaths() {
-  return supportedLocales.map((locale) => ({
-    params: { locale },
-  }));
+  return supportedLocales.map((locale) => ({ params: { locale } }));
 }
 
 const { locale } = Astro.params as { locale: Locale };
 
 const metadata = {
   title: t("homes.personal.metadata.title", locale),
+  description: t("homes.personal.hero.subtitle", locale),
 };
+
+const aboutItems = [
+  { title: "Dribbble", description: "Design snapshots and experiments" },
+  { title: "Behance", description: "Case studies and final projects" },
+  { title: "Pinterest", description: "Moodboards and visual references" },
+];
+
+const experienceItems = [0, 1].map((index) => ({
+  title: t(`homes.personal.resume.work_experience.items.${index}.title`, locale),
+  description: t(`homes.personal.resume.work_experience.items.${index}.description`, locale),
+  icon: "Work",
+}));
+
+const educationItems = [0, 1].map((index) => ({
+  title: t(`homes.personal.resume.education.items.${index}.title`, locale),
+  icon: "Edu",
+}));
+
+const skillItems = Array.from({ length: 9 }, (_, index) => ({
+  title: t(`homes.personal.skills.items.${index}.title`, locale),
+  description: t(`homes.personal.skills.items.${index}.description`, locale),
+  icon: `S${index + 1}`,
+}));
+
+const project0 = [
+  {
+    title: t("homes.personal.portfolio.projects.0.description_title", locale),
+    description: t("homes.personal.portfolio.projects.0.description", locale),
+  },
+  {
+    title: t("homes.personal.portfolio.projects.0.role_title", locale),
+    description: t("homes.personal.portfolio.projects.0.role", locale),
+  },
+];
+
+const project1 = [
+  {
+    title: t("homes.personal.portfolio.projects.1.description_title", locale),
+    description: t("homes.personal.portfolio.projects.1.description", locale),
+  },
+  {
+    title: t("homes.personal.portfolio.projects.1.role_title", locale),
+    description: t("homes.personal.portfolio.projects.1.role", locale),
+  },
+];
+
+const project2 = [
+  {
+    title: t("homes.personal.portfolio.projects.2.description_title", locale),
+    description: t("homes.personal.portfolio.projects.2.description", locale),
+  },
+  {
+    title: t("homes.personal.portfolio.projects.2.role_title", locale),
+    description: t("homes.personal.portfolio.projects.2.role", locale),
+  },
+];
+
+const testimonials = Array.from({ length: 6 }, (_, index) => ({
+  quote: t(`homes.personal.testimonials.items.${index}.testimonial`, locale),
+  name: t(`homes.personal.testimonials.items.${index}.name`, locale),
+  role: t(`homes.personal.testimonials.items.${index}.job`, locale),
+}));
 ---
 
 <Layout metadata={metadata} pageType="home_personal">
-  <Fragment slot="announcement"></Fragment>
-  <Fragment slot="header">
-    <Header
-      links={[
-        { text: t("homes.personal.header.links.home", locale), href: "#" },
-        {
-          text: t("homes.personal.header.links.about", locale),
-          href: "#about",
-        },
-        {
-          text: t("homes.personal.header.links.resume", locale),
-          href: "#resume",
-        },
-        {
-          text: t("homes.personal.header.links.porfolio", locale),
-          href: "#porfolio",
-        },
-        { text: t("homes.personal.header.links.blog", locale), href: "#blog" },
-        {
-          text: t("homes.personal.header.links.github", locale),
-          href: "https://ahliweb.co.id",
-        },
-      ]}
-      actions={[
-        {
-          text: t("homes.personal.header.actions.hire_me", locale),
-          href: "#",
-        },
-      ]}
-      isSticky
-      showToggleTheme
-    />
-  </Fragment>
-
-  <!-- Hero2 Widget ******************* -->
-
-  <Hero
-    id="hero"
+  <PublicHero
+    eyebrow={t("homes.personal.hero.tagline", locale)}
     title={t("homes.personal.hero.title", locale)}
-    tagline={t("homes.personal.hero.tagline", locale)}
-    actions={[
-      {
-        variant: "primary",
-        text: t("homes.personal.cta.actions.hire_me", locale),
-        href: getPermalink("/contact#form"),
-      },
-    ]}
-  >
-    <Fragment slot="subtitle">
-      <span set:html={t("homes.personal.hero.subtitle", locale)} />
-    </Fragment>
-  </Hero>
-
-  <!-- Content Widget **************** -->
-
-  <Content
-    id="about"
-    columns={3}
-    items={[
-      {
-        icon: "tabler:brand-dribbble",
-        callToAction: {
-          target: "_blank",
-          text: "Dribbble",
-          href: "#",
-        },
-      },
-      {
-        icon: "tabler:brand-behance",
-        callToAction: {
-          target: "_blank",
-          text: "Behance",
-          href: "#",
-        },
-      },
-      {
-        icon: "tabler:brand-pinterest",
-        callToAction: {
-          target: "_blank",
-          text: "Pinterest",
-          href: "#",
-        },
-      },
-    ]}
-    image={{
-      src: "https://images.unsplash.com/photo-1491349174775-aaafddd81942?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80",
-      alt: "Colorful Image",
-      loading: "eager",
-    }}
-  >
-    <Fragment slot="content">
-      <h2
-        class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
-      >
-        {t("homes.personal.about.title", locale)}
-      </h2>
-      <p>
-        {t("homes.personal.about.p1", locale)}
-      </p>
-      <br />
-      <p>
-        {t("homes.personal.about.p2", locale)}
-      </p>
-      <br />
-      <p>{t("homes.personal.about.p3", locale)}</p>
-    </Fragment>
-
-    <Fragment slot="bg">
-      <div class="absolute inset-0 bg-blue-50 dark:bg-transparent"></div>
-    </Fragment>
-  </Content>
-
-  <!-- Steps Widget ****************** -->
-
-  <Steps
-    id="resume"
-    title={t("homes.personal.resume.work_experience.title", locale)}
-    items={[
-      {
-        title: t("homes.personal.resume.work_experience.items.0.title", locale),
-        description: t(
-          "homes.personal.resume.work_experience.items.0.description",
-          locale,
-        ),
-        icon: "tabler:briefcase",
-      },
-      {
-        title: t("homes.personal.resume.work_experience.items.1.title", locale),
-        description: t(
-          "homes.personal.resume.work_experience.items.1.description",
-          locale,
-        ),
-        icon: "tabler:briefcase",
-      },
-    ]}
-    classes={{ container: "max-w-3xl" }}
+    description={t("homes.personal.hero.subtitle", locale)}
+    actions={[{ label: t("homes.personal.cta.actions.hire_me", locale), href: `/${locale}/contact` }]}
+    align="center"
   />
 
-  <!-- Steps Widget ****************** -->
+  <Section id="about" title={t("homes.personal.about.title", locale)} width="wide">
+    <SplitSection
+      title={t("homes.personal.about.title", locale)}
+      description={`${t("homes.personal.about.p1", locale)} ${t("homes.personal.about.p2", locale)} ${t("homes.personal.about.p3", locale)}`}
+      items={aboutItems}
+      image={{
+        src: "https://images.unsplash.com/photo-1491349174775-aaafddd81942?ixlib=rb-4.0.3&auto=format&fit=crop&w=774&q=80",
+        alt: "Personal profile showcase",
+      }}
+    />
+  </Section>
 
-  <Steps
-    id="resume"
-    title={t("homes.personal.resume.education.title", locale)}
-    items={[
-      {
-        title: t("homes.personal.resume.education.items.0.title", locale),
-        icon: "tabler:school",
-      },
-      {
-        title: t("homes.personal.resume.education.items.1.title", locale),
-        icon: "tabler:school",
-      },
-    ]}
-    classes={{ container: "max-w-3xl" }}
-  />
+  <Section id="resume" title={t("homes.personal.resume.work_experience.title", locale)} width="wide" muted>
+    <FeatureGrid items={experienceItems} columns={2} />
+  </Section>
 
-  <!-- Features3 Widget ************** -->
+  <Section title={t("homes.personal.resume.education.title", locale)} width="wide">
+    <FeatureGrid items={educationItems} columns={2} />
+  </Section>
 
-  <Features3
-    title={t("homes.personal.skills.title", locale)}
-    subtitle={t("homes.personal.skills.subtitle", locale)}
-    columns={3}
-    defaultIcon="tabler:point-filled"
-    items={[
-      {
-        title: t("homes.personal.skills.items.0.title", locale),
-        description: t("homes.personal.skills.items.0.description", locale),
-      },
-      {
-        title: t("homes.personal.skills.items.1.title", locale),
-        description: t("homes.personal.skills.items.1.description", locale),
-      },
-      {
-        title: t("homes.personal.skills.items.2.title", locale),
-        description: t("homes.personal.skills.items.2.description", locale),
-      },
-      {
-        title: t("homes.personal.skills.items.3.title", locale),
-        description: t("homes.personal.skills.items.3.description", locale),
-      },
-      {
-        title: t("homes.personal.skills.items.4.title", locale),
-        description: t("homes.personal.skills.items.4.description", locale),
-      },
-      {
-        title: t("homes.personal.skills.items.5.title", locale),
-        description: t("homes.personal.skills.items.5.description", locale),
-      },
-      {
-        title: t("homes.personal.skills.items.6.title", locale),
-        description: t("homes.personal.skills.items.6.description", locale),
-      },
-      {
-        title: t("homes.personal.skills.items.7.title", locale),
-        description: t("homes.personal.skills.items.7.description", locale),
-      },
-      {
-        title: t("homes.personal.skills.items.8.title", locale),
-        description: t("homes.personal.skills.items.8.description", locale),
-      },
-    ]}
-  />
+  <Section title={t("homes.personal.skills.title", locale)} description={t("homes.personal.skills.subtitle", locale)} width="wide" muted>
+    <FeatureGrid items={skillItems} columns={3} />
+  </Section>
 
-  <!-- Content Widget **************** -->
+  <Section id="porfolio" title={t("homes.personal.portfolio.title", locale)} description={t("homes.personal.portfolio.subtitle", locale)} width="wide">
+    <div class="grid gap-10">
+      <SplitSection
+        title={t("homes.personal.portfolio.projects.0.title", locale)}
+        items={project0}
+        image={{ src: "https://images.unsplash.com/photo-1658248165252-71e116af1b34?ixlib=rb-4.0.3&auto=format&fit=crop&w=928&q=80", alt: "Portfolio project one" }}
+        reverse
+      />
+      <SplitSection
+        title={t("homes.personal.portfolio.projects.1.title", locale)}
+        items={project1}
+        image={{ src: "https://images.unsplash.com/photo-1619983081563-430f63602796?ixlib=rb-4.0.3&auto=format&fit=crop&w=774&q=80", alt: "Portfolio project two" }}
+      />
+      <SplitSection
+        title={t("homes.personal.portfolio.projects.2.title", locale)}
+        items={project2}
+        image={{ src: "https://images.unsplash.com/photo-1558655146-d09347e92766?w=870&h=642&fit=crop", alt: "Portfolio project three" }}
+        reverse
+      />
+    </div>
+  </Section>
 
-  <Content
-    id="porfolio"
-    title={t("homes.personal.portfolio.title", locale)}
-    subtitle={t("homes.personal.portfolio.subtitle", locale)}
-    isReversed
-    items={[
-      {
-        title: t(
-          "homes.personal.portfolio.projects.0.description_title",
-          locale,
-        ),
-        description: t(
-          "homes.personal.portfolio.projects.0.description",
-          locale,
-        ),
-      },
-      {
-        title: t("homes.personal.portfolio.projects.0.role_title", locale),
-        description: t("homes.personal.portfolio.projects.0.role", locale),
-      },
-    ]}
-    image={{
-      src: "https://images.unsplash.com/photo-1658248165252-71e116af1b34?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=928&q=80",
-      alt: "Tech Design Image",
-    }}
-    callToAction={{
-      target: "_blank",
-      text: t("homes.personal.portfolio.call_to_action", locale),
-      icon: "tabler:chevron-right",
-      href: "#",
-    }}
-  >
-    <Fragment slot="content">
-      <h3
-        class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
-      >
-        <span
-          set:html={t("homes.personal.portfolio.projects.0.title", locale)}
-        />
-      </h3>
-    </Fragment>
+  <Section title={t("homes.personal.testimonials.title", locale)} description={t("homes.personal.testimonials.subtitle", locale)} width="wide" muted>
+    <TestimonialGrid items={testimonials} />
+  </Section>
 
-    <Fragment slot="bg">
-      <div class="absolute inset-0 bg-blue-50 dark:bg-transparent"></div>
-    </Fragment>
-  </Content>
-
-  <!-- Content Widget **************** -->
-
-  <Content
-    isReversed
-    isAfterContent={true}
-    items={[
-      {
-        title: t(
-          "homes.personal.portfolio.projects.1.description_title",
-          locale,
-        ),
-        description: t(
-          "homes.personal.portfolio.projects.1.description",
-          locale,
-        ),
-      },
-      {
-        title: t("homes.personal.portfolio.projects.1.role_title", locale),
-        description: t("homes.personal.portfolio.projects.1.role", locale),
-      },
-    ]}
-    image={{
-      src: "https://images.unsplash.com/photo-1619983081563-430f63602796?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80",
-      alt: "Art and Music Poster Image",
-    }}
-    callToAction={{
-      target: "_blank",
-      text: t("homes.personal.portfolio.call_to_action", locale),
-      icon: "tabler:chevron-right",
-      href: "#",
-    }}
-  >
-    <Fragment slot="content">
-      <h3
-        class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
-      >
-        <span
-          set:html={t("homes.personal.portfolio.projects.1.title", locale)}
-        />
-      </h3>
-    </Fragment>
-
-    <Fragment slot="bg">
-      <div class="absolute inset-0 bg-blue-50 dark:bg-transparent"></div>
-    </Fragment>
-  </Content>
-
-  <!-- Content Widget **************** -->
-
-  <Content
-    isReversed
-    isAfterContent={true}
-    items={[
-      {
-        title: t(
-          "homes.personal.portfolio.projects.2.description_title",
-          locale,
-        ),
-        description: t(
-          "homes.personal.portfolio.projects.2.description",
-          locale,
-        ),
-      },
-      {
-        title: t("homes.personal.portfolio.projects.2.role_title", locale),
-        description: t("homes.personal.portfolio.projects.2.role", locale),
-      },
-    ]}
-    image={{
-      src: "https://images.unsplash.com/photo-1558655146-d09347e92766?w=870&h=642&fit=crop",
-      alt: "Fashion e-commerce Image",
-      width: 870,
-      height: 642,
-    }}
-    callToAction={{
-      target: "_blank",
-      text: t("homes.personal.portfolio.call_to_action", locale),
-      icon: "tabler:chevron-right",
-      href: "#",
-    }}
-  >
-    <Fragment slot="content">
-      <h3
-        class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
-      >
-        <span
-          set:html={t("homes.personal.portfolio.projects.2.title", locale)}
-        />
-      </h3>
-    </Fragment>
-
-    <Fragment slot="bg">
-      <div class="absolute inset-0 bg-blue-50 dark:bg-transparent"></div>
-    </Fragment>
-  </Content>
-
-  <!-- Testimonials Widget *********** -->
-
-  <Testimonials
-    title={t("homes.personal.testimonials.title", locale)}
-    subtitle={t("homes.personal.testimonials.subtitle", locale)}
-    testimonials={[
-      {
-        testimonial: t(
-          "homes.personal.testimonials.items.0.testimonial",
-          locale,
-        ),
-        name: t("homes.personal.testimonials.items.0.name", locale),
-        job: t("homes.personal.testimonials.items.0.job", locale),
-        image: {
-          src: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80",
-          alt: "Mark Thompson Image",
-        },
-      },
-      {
-        testimonial: t(
-          "homes.personal.testimonials.items.1.testimonial",
-          locale,
-        ),
-        name: t("homes.personal.testimonials.items.1.name", locale),
-        job: t("homes.personal.testimonials.items.1.job", locale),
-        image: {
-          src: "https://images.unsplash.com/photo-1554151228-14d9def656e4?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=772&q=80",
-          alt: "Emily Martinez Image",
-        },
-      },
-      {
-        testimonial: t(
-          "homes.personal.testimonials.items.2.testimonial",
-          locale,
-        ),
-        name: t("homes.personal.testimonials.items.2.name", locale),
-        job: t("homes.personal.testimonials.items.2.job", locale),
-        image: {
-          src: "https://images.unsplash.com/photo-1554727242-741c14fa561c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80",
-          alt: "Laura Simmons Image",
-        },
-      },
-      {
-        testimonial: t(
-          "homes.personal.testimonials.items.3.testimonial",
-          locale,
-        ),
-        name: t("homes.personal.testimonials.items.3.name", locale),
-        job: t("homes.personal.testimonials.items.3.job", locale),
-        image: {
-          src: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80",
-          alt: "Alex Foster Image",
-        },
-      },
-      {
-        testimonial: t(
-          "homes.personal.testimonials.items.4.testimonial",
-          locale,
-        ),
-        name: t("homes.personal.testimonials.items.4.name", locale),
-        job: t("homes.personal.testimonials.items.4.job", locale),
-        image: {
-          src: "https://images.unsplash.com/photo-1548142813-c348350df52b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=778&q=80",
-          alt: "Jessica Collins Image",
-        },
-      },
-      {
-        testimonial: t(
-          "homes.personal.testimonials.items.5.testimonial",
-          locale,
-        ),
-        name: t("homes.personal.testimonials.items.5.name", locale),
-        job: t("homes.personal.testimonials.items.5.job", locale),
-        image: {
-          src: "https://images.unsplash.com/photo-1566492031773-4f4e44671857?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80",
-          alt: "Michael Carter Image",
-        },
-      },
-    ]}
-  />
-
-  <!-- CallToAction Widget *********** -->
-
-  <CallToAction
-    title={t("homes.personal.cta.title", locale)}
-    subtitle={t("homes.personal.cta.subtitle", locale)}
-    actions={[
-      {
-        variant: "primary",
-        text: t("homes.personal.cta.actions.hire_me", locale),
-        href: "/",
-      },
-    ]}
-  />
-
-  <!-- BlogLatestPost Widget **************** -->
-
-  <BlogLatestPosts
-    id="blog"
-    title={t("homes.personal.blog_latest.title", locale)}
-    information={t("homes.personal.blog_latest.information", locale)}
-  >
-    <Fragment slot="bg">
-      <div class="absolute inset-0 bg-blue-50 dark:bg-transparent"></div>
-    </Fragment>
-  </BlogLatestPosts>
+  <Section width="wide">
+    <CtaBanner
+      title={t("homes.personal.cta.title", locale)}
+      description={t("homes.personal.cta.subtitle", locale)}
+      action={{ label: t("homes.personal.cta.actions.hire_me", locale), href: `/${locale}/contact` }}
+    />
+  </Section>
 </Layout>

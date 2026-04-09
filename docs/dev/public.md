@@ -86,6 +86,7 @@ Current primary-portal composition now follows a more EmDash-style public struct
   - `TestimonialGrid.astro`
   - `FaqList.astro`
   - `CtaBanner.astro`
+- these section primitives now back the core localized marketing pages, the main showcase home variants, and the maintained landing pages, replacing most page-local AstroWind widget assemblies in `primary`
 - canonical tenant-facing content routes now live under locale-prefixed public paths such as:
   - `/{locale}/blogs`
   - `/{locale}/blogs/[slug]`
