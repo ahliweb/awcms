@@ -1,70 +1,197 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.3 (Permissions) and Section 3 (Modules)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Admin Menu System
 
 ## Purpose
 
-Describe how admin menus are stored, loaded, and extended.
+Describe how the current admin menu system is sourced, normalized, filtered, scoped, and extended in AWCMS.
 
-## Audience
+This guide reflects the live `useAdminMenu()` behavior rather than an older simplified model of “a single static sidebar table”.
 
-- Admin panel developers
-- Extension authors
+## Current State
 
-## Prerequisites
+### Current Menu Reality
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for menu system and permissions
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- `docs/security/abac.md`
+The admin menu is currently assembled from multiple inputs and then normalized.
 
-## Core Concepts
+It is not just:
 
-- Menu configuration is stored in `admin_menus`.
-- The UI falls back to `awcms/src/hooks/useAdminMenu.js` defaults.
-- Extensions and plugins can inject menu items at runtime.
-- Menu items are linked to `resources_registry` via `resource_id` for ABAC metadata.
-- `admin_menus` supports scoped rows via `tenant_id` and `scope` (`platform`, `tenant`, `shared`). `useAdminMenu` resolves the current tenant/platform view and should not treat the table as globally tenantless.
-- Grouping uses `group_label` and `group_order`, while `is_core` flags core items.
+- a hardcoded sidebar
+- a globally tenantless `admin_menus` table
+- an extension-only injection surface
 
-## How It Works
+Current menu behavior combines:
 
-### Data Source Order
+- `admin_menus`
+- `resources_registry`
+- `extension_menu_items`
+- plugin/extension/runtime injections
+- tenant-aware scope filtering
+- platform-vs-tenant preference and de-duplication
 
-1. `admin_menus` table (canonical)
-2. `DEFAULT_MENU_CONFIG` in `useAdminMenu.js` (fallback)
-3. Extension or plugin injections (`admin_menu_items` filter)
-4. Sidebar-level filter (`admin_sidebar_menu`) for last-mile customization
+### Current Scope Model
 
-### Extension Injection
+`admin_menus` currently supports scoped rows using fields like:
+
+- `tenant_id`
+- `scope`
+
+That means menu loading must respect:
+
+- current tenant scope
+- platform vs tenant visibility
+- shared/null-tenant rows where intended
+
+## Current Source Order
+
+The current effective menu model is closer to:
+
+1. `admin_menus` as a primary configured source
+2. `resources_registry` as a system/source-of-truth companion for module/resource metadata
+3. extension menu rows from `extension_menu_items`
+4. plugin/runtime filter injections
+5. de-duplication and priority normalization inside `useAdminMenu()`
+
+## Current `useAdminMenu()` Behavior
+
+`useAdminMenu()` currently does more than simply fetch rows.
+
+Important current behavior includes:
+
+- tenant-aware query scoping through the active tenant context
+- null-tenant fallback behavior where intended
+- extension menu normalization
+- resource fallback item generation for active resources without explicit menu rows
+- de-duplication across overlapping sources
+- priority-based winner selection for duplicate/conflicting menu candidates
+- platform-aware handling of platform menu items
+
+This means menu changes should read the current hook and utility helpers before assuming a direct table-to-sidebar mapping.
+
+## Current Data Sources
+
+### `admin_menus`
+
+Use `admin_menus` for configured menu rows and scope-aware seeded menu state.
+
+Current important fields/concepts include:
+
+- `tenant_id`
+- `scope`
+- `group_label`
+- `group_order`
+- `order`
+- `resource_id`
+- `permission`
+
+### `resources_registry`
+
+`resources_registry` is part of the current source-of-truth model for module/resource metadata.
+
+Current menu logic uses it to:
+
+- enrich configured menu rows
+- infer missing menu items for active resources
+- align resource/menu visibility with permission prefixes and scope
+
+### `extension_menu_items`
+
+Extension menu rows currently participate in the normalized menu result when the related extension is active and not deleted.
+
+### Plugin / Runtime Filters
+
+Menu injection may still happen through hooks/filters for plugin-like behavior.
+
+This remains part of the current runtime surface, but injected items still enter a normalization/deduplication pipeline.
+
+## Current Menu Identity And Deduplication Rules
+
+The current menu system tries to collapse equivalent items using identity signals such as:
+
+- canonical key
+- normalized path
+- normalized label
+
+Menu candidates are compared using current preference rules that account for factors like:
+
+- source type
+- tenant scoping
+- resource linkage
+- permission presence
+- platform-specific behavior
+- explicit ordering/group ordering
+
+Do not document or implement menu additions as if duplicate rows are always rendered independently.
+
+## Permissions And Access
+
+### Current Permission Model
+
+- Each menu item may declare a `permission`.
+- The sidebar/UI layer hides items when the current permission context does not allow them.
+- Platform-admin/full-access roles may bypass standard permission checks for visible platform/admin surfaces.
+- `resources_registry.permission_prefix` still matters for ABAC alignment.
+
+### Current Guidance
+
+- Use canonical permission names from [docs/security/abac.md](../security/abac.md).
+- Prefer resource-linked/menu-aligned permission design instead of ad hoc hardcoded checks.
+- Do not invent placeholder menu permission families without migration-backed support.
+
+## Extension And Plugin Injection
+
+Example shape:
 
 ```javascript
 import { addFilter } from '@/lib/hooks';
 
-addFilter('admin_menu_items', 'my_plugin', items => [
+addFilter('admin_menu_items', 'my_plugin', (items) => [
   ...items,
-  { label: 'My Feature', path: 'my-feature', icon: 'Star', permission: 'tenant.my_feature.read' }
+  {
+    label: 'My Feature',
+    path: 'my-feature',
+    icon: 'Star',
+    permission: 'tenant.my_feature.read',
+  },
 ]);
 ```
 
-## Implementation Patterns
+Current rule:
 
-- Use `useAdminMenu()` to load and update menu items.
-- Menu items must include a permission key following `scope.resource.action`.
-- Prefer `resource_id` + `permission_prefix` when seeding `admin_menus` for consistent ABAC checks.
+- injected items should still align with current menu identity, permission, and routing conventions
 
-## Permissions and Access
+## Implications For Admin Changes
 
-- Each menu item has a `permission` field.
-- The sidebar hides items when `usePermissions().hasPermission()` fails.
-- Platform admin/full-access roles bypass standard checks and see all visible items (including `platform_admin_only`).
-- `resources_registry.permission_prefix` is used to validate ABAC alignment.
+When adding or changing admin menu behavior:
 
-## Security and Compliance Notes
+- do not assume `admin_menus` is globally tenantless
+- do not assume a new module only needs a route and a sidebar label
+- check whether the feature should be represented in `resources_registry`
+- check whether extension/runtime injection is more appropriate than a direct seeded menu row
+- preserve current scope-aware behavior for platform and tenant users
+- verify menu routing and permission alignment together
+
+## Security And Compliance Notes
 
 - Menu permissions must align with ABAC definitions.
-- Avoid hardcoded menu items outside the menu system.
+- Avoid undocumented hardcoded sidebar items outside the current menu system.
+- Preserve tenant/platform scope boundaries in menu visibility.
+- Menu visibility should not imply backend authorization; RLS and permission enforcement remain authoritative.
 
-## References
+## Validation Guidance
 
-- `docs/security/abac.md`
-- `../../awcms/src/hooks/useAdminMenu.js`
+| Surface | Validation |
+| --- | --- |
+| admin/menu code changes | `cd awcms && npm run build` |
+| maintained docs | `cd awcms && npm run docs:check` |
+| edge/admin route docs tied to menu changes | `cd awcms-edge && npm test && npm run typecheck` when relevant |
+
+## Related Docs
+
+- [docs/security/abac.md](../security/abac.md)
+- [docs/dev/admin.md](../dev/admin.md)
+- [../../awcms/src/hooks/useAdminMenu.js](../../awcms/src/hooks/useAdminMenu.js)

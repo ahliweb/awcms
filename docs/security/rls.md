@@ -1,65 +1,77 @@
 # Row Level Security (RLS) Policies
 
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 2.1 - Multi-Tenancy & Isolation (RLS)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 ## Purpose
 
-Document the RLS helpers and standard policy patterns used in AWCMS.
+Document the current RLS helper functions, policy-authoring expectations, recursion-safe patterns, and public/tenant/platform policy rules used in AWCMS.
 
-## Audience
+This guide describes the maintained RLS model as it exists now in the migration baseline and runtime, not an older simplified role-check model.
 
-- Database maintainers
-- Backend and edge-runtime authors
+## Current State
 
-## Prerequisites
+### Current RLS Model
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for RLS mandates
-- [AGENTS.md](../../AGENTS.md) - RLS implementation patterns
-- [docs/security/abac.md](./abac.md) - ABAC permission system
-- [docs/tenancy/overview.md](../tenancy/overview.md) - Tenant context
-- [docs/architecture/database.md](../architecture/database.md) - Database schema
+AWCMS uses RLS as a mandatory enforcement layer for tenant isolation and access control.
 
-## Reference
+Current reality:
 
-### Core Helper Functions
+- tenant-scoped data should resolve against `public.current_tenant_id()`
+- ABAC permission checks should use canonical permission keys and helper functions
+- recursion-safe admin/permission helpers matter in real policy authoring
+- public routes and request-scoped flows may still rely on request header mediated tenant resolution where appropriate
+- Worker-side checks are additive and do not replace RLS
 
-| Function | Returns | Purpose |
+### Current Policy Philosophy
+
+New policy authoring should prefer:
+
+- explicit tenant isolation
+- explicit soft-delete filtering where applicable
+- explicit permission checks
+- recursion-safe helper functions
+- documented public read/write exceptions only where intended
+
+Avoid older “single helper + broad admin bypass” policy habits unless the table truly is an internal/admin-only surface.
+
+## Current Core Helper Functions
+
+| Function | Returns | Current Role |
 | --- | --- | --- |
-| `current_tenant_id()` | UUID | Tenant from the authenticated `public.users` row, with `app.current_tenant_id` fallback for unauthenticated/request-scoped flows |
-| `auth_is_admin()` | boolean | **SECURITY DEFINER**: Checks tenant-admin, platform-admin, or full-access flags for recursion-safe administrative bypass |
-| `is_platform_admin()` | boolean | Legacy/non-recursion-safe helper for platform admin/full-access checks. Avoid it in new RLS policy authoring. |
-| `has_permission(key)` | boolean | Checks if current user has specific permission key |
-| `caller_has_permission(key)` | boolean | **SECURITY DEFINER + row_security = off** helper for recursion-safe permission checks inside `public.users` RLS policies |
-| `is_admin_or_above()` | boolean | Legacy helper still used in existing policies; prefer `has_permission` for new policy authoring. |
-| `is_tenant_descendant(ancestor, descendant)` | boolean | Checks tenant hierarchy membership (descendant path). |
-| `tenant_can_access_resource(row_tenant, resource_key, action)` | boolean | Enforces shared vs isolated resource access across tenant levels. |
+| `current_tenant_id()` | UUID | Tenant resolver for tenant-scoped RLS paths; supports authenticated user resolution and request-scoped fallback behavior |
+| `auth_is_admin()` | boolean | Recursion-safe admin/full-access bypass helper for new policy authoring |
+| `has_permission(key)` | boolean | Canonical permission check helper |
+| `caller_has_permission(key)` | boolean | Recursion-safe permission helper for policy paths that would otherwise recurse through `public.users` |
+| `tenant_can_access_resource(row_tenant, resource_key, action)` | boolean | Hierarchy/resource-sharing helper |
+| `is_tenant_descendant(ancestor, descendant)` | boolean | Tenant hierarchy helper |
 
-`current_tenant_id()` is currently defined with `SECURITY DEFINER` and `row_security = off`
-to avoid recursion against `public.users`.
-For authenticated requests it resolves the tenant from `public.users.tenant_id`.
-For public/request-scoped flows it falls back to `app.current_tenant_id`, which is populated
-from the `x-tenant-id` request header.
+### Legacy Helpers Still Present
 
-### Table Policy Sources
+Helpers like `is_platform_admin()` and `is_admin_or_above()` may still exist in older policies, but they should not be treated as the preferred pattern for new policy authoring when the newer recursion-safe/ABAC-aware helpers already fit the table.
 
-- `supabase/migrations` contains the canonical SQL definitions.
-- Use `npx supabase migration list --local` before local migration ops.
-- Use `npx supabase db pull --schema public,extensions` only when syncing linked/remote schema snapshots.
-- Keep non-migration SQL in `supabase/manual/` (not in migration directories).
+## Current Tenant Resolution Behavior In RLS
 
-### Helper Function Source Snapshot
+`current_tenant_id()` currently matters in both authenticated and request-scoped paths.
 
-- `public.current_tenant_id()` -> `supabase/migrations/20260307070000_fix_users_rls_recursion.sql`
-- `public.auth_is_admin()` -> `supabase/migrations/20260119230212_remote_schema.sql`
-- `public.has_permission()` -> `supabase/migrations/20260119230212_remote_schema.sql`
-- `public.caller_has_permission()` -> `supabase/migrations/20260321000000_fix_users_rls_infinite_recursion.sql`
-- Hierarchy access helpers (`tenant_can_access_resource`, `is_tenant_descendant`) -> `supabase/migrations/20260127160000_tenant_hierarchy_resource_sharing.sql`
+Important current behavior:
 
-### `public.users` Recursion-Safe Pattern
+- authenticated requests resolve tenant from the caller’s user record
+- request/public-scoped flows may fall back through request-scoped tenant context populated from headers
+- this allows certain public or compatibility paths to remain tenant-aware without bypassing the overall RLS model
 
-`20260321000000_fix_users_rls_infinite_recursion.sql` rebuilds `public.users` select/update policies so they do not recurse back into `public.users` while RLS is already evaluating that table.
+That does not mean raw tenant headers are universally trusted everywhere. It means the SQL helper is part of the current runtime contract.
 
-Use this pattern when a policy must answer "does the caller have permission X?" and the caller identity itself lives in `public.users`:
+## Current Recursion-Safe Policy Pattern
+
+### `public.users` And Similar Sensitive Tables
+
+When a policy path needs to answer permission questions that themselves depend on user/role state, recursion-safe helper functions are required.
+
+Current example pattern:
 
 ```sql
 CREATE OR REPLACE FUNCTION public.caller_has_permission(p_permission_name text)
@@ -84,76 +96,83 @@ end;
 $$;
 ```
 
-Use `caller_has_permission(...)` rather than an inline `exists (...) join public.users ...` expression inside `public.users` policies.
+Use recursion-safe helpers instead of inline self-referential joins when the policy path would recurse through `public.users`.
 
-### Migration History Drift
+## Current Standard Policy Patterns
 
-Use the helper script for safe repair planning/execution:
-
-```bash
-scripts/repair_supabase_migration_history.sh
-scripts/repair_supabase_migration_history.sh --apply --local
-scripts/repair_supabase_migration_history.sh --apply --linked
-```
-
-### ⚠️ IMPORTANT: ABAC Policy Pattern (New Standard)
-
-Since AWCMS 2.5+, we enforce **Attribute-Based Access Control (ABAC)**. DO NOT use rigid role checks like `is_admin_or_above()` for tenant-level content. Instead, check for the specific *permission* required for that table.
-
-#### Standard Select Policy (Granular)
+### Tenant-Scoped Read Pattern
 
 ```sql
-CREATE POLICY "table_select_abac" ON public.table_name
+CREATE POLICY table_select_abac ON public.table_name
 FOR SELECT USING (
-  -- 1. Tenant Isolation
-  (tenant_id = public.current_tenant_id())
-  AND (
-     -- 2. Granular Permission Check
-     public.has_permission('tenant.module.read')
-     OR
-     -- 3. Platform Admin Bypass (Use auth_is_admin for recursion safety)
-     public.auth_is_admin()
-  )
+  tenant_id = public.current_tenant_id()
   AND deleted_at IS NULL
+  AND (
+    public.has_permission('tenant.module.read')
+    OR public.auth_is_admin()
+  )
 );
 ```
 
-### Insert and Update Pattern
+### Tenant-Scoped Insert Pattern
 
 ```sql
-CREATE POLICY "table_insert_abac" ON public.table_name
+CREATE POLICY table_insert_abac ON public.table_name
 FOR INSERT WITH CHECK (
-  (tenant_id = public.current_tenant_id() AND public.has_permission('tenant.module.create'))
+  (
+    tenant_id = public.current_tenant_id()
+    AND public.has_permission('tenant.module.create')
+  )
   OR public.auth_is_admin()
 );
 ```
 
-### Public Insert Pattern (Analytics/Event Logging)
-
-Use this for public, write-only telemetry like visitor analytics. Only insert is allowed, and the tenant is resolved from `x-tenant-id`.
+### Ownership-Aware Update Pattern
 
 ```sql
-CREATE POLICY "analytics_events_public_insert" ON public.analytics_events
+CREATE POLICY table_update_abac ON public.table_name
+FOR UPDATE USING (
+  tenant_id = public.current_tenant_id()
+  AND deleted_at IS NULL
+  AND (
+    public.has_permission('tenant.module.update')
+    OR (
+      public.has_permission('tenant.module.update_own')
+      AND owner_id = auth.uid()
+    )
+    OR public.auth_is_admin()
+  )
+);
+```
+
+### Public Insert Pattern
+
+Use for public write-only telemetry/event capture where the table is intentionally writable by unauthenticated traffic under tenant scope.
+
+```sql
+CREATE POLICY analytics_events_public_insert ON public.analytics_events
 FOR INSERT
 TO anon, authenticated
-WITH CHECK (tenant_id = public.current_tenant_id());
+WITH CHECK (
+  tenant_id = public.current_tenant_id()
+);
 ```
 
 ### Public Aggregate Read Pattern
 
-Aggregates (e.g., `analytics_daily`) may allow read-only access scoped to a tenant.
-
 ```sql
-CREATE POLICY "analytics_daily_public_read" ON public.analytics_daily
+CREATE POLICY analytics_daily_public_read ON public.analytics_daily
 FOR SELECT
 TO anon, authenticated
-USING (tenant_id = public.current_tenant_id());
+USING (
+  tenant_id = public.current_tenant_id()
+);
 ```
 
-### Shared Resource Pattern (Hierarchy-Aware)
+### Hierarchy-Aware Shared Resource Pattern
 
 ```sql
-CREATE POLICY "table_select_hierarchy" ON public.table_name
+CREATE POLICY table_select_hierarchy ON public.table_name
 FOR SELECT USING (
   tenant_id = public.current_tenant_id()
   OR public.tenant_can_access_resource(tenant_id, 'content', 'read')
@@ -161,37 +180,58 @@ FOR SELECT USING (
 );
 ```
 
-### Legacy Policy Pattern (Deprecated)
+## Current Policy Authoring Rules
 
-*Avoid using this for new tables unless they are strictly admin-only internal tools.*
+- prefer canonical permission keys from the migration-backed baseline
+- prefer `auth_is_admin()` over legacy non-recursion-safe admin helpers for new policy authoring
+- include `deleted_at IS NULL` for business-data reads unless the table/view intentionally exposes trash/deleted state
+- keep public access explicit and narrow
+- do not use role-name checks where permission checks or recursion-safe helpers are the right tool
 
-```sql
-CREATE POLICY "table_select_unified" ON public.table_name
-FOR SELECT USING (
-  (tenant_id = current_tenant_id() OR is_platform_admin())
-  AND deleted_at IS NULL
-);
+## Deprecated Or Lower-Value Patterns
+
+Avoid for new policy authoring unless a table is genuinely a narrow internal/admin-only exception:
+
+- role-name-based checks
+- `is_admin_or_above()` as the default tenant-content gate
+- `is_platform_admin()` as the preferred new helper in recursion-sensitive paths
+- broad unified policies that hide the actual permission/resource model
+
+## Performance Guidance
+
+- add indexes for columns used in RLS filters such as `tenant_id`, `user_id`, and hierarchy keys
+- scope policies to the correct roles where appropriate (`authenticated`, `anon`)
+- keep helper function usage deliberate and recursion-safe
+
+## Security And Compliance Notes
+
+- Every tenant-scoped table should include `tenant_id`.
+- Business-data tables should include `deleted_at` where the soft-delete lifecycle applies.
+- Public reads should stay explicitly published-only and non-deleted where relevant.
+- Plugin/extension routes must still query tenant-scoped tables correctly and rely on ABAC permissions rather than role names.
+- If a helper must read `public.users` or similar sensitive tables inside a policy path, evaluate recursion risk first and use `SECURITY DEFINER` plus `row_security = off` only when justified.
+- Notification configuration tables and notification dispatch tables do not necessarily share the same tenant write semantics; document the exact table behavior rather than implying one generic rule.
+
+## Migrations And Sources
+
+- `supabase/migrations/` remains the canonical migration source
+- keep `awcms/supabase/migrations/` mirrored in parity
+- keep non-migration SQL out of migration folders
+- commit policy changes as timestamped migrations only
+
+## Validation Guidance
+
+```bash
+cd awcms && npm run docs:check
+cd awcms-edge && npm test && npm run typecheck
+scripts/verify_supabase_migration_consistency.sh
 ```
 
-### Performance Tips (Context7)
+Use additional migration/local database validation as required by the specific policy change.
 
-- Use `(select auth.uid())` in policies to avoid recomputing per-row.
-- Add indexes for columns used in RLS filters (`tenant_id`, `user_id`, `region_id`).
-- Always scope policies to roles with `TO authenticated` or `TO anon` to avoid overly broad access.
+## Related Docs
 
-## Security and Compliance Notes
-
-- **Granularity**: Policies should match the canonical permission keys stored in `public.permissions` and any maintained admin permission-matrix UI.
-- **Isolation**: Every tenant-scoped table must include `tenant_id` and `deleted_at`.
-- **Public access**: Public reads must be explicitly scoped to published content (for example `status = 'published'` and `deleted_at IS NULL`).
-- **Plugins**: Extension/Plugin routes must query tenant-scoped tables with `tenant_id = current_tenant_id()` and rely on ABAC permissions (no role-name checks).
-- **Public portal headers**: Ensure `x-tenant-id` is set by scoped Supabase clients (static builds) or middleware (SSR) so `current_tenant_id()` resolves correctly.
-- **Recursion safety**: If a helper must query `public.users` or `public.roles` inside a policy path, keep it `SECURITY DEFINER` and explicitly evaluate whether `row_security = off` is required to avoid self-referential policy loops.
-- **Notification tables**: `tenant_notification_channels` and `notification_templates` are tenant-writable under the documented notification-management permissions for that feature set; `notification_dispatches` is intentionally read-only to tenants and written only through the Worker/admin-client path.
-- **Migration files**: RLS policy SQL must be committed as timestamped migrations only.
-
-## References
-
-- `docs/security/abac.md`
-- `docs/tenancy/overview.md`
-- `docs/architecture/database.md`
+- [docs/security/abac.md](./abac.md)
+- [docs/tenancy/overview.md](../tenancy/overview.md)
+- [docs/tenancy/supabase.md](../tenancy/supabase.md)
+- [docs/architecture/database.md](../architecture/database.md)

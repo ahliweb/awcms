@@ -1,111 +1,97 @@
 # Supabase Integration
 
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1.3 - Backend & Database  
-> **Context7 Reference**: `supabase/supabase-js` - See [AGENTS.md](../../AGENTS.md) for detailed patterns
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 ## Purpose
 
-Define how AWCMS integrates with Supabase for auth, PostgreSQL data, RLS, and ABAC while Cloudflare handles edge gateway and object storage responsibilities.
+Define the current Supabase integration model for AWCMS: what Supabase owns, how tenant context is resolved, how client and Worker code interact with it, how migrations are maintained, and where Supabase stops and Cloudflare begins.
 
-## Audience
+This is a current-state guide for the checked-in repo, not a generic Supabase tutorial.
 
-- Admin and public portal developers
-- Platform operators configuring Supabase
+## Current State
 
-## Prerequisites
+### What Supabase Owns
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - Backend architecture and constraints
-- [AGENTS.md](../../AGENTS.md) - Supabase JS patterns and Context7 references
-- Supabase project with RLS enabled
-- Supabase CLI v2.70+ (install globally or use `npx supabase`)
+Supabase remains the system of record for:
 
-## Core Concepts
+- Auth
+- PostgreSQL data
+- tenant isolation
+- RLS enforcement
+- ABAC permission enforcement
+- SQL/database functions and helper procedures
 
-- Supabase is the system of record for Auth, PostgreSQL data, RLS, and ABAC.
-- Cloudflare Workers provide the primary edge HTTP layer for maintained client applications.
-- Cloudflare R2 is the canonical object storage layer for maintained file/media flows.
-- RLS is mandatory for all tenant-scoped tables.
-- Tenant context is passed via `x-tenant-id` header and resolved in SQL with `current_tenant_id()`.
-- Tenant hierarchy and resource sharing are enforced with `tenant_can_access_resource()`.
+### What Supabase Does Not Own
 
-## How It Works
+In the maintained AWCMS runtime, Supabase does not own:
 
-### Admin Panel Client
+- the primary server-side HTTP runtime
+- object/file storage delivery for maintained media flows
+- the maintained edge/API orchestration layer
 
-- `awcms/src/lib/customSupabaseClient.js` injects `x-tenant-id` for every request.
-- `awcms/src/contexts/TenantContext.jsx` resolves tenant by domain and calls `setGlobalTenantId()`.
+Those responsibilities currently belong to Cloudflare Workers and Cloudflare R2.
 
-**Context7 guidance**: initialize clients with PKCE auth flow and global headers.
+## Current Integration Model
 
-```javascript
-import { createClient } from "@supabase/supabase-js";
+### Admin Client
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    flowType: "pkce",
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    storageKey: "supabase-auth-token",
-  },
-  db: {
-    schema: "public",
-  },
-  global: {
-    headers: {
-      "x-application-name": "awcms",
-    },
-    // fetch: customFetchImplementation,
-  },
-  realtime: {
-    params: { eventsPerSecond: 10 },
-  },
-});
-```
+The admin app uses `awcms/src/lib/customSupabaseClient.js`.
 
-### Public Portal Client
+Current behavior includes:
 
-- Static builds resolve tenant via `PUBLIC_TENANT_ID` (or `VITE_PUBLIC_TENANT_ID`).
-- `awcms-public/primary` and `awcms-public/smandapbun` both build on `@awcms/shared/supabase`; headers are set when scoped access is required.
-- Canonical static deployments do not depend on middleware-based analytics logging.
+- publishable-key client auth
+- automatic `x-tenant-id` header injection when tenant scope is set
+- `x-application-name` header injection
+- Worker proxy behavior for `functions.invoke(...)`
+- explicit blocking of `supabase.storage`
 
-### Edge Logic
+### Public Clients
 
-- Primary edge HTTP handlers live in `awcms-edge/` (Cloudflare Workers).
-- Use `SUPABASE_SECRET_KEY` only in approved server-side runtimes for cross-tenant operations and elevated workflows.
-- Must enforce tenant context checks and resource sharing rules before mutating data.
-- Notification queue consumers write dispatch outcomes to `public.notification_dispatches`; tenant clients can read those logs through RLS but do not insert/update them directly.
+Public portals use env-driven Supabase client helpers in their own workspaces.
 
-### Storage
+Current public expectations:
 
-- Maintained file and media delivery flows must use Cloudflare R2 through `awcms-edge/`.
-- Supabase must not be used as the primary file storage surface for maintained client applications.
-- Postgres stores the canonical media metadata, tenant ownership, and authorization state.
-- The application or Worker layer handles authorization, signed access, and post-upload bookkeeping.
-- Do not add new `storage/v1`-based media flows for maintained AWCMS features.
-- `20260322000000_fix_security_advisor_issues.sql` updates `check_tenant_limit()` and `get_storage_stats()` to use `public.media_objects` and keeps `sync_storage_files()` only as a deprecation stub so older callers receive a clear response instead of breaking against the removed `public.files` table.
+- tenant resolution is static-first for canonical public builds
+- public reads remain published-only and non-deleted
+- public code does not use secret-key paths
+- public compatibility routes may resolve tenant context through the Worker layer when needed
 
-### Notification Infrastructure
+### Worker Runtime
 
-- `20260320100000_create_notification_channels.sql` adds:
-  - `tenant_notification_channels` for per-tenant channel credentials, quotas, and enable/disable state
-  - `notification_templates` for reusable tenant-scoped outbound templates
-  - `notification_dispatches` for immutable dispatch audit records
-- Notification permission names must be verified against the live `public.permissions` table before use. Keep documentation aligned to the exact seeded keys present in migrations rather than assuming a generic naming pattern.
-- Seeded modules:
-  - `email-notifications`
-  - `whatsapp-notifications`
-  - `telegram-notifications`
+Cloudflare Workers in `awcms-edge/` are the maintained HTTP gateway that may use Supabase in two different modes:
 
-### Tenant Provisioning RPC Signatures
+- publishable-key caller-context client for auth/session-preserving checks
+- secret-key admin client for approved privileged operations
 
-`create_tenant_with_defaults` is currently authored as the hierarchy-aware 6-argument function:
+Worker-side checks are additive guardrails. Supabase remains the final authority for Auth, RLS, and ABAC.
 
-- 6-argument signature: `(p_name, p_slug, p_domain, p_tier, p_parent_tenant_id, p_role_inheritance_mode)`
+## Tenant Context Model
 
-Older compatibility overloads still appear in historical migration snapshots, but current seed migrations and onboarding flows should call the 6-argument hierarchy-aware signature only.
+### Current Tenant Resolution
 
-## Implementation Patterns
+Tenant context is not just a static string passed around arbitrarily.
+
+Current repo behavior includes:
+
+- admin-side tenant resolution through `TenantContext`
+- public static tenant resolution through build-time envs
+- request-scoped/public compatibility flows using `x-tenant-id` or route/domain-mediated Worker resolution where appropriate
+- SQL-side resolution through `public.current_tenant_id()`
+
+### Current `x-tenant-id` Role
+
+The `x-tenant-id` header still matters, but it should be understood in context:
+
+- admin client code uses it as part of the current scoped tenant contract
+- public/request-scoped flows may rely on it when the route/client helper is designed for that pattern
+- Worker public routes now also support domain-mediated tenant resolution on certain documented surfaces
+- raw tenant input should not be treated as implicitly trusted just because a header exists
+
+## Current Supabase Patterns
 
 ### Admin Client Usage
 
@@ -119,79 +105,93 @@ const { data, error } = await supabase
   .is('deleted_at', null);
 ```
 
-### Public Portal Client Usage
+### Public Client Usage
 
 ```ts
-import { createClientFromEnv } from "../lib/supabase";
+import { createClientFromEnv } from '../lib/supabase';
 
-const supabase = createClientFromEnv(import.meta.env, { "x-tenant-id": tenantId });
+const supabase = createClientFromEnv(import.meta.env, { 'x-tenant-id': tenantId });
 ```
 
-### Worker Invocation (Gateway Compatibility)
+### Worker Invocation Usage
 
 ```javascript
 const { data, error } = await supabase.functions.invoke('manage-users', {
-  body: { action: 'delete', user_id: targetId }
+  body: { action: 'delete', user_id: targetId },
 });
 ```
 
-In maintained clients, `supabase.functions.invoke(...)` is a compatibility bridge that proxies to the Cloudflare Worker API configured by `VITE_EDGE_URL` / `PUBLIC_EDGE_URL`.
+Current meaning of that example:
 
-## Security and Compliance Notes
+- in maintained clients, `functions.invoke(...)` is a compatibility bridge to the Worker runtime
+- it is not a recommendation to build against Supabase-hosted Edge Function URLs
 
-- Never expose `SUPABASE_SECRET_KEY` in client code.
-- Every request must be scoped to the tenant and filtered for `deleted_at`.
-- All public reads must use `status = 'published'` where applicable.
-- Prefer Cloudflare Workers for new edge HTTP endpoints.
+## Storage Model
 
-## Operational Concerns
+### Current Rule
 
-### Environment Variables (Admin)
+Maintained file/media flows use Cloudflare R2 through `awcms-edge/`.
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `VITE_TURNSTILE_SITE_KEY` (if Turnstile enabled)
-- `VITE_DEV_TENANT_SLUG` (local development)
-- Ensure the dev slug exists (seed with `node awcms/src/scripts/seed-primary-tenant.js` when using localhost).
+Supabase should not be used as the maintained file-storage surface for current AWCMS features.
 
-### Environment Variables (Public)
+### What Supabase Still Stores For Media
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` (CI/build fallback)
-- `PUBLIC_TENANT_ID` (static builds)
-- `VITE_PUBLIC_TENANT_ID` or `VITE_TENANT_ID` (fallbacks)
+Supabase/Postgres still owns:
 
-### Migrations
+- media metadata
+- tenant ownership
+- authorization state
+- upload/session bookkeeping
 
-Run from repo root.
+The Worker/runtime layer handles:
 
-#### Canonical dual-root policy
+- object storage interaction
+- public/protected delivery behavior
+- signed/session-bound access
+- post-upload orchestration
 
-- `supabase/migrations/` is the canonical authoring source.
-- `awcms/supabase/migrations/` is a required mirror used by CI linting.
-- Every migration change must be mirrored with identical filename and content.
-- Current inventory shows `152` migration files in both roots; keep using the verification script because matching counts alone do not guarantee filename/content alignment.
-- Validate parity before merge:
+## Notification And Integration Data
+
+Current notification infrastructure lives in Supabase tables for configuration and audit state, while Worker/queue paths perform operational send/dispatch behavior.
+
+Important current split:
+
+- tenants manage channel/template configuration through RLS-backed tables
+- dispatch outcomes are recorded through the Worker/queue path
+- permission names should be verified against the live migration-backed baseline before documenting new examples
+
+## Tenant Provisioning And Hierarchy Notes
+
+Current onboarding and hierarchy-sensitive flows should use the current canonical signatures and helper functions present in migrations and runtime code, not historical overload assumptions.
+
+Do not document older compatibility signatures as the recommended path when current flows already use the hierarchy-aware variant.
+
+## Current Migration Policy
+
+### Dual-Root Policy
+
+- `supabase/migrations/` is the canonical root migration path
+- `awcms/supabase/migrations/` is the required mirrored path
+- every migration change must keep both trees in parity
+- identical filenames and content matter; matching counts alone are not enough
+
+### Current Validation
 
 ```bash
 scripts/verify_supabase_migration_consistency.sh
-```
-
-If you need linked-project history validation too:
-
-```bash
 scripts/verify_supabase_migration_consistency.sh --linked
 ```
 
-#### Local-first workflow
+### Current CLI Guidance
+
+Local-first flow:
 
 ```bash
 npx supabase migration list --local
 npx supabase db push --local
 ```
 
-#### Linked/remote workflow
+Linked/remote flow:
 
 ```bash
 npx supabase migration list --linked
@@ -199,39 +199,62 @@ npx supabase db push --linked --dry-run
 npx supabase db push --linked
 ```
 
-#### Linked schema sync snapshot (when needed)
+Linked schema snapshot when needed:
 
 ```bash
 npx supabase db pull --schema public,extensions
 ```
 
-> **Note**: We explicitly pull only the `public` and `extensions` schemas to avoid permission errors with the managed `storage` and `auth` schemas.
+Keep non-migration SQL in `supabase/manual/`.
 
-#### If migration history is mismatched
+## Security And Compliance Notes
 
-```bash
-scripts/repair_supabase_migration_history.sh
-scripts/repair_supabase_migration_history.sh --apply --local
-scripts/repair_supabase_migration_history.sh --apply --linked
-scripts/verify_supabase_migration_consistency.sh
-scripts/verify_supabase_migration_consistency.sh --linked
-```
+- Never expose `SUPABASE_SECRET_KEY` in client code.
+- Keep tenant filtering explicit where the surface is tenant-scoped.
+- Keep `deleted_at IS NULL` explicit for normal reads.
+- Keep public reads published-only where applicable.
+- Prefer Cloudflare Workers for new server-side HTTP endpoints.
+- Do not document Supabase Storage as an approved maintained media surface.
 
-Keep non-migration SQL in `supabase/manual/` and keep `supabase/migrations/` timestamp-only.
+## Environment Variables
 
-Supabase CLI configuration lives in `supabase/config.toml`.
+### Admin
 
-### Repo Layout Note
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_DEV_TENANT_SLUG`
+- Turnstile-related public/admin envs when those surfaces are enabled
 
-This repository contains both `supabase/` (root) and `awcms/supabase/`. CI currently lints from `awcms/supabase`, while local Supabase CLI commands default to root `supabase/`. Follow the canonical dual-root policy above to keep both paths aligned.
+### Public
 
-## Troubleshooting
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `PUBLIC_SUPABASE_URL`
+- `PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `PUBLIC_TENANT_ID`
+- `VITE_PUBLIC_TENANT_ID`
+- `VITE_TENANT_ID`
 
-- Missing tenant data: verify `x-tenant-id` header and `current_tenant_id()`.
-- Auth errors: confirm Supabase URL and publishable key are set.
+### Worker / Server-Side
 
-## References
+- `SUPABASE_SECRET_KEY`
+- the current Worker env set required by the route/integration in question
 
-- `docs/dev/api-usage.md`
-- `docs/security/rls.md`
-- `docs/tenancy/overview.md`
+## Validation Guidance
+
+Use the most relevant command for the changed surface.
+
+| Surface | Validation |
+| --- | --- |
+| maintained docs | `cd awcms && npm run docs:check` |
+| Worker/runtime/Supabase trust-boundary changes | `cd awcms-edge && npm test && npm run typecheck` |
+| migration parity | `scripts/verify_supabase_migration_consistency.sh` |
+| route catalog/OpenAPI examples | `cd awcms-edge && npm run openapi:build && npm run openapi:validate && npm run openapi:diff` |
+
+## Related Docs
+
+- [docs/dev/api-usage.md](../dev/api-usage.md)
+- [docs/security/rls.md](../security/rls.md)
+- [docs/tenancy/overview.md](./overview.md)
+- [docs/architecture/runtime-boundaries.md](../architecture/runtime-boundaries.md)
+- [docs/architecture/database.md](../architecture/database.md)
