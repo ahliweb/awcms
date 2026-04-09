@@ -109,7 +109,7 @@ export async function resolveTenantByHostname(hostname) {
  * so it resolves through the full control-plane stack — giving you a real
  * cellId, serviceProfile, and domainId in development.
  *
- * Run `supabase/seeds/dev_control_plane.sql` once to seed the control-plane
+ * Run `awcms/supabase/seeds/dev_control_plane.sql` once to seed the control-plane
  * tables so this works. See docs/architecture/deployment-cells/overview.md.
  *
  * Falls back with a warning to the legacy `tenants` table if the seed
@@ -163,7 +163,7 @@ export async function resolveDevTenant() {
   // Step 2: Seed not applied yet — warn and fall back to legacy tenants table
   console.warn(
     '[resolveTenant] ⚠️  localhost not found in tenant_domains. ' +
-    'Run supabase/seeds/dev_control_plane.sql to enable full control-plane dev mode. ' +
+    'Run awcms/supabase/seeds/dev_control_plane.sql to enable full control-plane dev mode. ' +
     'Falling back to legacy tenants table.'
   );
 

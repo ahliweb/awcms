@@ -62,6 +62,8 @@ VITE_DEV_TENANT_SLUG=primary
 
 The admin app resolves the tenant on `localhost` using `VITE_DEV_TENANT_SLUG` (default `primary`). Ensure the tenant exists before logging in.
 
+`seed-primary-tenant.js` now seeds both the application tenant and the local control-plane `localhost` mapping used by the current dev tenant resolver.
+
 When media or other Worker-backed flows are part of the local session, either start `awcms-edge` separately with
 `npm run dev:local` in `awcms-edge/` or use `npm run dev:full` here so `VITE_LOCAL_EDGE_URL` resolves cleanly.
 

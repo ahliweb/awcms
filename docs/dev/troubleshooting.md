@@ -23,6 +23,7 @@ Provide current, repo-state-aware troubleshooting guidance for local development
 
 - verify `VITE_DEV_TENANT_SLUG`
 - confirm the tenant exists and the current local tenant/bootstrap path has been seeded
+- rerun `node awcms/src/scripts/seed-primary-tenant.js` if `localhost` is missing from `tenant_domains`
 - check current tenant-resolution behavior before inventing a workaround
 
 ### Tenant Not Found (Public)
