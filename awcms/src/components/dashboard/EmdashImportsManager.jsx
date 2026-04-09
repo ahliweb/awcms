@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Loader2, RefreshCw } from 'lucide-react';
-import AdminPageLayout from '@/templates/flowbite-admin/layouts/AdminPageLayout';
-import { PageHeader } from '@/templates/flowbite-admin';
+import AdminPageLayout from '@/templates/emdash-admin/layouts/AdminPageLayout';
+import { PageHeader } from '@/templates/emdash-admin';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -159,6 +159,19 @@ function EmdashImportsManager() {
         icon={ArrowDownToLine}
         breadcrumbs={[{ label: 'EmDash Imports', icon: ArrowDownToLine }]}
       />
+
+      <div className="mb-6 grid grid-cols-1 gap-3 px-6 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Tenant scope</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{activeTenantId ? 'Resolved' : 'Missing'}</p>
+          <p className="text-xs text-muted-foreground">Import jobs remain tenant-scoped and auditable</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Jobs</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{jobs.length}</p>
+          <p className="text-xs text-muted-foreground">Visible dry-run and execution records</p>
+        </div>
+      </div>
 
       <div className="space-y-6 p-6 pt-0">
         {error && (
