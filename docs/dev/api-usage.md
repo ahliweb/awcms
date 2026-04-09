@@ -121,6 +121,7 @@ const response = await fetch(`${edgeUrl}/api/mailketing`, {
   headers: {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session.access_token}`,
+    'x-tenant-id': tenantId,
   },
   body: JSON.stringify({ action: 'send', recipient: 'user@example.com' })
 });
@@ -134,6 +135,9 @@ const data = await response.json();
 - Tenant-scoped tables must be filtered by tenant and RLS enforced.
 - Secret keys may be used only in Cloudflare Workers, migrations, and trusted operational scripts.
 - Admin client injects `x-tenant-id` automatically via `customSupabaseClient`.
+- Protected Worker routes that act on tenant-scoped resources, including `POST /api/mailketing` when `action === 'send'`, must receive a tenant context that matches the authenticated user's tenant.
+- Public Worker routes that accept tenant context may use `tenantId`/`tenant_id` or `domain`; when both are sent they must resolve to the same tenant.
+- Public media URLs must keep the canonical tenant-prefixed storage key shape `tenants/<tenant_id>/...`; `/public/media/*` rejects malformed keys and the reserved `protected` namespace.
 - Supabase Storage is disabled; object storage must use Cloudflare R2.
 - For local dev, prefer the locally configured Worker URL (`VITE_LOCAL_EDGE_URL`) when the flow depends on `wrangler dev` routes.
 
