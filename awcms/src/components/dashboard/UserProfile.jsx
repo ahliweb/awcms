@@ -7,7 +7,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import TwoFactorSettings from '@/components/dashboard/TwoFactorSettings';
-import { AdminPageLayout } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/emdash-admin';
 import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import ProfileSummaryCards from '@/components/dashboard/user-profile/ProfileSummaryCards';
 import PersonalInformationCard from '@/components/dashboard/user-profile/PersonalInformationCard';

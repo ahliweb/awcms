@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { supabase } from '@/lib/customSupabaseClient';
 import { MapPin } from 'lucide-react';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 
 function ContactsManager() {
   const [provinces, setProvinces] = useState([]);

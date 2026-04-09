@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
-import AdminPageLayout from '@/templates/flowbite-admin/layouts/AdminPageLayout';
-import { PageHeader } from '@/templates/flowbite-admin';
+import AdminPageLayout from '@/templates/emdash-admin/layouts/AdminPageLayout';
+import { PageHeader } from '@/templates/emdash-admin';
 import SchemaForm from './SchemaForm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Box, Loader2 } from 'lucide-react';

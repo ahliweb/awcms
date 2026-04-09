@@ -2,7 +2,7 @@ import { RefreshCw, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 
 function LoadingState() {
   return (
@@ -58,8 +58,9 @@ export default function SettingsPageShell({
         actions={headerActions}
       />
 
-      <Card className="mb-6 border-border/60 bg-card/65 shadow-sm">
-        <CardContent className="flex items-center justify-between gap-4 px-6 py-4 text-sm">
+      <Card className="mb-6 overflow-hidden border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+        <div className="bg-gradient-to-r from-primary/12 via-background/40 to-sky-500/12 px-6 py-4 text-sm">
+          <div className="flex items-center justify-between gap-4">
           <div>
             <p className="font-medium text-foreground">Separate admin surface, shared settings infrastructure</p>
             <p className="text-muted-foreground">
@@ -69,7 +70,8 @@ export default function SettingsPageShell({
           <div className="rounded-full border border-border/70 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
             {hasChanges ? 'Unsaved changes' : 'Up to date'}
           </div>
-        </CardContent>
+          </div>
+        </div>
       </Card>
 
       {loading ? <LoadingState /> : children}

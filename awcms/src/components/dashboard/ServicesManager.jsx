@@ -1,7 +1,7 @@
 
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { Wrench } from 'lucide-react';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 
 function ServicesManager() {
     const columns = [

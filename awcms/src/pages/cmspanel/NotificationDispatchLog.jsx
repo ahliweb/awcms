@@ -11,8 +11,9 @@ import {
   Mail,
   MessageSquare,
   Send,
+  ShieldCheck,
 } from 'lucide-react';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -141,6 +142,37 @@ export default function NotificationDispatchLog() {
           </Button>
         }
       />
+
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Dispatches</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{totalCount}</p>
+          <p className="text-xs text-muted-foreground">Outbound notifications in the active filter scope</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Page</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{page} / {totalPages || 1}</p>
+          <p className="text-xs text-muted-foreground">Current paginated review position</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Scope</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">Tenant dispatch audit</p>
+          <p className="text-xs text-muted-foreground">Read access remains permission-gated</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Channels</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">Email, WhatsApp, Telegram</p>
+          <p className="text-xs text-muted-foreground">Unified outbound delivery history</p>
+        </div>
+      </div>
+
+      <div className="mb-4 overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+        <div className="bg-gradient-to-r from-primary/12 via-background/40 to-emerald-500/12 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span className="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1.5"><ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-primary" />Channel dispatch audit trail</span>
+          </div>
+        </div>
+      </div>
 
       {/* Filters */}
       <Card className="mb-4 border-border/60 bg-card/70 shadow-sm">

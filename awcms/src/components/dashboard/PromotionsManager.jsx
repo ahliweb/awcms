@@ -1,7 +1,7 @@
 
 import GenericContentManager from '@/components/dashboard/GenericContentManager';
 import { Tag } from 'lucide-react';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 
 function PromotionsManager() {
     const columns = [

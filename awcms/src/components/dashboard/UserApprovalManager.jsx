@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, ChevronRight, Home, UserCheck, XCircle } from 'lucide-react';
 import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
-import { PageTabs, TabsContent } from '@/templates/flowbite-admin';
+import { PageTabs, TabsContent } from '@/templates/emdash-admin';
 import ApprovalHeaderActions from '@/components/dashboard/user-approvals/ApprovalHeaderActions';
 import ApprovalRequestsTable from '@/components/dashboard/user-approvals/ApprovalRequestsTable';
 import RejectApplicationDialog from '@/components/dashboard/user-approvals/RejectApplicationDialog';

@@ -5,7 +5,7 @@ import { Layout, Globe, FileType, AlertTriangle, Layers3, PanelTop, PanelBottom,
 import GenericContentManager from './GenericContentManager';
 import VisualPageBuilder from '@/components/visual-builder/VisualPageBuilder';
 import { Button } from '@/components/ui/button';
-import { AdminPageLayout } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/emdash-admin';
 import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 
 const singlePostStarterLayout = {

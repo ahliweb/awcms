@@ -7,7 +7,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { AdminPageLayout } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/emdash-admin';
 import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';
 import { cn } from '@/lib/utils';
 
