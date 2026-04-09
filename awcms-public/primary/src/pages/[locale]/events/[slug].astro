@@ -1,5 +1,6 @@
 ---
 import Layout from "~/layouts/PageLayout.astro";
+import WidgetArea from "~/components/common/WidgetArea.astro";
 import { Icon } from "astro-icon/components";
 import { supportedLocales, type Locale } from "~/utils/i18n";
 import { getPublicTenantId } from "~/lib/publicTenant";
@@ -38,9 +39,10 @@ const metadata = {
 };
 ---
 
-<Layout metadata={metadata}>
+<Layout metadata={metadata} pageType="event_detail">
   <section class="py-12 sm:py-16 lg:py-20">
-    <div class="mx-auto max-w-4xl px-6 sm:px-8">
+    <div class="mx-auto grid max-w-7xl gap-12 px-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <div class="min-w-0">
       <a href={`/${locale}/events`} class="mb-6 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
         <Icon name="tabler:arrow-left" class="h-4 w-4" />
         {locale === "id" ? "Kembali ke agenda" : "Back to events"}
@@ -84,6 +86,11 @@ const metadata = {
           ) : null}
         </dl>
       </article>
+      </div>
+
+      <aside class="space-y-6 lg:sticky lg:top-24">
+        <WidgetArea area="sidebar" />
+      </aside>
     </div>
   </section>
 </Layout>

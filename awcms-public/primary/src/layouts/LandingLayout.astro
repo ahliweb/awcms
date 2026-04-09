@@ -11,11 +11,12 @@ import { getPublicTenantId } from "~/lib/publicTenant";
 
 export interface Props {
   metadata?: MetaData;
+  pageType?: string;
 }
 
 import { getLocale } from "~/utils/i18n";
 
-const { metadata } = Astro.props;
+const { metadata, pageType = "landing" } = Astro.props;
 const tenantId = getPublicTenantId();
 const supabase = createClientFromEnv(import.meta.env);
 const locale = getLocale(Astro.url);
@@ -30,7 +31,7 @@ if (supabase && tenantId) {
 }
 ---
 
-<PageLayout metadata={metadata}>
+<PageLayout metadata={metadata} pageType={pageType}>
   <Fragment slot="announcement">
     <slot name="announcement" />
   </Fragment>

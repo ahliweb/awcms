@@ -77,6 +77,21 @@ Current primary-portal composition now follows a more EmDash-style public struct
   - `src/components/common/PublicBodyEnd.astro`
 - reusable public widget-area rendering is centered around `src/components/common/WidgetArea.astro`
 - homepage rendering is centralized in `src/components/public/HomePageContent.astro` instead of duplicating large AstroWind fallback pages per locale
+- shared marketing/showcase section primitives now live under `src/components/public/`, including:
+  - `Hero.astro`
+  - `Section.astro`
+  - `FeatureGrid.astro`
+  - `SplitSection.astro`
+  - `StatGrid.astro`
+  - `TestimonialGrid.astro`
+  - `FaqList.astro`
+  - `CtaBanner.astro`
+- canonical tenant-facing content routes now live under locale-prefixed public paths such as:
+  - `/{locale}/blogs`
+  - `/{locale}/blogs/[slug]`
+  - `/{locale}/p/[slug]`
+  - `/{locale}/events`
+- remaining non-localized legacy AstroWind demo surfaces are being reduced to compatibility redirects where appropriate rather than maintained as a parallel public content model
 
 Important live helper surfaces include:
 

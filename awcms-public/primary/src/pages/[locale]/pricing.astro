@@ -1,311 +1,71 @@
 ---
 import Layout from "~/layouts/PageLayout.astro";
-import HeroText from "~/components/widgets/HeroText.astro";
-import Prices from "~/components/widgets/Pricing.astro";
-import FAQs from "~/components/widgets/FAQs.astro";
-import Steps from "~/components/widgets/Steps.astro";
-import Features3 from "~/components/widgets/Features3.astro";
-import CallToAction from "~/components/widgets/CallToAction.astro";
+import PublicHero from "~/components/public/Hero.astro";
+import Section from "~/components/public/Section.astro";
+import FeatureGrid from "~/components/public/FeatureGrid.astro";
+import FaqList from "~/components/public/FaqList.astro";
+import CtaBanner from "~/components/public/CtaBanner.astro";
 import { t, supportedLocales, type Locale } from "~/utils/i18n";
 
 export const prerender = true;
 
 export function getStaticPaths() {
-    return supportedLocales.map((locale) => ({
-        params: { locale },
-    }));
+  return supportedLocales.map((locale) => ({ params: { locale } }));
 }
 
 const { locale } = Astro.params as { locale: Locale };
 
 const metadata = {
-    title: t("pricing_page.hero.tagline", locale),
+  title: t("pricing_page.hero.tagline", locale),
+  description: t("pricing_page.hero.subtitle", locale),
 };
+
+const plans = ["basic", "standard", "premium"].map((key) => ({
+  title: t(`pricing_page.prices.${key}.title`, locale),
+  description: [0, 1, 2, 3, 4]
+    .map((index) => t(`pricing_page.prices.${key}.items.${index}`, locale))
+    .filter((value) => value && !value.includes(`items.`))
+    .join(" | "),
+  icon: key === "standard" ? "Popular" : key,
+}));
+
+const benefits = ["tiered", "transparent", "secure", "access", "upgrade", "support"].map((key) => ({
+  title: t(`pricing_page.features.items.${key}.title`, locale),
+  description: t(`pricing_page.features.items.${key}.desc`, locale),
+  icon: key,
+}));
+
+const faqs = ["support", "trial", "switch", "payment", "fees"].map((key) => ({
+  question: t(`pricing_page.faqs.items.${key}.title`, locale),
+  answer: t(`pricing_page.faqs.items.${key}.desc`, locale),
+}));
 ---
 
-<Layout metadata={metadata}>
-    <!-- HeroText Widget ******************* -->
+<Layout metadata={metadata} pageType="pricing_page">
+  <PublicHero
+    eyebrow={t("pricing_page.hero.tagline", locale)}
+    title={t("pricing_page.hero.title", locale)}
+    description={t("pricing_page.hero.subtitle", locale)}
+    align="center"
+  />
 
-    <HeroText
-        tagline={t("pricing_page.hero.tagline", locale)}
-        title={t("pricing_page.hero.title", locale)}
-        subtitle={t("pricing_page.hero.subtitle", locale)}
+  <Section title={t("pricing_page.prices.title", locale)} description={t("pricing_page.prices.subtitle", locale)} width="wide">
+    <FeatureGrid items={plans} columns={3} />
+  </Section>
+
+  <Section title={t("pricing_page.features.title", locale)} description={t("pricing_page.features.subtitle", locale)} width="wide" muted>
+    <FeatureGrid items={benefits} columns={3} />
+  </Section>
+
+  <Section title={t("pricing_page.faqs.title", locale)} description={t("pricing_page.faqs.subtitle", locale)} width="narrow">
+    <FaqList items={faqs} />
+  </Section>
+
+  <Section width="wide">
+    <CtaBanner
+      title={t("pricing_page.cta.title", locale)}
+      description={t("pricing_page.cta.subtitle", locale)}
+      action={{ label: t("pricing_page.cta.action", locale), href: `/${locale}` }}
     />
-
-    <!-- Pricing Widget ******************* -->
-
-    <Prices
-        title={t("pricing_page.prices.title", locale)}
-        subtitle={t("pricing_page.prices.subtitle", locale)}
-        currency={t("pricing_page.currency", locale)}
-        prices={[
-            {
-                title: t("pricing_page.prices.basic.title", locale),
-                subtitle: t("pricing_page.prices.basic.subtitle", locale),
-                price: 29,
-                period: t("pricing_page.prices.per_month", locale),
-                items: [
-                    {
-                        description: t(
-                            "pricing_page.prices.basic.items.0",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.basic.items.1",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.basic.items.2",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.basic.items.3",
-                            locale,
-                        ),
-                    },
-                ],
-                callToAction: {
-                    target: "_blank",
-                    text: t("pricing_page.prices.get_started", locale),
-                    href: "#",
-                },
-            },
-            {
-                title: t("pricing_page.prices.standard.title", locale),
-                subtitle: t("pricing_page.prices.standard.subtitle", locale),
-                price: 69,
-                period: t("pricing_page.prices.per_month", locale),
-                items: [
-                    {
-                        description: t(
-                            "pricing_page.prices.standard.items.0",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.standard.items.1",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.standard.items.2",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.standard.items.3",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.standard.items.4",
-                            locale,
-                        ),
-                    },
-                ],
-                callToAction: {
-                    target: "_blank",
-                    text: t("pricing_page.prices.get_started", locale),
-                    href: "#",
-                },
-                hasRibbon: true,
-                ribbonTitle: t("pricing_page.prices.standard.ribbon", locale),
-            },
-            {
-                title: t("pricing_page.prices.premium.title", locale),
-                subtitle: t("pricing_page.prices.premium.subtitle", locale),
-                price: 199,
-                period: t("pricing_page.prices.per_month", locale),
-                items: [
-                    {
-                        description: t(
-                            "pricing_page.prices.premium.items.0",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.premium.items.1",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.premium.items.2",
-                            locale,
-                        ),
-                    },
-                    {
-                        description: t(
-                            "pricing_page.prices.premium.items.3",
-                            locale,
-                        ),
-                    },
-                ],
-                callToAction: {
-                    target: "_blank",
-                    text: t("pricing_page.prices.get_started", locale),
-                    href: "#",
-                },
-            },
-        ]}
-    />
-
-    <!-- Features3 Widget ************** -->
-
-    <Features3
-        title={t("pricing_page.features.title", locale)}
-        subtitle={t("pricing_page.features.subtitle", locale)}
-        columns={2}
-        items={[
-            {
-                title: t("pricing_page.features.items.tiered.title", locale),
-                description: t(
-                    "pricing_page.features.items.tiered.desc",
-                    locale,
-                ),
-                icon: "tabler:stairs",
-            },
-            {
-                title: t(
-                    "pricing_page.features.items.transparent.title",
-                    locale,
-                ),
-                description: t(
-                    "pricing_page.features.items.transparent.desc",
-                    locale,
-                ),
-                icon: "tabler:flip-vertical",
-            },
-            {
-                title: t("pricing_page.features.items.secure.title", locale),
-                description: t(
-                    "pricing_page.features.items.secure.desc",
-                    locale,
-                ),
-                icon: "tabler:shield-lock",
-            },
-            {
-                title: t("pricing_page.features.items.access.title", locale),
-                description: t(
-                    "pricing_page.features.items.access.desc",
-                    locale,
-                ),
-                icon: "tabler:accessible",
-            },
-            {
-                title: t("pricing_page.features.items.upgrade.title", locale),
-                description: t(
-                    "pricing_page.features.items.upgrade.desc",
-                    locale,
-                ),
-                icon: "tabler:chevrons-up",
-            },
-            {
-                title: t("pricing_page.features.items.support.title", locale),
-                description: t(
-                    "pricing_page.features.items.support.desc",
-                    locale,
-                ),
-                icon: "tabler:headset",
-            },
-        ]}
-        classes={{ container: "max-w-5xl" }}
-    />
-
-    <!-- Steps Widget ****************** -->
-
-    <Steps
-        title={t("pricing_page.steps.title", locale)}
-        tagline={t("pricing_page.steps.tagline", locale)}
-        isReversed={true}
-        items={[
-            {
-                title: t("pricing_page.steps.items.explore", locale),
-                icon: "tabler:number-1",
-            },
-            {
-                title: t("pricing_page.steps.items.select", locale),
-                icon: "tabler:number-2",
-            },
-            {
-                title: t("pricing_page.steps.items.signup", locale),
-                icon: "tabler:number-3",
-            },
-            {
-                title: t("pricing_page.steps.items.review", locale),
-                icon: "tabler:number-4",
-            },
-            {
-                title: t("pricing_page.steps.items.payment", locale),
-                icon: "tabler:number-5",
-            },
-            {
-                title: t("pricing_page.steps.items.confirm", locale),
-                icon: "tabler:number-6",
-            },
-            {
-                title: t("pricing_page.steps.items.download", locale),
-                icon: "tabler:number-7",
-            },
-        ]}
-        image={{
-            src: "https://images.unsplash.com/photo-1536816579748-4ecb3f03d72a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=987&q=80",
-            alt: "Steps image",
-        }}
-    />
-
-    <!-- FAQs Widget ******************* -->
-
-    <FAQs
-        title={t("pricing_page.faqs.title", locale)}
-        subtitle={t("pricing_page.faqs.subtitle", locale)}
-        columns={1}
-        items={[
-            {
-                title: t("pricing_page.faqs.items.support.title", locale),
-                description: t("pricing_page.faqs.items.support.desc", locale),
-            },
-            {
-                title: t("pricing_page.faqs.items.trial.title", locale),
-                description: t("pricing_page.faqs.items.trial.desc", locale),
-            },
-            {
-                title: t("pricing_page.faqs.items.switch.title", locale),
-                description: t("pricing_page.faqs.items.switch.desc", locale),
-            },
-            {
-                title: t("pricing_page.faqs.items.payment.title", locale),
-                description: t("pricing_page.faqs.items.payment.desc", locale),
-            },
-            {
-                title: t("pricing_page.faqs.items.fees.title", locale),
-                description: t("pricing_page.faqs.items.fees.desc", locale),
-            },
-        ]}
-    />
-
-    <!-- CallToAction Widget *********** -->
-
-    <CallToAction
-        title={t("pricing_page.cta.title", locale)}
-        subtitle={t("pricing_page.cta.subtitle", locale)}
-        actions={[
-            {
-                variant: "primary",
-                text: t("pricing_page.cta.action", locale),
-                href: `/${locale}`,
-            },
-        ]}
-    />
+  </Section>
 </Layout>

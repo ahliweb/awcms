@@ -1,14 +1,7 @@
 ---
 import type { InferGetStaticPropsType, GetStaticPaths } from "astro";
-
-import Layout from "~/layouts/PageLayout.astro";
-import BlogList from "~/components/blog/List.astro";
-import Headline from "~/components/blog/Headline.astro";
-import Pagination from "~/components/blog/Pagination.astro";
-// import PostTags from "~/components/blog/Tags.astro";
-
-import { blogListRobots, getStaticPathsBlogList } from "~/utils/blog";
-import { getLocale, t } from "~/utils/i18n";
+import { defaultLocale } from "~/utils/i18n";
+import { getStaticPathsBlogList } from "~/utils/blog";
 
 export const prerender = true;
 
@@ -17,37 +10,12 @@ export const getStaticPaths = (async ({ paginate }) => {
 }) satisfies GetStaticPaths;
 
 type Props = InferGetStaticPropsType<typeof getStaticPaths>;
-
 const { page } = Astro.props as Props;
 const currentPage = page.currentPage ?? 1;
-
-// const allCategories = await findCategories();
-// const allTags = await findTags();
-
-const locale = getLocale(Astro.url);
-
-const metadata = {
-  title: `${t("blog_page.list.metadata_title", locale)}${currentPage > 1 ? `${t("blog_page.shared.page_prefix", locale)}${currentPage}` : ""}`,
-  robots: {
-    index: blogListRobots?.index && currentPage === 1,
-    follow: blogListRobots?.follow,
-  },
-  openGraph: {
-    type: "blog",
-  },
-};
+const target = currentPage > 1 ? `/${defaultLocale}/blogs?page=${currentPage}` : `/${defaultLocale}/blogs`;
 ---
 
-<Layout metadata={metadata}>
-  <section class="px-6 sm:px-6 py-12 sm:py-16 lg:py-20 mx-auto max-w-4xl">
-    <Headline subtitle={t("blog_page.list.subtitle", locale)}>
-      {t("blog_page.list.title", locale)}
-    </Headline>
-    <BlogList posts={page.data} />
-    <Pagination prevUrl={page.url.prev} nextUrl={page.url.next} />
-    <!--
-      <PostTags tags={allCategories} class="mb-2" title="Search by Categories:" isCategory />
-      <PostTags tags={allTags}  title="Search by Tags:" />
-    -->
-  </section>
-</Layout>
+<meta http-equiv="refresh" content={`0;url=${target}`} />
+<script is:inline define:vars={{ target }}>
+  window.location.href = target;
+</script>

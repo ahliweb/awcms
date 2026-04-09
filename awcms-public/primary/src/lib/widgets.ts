@@ -91,6 +91,9 @@ export async function getWidgetsByArea(
   const { data, error } = await query;
 
   if (error) {
+    if (error.message?.includes("column widgets.area does not exist")) {
+      return [];
+    }
     console.error(
       `[Widget] Error fetching widgets for area "${area}":`,
       error.message,

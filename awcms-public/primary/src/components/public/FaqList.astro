@@ -1,0 +1,23 @@
+---
+interface FaqItem {
+  question: string;
+  answer: string;
+}
+
+interface Props {
+  items: FaqItem[];
+}
+
+const { items = [] } = Astro.props;
+---
+
+<div class="grid gap-4">
+  {items.map((item) => (
+    <details class="group rounded-2xl border border-slate-200/70 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-950">
+      <summary class="cursor-pointer list-none font-medium text-slate-950 dark:text-slate-100">
+        {item.question}
+      </summary>
+      <p class="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.answer}</p>
+    </details>
+  ))}
+</div>

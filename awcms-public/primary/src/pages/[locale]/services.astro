@@ -1,316 +1,107 @@
 ---
-import CallToAction from "~/components/widgets/CallToAction.astro";
-import Content from "~/components/widgets/Content.astro";
-import Features2 from "~/components/widgets/Features2.astro";
-import Hero from "~/components/widgets/Hero.astro";
-import Testimonials from "~/components/widgets/Testimonials.astro";
 import Layout from "~/layouts/PageLayout.astro";
+import PublicHero from "~/components/public/Hero.astro";
+import Section from "~/components/public/Section.astro";
+import FeatureGrid from "~/components/public/FeatureGrid.astro";
+import SplitSection from "~/components/public/SplitSection.astro";
+import TestimonialGrid from "~/components/public/TestimonialGrid.astro";
+import CtaBanner from "~/components/public/CtaBanner.astro";
 import { t, supportedLocales, type Locale } from "~/utils/i18n";
 
 export const prerender = true;
 
 export function getStaticPaths() {
-    return supportedLocales.map((locale) => ({
-        params: { locale },
-    }));
+  return supportedLocales.map((locale) => ({ params: { locale } }));
 }
 
 const { locale } = Astro.params as { locale: Locale };
 
 const metadata = {
-    title: t("services_page.hero.tagline", locale),
+  title: t("services_page.hero.tagline", locale),
+  description: t("services_page.hero.subtitle", locale),
 };
+
+const serviceItems = [
+  "educational",
+  "interior",
+  "photography",
+  "ecommerce",
+  "blog",
+  "business",
+  "branding",
+  "medical",
+  "fashion",
+].map((key) => ({
+  title: t(`services_page.features.items.${key}.title`, locale),
+  description: t(`services_page.features.items.${key}.description`, locale),
+  icon: key,
+}));
+
+const mainFeatureItems = [0, 1, 2, 3].map((index) => ({
+  title: t(`services_page.main_features.items.${index}.title`, locale),
+  description: t(`services_page.main_features.items.${index}.desc`, locale),
+}));
+
+const benefitItems = ["time", "appearance", "cost", "download"].map((key) => ({
+  title: t(`services_page.benefits.items.${key}`, locale),
+  description: t(`services_page.benefits.items.${key}_desc`, locale),
+}));
+
+const testimonials = ["emily", "sarah", "mark"].map((key) => ({
+  quote: t(`services_page.testimonials.items.${key}.testimonial`, locale),
+  name: t(`services_page.testimonials.items.${key}.name`, locale),
+  role: t(`services_page.testimonials.items.${key}.job`, locale),
+}));
 ---
 
-<Layout metadata={metadata}>
-    <!-- Hero Widget ******************* -->
+<Layout metadata={metadata} pageType="services_page">
+  <PublicHero
+    eyebrow={t("services_page.hero.tagline", locale)}
+    title={t("services_page.hero.title", locale)}
+    description={t("services_page.hero.subtitle", locale)}
+    actions={[{ label: t("services_page.hero.cta", locale), href: `/${locale}` }]}
+    image={{
+      src: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1740&q=80",
+      alt: "Services showcase",
+    }}
+  />
 
-    <Hero
-        tagline={t("services_page.hero.tagline", locale)}
-        title={t("services_page.hero.title", locale)}
-        subtitle={t("services_page.hero.subtitle", locale)}
-        actions={[
-            {
-                variant: "primary",
-                target: "_blank",
-                text: t("services_page.hero.cta", locale),
-                href: `/${locale}`,
-            },
-        ]}
-        image={{
-            src: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1740&q=80",
-            alt: "AstroWind Hero Image",
-        }}
+  <Section title={t("services_page.features.title", locale)} description={t("services_page.features.subtitle", locale)} width="wide">
+    <FeatureGrid items={serviceItems} columns={3} />
+  </Section>
+
+  <Section width="wide" muted>
+    <SplitSection
+      title={t("services_page.main_features.title", locale)}
+      items={mainFeatureItems}
+      image={{
+        src: "https://images.unsplash.com/photo-1525909002-1b05e0c869d8?ixlib=rb-4.0.3&auto=format&fit=crop&w=870&q=80",
+        alt: "Main service features",
+      }}
+      reverse
     />
+  </Section>
 
-    <!-- Features2 Widget ************** -->
-
-    <Features2
-        title={t("services_page.features.title", locale)}
-        subtitle={t("services_page.features.subtitle", locale)}
-        columns={3}
-        items={[
-            {
-                title: t(
-                    "services_page.features.items.educational.title",
-                    locale,
-                ),
-                description: t(
-                    "services_page.features.items.educational.description",
-                    locale,
-                ),
-                icon: "tabler:school",
-            },
-            {
-                title: t("services_page.features.items.interior.title", locale),
-                description: t(
-                    "services_page.features.items.interior.description",
-                    locale,
-                ),
-                icon: "tabler:home-star",
-            },
-            {
-                title: t(
-                    "services_page.features.items.photography.title",
-                    locale,
-                ),
-                description: t(
-                    "services_page.features.items.photography.description",
-                    locale,
-                ),
-                icon: "tabler:photo",
-            },
-            {
-                title: t(
-                    "services_page.features.items.ecommerce.title",
-                    locale,
-                ),
-                description: t(
-                    "services_page.features.items.ecommerce.description",
-                    locale,
-                ),
-                icon: "tabler:shopping-cart",
-            },
-            {
-                title: t("services_page.features.items.blog.title", locale),
-                description: t(
-                    "services_page.features.items.blog.description",
-                    locale,
-                ),
-                icon: "tabler:article",
-            },
-            {
-                title: t("services_page.features.items.business.title", locale),
-                description: t(
-                    "services_page.features.items.business.description",
-                    locale,
-                ),
-                icon: "tabler:building-store",
-            },
-            {
-                title: t("services_page.features.items.branding.title", locale),
-                description: t(
-                    "services_page.features.items.branding.description",
-                    locale,
-                ),
-                icon: "tabler:arrow-big-up-lines",
-            },
-            {
-                title: t("services_page.features.items.medical.title", locale),
-                description: t(
-                    "services_page.features.items.medical.description",
-                    locale,
-                ),
-                icon: "tabler:vaccine",
-            },
-            {
-                title: t("services_page.features.items.fashion.title", locale),
-                description: t(
-                    "services_page.features.items.fashion.description",
-                    locale,
-                ),
-                icon: "tabler:tie",
-            },
-        ]}
+  <Section width="wide">
+    <SplitSection
+      title={t("services_page.benefits.title", locale)}
+      items={benefitItems}
+      image={{
+        src: "https://images.unsplash.com/photo-1552664688-cf412ec27db2?ixlib=rb-4.0.3&auto=format&fit=crop&w=774&q=80",
+        alt: "Service benefits",
+      }}
     />
+  </Section>
 
-    <!-- Content Widget **************** -->
+  <Section title={t("services_page.testimonials.title", locale)} width="wide" muted>
+    <TestimonialGrid items={testimonials} />
+  </Section>
 
-    <Content
-        isReversed
-        items={[
-            {
-                title: t(
-                    "services_page.main_features.items.quality.title",
-                    locale,
-                ),
-                description: t(
-                    "services_page.main_features.items.quality.desc",
-                    locale,
-                ),
-                icon: "tabler:wand",
-            },
-            {
-                title: t(
-                    "services_page.main_features.items.customization.title",
-                    locale,
-                ),
-                description: t(
-                    "services_page.main_features.items.customization.desc",
-                    locale,
-                ),
-                icon: "tabler:settings",
-            },
-            {
-                title: t(
-                    "services_page.main_features.items.elements.title",
-                    locale,
-                ),
-                description: t(
-                    "services_page.main_features.items.elements.desc",
-                    locale,
-                ),
-                icon: "tabler:presentation",
-            },
-            {
-                title: t(
-                    "services_page.main_features.items.preview.title",
-                    locale,
-                ),
-                description: t(
-                    "services_page.main_features.items.preview.desc",
-                    locale,
-                ),
-                icon: "tabler:carousel-horizontal",
-            },
-        ]}
-        image={{
-            src: "https://images.unsplash.com/photo-1525909002-1b05e0c869d8?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=870&q=80",
-            alt: "Features Image",
-        }}
-    >
-        <Fragment slot="content">
-            <h3
-                class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
-            >
-                {t("services_page.main_features.title", locale)}
-            </h3>
-        </Fragment>
-    </Content>
-
-    <!-- Content Widget **************** -->
-
-    <Content
-        isAfterContent
-        items={[
-            {
-                title: t("services_page.benefits.items.time", locale),
-                description: t(
-                    "services_page.benefits.items.time_desc",
-                    locale,
-                ),
-                icon: "tabler:clock",
-            },
-            {
-                title: t("services_page.benefits.items.appearance", locale),
-                description: t(
-                    "services_page.benefits.items.appearance_desc",
-                    locale,
-                ),
-                icon: "tabler:school",
-            },
-            {
-                title: t("services_page.benefits.items.cost", locale),
-                description: t(
-                    "services_page.benefits.items.cost_desc",
-                    locale,
-                ),
-                icon: "tabler:coin",
-            },
-            {
-                title: t("services_page.benefits.items.download", locale),
-                description: t(
-                    "services_page.benefits.items.download_desc",
-                    locale,
-                ),
-                icon: "tabler:file-download",
-            },
-        ]}
-        image={{
-            src: "https://images.unsplash.com/photo-1552664688-cf412ec27db2?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80",
-            alt: "Benefits Image",
-        }}
-    >
-        <Fragment slot="content">
-            <h3
-                class="text-2xl font-bold tracking-tight dark:text-white sm:text-3xl mb-2"
-            >
-                {t("services_page.benefits.title", locale)}
-            </h3>
-        </Fragment>
-    </Content>
-
-    <!-- Testimonials Widget *********** -->
-
-    <Testimonials
-        title={t("services_page.testimonials.title", locale)}
-        testimonials={[
-            {
-                testimonial: t(
-                    "services_page.testimonials.items.emily.testimonial",
-                    locale,
-                ),
-                name: t("services_page.testimonials.items.emily.name", locale),
-                job: t("services_page.testimonials.items.emily.job", locale),
-                image: {
-                    src: "https://images.unsplash.com/photo-1618835962148-cf177563c6c0?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=930&q=80",
-                    alt: "Emily Kennedy Image",
-                },
-            },
-            {
-                testimonial: t(
-                    "services_page.testimonials.items.sarah.testimonial",
-                    locale,
-                ),
-                name: t("services_page.testimonials.items.sarah.name", locale),
-                job: t("services_page.testimonials.items.sarah.job", locale),
-                image: {
-                    src: "https://images.unsplash.com/photo-1561406636-b80293969660?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80",
-                    alt: "Sarah Hansen Image",
-                },
-            },
-            {
-                testimonial: t(
-                    "services_page.testimonials.items.mark.testimonial",
-                    locale,
-                ),
-                name: t("services_page.testimonials.items.mark.name", locale),
-                job: t("services_page.testimonials.items.mark.job", locale),
-                image: {
-                    src: "https://images.unsplash.com/photo-1545167622-3a6ac756afa4?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=824&q=80",
-                    alt: "Mark Wilkinson Image",
-                },
-            },
-        ]}
-        callToAction={{
-            target: "_blank",
-            text: t("services_page.testimonials.cta", locale),
-            href: "https://ahliweb.co.id",
-            icon: "tabler:chevron-right",
-        }}
+  <Section width="wide">
+    <CtaBanner
+      title={t("services_page.cta.title", locale)}
+      description={t("services_page.cta.subtitle", locale)}
+      action={{ label: t("services_page.cta.action", locale), href: `/${locale}` }}
     />
-
-    <!-- CallToAction Widget *********** -->
-
-    <CallToAction
-        actions={[
-            {
-                variant: "primary",
-                text: t("services_page.cta.action", locale),
-                href: `/${locale}`,
-            },
-        ]}
-        title={t("services_page.cta.title", locale)}
-        subtitle={t("services_page.cta.subtitle", locale)}
-    />
+  </Section>
 </Layout>

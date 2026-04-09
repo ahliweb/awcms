@@ -1,5 +1,6 @@
 ---
 import Layout from "~/layouts/PageLayout.astro";
+import WidgetArea from "~/components/common/WidgetArea.astro";
 import { Icon } from "astro-icon/components";
 import { supportedLocales, type Locale } from "~/utils/i18n";
 import { getPublicTenantId } from "~/lib/publicTenant";
@@ -42,9 +43,10 @@ const metadata = {
 };
 ---
 
-<Layout metadata={metadata}>
+<Layout metadata={metadata} pageType="events_archive">
   <section class="py-12 sm:py-16 lg:py-20">
-    <div class="mx-auto max-w-6xl px-6 sm:px-8">
+    <div class="mx-auto grid max-w-7xl gap-12 px-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <div class="min-w-0">
       <header class="mb-12 text-center">
         <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
           <Icon name="tabler:calendar-event" class="h-7 w-7" />
@@ -116,6 +118,11 @@ const metadata = {
           <p class="mx-auto mt-3 max-w-xl text-muted-foreground">{copy.emptyBody}</p>
         </div>
       )}
+      </div>
+
+      <aside class="space-y-6 lg:sticky lg:top-24">
+        <WidgetArea area="sidebar" />
+      </aside>
     </div>
   </section>
 </Layout>
