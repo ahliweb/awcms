@@ -74,6 +74,8 @@ node awcms/src/scripts/create-admin-user.js
 
 `seed-primary-tenant.js` seeds both the `primary` tenant and the local control-plane `localhost` mapping consumed by the current dev resolver.
 
+`create-admin-user.js` provisions the local bootstrap user `cms@ahliweb.com` on tenant `primary` with the platform-scoped `owner` role and resets that local password when the user already exists.
+
 Optional local bootstrap helpers may include owner-role or sidebar/module seed scripts where the local environment needs them.
 
 ## Current Migration Workflow Notes

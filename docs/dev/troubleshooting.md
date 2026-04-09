@@ -26,6 +26,11 @@ Provide current, repo-state-aware troubleshooting guidance for local development
 - rerun `node awcms/src/scripts/seed-primary-tenant.js` if `localhost` is missing from `tenant_domains`
 - check current tenant-resolution behavior before inventing a workaround
 
+### Local Admin Bootstrap User Problems
+
+- rerun `node awcms/src/scripts/create-admin-user.js` to reset the local bootstrap user and owner/platform role linkage
+- confirm the `primary` tenant exists before rerunning it
+
 ### Tenant Not Found (Public)
 
 - verify `PUBLIC_TENANT_ID` / `VITE_PUBLIC_TENANT_ID`

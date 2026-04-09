@@ -72,10 +72,11 @@ node src/scripts/seed-primary-tenant.js
 node src/scripts/create-admin-user.js
 ```
 
+`create-admin-user.js` provisions `cms@ahliweb.com` on tenant `primary` with the platform-scoped `owner` role and resets the local bootstrap password when the user already exists.
+
 Optional setup:
 
 ```bash
-node src/scripts/assign-owner-role.js
 node src/scripts/seed-sidebar.js
 ```
 
