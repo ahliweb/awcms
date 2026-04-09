@@ -258,7 +258,16 @@ function UsersManager() {
         if (error) throw error;
         if (data && data.error) throw new Error(data.error);
       } else {
-        await udm.from('users').update({ deleted_at: new Date().toISOString() }).eq('id', userToDelete.id);
+        let deleteQuery = udm
+          .from('users')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', userToDelete.id);
+
+        if (currentTenant?.id) {
+          deleteQuery = deleteQuery.eq('tenant_id', currentTenant.id);
+        }
+
+        await deleteQuery;
         toast({ title: 'Offline', description: 'User marked for deletion. Will sync when online.' });
       }
 

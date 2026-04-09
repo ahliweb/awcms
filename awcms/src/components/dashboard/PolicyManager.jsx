@@ -36,13 +36,24 @@ export default function PolicyManager() {
     });
 
     const fetchPolicies = useCallback(async () => {
+        if (!tenantId && !isPlatformAdmin) {
+            setPolicies([]);
+            return;
+        }
+
         setLoading(true);
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('policies')
                 .select('*')
                 .is('deleted_at', null)
                 .order('created_at', { ascending: false });
+
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
             setPolicies(data || []);
@@ -52,7 +63,7 @@ export default function PolicyManager() {
         } finally {
             setLoading(false);
         }
-    }, [toast, t]);
+    }, [tenantId, isPlatformAdmin, toast, t]);
 
     useEffect(() => {
         if (canView) {
@@ -115,7 +126,8 @@ export default function PolicyManager() {
                 const { error: updateError } = await supabase
                     .from('policies')
                     .update(payload)
-                    .eq('id', editingPolicy.id);
+                    .eq('id', editingPolicy.id)
+                    .eq('tenant_id', tenantId);
                 error = updateError;
             } else {
                 const { error: insertError } = await supabase
@@ -144,7 +156,8 @@ export default function PolicyManager() {
             const { error } = await supabase
                 .from('policies')
                 .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id);
+                .eq('id', id)
+                .eq('tenant_id', tenantId);
             if (error) throw error;
             toast({ title: t('policies.toasts.deleted'), description: t('policies.toasts.deleted') });
             fetchPolicies();

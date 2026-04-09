@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { encodeRouteParam } from '@/lib/routeSecurity';
 
 export function MyApprovals() {
-    const { hasPermission } = usePermissions();
+    const { hasPermission, tenantId } = usePermissions();
     const navigate = useNavigate();
     const { toast } = useToast();
     const [approvals, setApprovals] = useState([]);
@@ -28,12 +28,19 @@ export function MyApprovals() {
     }, [canApprove]);
 
     const fetchPendingApprovals = async () => {
+        if (!tenantId) {
+            setApprovals([]);
+            return;
+        }
+
         try {
             // Fetch posts in 'reviewed' state
             const { data: posts, error } = await supabase
                 .from('blogs') // Updated to 'blogs' table
                 .select('id, title, updated_at, author:users!created_by(email)')
+                .eq('tenant_id', tenantId)
                 .eq('workflow_state', 'reviewed')
+                .is('deleted_at', null)
                 .limit(5);
 
             if (error) throw error;

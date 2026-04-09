@@ -2,9 +2,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 
 export function useDashboardData() {
   const { session } = useAuth();
+  const { currentTenant } = useTenant();
   const [data, setData] = useState({
     overview: {
       blogs: 0,
@@ -30,17 +32,34 @@ export function useDashboardData() {
       setLoading(false);
       return;
     }
+    if (!currentTenant?.id) {
+      setData((current) => ({
+        ...current,
+        overview: {
+          blogs: 0,
+          pages: 0,
+          products: 0,
+          orders: 0,
+          users: 0,
+          storage: '0 MB'
+        },
+        activity: [],
+        topContent: [],
+      }));
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       // 1. Fetch Overview Counts
       const results = await Promise.allSettled([
-        supabase.from('blogs').select('*', { count: 'exact', head: true }).is('deleted_at', null),
-        supabase.from('pages').select('*', { count: 'exact', head: true }).is('deleted_at', null),
-        supabase.from('products').select('*', { count: 'exact', head: true }).is('deleted_at', null),
-        supabase.from('users').select('*', { count: 'exact', head: true }).is('deleted_at', null),
-        supabase.from('orders').select('*', { count: 'exact', head: true }),
-        supabase.from('media_objects').select('size_bytes').is('deleted_at', null)
+        supabase.from('blogs').select('*', { count: 'exact', head: true }).eq('tenant_id', currentTenant.id).is('deleted_at', null),
+        supabase.from('pages').select('*', { count: 'exact', head: true }).eq('tenant_id', currentTenant.id).is('deleted_at', null),
+        supabase.from('products').select('*', { count: 'exact', head: true }).eq('tenant_id', currentTenant.id).is('deleted_at', null),
+        supabase.from('users').select('*', { count: 'exact', head: true }).eq('tenant_id', currentTenant.id).is('deleted_at', null),
+        supabase.from('orders').select('*', { count: 'exact', head: true }).eq('tenant_id', currentTenant.id),
+        supabase.from('media_objects').select('size_bytes').eq('tenant_id', currentTenant.id).is('deleted_at', null)
       ]);
 
       const [
@@ -76,6 +95,7 @@ export function useDashboardData() {
       const { data: recentBlogs } = await supabase
         .from('blogs')
         .select('title, updated_at, users!created_by(full_name)')
+        .eq('tenant_id', currentTenant.id)
         .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5);
@@ -83,6 +103,7 @@ export function useDashboardData() {
       const { data: recentPages } = await supabase
         .from('pages')
         .select('title, updated_at, users!created_by(full_name)')
+        .eq('tenant_id', currentTenant.id)
         .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5);
@@ -108,6 +129,7 @@ export function useDashboardData() {
       const { data: topBlogs } = await supabase
         .from('blogs')
         .select('title, views, status')
+        .eq('tenant_id', currentTenant.id)
         .is('deleted_at', null)
         .order('views', { ascending: false })
         .limit(5);
@@ -136,7 +158,7 @@ export function useDashboardData() {
     } finally {
       setLoading(false);
     }
-  }, [session]);
+  }, [session, currentTenant?.id]);
 
   useEffect(() => {
     fetchDashboardData();
