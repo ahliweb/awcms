@@ -107,12 +107,16 @@ export function useDevices() {
     // Update device
     const updateDevice = async (id, updates) => {
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('devices')
                 .update(updates)
-                .eq('id', id)
-                .select()
-                .single();
+                .eq('id', id);
+
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { data, error } = await query.select().single();
 
             if (error) throw error;
 
@@ -131,10 +135,16 @@ export function useDevices() {
     // Soft delete device
     const deleteDevice = async (id) => {
         try {
-            const { error } = await supabase
+            let query = supabase
                 .from('devices')
                 .update({ deleted_at: new Date().toISOString() })
                 .eq('id', id);
+
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { error } = await query;
 
             if (error) throw error;
 

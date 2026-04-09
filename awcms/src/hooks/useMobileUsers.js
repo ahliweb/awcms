@@ -62,10 +62,16 @@ export function useMobileUsers() {
     // Delete user registration
     const deleteUser = async (id) => {
         try {
-            const { error } = await supabase
+            let query = supabase
                 .from('mobile_users')
                 .update({ deleted_at: new Date().toISOString() })
                 .eq('id', id);
+
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { error } = await query;
 
             if (error) throw error;
 

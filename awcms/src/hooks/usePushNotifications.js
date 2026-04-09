@@ -81,13 +81,19 @@ export function usePushNotifications() {
     // Send notification
     const sendNotification = async (id) => {
         try {
-            const { error } = await supabase
+            let query = supabase
                 .from('push_notifications')
                 .update({
                     status: 'sent',
                     sent_at: new Date().toISOString(),
                 })
                 .eq('id', id);
+
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { error } = await query;
 
             if (error) throw error;
 
@@ -111,10 +117,16 @@ export function usePushNotifications() {
     // Delete notification
     const deleteNotification = async (id) => {
         try {
-            const { error } = await supabase
+            let query = supabase
                 .from('push_notifications')
                 .update({ deleted_at: new Date().toISOString() })
                 .eq('id', id);
+
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
+            const { error } = await query;
 
             if (error) throw error;
 
