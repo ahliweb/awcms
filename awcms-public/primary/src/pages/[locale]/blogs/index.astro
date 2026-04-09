@@ -26,6 +26,7 @@ const url = Astro.url;
 const currentPage = parseInt(url.searchParams.get("page") || "1");
 const categorySlug = url.searchParams.get("category") || undefined;
 const tagSlug = url.searchParams.get("tag") || undefined;
+const archiveKey = url.searchParams.get("archive") || undefined;
 const perPage = 12;
 
 const tenantId = getPublicTenantId();
@@ -42,6 +43,7 @@ if (supabase) {
         offset: (currentPage - 1) * perPage,
         categorySlug,
         tagSlug,
+        archiveKey,
         locale,
     });
     blogs = result.blogs;
@@ -97,6 +99,19 @@ const metadata = {
                             <span>
                                 {t("blogs_page.filter.tag", locale)} {tagSlug}
                             </span>
+                            <a
+                                href={`/${locale}/blogs`}
+                                class="hover:bg-secondary/80 rounded-full p-1"
+                            >
+                                <Icon name="tabler:x" class="w-4 h-4" />
+                            </a>
+                        </div>
+                    )
+                }
+                {
+                    archiveKey && (
+                        <div class="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted text-foreground">
+                            <span>Archive {archiveKey}</span>
                             <a
                                 href={`/${locale}/blogs`}
                                 class="hover:bg-secondary/80 rounded-full p-1"

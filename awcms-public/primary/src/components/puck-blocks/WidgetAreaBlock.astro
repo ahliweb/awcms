@@ -1,9 +1,5 @@
 ---
-import { createClientFromEnv } from "~/lib/supabase";
-import { getPublicTenantId } from "~/lib/publicTenant";
-import WidgetRenderer from "../common/WidgetRenderer.astro";
-import { getWidgetsByAreaSlug } from "~/lib/widgets";
-import type { WidgetData } from "~/lib/widgets";
+import WidgetArea from "~/components/common/WidgetArea.astro";
 
 interface Props {
   area?: string;
@@ -12,40 +8,10 @@ interface Props {
 }
 
 const { area, title } = Astro.props;
-
-const supabase = createClientFromEnv(import.meta.env);
-const tenantId = getPublicTenantId();
-let widgets: WidgetData[] = [];
-
-if (supabase && area && tenantId) {
-  try {
-    widgets = await getWidgetsByAreaSlug(supabase, area, tenantId);
-  } catch (e) {
-    console.error("[WidgetAreaBlock] Error fetching widgets:", e);
-  }
-}
 ---
 
-<div class="widget-area">
-  {
-    title && (
-      <h2 class="text-2xl font-bold mb-6 text-slate-800 dark:text-slate-200">
-        {title}
-      </h2>
-    )
-  }
-
-  {
-    widgets.length === 0 ? (
-      <div class="p-4 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-center text-slate-500">
-        Widget Area: {area} (Empty)
-      </div>
-    ) : (
-      <div class="space-y-6">
-        {widgets.map((widget) => (
-          <WidgetRenderer widget={widget} />
-        ))}
-      </div>
-    )
-  }
-</div>
+<WidgetArea
+  area={area || "default"}
+  title={title}
+  emptyMessage={area ? `Widget Area: ${area} (Empty)` : ""}
+/>

@@ -5,12 +5,14 @@
  */
 import type { GetStaticPaths } from "astro";
 import Layout from "~/layouts/PageLayout.astro";
+import WidgetArea from "~/components/common/WidgetArea.astro";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getPublicTenantId } from "~/lib/publicTenant";
 import { getBlogBySlug, getPageByType } from "~/lib/content";
 import PuckRenderer from "~/components/common/PuckRenderer.astro";
 import { Icon } from "astro-icon/components";
 import { t, supportedLocales, type Locale } from "~/utils/i18n";
+import { sanitizeHTML } from "~/utils/sanitize";
 
 export const prerender = true;
 
@@ -122,7 +124,7 @@ const metadata = {
 // Content
 const isVisual = blog?.editor_type === "visual";
 const visualContent = blog?.visual_content || blog?.content_published || blog?.content_draft || null;
-const htmlContent = blog?.content || "";
+const htmlContent = sanitizeHTML(blog?.content || "");
 const singlePostVisualContent =
   singlePostTemplate?.content_published || singlePostTemplate?.visual_content || null;
 const useSinglePostTemplate = Boolean(
@@ -154,7 +156,11 @@ const blogContext = blog
   : {};
 ---
 
-<Layout metadata={metadata}>
+<Layout
+  metadata={metadata}
+  pageType="post"
+  contentRef={blog ? { collection: "blogs", id: blog.id, slug: blog.slug } : undefined}
+>
     {
         blog ? (
             <article class="py-12 sm:py-16 lg:py-20">
@@ -163,7 +169,8 @@ const blogContext = blog
                         <PuckRenderer content={singlePostVisualContent} context={blogContext} />
                     </div>
                 ) : (
-                <div class="mx-auto max-w-4xl px-6 sm:px-8">
+                <div class="mx-auto grid max-w-7xl gap-12 px-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+                    <div class="min-w-0">
                     {/* Blog Header */}
                     <header class="mb-8">
                         {/* Category Badge */}
@@ -224,7 +231,7 @@ const blogContext = blog
                     {/* Blog Content */}
                     {isVisual ? (
                         <div class="visual-content prose prose-lg dark:prose-invert max-w-none">
-                            <PuckRenderer content={visualContent} />
+                            <PuckRenderer content={visualContent} context={blogContext} />
                         </div>
                     ) : (
                         <div
@@ -263,6 +270,11 @@ const blogContext = blog
                             {t("blogs_page.blog.back_to_blogs", locale)}
                         </a>
                     </footer>
+                    </div>
+
+                    <aside class="space-y-6 lg:sticky lg:top-24">
+                        <WidgetArea area="sidebar" />
+                    </aside>
                 </div>
                 )}
             </article>

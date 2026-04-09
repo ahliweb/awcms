@@ -3,6 +3,7 @@
  * Provides a standardized interface for plugin configuration and rendering.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PublicPageContext } from "~/lib/publicPageContext";
 
 export interface PluginData {
   id: string;
@@ -25,6 +26,72 @@ export interface PluginScript {
   position: "head" | "body_start" | "body_end";
   attributes?: Record<string, string>;
 }
+
+export interface PluginMetaTag {
+  name?: string;
+  property?: string;
+  content: string;
+}
+
+export interface PluginFragment {
+  html: string;
+  position: "head" | "body_start" | "body_end";
+}
+
+type PageScope = {
+  page_types?: string[];
+  kinds?: string[];
+  collections?: string[];
+  locales?: string[];
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const matchesScope = (
+  scope: PageScope | null,
+  pageContext?: PublicPageContext,
+): boolean => {
+  if (!scope || !pageContext) return true;
+
+  if (
+    scope.page_types?.length &&
+    (!pageContext.pageType || !scope.page_types.includes(pageContext.pageType))
+  ) {
+    return false;
+  }
+
+  if (
+    scope.kinds?.length &&
+    (!pageContext.kind || !scope.kinds.includes(pageContext.kind))
+  ) {
+    return false;
+  }
+
+  if (
+    scope.collections?.length &&
+    (!pageContext.content?.collection ||
+      !scope.collections.includes(pageContext.content.collection))
+  ) {
+    return false;
+  }
+
+  if (
+    scope.locales?.length &&
+    (!pageContext.locale || !scope.locales.includes(pageContext.locale))
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+const getPublicConfig = (plugin: PluginData): Record<string, unknown> => {
+  const rootConfig = asRecord(plugin.config) || {};
+  return asRecord(rootConfig.public) || rootConfig;
+};
 
 /**
  * Fetch all active plugins for a tenant
@@ -210,4 +277,90 @@ export function renderPluginScripts(scripts: PluginScript[]): string {
       return "";
     })
     .join("\n");
+}
+
+export function getPluginMetadataTags(
+  plugins: PluginData[],
+  pageContext?: PublicPageContext,
+): PluginMetaTag[] {
+  const metaTags: PluginMetaTag[] = [];
+
+  for (const plugin of plugins) {
+    const config = getPublicConfig(plugin);
+    const rawMeta = config.meta_tags;
+    if (!Array.isArray(rawMeta)) continue;
+
+    for (const tag of rawMeta) {
+      const meta = asRecord(tag);
+      if (!meta || typeof meta.content !== "string") continue;
+
+      const scope = asRecord(meta.scope) as PageScope | null;
+      if (!matchesScope(scope, pageContext)) continue;
+
+      if (typeof meta.name === "string" || typeof meta.property === "string") {
+        metaTags.push({
+          name: typeof meta.name === "string" ? meta.name : undefined,
+          property:
+            typeof meta.property === "string" ? meta.property : undefined,
+          content: meta.content,
+        });
+      }
+    }
+  }
+
+  return metaTags;
+}
+
+export function renderPluginMetadataTags(tags: PluginMetaTag[]): string {
+  return tags
+    .map((tag) => {
+      const attrs = [
+        tag.name ? `name="${tag.name}"` : "",
+        tag.property ? `property="${tag.property}"` : "",
+        `content="${tag.content.replace(/"/g, "&quot;")}"`,
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      return `<meta ${attrs}>`;
+    })
+    .join("\n");
+}
+
+export function getPluginFragments(
+  plugins: PluginData[],
+  position: "head" | "body_start" | "body_end",
+  pageContext?: PublicPageContext,
+): PluginFragment[] {
+  const scriptFragments = getPluginScripts(plugins, position).map((script) => ({
+    html: renderPluginScripts([script]),
+    position,
+  }));
+
+  const configuredFragments: PluginFragment[] = [];
+
+  for (const plugin of plugins) {
+    const config = getPublicConfig(plugin);
+    const fragments = Array.isArray(config.fragments) ? config.fragments : [];
+
+    for (const fragmentValue of fragments) {
+      const fragment = asRecord(fragmentValue);
+      if (!fragment || typeof fragment.html !== "string") continue;
+      if (fragment.position !== position) continue;
+
+      const scope = asRecord(fragment.scope) as PageScope | null;
+      if (!matchesScope(scope, pageContext)) continue;
+
+      configuredFragments.push({
+        html: fragment.html,
+        position,
+      });
+    }
+  }
+
+  return [...configuredFragments, ...scriptFragments];
+}
+
+export function renderPluginFragments(fragments: PluginFragment[]): string {
+  return fragments.map((fragment) => fragment.html).join("\n");
 }

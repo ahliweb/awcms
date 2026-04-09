@@ -68,6 +68,16 @@ Use `primary` for:
 - shared public content/query helpers
 - tenant-scoped widgets, menu rendering, search, sitemap generation, and localized content rendering
 
+Current primary-portal composition now follows a more EmDash-style public structure while preserving AWCMS runtime boundaries:
+
+- shared page composition is centered around `src/layouts/Layout.astro` and `src/layouts/PageLayout.astro`
+- page-level public plugin injection is resolved through:
+  - `src/components/common/PublicHead.astro`
+  - `src/components/common/PublicBodyStart.astro`
+  - `src/components/common/PublicBodyEnd.astro`
+- reusable public widget-area rendering is centered around `src/components/common/WidgetArea.astro`
+- homepage rendering is centralized in `src/components/public/HomePageContent.astro` instead of duplicating large AstroWind fallback pages per locale
+
 Important live helper surfaces include:
 
 - `awcms-public/primary/src/lib/content.ts`

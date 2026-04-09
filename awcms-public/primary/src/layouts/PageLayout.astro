@@ -18,19 +18,32 @@ import {
 } from "~/lib/menu";
 import { getActivePublicModules } from "~/lib/extension_registry";
 import { getPublicTenantId } from "~/lib/publicTenant";
+import {
+  createPublicPageContext,
+  type PublicContentRef,
+} from "~/lib/publicPageContext";
 
 import type { MetaData } from "~/types";
 
 export interface Props {
   metadata?: MetaData;
+  pageType?: string;
+  contentRef?: PublicContentRef;
 }
 
 import { getLocale } from "~/utils/i18n";
 
-const { metadata } = Astro.props;
+const { metadata, pageType = "website", contentRef } = Astro.props;
 const tenantId = getPublicTenantId();
 const supabase = createClientFromEnv(import.meta.env);
 const locale = getLocale(Astro.url);
+const pageContext = createPublicPageContext({
+  metadata,
+  pageType,
+  locale,
+  tenantId,
+  content: contentRef,
+});
 
 let headerLinks: HeaderLink[] = fallbackHeaderData.links;
 let footerLinks = fallbackFooterData.links;
@@ -73,7 +86,7 @@ if (supabase && tenantId) {
 }
 ---
 
-<Layout metadata={metadata}>
+<Layout metadata={metadata} pageContext={pageContext}>
   <slot name="announcement">
     <Announcement />
   </slot>

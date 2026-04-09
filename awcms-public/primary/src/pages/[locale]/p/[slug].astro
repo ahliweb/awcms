@@ -6,10 +6,12 @@
 import type { GetStaticPaths } from "astro";
 import Layout from "~/layouts/PageLayout.astro";
 import PuckRenderer from "~/components/common/PuckRenderer.astro";
+import WidgetArea from "~/components/common/WidgetArea.astro";
 import { createClientFromEnv } from "~/lib/supabase";
 import { getPublicTenantId } from "~/lib/publicTenant";
 import { getPageBySlug } from "~/lib/content";
 import { supportedLocales } from "~/utils/i18n";
+import { sanitizeHTML } from "~/utils/sanitize";
 
 export const prerender = true;
 
@@ -105,7 +107,7 @@ const metadata = {
 const isVisual = page?.editor_type === "visual";
 const visualContent =
   page?.content_published || page?.puck_layout_jsonb || null;
-const htmlContent = page?.content || "";
+const htmlContent = sanitizeHTML(page?.content || "");
 const pageContext = page
   ? {
       page: {
@@ -122,11 +124,16 @@ const pageContext = page
   : {};
 ---
 
-<Layout metadata={metadata}>
+<Layout
+  metadata={metadata}
+  pageType="page"
+  contentRef={page ? { collection: "pages", id: page.id, slug: page.slug } : undefined}
+>
   {
     page ? (
       <section class="py-12 sm:py-16 lg:py-20">
-        <div class="mx-auto max-w-4xl px-6 sm:px-8">
+        <div class="mx-auto grid max-w-7xl gap-12 px-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+          <div class="min-w-0">
           {/* Page Header */}
           <header class="mb-8">
             <h1 class="text-4xl md:text-5xl font-bold leading-tight tracking-tight dark:text-slate-200">
@@ -188,6 +195,11 @@ const pageContext = page
               </p>
             </footer>
           )}
+          </div>
+
+          <aside class="space-y-6 lg:sticky lg:top-24">
+            <WidgetArea area="sidebar" />
+          </aside>
         </div>
       </section>
     ) : (

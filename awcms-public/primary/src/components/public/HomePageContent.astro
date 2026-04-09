@@ -1,0 +1,113 @@
+---
+import PageLayout from "~/layouts/PageLayout.astro";
+import PuckRenderer from "~/components/common/PuckRenderer.astro";
+import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
+import { getPageBySlug, getPageByType } from "~/lib/content";
+import { getPublicSettings } from "~/lib/publicSettings";
+import { sanitizeHTML } from "~/utils/sanitize";
+import type { Locale } from "~/utils/i18n";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const tenantId = getPublicTenantId();
+const supabase = createClientFromEnv(import.meta.env);
+const { seo, siteInfo } = await getPublicSettings();
+
+let homePage = null;
+
+if (tenantId && supabase) {
+  homePage = await getPageByType(supabase, "home", tenantId, locale);
+  if (!homePage) {
+    homePage = await getPageBySlug(supabase, "home", tenantId, locale);
+  }
+}
+
+const metadata = homePage
+  ? {
+      title: homePage.meta_title || homePage.title,
+      description: homePage.meta_description || homePage.excerpt || "",
+      keywords: homePage.meta_keywords || undefined,
+      canonical: homePage.canonical_url || undefined,
+      openGraph: {
+        images: homePage.featured_image
+          ? [{ url: homePage.featured_image }]
+          : undefined,
+      },
+    }
+  : {
+      title:
+        (seo?.site_title as string) ||
+        (siteInfo?.name as string) ||
+        (siteInfo?.site_name as string) ||
+        "Primary Tenant",
+      description:
+        (seo?.site_description as string) ||
+        (siteInfo?.tagline as string) ||
+        "Published tenant content will appear here once the homepage is configured.",
+      ignoreTitleTemplate: true,
+    };
+
+const visualContent =
+  homePage?.content_published || homePage?.puck_layout_jsonb || null;
+const htmlContent = sanitizeHTML(homePage?.content || "");
+const pageContext = homePage
+  ? {
+      page: {
+        title: homePage.title,
+        excerpt: homePage.excerpt,
+        htmlContent,
+        featuredImage: homePage.featured_image,
+        publishedAt: homePage.published_at || homePage.created_at,
+        categoryName: "",
+        tags: homePage.tags || [],
+        authorName: "",
+      },
+    }
+  : {};
+
+const isVisual = homePage?.editor_type === "visual";
+const siteTitle =
+  (siteInfo?.name as string) ||
+  (siteInfo?.site_name as string) ||
+  (seo?.site_title as string) ||
+  "Primary Tenant";
+---
+
+<PageLayout metadata={metadata} pageType="home">
+  {
+    homePage ? (
+      <section class="py-12 sm:py-16 lg:py-20">
+        <div class="mx-auto max-w-6xl px-6 sm:px-8">
+          {isVisual ? (
+            <PuckRenderer content={visualContent} context={pageContext} />
+          ) : (
+            <article
+              class="prose prose-lg max-w-none dark:prose-invert prose-headings:tracking-tight prose-a:text-primary prose-a:no-underline hover:prose-a:underline"
+              set:html={htmlContent}
+            />
+          )}
+        </div>
+      </section>
+    ) : (
+      <section class="py-20 sm:py-24 lg:py-32">
+        <div class="mx-auto flex max-w-4xl flex-col gap-6 px-6 text-center sm:px-8">
+          <p class="text-sm font-semibold uppercase tracking-[0.2em] text-primary">
+            {locale === "id" ? "Tenant utama" : "Primary tenant"}
+          </p>
+          <h1 class="text-4xl font-bold tracking-tight text-slate-950 dark:text-slate-50 sm:text-5xl lg:text-6xl">
+            {siteTitle}
+          </h1>
+          <p class="mx-auto max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
+            {locale === "id"
+              ? "Beranda publik belum dikonfigurasi. Terbitkan halaman berjenis home atau halaman dengan slug home dari admin utama untuk menampilkan konten tenant ini."
+              : "The public homepage is not configured yet. Publish a page with type home or slug home from the primary admin tenant to render this tenant's public experience."}
+          </p>
+        </div>
+      </section>
+    )
+  }
+</PageLayout>

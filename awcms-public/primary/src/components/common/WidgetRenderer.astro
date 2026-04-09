@@ -6,6 +6,9 @@
  * Supports common widget types with Tailwind styling.
  */
 import type { WidgetData } from "~/lib/widgets";
+import { createClientFromEnv } from "~/lib/supabase";
+import { getPublicTenantId } from "~/lib/publicTenant";
+import { getLocale } from "~/utils/i18n";
 
 export interface Props {
   /** Widget data object */
@@ -47,6 +50,123 @@ const effectiveType = emdashComponentId === "core:archives"
 const contentText = type === "content"
   ? getPortableTextText(content || rawEmdashPayload?.content)
   : "";
+
+const supabase = createClientFromEnv(import.meta.env);
+const tenantId = getPublicTenantId();
+const locale = getLocale(Astro.url);
+
+type BlogWidgetPost = {
+  id: string;
+  title: string;
+  slug: string;
+  published_at: string | null;
+  created_at: string;
+};
+
+type NamedTerm = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+const recentPosts: BlogWidgetPost[] = [];
+const categories: NamedTerm[] = [];
+const tags: NamedTerm[] = [];
+const archives: Array<{ label: string; href: string; count: number }> = [];
+
+if (supabase && effectiveType === "recent_posts") {
+  let query = supabase
+    .from("blogs")
+    .select("id, title, slug, published_at, created_at")
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .order("published_at", { ascending: false })
+    .limit(5);
+
+  query = tenantId
+    ? query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+    : query.is("tenant_id", null);
+
+  const { data } = await query;
+  recentPosts.push(...((data || []) as BlogWidgetPost[]));
+}
+
+if (supabase && effectiveType === "categories") {
+  let query = supabase
+    .from("categories")
+    .select("id, name, slug")
+    .is("deleted_at", null)
+    .order("name", { ascending: true })
+    .limit(12);
+
+  query = tenantId
+    ? query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+    : query.is("tenant_id", null);
+
+  const { data } = await query;
+  categories.push(...((data || []) as NamedTerm[]));
+}
+
+if (supabase && effectiveType === "tags") {
+  let query = supabase
+    .from("tags")
+    .select("id, name, slug")
+    .is("deleted_at", null)
+    .order("name", { ascending: true })
+    .limit(20);
+
+  query = tenantId
+    ? query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+    : query.is("tenant_id", null);
+
+  const { data } = await query;
+  tags.push(...((data || []) as NamedTerm[]));
+}
+
+if (supabase && effectiveType === "archives") {
+  let query = supabase
+    .from("blogs")
+    .select("published_at, created_at")
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .order("published_at", { ascending: false })
+    .limit(50);
+
+  query = tenantId
+    ? query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+    : query.is("tenant_id", null);
+
+  const { data } = await query;
+  const grouped = new Map<string, { label: string; href: string; count: number }>();
+
+  for (const row of (data || []) as Array<{ published_at: string | null; created_at: string }>) {
+    const source = row.published_at || row.created_at;
+    if (!source) continue;
+    const date = new Date(source);
+    if (Number.isNaN(date.getTime())) continue;
+
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const key = `${year}-${month}`;
+    const label = date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+    });
+
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+        grouped.set(key, {
+          label,
+          href: `/${locale}/blogs?archive=${key}`,
+          count: 1,
+        });
+    }
+  }
+
+  archives.push(...grouped.values());
+}
 
 // Prepare typed data for specific widgets to avoid casting in template
 const linkItems =
@@ -110,7 +230,7 @@ function getContainerClasses(widgetType: string): string {
 
       {
         effectiveType === "search" && (
-          <form action="/search" method="GET" class="space-y-3">
+          <form action={`/${locale}/search`} method="GET" class="space-y-3">
             <input
               type="search"
               name="q"
@@ -166,9 +286,32 @@ function getContainerClasses(widgetType: string): string {
     {
       effectiveType === "recent_posts" && (
         <div class="space-y-3">
-          <p class="text-sm text-slate-500 dark:text-slate-400 italic">
-            Recent posts will load dynamically...
-          </p>
+          {recentPosts.length > 0 ? (
+            recentPosts.map((post) => (
+              <a
+                href={`/${locale}/blogs/${post.slug}`}
+                class="block rounded-xl border border-slate-200/70 px-3 py-3 transition hover:border-primary/40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/70"
+              >
+                <p class="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {post.title}
+                </p>
+                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {new Date(post.published_at || post.created_at).toLocaleDateString(
+                    "en-US",
+                    {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    },
+                  )}
+                </p>
+              </a>
+            ))
+          ) : (
+            <p class="text-sm text-slate-500 dark:text-slate-400 italic">
+              No recent posts found.
+            </p>
+          )}
         </div>
       )
     }
@@ -176,9 +319,20 @@ function getContainerClasses(widgetType: string): string {
     {
       effectiveType === "categories" && (
         <div class="flex flex-wrap gap-2">
-          <p class="text-sm text-slate-500 dark:text-slate-400 italic">
-            Categories will load dynamically...
-          </p>
+          {categories.length > 0 ? (
+            categories.map((category) => (
+              <a
+                href={`/${locale}/blogs?category=${category.slug}`}
+                class="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-primary/40 hover:text-primary dark:border-slate-700 dark:text-slate-300"
+              >
+                {category.name}
+              </a>
+            ))
+          ) : (
+            <p class="text-sm text-slate-500 dark:text-slate-400 italic">
+              No categories found.
+            </p>
+          )}
         </div>
       )
     }
@@ -186,9 +340,20 @@ function getContainerClasses(widgetType: string): string {
     {
       effectiveType === "tags" && (
         <div class="flex flex-wrap gap-2">
-          <p class="text-sm text-slate-500 dark:text-slate-400 italic">
-            Tags will load dynamically...
-          </p>
+          {tags.length > 0 ? (
+            tags.map((tag) => (
+              <a
+                href={`/${locale}/blogs?tag=${tag.slug}`}
+                class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-primary/10 hover:text-primary dark:bg-slate-800 dark:text-slate-300"
+              >
+                #{tag.name}
+              </a>
+            ))
+          ) : (
+            <p class="text-sm text-slate-500 dark:text-slate-400 italic">
+              No tags found.
+            </p>
+          )}
         </div>
       )
     }
@@ -309,9 +474,21 @@ function getContainerClasses(widgetType: string): string {
       {
         effectiveType === "archives" && (
           <div class="space-y-3">
-            <p class="text-sm text-slate-500 dark:text-slate-400 italic">
-              Archive widget is preserved through the EmDash compatibility layer.
-            </p>
+            {archives.length > 0 ? (
+              archives.map((archive) => (
+                <a
+                  href={archive.href}
+                  class="flex items-center justify-between rounded-xl border border-slate-200/70 px-3 py-2 text-sm transition hover:border-primary/40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/70"
+                >
+                  <span class="text-slate-700 dark:text-slate-300">{archive.label}</span>
+                  <span class="text-slate-500 dark:text-slate-400">{archive.count}</span>
+                </a>
+              ))
+            ) : (
+              <p class="text-sm text-slate-500 dark:text-slate-400 italic">
+                No archive entries found.
+              </p>
+            )}
           </div>
         )
       }

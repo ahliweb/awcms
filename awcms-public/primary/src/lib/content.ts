@@ -517,10 +517,18 @@ export async function getBlogs(
     offset?: number;
     categorySlug?: string;
     tagSlug?: string;
+    archiveKey?: string;
     locale?: string;
   } = {},
 ): Promise<{ blogs: BlogData[]; total: number }> {
-  const { limit = 10, offset = 0, categorySlug, tagSlug, locale } = options;
+  const {
+    limit = 10,
+    offset = 0,
+    categorySlug,
+    tagSlug,
+    archiveKey,
+    locale,
+  } = options;
 
   let categoryId: string | null = null;
   if (categorySlug) {
@@ -620,6 +628,15 @@ export async function getBlogs(
 
   if (taggedBlogIds) {
     query = query.in("id", taggedBlogIds);
+  }
+
+  if (archiveKey && /^\d{4}-\d{2}$/.test(archiveKey)) {
+    const [year, month] = archiveKey
+      .split("-")
+      .map((value) => Number.parseInt(value, 10));
+    const start = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+    const end = new Date(Date.UTC(year, month, 1)).toISOString();
+    query = query.gte("published_at", start).lt("published_at", end);
   }
 
   const { data, error, count } = await query;
