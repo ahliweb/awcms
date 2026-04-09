@@ -58,6 +58,7 @@
 | DOCSYNC-2026-04-01-01 | Medium | Security and tenancy docs still contained small authority drifts around platform-admin helper naming, notification permission examples, and source-of-truth wording | Resolved 2026-04-01 | `docs/security/rls.md`, `docs/security/abac.md`, `docs/security/overview.md`, `docs/tenancy/supabase.md`, and `docs/architecture/platform-tenant-separation.md` updated | Re-check when auth helpers, permissions, or notification migrations change |
 | DOCSYNC-2026-04-01-02 | Medium | Module and user docs still had stale extension-manifest naming, legacy extension-table setup guidance, incomplete role coverage, and notification permission-family ambiguity | Resolved 2026-04-01 | `docs/modules/EXTENSIONS.md`, `docs/modules/USER_MANAGEMENT.md`, `docs/security/abac.md`, and `docs/architecture/database.md` updated | Re-check when extension lifecycle, role model, or notification permissions change |
 | DOCSYNC-2026-04-09-01 | Low | `docs/dev/prompt-guide.md` had drifted behind the current repo condition and no longer reflected the live stack/runtime framing, current validation commands, or the now-executable EmDash import waves | Resolved 2026-04-09 | `docs/dev/prompt-guide.md` rewritten and re-aligned to current workspace boundaries, validation expectations, import surfaces, and prompt templates; `cd awcms && npm run docs:check` passed | Re-check when prompt workflows, validation commands, or major executable surfaces change |
+| DOCSYNC-2026-04-09-02 | Medium | Edge/OpenAPI docs and generated spec artifacts had drifted behind the current public-route guardrails for tenant/domain resolution, public media key validation, and Mailketing send auth expectations | Resolved 2026-04-09 | Updated `docs/dev/edge-functions.md`, `docs/dev/api-usage.md`, `docs/architecture/edge-openapi-spec.md`, `docs/dev/openapi-quality-checklist.md`, `awcms-edge/src/lib/openapi/route-catalog.ts`, and regenerated `awcms-edge/openapi/*.json`; validation gates passed | Re-check when public Worker route contracts, OpenAPI metadata, or generated artifacts change |
 
 ## Commands Run During This Cycle
 
@@ -70,6 +71,11 @@
 | `ls awcms/supabase/migrations/*.sql \| wc -l` | `152` | Mirrored migration count at 2026-03-29 baseline |
 | `scripts/verify_supabase_migration_consistency.sh` | Not re-run in this pass | Existing tracker baseline remains `152/152`; re-run after doc edits if migration docs change materially |
 | `cd awcms && npm run docs:check` | Passed | Link validation passes; content audit still required |
+| `cd awcms-edge && npm test` | Passed | Edge route and OpenAPI metadata regression coverage stayed green after public-route hardening |
+| `cd awcms-edge && npm run typecheck` | Passed | Worker type surface remained valid after route/doc updates |
+| `cd awcms-edge && npm run openapi:build` | Passed | Regenerated `openapi/public.json`, `openapi/admin.json`, and `openapi/internal.json` from the updated route catalog |
+| `cd awcms-edge && npm run openapi:validate` | Passed | Generated specs remain valid OpenAPI artifacts |
+| `cd awcms-edge && npm run openapi:diff` | Passed | Artifact diff check reported generated specs in sync |
 | Workspace manifest extraction | Completed | React/Vite/Astro/Supabase/Wrangler versions re-verified from live manifests |
 
 ## Context7 Verification Log
