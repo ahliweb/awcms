@@ -1,220 +1,118 @@
 # AWCMS Core Standards
 
-> Version: 2.30.0 | Last Updated: 2026-02-17 | React: 19.2.4  
-> **Documentation Hierarchy**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) → [AGENTS.md](../../AGENTS.md) → This Document
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 ## Purpose
 
-Define the non-negotiable architecture and implementation standards for AWCMS across all packages.
+Define the current non-negotiable implementation standards for AWCMS across admin, public, edge, database, storage, and documentation surfaces.
 
-## Audience
+This document is the practical standards summary for the checked-in repo. It is not a replacement for the authority docs above it.
 
-- Engineers and maintainers working on any AWCMS package
-- AI coding agents collaborating on the codebase
+## Current Core Standards
 
-## Prerequisites
+### 1. Runtime Ownership
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for tech stack and architecture
-- [AGENTS.md](../../AGENTS.md) - AI coding guidelines and Context7 references
-- [DOCS_INDEX.md](../../DOCS_INDEX.md) - Documentation navigation
+- `awcms/` is the maintained admin app.
+- `awcms-public/*` are the maintained public portals.
+- `awcms-edge/` is the only maintained server-side HTTP runtime.
+- Supabase is authoritative for Auth, PostgreSQL, RLS, and ABAC.
+- Cloudflare R2 is the maintained object storage layer.
+- Cloudflare Queues are the maintained async offload layer.
+- Custom Node.js application servers are not part of the maintained runtime.
 
-## Core Concepts
+### 2. Tenancy And Isolation
 
-### 1. Core Security and Access
+- tenant isolation is mandatory across admin, public, Worker, and database surfaces
+- tenant-scoped tables must use `tenant_id`
+- tenant-aware queries should preserve explicit tenant filtering where applicable
+- platform-wide behavior must remain explicit and auditable
+- public route tenant/domain guardrails are part of the current runtime contract
 
-**Standard**: Zero Trust, ABAC, and strict tenant isolation.
+### 3. Authorization And Security
 
-#### 1.1 Security Architecture
+- ABAC is the maintained authorization model
+- permission keys must use `scope.resource.action`
+- UI permission checks are additive UX guardrails only
+- RLS remains the final authority for tenant isolation and authorization
+- recursion-safe helper patterns matter for new RLS authoring
+- soft delete is the default business-data lifecycle
 
-- **ABAC System**:
-  - Context: `awcms/src/contexts/PermissionContext.jsx`
-  - Hook: `usePermissions()` (role and permission checks)
-  - Definition: `docs/modules/ROLE_HIERARCHY.md`
-- **Administrative Regions**: Indonesian administrative regions (Propinsi to Desa/Kelurahan) sourced from [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah/blob/master/db/wilayah.sql) (Last Updated: 2026-01-13). Managed via `administrative_regions`.
-- **Operational Regions**: 10-level hierarchy managed via `regions`.
-- **Tenants**: Multi-tenancy support with `tenants` table and RLS policies.
-  - Context: `awcms/src/contexts/TenantContext.jsx`
-  - Hooks: `useTenant()`, `usePublicTenant()`, `useTenantTheme()`
-  - Policy: All database queries must be scoped by `tenant_id`
-- **Modules**: Feature toggles managed via `modules` table (e.g., Blog, Shop, Portfolio).
-  - Permission: `tenant.modules.read` required to view available modules.
-  - Context: `TenantContext` generally handles active module states.
-- **Authentication**:
-  - Context: `awcms/src/contexts/SupabaseAuthContext.jsx`
-  - Security: `useTwoFactor()` and OTP verification
-- **Database Security**:
-  - Safe client: `awcms/src/lib/customSupabaseClient.js` (RLS enforced)
-  - Privileged: `awcms/src/lib/supabaseAdmin.js` (secret key only)
-- Rules: `docs/security/rls.md`
-- **Audit and Lifecycle**:
-  - Logging: `useAuditLog()`, `useExtensionAudit()`
-  - Soft delete only: `docs/architecture/database.md`
+### 4. Storage And Media
 
-#### 1.2 Security Documentation
+- maintained media flows use Worker + R2
+- Supabase Storage is disabled in maintained clients
+- public media delivery must respect canonical public storage-key rules
+- protected/session-bound media must not be described as public object access
 
-- `docs/security/abac.md`
-- `docs/tenancy/overview.md`
-- `docs/security/overview.md`
-- `docs/modules/USER_MANAGEMENT.md`
-- `docs/modules/PERFORMANCE.md`
+### 5. UI And Routing
 
-### 2. Core UI and UX
+- admin code in `awcms/` stays JavaScript ES2022+
+- public portal code stays TypeScript/TSX
+- admin edit/detail routes should use signed route params where the current routing model requires them
+- themeable UI should use semantic variables rather than hardcoded hex values
+- public rendering must remain published-only and non-deleted
 
-**Standard**: Responsive, accessible, theme-able, and consistent shadcn/ui + Tailwind.
+### 6. Docs And Contract Alignment
 
-#### 2.1 UI and UX Architecture
+- documented Worker route changes should usually update:
+  - route implementation
+  - route catalog/OpenAPI metadata
+  - generated OpenAPI artifacts
+  - edge/runtime docs
+- cross-cutting doc changes should be reflected in the documentation audit tracker
+- docs should describe runtime reality, not aspirational behavior
 
-- **Template System**:
-  - Layouts: `MainLayout`, `AuthLayout`, `DashboardLayout`
-  - Hook: `useTemplates()`
-- **Theming Engine**:
-  - Context: `awcms/src/contexts/ThemeContext.jsx`
-  - Config: TailwindCSS v4 with CSS variables
-  - Library: `awcms/src/components/ui/*` (shadcn/ui)
-- **Navigation and Menu**:
-  - Hook: `useAdminMenu()`
-  - Router: `awcms/src/components/MainRouter.jsx`
-  - Components: `Sidebar.jsx`, `Header.jsx`, `Footer.jsx`
-- **Public Portal**:
-  - Rendering: `PuckRenderer` only (no editor runtime)
-  - Astro static output with React islands
-  - Consent + analytics: `ConsentNotice`; middleware logging only in SSR/runtime deployments
-- **Internationalization**:
-  - `awcms/src/lib/i18n.js`
-  - Template-driven translations in `template_strings`
+## Current Standards By Surface
 
-#### 2.2 UI and UX Documentation
+### Admin
 
-- `docs/modules/TEMPLATE_SYSTEM.md`
-- `docs/modules/THEMING.md`
-- `docs/modules/VISUAL_BUILDER.md`
-- `docs/modules/MENU_SYSTEM.md`
-- `docs/modules/INTERNATIONALIZATION.md`
+- React 19.2.4 + Vite `^8.0.5`
+- JavaScript ES2022+
+- `useTenant()` and `usePermissions()` are current foundational contexts
+- scope-aware menu behavior should follow `useAdminMenu()`
 
-### 3. Core Extension System
+### Public
 
-**Standard**: Modular, sandboxed, multi-tenant, and event-driven.
+- Astro 6.0.8 + React 19.2.4 islands
+- static-first output for canonical public builds
+- build-time tenant resolution is the normal path
+- public Worker compatibility routes must preserve current tenant/domain/media guardrails
 
-#### 3.1 Extension Architecture Overview
+### Edge
 
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                         AWCMS CORE                                   │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                    PluginContext.jsx                          │  │
-│  │   • Loads active plugins from `extensions` table              │  │
-│  │   • Separates Core vs External plugins                        │  │
-│  │   • Calls register() lifecycle on each plugin                 │  │
-│  │   • Fires 'plugins_loaded' action when complete               │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-│                              ↓                                       │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
-│  │  pluginRegistry  │  │ externalLoader   │  │ templateExts     │   │
-│  │  (Core Plugins)  │  │ (Dynamic Import) │  │ (UI Slots)       │   │
-│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘   │
-└───────────┼──────────────────────┼──────────────────────┼───────────┘
-            ↓                      ↓                      ↓
-    ┌───────────────┐      ┌───────────────┐      ┌───────────────┐
-    │ src/plugins/  │      │ awcms-ext-*   │      │ <PluginSlot>  │
-    │ backup/       │      │ vendor-slug/  │      │ Injection Pts │
-    │ mailketing/   │      │ (Per-Tenant)  │      │               │
-    │ regions/      │      └───────────────┘      └───────────────┘
-    │ helloworld/   │
-    └───────────────┘
-```
+- Cloudflare Workers + Hono
+- protected routes validate auth early
+- request shape validation happens before writes or sensitive reads
+- public routes must fail closed on missing/mismatched tenant context where applicable
+- documented route changes must keep OpenAPI/docs aligned
 
-#### 3.2 Three-Layer Extension Model
+### Database
 
-| Layer | Location | Loading | Scope | Use Case |
-| --- | --- | --- | --- | --- |
-| Core Plugins | `awcms/src/plugins/` | Static import | Platform-wide | Essential functionality |
-| External Extensions | `awcms-ext/*` folders | Dynamic import | Per-tenant | Third-party modules |
-| UI Slots | `<PluginSlot>` components | Runtime injection | Any | Widgets, menus, form fields |
+- migrations remain the canonical executable truth
+- root and mirrored migration trees must stay in parity
+- new policy authoring should follow current ABAC-first and recursion-safe patterns
 
-> **Requirement**: Core Plugins must specify `"type": "core"` in their `plugin.json` manifest and pass `plugin_type` during menu registration to be labeled as "Core" in the UI. Extensions must not use this type.
+## Current Validation Expectations
 
-#### 3.3 Core Files
+Use the most relevant validation for the changed surface.
 
-| File | Purpose |
+| Surface | Typical Validation |
 | --- | --- |
-| `awcms/src/contexts/PluginContext.jsx` | Provider for plugin state and loading |
-| `awcms/src/lib/pluginRegistry.js` | Static registry for core plugins |
-| `awcms/src/lib/externalExtensionLoader.js` | Dynamic loader for external packages |
-| `awcms/src/lib/templateExtensions.js` | APIs for registering Puck blocks and widgets |
-| `awcms/src/lib/hooks.js` | Actions and filters system |
-| `awcms/src/lib/widgetRegistry.js` | Widget type definitions |
+| maintained docs | `cd awcms && npm run docs:check` |
+| admin | `cd awcms && npm run build` |
+| public primary | `cd awcms-public/primary && npm run check:astro` |
+| edge | `cd awcms-edge && npm test && npm run typecheck` |
+| documented edge route metadata | `cd awcms-edge && npm run openapi:build && npm run openapi:validate && npm run openapi:diff` |
+| migration parity | `scripts/verify_supabase_migration_consistency.sh` |
 
-#### 3.4 Extension Documentation
+## Related Docs
 
-- `docs/modules/EXTENSIONS.md`
-- `docs/modules/MODULES_GUIDE.md` (Covers both System Modules and Extensions)
-
-### 4. Core Documentation
-
-**Standard**: Single source of truth, AI-native, and comprehensive.
-
-#### 4.1 Documentation Architecture
-
-- AI Guidelines: `../../AGENTS.md`
-- Docs Index: `../../DOCS_INDEX.md`
-- Admin Docs Index: `../../DOCS_INDEX.md`
-- Tech Reference: `docs/architecture/database.md`
-
-### 5. Additional Standards
-
-#### 5.1 Context7 Best Practices
-
-- **Supabase JS**: Use `createClient` with `flowType: "pkce"`, `autoRefreshToken`, `persistSession`, `detectSessionInUrl`, and `storageKey`; include `db.schema` and `realtime.params` when needed, and provide `global.fetch` for edge runtimes.
-- **Vite**: Client-exposed variables must use the `VITE_` prefix; when config needs env values, call `loadEnv(mode, process.cwd(), "")` inside `defineConfig`.
-- **Astro**: Use `defineConfig`, set `site`, pick an `output` mode (`static` for AWCMS), and enforce a consistent `trailingSlash`; register integrations in the `integrations` array and rely on `getStaticPaths` for dynamic routes in static builds.
-- **TailwindCSS**: Tailwind v4 is CSS-first—use `@import "tailwindcss"` (not `@tailwind` directives) and declare tokens in `@theme`; keep colors as CSS variables.
-- **React**: Keep effects focused; use full dependency arrays so effects run only when dependencies change.
-- **React Router**: Prefer data routers (`createBrowserRouter`, `RouterProvider`) when adopting loaders/actions; use `loader`/`useLoaderData` for reads and `action`/`Form` for mutations.
-- **TipTap**: Start with `StarterKit` and configure built-in extensions via `StarterKit.configure({ ... })`.
-- **Puck**: Use `<Puck>` with `config` + `data` for editing, import `@puckeditor/core/puck.css`, and render public pages with `<Render config={...} data={...} />`.
-- **Framer Motion**: Use `motion` components with explicit `initial/animate/transition` props and wrap shared layout transitions in `LayoutGroup` where needed.
-
-**Standard**: Modern mobile/IoT integration, DevOps excellence, and high code quality.
-
-#### 5.1 Additional Standards Architecture
-
-- **Mobile and IoT**:
-  - Flutter app: `awcms-mobile/primary`
-  - IoT hooks: `useSensorData()`, `useDevices()`
-- **Performance Strategy**:
-  - Local Storage caching via `UnifiedDataManager` (60s TTL)
-- **DevOps and Deployment**:
-  - Cloudflare Pages for public/admin
-  - GitHub Actions workflows
-- **Quality Assurance**:
-  - `vitest` for unit/integration tests
-  - ESLint and Prettier
-
-#### 5.2 Additional Standards Documentation
-
-- `docs/dev/mobile.md`
-- `docs/deploy/cloudflare.md`
-- `docs/dev/testing.md`
-- `CONTRIBUTING.md`
-- `../ARCHITECTURAL_RECOMMENDATIONS.md`
-
-## Security and Compliance Notes
-
-- Always enforce tenant scoping at UI entry points, data operations, and edge boundaries.
-- ABAC permission keys must follow `scope.resource.action` and be enforced in the UI and Supabase operations.
-- All deletes are soft deletes (`deleted_at`) unless explicitly documented otherwise.
-- Supabase is the system of record for Auth, Postgres, RLS, and ABAC, while Cloudflare Workers are the maintained edge/backend runtime; no custom Node.js servers are permitted.
-
-## Operational Concerns
-
-- Update `CHANGELOG.md` for releases and doc updates.
-- Versioning rules live in `docs/modules/VERSIONING.md`.
-
-## Troubleshooting
-
-- See `docs/dev/troubleshooting.md`.
-
-## References
-
-- `../../AGENTS.md`
-- `../../DOCS_INDEX.md`
+- [docs/security/overview.md](../security/overview.md)
+- [docs/tenancy/overview.md](../tenancy/overview.md)
+- [docs/architecture/runtime-boundaries.md](./runtime-boundaries.md)
+- [docs/dev/edge-functions.md](../dev/edge-functions.md)
+- [docs/dev/prompt-guide.md](../dev/prompt-guide.md)

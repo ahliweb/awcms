@@ -1,98 +1,84 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) Section 1 (Tech Stack)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # Testing Guide
 
 ## Purpose
 
-Describe how to validate AWCMS packages locally and in CI.
+Describe the current validation workflow for AWCMS packages locally and in CI, with emphasis on deterministic checks, cross-surface verification, and the commands that reflect the current repo state.
 
-This guide also defines the minimum determinism requirements expected by the AWCMS audit workflow.
+## Current Testing Model
 
-## Audience
+AWCMS validation is workspace-specific and contract-aware.
 
-- Contributors running tests before PRs
-- Maintainers verifying releases
+Current expectations:
 
-## Prerequisites
+- run the smallest relevant checks for the changed surface
+- include negative-path verification when trust boundaries changed
+- verify shared contracts across affected surfaces instead of testing only the file you edited
+- keep docs/spec artifacts aligned when documented runtime behavior changes
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) - **Primary authority** for testing framework versions
-- [AGENTS.md](../../AGENTS.md) - Implementation patterns and Context7 references
-- Node.js 24.14.1+ (admin/public/edge/mcp/shared)
-- Flutter SDK (mobile)
-- Wrangler CLI (edge worker typecheck — installed via `devDependencies` in `awcms-edge/`)
+## Current Determinism Rules
 
-## Steps
+- tests must not depend on leftover database or storage state
+- Worker and integration tests should seed/reset/mock state explicitly
+- validation failures and authorization failures should be tested intentionally where relevant
+- rerunning checks from a clean checkout should produce the same result
+- generated artifacts should be rebuilt when their source metadata changes
 
-### Deterministic Test Rules
+## Current Workspace Validation Commands
 
-- Tests must not depend on leftover database or storage state.
-- API and Worker tests should seed, reset, or clean state before execution.
-- Validation failures and authorization failures should be tested intentionally, not treated as optional coverage.
-- If a test touches Supabase-backed state, setup and teardown should be explicit in the test or harness.
-- If a change affects a shared contract, verify all affected surfaces, not only the package you edited.
-
-### Admin Panel (`awcms/`)
-
-Uses **Vitest 4.1.0** for unit and integration tests.
+### Admin (`awcms/`)
 
 ```bash
 cd awcms
-npm run lint
-npm run test -- --run
 npm run build
 ```
+
+Use additional workspace-local tests/lint commands when the touched surface already has them, but `npm run build` remains the most reliable baseline gate for ordinary admin changes.
 
 ### Public Portal — Primary (`awcms-public/primary/`)
 
 ```bash
 cd awcms-public/primary
-npm run check
-npm run build
+npm run check:astro
 ```
+
+Use the workspace build/check path if the change affects deployment/build behavior beyond ordinary Astro validation.
 
 ### Public Portal — Smandapbun (`awcms-public/smandapbun/`)
 
-```bash
-cd awcms-public/smandapbun
-npm run check
-npm run lint
-npm run build
-```
+Run the relevant workspace validation command(s) for that portal.
+
+When in doubt, inspect the workspace manifest rather than copying `primary` assumptions blindly.
 
 ### Edge Worker (`awcms-edge/`)
 
-Runs TypeScript type checking via Wrangler (`^4.77.0`).
+```bash
+cd awcms-edge
+npm test
+npm run typecheck
+```
+
+For documented route/catalog changes also run:
 
 ```bash
 cd awcms-edge
 npm run openapi:build
 npm run openapi:validate
 npm run openapi:diff
-npm run test
-npm run typecheck
 ```
-
-For Worker route changes, include negative-path verification for:
-- malformed input
-- missing or invalid auth
-- permission failures
-- docs-surface and OpenAPI drift where the route is documented
 
 ### MCP Server (`awcms-mcp/`)
 
-```bash
-cd awcms-mcp
-npm run lint
-npm run build
-```
+Run the current workspace build/lint commands from its manifest when touched.
 
 ### Shared Package (`packages/awcms-shared/`)
 
-```bash
-cd packages/awcms-shared
-npm install
-npm run typecheck
-```
+Run the relevant package validation command(s) when touched.
 
 ### Mobile App (`awcms-mobile/primary/`)
 
@@ -103,37 +89,62 @@ flutter analyze
 flutter test
 ```
 
-### Docs Links
+### Docs
 
 ```bash
 cd awcms
 npm run docs:check
 ```
 
-### Database Lint
+### Migration Parity
 
 ```bash
-cd awcms/supabase
-npx supabase db lint
+scripts/verify_supabase_migration_consistency.sh
 ```
 
-## Verification
+## Current Negative-Path Expectations
 
-- Admin loads and resolves tenant context.
-- Public portal renders pages via `PuckRenderer`.
-- ABAC restrictions block unauthorized actions.
-- Soft delete updates `deleted_at` instead of hard deletes.
-- Worker validation rejects malformed requests before sensitive writes.
-- Tests remain reproducible when re-run from a clean checkout.
+When a change touches auth, permissions, validation, or public trust boundaries, current expectations include verifying relevant negative paths such as:
+
+- malformed input
+- missing auth
+- invalid auth
+- permission failures
+- tenant/domain mismatch failures
+- invalid public media key failures
+- route catalog/OpenAPI drift where documented route metadata changed
+
+## Current Cross-Surface Rules
+
+If a shared contract changed, verify all affected surfaces.
+
+Examples:
+
+- edge route contract -> edge tests + OpenAPI generation/validation + docs check
+- public route behavior -> public validation + edge validation if Worker-backed
+- ABAC/RLS/migration changes -> migration parity + edge/docs validation where relevant
+- admin/public shared content behavior -> validate both consuming workspaces when the change crosses boundaries
+
+## Current Verification Goals
+
+- admin resolves tenant context and builds cleanly
+- public portal renders only the intended published/non-deleted content path
+- ABAC/RLS boundaries remain intact
+- Worker validation rejects malformed/unauthorized requests before sensitive operations
+- public route guardrails remain explicit when touched
+- generated OpenAPI artifacts stay in sync when their source metadata changed
 
 ## Troubleshooting
 
-- Missing env vars: check `.env.local` and `.env` files.
-- CI failures: compare commands with `.github/workflows/ci-push.yml` and `.github/workflows/ci-pr.yml`.
+- missing env vars: verify the relevant workspace env configuration
+- docs failure: fix local links and stale references before continuing
+- edge failure: check whether the route contract, route catalog, and docs diverged
+- parity failure: verify root/mirrored migration trees are still aligned
+- CI mismatch: compare local commands with the actual workflow file rather than assuming older CI behavior
 
-## References
+## Related Docs
 
-- `docs/dev/ci-cd.md`
-- `docs/dev/ai-planning-workflow.md`
-- `docs/audit/awcms-vibe-engineering-audit-checklist.md`
-- `docs/architecture/database.md`
+- [docs/dev/ci-cd.md](./ci-cd.md)
+- [docs/dev/ai-planning-workflow.md](./ai-planning-workflow.md)
+- [docs/dev/openapi-quality-checklist.md](./openapi-quality-checklist.md)
+- [docs/audit/awcms-vibe-engineering-audit-checklist.md](../audit/awcms-vibe-engineering-audit-checklist.md)

@@ -1,107 +1,158 @@
-> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) → [AGENTS.md](../../AGENTS.md)
+> **Documentation Authority**: [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [README.md](../../README.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
+>
+> **Status:** Maintained
+>
+> **Last Refreshed:** 2026-04-09
 
 # AI Workflow Standards
 
 ## Purpose
 
-Standardize how AI agents interact with the AWCMS codebase: prompt structure, iteration loops, and safety gates.
+Standardize how AI agents should approach work in the AWCMS repo: prompt shape, planning triggers, iteration loops, safety gates, and current doc/spec/validation expectations.
 
-## 1. Prompt Template
+This document complements the prompt guide and planning workflow. It is about execution discipline, not just prompt wording.
 
-All significant AI-assisted changes should follow this structure:
+## Current Workflow Model
+
+Current AWCMS AI work should be:
+
+- context-first
+- atomic when possible
+- validation-backed
+- explicit about trust boundaries
+- aligned with docs/spec artifacts when documented surfaces change
+
+## Current Prompt Shape
+
+Substantial AI-assisted changes should still identify:
 
 ```text
-Role: [Your role, e.g., "Senior AWCMS engineer"]
-Context: [Relevant files, docs, constraints]
-Task: [Specific, measurable objective]
-Constraints: [Non-negotiable rules from SYSTEM_MODEL.md]
-Output: [Expected deliverables]
+Role: [operator stance if helpful]
+Context: [relevant files, docs, runtime boundaries]
+Task: [specific measurable objective]
+Constraints: [non-negotiable rules]
+Validation: [commands or proof expectations]
+Output: [expected code/docs/spec/result]
 ```
 
-## 2. Atomic Prompting
+For current detailed prompting guidance, use [docs/dev/prompt-guide.md](./prompt-guide.md).
 
-- **One objective per prompt** — don't combine migration + UI + docs
-- **Small diffs** — prefer multiple small, reviewable changes over monolithic PRs
-- **Verify between steps** — build/lint/test after each change before proceeding
+## Current Atomicity Rules
 
-## 3. Plan Mode Triggers
+- prefer one coherent objective per prompt when feasible
+- prefer small reviewable diffs over broad rewrites
+- if a documented route/contract changes, include the related doc/spec updates in the same change set
+- if a schema/permission surface changes, include parity/docs implications in the same change set
 
-**Plan mode required** (explain approach before coding) for:
+## Current Planning Triggers
+
+Plan first before coding for high-risk categories such as:
 
 | Category | Examples |
-|----------|----------|
-| Migrations | Any `supabase/migrations/*.sql` change |
-| RLS/ABAC | Policy creation, modification, or permission changes |
-| Auth | Auth context, login flows, session handling |
-| Storage | Bucket policies, upload handlers |
-| Sanitization | Import pipelines, render sanitizers |
-| Cross-tenant | Any operation that touches multiple tenants |
+| --- | --- |
+| migrations | `supabase/migrations/*.sql`, parity updates |
+| RLS / ABAC | policy creation/modification, helper changes, permission families |
+| auth | auth contexts, session flows, tenant resolution auth boundaries |
+| storage/media | public media contract, signed access, upload/finalize paths |
+| sanitization | import/render sanitization, raw HTML paths |
+| cross-tenant/platform | onboarding, tenant override, shared-resource changes |
+| documented route contracts | public/admin Worker route behavior and OpenAPI surfaces |
 
-## 4. Self-Correction Loop
+## Current Iteration Loop
 
 ```text
-1. Make change
-2. Run build/lint/test
-3. If errors → fix → go to 2
-4. If clean → verify manually → commit
-5. If stuck after 3 iterations → stop, document issue, ask for help
+1. Read the relevant code and docs first
+2. Make the smallest coherent change
+3. Run the relevant validation commands
+4. If validation fails, fix and re-run
+5. If the contract/docs changed, align docs/spec artifacts
+6. Stop only when the task is complete or a real blocker requires user input
 ```
 
-## 5. Process Monitoring
+## Current Stop-And-Ask Triggers
 
-- Monitor all background processes during dev sessions
-- Enforce maximum runtime (kill stuck processes after 5 minutes)
-- Never leave `supabase start` or `npm run dev` running unattended
-- Check for port conflicts before starting services
+Stop and ask the user when:
 
-## 6. Available Workflows
+- requirements conflict with the authority docs
+- a task would require destructive/revert behavior affecting user changes
+- there is a real conflict with unexpected concurrent edits
+- the correct path depends on a product decision rather than an implementation choice
 
-See `.agents/workflows/` for step-by-step procedures:
+## Current Process Monitoring Rules
 
-- `migration-workflow.md` — Safe database migration steps
-- `rls-change-workflow.md` — RLS/ABAC policy changes
-- `ui-change-workflow.md` — UI component changes
-- `ci-validation-workflow.md` — Build/lint/test gate
+- do not leave long-running dev processes unattended unnecessarily
+- watch for stuck commands and terminate/retry when appropriate
+- prefer explicit validation commands over vague “it should work” claims
 
-## 6.1 Operator Surfaces for Composition Features
+## Current Workflow Families
 
-For the new template composition primitives, prefer operator tooling over direct ad hoc SQL when investigating state:
+Use the repo workflow docs where appropriate:
 
-- Site blueprints: use the local MCP tools for blueprint inventory and tenant applied-state inspection
-- Reusable sections: use the local MCP tools for section inventory before changing tenant runtime records manually
+- `migration-workflow.md`
+- `rls-change-workflow.md`
+- `ui-change-workflow.md`
+- `ci-validation-workflow.md`
 
-Current local MCP composition tools:
+Use related maintained docs alongside them:
 
-- `awcms_list_site_blueprints`
-- `awcms_get_tenant_blueprint_state`
-- `awcms_list_reusable_sections`
-- `awcms_apply_site_blueprint`
-- `awcms_materialize_reusable_section`
+- [docs/dev/prompt-guide.md](./prompt-guide.md)
+- [docs/dev/ai-planning-workflow.md](./ai-planning-workflow.md)
+- [docs/dev/review-checklist.md](./review-checklist.md)
+- [docs/dev/openapi-quality-checklist.md](./openapi-quality-checklist.md)
 
-These tools are read-only and are intended to support AI/operator diagnostics and planning around the Phase 2 and Phase 3 composition flows.
+## Current Composition / Operator Tooling Notes
 
-For write-capable composition actions, use the Worker-backed MCP tools rather than direct SQL:
+For blueprint/reusable-section composition work, prefer the current operator/MCP tooling and documented Worker-backed paths instead of inventing direct ad hoc SQL flows.
 
-- `awcms_apply_site_blueprint`
-- `awcms_materialize_reusable_section`
+Current composition-oriented operator surfaces include the AWCMS MCP tools for:
 
-These require `AWCMS_OPERATOR_BEARER_TOKEN` plus a configured edge base URL.
+- listing site blueprints
+- inspecting tenant blueprint state
+- listing reusable sections
+- applying site blueprints
+- materializing reusable sections
 
-For extension sandbox planning, rely on manifest diagnostics and documented metadata rather than inventing new execution paths. Phase 5 currently supports metadata-only sandbox profiling, not live sandbox execution.
+## Current Rule Families
 
-## 7. Available Rules
+Guardrail-oriented rules currently include playbooks for:
 
-See `.agents/rules/` for guardrail playbooks:
+- tenancy enforcement
+- RLS coverage
+- ABAC naming/enforcement
+- migration safety
+- secret prevention
+- sanitization/render safety
+- release readiness
 
-- `tenancy-guard.md` — Tenant isolation enforcement
-- `rls-policy-auditor.md` — RLS coverage audit
-- `abac-enforcer.md` — Permission naming and enforcement
-- `migration-guardian.md` — Migration safety
-- `no-secrets-ever.md` — Secret prevention
-- `sanitize-and-render.md` — Content sanitization
-- `release-readiness.md` — Pre-release checklist
+Use them when the task touches their boundary, not only after a problem appears.
 
-## References
+## Current Validation Expectations
 
-- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) — Authoritative constraints
-- [AGENTS.md](../../AGENTS.md) — Coding standards and patterns
+AI work should name or run the relevant validation commands instead of ending at code edits.
+
+Typical current commands:
+
+- `cd awcms && npm run build`
+- `cd awcms && npm run docs:check`
+- `cd awcms-public/primary && npm run check:astro`
+- `cd awcms-edge && npm test && npm run typecheck`
+- `cd awcms-edge && npm run openapi:build && npm run openapi:validate && npm run openapi:diff`
+- `scripts/verify_supabase_migration_consistency.sh`
+
+## Current Review Alignment
+
+When a workflow ends in a review or a reviewable change set, it should already satisfy the expectations in [docs/dev/review-checklist.md](./review-checklist.md):
+
+- trust boundaries preserved
+- docs updated with behavior where required
+- negative-path coverage present where relevant
+- shared contracts reviewed across affected surfaces
+
+## Related Docs
+
+- [docs/dev/prompt-guide.md](./prompt-guide.md)
+- [docs/dev/ai-planning-workflow.md](./ai-planning-workflow.md)
+- [docs/dev/review-checklist.md](./review-checklist.md)
+- [docs/dev/openapi-quality-checklist.md](./openapi-quality-checklist.md)
+- [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md)
+- [AGENTS.md](../../AGENTS.md)
