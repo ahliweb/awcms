@@ -37,6 +37,45 @@ const withAuthenticatedFetch = async (handler) => {
   }
 }
 
+const withMismatchedPublicTenantFetch = async (handler) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const request = input instanceof Request ? input : new Request(String(input), init)
+    const url = new URL(request.url)
+
+    if (url.pathname.endsWith('/rest/v1/tenants')) {
+      return new Response(JSON.stringify({
+        id: 'tenant-a',
+        domain: 'tenant-a.example.com',
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (url.pathname.endsWith('/rest/v1/rpc/get_tenant_by_domain')) {
+      return new Response(JSON.stringify({
+        id: 'tenant-b',
+        domain: 'tenant-b.example.com',
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    return new Response(JSON.stringify({ error: `Unhandled fetch: ${url.pathname}` }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  try {
+    return await handler()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
 const authOnlyEnv = {
   VITE_SUPABASE_URL: 'https://example.supabase.co',
   VITE_SUPABASE_PUBLISHABLE_KEY: 'test-publishable-key',
@@ -74,6 +113,60 @@ test('extensions events health rejects anonymous requests', async () => {
 
   assert.equal(response.status, 401)
   assert.deepEqual(await response.json(), { error: 'Unauthorized' })
+})
+
+test('public sitemap rejects missing tenant context', async () => {
+  const response = await app.request('/public/sitemap', {
+    method: 'GET',
+  })
+
+  assert.equal(response.status, 404)
+  assert.match(await response.text(), /Tenant not found/)
+})
+
+test('extensions public route rejects missing tenant context', async () => {
+  const response = await app.request('/functions/v1/extensions/events/public', {
+    method: 'GET',
+  })
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'Missing tenantId or domain' })
+})
+
+test('public modules route rejects missing tenant context', async () => {
+  const response = await app.request('/functions/v1/extensions/public-modules', {
+    method: 'GET',
+  })
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'Missing tenantId or domain' })
+})
+
+test('public sitemap rejects mismatched tenant and domain context', async () => {
+  const response = await withMismatchedPublicTenantFetch(() => app.fetch(new Request('https://edge.example.com/public/sitemap?tenant_id=tenant-a&domain=tenant-b.example.com', {
+    method: 'GET',
+  }), adminClientEnv))
+
+  assert.equal(response.status, 400)
+  assert.match(await response.text(), /Tenant\/domain mismatch/)
+})
+
+test('extensions public route rejects mismatched tenant and domain context', async () => {
+  const response = await withMismatchedPublicTenantFetch(() => app.fetch(new Request('https://edge.example.com/functions/v1/extensions/events/public?tenantId=tenant-a&domain=tenant-b.example.com', {
+    method: 'GET',
+  }), adminClientEnv))
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'Tenant/domain mismatch' })
+})
+
+test('public modules route rejects mismatched tenant and domain context', async () => {
+  const response = await withMismatchedPublicTenantFetch(() => app.fetch(new Request('https://edge.example.com/functions/v1/extensions/public-modules?tenantId=tenant-a&domain=tenant-b.example.com', {
+    method: 'GET',
+  }), adminClientEnv))
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'Tenant/domain mismatch' })
 })
 
 test('mailketing-webhook rejects invalid JSON', async () => {

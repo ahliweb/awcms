@@ -247,6 +247,65 @@ const resolveTenantId = (requestedTenantId: string | null, userContext: { tenant
   return userContext.tenantId
 }
 
+const resolvePublicTenantContext = async (adminSupabase: any, params: {
+  tenantId?: string | null
+  domain?: string | null
+}) => {
+  const requestedTenantId = typeof params.tenantId === 'string' && params.tenantId.trim()
+    ? params.tenantId.trim()
+    : null
+  const requestedDomain = typeof params.domain === 'string' && params.domain.trim()
+    ? params.domain.trim().toLowerCase()
+    : null
+
+  if (!requestedTenantId && !requestedDomain) {
+    return null
+  }
+
+  let tenantById: { id: string; domain?: string | null } | null = null
+  if (requestedTenantId) {
+    const { data, error } = await adminSupabase
+      .from('tenants')
+      .select('id, domain')
+      .eq('id', requestedTenantId)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (error) {
+      throw new Error('Failed to resolve tenant by id')
+    }
+
+    tenantById = data || null
+  }
+
+  let tenantByDomain: { id: string; domain?: string | null } | null = null
+  if (requestedDomain) {
+    const { data, error } = await adminSupabase.rpc('get_tenant_by_domain', {
+      lookup_domain: requestedDomain,
+    })
+
+    if (error) {
+      throw new Error('Failed to resolve tenant by domain')
+    }
+
+    tenantByDomain = Array.isArray(data) ? (data[0] || null) : (data || null)
+  }
+
+  if (tenantById && tenantByDomain && tenantById.id !== tenantByDomain.id) {
+    throw new HTTPException(400, { message: 'Tenant/domain mismatch' })
+  }
+
+  const tenant = tenantById || tenantByDomain
+  if (!tenant?.id) {
+    return null
+  }
+
+  return {
+    tenantId: tenant.id,
+    domain: tenant.domain || requestedDomain || null,
+  }
+}
+
 const hasAnyPermission = async (userSupabase: any, permissionNames: string[]) => {
   for (const permissionName of permissionNames) {
     const { data, error } = await userSupabase.rpc('has_permission', { permission_name: permissionName })
@@ -2772,63 +2831,68 @@ app.post('/api/public/rebuild', async (c) => {
 
 // Sitemap generation
 app.get('/public/sitemap', async (c) => {
-  const domainParam = c.req.query('domain');
-  const tenantIdParam = c.req.query('tenant_id');
-  
-  const supabase = createClient(c.env.VITE_SUPABASE_URL, c.env.SUPABASE_SECRET_KEY);
-  
-  let tenantId: string | null = null;
-  let baseUrl = 'https://awcms.ahliweb.com';
-  
-  if (tenantIdParam) {
-    tenantId = tenantIdParam;
-    const { data: tenant } = await supabase.from('tenants').select('domain, config').eq('id', tenantId).single();
-    if (tenant?.domain) baseUrl = `https://${tenant.domain}`;
-  } else if (domainParam) {
-    const { data: tenant } = await supabase.rpc('get_tenant_by_domain', { lookup_domain: domainParam });
-    if (tenant) {
-      tenantId = tenant.id;
-      baseUrl = `https://${domainParam}`;
+  try {
+    const domainParam = c.req.query('domain')
+    const tenantIdParam = c.req.query('tenant_id')
+
+    if (!tenantIdParam && !domainParam) {
+      return c.text('<?xml version="1.0" encoding="UTF-8"?><error>Tenant not found</error>', 404, { 'Content-Type': 'application/xml' })
     }
+
+    const supabase = createClient(c.env.VITE_SUPABASE_URL, c.env.SUPABASE_SECRET_KEY)
+    const tenant = await resolvePublicTenantContext(supabase, {
+      tenantId: tenantIdParam,
+      domain: domainParam,
+    })
+
+    if (!tenant?.tenantId) {
+      return c.text('<?xml version="1.0" encoding="UTF-8"?><error>Tenant not found</error>', 404, { 'Content-Type': 'application/xml' })
+    }
+
+    const tenantId = tenant.tenantId
+    const baseUrl = tenant.domain
+      ? `https://${tenant.domain}`
+      : 'https://awcms.ahliweb.com'
+
+    const { data: articles } = await supabase.from('articles').select('slug, updated_at').eq('tenant_id', tenantId).eq('status', 'published').is('deleted_at', null).order('updated_at', { ascending: false })
+    const { data: pages } = await supabase.from('pages').select('slug, updated_at').eq('tenant_id', tenantId).eq('status', 'published').eq('is_public', true).is('deleted_at', null).order('updated_at', { ascending: false })
+    const { data: products } = await supabase.from('products').select('slug, updated_at').eq('tenant_id', tenantId).eq('status', 'active').is('deleted_at', null).order('updated_at', { ascending: false })
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`
+
+    xml += `\n  <url>\n    <loc>${baseUrl}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`
+
+    if (articles && articles.length > 0) {
+      articles.forEach((item: any) => {
+        xml += `\n  <url>\n    <loc>${baseUrl}/articles/${item.slug}</loc>\n    <lastmod>${new Date(item.updated_at).toISOString()}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`
+      })
+    }
+
+    if (pages && pages.length > 0) {
+      pages.forEach((item: any) => {
+        if (item.slug === 'home' || item.slug === '/') return
+        xml += `\n  <url>\n    <loc>${baseUrl}/${item.slug}</loc>\n    <lastmod>${new Date(item.updated_at).toISOString()}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>`
+      })
+    }
+
+    if (products && products.length > 0) {
+      products.forEach((item: any) => {
+        xml += `\n  <url>\n    <loc>${baseUrl}/products/${item.slug}</loc>\n    <lastmod>${new Date(item.updated_at).toISOString()}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n  </url>`
+      })
+    }
+
+    xml += `\n</urlset>`
+
+    return c.text(xml, 200, {
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600, s-maxage=86400'
+    })
+  } catch (error) {
+    if (error instanceof HTTPException) {
+      return c.text(`<?xml version="1.0" encoding="UTF-8"?><error>${error.message}</error>`, error.status, { 'Content-Type': 'application/xml' })
+    }
+    return c.text('<?xml version="1.0" encoding="UTF-8"?><error>Failed to generate sitemap</error>', 500, { 'Content-Type': 'application/xml' })
   }
-
-  if (!tenantId) {
-    return c.text('<?xml version="1.0" encoding="UTF-8"?><error>Tenant not found</error>', 404, { 'Content-Type': 'application/xml' });
-  }
-
-  const { data: articles } = await supabase.from('articles').select('slug, updated_at').eq('tenant_id', tenantId).eq('status', 'published').is('deleted_at', null).order('updated_at', { ascending: false });
-  const { data: pages } = await supabase.from('pages').select('slug, updated_at').eq('tenant_id', tenantId).eq('status', 'published').eq('is_public', true).is('deleted_at', null).order('updated_at', { ascending: false });
-  const { data: products } = await supabase.from('products').select('slug, updated_at').eq('tenant_id', tenantId).eq('status', 'active').is('deleted_at', null).order('updated_at', { ascending: false });
-
-  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`;
-  
-  xml += `\n  <url>\n    <loc>${baseUrl}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`;
-
-  if (articles && articles.length > 0) {
-    articles.forEach((item: any) => {
-      xml += `\n  <url>\n    <loc>${baseUrl}/articles/${item.slug}</loc>\n    <lastmod>${new Date(item.updated_at).toISOString()}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`;
-    });
-  }
-
-  if (pages && pages.length > 0) {
-    pages.forEach((item: any) => {
-      if (item.slug === 'home' || item.slug === '/') return;
-      xml += `\n  <url>\n    <loc>${baseUrl}/${item.slug}</loc>\n    <lastmod>${new Date(item.updated_at).toISOString()}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>`;
-    });
-  }
-
-  if (products && products.length > 0) {
-    products.forEach((item: any) => {
-      xml += `\n  <url>\n    <loc>${baseUrl}/products/${item.slug}</loc>\n    <lastmod>${new Date(item.updated_at).toISOString()}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n  </url>`;
-    });
-  }
-
-  xml += `\n</urlset>`;
-
-  return c.text(xml, 200, {
-    'Content-Type': 'application/xml; charset=utf-8',
-    'Cache-Control': 'public, max-age=3600, s-maxage=86400'
-  });
 });
 
 // Mailketing integration
@@ -4479,15 +4543,25 @@ app.get('/functions/v1/extensions/events/health', async (c) => {
 
 app.get('/functions/v1/extensions/events/public', async (c) => {
   try {
-    const tenantId = c.req.query('tenantId') || ''
+    const tenantIdParam = c.req.query('tenantId') || c.req.query('tenant_id') || ''
+    const domainParam = c.req.query('domain') || ''
     const limit = Number.parseInt(c.req.query('limit') || '12', 10)
     const slug = c.req.query('slug') || ''
 
-    if (!tenantId) {
-      return c.json({ error: 'Missing tenantId' }, 400)
+    if (!tenantIdParam && !domainParam) {
+      return c.json({ error: 'Missing tenantId or domain' }, 400)
     }
 
     const adminSupabase = getAdminSupabase(c.env)
+    const tenant = await resolvePublicTenantContext(adminSupabase, {
+      tenantId: tenantIdParam,
+      domain: domainParam,
+    })
+    if (!tenant?.tenantId) {
+      return c.json({ error: 'Tenant not found' }, 404)
+    }
+    const tenantId = tenant.tenantId
+
     const { data: extensionRows, error: extensionError } = await adminSupabase
       .from('tenant_extensions')
       .select('id, catalog:platform_extension_catalog(slug, vendor)')
@@ -4541,30 +4615,43 @@ app.get('/functions/v1/extensions/events/public', async (c) => {
 })
 
 app.get('/functions/v1/extensions/public-modules', async (c) => {
-  const tenantId = c.req.query('tenantId') || ''
-  if (!tenantId) {
-    return c.json({ error: 'Missing tenantId' }, 400)
+  try {
+    const tenantIdParam = c.req.query('tenantId') || c.req.query('tenant_id') || ''
+    const domainParam = c.req.query('domain') || ''
+    if (!tenantIdParam && !domainParam) {
+      return c.json({ error: 'Missing tenantId or domain' }, 400)
+    }
+
+    const adminSupabase = getAdminSupabase(c.env)
+    const tenant = await resolvePublicTenantContext(adminSupabase, {
+      tenantId: tenantIdParam,
+      domain: domainParam,
+    })
+    if (!tenant?.tenantId) {
+      return c.json({ error: 'Tenant not found' }, 404)
+    }
+
+    const { data, error } = await adminSupabase
+      .from('tenant_extensions')
+      .select('catalog:platform_extension_catalog(manifest)')
+      .eq('tenant_id', tenant.tenantId)
+      .eq('activation_state', 'active')
+      .is('deleted_at', null)
+
+    if (error) {
+      return c.json({ error: error.message }, 400)
+    }
+
+    const modules = (data || []).flatMap((row: any) => {
+      const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
+      const manifest = catalog?.manifest
+      return Array.isArray(manifest?.publicModules) ? manifest.publicModules : []
+    })
+
+    return c.json({ ok: true, modules })
+  } catch (error) {
+    return handleRouteError(c, error, 'Failed to load public modules')
   }
-
-  const adminSupabase = getAdminSupabase(c.env)
-  const { data, error } = await adminSupabase
-    .from('tenant_extensions')
-    .select('catalog:platform_extension_catalog(manifest)')
-    .eq('tenant_id', tenantId)
-    .eq('activation_state', 'active')
-    .is('deleted_at', null)
-
-  if (error) {
-    return c.json({ error: error.message }, 400)
-  }
-
-  const modules = (data || []).flatMap((row: any) => {
-    const catalog = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog
-    const manifest = catalog?.manifest
-    return Array.isArray(manifest?.publicModules) ? manifest.publicModules : []
-  })
-
-  return c.json({ ok: true, modules })
 })
 
 // redirect /functions/v1/serve-sitemap to /public/sitemap
