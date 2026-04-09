@@ -1,7 +1,7 @@
 # OpenClaw AI Gateway
 
 > **Documentation Authority:** [SYSTEM_MODEL.md](../../SYSTEM_MODEL.md) -> [AGENTS.md](../../AGENTS.md) -> [DOCS_INDEX.md](../../DOCS_INDEX.md)
-> **Last Updated:** 2026-02-24
+> **Last Updated:** 2026-04-10
 > **Context7 Source:** `openclaw/openclaw`
 
 ## Purpose

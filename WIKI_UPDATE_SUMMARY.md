@@ -1,5 +1,9 @@
 # GitHub Wiki Update Summary
 
+> Status: Historical summary of a wiki-sync pass.
+>
+> For the current documentation-audit state, use `docs/dev/documentation-audit-plan.md` and `docs/dev/documentation-audit-tracker.md`.
+
 ## Overview
 
 The AWCMS GitHub wiki (`awcms.wiki/`) has been successfully updated with the latest documentation from the Context7-based 2026-Q1 full re-audit cycle.
@@ -83,6 +87,8 @@ The AWCMS GitHub wiki (`awcms.wiki/`) has been successfully updated with the lat
 - **New files**: 1 (context7-benchmark-playbook.md)
 
 ## Audit Cycle Status
+
+This section reflects the status at the time of that wiki update, not the live repository audit state.
 
 All phases completed:
 
