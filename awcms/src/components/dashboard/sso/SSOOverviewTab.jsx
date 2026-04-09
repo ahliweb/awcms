@@ -1,6 +1,6 @@
 import { AlertTriangle, Key, Lock, Shield } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TabsContent } from '@/templates/flowbite-admin';
+import { TabsContent } from '@/templates/emdash-admin';
 import SecurityFeatureCard from '@/components/dashboard/sso/SecurityFeatureCard';
 
 function SSOOverviewTab({ securityInfo }) {

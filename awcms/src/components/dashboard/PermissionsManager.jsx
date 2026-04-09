@@ -6,7 +6,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useSearch } from '@/hooks/useSearch';
 import ContentTable from '@/components/dashboard/ContentTable';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 import PermissionsAccessDenied from '@/components/dashboard/permissions/PermissionsAccessDenied';
 import PermissionsHeaderActions from '@/components/dashboard/permissions/PermissionsHeaderActions';
 import PermissionsSearchPanel from '@/components/dashboard/permissions/PermissionsSearchPanel';
@@ -232,6 +232,13 @@ function PermissionsManager() {
         ]}
         summaryCards={summaryCards}
       />
+
+      <div className="mb-6 overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
+        <div className="bg-gradient-to-r from-primary/12 via-background/40 to-emerald-500/12 p-4 sm:p-5">
+          <h3 className="text-base font-semibold text-foreground">Permission catalog workspace</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Search, review, and maintain platform permission entries while keeping the role matrix aligned with active ABAC resources.</p>
+        </div>
+      </div>
 
       <PermissionsSearchPanel
         query={query}

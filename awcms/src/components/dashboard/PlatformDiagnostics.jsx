@@ -1,7 +1,7 @@
 import { Building2, ChevronRight, CloudCog, Database, Home, Layers3, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AdminPageLayout } from '@/templates/flowbite-admin';
+import { AdminPageLayout } from '@/templates/emdash-admin';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useTenant } from '@/contexts/TenantContext';
 import DashboardModuleIntro from '@/components/dashboard/DashboardModuleIntro';

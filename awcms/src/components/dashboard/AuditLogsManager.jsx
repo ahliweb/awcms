@@ -4,7 +4,7 @@ import { ClipboardList } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 import AuditLogsHeaderActions from '@/components/dashboard/audit-logs/AuditLogsHeaderActions';
 import AuditLogsSearchBar from '@/components/dashboard/audit-logs/AuditLogsSearchBar';
 import AuditLogsTable from '@/components/dashboard/audit-logs/AuditLogsTable';
@@ -92,6 +92,19 @@ function AuditLogsManager() {
           />
         )}
       />
+
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Results</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{totalCount}</p>
+          <p className="text-xs text-muted-foreground">Audit events in the current filtered scope</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Page</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{page}</p>
+          <p className="text-xs text-muted-foreground">Paginated audit review state</p>
+        </div>
+      </div>
 
       <AuditLogsSearchBar
         searchQuery={searchQuery}

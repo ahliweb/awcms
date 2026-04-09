@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 
 export default function PolicyManager() {
     const { tenantId, hasPermission, isPlatformAdmin } = usePermissions();
@@ -179,6 +179,29 @@ export default function PolicyManager() {
                     </Button>
                 )}
             />
+
+            <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Policies</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{policies.length}</p>
+                    <p className="text-xs text-muted-foreground">Tenant-scoped policy records in the current view</p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Access</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{isPlatformAdmin ? 'Platform governance' : 'Tenant governance'}</p>
+                    <p className="text-xs text-muted-foreground">Policy CRUD remains ABAC-gated</p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Mode</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">Allow / deny rule editor</p>
+                    <p className="text-xs text-muted-foreground">JSON conditions stay visible for review</p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Mutations</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{canManage ? 'Writable' : 'Read-only'}</p>
+                    <p className="text-xs text-muted-foreground">Editing respects the current permission matrix</p>
+                </div>
+            </div>
 
             <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm">
                 <div className="overflow-x-auto">

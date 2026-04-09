@@ -1,6 +1,6 @@
 import { CheckCircle, XCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TabsContent } from '@/templates/flowbite-admin';
+import { TabsContent } from '@/templates/emdash-admin';
 
 function SSOProvidersTab({ securityInfo }) {
   return (

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { usePlugins } from '@/contexts/PluginContext';
-import { AdminPageLayout, PageHeader } from '@/templates/flowbite-admin';
+import { AdminPageLayout, PageHeader } from '@/templates/emdash-admin';
 import EmailSettingsPanel from '@/plugins/mailketing/components/EmailSettings';
 
 function EmailSettingsDisabledState() {
@@ -66,6 +66,19 @@ export default function EmailSettingsManager() {
         icon={Mail}
         breadcrumbs={[{ label: 'Settings' }, { label: 'Email Settings', icon: Mail }]}
       />
+
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Provider</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">Mailketing</p>
+          <p className="text-xs text-muted-foreground">Tenant email delivery entry point</p>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Plugin state</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{isMailketingActive ? 'Active' : 'Inactive'}</p>
+          <p className="text-xs text-muted-foreground">Screen stays visible even when the provider is disabled</p>
+        </div>
+      </div>
 
       {isMailketingActive ? <EmailSettingsPanel /> : <EmailSettingsDisabledState />}
     </AdminPageLayout>
