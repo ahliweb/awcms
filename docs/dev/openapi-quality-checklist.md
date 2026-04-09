@@ -28,10 +28,12 @@ Applies to:
 | OAPI-04 | Admin docs remain protected before rendering. |  |  |
 | OAPI-05 | Request examples exist for each documented audited endpoint. |  |  |
 | OAPI-06 | Success response examples exist for each documented audited endpoint. |  |  |
-| OAPI-07 | Error examples exist for `400`, `401`, and other expected failures where applicable. |  |  |
+| OAPI-07 | Error examples exist for `400`, `401`, and other expected failures where applicable. |  | Include public mismatch and invalid-key failures where runtime enforces them. |
 | OAPI-08 | Permission metadata remains accurate for protected operations. |  |  |
 | OAPI-09 | Tenant context metadata remains accurate for tenant-scoped operations. |  |  |
 | OAPI-10 | Spec updates ship in the same change set as route behavior changes. |  |  |
+| OAPI-11 | Public tenant-aware routes document accepted tenant inputs (`tenantId`, `tenant_id`, `domain`) and mismatch behavior consistently. |  |  |
+| OAPI-12 | Public media routes document canonical storage-key requirements and protected-path rejection consistently. |  |  |
 
 ## Required Commands
 
@@ -48,6 +50,8 @@ npm run typecheck
 
 - Does the documented request shape match runtime validation?
 - Are failure responses explicit rather than implied?
+- If a public route accepts tenant context, does the spec describe all accepted inputs and the tenant/domain mismatch failure path?
+- If a public route serves media, does the spec describe canonical key requirements instead of implying arbitrary storage-key access?
 - Did the change alter permissions, tenant context, or auth expectations?
 - Did the docs surface change in a way that could expose internal routes?
 - Is the spec descriptive of reality rather than aspirational?
