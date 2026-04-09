@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Provide a current, practical guide for writing prompts that match the live AWCMS monorepo as it exists now: the real workspace boundaries, runtime ownership model, multi-tenant rules, ABAC naming, validation gates, executable import surfaces, and the current documentation/OpenAPI maintenance workflow.
+Provide a current, practical guide for writing prompts that match the live AWCMS monorepo as it exists now: the real workspace boundaries, runtime ownership model, multi-tenant rules, ABAC naming, validation gates, executable import surfaces, MCP/tooling shape, and the current documentation/OpenAPI maintenance workflow.
 
 This guide is for humans and AI operators who want prompts to produce changes that are:
 
@@ -25,18 +25,58 @@ This guide is descriptive, not authoritative. When it conflicts with a higher-le
 3. [README.md](../../README.md)
 4. [DOCS_INDEX.md](../../DOCS_INDEX.md)
 
+This guide complements, not replaces:
+
+- [docs/dev/ai-workflows.md](ai-workflows.md) for execution discipline
+- [docs/dev/ai-planning-workflow.md](ai-planning-workflow.md) for when planning is required
+- [docs/dev/review-checklist.md](review-checklist.md) for review expectations
+
+## How To Use This Guide
+
+Use this guide in three passes when drafting a prompt:
+
+1. Confirm the authority chain and the actual workspace path.
+2. State the trust boundary, constraints, and validation commands explicitly.
+3. Point the prompt at the real checked-in files or docs that define the existing pattern.
+
+If the task is non-trivial, pair the prompt with a short planning record using [docs/dev/ai-planning-workflow.md](ai-planning-workflow.md).
+
 ## Current Repository Condition
 
 Prompts should assume the following current repo condition unless the task explicitly says otherwise.
 
+### Current Repository Snapshot
+
+- The repo is an actively maintained monorepo with admin, public, edge, mobile, IoT, shared-package, MCP, and AI-gateway surfaces.
+- The documentation audit cycle is active and tracked in:
+  - [docs/dev/documentation-audit-plan.md](documentation-audit-plan.md)
+  - [docs/dev/documentation-audit-tracker.md](documentation-audit-tracker.md)
+- Canonical database migrations live in `supabase/migrations/` and are mirrored in `awcms/supabase/migrations/`.
+- Runtime validation is not purely workspace-local anymore; prompts can target either a specific package check or the consolidated runtime script `bash scripts/ci-validate-runtime.sh`.
+- Prompt authors should prefer workspace paths over package names because some workspace package manifests use historical or implementation-specific names.
+
+### Documentation And Manifest Drift Reality
+
+- The authority chain remains the decision source for architecture and constraints.
+- Some patch-level package versions may move faster than higher-level docs. When version precision matters, prompts should say:
+  - follow `SYSTEM_MODEL.md` and `AGENTS.md` for architectural constraints
+  - verify the affected workspace manifest before making patch-version-sensitive changes
+- This is especially important for public workspaces and toolchain/package-manager behavior.
+
 ### Core Runtime Reality
 
 - `awcms/` is the admin panel: React 19.2.4 + Vite `^8.0.5` + JavaScript ES2022+.
-- `awcms-public/primary/` and `awcms-public/smandapbun/` are Astro 6.0.8 public portals with React 19.2.4 islands and static-first output.
+- `awcms-public/` is the public-portal umbrella workspace.
+- `awcms-public/primary/` and `awcms-public/smandapbun/` are Astro public portals with React 19.2.4 islands and static-first output.
+- Public work should treat `awcms-public/primary/` and `awcms-public/smandapbun/` as separate implementation targets even when their architectural rules are shared.
 - `awcms-edge/` is the maintained server-side HTTP runtime: Cloudflare Workers + Hono.
 - Supabase remains authoritative for Auth, PostgreSQL data, RLS, and ABAC enforcement.
 - Cloudflare R2 is the maintained object storage layer.
 - Cloudflare Queues are used for asynchronous edge work such as media finalization and notification fan-out.
+- `packages/awcms-shared/` contains shared public-facing TypeScript utilities and can affect multiple public workspaces at once.
+- `awcms-mobile/primary/` is the maintained Flutter mobile client.
+- `awcms-esp32/primary/` is the maintained ESP32/PlatformIO firmware workspace.
+- `openclaw/` is the maintained AI gateway configuration surface.
 - Custom Node.js backend servers are not part of the supported runtime.
 
 ### Security And Data Lifecycle Reality
@@ -74,6 +114,25 @@ Prompts should assume the following current repo condition unless the task expli
   - edge docs updates
   - generated artifact rebuild/validation
 - Documentation validation with `npm run docs:check` is active and should be called out in prompts for maintained docs.
+
+### MCP And Operator Tooling Reality
+
+- The repo-level MCP topology is declared in `mcp.json`.
+- The currently enabled MCP servers are `supabase`, `context7`, `github`, and `cloudflare`.
+- `paper` remains configured but disabled by default.
+- GitHub MCP is intentionally limited to `default,git` toolsets.
+- Cloudflare MCP uses a curated disabled-tools list to reduce tool sprawl.
+- Prompt authors should ask for repo-aware, bounded changes rather than vague "use MCP" instructions.
+
+### Validation Entry Point Reality
+
+- Validation should be named with real commands, not described generically.
+- Important current entry points include:
+  - `bash scripts/ci-validate-runtime.sh`
+  - `bash scripts/verify_supabase_migration_consistency.sh`
+  - `npm run docs:check` from `awcms/`
+  - workspace-local build/check/typecheck/test commands
+- Prompt authors should choose the narrowest correct validation path for the change and mention the broader runtime script only when cross-surface confidence is needed.
 
 ### Import / EmDash Reality
 
@@ -131,6 +190,8 @@ Good AWCMS prompts are:
 - clear about validation requirements
 - limited to one coherent objective when possible
 - careful about doc/spec parity when touching documented surfaces
+- aware of whether the task is local, cross-workspace, or audit/remediation work
+- specific about whether the prompt needs implementation, investigation, review, or documentation maintenance
 
 Bad AWCMS prompts are usually vague in one or more of these ways:
 
@@ -165,6 +226,23 @@ Before writing a detailed prompt, anchor it to the authority chain and the relev
 
 If the task is documentation-heavy, the prompt should say which docs must stay aligned.
 
+## Prompt Anatomy
+
+The current repo workflow expects prompt shape and execution discipline to work together.
+
+For substantial work, a good prompt usually contains these fields explicitly or implicitly:
+
+```text
+Role: optional operator stance when useful
+Context: workspace paths, docs, and runtime boundaries
+Task: one concrete objective
+Constraints: security, tenancy, lifecycle, styling, and runtime rules
+Validation: exact commands or verification proof
+Output: code/docs/spec/review result expected
+```
+
+This shape aligns with [docs/dev/ai-workflows.md](ai-workflows.md). Prompts do not need to be verbose, but they should still cover these elements.
+
 ## The 7 Essential Prompt Components
 
 Every useful AWCMS prompt should answer these questions up front.
@@ -176,6 +254,7 @@ State exactly where the change belongs.
 | Workspace | Use When The Request Is About |
 | --- | --- |
 | `awcms/` | Admin panel UI, hooks, contexts, manager screens, dashboard widgets, module routes |
+| `awcms-public/` | Umbrella public workspace commands that coordinate `primary` and `smandapbun` |
 | `awcms-public/primary/` | Default public portal, Astro pages, islands, static content rendering |
 | `awcms-public/smandapbun/` | Sovereign SMANDAPBUN portal |
 | `awcms-edge/` | Worker routes, queue consumers, R2 delivery, edge auth, import execution |
@@ -186,6 +265,7 @@ State exactly where the change belongs.
 | `awcms-mobile/primary/` | Flutter mobile implementation |
 | `awcms-esp32/primary/` | ESP32 / PlatformIO firmware |
 | `openclaw/` | AI gateway routing and tenant model config |
+| `scripts/` | Repo-level validation, migration parity, environment bootstrap, and operational automation |
 | `docs/` | Documentation updates |
 
 Example:
@@ -290,6 +370,7 @@ Useful validation language:
 - validate generated specs when route catalog changes
 - keep both migration folders in parity if schema work is involved
 - update docs if a user-facing, runtime, or contract surface changed
+- use the runtime validation script for cross-surface confidence when the change spans admin/shared/edge/migration boundaries
 
 Example:
 
@@ -313,13 +394,15 @@ Useful completion language:
 ### Stack And Runtime
 
 - `awcms/`: React 19.2.4, Vite `^8.0.5`, JavaScript ES2022+
-- `awcms-public/primary/`: Astro 6.0.8, React 19.2.4 islands, TypeScript/TSX, static-first output
-- `awcms-public/smandapbun/`: Astro 6.0.8, React 19.2.4 islands, TypeScript/TSX, static-first output
+- `awcms-public/primary/`: Astro-based public portal, React 19.2.4 islands, TypeScript/TSX, static-first output
+- `awcms-public/smandapbun/`: Astro-based public portal, React 19.2.4 islands, TypeScript/TSX, static-first output
 - `awcms-edge/`: Cloudflare Workers + Hono
 - Supabase: Auth, PostgreSQL, RLS, ABAC authority
 - Cloudflare R2: object storage
 - Cloudflare Queues: async background processing
 - Node.js baseline: `>=24.14.1`
+
+When exact patch versions matter, read the relevant workspace manifest in addition to the authority docs.
 
 ### Tenancy And Authorization
 
@@ -384,18 +467,31 @@ Prompts for docs should say whether the change must also update:
 
 Doc prompts should also call out `npm run docs:check` when the change touches maintained docs.
 
+### Planning And Review Discipline
+
+- Non-trivial prompts should either include a planning expectation or explicitly say the work is small enough not to require one.
+- High-risk prompts should say to plan first, especially for migrations, RLS/ABAC, auth, edge contracts, storage, sanitization, or cross-tenant flows.
+- Review prompts should ask for findings first, file references, and explicit risk/test-gap callouts.
+- If the task is a review of an implementation that changed docs or contracts, the prompt should ask the reviewer to verify doc/spec parity rather than only code correctness.
+
 ## Current Validation Commands To Mention In Prompts
 
 Use the most relevant command for the changed surface instead of vague language like “run checks”.
 
 | Surface | Typical Validation |
 | --- | --- |
-| `awcms/` | `npm run build` |
+| `awcms/` | `npm run lint`, `npm run build`, or targeted `npm test -- --run <path>` depending on the change |
+| `awcms/` docs | `npm run docs:check` |
 | `awcms-edge/` | `npm test` and `npm run typecheck` |
 | `awcms-edge/` OpenAPI changes | `npm run openapi:build`, `npm run openapi:validate`, `npm run openapi:diff` |
-| `awcms-public/primary/` | `npm run check:astro` |
+| `awcms-public/primary/` | `npm run check:astro`, `npm run check`, or `npm run build` as appropriate |
+| `awcms-public/smandapbun/` | `npm run check`, `npm run lint`, or `npm run build` as appropriate |
+| `awcms-public/` cross-portal work | `pnpm -C awcms-public run build` or the equivalent root public build command |
 | maintained docs | `npm run docs:check` from `awcms/` |
-| migration work | identify or run the appropriate migration validation path and keep mirrored migrations aligned |
+| migration work | `bash scripts/verify_supabase_migration_consistency.sh` and keep mirrored migrations aligned |
+| admin/shared/edge/runtime-crossing work | `bash scripts/ci-validate-runtime.sh` |
+
+Choose the narrowest correct command set. Do not automatically ask for every validation command in the repo.
 
 ## Workflow-Aware Prompting
 
@@ -419,6 +515,7 @@ Also align with [docs/dev/ai-workflows.md](ai-workflows.md):
 - prefer atomic changes over broad rewrites
 - verify after changes
 - plan first for migrations, RLS/ABAC, auth, storage, sanitization, and cross-tenant work
+- use a tracked plan or planning record for non-trivial implementation work
 
 ## Prompt Templates
 
@@ -452,7 +549,7 @@ Task type: Astro page / island / public rendering update.
 Scope: public-facing.
 Follow: `docs/dev/public.md` and current tenant-scoped content-fetching patterns.
 Constraints:
-- Astro 6.0.8 static-first output
+- Astro static-first output
 - TypeScript/TSX only
 - resolve tenant at build time using PUBLIC_TENANT_ID or VITE_PUBLIC_TENANT_ID unless the task is explicitly Worker-mediated
 - render only published and non-deleted content
@@ -578,6 +675,7 @@ Task type: documentation update.
 Authority order: SYSTEM_MODEL.md -> AGENTS.md -> README.md -> DOCS_INDEX.md -> target doc.
 Constraints:
 - keep stack versions and runtime boundaries current
+- prefer path- and manifest-aware language over guessed package names or stale topology assumptions
 - use relative links
 - update canonical references if topic routing changes
 - update the audit tracker if this is a repo-wide or cross-surface correction
@@ -632,6 +730,7 @@ Use these when you want the agent to ground itself quickly:
 - [docs/dev/admin.md](admin.md)
 - [docs/dev/public.md](public.md)
 - [docs/dev/edge-functions.md](edge-functions.md)
+- [docs/dev/agent-skill-policy.md](agent-skill-policy.md)
 - [docs/architecture/edge-openapi-spec.md](../architecture/edge-openapi-spec.md)
 - [docs/dev/openapi-quality-checklist.md](openapi-quality-checklist.md)
 - [docs/dev/ai-workflows.md](ai-workflows.md)
@@ -669,6 +768,8 @@ Use these when you want the agent to ground itself quickly:
 7. Did you say whether docs, OpenAPI artifacts, or mirrored migrations must also be updated?
 8. If the task is import-related, did you say which wave or contract surface is being changed?
 9. If the task is a public Worker route, did you say how tenant resolution and failure paths should behave?
+10. If the task is non-trivial, did you state whether planning is required?
+11. If exact versions matter, did you say whether to trust authority docs, live manifests, or both?
 
 ## References
 
