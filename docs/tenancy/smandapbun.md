@@ -53,6 +53,7 @@ The portal reads tenant settings and merges them with JSON defaults:
 - `analytics_consent`
 - `site_info`
 - `contact_info`
+- `site_images`
 - `page_contact`
 - `page_profile`
 - `page_organization`
@@ -64,6 +65,9 @@ The portal reads tenant settings and merges them with JSON defaults:
 - `page_agenda`
 - `page_gallery`
 - `page_school_info`
+
+- The sovereign public portal now understands both the nested and the current flat admin `site_info` payload shape emitted by `awcms/SettingsManager.jsx`, including contact and social fields.
+- `page_agenda`, `page_gallery`, and `page_contact` are consumed directly as tenant-scoped admin-managed structured fallback content instead of relying only on bundled JSON defaults.
 
 ### Menus
 

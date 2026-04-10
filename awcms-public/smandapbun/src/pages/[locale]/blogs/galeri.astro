@@ -22,5 +22,5 @@ const pageDescription = galleryPage?.excerpt || undefined;
 
 <Layout title={pageTitle} description={pageDescription} pageType="gallery_archive">
   <PageHero title={pageTitle} description={pageDescription} image="/images/backgrounds/hero-activity.webp" breadcrumbs={[{ href: getLocalizedPath("/", locale), label: t("nav.home", locale) }, { href: getLocalizedPath("/blogs", locale), label: t("blogs.title", locale) }, { label: t("blogs.gallery", locale) }]} testId="gallery-hero" />
-  <GalleryArchiveContent locale={locale} pageHtml={galleryPage?.content ? sanitizeHTML(galleryPage.content) : null} />
+  <GalleryArchiveContent locale={locale} pageHtml={galleryPage?.content ? sanitizeHTML(galleryPage.content) : null} albums={gallery.albums} />
 </Layout>

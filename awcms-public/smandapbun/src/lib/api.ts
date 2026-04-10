@@ -48,6 +48,20 @@ const getTenantClient = (tenantId?: string | null): SupabaseClient => {
     return (scopedClient || supabase) as SupabaseClient;
 };
 
+const parseSettingValue = <T = unknown>(value: unknown): T | null => {
+    if (!value) return null;
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value) as T;
+        } catch (e) {
+            console.error('Error parsing settings JSON:', e);
+            return null;
+        }
+    }
+
+    return value as T;
+};
+
 export interface LocalizedString {
     id: string;
     en: string;
@@ -675,26 +689,13 @@ export async function getSiteData(): Promise<SiteData> {
         const siteInfo = settings.find(s => s.key === 'site_info')?.value;
         const contactInfo = settings.find(s => s.key === 'contact_info')?.value;
 
-        const parseSetting = (value: unknown) => {
-            if (!value) return null;
-            if (typeof value === 'string') {
-                try {
-                    return JSON.parse(value);
-                } catch (e) {
-                    console.error('Error parsing settings JSON:', e);
-                    return null;
-                }
-            }
-            return value;
-        };
-
-        const parsedSeo = parseSetting(seo) as Record<string, any> | null;
+        const parsedSeo = parseSettingValue<Record<string, any>>(seo);
         if (parsedSeo) {
             if (parsedSeo.meta_title) defaultData.site.name = parsedSeo.meta_title;
             if (parsedSeo.meta_description) defaultData.site.description = parsedSeo.meta_description;
         }
 
-        const parsedSiteInfo = parseSetting(siteInfo) as Record<string, any> | null;
+        const parsedSiteInfo = parseSettingValue<Record<string, any>>(siteInfo);
         if (parsedSiteInfo) {
             if (parsedSiteInfo.site) {
                 defaultData.site = { ...defaultData.site, ...parsedSiteInfo.site };
@@ -704,9 +705,30 @@ export async function getSiteData(): Promise<SiteData> {
             }
             if (parsedSiteInfo.accreditation) defaultData.accreditation = parsedSiteInfo.accreditation;
             if (parsedSiteInfo.established) defaultData.established = parsedSiteInfo.established;
+
+            // Admin general settings currently save a flat `site_info` payload.
+            if (parsedSiteInfo.site_name) defaultData.site.name = parsedSiteInfo.site_name;
+            if (parsedSiteInfo.site_tagline) defaultData.site.tagline = parsedSiteInfo.site_tagline;
+            if (parsedSiteInfo.contact_email) {
+                defaultData.contact.email = parsedSiteInfo.contact_email;
+                defaultData.site.email = parsedSiteInfo.contact_email;
+            }
+            if (parsedSiteInfo.contact_phone) {
+                defaultData.contact.phone = parsedSiteInfo.contact_phone;
+                defaultData.site.phone = parsedSiteInfo.contact_phone;
+            }
+
+            defaultData.site.socialMedia = {
+                ...(defaultData.site.socialMedia || {}),
+                ...(parsedSiteInfo.socialMedia || {}),
+                ...(parsedSiteInfo.social_facebook ? { facebook: parsedSiteInfo.social_facebook } : {}),
+                ...(parsedSiteInfo.social_instagram ? { instagram: parsedSiteInfo.social_instagram } : {}),
+                ...(parsedSiteInfo.social_youtube ? { youtube: parsedSiteInfo.social_youtube } : {}),
+                ...(parsedSiteInfo.social_twitter ? { twitter: parsedSiteInfo.social_twitter } : {}),
+            };
         }
 
-        const parsedContactInfo = parseSetting(contactInfo) as Record<string, any> | null;
+        const parsedContactInfo = parseSettingValue<Record<string, any>>(contactInfo);
         if (parsedContactInfo) {
             defaultData.contact = { ...defaultData.contact, ...parsedContactInfo };
             defaultData.site = {
@@ -727,9 +749,62 @@ export async function getContactPageData(): Promise<ContactData> {
 
     const siteData = await getSiteData();
     const defaultData = structuredClone(contactDefault) as ContactData;
+    const client = getTenantClient(tenantId);
+    const { data: contactPageSetting } = await client
+        .from('settings')
+        .select('value')
+        .eq('tenant_id', tenantId)
+        .eq('key', 'page_contact')
+        .is('deleted_at', null)
+        .maybeSingle();
+
+    const contactPageValue = parseSettingValue<Record<string, any>>(contactPageSetting?.value);
     const contact = siteData.contact || {};
     const site = siteData.site || {};
     const socialMedia = site.socialMedia || {};
+
+    if (contactPageValue?.contactPage) {
+        defaultData.contactPage = { ...defaultData.contactPage, ...contactPageValue.contactPage };
+    }
+
+    if (contactPageValue?.contactInfo) {
+        defaultData.contactInfo = { ...defaultData.contactInfo, ...contactPageValue.contactInfo };
+    }
+
+    if (contactPageValue?.socialMedia) {
+        if (Array.isArray(contactPageValue.socialMedia)) {
+            defaultData.socialMedia = contactPageValue.socialMedia;
+        } else if (typeof contactPageValue.socialMedia === 'object') {
+            defaultData.socialMedia = [
+                contactPageValue.socialMedia.facebook ? {
+                    platform: 'Facebook',
+                    url: contactPageValue.socialMedia.facebook,
+                    icon: 'tabler:brand-facebook',
+                } : null,
+                contactPageValue.socialMedia.instagram ? {
+                    platform: 'Instagram',
+                    url: contactPageValue.socialMedia.instagram,
+                    icon: 'tabler:brand-instagram',
+                } : null,
+                contactPageValue.socialMedia.youtube ? {
+                    platform: 'YouTube',
+                    url: contactPageValue.socialMedia.youtube,
+                    icon: 'tabler:brand-youtube',
+                } : null,
+                contactPageValue.socialMedia.twitter ? {
+                    platform: 'Twitter/X',
+                    url: contactPageValue.socialMedia.twitter,
+                    icon: 'tabler:brand-x',
+                } : null,
+            ].filter(Boolean) as ContactData['socialMedia'];
+        }
+    }
+
+    if (contactPageValue?.mapEmbed) {
+        defaultData.mapEmbed = contactPageValue.mapEmbed;
+    } else if (contactPageValue?.contactInfo?.mapEmbed) {
+        defaultData.mapEmbed = contactPageValue.contactInfo.mapEmbed;
+    }
 
     defaultData.contactInfo.address = toLocalizedField(contact.address, defaultData.contactInfo.address.id);
     defaultData.contactInfo.phone = contact.phone || defaultData.contactInfo.phone;
@@ -1146,6 +1221,31 @@ export interface AgendaData {
 }
 
 export async function getAgendaData(): Promise<AgendaData> {
+    const tenantId = await getTenantId();
+    if (!tenantId) return blogsDefault as unknown as AgendaData;
+
+    const client = getTenantClient(tenantId);
+    const { data } = await client
+        .from('settings')
+        .select('value')
+        .eq('tenant_id', tenantId)
+        .eq('key', 'page_agenda')
+        .is('deleted_at', null)
+        .maybeSingle();
+
+    const parsed = parseSettingValue<Record<string, any>>(data?.value);
+    if (parsed) {
+        const fallback = (blogsDefault as any).agenda || {};
+        return {
+            agenda: {
+                ...fallback,
+                ...parsed,
+                title: parsed.title || fallback.title,
+                events: Array.isArray(parsed.events) ? parsed.events : fallback.events,
+            },
+        } as AgendaData;
+    }
+
     return blogsDefault as unknown as AgendaData;
 }
 
@@ -1163,6 +1263,31 @@ export interface GalleryData {
 }
 
 export async function getGalleryData(): Promise<GalleryData> {
+    const tenantId = await getTenantId();
+    if (!tenantId) return blogsDefault as unknown as GalleryData;
+
+    const client = getTenantClient(tenantId);
+    const { data } = await client
+        .from('settings')
+        .select('value')
+        .eq('tenant_id', tenantId)
+        .eq('key', 'page_gallery')
+        .is('deleted_at', null)
+        .maybeSingle();
+
+    const parsed = parseSettingValue<Record<string, any>>(data?.value);
+    if (parsed) {
+        const fallback = (blogsDefault as any).gallery || {};
+        return {
+            gallery: {
+                ...fallback,
+                ...parsed,
+                title: parsed.title || fallback.title,
+                albums: Array.isArray(parsed.albums) ? parsed.albums : fallback.albums,
+            },
+        } as GalleryData;
+    }
+
     return blogsDefault as unknown as GalleryData;
 }
 

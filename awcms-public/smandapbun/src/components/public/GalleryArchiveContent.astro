@@ -8,17 +8,52 @@ import RichContentCard from "./RichContentCard.astro";
 const localImagesGlob = import.meta.glob<{ default: ImageMetadata }>("../../assets/foto-smandapbun/kegiatan-sekolah/*.{webp,jpg,jpeg,png}", { eager: true });
 const localImages = Object.values(localImagesGlob).map((img) => img.default);
 
+type ConfiguredAlbum = {
+  title?: { id?: string; en?: string } | string;
+  images?: string[];
+};
+
+type GalleryItem = {
+  type: "local" | "remote";
+  src: ImageMetadata | string;
+  alt: string;
+};
+
+type RenderAlbum = {
+  title: { id?: string; en?: string };
+  images: GalleryItem[];
+};
+
 const { locale, pageHtml = null } = Astro.props as {
   locale: Locale;
   pageHtml?: string | null;
+  albums?: ConfiguredAlbum[];
 };
 
-const albums = [
+const fallbackAlbums = [
   {
     title: { id: "Kegiatan Sekolah", en: "School Activities" },
     images: localImages.map((img, index) => ({ type: "local" as const, src: img, alt: `School Activity ${index + 1}` })),
   },
 ];
+
+const configuredAlbums: RenderAlbum[] = Array.isArray(Astro.props.albums)
+  ? Astro.props.albums
+      .filter((album: ConfiguredAlbum | null | undefined) => album && Array.isArray(album.images) && album.images.length > 0)
+      .map((album: ConfiguredAlbum, albumIndex: number) => ({
+        title:
+          typeof album.title === "string"
+            ? { id: album.title, en: album.title }
+            : album.title || { id: `Album ${albumIndex + 1}`, en: `Album ${albumIndex + 1}` },
+        images: (album.images || []).map((image: string, imageIndex: number) => ({
+          type: "remote" as const,
+          src: image,
+          alt: `${typeof album.title === "string" ? album.title : album.title?.id || album.title?.en || `Album ${albumIndex + 1}`} ${imageIndex + 1}`,
+        })),
+      }))
+  : [];
+
+const albums = configuredAlbums.length > 0 ? configuredAlbums : fallbackAlbums;
 ---
 
 <PageContentShell backgroundImage="/images/backgrounds/section-green.webp" testId="gallery-content">
@@ -28,8 +63,8 @@ const albums = [
     {albums.map((album) => <button class="filter-btn px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-gray-700" data-category={(getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-")}>{getLocalizedValue(album.title, locale)}</button>)}
   </div>
   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="gallery-grid">
-    {albums.flatMap((album) => album.images.map((image, imageIndex) => ({ ...image, category: (getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-"), categoryResult: getLocalizedValue(album.title, locale) as string, id: `${(getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-")}-${imageIndex}` }))).map((image, index) => <div class="gallery-item group relative aspect-square bg-gray-200 dark:bg-slate-800 rounded-xl overflow-hidden cursor-pointer" data-category={image.category} data-index={index} data-src={(image.src as ImageMetadata).src} data-caption={`${image.alt} - ${image.categoryResult}`} data-testid={`gallery-image-${index}`}>
-      <Image src={image.src as ImageMetadata} alt={image.alt} width={400} height={400} class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+    {albums.flatMap((album) => album.images.map((image, imageIndex) => ({ ...image, category: (getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-"), categoryResult: getLocalizedValue(album.title, locale) as string, id: `${(getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-")}-${imageIndex}` }))).map((image, index) => <div class="gallery-item group relative aspect-square bg-gray-200 dark:bg-slate-800 rounded-xl overflow-hidden cursor-pointer" data-category={image.category} data-index={index} data-src={image.type === "local" ? (image.src as ImageMetadata).src : (image.src as string)} data-caption={`${image.alt} - ${image.categoryResult}`} data-testid={`gallery-image-${index}`}>
+      {image.type === "local" ? <Image src={image.src as ImageMetadata} alt={image.alt} width={400} height={400} class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /> : <img src={image.src as string} alt={image.alt} class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />}
       <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
         <div class="transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300"><Icon name="tabler:zoom-in" class="w-10 h-10 text-white drop-shadow-md" /></div>
         <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
