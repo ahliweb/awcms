@@ -117,7 +117,7 @@ export async function getMenuByLocation(
       .order("order", { ascending: true });
 
     if (tenantId) {
-      query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+      query = query.eq("tenant_id", tenantId);
     } else {
       query = query.is("tenant_id", null);
     }
@@ -215,7 +215,7 @@ export async function getAllMenus(
     .order("order", { ascending: true });
 
   if (tenantId) {
-    query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+    query = query.eq("tenant_id", tenantId);
   } else {
     query = query.is("tenant_id", null);
   }

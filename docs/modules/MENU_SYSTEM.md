@@ -46,6 +46,8 @@ That means menu loading must respect:
 - platform vs tenant visibility
 - shared/null-tenant rows where intended
 
+For public website rendering, tenant-owned portals should prefer explicit tenant-scoped menu rows for the active tenant. Shared/null-tenant fallback rows should only be used when a public workspace intentionally documents that fallback behavior.
+
 ## Current Source Order
 
 The current effective menu model is closer to:

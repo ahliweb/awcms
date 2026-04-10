@@ -22,7 +22,9 @@ const currentPath = Astro.url.pathname;
 const activePath = extractLocaleFromPath(currentPath).cleanPath || "/";
 const site = await getSiteData();
 const dynamicMenu = await getMenuTree("header", locale);
+const dynamicMobileMenu = await getMenuTree("mobile_menu", locale);
 const menuItems = dynamicMenu.length > 0 ? dynamicMenu : navigation.mainMenu;
+const mobileMenuItems = dynamicMobileMenu.length > 0 ? dynamicMobileMenu : menuItems;
 const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
 const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || "";
 
@@ -258,7 +260,7 @@ function isActiveLink(href: string): boolean {
   >
     <nav class="container-custom py-4 space-y-2">
       {
-        menuItems.map((item) => (
+        mobileMenuItems.map((item) => (
           <div class="space-y-1">
             <a
               href={resolveHref(item.href)}
