@@ -15,6 +15,7 @@ import type { HeaderLink } from "~/lib/menu";
 export interface Props {
   id?: string;
   links?: Array<HeaderLink>;
+  mobileLinks?: Array<HeaderLink>;
   actions?: Array<CallToAction>;
   isSticky?: boolean;
   isDark?: boolean;
@@ -26,6 +27,7 @@ export interface Props {
 const {
   id = "header",
   links = [],
+  mobileLinks = links,
   actions = [],
   isSticky = false,
   isDark = false,
@@ -82,7 +84,52 @@ const locale = getLocale(Astro.url);
       aria-label="Main navigation"
     >
       <ul
-        class="flex flex-col md:flex-row md:self-center w-full md:w-auto text-xl md:text-[0.9375rem] tracking-[0.01rem] font-medium md:justify-center"
+        class="flex flex-col w-full text-xl tracking-[0.01rem] font-medium md:hidden"
+      >
+        {
+          mobileLinks.map(({ text, href, links }) => (
+            <li class={links?.length ? "dropdown" : ""}>
+              {links?.length ? (
+                <>
+                  <button
+                    type="button"
+                    class="hover:text-link dark:hover:text-white px-4 py-3 flex items-center whitespace-nowrap"
+                  >
+                    {t(text || "", locale)}
+                  </button>
+                  <ul class="pl-4 font-medium">
+                    {links.map(({ text: text2, href: href2 }) => (
+                      <li>
+                        <a
+                          class:list={[
+                            "py-2 px-5 block whitespace-no-wrap hover:text-link dark:hover:text-white",
+                            { "aw-link-active": href2 === currentPath },
+                          ]}
+                          href={href2}
+                        >
+                          {t(text2 || "", locale)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <a
+                  class:list={[
+                    "hover:text-link dark:hover:text-white px-4 py-3 flex items-center whitespace-nowrap",
+                    { "aw-link-active": href === currentPath },
+                  ]}
+                  href={href}
+                >
+                  {t(text || "", locale)}
+                </a>
+              )}
+            </li>
+          ))
+        }
+      </ul>
+      <ul
+        class="hidden md:flex md:flex-row md:self-center w-full md:w-auto text-[0.9375rem] tracking-[0.01rem] font-medium md:justify-center"
       >
         {
           links.map(({ text, href, links }) => (

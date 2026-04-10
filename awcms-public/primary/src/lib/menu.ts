@@ -270,6 +270,18 @@ export async function getFooterMenu(
 }
 
 /**
+ * Get menu items for mobile navigation.
+ */
+export async function getMobileMenu(
+  supabase: SupabaseClient,
+  tenantId?: string | null,
+  locale?: string,
+): Promise<MenuItem[]> {
+  const menu = await getMenuByLocation(supabase, "mobile_menu", tenantId, locale);
+  return menu || [];
+}
+
+/**
  * Recursively filter and sort active menu items
  */
 function filterActiveItems(items: MenuItem[]): MenuItem[] {
@@ -360,9 +372,14 @@ export function mapMenuItemsToFooterLinks(items: MenuItem[], locale?: string) {
       ].includes(href),
     );
 
-  return items.map((item) => ({
-    title: item.title,
-    links: (item.children || []).map((child) => {
+  const groupedLinks: Array<{
+    title: string;
+    links: Array<{ text: string; href: string; target?: string; popup?: boolean }>;
+  }> = [];
+  const standaloneLinks: Array<{ text: string; href: string; target?: string; popup?: boolean }> = [];
+
+  items.forEach((item) => {
+    const childLinks = (item.children || []).map((child) => {
       const childUrl = child.url ?? undefined;
 
       return {
@@ -373,8 +390,31 @@ export function mapMenuItemsToFooterLinks(items: MenuItem[], locale?: string) {
           : undefined,
         popup: isPopupPage(localizePublicUrl(childUrl, locale)),
       };
-    }),
-  }));
+    });
+
+    if (childLinks.length > 0) {
+      groupedLinks.push({ title: item.title, links: childLinks });
+      return;
+    }
+
+    if (!item.url) {
+      return;
+    }
+
+    const itemUrl = localizePublicUrl(item.url, locale);
+    standaloneLinks.push({
+      text: item.title,
+      href: itemUrl,
+      target: isPopupPage(itemUrl) ? "_blank" : undefined,
+      popup: isPopupPage(itemUrl),
+    });
+  });
+
+  if (standaloneLinks.length > 0) {
+    groupedLinks.unshift({ title: "", links: standaloneLinks });
+  }
+
+  return groupedLinks;
 }
 
 /**

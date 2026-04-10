@@ -34,6 +34,8 @@ const MENU_LOCATIONS = [
   { id: 'mobile_menu', label: 'Mobile Menu' }
 ];
 
+const DEFAULT_CONTENT_LOCALE = 'id';
+
 const normalizeMenuUrl = (value) => {
   const trimmed = (value || '').trim();
 
@@ -201,9 +203,50 @@ function MenusManager() {
       if (currentTenant?.id) q = q.eq('tenant_id', currentTenant.id);
 
       const { data, error } = await q;
-      if (!error) setPages(data || []);
+      if (error) throw error;
+
+      const pageRows = data || [];
+      if (currentLocale === DEFAULT_CONTENT_LOCALE || pageRows.length === 0) {
+        setPages(pageRows.map((page) => ({
+          ...page,
+          localized_title: page.title,
+          localized_slug: page.slug,
+          menu_url: `/p/${page.slug}`,
+        })));
+        return;
+      }
+
+      let translationQuery = supabase
+        .from('content_translations')
+        .select('content_id, title, slug')
+        .eq('content_type', 'page')
+        .eq('locale', currentLocale)
+        .in('content_id', pageRows.map((page) => page.id));
+
+      if (currentTenant?.id) {
+        translationQuery = translationQuery.or(`tenant_id.eq.${currentTenant.id},tenant_id.is.null`);
+      } else {
+        translationQuery = translationQuery.is('tenant_id', null);
+      }
+
+      const { data: translationRows, error: translationError } = await translationQuery;
+      if (translationError) throw translationError;
+
+      const translationsByPageId = new Map((translationRows || []).map((translation) => [translation.content_id, translation]));
+      setPages(pageRows.map((page) => {
+        const translation = translationsByPageId.get(page.id);
+        const localizedSlug = translation?.slug || page.slug;
+
+        return {
+          ...page,
+          localized_title: translation?.title || page.title,
+          localized_slug: localizedSlug,
+          menu_url: `/p/${localizedSlug}`,
+        };
+      }));
     } catch (e) {
       console.error(e);
+      setPages([]);
     }
   };
 
@@ -315,6 +358,12 @@ function MenusManager() {
 
       if (error) throw error;
 
+      try {
+        await triggerPublicRebuild({ tenantId: currentTenant?.id, resource: 'menus', action: 'update' });
+      } catch (rebuildError) {
+        console.warn('Public rebuild trigger failed:', rebuildError);
+      }
+
       toast({ title: 'Menu order saved', description: 'The navigation structure has been updated.' });
     } catch (err) {
       console.error(err);
@@ -361,9 +410,9 @@ function MenusManager() {
       setMenuFormData(prev => ({
         ...prev,
         page_id: pageId,
-        url: page.slug.startsWith('/') ? page.slug : `/${page.slug}`,
-        label: prev.label || page.title,
-        slug: prev.slug || createMenuSlug(page.title, page.slug),
+        url: page.menu_url || `/p/${page.localized_slug || page.slug}`,
+        label: prev.label || page.localized_title || page.title,
+        slug: prev.slug || createMenuSlug(page.localized_title || page.title, page.localized_slug || page.slug),
       }));
     } else {
       // Clear page association

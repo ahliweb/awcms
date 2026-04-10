@@ -68,7 +68,7 @@ function MenuItemDialog({
 						>
 							<option value="">-- No Page Linked --</option>
 							{pages.map((page) => (
-								<option key={page.id} value={page.id}>{page.title} ({page.slug})</option>
+								<option key={page.id} value={page.id}>{page.localized_title || page.title} ({page.localized_slug || page.slug})</option>
 							))}
 						</select>
 						</div>

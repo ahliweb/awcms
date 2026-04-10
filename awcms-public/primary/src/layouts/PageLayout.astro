@@ -13,6 +13,7 @@ import { getPublicSettings } from "~/lib/publicSettings";
 import {
   getFooterMenu,
   getHeaderMenu,
+  getMobileMenu,
   localizePublicUrl,
   type HeaderLink,
   mapMenuItemsToFooterLinks,
@@ -50,6 +51,7 @@ const pageContext = createPublicPageContext({
 });
 
 let headerLinks: HeaderLink[] = fallbackHeaderData.links;
+let mobileHeaderLinks: HeaderLink[] = fallbackHeaderData.links;
 let footerLinks = fallbackFooterData.links;
 let headerActions = fallbackHeaderData.actions;
 let socialLinks = fallbackFooterData.socialLinks;
@@ -264,10 +266,16 @@ if (typeof siteInfo?.footer_footnote === "string" && siteInfo.footer_footnote) {
 if (supabase && tenantId) {
   const headerItems = await getHeaderMenu(supabase, tenantId, locale);
   const footerItems = await getFooterMenu(supabase, tenantId, locale);
+  const mobileHeaderItems = await getMobileMenu(supabase, tenantId, locale);
+  const hasDedicatedMobileMenu = mobileHeaderItems.length > 0;
 
   if (headerItems.length > 0) {
     headerLinks = mapMenuItemsToHeaderLinks(headerItems, locale);
   }
+
+  mobileHeaderLinks = hasDedicatedMobileMenu
+    ? mapMenuItemsToHeaderLinks(mobileHeaderItems, locale)
+    : headerLinks;
 
   if (footerItems.length > 0) {
     footerLinks = mapMenuItemsToFooterLinks(footerItems, locale);
@@ -288,6 +296,9 @@ if (supabase && tenantId) {
       links: moduleLinks,
     };
     headerLinks = [...headerLinks, moduleGroup];
+    if (!hasDedicatedMobileMenu) {
+      mobileHeaderLinks = [...mobileHeaderLinks, moduleGroup];
+    }
     footerLinks = [
       ...footerLinks,
       {
@@ -306,6 +317,7 @@ if (supabase && tenantId) {
   <slot name="header">
       <Header
         links={headerLinks}
+        mobileLinks={mobileHeaderLinks}
         actions={headerActions}
         isSticky
         showToggleTheme
