@@ -26,6 +26,7 @@ import {
 } from "~/lib/publicPageContext";
 
 import type { MetaData } from "~/types";
+import type { CallToAction } from "~/types";
 
 export interface Props {
   metadata?: MetaData;
@@ -60,6 +61,19 @@ let secondaryLinks = fallbackFooterData.secondaryLinks.map(
 );
 let footNote = fallbackFooterData.footNote;
 
+type FooterLinkItem = {
+  text: string;
+  href: string;
+  ariaLabel?: string;
+  target: string;
+  popup: boolean;
+};
+
+type FooterColumn = {
+  title: string;
+  links: FooterLinkItem[];
+};
+
 const parseJsonArray = (value: unknown) => {
   if (!value) return null;
   if (Array.isArray(value)) return value;
@@ -76,19 +90,22 @@ const parseJsonArray = (value: unknown) => {
 
 const normalizedHeaderActions = parseJsonArray(
   siteInfo?.header_actions_json || siteInfo?.headerActions,
-)
-  ?.map((action) => {
-    if (!action || typeof action !== "object") return null;
-    const text = typeof action.text === "string" ? action.text : "";
-    const href = typeof action.href === "string" ? action.href : "";
-    if (!text || !href) return null;
-    return {
-      text,
-      href: localizePublicUrl(href, locale),
-      target: typeof action.target === "string" ? action.target : undefined,
-    };
-  })
-  .filter(Boolean);
+)?.reduce<CallToAction[]>((acc, action) => {
+  if (!action || typeof action !== "object") return acc;
+  const actionRecord = action as Record<string, unknown>;
+  const text = typeof actionRecord.text === "string" ? actionRecord.text : "";
+  const href = typeof actionRecord.href === "string" ? actionRecord.href : "";
+  if (!text || !href) return acc;
+  acc.push({
+    text,
+    href: localizePublicUrl(href, locale),
+    target:
+      typeof actionRecord.target === "string"
+        ? actionRecord.target
+        : undefined,
+  });
+  return acc;
+}, []);
 
 if (normalizedHeaderActions && normalizedHeaderActions.length > 0) {
   headerActions = normalizedHeaderActions;
@@ -113,32 +130,37 @@ if (configuredPrimaryCtaLabel && configuredPrimaryCtaUrl) {
 
 const configuredFooterColumns = parseJsonArray(
   siteInfo?.footer_columns_json || siteInfo?.footerColumns,
-)
-  ?.map((column) => {
-    if (!column || typeof column !== "object") return null;
-    const title = typeof column.title === "string" ? column.title : "";
-    const links = Array.isArray(column.links)
-      ? column.links
-          .map((link) => {
-            if (!link || typeof link !== "object") return null;
-            const text = typeof link.text === "string" ? link.text : "";
-            const href = typeof link.href === "string" ? link.href : "";
-            if (!text || !href) return null;
-            return {
-              text,
-              href: localizePublicUrl(href, locale),
-              ariaLabel:
-                typeof link.ariaLabel === "string" ? link.ariaLabel : undefined,
-              target: typeof link.target === "string" ? link.target : undefined,
-              popup: Boolean(link.popup),
-            };
-          })
-          .filter(Boolean)
-      : [];
-    if (!title && links.length === 0) return null;
-    return { title, links };
-  })
-  .filter(Boolean);
+)?.reduce<FooterColumn[]>((acc, column) => {
+  if (!column || typeof column !== "object") return acc;
+  const columnRecord = column as Record<string, unknown>;
+  const title = typeof columnRecord.title === "string" ? columnRecord.title : "";
+  const links = Array.isArray(columnRecord.links)
+    ? columnRecord.links.reduce<FooterLinkItem[]>((linkAcc, link) => {
+        if (!link || typeof link !== "object") return linkAcc;
+        const linkRecord = link as Record<string, unknown>;
+        const text = typeof linkRecord.text === "string" ? linkRecord.text : "";
+        const href = typeof linkRecord.href === "string" ? linkRecord.href : "";
+        if (!text || !href) return linkAcc;
+        linkAcc.push({
+          text,
+          href: localizePublicUrl(href, locale),
+          ariaLabel:
+            typeof linkRecord.ariaLabel === "string"
+              ? linkRecord.ariaLabel
+              : undefined,
+          target:
+            typeof linkRecord.target === "string"
+              ? linkRecord.target
+              : "",
+          popup: Boolean(linkRecord.popup),
+        });
+        return linkAcc;
+      }, [])
+    : [];
+  if (!title && links.length === 0) return acc;
+  acc.push({ title, links });
+  return acc;
+}, []);
 
 if (configuredFooterColumns && configuredFooterColumns.length > 0) {
   footerLinks = configuredFooterColumns;
@@ -146,21 +168,27 @@ if (configuredFooterColumns && configuredFooterColumns.length > 0) {
 
 const configuredSecondaryLinks = parseJsonArray(
   siteInfo?.footer_secondary_links_json || siteInfo?.footerSecondaryLinks,
-)
-  ?.map((link) => {
-    if (!link || typeof link !== "object") return null;
-    const text = typeof link.text === "string" ? link.text : "";
-    const href = typeof link.href === "string" ? link.href : "";
-    if (!text || !href) return null;
-    return {
-      text,
-      href: localizePublicUrl(href, locale),
-      target: typeof link.target === "string" ? link.target : undefined,
-      popup: Boolean(link.popup),
-      ariaLabel: typeof link.ariaLabel === "string" ? link.ariaLabel : undefined,
-    };
-  })
-  .filter(Boolean);
+)?.reduce<FooterLinkItem[]>((acc, link) => {
+  if (!link || typeof link !== "object") return acc;
+  const linkRecord = link as Record<string, unknown>;
+  const text = typeof linkRecord.text === "string" ? linkRecord.text : "";
+  const href = typeof linkRecord.href === "string" ? linkRecord.href : "";
+  if (!text || !href) return acc;
+  acc.push({
+    text,
+    href: localizePublicUrl(href, locale),
+    target:
+      typeof linkRecord.target === "string"
+        ? linkRecord.target
+        : "",
+    popup: Boolean(linkRecord.popup),
+    ariaLabel:
+      typeof linkRecord.ariaLabel === "string"
+        ? linkRecord.ariaLabel
+        : undefined,
+  });
+  return acc;
+}, []);
 
 if (configuredSecondaryLinks && configuredSecondaryLinks.length > 0) {
   secondaryLinks = configuredSecondaryLinks;

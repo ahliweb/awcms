@@ -81,6 +81,16 @@ const wranglerConfigPath = resolve(cwd, "wrangler.json");
 const loadedFiles = [];
 const mergedEnv = { ...process.env };
 
+for (const key of Object.keys(mergedEnv)) {
+  if (
+    key.startsWith("VSCODE_") ||
+    key.startsWith("ELECTRON_") ||
+    key === "NODE_OPTIONS"
+  ) {
+    delete mergedEnv[key];
+  }
+}
+
 const previewEnvHelp = [
   "Cloudflare Pages preview deployments use their own environment variable set.",
   "Open Cloudflare Dashboard -> Workers & Pages -> awcms-public -> Settings -> Variables and Secrets.",
