@@ -10,7 +10,7 @@ import {
   defaultLocale,
 } from "../utils/i18n";
 import navigation from "../data/navigation.json";
-import { getMenuTree, getSiteData } from "../lib/api";
+import { getMenuTree, getSiteData, hasManagedMenuRows } from "../lib/api";
 import ThemeToggle from "./ThemeToggle.astro";
 
 export interface Props {
@@ -23,8 +23,18 @@ const activePath = extractLocaleFromPath(currentPath).cleanPath || "/";
 const site = await getSiteData();
 const dynamicMenu = await getMenuTree("header", locale);
 const dynamicMobileMenu = await getMenuTree("mobile_menu", locale);
-const menuItems = dynamicMenu.length > 0 ? dynamicMenu : navigation.mainMenu;
-const mobileMenuItems = dynamicMobileMenu.length > 0 ? dynamicMobileMenu : menuItems;
+const hasManagedHeaderMenu = await hasManagedMenuRows("header");
+const hasManagedMobileMenu = await hasManagedMenuRows("mobile_menu");
+const menuItems = dynamicMenu.length > 0
+  ? dynamicMenu
+  : hasManagedHeaderMenu
+    ? []
+    : navigation.mainMenu;
+const mobileMenuItems = dynamicMobileMenu.length > 0
+  ? dynamicMobileMenu
+  : hasManagedMobileMenu
+    ? []
+    : menuItems;
 const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
 const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || "";
 

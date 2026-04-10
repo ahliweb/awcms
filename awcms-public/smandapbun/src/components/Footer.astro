@@ -2,7 +2,7 @@
 import { Icon } from "astro-icon/components";
 import { t, getLocalizedPath, getLocalizedValue, type Locale } from "../utils/i18n";
 import navigation from "../data/navigation.json";
-import { getMenuTree, getSiteData } from "../lib/api";
+import { getMenuTree, getSiteData, hasManagedMenuRows } from "../lib/api";
 import WidgetArea from "./common/WidgetArea.astro";
 import PublicMenuList from "./common/PublicMenuList.astro";
 
@@ -14,7 +14,9 @@ const { locale } = Astro.props;
 const currentYear = new Date().getFullYear();
 const site = await getSiteData();
 const footerMenu = await getMenuTree("footer", locale);
-const menuItems = footerMenu.length > 0 ? footerMenu : navigation.mainMenu;
+const hasManagedFooterMenu = await hasManagedMenuRows("footer");
+const useFallbackFooterMenu = footerMenu.length === 0 && !hasManagedFooterMenu;
+const menuItems = footerMenu.length > 0 ? footerMenu : useFallbackFooterMenu ? navigation.mainMenu : [];
 const footerMenuGroups = menuItems.filter((item) => item.children && item.children.length > 0);
 const footerStandaloneLinks = menuItems.filter((item) => !item.children || item.children.length === 0).slice(0, 6);
 const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
@@ -109,12 +111,12 @@ const siteAddress = getLocalizedValue<string>(site.site.address, locale) || "";
                 <PublicMenuList items={group.children || []} locale={locale} />
               </div>
             ))
-          : (
+          : useFallbackFooterMenu ? (
             <div>
               <h3 class="font-bold text-lg mb-4">{t("footer.quick_links", locale)}</h3>
               <PublicMenuList items={footerStandaloneLinks} locale={locale} />
             </div>
-          )
+          ) : null
       }
 
       {
@@ -125,7 +127,7 @@ const siteAddress = getLocalizedValue<string>(site.site.address, locale) || "";
                 <PublicMenuList items={group.children || []} locale={locale} />
               </div>
             ))
-          : footerMenuGroups.length === 0 && (
+          : useFallbackFooterMenu && footerMenuGroups.length === 0 && (
             <div>
               <h3 class="font-bold text-lg mb-4">{t("services.title", locale)}</h3>
               <ul class="space-y-2">

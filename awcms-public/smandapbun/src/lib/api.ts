@@ -26,6 +26,8 @@ const TENANT_ID_FROM_ENV = String(
     import.meta.env.VITE_TENANT_ID ||
     '',
 ).trim() || null;
+let resolvedTenantIdPromise: Promise<string | null> | null = null;
+let hasWarnedTenantIdMismatch = false;
 const RESERVED_PAGE_SLUGS = new Set([
     '404',
     'alumni',
@@ -333,24 +335,39 @@ export interface SiteData {
 
 export async function getTenantId(overrideTenantId?: string | null) {
     if (overrideTenantId) return overrideTenantId;
-    if (TENANT_ID_FROM_ENV) return TENANT_ID_FROM_ENV;
 
-    if (!supabase) {
-        return null;
+    if (resolvedTenantIdPromise) {
+        return resolvedTenantIdPromise;
     }
 
-    const { data, error } = await supabase.rpc('get_tenant_by_slug', {
-        lookup_slug: TENANT_SLUG
-    }).maybeSingle();
+    resolvedTenantIdPromise = (async () => {
+        if (!supabase) {
+            return TENANT_ID_FROM_ENV;
+        }
 
-    if (error) {
-        console.error('Error fetching tenant:', error);
-        return null;
-    }
+        const { data, error } = await supabase.rpc('get_tenant_by_slug', {
+            lookup_slug: TENANT_SLUG
+        }).maybeSingle();
 
-    // Cast data to expected type
-    const tenant = data as { id: string; slug: string } | null;
-    return tenant ? tenant.id : null;
+        if (error) {
+            console.error('Error fetching tenant:', error);
+            return TENANT_ID_FROM_ENV;
+        }
+
+        const tenant = data as { id: string; slug: string } | null;
+
+        if (tenant?.id) {
+            if (TENANT_ID_FROM_ENV && TENANT_ID_FROM_ENV !== tenant.id && !hasWarnedTenantIdMismatch) {
+                console.warn('[Public] PUBLIC_TENANT_ID does not match tenant slug resolution. Using slug-resolved tenant id instead.');
+                hasWarnedTenantIdMismatch = true;
+            }
+            return tenant.id;
+        }
+
+        return TENANT_ID_FROM_ENV;
+    })();
+
+    return resolvedTenantIdPromise;
 }
 
 export async function getAnalyticsConsent(overrideTenantId?: string | null) {
@@ -607,6 +624,9 @@ interface MenuRow {
 const isMissingLocaleColumnError = (message: string): boolean =>
     message.includes('.locale') && message.includes('does not exist');
 
+const isMissingRpcFunctionError = (message: string): boolean =>
+    message.includes('Could not find the function public.get_public_menu_rows');
+
 const buildMenuTree = (rows: MenuRow[]): NavigationItem[] => {
     const nodes: Record<string, NavigationItem> = {};
     const roots: NavigationItem[] = [];
@@ -669,7 +689,7 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
     if (!tenantId) return [];
 
     const client = getTenantClient(tenantId);
-    const runQuery = async (localeFilter?: string | null) => {
+    const runLegacyQuery = async (localeFilter?: string | null) => {
         let query = client
             .from('menus')
             .select('*')
@@ -687,6 +707,20 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
         return query;
     };
 
+    const runQuery = async (localeFilter?: string | null) => {
+        const rpcResult = await client.rpc('get_public_menu_rows', {
+            p_tenant_id: tenantId,
+            p_location: location,
+            p_locale: localeFilter || null,
+        });
+
+        if (rpcResult.error && isMissingRpcFunctionError(rpcResult.error.message || '')) {
+            return runLegacyQuery(localeFilter);
+        }
+
+        return rpcResult;
+    };
+
     let { data, error } = await runQuery(locale || null);
 
     if (error && locale && isMissingLocaleColumnError(error.message || '')) {
@@ -701,6 +735,43 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
     }
 
     return buildMenuTree(pickScopedMenuRows((data || []) as MenuRow[], locale));
+}
+
+export async function hasManagedMenuRows(location: string): Promise<boolean> {
+    const tenantId = await getTenantId();
+    if (!tenantId) return false;
+
+    const client = getTenantClient(tenantId);
+    const { data, error } = await client.rpc('get_public_menu_rows', {
+        p_tenant_id: tenantId,
+        p_location: location,
+        p_locale: null,
+    });
+
+    if (error && !isMissingRpcFunctionError(error.message || '')) {
+        console.error('Error checking managed menus:', error);
+        return false;
+    }
+
+    if (Array.isArray(data)) {
+        return data.length > 0;
+    }
+
+    const { count, error: legacyError } = await client
+        .from('menus')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .eq('is_public', true)
+        .is('deleted_at', null)
+        .or(`location.eq.${location},group_label.eq.${location}`);
+
+    if (legacyError) {
+        console.error('Error checking legacy managed menus:', legacyError);
+        return false;
+    }
+
+    return (count || 0) > 0;
 }
 
 export async function getSiteData(): Promise<SiteData> {

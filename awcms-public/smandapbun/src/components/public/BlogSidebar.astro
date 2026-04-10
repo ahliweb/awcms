@@ -2,7 +2,7 @@
 import WidgetArea from "../common/WidgetArea.astro";
 import PublicMenuList from "../common/PublicMenuList.astro";
 import { getLocalizedPath, getLocalizedValue, type Locale } from "../../utils/i18n";
-import { getMenuTree, type Post } from "../../lib/api";
+import { getMenuTree, hasManagedMenuRows, type Post } from "../../lib/api";
 
 interface Props {
   locale: Locale;
@@ -11,12 +11,13 @@ interface Props {
 
 const { locale, relatedBlogs = [] } = Astro.props;
 const sidebarMenu = await getMenuTree("public_sidebar", locale);
+const hasManagedSidebarMenu = await hasManagedMenuRows("public_sidebar");
 const fallbackExploreLinks = [
   { id: "latest", label: "Latest Posts", href: "/blogs" },
   { id: "agenda", label: "Agenda", href: "/blogs/agenda" },
   { id: "gallery", label: "Gallery", href: "/blogs/galeri" },
 ];
-const exploreItems = sidebarMenu.length > 0 ? sidebarMenu : fallbackExploreLinks;
+const exploreItems = sidebarMenu.length > 0 ? sidebarMenu : hasManagedSidebarMenu ? [] : fallbackExploreLinks;
 ---
 
 <div class="space-y-6">
