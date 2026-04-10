@@ -16,6 +16,6 @@ const pageDescription = agendaPage?.excerpt || undefined;
 ---
 
 <Layout title={pageTitle} description={pageDescription} pageType="agenda_archive">
-  <PageHero title={pageTitle} description={pageDescription} image="/images/backgrounds/hero-ceremony.webp" breadcrumbs={[{ href: getLocalizedPath("/", locale), label: "Beranda" }, { href: getLocalizedPath("/blogs", locale), label: t("blogs.title", locale) }, { label: t("blogs.agenda", locale) }]} testId="agenda-hero" />
+  <PageHero title={pageTitle} description={pageDescription} image="/images/backgrounds/hero-ceremony.webp" breadcrumbs={[{ href: getLocalizedPath("/", locale), label: t("nav.home", locale) }, { href: getLocalizedPath("/blogs", locale), label: t("blogs.title", locale) }, { label: t("blogs.agenda", locale) }]} testId="agenda-hero" />
   <AgendaArchiveContent locale={locale} pageHtml={agendaPage?.content ? sanitizeHTML(agendaPage.content) : null} events={agenda.events} kalenderPdf={kalenderPdf} />
 </Layout>

@@ -1,7 +1,7 @@
 ---
 import { Icon } from "astro-icon/components";
 import { Image } from "astro:assets";
-import { getLocalizedValue, getLocalizedPath, type Locale } from "../../utils/i18n";
+import { getLocalizedValue, getLocalizedPath, t, type Locale } from "../../utils/i18n";
 import PageContentShell from "./PageContentShell.astro";
 import RichContentCard from "./RichContentCard.astro";
 
@@ -24,7 +24,7 @@ const albums = [
 <PageContentShell backgroundImage="/images/backgrounds/section-green.webp" testId="gallery-content">
   <RichContentCard html={pageHtml} class="mb-10" />
   <div class="flex flex-wrap justify-center gap-3 mb-10" data-testid="gallery-filters">
-    <button class="filter-btn active px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-primary-600 text-white shadow-lg shadow-primary-500/30" data-category="all">{locale === "id" ? "Semua" : "All"}</button>
+    <button class="filter-btn active px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-primary-600 text-white shadow-lg shadow-primary-500/30" data-category="all">{t("common.all", locale)}</button>
     {albums.map((album) => <button class="filter-btn px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-gray-700" data-category={(getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-")}>{getLocalizedValue(album.title, locale)}</button>)}
   </div>
   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="gallery-grid">
@@ -40,7 +40,7 @@ const albums = [
     </div>)}
   </div>
   <div class="mt-12 text-center">
-    <a href={getLocalizedPath("/blogs", locale)} class="inline-flex items-center btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800 transition-transform hover:-translate-x-1" data-testid="back-to-blogs"><Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />{locale === "id" ? "Kembali" : "Back"}</a>
+    <a href={getLocalizedPath("/blogs", locale)} class="inline-flex items-center btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800 transition-transform hover:-translate-x-1" data-testid="back-to-blogs"><Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />{t("common.back", locale)}</a>
   </div>
   <div id="lightbox" class="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm hidden flex items-center justify-center opacity-0 transition-opacity duration-300" role="dialog" aria-modal="true" aria-label="Image Lightbox">
     <button id="lightbox-close" class="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors z-[10001]"><Icon name="tabler:x" class="w-8 h-8" /></button>

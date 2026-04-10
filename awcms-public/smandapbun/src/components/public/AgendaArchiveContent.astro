@@ -1,6 +1,6 @@
 ---
 import { Icon } from "astro-icon/components";
-import { getLocalizedValue, getLocalizedPath, type Locale } from "../../utils/i18n";
+import { getLocalizedValue, getLocalizedPath, t, type Locale } from "../../utils/i18n";
 import PageContentShell from "./PageContentShell.astro";
 import RichContentCard from "./RichContentCard.astro";
 
@@ -34,8 +34,8 @@ const pastEvents = sortedEvents.filter((event) => new Date(event.date) < new Dat
           <Icon name="tabler:calendar-time" class="w-6 h-6 text-primary-600 dark:text-primary-300" />
         </div>
         <div>
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white">{locale === "id" ? "Kalender Pendidikan 2025/2026" : "Academic Calendar 2025/2026"}</h2>
-          <p class="text-sm text-gray-600 dark:text-gray-300">{locale === "id" ? "Kalender Pendidikan Lima Hari Sekolah (LHS) SMA Provinsi Kalimantan Tengah." : "Five-day school academic calendar for Central Kalimantan high schools."}</p>
+          <h2 class="text-xl font-bold text-gray-900 dark:text-white">{t("blogs.academic_calendar_title", locale)}</h2>
+          <p class="text-sm text-gray-600 dark:text-gray-300">{t("blogs.academic_calendar_desc", locale)}</p>
         </div>
       </div>
       <a href={kalenderPdf} target="_blank" rel="noopener" class="btn-primary inline-flex items-center justify-center" download>
@@ -50,7 +50,7 @@ const pastEvents = sortedEvents.filter((event) => new Date(event.date) < new Dat
       <div class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center transition-colors">
         <Icon name="tabler:calendar-event" class="w-5 h-5 text-green-600 dark:text-green-400" />
       </div>
-      {locale === "id" ? "Agenda Mendatang" : "Upcoming Events"}
+      {t("blogs.upcoming", locale)}
     </h2>
     <div class="space-y-4">
       {upcomingEvents.map((event) => <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border-l-4 border-green-500 hover:shadow-md transition-all duration-200" data-testid={`event-${event.date}`}>
@@ -75,7 +75,7 @@ const pastEvents = sortedEvents.filter((event) => new Date(event.date) < new Dat
       <div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center transition-colors">
         <Icon name="tabler:history" class="w-5 h-5 text-gray-600 dark:text-gray-400" />
       </div>
-      {locale === "id" ? "Agenda Sebelumnya" : "Past Events"}
+      {t("blogs.past", locale)}
     </h2>
     <div class="space-y-4">
       {pastEvents.map((event) => <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border-l-4 border-gray-300 dark:border-gray-600 opacity-75 dark:opacity-60 transition-colors">
@@ -98,7 +98,7 @@ const pastEvents = sortedEvents.filter((event) => new Date(event.date) < new Dat
   <div class="mt-12 text-center">
     <a href={getLocalizedPath("/blogs", locale)} class="btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800" data-testid="back-to-blogs">
       <Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />
-      {locale === "id" ? "Kembali" : "Back"}
+      {t("common.back", locale)}
     </a>
   </div>
 </PageContentShell>
