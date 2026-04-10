@@ -46,15 +46,6 @@
           "category": "Profile"
         },
         {
-          "id": "competency-alignment",
-          "label": {
-            "id": "Keselarasan Standar Kompetensi",
-            "en": "Competency Standards Alignment"
-          },
-          "href": "/profil/keselarasan-standar-kompetensi",
-          "category": "Profile"
-        },
-        {
           "id": "school-condition",
           "label": {
             "id": "Kondisi Sekolah",
@@ -135,7 +126,27 @@
             "en": "Staff"
           },
           "href": "/profil/tenaga-pendidik",
-          "category": "Profile"
+          "category": "Profile",
+          "children": [
+            {
+              "id": "teachers",
+              "label": {
+                "id": "Tenaga Pendidik",
+                "en": "Teaching Staff"
+              },
+              "href": "/profil/tenaga-pendidik/guru",
+              "category": "Profile"
+            },
+            {
+              "id": "admin-staff",
+              "label": {
+                "id": "Tenaga Kependidikan",
+                "en": "Administrative Staff"
+              },
+              "href": "/profil/tenaga-pendidik/tata-usaha",
+              "category": "Profile"
+            }
+          ]
         }
       ]
     },
