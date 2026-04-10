@@ -1,0 +1,26 @@
+---
+import { Icon } from "astro-icon/components";
+import { getLocalizedValue, type Locale } from "../../utils/i18n";
+
+interface Props {
+  locale: Locale;
+  contactInfo: any;
+  socialMedia: any[];
+}
+
+const { locale, contactInfo, socialMedia = [] } = Astro.props;
+---
+
+<div>
+  <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">{locale === "id" ? "Informasi Kontak" : "Contact Information"}</h2>
+  <div class="space-y-6">
+    <div class="flex items-start gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm transition-colors duration-200" data-testid="contact-address"><div class="w-12 h-12 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center flex-shrink-0"><Icon name="tabler:map-pin" class="w-6 h-6 text-primary-600 dark:text-primary-300" /></div><div><h3 class="font-semibold text-gray-900 dark:text-white mb-1">{locale === "id" ? "Alamat" : "Address"}</h3><p class="text-gray-600 dark:text-gray-300">{getLocalizedValue(contactInfo.address, locale)}</p></div></div>
+    <div class="flex items-start gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm transition-colors duration-200" data-testid="contact-phone"><div class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0"><Icon name="tabler:phone" class="w-6 h-6 text-green-600 dark:text-green-400" /></div><div><h3 class="font-semibold text-gray-900 dark:text-white mb-1">{locale === "id" ? "Telepon" : "Phone"}</h3><p class="text-gray-600 dark:text-gray-300">{contactInfo.phone}</p></div></div>
+    <div class="flex items-start gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm transition-colors duration-200" data-testid="contact-email"><div class="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center flex-shrink-0"><Icon name="tabler:mail" class="w-6 h-6 text-orange-600 dark:text-orange-400" /></div><div><h3 class="font-semibold text-gray-900 dark:text-white mb-1">Email</h3><a href={`mailto:${contactInfo.email}`} class="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">{contactInfo.email}</a></div></div>
+    <div class="flex items-start gap-4 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm transition-colors duration-200" data-testid="contact-hours"><div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center flex-shrink-0"><Icon name="tabler:clock" class="w-6 h-6 text-purple-600 dark:text-purple-400" /></div><div><h3 class="font-semibold text-gray-900 dark:text-white mb-1">{locale === "id" ? "Jam Operasional" : "Opening Hours"}</h3><p class="text-gray-600 dark:text-gray-300 whitespace-pre-line">{getLocalizedValue(contactInfo.operationalHours, locale)}</p></div></div>
+  </div>
+  <div class="mt-8">
+    <h3 class="font-semibold text-gray-900 dark:text-white mb-4">{locale === "id" ? "Ikuti Kami" : "Follow Us"}</h3>
+    <div class="flex gap-3">{socialMedia.map((social) => <a href={social.url} target="_blank" rel="noopener" class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center hover:bg-primary-500 dark:hover:bg-primary-600 hover:text-white dark:text-gray-200 transition-colors" data-testid={`social-${social.platform.toLowerCase()}`}><Icon name={social.icon} class="w-5 h-5" /></a>)}</div>
+  </div>
+</div>

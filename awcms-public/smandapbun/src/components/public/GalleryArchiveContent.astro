@@ -1,0 +1,139 @@
+---
+import { Icon } from "astro-icon/components";
+import { Image } from "astro:assets";
+import { getLocalizedValue, getLocalizedPath, type Locale } from "../../utils/i18n";
+import PageContentShell from "./PageContentShell.astro";
+import RichContentCard from "./RichContentCard.astro";
+
+const localImagesGlob = import.meta.glob<{ default: ImageMetadata }>("../../assets/foto-smandapbun/kegiatan-sekolah/*.{webp,jpg,jpeg,png}", { eager: true });
+const localImages = Object.values(localImagesGlob).map((img) => img.default);
+
+const { locale, pageHtml = null } = Astro.props as {
+  locale: Locale;
+  pageHtml?: string | null;
+};
+
+const albums = [
+  {
+    title: { id: "Kegiatan Sekolah", en: "School Activities" },
+    images: localImages.map((img, index) => ({ type: "local" as const, src: img, alt: `School Activity ${index + 1}` })),
+  },
+];
+---
+
+<PageContentShell backgroundImage="/images/backgrounds/section-green.webp" testId="gallery-content">
+  <RichContentCard html={pageHtml} class="mb-10" />
+  <div class="flex flex-wrap justify-center gap-3 mb-10" data-testid="gallery-filters">
+    <button class="filter-btn active px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-primary-600 text-white shadow-lg shadow-primary-500/30" data-category="all">{locale === "id" ? "Semua" : "All"}</button>
+    {albums.map((album) => <button class="filter-btn px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-gray-700" data-category={(getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-")}>{getLocalizedValue(album.title, locale)}</button>)}
+  </div>
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="gallery-grid">
+    {albums.flatMap((album) => album.images.map((image, imageIndex) => ({ ...image, category: (getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-"), categoryResult: getLocalizedValue(album.title, locale) as string, id: `${(getLocalizedValue(album.title, locale) as string).toLowerCase().replace(/\s+/g, "-")}-${imageIndex}` }))).map((image, index) => <div class="gallery-item group relative aspect-square bg-gray-200 dark:bg-slate-800 rounded-xl overflow-hidden cursor-pointer" data-category={image.category} data-index={index} data-src={(image.src as ImageMetadata).src} data-caption={`${image.alt} - ${image.categoryResult}`} data-testid={`gallery-image-${index}`}>
+      <Image src={image.src as ImageMetadata} alt={image.alt} width={400} height={400} class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+      <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
+        <div class="transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300"><Icon name="tabler:zoom-in" class="w-10 h-10 text-white drop-shadow-md" /></div>
+        <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <p class="text-white text-xs font-medium truncate">{image.alt}</p>
+          <p class="text-gray-300 text-[10px] uppercase tracking-wider">{image.categoryResult}</p>
+        </div>
+      </div>
+    </div>)}
+  </div>
+  <div class="mt-12 text-center">
+    <a href={getLocalizedPath("/blogs", locale)} class="inline-flex items-center btn-outline dark:text-white dark:border-gray-600 dark:hover:bg-slate-800 transition-transform hover:-translate-x-1" data-testid="back-to-blogs"><Icon name="tabler:arrow-left" class="w-5 h-5 mr-2" />{locale === "id" ? "Kembali" : "Back"}</a>
+  </div>
+  <div id="lightbox" class="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm hidden flex items-center justify-center opacity-0 transition-opacity duration-300" role="dialog" aria-modal="true" aria-label="Image Lightbox">
+    <button id="lightbox-close" class="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors z-[10001]"><Icon name="tabler:x" class="w-8 h-8" /></button>
+    <button id="lightbox-prev" class="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-3 rounded-full hover:bg-white/10 transition-colors z-[10001] hidden md:block group"><Icon name="tabler:chevron-left" class="w-10 h-10 group-hover:-translate-x-1 transition-transform" /></button>
+    <button id="lightbox-next" class="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-3 rounded-full hover:bg-white/10 transition-colors z-[10001] hidden md:block group"><Icon name="tabler:chevron-right" class="w-10 h-10 group-hover:translate-x-1 transition-transform" /></button>
+    <div class="relative w-full h-full max-w-5xl max-h-screen p-4 md:p-10 flex items-center justify-center">
+      <img id="lightbox-img" src="" alt="" class="max-w-full max-h-full object-contain rounded-md shadow-2xl transition-transform duration-300 scale-95 opacity-0" />
+      <div class="absolute bottom-6 left-0 right-0 text-center px-4 pointer-events-none"><div class="inline-block bg-black/60 backdrop-blur-md rounded-xl px-6 py-3 text-white pointer-events-auto max-w-2xl"><p id="lightbox-caption" class="text-sm md:text-base font-medium"></p><p id="lightbox-counter" class="text-xs text-gray-400 mt-1"></p></div></div>
+    </div>
+  </div>
+  <script>
+    function initGallery() {
+      const galleryGrid = document.getElementById("gallery-grid");
+      if (!galleryGrid || galleryGrid.hasAttribute("data-initialized")) return;
+      galleryGrid.setAttribute("data-initialized", "true");
+      const filters = document.querySelectorAll(".filter-btn");
+      const lightbox = document.getElementById("lightbox");
+      const lightboxImg = document.getElementById("lightbox-img") as HTMLImageElement | null;
+      const lightboxCaption = document.getElementById("lightbox-caption") as HTMLElement | null;
+      const lightboxCounter = document.getElementById("lightbox-counter") as HTMLElement | null;
+      let currentVisibleIndex = 0;
+      let visibleItems: HTMLElement[] = [];
+      updateVisibleItems("all");
+      filters.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          filters.forEach((b) => {
+            b.classList.remove("active", "bg-primary-600", "text-white", "shadow-lg", "shadow-primary-500/30");
+            b.classList.add("bg-white", "text-gray-600", "border", "border-gray-200", "dark:bg-slate-800", "dark:text-gray-300", "dark:border-gray-700");
+          });
+          btn.classList.add("active", "bg-primary-600", "text-white", "shadow-lg", "shadow-primary-500/30");
+          btn.classList.remove("bg-white", "text-gray-600", "border", "border-gray-200", "dark:bg-slate-800", "dark:text-gray-300", "dark:border-gray-700");
+          updateVisibleItems(btn.getAttribute("data-category"));
+        });
+      });
+      function updateVisibleItems(category: string | null) {
+        visibleItems = [];
+        document.querySelectorAll(".gallery-item").forEach((item) => {
+          const element = item as HTMLElement;
+          const itemCategory = element.getAttribute("data-category");
+          if (category === "all" || itemCategory === category) {
+            element.style.display = "block";
+            visibleItems.push(element);
+          } else {
+            element.style.display = "none";
+          }
+        });
+      }
+      function openLightbox(index: number) {
+        currentVisibleIndex = index;
+        const item = visibleItems[currentVisibleIndex];
+        if (!item || !lightbox || !lightboxImg || !lightboxCaption || !lightboxCounter) return;
+        lightboxImg.src = item.dataset.src || "";
+        lightboxImg.alt = item.dataset.caption || "";
+        lightboxCaption.textContent = item.dataset.caption || "";
+        lightboxCounter.textContent = `${currentVisibleIndex + 1} / ${visibleItems.length}`;
+        lightbox.classList.remove("hidden");
+        requestAnimationFrame(() => {
+          lightbox.classList.add("opacity-100");
+          lightboxImg.classList.remove("scale-95", "opacity-0");
+        });
+      }
+      function closeLightbox() {
+        if (!lightbox || !lightboxImg) return;
+        lightbox.classList.remove("opacity-100");
+        lightboxImg.classList.add("scale-95", "opacity-0");
+        setTimeout(() => lightbox.classList.add("hidden"), 300);
+      }
+      function navigate(direction: number) {
+        if (!visibleItems.length) return;
+        currentVisibleIndex = (currentVisibleIndex + direction + visibleItems.length) % visibleItems.length;
+        openLightbox(currentVisibleIndex);
+      }
+      document.querySelectorAll(".gallery-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          const clickedIndex = visibleItems.indexOf(item as HTMLElement);
+          if (clickedIndex !== -1) openLightbox(clickedIndex);
+        });
+      });
+      document.getElementById("lightbox-close")?.addEventListener("click", closeLightbox);
+      document.getElementById("lightbox-prev")?.addEventListener("click", () => navigate(-1));
+      document.getElementById("lightbox-next")?.addEventListener("click", () => navigate(1));
+      lightbox?.addEventListener("click", (e) => { if (e.target === lightbox) closeLightbox(); });
+      document.addEventListener("keydown", (e) => {
+        if (!lightbox || lightbox.classList.contains("hidden")) return;
+        if (e.key === "Escape") closeLightbox();
+        if (e.key === "ArrowLeft") navigate(-1);
+        if (e.key === "ArrowRight") navigate(1);
+      });
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initGallery, { once: true });
+    } else {
+      initGallery();
+    }
+  </script>
+</PageContentShell>
