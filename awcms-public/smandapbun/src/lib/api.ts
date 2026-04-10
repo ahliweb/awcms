@@ -1,6 +1,6 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { supabase, createScopedClient } from './supabase';
-import { defaultLocale, supportedLocales, type Locale } from '../utils/i18n';
+import { defaultLocale, type Locale } from '../utils/i18n';
 import contactDefault from '../data/pages/contact.json';
 import profileDefault from '../data/pages/profile.json';
 import organizationDefault from '../data/pages/organization.json';
@@ -640,7 +640,7 @@ const buildMenuTree = (rows: MenuRow[]): NavigationItem[] => {
     return roots;
 };
 
-const pickBestLocalizedMenuRows = (
+const pickScopedMenuRows = (
     rows: MenuRow[],
     locale?: string,
 ): MenuRow[] => {
@@ -651,34 +651,17 @@ const pickBestLocalizedMenuRows = (
         return rows;
     }
 
-    const rowsByLocale = new Map<string, MenuRow[]>();
-    rows.forEach((row) => {
-        if (!row.locale) return;
-        if (!rowsByLocale.has(row.locale)) {
-            rowsByLocale.set(row.locale, []);
-        }
-        rowsByLocale.get(row.locale)?.push(row);
-    });
-
-    const localeCandidates = [
-        locale,
-        defaultLocale,
-        ...supportedLocales,
-    ].filter((candidate, index, list): candidate is string => Boolean(candidate) && list.indexOf(candidate) === index);
-
-    for (const candidate of localeCandidates) {
-        const matchingRows = rowsByLocale.get(candidate);
-        if (matchingRows && matchingRows.length > 0) {
-            return matchingRows;
-        }
+    const targetLocale = locale || defaultLocale;
+    const matchingRows = rows.filter((row) => row.locale === targetLocale);
+    if (matchingRows.length > 0) {
+        return matchingRows;
     }
 
     if (rowsWithoutLocale.length > 0) {
         return rowsWithoutLocale;
     }
 
-    const firstLocalizedRows = rowsByLocale.values().next().value;
-    return firstLocalizedRows || rows;
+    return [];
 };
 
 export async function getMenuTree(location: string, locale?: string): Promise<NavigationItem[]> {
@@ -717,7 +700,7 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
         return [];
     }
 
-    return buildMenuTree(pickBestLocalizedMenuRows((data || []) as MenuRow[], locale));
+    return buildMenuTree(pickScopedMenuRows((data || []) as MenuRow[], locale));
 }
 
 export async function getSiteData(): Promise<SiteData> {
