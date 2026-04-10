@@ -75,8 +75,9 @@ The portal reads tenant settings and merges them with JSON defaults:
 - Primary source: `menus` table via `getMenuTree()`.
 - Fallback: `src/data/navigation.json`.
 - Public menu reads are resolved through the `get_public_menu_rows(...)` RPC so tenant-scoped public builds do not depend on direct anon `menus` table access.
-- Locale fallback: the public portal only uses menu rows for the active locale, then legacy locale-less rows, and only falls back to bundled JSON when that locale has no tenant-authored menu rows for the location.
+- Locale fallback: the public portal prefers active-locale rows, then legacy locale-less rows, then another tenant-managed locale for the same location before using bundled JSON.
 - Once a tenant has managed menu rows for a location, the bundled JSON fallback is suppressed for that location so public navigation stays aligned with the admin menu scope, even when a specific locale has zero rows.
+- When a managed location falls back to another tenant-authored locale, known module-style menu labels are localized to the active public language.
 - `header`, `footer`, `mobile_menu`, and `public_sidebar` are now all consumed as tenant-managed public menu locations.
 - The footer now renders grouped tenant menu columns when footer menu items are configured with parent/child hierarchy, and the blog/archive sidebar can render tenant-managed `public_sidebar` menu links before using the local fallback list.
 

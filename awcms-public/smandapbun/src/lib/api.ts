@@ -1,6 +1,6 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { supabase, createScopedClient } from './supabase';
-import { defaultLocale, type Locale } from '../utils/i18n';
+import { defaultLocale, supportedLocales, t, type Locale } from '../utils/i18n';
 import contactDefault from '../data/pages/contact.json';
 import profileDefault from '../data/pages/profile.json';
 import organizationDefault from '../data/pages/organization.json';
@@ -613,7 +613,9 @@ export interface NavigationItem {
 
 interface MenuRow {
     id: string;
+    name?: string | null;
     label: string;
+    slug?: string | null;
     url?: string | null;
     order?: number | null;
     is_active?: boolean | null;
@@ -627,14 +629,73 @@ const isMissingLocaleColumnError = (message: string): boolean =>
 const isMissingRpcFunctionError = (message: string): boolean =>
     message.includes('Could not find the function public.get_public_menu_rows');
 
-const buildMenuTree = (rows: MenuRow[]): NavigationItem[] => {
+const MENU_LABEL_KEYS: Record<string, string> = {
+    home: 'nav.home',
+    about: 'home.about_title',
+    profile: 'nav.profile',
+    school_profile: 'nav.profile',
+    blogs: 'nav.blogs',
+    blog: 'nav.blogs',
+    finance: 'nav.finance',
+    school_finance: 'nav.finance',
+    services: 'nav.services',
+    school_services: 'nav.services',
+    achievements: 'nav.achievements',
+    school_achievements: 'nav.achievements',
+    alumni: 'nav.alumni',
+    school_alumni: 'nav.alumni',
+    contact: 'nav.contact',
+    school_contact: 'nav.contact',
+    agenda: 'blogs.agenda',
+    school_agenda: 'blogs.agenda',
+    gallery: 'blogs.gallery',
+    school_gallery: 'blogs.gallery',
+    organization: 'profile.organization',
+    school_organization: 'profile.organization',
+    staff: 'profile.staff',
+    school_staff: 'profile.staff',
+};
+
+const MENU_URL_KEYS: Record<string, string> = {
+    '/': 'nav.home',
+    '/about': 'home.about_title',
+    '/profil': 'nav.profile',
+    '/blogs': 'nav.blogs',
+    '/keuangan': 'nav.finance',
+    '/layanan': 'nav.services',
+    '/prestasi': 'nav.achievements',
+    '/alumni': 'nav.alumni',
+    '/kontak': 'nav.contact',
+    '/blogs/agenda': 'blogs.agenda',
+    '/blogs/galeri': 'blogs.gallery',
+    '/profil/struktur-organisasi': 'profile.organization',
+    '/profil/tenaga-pendidik': 'profile.staff',
+};
+
+const localizeMenuLabel = (row: MenuRow, locale?: string): string => {
+    if (!locale) {
+        return row.label;
+    }
+
+    const normalizedName = (row.name || row.slug || '').trim().toLowerCase();
+    const normalizedUrl = (row.url || '').trim().toLowerCase();
+    const translationKey = MENU_LABEL_KEYS[normalizedName] || MENU_URL_KEYS[normalizedUrl];
+
+    if (!translationKey) {
+        return row.label;
+    }
+
+    return t(translationKey, locale as Locale);
+};
+
+const buildMenuTree = (rows: MenuRow[], locale?: string): NavigationItem[] => {
     const nodes: Record<string, NavigationItem> = {};
     const roots: NavigationItem[] = [];
 
     rows.forEach((row) => {
         nodes[row.id] = {
             id: row.id,
-            label: row.label,
+            label: localizeMenuLabel(row, locale),
             href: row.url || '#',
             order: row.order || 0,
             is_active: row.is_active !== false,
@@ -681,7 +742,29 @@ const pickScopedMenuRows = (
         return rowsWithoutLocale;
     }
 
-    return [];
+    const rowsByLocale = new Map<string, MenuRow[]>();
+    rows.forEach((row) => {
+        if (!row.locale) return;
+        if (!rowsByLocale.has(row.locale)) {
+            rowsByLocale.set(row.locale, []);
+        }
+        rowsByLocale.get(row.locale)?.push(row);
+    });
+
+    const localeCandidates = [
+        defaultLocale,
+        ...supportedLocales.filter((candidate) => candidate !== targetLocale),
+    ];
+
+    for (const candidate of localeCandidates) {
+        const localizedRows = rowsByLocale.get(candidate);
+        if (localizedRows && localizedRows.length > 0) {
+            return localizedRows;
+        }
+    }
+
+    const firstLocalizedRows = rowsByLocale.values().next().value;
+    return firstLocalizedRows || [];
 };
 
 export async function getMenuTree(location: string, locale?: string): Promise<NavigationItem[]> {
@@ -734,7 +817,7 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
         return [];
     }
 
-    return buildMenuTree(pickScopedMenuRows((data || []) as MenuRow[], locale));
+    return buildMenuTree(pickScopedMenuRows((data || []) as MenuRow[], locale), locale);
 }
 
 export async function hasManagedMenuRows(location: string): Promise<boolean> {
