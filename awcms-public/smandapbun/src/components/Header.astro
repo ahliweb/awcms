@@ -55,6 +55,10 @@ function isActiveLink(href: string): boolean {
   if (href === "/") return activePath === "/";
   return activePath === href || activePath.startsWith(`${href}/`);
 }
+
+function getChildren(item: { children?: unknown[] }): unknown[] {
+  return Array.isArray(item.children) ? item.children : [];
+}
 ---
 
 <header
@@ -192,6 +196,10 @@ function isActiveLink(href: string): boolean {
         {
           menuItems.map((item) => (
             <div class="relative group">
+              {(() => {
+                const childItems = getChildren(item);
+                return (
+                <>
               <a
                 href={resolveHref(item.href)}
                 class={`nav-link px-3 py-2 rounded-lg flex items-center gap-1 ${
@@ -202,16 +210,17 @@ function isActiveLink(href: string): boolean {
                 data-testid={`nav-${item.id}`}
               >
                 {getLabel(item)}
-                {item.children && (
+                {childItems.length > 0 && (
                   <Icon name="tabler:chevron-down" class="w-4 h-4" />
                 )}
               </a>
 
-              {item.children && (
+              {childItems.length > 0 && (
                 <div class="absolute left-0 top-full pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
                   <div class="bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700 py-2 min-w-[220px]">
-                    {item.children.map((child: any) => (
-                      <div>
+                    {childItems.map((child: any) => {
+                      const grandchildItems = getChildren(child);
+                      return <div>
                         <a
                           href={resolveHref(child.href)}
                           class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-300 transition-colors"
@@ -219,9 +228,9 @@ function isActiveLink(href: string): boolean {
                         >
                           {getLabel(child)}
                         </a>
-                        {child.children && (
+                        {grandchildItems.length > 0 && (
                           <div class="pl-4">
-                            {child.children.map((subChild: any) => (
+                            {grandchildItems.map((subChild: any) => (
                               <a
                                 href={resolveHref(subChild.href)}
                                 class="block px-4 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-300 transition-colors"
@@ -232,11 +241,14 @@ function isActiveLink(href: string): boolean {
                             ))}
                           </div>
                         )}
-                      </div>
-                    ))}
+                      </div>;
+                    })}
                   </div>
                 </div>
               )}
+                </>
+                );
+              })()}
             </div>
           ))
         }
@@ -272,6 +284,10 @@ function isActiveLink(href: string): boolean {
       {
         mobileMenuItems.map((item) => (
           <div class="space-y-1">
+            {(() => {
+              const childItems = getChildren(item);
+              return (
+              <>
             <a
               href={resolveHref(item.href)}
               class={`block px-4 py-2 rounded-lg font-medium ${
@@ -282,9 +298,9 @@ function isActiveLink(href: string): boolean {
             >
               {getLabel(item)}
             </a>
-            {item.children && (
+            {childItems.length > 0 && (
               <div class="pl-4 space-y-1">
-                {item.children.map((child: any) => (
+                {childItems.map((child: any) => (
                   <a
                     href={resolveHref(child.href)}
                     class="block px-4 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-300"
@@ -294,6 +310,9 @@ function isActiveLink(href: string): boolean {
                 ))}
               </div>
             )}
+              </>
+              );
+            })()}
           </div>
         ))
       }
