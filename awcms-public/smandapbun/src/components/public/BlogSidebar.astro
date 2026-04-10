@@ -1,8 +1,8 @@
 ---
-import { Icon } from "astro-icon/components";
 import WidgetArea from "../common/WidgetArea.astro";
+import PublicMenuList from "../common/PublicMenuList.astro";
 import { getLocalizedPath, getLocalizedValue, type Locale } from "../../utils/i18n";
-import type { Post } from "../../lib/api";
+import { getMenuTree, type Post } from "../../lib/api";
 
 interface Props {
   locale: Locale;
@@ -10,6 +10,13 @@ interface Props {
 }
 
 const { locale, relatedBlogs = [] } = Astro.props;
+const sidebarMenu = await getMenuTree("public_sidebar", locale);
+const fallbackExploreLinks = [
+  { id: "latest", label: "Latest Posts", href: "/blogs" },
+  { id: "agenda", label: "Agenda", href: "/blogs/agenda" },
+  { id: "gallery", label: "Gallery", href: "/blogs/galeri" },
+];
+const exploreItems = sidebarMenu.length > 0 ? sidebarMenu : fallbackExploreLinks;
 ---
 
 <div class="space-y-6">
@@ -48,19 +55,12 @@ const { locale, relatedBlogs = [] } = Astro.props;
 
   <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 transition-colors duration-200">
     <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-4">Explore</h3>
-    <div class="space-y-2">
-      <a href={getLocalizedPath("/blogs", locale)} class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-        <span class="text-gray-700 dark:text-gray-300">Latest Posts</span>
-        <Icon name="tabler:chevron-right" class="w-5 h-5 text-gray-400" />
-      </a>
-      <a href={getLocalizedPath("/blogs/agenda", locale)} class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-        <span class="text-gray-700 dark:text-gray-300">Agenda</span>
-        <Icon name="tabler:chevron-right" class="w-5 h-5 text-gray-400" />
-      </a>
-      <a href={getLocalizedPath("/blogs/galeri", locale)} class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-        <span class="text-gray-700 dark:text-gray-300">Gallery</span>
-        <Icon name="tabler:chevron-right" class="w-5 h-5 text-gray-400" />
-      </a>
-    </div>
+    <PublicMenuList
+      items={exploreItems}
+      locale={locale}
+      class="space-y-2"
+      linkClass="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-gray-700 dark:text-gray-300"
+      nestedClass="ml-3 mt-2 space-y-2 border-l border-slate-200 dark:border-slate-700 pl-3"
+    />
   </div>
 </div>

@@ -4,6 +4,7 @@ import { t, getLocalizedPath, getLocalizedValue, type Locale } from "../utils/i1
 import navigation from "../data/navigation.json";
 import { getMenuTree, getSiteData } from "../lib/api";
 import WidgetArea from "./common/WidgetArea.astro";
+import PublicMenuList from "./common/PublicMenuList.astro";
 
 export interface Props {
   locale: Locale;
@@ -14,22 +15,13 @@ const currentYear = new Date().getFullYear();
 const site = await getSiteData();
 const footerMenu = await getMenuTree("footer", locale);
 const menuItems = footerMenu.length > 0 ? footerMenu : navigation.mainMenu;
+const footerMenuGroups = menuItems.filter((item) => item.children && item.children.length > 0);
+const footerStandaloneLinks = menuItems.filter((item) => !item.children || item.children.length === 0).slice(0, 6);
 const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pangkalan Bun";
 const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || "";
 const siteDescription = getLocalizedValue<string>(site.site.description, locale) || "";
 const siteAddress = getLocalizedValue<string>(site.site.address, locale) || "";
 
-function getLabel(item: any): string {
-  if (!item?.label) return "";
-  if (typeof item.label === "string") return item.label;
-  return item.label[locale] || item.label.id || "";
-}
-
-function resolveHref(href: string): string {
-  if (!href || href.startsWith("http") || href.startsWith("#"))
-    return href || "#";
-  return getLocalizedPath(href, locale);
-}
 ---
 
 <footer class="bg-gray-900 text-white">
@@ -109,61 +101,50 @@ function resolveHref(href: string): string {
         </div>
       </div>
 
-      <!-- Quick Links -->
-      <div>
-        <h3 class="font-bold text-lg mb-4">
-          {t("footer.quick_links", locale)}
-        </h3>
-        <ul class="space-y-2">
-          {
-            menuItems.slice(0, 6).map((item) => (
-              <li>
-                <a
-                  href={resolveHref(item.href)}
-                  class="text-gray-400 hover:text-white transition-colors text-sm"
-                >
-                  {getLabel(item)}
-                </a>
-              </li>
+      {
+        footerMenuGroups.length > 0
+          ? footerMenuGroups.slice(0, 2).map((group) => (
+              <div>
+                <h3 class="font-bold text-lg mb-4">{group.label}</h3>
+                <PublicMenuList items={group.children || []} locale={locale} />
+              </div>
             ))
-          }
-        </ul>
-      </div>
+          : (
+            <div>
+              <h3 class="font-bold text-lg mb-4">{t("footer.quick_links", locale)}</h3>
+              <PublicMenuList items={footerStandaloneLinks} locale={locale} />
+            </div>
+          )
+      }
 
-      <!-- Services -->
-      <div>
-        <h3 class="font-bold text-lg mb-4">{t("services.title", locale)}</h3>
-        <ul class="space-y-2">
-          <li>
-            <a
-              href={getLocalizedPath("/layanan/ekstrakurikuler", locale)}
-              class="text-gray-400 hover:text-white transition-colors text-sm"
-              >{t("services.extracurricular", locale)}</a
-            >
-          </li>
-          <li>
-            <a
-              href={getLocalizedPath("/layanan/laboratorium", locale)}
-              class="text-gray-400 hover:text-white transition-colors text-sm"
-              >{t("services.laboratory", locale)}</a
-            >
-          </li>
-          <li>
-            <a
-              href={getLocalizedPath("/layanan/perpustakaan", locale)}
-              class="text-gray-400 hover:text-white transition-colors text-sm"
-              >{t("services.library", locale)}</a
-            >
-          </li>
-          <li>
-            <a
-              href={getLocalizedPath("/layanan/kesiswaan", locale)}
-              class="text-gray-400 hover:text-white transition-colors text-sm"
-              >{t("services.student_affairs", locale)}</a
-            >
-          </li>
-        </ul>
-      </div>
+      {
+        footerMenuGroups.length > 2
+          ? footerMenuGroups.slice(2, 3).map((group) => (
+              <div>
+                <h3 class="font-bold text-lg mb-4">{group.label}</h3>
+                <PublicMenuList items={group.children || []} locale={locale} />
+              </div>
+            ))
+          : footerMenuGroups.length === 0 && (
+            <div>
+              <h3 class="font-bold text-lg mb-4">{t("services.title", locale)}</h3>
+              <ul class="space-y-2">
+                <li>
+                  <a href={getLocalizedPath("/layanan/ekstrakurikuler", locale)} class="text-gray-400 hover:text-white transition-colors text-sm">{t("services.extracurricular", locale)}</a>
+                </li>
+                <li>
+                  <a href={getLocalizedPath("/layanan/laboratorium", locale)} class="text-gray-400 hover:text-white transition-colors text-sm">{t("services.laboratory", locale)}</a>
+                </li>
+                <li>
+                  <a href={getLocalizedPath("/layanan/perpustakaan", locale)} class="text-gray-400 hover:text-white transition-colors text-sm">{t("services.library", locale)}</a>
+                </li>
+                <li>
+                  <a href={getLocalizedPath("/layanan/kesiswaan", locale)} class="text-gray-400 hover:text-white transition-colors text-sm">{t("services.student_affairs", locale)}</a>
+                </li>
+              </ul>
+            </div>
+          )
+      }
 
       <!-- Contact Info -->
       <div>

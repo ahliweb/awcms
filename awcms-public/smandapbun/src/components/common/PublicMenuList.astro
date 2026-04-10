@@ -1,0 +1,63 @@
+---
+import { getLocalizedPath } from "../../utils/i18n";
+
+interface MenuItem {
+  id: string;
+  label: string | { id?: string; en?: string };
+  href: string;
+  children?: MenuItem[];
+}
+
+interface Props {
+  items: MenuItem[];
+  locale: string;
+  class?: string;
+  linkClass?: string;
+  nestedClass?: string;
+}
+
+const {
+  items = [],
+  locale,
+  class: className = "space-y-2",
+  linkClass = "text-gray-400 hover:text-white transition-colors text-sm",
+  nestedClass = "ml-4 mt-2 space-y-2 border-l border-gray-800 pl-4",
+} = Astro.props;
+
+const resolveHref = (href: string): string => {
+  if (!href || href.startsWith("http") || href.startsWith("#")) return href || "#";
+  return getLocalizedPath(href, locale as "id" | "en");
+};
+
+const getLabel = (label: MenuItem["label"]): string => {
+  if (typeof label === "string") return label;
+  if (!label || typeof label !== "object") return "";
+  return label[locale as "id" | "en"] || label.id || label.en || "";
+};
+---
+
+<ul class={className}>
+  {items.map((item) => (
+    <li>
+      <a href={resolveHref(item.href)} class={linkClass}>{getLabel(item.label)}</a>
+      {item.children && item.children.length > 0 && (
+        <ul class={nestedClass}>
+          {item.children.map((child) => (
+            <li>
+              <a href={resolveHref(child.href)} class={linkClass}>{getLabel(child.label)}</a>
+              {child.children && child.children.length > 0 && (
+                <ul class={nestedClass}>
+                  {child.children.map((grandchild) => (
+                    <li>
+                      <a href={resolveHref(grandchild.href)} class={linkClass}>{getLabel(grandchild.label)}</a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  ))}
+</ul>
