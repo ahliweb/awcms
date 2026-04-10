@@ -50,7 +50,7 @@ const siteDescription = getLocalizedValue<string>(site.site.description, locale)
 
 // Import assets
 import { HeroSlider } from "../../components/HeroSlider";
-import { sanitizeHTML } from "~/utils/sanitize";
+import { sanitizeHTML } from "../../utils/sanitize";
 const images = import.meta.glob<{ default: ImageMetadata }>(
   "../../assets/foto-smandapbun/foto-campur-smanda/*.webp",
   { eager: true },

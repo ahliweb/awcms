@@ -37,7 +37,7 @@ const siteName = getLocalizedValue<string>(site.site.name, locale) || "SMAN 2 Pa
 const siteTagline = getLocalizedValue<string>(site.site.tagline, locale) || t("home.tagline", locale);
 // Import assets
 import { HeroSlider } from "../components/HeroSlider";
-import { sanitizeHTML } from "~/utils/sanitize";
+import { sanitizeHTML } from "../utils/sanitize";
 const images = import.meta.glob<{ default: ImageMetadata }>(
   "../assets/foto-smandapbun/foto-campur-smanda/*.webp",
   { eager: true },
