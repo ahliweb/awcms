@@ -1,6 +1,6 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { supabase, createScopedClient } from './supabase';
-import { defaultLocale, type Locale } from '../utils/i18n';
+import { defaultLocale, supportedLocales, type Locale } from '../utils/i18n';
 import contactDefault from '../data/pages/contact.json';
 import profileDefault from '../data/pages/profile.json';
 import organizationDefault from '../data/pages/organization.json';
@@ -594,10 +594,20 @@ export interface NavigationItem {
     is_active?: boolean;
 }
 
+interface MenuRow {
+    id: string;
+    label: string;
+    url?: string | null;
+    order?: number | null;
+    is_active?: boolean | null;
+    parent_id?: string | null;
+    locale?: string | null;
+}
+
 const isMissingLocaleColumnError = (message: string): boolean =>
     message.includes('.locale') && message.includes('does not exist');
 
-const buildMenuTree = (rows: any[]): NavigationItem[] => {
+const buildMenuTree = (rows: MenuRow[]): NavigationItem[] => {
     const nodes: Record<string, NavigationItem> = {};
     const roots: NavigationItem[] = [];
 
@@ -630,6 +640,47 @@ const buildMenuTree = (rows: any[]): NavigationItem[] => {
     return roots;
 };
 
+const pickBestLocalizedMenuRows = (
+    rows: MenuRow[],
+    locale?: string,
+): MenuRow[] => {
+    if (rows.length === 0) return [];
+
+    const rowsWithoutLocale = rows.filter((row) => !row.locale);
+    if (rowsWithoutLocale.length === rows.length) {
+        return rows;
+    }
+
+    const rowsByLocale = new Map<string, MenuRow[]>();
+    rows.forEach((row) => {
+        if (!row.locale) return;
+        if (!rowsByLocale.has(row.locale)) {
+            rowsByLocale.set(row.locale, []);
+        }
+        rowsByLocale.get(row.locale)?.push(row);
+    });
+
+    const localeCandidates = [
+        locale,
+        defaultLocale,
+        ...supportedLocales,
+    ].filter((candidate, index, list): candidate is string => Boolean(candidate) && list.indexOf(candidate) === index);
+
+    for (const candidate of localeCandidates) {
+        const matchingRows = rowsByLocale.get(candidate);
+        if (matchingRows && matchingRows.length > 0) {
+            return matchingRows;
+        }
+    }
+
+    if (rowsWithoutLocale.length > 0) {
+        return rowsWithoutLocale;
+    }
+
+    const firstLocalizedRows = rowsByLocale.values().next().value;
+    return firstLocalizedRows || rows;
+};
+
 export async function getMenuTree(location: string, locale?: string): Promise<NavigationItem[]> {
     const tenantId = await getTenantId();
     if (!tenantId) return [];
@@ -657,8 +708,8 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
 
     if (error && locale && isMissingLocaleColumnError(error.message || '')) {
         ({ data, error } = await runQuery(null));
-    } else if ((!data || data.length === 0) && locale && locale !== defaultLocale) {
-        ({ data, error } = await runQuery(defaultLocale));
+    } else if ((!data || data.length === 0) && locale) {
+        ({ data, error } = await runQuery(null));
     }
 
     if (error) {
@@ -666,7 +717,7 @@ export async function getMenuTree(location: string, locale?: string): Promise<Na
         return [];
     }
 
-    return buildMenuTree(data || []);
+    return buildMenuTree(pickBestLocalizedMenuRows((data || []) as MenuRow[], locale));
 }
 
 export async function getSiteData(): Promise<SiteData> {
