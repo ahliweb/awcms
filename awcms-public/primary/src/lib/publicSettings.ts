@@ -65,6 +65,30 @@ const buildSettings = (
       (siteInfoSetting?.site_tagline as string | undefined) ||
       (tenantSettings?.siteTagline as string | undefined) ||
       (tenantSettings?.site_tagline as string | undefined),
+    contact_email:
+      (siteInfoSetting?.contact_email as string | undefined) ||
+      (tenantSettings?.contactEmail as string | undefined) ||
+      (tenantSettings?.contact_email as string | undefined),
+    contact_phone:
+      (siteInfoSetting?.contact_phone as string | undefined) ||
+      (tenantSettings?.contactPhone as string | undefined) ||
+      (tenantSettings?.contact_phone as string | undefined),
+    social_facebook:
+      (siteInfoSetting?.social_facebook as string | undefined) ||
+      (tenantSettings?.socialFacebook as string | undefined) ||
+      (tenantSettings?.social_facebook as string | undefined),
+    social_instagram:
+      (siteInfoSetting?.social_instagram as string | undefined) ||
+      (tenantSettings?.socialInstagram as string | undefined) ||
+      (tenantSettings?.social_instagram as string | undefined),
+    social_youtube:
+      (siteInfoSetting?.social_youtube as string | undefined) ||
+      (tenantSettings?.socialYoutube as string | undefined) ||
+      (tenantSettings?.social_youtube as string | undefined),
+    social_twitter:
+      (siteInfoSetting?.social_twitter as string | undefined) ||
+      (tenantSettings?.socialTwitter as string | undefined) ||
+      (tenantSettings?.social_twitter as string | undefined),
   };
 
   const seo = {
