@@ -111,6 +111,14 @@
       "type": "remote",
       "url": "http://127.0.0.1:29979/mcp",
       "enabled": false
+    },
+    "stitch": {
+      "type": "remote",
+      "url": "https://stitch.googleapis.com/mcp",
+      "enabled": true,
+      "headers": {
+        "X-Goog-Api-Key": "{env:STITCH_API_KEY}"
+      }
     }
   }
 }
