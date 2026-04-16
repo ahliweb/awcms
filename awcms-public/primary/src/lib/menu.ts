@@ -277,7 +277,12 @@ export async function getMobileMenu(
   tenantId?: string | null,
   locale?: string,
 ): Promise<MenuItem[]> {
-  const menu = await getMenuByLocation(supabase, "mobile_menu", tenantId, locale);
+  const menu = await getMenuByLocation(
+    supabase,
+    "mobile_menu",
+    tenantId,
+    locale,
+  );
   return menu || [];
 }
 
@@ -374,9 +379,19 @@ export function mapMenuItemsToFooterLinks(items: MenuItem[], locale?: string) {
 
   const groupedLinks: Array<{
     title: string;
-    links: Array<{ text: string; href: string; target?: string; popup?: boolean }>;
+    links: Array<{
+      text: string;
+      href: string;
+      target?: string;
+      popup?: boolean;
+    }>;
   }> = [];
-  const standaloneLinks: Array<{ text: string; href: string; target?: string; popup?: boolean }> = [];
+  const standaloneLinks: Array<{
+    text: string;
+    href: string;
+    target?: string;
+    popup?: boolean;
+  }> = [];
 
   items.forEach((item) => {
     const childLinks = (item.children || []).map((child) => {
