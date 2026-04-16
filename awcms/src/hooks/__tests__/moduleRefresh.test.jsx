@@ -85,6 +85,10 @@ vi.mock('@/components/ui/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
+vi.mock('@/lib/publicRebuild', () => ({
+  triggerPublicRebuild: vi.fn(() => Promise.resolve({ ok: true })),
+}));
+
 vi.mock('@/contexts/TenantContext', () => ({
   useTenant: () => ({ currentTenant: { id: 'tenant-1', name: 'Tenant One', subscription_tier: 'free' } }),
 }));
