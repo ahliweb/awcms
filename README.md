@@ -1,5 +1,15 @@
 # AWCMS Ecosystem
 
+> ## 🏛️ Architecture Update (2026-06-17)
+>
+> Penyelarasan dengan fondasi product line AWCMS. Keputusan yang berlaku untuk repo ini:
+> - **PostgreSQL murni tanpa Supabase** — migrasi keluar Supabase (auth/data/RLS/ABAC ke PostgreSQL) — ADR-014. Tracking: #103.
+> - **RLS wajib (enforced) pada semua tabel** tenant — ADR-015. Tracking: #104.
+> - **AWCMS memiliki platform core sendiri**; EmDash = subsystem CMS opsional (bukan rewrite admin) — ADR-012.
+> - Konektivitas DB via **pooler OSS** (Supavisor/PgBouncer); Hyperdrive ditunda — ADR-013.
+>
+> Backlog penyelarasan: #103 (off-Supabase), #104 (RLS), #105 (standar bersama), #106 (docs).
+
 Welcome to the AWCMS Ecosystem. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
 
 ## Status Snapshot (2026-03-29)
