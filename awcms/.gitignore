@@ -70,6 +70,16 @@ coverage/
 *.lcov
 .jest/
 __snapshots__/
+playwright-report/
+test-results/
+
+# ============================================================================
+# Lint / analysis reports (generated artifacts — jangan commit)
+# ============================================================================
+eslint-report.txt
+lint-results.json
+lint_results.txt
+knip-report.*
 
 # ============================================================================
 # Misc
