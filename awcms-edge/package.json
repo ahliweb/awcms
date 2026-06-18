@@ -25,13 +25,13 @@
     "@aws-sdk/client-s3": "^3.1014.0",
     "@aws-sdk/s3-request-presigner": "^3.1014.0",
     "@supabase/supabase-js": "^2.99.3",
-    "hono": "^4.12.14"
+    "hono": "^4.12.25"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260317.1",
-    "tsx": "^4.20.6",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.0",
-    "wrangler": "^4.77.0"
+    "wrangler": "^4.102.0"
   },
   "overrides": {
     "undici": "^7.24.1",
