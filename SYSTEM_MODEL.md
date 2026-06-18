@@ -5,6 +5,8 @@
 
 This document serves as the single source of truth for the AWCMS architecture, technology stack, and security mandates. All Agents (Coding, Communication, Public Experience) must adhere strictly to these definitions.
 
+> **Arah Arsitektur (Decided — ADRs, migrasi berjalan):** definisi di bawah mendeskripsikan **current state** (berbasis Supabase). Target yang sudah diputuskan: **PostgreSQL murni tanpa Supabase** (ADR-014; inventaris `docs/architecture/supabase-usage-inventory.md`, epic #103), **RLS wajib** (ADR-015), **pooler OSS** (ADR-013), **EmDash = rujukan saja** (ADR-020), **toolchain Bun** (ADR-019; `awcms-edge` tetap Workers), **Pino/Workers-native logging** (ADR-021), **CQRS-lite pencarian** (ADR-023), **tiga rujukan Supabase/Odoo/EmDash** (ADR-022). Saat menulis kode baru, ikuti arah ini. Detail: repo `personal-coding`.
+
 ---
 
 ## 1. Technology Stack Mandates
