@@ -17,7 +17,7 @@ Current AWCMS-specific operator coverage includes:
 ## Prerequisites
 
 - Node.js >= 24.14.1
-- npm 10+
+- Bun 1.3+
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ bun run dev
 | `bun run start` | Run MCP server (`bun src/index.ts`) |
 | `bun run lint` | Lint TypeScript source files |
 | `bun run lint:fix` | Lint with autofix |
-| `npm run format` | Format source files with Prettier |
+| `bun run format` | Format source files with Prettier |
 
 ## Environment Notes
 
