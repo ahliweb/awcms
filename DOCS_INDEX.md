@@ -54,6 +54,7 @@ All documentation follows this authority structure:
 | Core Standards | [docs/architecture/standards.md](docs/architecture/standards.md) | UI, coding, and quality standards |
 | Folder Structure | [docs/architecture/folder-structure.md](docs/architecture/folder-structure.md) | Monorepo layout |
 | Database Schema | [docs/architecture/database.md](docs/architecture/database.md) | Tables and relations |
+| Supabase Usage Inventory | [docs/architecture/supabase-usage-inventory.md](docs/architecture/supabase-usage-inventory.md) | Audit ketergantungan Supabase + peta migrasi off-Supabase (ADR-014, #103/#108) |
 | Runtime Boundaries | [docs/architecture/runtime-boundaries.md](docs/architecture/runtime-boundaries.md) | Cloudflare-only runtime and scope guarantees |
 | Edge OpenAPI Contract | [docs/architecture/edge-openapi-spec.md](docs/architecture/edge-openapi-spec.md) | Boundary-separated OpenAPI 3.1 and Swagger UI rules for `awcms-edge/` |
 | Queue Topology | [docs/architecture/queue-topology.md](docs/architecture/queue-topology.md) | Cloudflare Queues: topology, message contracts, consumer patterns |

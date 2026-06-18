@@ -14,6 +14,23 @@ All agent work must respect this chain:
 
 ---
 
+## Arah Arsitektur (Decided — ADRs)
+
+> **Penting:** Bagian lain dokumen ini mendeskripsikan **current state** (berbasis Supabase). Keputusan arsitektur berikut adalah **target yang sudah diputuskan**; migrasi sedang berjalan. Saat menulis kode baru, ikuti arah ini.
+
+- **PostgreSQL murni tanpa Supabase** (ADR-014) — migrasi keluar Supabase (auth/data/RLS). Inventaris: `docs/architecture/supabase-usage-inventory.md`. Epic #103 (sub: #109 auth, #110 schema+RLS, #111 pooler).
+- **RLS wajib** semua tabel tenant (ADR-015) — port policy Supabase ke RLS PostgreSQL murni.
+- **Connection pooler OSS** (ADR-013) — `awcms-edge` (Workers) = Transaction mode + `prepare:false`; backend Node = Session mode.
+- **EmDash = rujukan arsitektur saja** (ADR-020) — bukan dependency; CMS = modul native bila perlu. Full EmDash hanya `awcms-micro`.
+- **Toolchain Bun** (ADR-019) — admin/public/mcp; `awcms-edge` runtime tetap Workers (workerd). #113.
+- **Logging Pino / Workers-native** (ADR-021) — `awcms-edge` pakai `src/lib/logger.ts` (NDJSON + redaction). #114.
+- **CQRS-lite untuk pencarian** (ADR-023) — query side read-only, read DTO, RLS+masking; OpenSearch hanya saat skala besar. #117.
+- **Tiga rujukan arsitektur** (ADR-022) — Supabase (pola PostgreSQL-native) + Odoo (ERP modular) + EmDash (CMS), stack sendiri tanpa lock-in.
+
+Detail keputusan: repo `personal-coding` (`docs/concepts/canvas-arsitektur-...`, `docs/ahliweb-repo-decision-log.md`).
+
+---
+
 ## 🤖 Agent Overview
 
 In the AWCMS ecosystem, AI Agents are treated as specialized team members. We define three primary personas for AI interactions:

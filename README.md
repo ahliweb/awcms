@@ -10,7 +10,7 @@
 >
 > Backlog penyelarasan: #103 (off-Supabase), #104 (RLS), #105 (standar bersama), #106 (docs).
 
-Welcome to the AWCMS Ecosystem. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients backed by Supabase.
+Welcome to the AWCMS Ecosystem. AWCMS is a **multi-tenant CMS platform** with admin, public, mobile, and IoT clients. **Current state:** backed by Supabase. **Target (decided, migrasi berjalan):** PostgreSQL murni tanpa Supabase (ADR-014) — lihat `docs/architecture/supabase-usage-inventory.md` & #103.
 
 ## Status Snapshot (2026-03-29)
 
