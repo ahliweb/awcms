@@ -23,19 +23,19 @@ Current AWCMS-specific operator coverage includes:
 
 ```bash
 cd awcms-mcp
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 ## Scripts
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start MCP server in development mode (`tsx`) |
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm run start` | Run compiled server from `dist/index.js` |
-| `npm run lint` | Lint TypeScript source files |
-| `npm run lint:fix` | Lint with autofix |
+| `bun run dev` | Start MCP server in watch mode (Bun runs TypeScript natively) |
+| `bun run build` | Type-check / compile TypeScript to `dist/` (opsional; runtime pakai TS langsung) |
+| `bun run start` | Run MCP server (`bun src/index.ts`) |
+| `bun run lint` | Lint TypeScript source files |
+| `bun run lint:fix` | Lint with autofix |
 | `npm run format` | Format source files with Prettier |
 
 ## Environment Notes
