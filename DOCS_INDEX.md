@@ -55,6 +55,7 @@ All documentation follows this authority structure:
 | Folder Structure | [docs/architecture/folder-structure.md](docs/architecture/folder-structure.md) | Monorepo layout |
 | Database Schema | [docs/architecture/database.md](docs/architecture/database.md) | Tables and relations |
 | Supabase Usage Inventory | [docs/architecture/supabase-usage-inventory.md](docs/architecture/supabase-usage-inventory.md) | Audit ketergantungan Supabase + peta migrasi off-Supabase (ADR-014, #103/#108) |
+| AhliWeb Architecture Decisions | [docs/architecture/ahliweb-architecture-decisions.md](docs/architecture/ahliweb-architecture-decisions.md) | Matriks ADR-013…023 per produk + aturan operasional (source of truth: personal-coding) |
 | Runtime Boundaries | [docs/architecture/runtime-boundaries.md](docs/architecture/runtime-boundaries.md) | Cloudflare-only runtime and scope guarantees |
 | Edge OpenAPI Contract | [docs/architecture/edge-openapi-spec.md](docs/architecture/edge-openapi-spec.md) | Boundary-separated OpenAPI 3.1 and Swagger UI rules for `awcms-edge/` |
 | Queue Topology | [docs/architecture/queue-topology.md](docs/architecture/queue-topology.md) | Cloudflare Queues: topology, message contracts, consumer patterns |
