@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ES2024"],
+    "types": ["bun"],
+    "checkJs": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true
+  },
+  "include": [".astro/types.d.ts", "scripts/**/*", "src/**/*", "tests/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

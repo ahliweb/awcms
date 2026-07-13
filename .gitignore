@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Environment (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Local dev-only Docker Compose overrides — auto-loaded by
+# `docker compose`, never committed (each operator's own local port/volume
+# preferences, not shared config). See docker-compose.override.yml.example.
+docker-compose.override.yml
+
+# PgBouncer SCRAM verifier file — contains SCRAM-SHA-256 verifiers
+# (equivalent to password hashes; usable for offline dictionary attacks
+# against DB roles), never committed.
+userlist.txt
+
+# Build output
+dist/
+.astro/
+build/
+
+# Local storage & backups
+storage/
+*.dump
+*.sql.gz
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+
+# Playwright E2E artifacts
+playwright-report/
+test-results/
+blob-report/
+
+# Claude Code user-local settings (jangan commit)
+.claude/settings.local.json
