@@ -11,7 +11,7 @@
         "react-dom": "^19.0.0"
     },
     "devDependencies": {
-        "vite": "^8.0.5"
+        "vite": "^8.0.16"
     },
     "scripts": {
         "build": "vite build --ssr src/index.js --outDir ../../temp_debug_files/primary-analytics-build",
