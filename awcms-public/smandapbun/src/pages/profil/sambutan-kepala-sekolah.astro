@@ -1,9 +1,0 @@
----
-import SettingsManagedPage from "../../components/SettingsManagedPage.astro";
-import { getProfilePageData } from "../../lib/api";
-
-const profileData = await getProfilePageData();
-const data = profileData?.principalMessage;
----
-
-<SettingsManagedPage data={data} locale="id" backHref="/profil" />

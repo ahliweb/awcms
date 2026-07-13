@@ -1,4 +1,0 @@
-
-> @onwidget/astrowind@2.27.0 check:eslint
-> eslint .
-
