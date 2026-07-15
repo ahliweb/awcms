@@ -1,0 +1,50 @@
+name: Feature request
+description: Usulkan kemampuan baru atau peningkatan pada platform ERP AWCMS.
+title: "[feat] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        AWCMS adalah platform ERP & integrasi solusi bisnis milik AhliWeb (lihat [ADR-0001](../../docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — modul domain ERP (finance, inventory, procurement, manufacturing, HR/payroll) dan integrasi bisnis eksternal masuk langsung ke `src/modules/` repo ini, bukan repo terpisah.
+
+        Bila usulan ini adalah **modul baru** (bukan perubahan modul yang sudah ada), baca dulu kebijakan admission modul: `docs/awcms/21_module_admission_governance.md` (kategori, pohon keputusan, kriteria) dan isi `docs/awcms/templates/module-proposal-template.md` sebagai lampiran/komentar issue ini sebelum scaffold dimulai.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Masalah / kebutuhan
+      description: Masalah apa yang ingin diselesaikan? Untuk siapa?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Usulan solusi
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatif yang dipertimbangkan
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Kategori modul (doc 21 §2 — bila usulan ini modul baru)
+      options:
+        - "Core / System (fondasi lintas-modul)"
+        - "ERP Domain Module (finance/inventory/procurement/manufacturing/HR)"
+        - "External Integration (payment gateway/marketplace/Coretax/logistik)"
+        - "Tidak yakin"
+        - "Bukan modul baru (perubahan modul yang sudah ada)"
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: Dampak dokumentasi / standar
+      description: Doc/ADR/kontrak mana yang perlu berubah bila fitur ini diterima?
+    validations:
+      required: false

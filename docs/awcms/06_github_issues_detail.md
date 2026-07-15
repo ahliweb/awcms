@@ -216,7 +216,7 @@ Selain doc 01–05, setiap epic wajib membaca dokumen desain teknis terkait. Sem
 
 Dokumen ini adalah template/backlog issue atomic generik untuk AWCMS base. Snapshot live GitHub terbaru (2026-07-04) mencatat **18 issue OPEN** dari backlog ini di `ahliweb/awcms`.
 
-Nomor `Issue X.Y` pada dokumen ini adalah **kode traceability internal**, bukan nomor issue GitHub. Untuk mengetahui nomor issue GitHub dari kode X.Y, lihat tabel di [`github/issues-open-001.md`](github/issues-open-001.md).
+Nomor `Issue X.Y` pada dokumen ini adalah **kode traceability internal**, bukan nomor issue GitHub. Untuk mengetahui nomor issue GitHub dari kode X.Y, lihat tabel di `github/issues-open-001.md` (belum ada — di-generate skill `awcms-github-snapshot` sekali dijalankan).
 
 ## Riwayat perubahan backlog (2026-07-04)
 
@@ -227,7 +227,7 @@ Status awal issue yang tersisa:
 1. Sprint 1 (Issue 0.1, 0.2, 0.3) berlabel `status:ready`.
 2. 15 issue lain berlabel `status:blocked` karena bergantung pada milestone yang belum selesai (lihat §Ketergantungan milestone di atas).
 3. Setelah suatu issue selesai dan di-merge, ubah label issue yang dependency-nya baru terpenuhi dari `status:blocked` menjadi `status:ready` di GitHub.
-4. Refresh snapshot di [`github/README.md`](github/README.md), `github/issues-open-NNN.md`, `github/issues-closed-NNN.md`, dan `github/labels-milestones.md` setiap kali status/label/milestone berubah.
+4. Refresh snapshot di `github/README.md`, `github/issues-open-NNN.md`, `github/issues-closed-NNN.md`, dan `github/labels-milestones.md` setiap kali status/label/milestone berubah.
 
 ### Koreksi urutan sprint (2026-07-05)
 
@@ -239,7 +239,7 @@ Sprint awal (setelah koreksi #1) menempatkan **10.1–10.3 (M8 — Security/Perf
 
 Jika repo ini dipakai sebagai template untuk membangun aplikasi domain baru: **jangan** menambah epic domain ke backlog ini. Buat paket dokumen 01–20 dan backlog issue terpisah milik aplikasi turunan tersebut (pola: paket dokumen AWPOS), dan tambahkan modul domainnya di `src/modules/` di atas base ini.
 
-Snapshot isi GitHub aktual dicatat di [`github/README.md`](github/README.md). Snapshot dipisah menjadi file `issues-open-NNN.md` dan `issues-closed-NNN.md`, dengan batas maksimal 100 issue per file. Dokumen ini tetap menjadi template/rencana issue atomic; folder `github/` menjadi arsip state GitHub yang direfresh dari `gh`.
+Snapshot isi GitHub aktual dicatat di `github/README.md` (belum ada — lihat catatan di atas). Snapshot dipisah menjadi file `issues-open-NNN.md` dan `issues-closed-NNN.md`, dengan batas maksimal 100 issue per file. Dokumen ini tetap menjadi template/rencana issue atomic; folder `github/` menjadi arsip state GitHub yang direfresh dari `gh`.
 
 # Sprint awal rekomendasi
 

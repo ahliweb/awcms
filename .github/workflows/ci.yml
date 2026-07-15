@@ -1,0 +1,114 @@
+# CI AWCMS — kualitas dokumentasi, kontrak, unit test, & hygiene (Bun-only).
+#
+# Setiap step di job `quality` dinamai sesuai, dan dijaga urutannya sama
+# dengan, script `check` di package.json — script itu tetap satu-satunya
+# sumber kebenaran; step di sini adalah cerminannya yang di-orkestrasi CI,
+# bukan daftar independen yang bisa drift darinya. Diadaptasi dari
+# awcms-mini (`.github/workflows/ci.yml`), dipangkas ke apa yang benar-benar
+# ada di repo ini: belum ada test integrasi yang butuh Postgres hidup (semua
+# 174+ test adalah unit murni), belum ada Playwright/E2E, dan belum ada
+# docker-compose*.yml untuk divalidasi.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality (lint + docs + contracts + typecheck + test + build)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prettier check
+        run: bun run lint
+
+      - name: Docs checks (mermaid, internal links, naming)
+        run: bun run check:docs
+
+      - name: API spec + route contract check
+        run: bun run api:spec:check
+
+      - name: Module dependency graph check
+        run: bun run modules:dag:check
+
+      - name: Logging redaction lint check
+        run: bun run logging:lint:check
+
+      - name: Typecheck (tsc --noEmit)
+        run: bun run typecheck
+
+      - name: Unit tests (bun test)
+        run: bun test
+
+      - name: Build Astro foundation
+        run: bun run build
+
+      # Diagnostik ringkas, hanya di-upload bila ada step di atas yang
+      # gagal. Sengaja sempit (bukan seluruh workspace/node_modules) dan
+      # log-only — logger terstruktur repo ini tidak pernah mencetak
+      # DATABASE_URL/secret (lihat src/lib/logging), dan job ini tidak
+      # memakai secret sungguhan sama sekali.
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: quality-failure-diagnostics
+          path: |
+            dist/
+            !dist/**/*.map
+          retention-days: 5
+          if-no-files-found: ignore
+
+  hygiene:
+    name: Repo hygiene (Bun-only + no secrets)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: No Node.js tooling in package scripts (Bun-only)
+        run: |
+          if grep -REn '"[^"]*":\s*"(npm|npx|pnpm|yarn|node) ' package.json; then
+            echo "::error::package.json scripts harus Bun-only (lihat AGENTS.md aturan Bun-only)."
+            exit 1
+          fi
+          echo "OK: tidak ada tooling Node.js di package scripts."
+
+      - name: No committed .env / secret files
+        run: |
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$'; then
+            echo "::error::Berkas .env tidak boleh di-commit."
+            exit 1
+          fi
+          echo "OK: tidak ada berkas .env yang ter-track."

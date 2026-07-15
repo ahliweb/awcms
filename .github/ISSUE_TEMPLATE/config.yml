@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Pertanyaan / diskusi
+    url: https://github.com/ahliweb/awcms/discussions
+    about: Untuk pertanyaan umum dan diskusi, gunakan Discussions (bila aktif) atau lihat SUPPORT.md.
+  - name: Laporan kerentanan keamanan
+    url: https://github.com/ahliweb/awcms/security/advisories/new
+    about: JANGAN buka issue publik untuk kerentanan. Gunakan private vulnerability reporting (lihat SECURITY.md).
+  - name: Kontrak kerja & standar (AGENTS.md)
+    url: https://github.com/ahliweb/awcms/blob/main/AGENTS.md
+    about: Baca aturan wajib dan alur kerja sebelum membuat issue implementasi.

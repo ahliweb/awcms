@@ -1,15 +1,15 @@
 # Branch Protection — Required Status Checks
 
 > **Document status.** Repo `awcms` is at the foundation-rebuild stage
-> ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — no
-> ERP module code exists yet. This document adapts the generic branch
-> protection / required-checks policy from the awcms-mini base (a
-> repo-hygiene mechanism, not domain-specific) for this repository. Some
-> checks listed below (e.g. `E2E smoke (Playwright)`, the exact step
-> count in `bun run check`) reference workflows/scripts that will be
-> mirrored into `awcms` as its own CI is built out — verify against this
-> repo's actual `.github/workflows/` before relying on any specific
-> number or name.
+> ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) —
+> Sprint 1–2 modul fondasi sudah ada (lihat `../ARCHITECTURE.md`), belum
+> ada modul domain ERP. `.github/workflows/ci.yml`, `codeql.yml`, dan
+> `changesets.yml` **sudah ada** di repo ini (diadaptasi dari awcms-mini),
+> dipangkas ke apa yang benar-benar berjalan hari ini: belum ada test
+> integrasi yang butuh Postgres hidup, belum ada E2E/Playwright, dan belum
+> ada `docker-compose*.yml` untuk divalidasi — job `e2e-smoke` dan validasi
+> compose file **tidak** ada di sini (beda dari base awcms-mini), akan
+> ditambah begitu infrastrukturnya dibangun.
 
 Acceptance criterion this document exists to satisfy: "Branch protection
 documentation identifies required checks." This document is that
@@ -23,26 +23,35 @@ automatically by this doc or by CI itself.
 
 ## Required status checks (recommended)
 
-These are the check names GitHub should report for `.github/workflows/ci.yml`
-and `.github/workflows/codeql.yml` once those workflows exist in this repo —
-a branch protection rule's "required status checks" list must reference these
-names verbatim (GitHub matches on the job's `name:`, not its internal id).
-Adjust this table to match the actual workflow files as they are built —
-do not assume it is already in sync:
+Nama check di bawah adalah yang benar-benar dilaporkan oleh
+`.github/workflows/ci.yml`, `codeql.yml`, dan `changesets.yml` di repo ini
+hari ini — sebuah branch protection rule's "required status checks" harus
+mereferensikan nama ini verbatim (GitHub mencocokkan `name:` job, bukan id
+internalnya):
 
-| Check name (verbatim)                                  | Workflow / job                    | What it gates                                                                                                                                                                                        |
-| ------------------------------------------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Quality (lint + docs + contracts + typecheck + test)` | `ci.yml` / `quality`              | Prettier, docs checks, `api:spec:check` (OpenAPI/AsyncAPI + route parity + public-operation allow-list), `modules:dag:check`, `i18n:parity:check`, typecheck, `bun test` (unit + integration), build |
-| `E2E smoke (Playwright)`                               | `ci.yml` / `e2e-smoke`            | Real-browser smoke coverage against a live app + isolated Postgres (login, admin/security both gate states, admin/analytics access control)                                                          |
-| `Repo hygiene (Bun-only + no secrets)`                 | `ci.yml` / `hygiene`              | Bun-only tooling convention, no committed `.env`, both `docker-compose*.yml` files parse                                                                                                             |
-| `Analyze (actions)`                                    | `codeql.yml` / `analyze`          | CodeQL static analysis of GitHub Actions workflow files                                                                                                                                              |
-| `Analyze (javascript-typescript)`                      | `codeql.yml` / `analyze`          | CodeQL static analysis (security-extended + security-and-quality queries) of the TypeScript/Astro source                                                                                             |
-| `Changeset required for behavior changes`              | `changesets.yml` / `policy-check` | Fails a PR touching non-docs/non-agent-tooling files without a new `.changeset/*.md` — see `release-process.md` §PR-time gate (belum ditulis di awcms)                                               |
+| Check name (verbatim)                                          | Workflow / job                    | What it gates                                                                                                                                                                                                      |
+| -------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Quality (lint + docs + contracts + typecheck + test + build)` | `ci.yml` / `quality`              | Prettier, `check:docs` (mermaid/tautan/penamaan), `api:spec:check` (OpenAPI/AsyncAPI + route parity + public-operation allow-list), `modules:dag:check`, `logging:lint:check`, typecheck, `bun test` (unit), build |
+| `Repo hygiene (Bun-only + no secrets)`                         | `ci.yml` / `hygiene`              | Konvensi tooling Bun-only, tidak ada `.env` ter-commit                                                                                                                                                             |
+| `Analyze (actions)`                                            | `codeql.yml` / `analyze`          | CodeQL static analysis atas berkas workflow GitHub Actions                                                                                                                                                         |
+| `Analyze (javascript-typescript)`                              | `codeql.yml` / `analyze`          | CodeQL static analysis (query security-extended + security-and-quality) atas source TypeScript/Astro                                                                                                               |
+| `Changeset required for behavior changes`                      | `changesets.yml` / `policy-check` | Menolak PR yang menyentuh file non-docs/non-agent-tooling tanpa `.changeset/*.md` baru — lihat `scripts/changeset-policy-check.ts`                                                                                 |
 
-`GitGuardian Security Checks` (a GitHub App check, not a workflow file in
-this repo) should also be included in the required list once the org's
-GitGuardian integration is enabled for this repo; it is not configured by
-anything in `.github/workflows/`, so it isn't itemized above with the rest.
+`GitGuardian Security Checks` (GitHub App check, bukan workflow file di
+repo ini) sebaiknya juga masuk daftar wajib begitu integrasi GitGuardian
+organisasi diaktifkan untuk repo ini; tidak dikonfigurasi oleh apa pun di
+`.github/workflows/`, jadi tidak diitemisasi di atas.
+
+**Cloudflare Pages** (bila GitHub App "Cloudflare Workers and Pages"
+terpasang di repo ini) **tidak boleh** masuk daftar required checks —
+repo ini tidak punya konfigurasi Cloudflare Pages/Wrangler apa pun (tidak
+ada `wrangler.toml`, tidak ada build command Pages yang valid untuk
+skeleton Astro/Bun saat ini), jadi check itu akan selalu gagal membangun.
+Bila muncul sebagai check yang gagal pada commit/PR, itu adalah sisa
+instalasi GitHub App Cloudflare dari repo lama (pra-ADR-0001) yang perlu
+dilepas dari sisi Cloudflare (dashboard Cloudflare → Workers & Pages →
+project terkait → Settings → putuskan koneksi Git, atau hapus project) —
+bukan sesuatu yang bisa diperbaiki lewat commit ke repo ini.
 
 ## Applying this (maintainer action, not automated)
 
@@ -63,8 +72,7 @@ if the check list above has since changed):
 gh api -X PUT repos/ahliweb/awcms/branches/main/protection \
   -H "Accept: application/vnd.github+json" \
   -f required_status_checks.strict=true \
-  -f 'required_status_checks.contexts[]=Quality (lint + docs + contracts + typecheck + test)' \
-  -f 'required_status_checks.contexts[]=E2E smoke (Playwright)' \
+  -f 'required_status_checks.contexts[]=Quality (lint + docs + contracts + typecheck + test + build)' \
   -f 'required_status_checks.contexts[]=Repo hygiene (Bun-only + no secrets)' \
   -f 'required_status_checks.contexts[]=Analyze (actions)' \
   -f 'required_status_checks.contexts[]=Analyze (javascript-typescript)' \
@@ -81,33 +89,39 @@ check requirement this doc is about.)
 
 ## Why `bun run check` and CI must stay the same source of truth
 
-Once this repo's `package.json` `check` composite and `.github/workflows/ci.yml`
-exist, they must be kept in lockstep: every step added to `bun run check`
-needs a matching named step in `ci.yml`'s `quality` job in the same PR (or
-an explicit documented reason why it stays release-only). The awcms-mini
-base found and closed exactly this kind of drift more than once (`api:spec:check`
-and `modules:dag:check` were missing from CI for a period; `api:docs:check`,
-`repo:inventory:check`, `i18n:pot:check`, `config:docs:check`, and
-`logging:lint:check` still only run in `release.yml` there, not in `ci.yml`'s
-`quality` job) — treat that history as a warning to design against from the
-start in awcms, not a problem to rediscover later. Concretely: an
-API-docs drift, a repo-inventory drift, an i18n `.pot` drift, a config-docs
-drift, or a raw-error-logging violation must not be able to merge to `main`
-via a green PR and only surface when a release tag is pushed.
+`package.json`'s `check` composite dan `.github/workflows/ci.yml`'s
+`quality` job harus tetap lockstep: setiap step yang ditambah ke
+`bun run check` butuh step senama yang cocok di `ci.yml`'s `quality` job
+pada PR yang sama (atau alasan eksplisit terdokumentasi kenapa itu
+release-only). Base awcms-mini pernah menemukan dan menutup drift persis
+seperti ini lebih dari sekali (`api:spec:check` dan `modules:dag:check`
+sempat hilang dari CI-nya untuk suatu periode) — perlakukan riwayat itu
+sebagai peringatan untuk didesain dari awal di `awcms`, bukan masalah yang
+ditemukan ulang nanti.
+
+## Deferred (belum diadaptasi — butuh infrastruktur yang belum ada)
+
+- **`E2E smoke (Playwright)`** — butuh `playwright.config.ts` + suite E2E
+  nyata; belum ada di repo ini.
+- **Validasi `docker-compose*.yml`** (bagian dari job `hygiene` di
+  awcms-mini) — repo ini belum punya `docker-compose.yml`/`Dockerfile.production`.
+- **`release.yml`** (build image + SBOM + cosign sign + attestation +
+  GitHub Release) — butuh Dockerfile/image publish yang belum ada; lihat
+  [`release-process.md`](release-process.md) untuk kapan ini relevan.
+
+Ketiganya diadaptasi begitu prasyaratnya ada — lihat
+[`scripts/README.md`](../../scripts/README.md) untuk pola yang sama pada
+script tooling.
 
 ## See also
 
-- `06_github_issues_detail.md` — issue tracking for platform-hardening
-  work (out of scope for this adaptation; will be added as issues are
-  opened for this repo).
 - [`07_sprint_testing_production_readiness.md`](07_sprint_testing_production_readiness.md)
   — testing pyramid and production readiness checklist this CI
-  orchestration serves (belum ditulis).
-- `.github/workflows/ci.yml` / `.github/workflows/codeql.yml` — the
-  actual workflow definitions this doc describes, once created.
-- [`release-process.md`](release-process.md) — the `changesets.yml`
-  (PR-time changeset policy gate, table row above) and `release.yml`
-  (tag-triggered build/SBOM/sign/attest/publish pipeline) once
-  documented for this repo, including its own repo-admin manual step
-  (the `release` GitHub Environment's required reviewers) that follows
-  this same "document, don't self-apply" pattern.
+  orchestration serves.
+- `.github/workflows/ci.yml`, `codeql.yml`, `changesets.yml` — definisi
+  workflow aktual yang dideskripsikan dokumen ini.
+- [`release-process.md`](release-process.md) — `release.yml` (tag-triggered
+  build/SBOM/sign/attest/publish pipeline) sekali didokumentasikan untuk
+  repo ini, termasuk langkah manual repo-admin-nya sendiri (required
+  reviewers GitHub Environment `release`) yang mengikuti pola "dokumentasikan,
+  jangan self-apply" yang sama.

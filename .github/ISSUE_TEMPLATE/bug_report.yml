@@ -1,0 +1,59 @@
+name: Bug report
+description: Laporkan perilaku yang salah atau tidak sesuai dokumentasi.
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Terima kasih atas laporannya. **Jangan** menyertakan secret, kredensial, dump database, atau data pengguna asli. Untuk kerentanan keamanan, gunakan alur privat di `SECURITY.md`.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Ringkasan
+      description: Jelaskan bug secara singkat dan jelas.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Langkah reproduksi
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Perilaku yang diharapkan
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Perilaku aktual
+      description: Sertakan pesan error / log relevan (tanpa data sensitif).
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Lingkungan
+      description: Versi Bun, OS, versi/commit repo, PostgreSQL (bila relevan).
+      placeholder: |
+        - Bun:
+        - OS:
+        - Commit/tag:
+        - PostgreSQL:
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Konteks tambahan
+      description: Dokumen/issue terkait, dugaan penyebab, dsb.
+    validations:
+      required: false

@@ -1,0 +1,22 @@
+# CODEOWNERS — reviewer otomatis per path.
+# Format: <pattern> <owner...>. Baris terakhir yang cocok yang menang.
+# Ganti @ahliweb dengan tim/maintainer sesuai kebutuhan.
+
+# Default: seluruh repo
+*                                   @ahliweb
+
+# Kontrak kerja & standar inti
+/AGENTS.md                          @ahliweb
+/docs/                              @ahliweb
+/docs/adr/                          @ahliweb
+
+# Keamanan & tata kelola
+/SECURITY.md                        @ahliweb
+/GOVERNANCE.md                      @ahliweb
+/CODE_OF_CONDUCT.md                 @ahliweb
+/.github/                           @ahliweb
+
+# Otomasi & konfigurasi build
+/.github/workflows/                 @ahliweb
+/package.json                       @ahliweb
+/.changeset/                        @ahliweb

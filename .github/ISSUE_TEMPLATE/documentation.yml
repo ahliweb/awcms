@@ -1,0 +1,32 @@
+name: Documentation
+description: Laporkan kesalahan, kekurangan, atau usulan perbaikan dokumentasi/standar.
+title: "[docs] "
+labels:
+  - documentation
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Lokasi dokumen
+      description: Path file + bagian/heading (mis. `docs/awcms/16_...md` §RLS context).
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Apa yang salah/kurang
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Usulan perbaikan
+    validations:
+      required: false
+  - type: checkboxes
+    id: consistency
+    attributes:
+      label: Konsistensi
+      options:
+        - label: Perubahan ini perlu diselaraskan lintas dokumen (doc + skill + kode)
+        - label: Perubahan ini menyentuh keputusan arsitektural (mungkin butuh ADR)

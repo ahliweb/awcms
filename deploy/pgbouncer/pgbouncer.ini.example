@@ -1,0 +1,56 @@
+; pgbouncer.ini.example — PgBouncer (transaction mode) template (Issue 12.2,
+; doc 18 §Topologi deployment LAN-first, doc 11 §Sprint 12 deploy files).
+;
+; This is the canonical copy of the example first documented inline in
+; docs/awcms/database-pooling.md (Issue 10.2, §7 "PgBouncer (transaction
+; mode)") — that doc now links here instead of duplicating it, to avoid two
+; copies drifting apart.
+;
+; OPTIONAL. Doc 18's LAN-first topology is one server running the app +
+; PostgreSQL directly (see docker-compose.yml at the repo root) — PgBouncer
+; is only needed when there are many short-lived connections in front of
+; Postgres (e.g. serverless/edge clients, high connection churn), not for
+; the default single-server LAN setup.
+;
+; Copy into place and adapt before use:
+;   sudo cp deploy/pgbouncer/pgbouncer.ini.example /etc/pgbouncer/pgbouncer.ini
+;   sudo systemctl enable --now pgbouncer
+;
+; When PgBouncer is fronting this app in transaction pool mode, set
+; DATABASE_PGBOUNCER=true in the app's environment — this automatically
+; disables prepared statements on the Bun.SQL client (see
+; docs/awcms/database-pooling.md §1), which are unsafe under PgBouncer
+; transaction mode because a prepared statement can be reused on a
+; different backend connection between transactions.
+;
+; auth_type = scram-sha-256 (Issue #682, epic #679, platform-hardening —
+; was `md5`). Matches PostgreSQL 18's own default password hashing
+; (`password_encryption = scram-sha-256`), so a role created with a plain
+; `CREATE ROLE ... PASSWORD '...'` on this repo's Postgres already has a
+; SCRAM verifier stored server-side — no extra step there. `userlist.txt`
+; needs that verifier string, not the plaintext password:
+;
+;   psql -tAc "SELECT rolpassword FROM pg_authid WHERE rolname = 'awcms_app'" \
+;     | xargs -I{} echo '"awcms_app" "{}"' >> /etc/pgbouncer/userlist.txt
+;
+; (repeat per role you route through this PgBouncer — e.g.
+; `awcms_worker`/`awcms_setup` from sql/045 if those connect via
+; PgBouncer too). `pg_authid` is superuser-only to read — run this as the
+; same privileged role `bun run db:migrate` already uses, never as the
+; least-privilege app role. `userlist.txt` itself is a secret (never
+; committed) — see docker-compose.yml's pgbouncer service comment for how
+; it's mounted in the Compose profile.
+
+[databases]
+awcms = host=127.0.0.1 port=5432 dbname=awcms
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+pool_mode = transaction
+; max_client_conn menampung banyak koneksi pendek dari edge/serverless;
+; default_pool_size selaras dengan DATABASE_POOL_MAX aplikasi ini.
+max_client_conn = 200
+default_pool_size = 20

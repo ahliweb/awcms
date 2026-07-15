@@ -61,7 +61,7 @@ operation allow-list (`ALLOWED_PUBLIC_OPERATIONS` in
 every tenant-scoped request; the server also sets PostgreSQL Row-Level
 Security context from the authenticated session, never trusting the
 header alone as the sole isolation boundary (defense in depth — see
-[`16_backend_data_access_integration.md`](16_backend_data_access_integration.md#rls-context-kritis-untuk-multi-tenant)).
+[`16_backend_data_access_integration.md`](16_backend_data_access_integration.md#rls-context-kritis-untuk-multi-tenantmulti-entitas)).
 
 ### Pagination
 
@@ -74,7 +74,7 @@ as `cursor`; omit it for the first page.
 
 High-risk mutations require the `Idempotency-Key` header (see the
 `IdempotencyKey` row below) — see
-[`05_openapi_asyncapi_detail.md`](05_openapi_asyncapi_detail.md#endpoint-wajib-idempotency)
+[`05_openapi_asyncapi_detail.md`](05_openapi_asyncapi_detail.md#endpoint-wajib-idempotency-rencana)
 for the full list of endpoints that require it and the replay-conflict
 behavior.
 
