@@ -65,11 +65,11 @@ Lihat `resilience-dr-verification.md` (menyusul) untuk flowchart safety-interloc
 
 `scale-profiles.ts` mendefinisikan tiga profil versioned:
 
-| Profil    | Tenants | Multiplier noisy-neighbor | Durasi soak | Dipakai oleh                                |
-| ---------- | ------: | ---------------------------: | ------------: | -------------------------------------------- |
-| `safe`     |       5 |                           6x |   0 (dilewati) | `quality` job CI, default kedua script       |
-| `standard` |      20 |                          10x |           60s | investigasi manual                           |
-| `large`    |      50 |                          15x |          600s | lane `--full` terjadwal/manual               |
+| Profil     | Tenants | Multiplier noisy-neighbor |  Durasi soak | Dipakai oleh                           |
+| ---------- | ------: | ------------------------: | -----------: | -------------------------------------- |
+| `safe`     |       5 |                        6x | 0 (dilewati) | `quality` job CI, default kedua script |
+| `standard` |      20 |                       10x |          60s | investigasi manual                     |
+| `large`    |      50 |                       15x |         600s | lane `--full` terjadwal/manual         |
 
 Setiap profil menyediakan seed tabel representatif per tenant — direncanakan mencakup: audit event, ABAC decision log, outbox/delivery sync, antrian sync objek eksternal, idempotency key, dan tabel bisnis tenant-scoped representatif per domain ERP (mis. `awcms_finance_journal_entries` untuk finance, `awcms_inventory_stock_movements` untuk inventory — driving table budget query-plan full-text/laporan). Tenant TERAKHIR di setiap profil adalah tenant noisy-neighbor yang ditunjuk, jumlah barisnya dikalikan — tidak pernah kebetulan skala, selalu posisi deterministik yang sama untuk seed tertentu.
 
@@ -83,24 +83,24 @@ Fixture seeding menulis lewat `withTenant` (`fixture-seeder.ts`), chokepoint SAM
 
 `workload.ts` memetakan model workload ke lima work class repo ini (`src/lib/database/work-class.ts`), masing-masing lewat `withTenant` nyata:
 
-| Work class             | Model workload                     | Operasi nyata (contoh ERP)                                                                                       |
-| ------------------------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `interactive`          | read/write API interaktif           | Pembacaan audit-event/list transaksi scoped RLS keyset-style (bentuk sama seperti `GET /api/v1/finance/journals`) |
-| `critical_transaction` | transaksi idempoten kritikal        | Store idempotency nyata — mis. posting jurnal/payroll run yang tidak boleh terduplikasi                          |
-| `reporting`             | pembacaan pelaporan/analitik        | Agregat laporan keuangan/stok scoped RLS (mis. neraca saldo, ringkasan stok per gudang)                          |
-| `background_sync`       | workload sync/event/job              | Probe klaim outbox `FOR UPDATE SKIP LOCKED` (bentuk sama seperti dispatcher sync integrasi eksternal)            |
-| `maintenance`           | degradasi terkendali / retensi       | Purge retensi nyata (audit/log), retention window diset agar cocok nol baris terhadap data fixture               |
+| Work class             | Model workload                 | Operasi nyata (contoh ERP)                                                                                        |
+| ---------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `interactive`          | read/write API interaktif      | Pembacaan audit-event/list transaksi scoped RLS keyset-style (bentuk sama seperti `GET /api/v1/finance/journals`) |
+| `critical_transaction` | transaksi idempoten kritikal   | Store idempotency nyata — mis. posting jurnal/payroll run yang tidak boleh terduplikasi                           |
+| `reporting`            | pembacaan pelaporan/analitik   | Agregat laporan keuangan/stok scoped RLS (mis. neraca saldo, ringkasan stok per gudang)                           |
+| `background_sync`      | workload sync/event/job        | Probe klaim outbox `FOR UPDATE SKIP LOCKED` (bentuk sama seperti dispatcher sync integrasi eksternal)             |
+| `maintenance`          | degradasi terkendali / retensi | Purge retensi nyata (audit/log), retention window diset agar cocok nol baris terhadap data fixture                |
 
 Skenario (`src/lib/performance/scenarios/*.ts`), masing-masing `ScenarioDefinition` yang menggunakan ulang `runScenario`/`computeDrOverall` milik resilience scenario-runner:
 
-| Skenario                         | Tier | Yang dibuktikan                                                                                                                                                                                                                                                                                                 |
-| ----------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `interactive-load`                 | safe | p50/p95/p99/throughput/error-rate di bawah pembacaan interaktif konkuren                                                                                                                                                                                                                                       |
-| `critical-transaction-integrity`   | safe | N racer konkuren untuk KUNCI idempotency yang SAMA (mis. posting jurnal duplikat) -> tepat 1 baris persisten (atomisitas di bawah beban)                                                                                                                                                                       |
-| `reporting-under-load`             | safe | Pembacaan pelaporan konkuren tidak pernah merusak korektnas critical-transaction konkuren                                                                                                                                                                                                                       |
-| `background-sync-claim-load`      | safe | Throughput/error-rate klaim `FOR UPDATE SKIP LOCKED` di bawah konkurensi                                                                                                                                                                                                                                        |
-| `saturation-and-recovery`          | safe | **Bukti inti**: sengaja over-subscribe gate work-class "maintenance" nyata (kapasitas 5), menegaskan jumlah tepat penolakan langsung `503 DATABASE_BUSY` + `Retry-After: 2`, mengonfirmasi gate kembali kosong (`active=0/queued=0`), dan panggilan susulan berhasil (recovery terbukti)                       |
-| `soak-stability`                   | full | Panggilan interaktif berulang selama `soakDurationMs` profil skala; menegaskan pertumbuhan RSS tetap di bawah plafon longgar (tidak ada pertumbuhan tak terbatas) — self-skip pada profil `safe` (`soakDurationMs = 0`)                                                                                        |
+| Skenario                         | Tier | Yang dibuktikan                                                                                                                                                                                                                                                                          |
+| -------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interactive-load`               | safe | p50/p95/p99/throughput/error-rate di bawah pembacaan interaktif konkuren                                                                                                                                                                                                                 |
+| `critical-transaction-integrity` | safe | N racer konkuren untuk KUNCI idempotency yang SAMA (mis. posting jurnal duplikat) -> tepat 1 baris persisten (atomisitas di bawah beban)                                                                                                                                                 |
+| `reporting-under-load`           | safe | Pembacaan pelaporan konkuren tidak pernah merusak korektnas critical-transaction konkuren                                                                                                                                                                                                |
+| `background-sync-claim-load`     | safe | Throughput/error-rate klaim `FOR UPDATE SKIP LOCKED` di bawah konkurensi                                                                                                                                                                                                                 |
+| `saturation-and-recovery`        | safe | **Bukti inti**: sengaja over-subscribe gate work-class "maintenance" nyata (kapasitas 5), menegaskan jumlah tepat penolakan langsung `503 DATABASE_BUSY` + `Retry-After: 2`, mengonfirmasi gate kembali kosong (`active=0/queued=0`), dan panggilan susulan berhasil (recovery terbukti) |
+| `soak-stability`                 | full | Panggilan interaktif berulang selama `soakDurationMs` profil skala; menegaskan pertumbuhan RSS tetap di bawah plafon longgar (tidak ada pertumbuhan tak terbatas) — self-skip pada profil `safe` (`soakDurationMs = 0`)                                                                  |
 
 `saturation-and-recovery` adalah jawaban konkret untuk kriteria "perilaku saturasi cocok dengan model kapasitas dan recovery terbukti" — tidak mensimulasikan backpressure, benar-benar menjalankan antrean FIFO bounded nyata sampai kapasitas terdokumentasinya dan menegaskan perilaku 503+`Retry-After` yang sudah ada.
 

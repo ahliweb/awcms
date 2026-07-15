@@ -11,16 +11,16 @@ Terkait: dokumen coding standard (mengikuti pola `10_template_kode_coding_standa
 ## Keputusan teknis
 
 | Aspek            | Keputusan                                                               |
-| ----------------- | -------------------------------------------------------------------------- |
+| ---------------- | ----------------------------------------------------------------------- |
 | Backend platform | **Bun runtime**; semua script backend dijalankan dengan `bun`           |
 | Driver           | `postgres` (postgres.js) atau `Bun.sql` — parameterized, mendukung pool |
 | Pola akses       | Repository per modul (`infrastructure/repository.ts`)                   |
 | RLS context      | `SET LOCAL app.current_tenant_id` di dalam transaction                  |
-| Transaction      | Wrapper eksplisit; `FOR UPDATE` untuk stok/saldo; timeout                |
-| Event/provider   | **Transactional outbox** (event, pesan CRM/notifikasi, sync)             |
+| Transaction      | Wrapper eksplisit; `FOR UPDATE` untuk stok/saldo; timeout               |
+| Event/provider   | **Transactional outbox** (event, pesan CRM/notifikasi, sync)            |
 | Soft delete      | Repository default filter `deleted_at IS NULL`; restore/purge berizin   |
-| Migration        | Runner berurutan + checksum (`awcms_schema_migrations`)                  |
-| Pool             | Work-class + antrean + circuit breaker; PgBouncer opsional               |
+| Migration        | Runner berurutan + checksum (`awcms_schema_migrations`)                 |
+| Pool             | Work-class + antrean + circuit breaker; PgBouncer opsional              |
 
 ## Lapisan akses data
 
@@ -197,13 +197,13 @@ consumer out-of-transaction/broker-backed di masa depan
 
 Work class membatasi konkurensi per jenis beban agar transaksi operasional tetap prioritas.
 
-| Work class             | Contoh                                         | Prioritas |
-| ------------------------ | ------------------------------------------------- | ----------- |
-| `critical_transaction` | Posting jurnal, approval PO, transfer receive   | Tertinggi |
-| `interactive`          | CRUD admin, search                              | Tinggi    |
-| `reporting`            | Laporan keuangan, dashboard                     | Sedang    |
-| `background_sync`      | Sync push/pull, outbox, payroll batch           | Rendah    |
-| `maintenance`          | Migration, backup                               | Terjadwal |
+| Work class             | Contoh                                        | Prioritas |
+| ---------------------- | --------------------------------------------- | --------- |
+| `critical_transaction` | Posting jurnal, approval PO, transfer receive | Tertinggi |
+| `interactive`          | CRUD admin, search                            | Tinggi    |
+| `reporting`            | Laporan keuangan, dashboard                   | Sedang    |
+| `background_sync`      | Sync push/pull, outbox, payroll batch         | Rendah    |
+| `maintenance`          | Migration, backup                             | Terjadwal |
 
 ```mermaid
 flowchart LR
@@ -289,13 +289,13 @@ Aturan:
 ## Tipe data & konvensi
 
 | Domain                | Tipe PostgreSQL                             |
-| ------------------------ | ---------------------------------------------- |
-| ID                     | `uuid` (default `gen_random_uuid()`)        |
-| Waktu                  | `timestamptz`                               |
-| Uang/quantity          | `numeric`                                   |
-| Payload fleksibel      | `jsonb`                                     |
-| Enum-like              | `text` + `CHECK`                            |
-| Soft delete timestamp  | `timestamptz` (`deleted_at`, `restored_at`) |
+| --------------------- | ------------------------------------------- |
+| ID                    | `uuid` (default `gen_random_uuid()`)        |
+| Waktu                 | `timestamptz`                               |
+| Uang/quantity         | `numeric`                                   |
+| Payload fleksibel     | `jsonb`                                     |
+| Enum-like             | `text` + `CHECK`                            |
+| Soft delete timestamp | `timestamptz` (`deleted_at`, `restored_at`) |
 
 Nama tabel/kolom `snake_case`, prefiks `awcms_` (dokumen ERD/coding standard, saat ditulis).
 

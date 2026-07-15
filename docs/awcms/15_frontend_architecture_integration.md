@@ -10,15 +10,15 @@ Terkait: `14_ui_ux_design_system.md` (desain), `16_backend_data_access_integrati
 
 ## Keputusan arsitektur frontend
 
-| Aspek          | Keputusan                                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Framework      | Astro 7, output **server (SSR)** dijalankan di runtime Bun                                                        |
+| Aspek          | Keputusan                                                                                                                                |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework      | Astro 7, output **server (SSR)** dijalankan di runtime Bun                                                                               |
 | Interaktivitas | **Astro islands** + TypeScript; framework island opsional (mis. Preact) hanya untuk pulau kompleks (entri jurnal cepat, chat AI analyst) |
-| Styling        | CSS variables (design token doc 14), scoped styles                                                                |
-| Rendering      | Halaman authed = SSR; portal vendor/karyawan = SSR; aset statis di-cache SW                                       |
-| Data fetching  | SSR initial load + client mutation via API client                                                                 |
-| Offline        | PWA: service worker + IndexedDB outbox untuk entri operasional lapangan (gudang, stock opname)                    |
-| State          | Lokal per-island + store ringan untuk sesi entri berjalan; hindari SPA global besar                               |
+| Styling        | CSS variables (design token doc 14), scoped styles                                                                                       |
+| Rendering      | Halaman authed = SSR; portal vendor/karyawan = SSR; aset statis di-cache SW                                                              |
+| Data fetching  | SSR initial load + client mutation via API client                                                                                        |
+| Offline        | PWA: service worker + IndexedDB outbox untuk entri operasional lapangan (gudang, stock opname)                                           |
+| State          | Lokal per-island + store ringan untuk sesi entri berjalan; hindari SPA global besar                                                      |
 
 Alasan: SSR menjaga waktu muat cepat di LAN, aman untuk cookie httpOnly, dan tetap ringan; islands membatasi JS hanya di area interaktif. Backend/SSR dijalankan dengan **Bun** sebagai platform runtime; Node.js bukan target platform server utama.
 
@@ -29,7 +29,7 @@ Astro **berjalan penuh di Bun** untuk semua fase: `bun install`, dev, build, dan
 Nuansa satu-satunya: Astro **belum punya adapter SSR Bun first-party** (yang resmi: `@astrojs/node`, Cloudflare, Vercel, Netlify — verifikasi versi saat implementasi). Dua opsi tersanksi, keduanya tetap runtime Bun:
 
 | Opsi                               | Cara                                                                                                                | Kapan                                                  |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | **A. Pisahkan seam (rekomendasi)** | API/backend native `Bun.serve` (+Hono); Astro hanya frontend/SSR                                                    | Default base — paling "Bun-murni", cocok offline-first |
 | **B. `@astrojs/node` di atas Bun** | `output: "server"` + adapter node standalone; jalankan `bun ./dist/server/entry.mjs`; build `bun --bun astro build` | Bila ingin SSR Astro terpadu tanpa server terpisah     |
 
@@ -223,19 +223,19 @@ Aturan offline:
 
 > Kontrak berikut adalah **rencana target** per modul ERP; akan diperinci lebih lanjut per modul di dokumen OpenAPI/AsyncAPI saat ditulis.
 
-| Layar                  | Aksi                | Endpoint                                                                     | Event dihasilkan                          |
-| ------------------------ | --------------------- | ------------------------------------------------------------------------------- | -------------------------------------------- |
-| Setup wizard            | Inisialisasi        | `POST /setup/initialize`                                                     | `tenant.created`                           |
-| Login                   | Masuk               | `POST /auth/login`                                                           | `identity.login.succeeded`                 |
-| Produk & bahan baku     | CRUD                | `/inventory/products`                                                        | `inventory.product.created`                |
-| Produk & bahan baku     | Soft delete/restore | `DELETE /inventory/products/{id}`, `POST /inventory/products/{id}/restore`   | `inventory.product.soft_deleted/restored`  |
-| Stock adjustment        | Opening balance     | `/inventory/stock-adjustment-requests`                                      | `inventory.stock.adjustment.posted`        |
-| Purchase order          | Approval & posting  | `POST /procurement/purchase-orders/{id}/approve`                            | `procurement.purchase_order.approved`      |
-| Jurnal keuangan         | Posting             | `POST /finance/journal-entries/{id}/post`                                   | `finance.journal_entry.posted`             |
-| Payroll                 | Jalankan payroll run| `POST /hr/payroll-runs/{id}/execute`                                         | `hr.payroll_run.executed`                  |
-| Warehouse               | Transfer            | `/warehouse-transfers/*`                                                     | `warehouse.transfer.shipped/received`      |
-| Pajak                   | VAT/Coretax         | `/tax/*`                                                                     | `tax.vat_invoice.generated`                |
-| Sync                    | Push/pull           | `/sync/push`, `/sync/pull`                                                   | `sync.conflict.detected`                   |
+| Layar               | Aksi                 | Endpoint                                                                   | Event dihasilkan                          |
+| ------------------- | -------------------- | -------------------------------------------------------------------------- | ----------------------------------------- |
+| Setup wizard        | Inisialisasi         | `POST /setup/initialize`                                                   | `tenant.created`                          |
+| Login               | Masuk                | `POST /auth/login`                                                         | `identity.login.succeeded`                |
+| Produk & bahan baku | CRUD                 | `/inventory/products`                                                      | `inventory.product.created`               |
+| Produk & bahan baku | Soft delete/restore  | `DELETE /inventory/products/{id}`, `POST /inventory/products/{id}/restore` | `inventory.product.soft_deleted/restored` |
+| Stock adjustment    | Opening balance      | `/inventory/stock-adjustment-requests`                                     | `inventory.stock.adjustment.posted`       |
+| Purchase order      | Approval & posting   | `POST /procurement/purchase-orders/{id}/approve`                           | `procurement.purchase_order.approved`     |
+| Jurnal keuangan     | Posting              | `POST /finance/journal-entries/{id}/post`                                  | `finance.journal_entry.posted`            |
+| Payroll             | Jalankan payroll run | `POST /hr/payroll-runs/{id}/execute`                                       | `hr.payroll_run.executed`                 |
+| Warehouse           | Transfer             | `/warehouse-transfers/*`                                                   | `warehouse.transfer.shipped/received`     |
+| Pajak               | VAT/Coretax          | `/tax/*`                                                                   | `tax.vat_invoice.generated`               |
+| Sync                | Push/pull            | `/sync/push`, `/sync/pull`                                                 | `sync.conflict.detected`                  |
 
 ## Keamanan frontend
 

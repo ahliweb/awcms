@@ -12,7 +12,7 @@ Terima kasih sudah memakai AWCMS. Halaman ini menjelaskan cara mendapatkan bantu
 ## Kanal bantuan
 
 | Kebutuhan                        | Kanal                                                                                                          |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Pertanyaan umum / diskusi        | [GitHub Discussions](https://github.com/ahliweb/awcms/discussions) (bila aktif) atau issue berlabel `question` |
 | Laporan bug                      | Buka issue dengan template **Bug report**                                                                      |
 | Usulan fitur / modul ERP baru    | Buka issue dengan template **Feature request**                                                                 |

@@ -39,11 +39,11 @@ and the standalone `bun run database:capacity:check`.
 
 ## Process class inventory
 
-| Class    | What it is                                                        | Role                | Connection string     |
-| -------- | ------------------------------------------------------------------- | -------------------- | --------------------- |
-| `app`    | Every web/SSR instance (`bun run start`/`preview`/`dev`)          | `awcms_app`    | `DATABASE_URL`        |
-| `worker` | Unattended background scripts (`getWorkerDatabaseClient()`)      | `awcms_worker` | `WORKER_DATABASE_URL` |
-| `setup`  | `POST /api/v1/setup/initialize` only (one-time wizard)            | `awcms_setup`  | `SETUP_DATABASE_URL`  |
+| Class    | What it is                                                  | Role           | Connection string     |
+| -------- | ----------------------------------------------------------- | -------------- | --------------------- |
+| `app`    | Every web/SSR instance (`bun run start`/`preview`/`dev`)    | `awcms_app`    | `DATABASE_URL`        |
+| `worker` | Unattended background scripts (`getWorkerDatabaseClient()`) | `awcms_worker` | `WORKER_DATABASE_URL` |
+| `setup`  | `POST /api/v1/setup/initialize` only (one-time wizard)      | `awcms_setup`  | `SETUP_DATABASE_URL`  |
 
 **`DATABASE_CAPACITY_WORKER_INSTANCES_MAX`'s default (1) is narrower than
 it looks.** It only accounts for one instance of the SAME job NAME running
@@ -187,7 +187,7 @@ entry also reports `maxQueueDepth`). Metrics
 labels only, no tenant ids, no DSNs:
 
 | Metric                                         | Type      | Labels                    | Meaning                                               |
-| ------------------------------------------------ | --------- | -------------------------- | -------------------------------------------------------- |
+| ---------------------------------------------- | --------- | ------------------------- | ----------------------------------------------------- |
 | `db_pool_work_class_rejected_total`            | counter   | `workClass`               | Immediate rejections (queue was already full)         |
 | `db_pool_work_class_wait_ms`                   | histogram | `workClass`, `outcome`    | How long a queued caller waited (saturation duration) |
 | `db_pool_capacity_configured_connections`      | gauge     | `processClass`            | This process's configured pool max                    |

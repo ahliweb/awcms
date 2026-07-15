@@ -39,9 +39,9 @@ Check ini berjalan sebagai workflow sendiri (`changesets.yml`), bukan step tamba
 
 Dua entry point, keduanya konvergen ke job graph yang sama:
 
-| Trigger                        | Efek                                                                                                                                     |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `push` tag yang cocok `v*.*.*` | **Rilis nyata.** Mempublikasikan image, GitHub Release, dan memindahkan `:latest`.                                                          |
+| Trigger                           | Efek                                                                                                                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `push` tag yang cocok `v*.*.*`    | **Rilis nyata.** Mempublikasikan image, GitHub Release, dan memindahkan `:latest`.                                                                    |
 | `workflow_dispatch` (ref apa pun) | **Rehearsal.** Menjalankan pipeline yang identik terhadap image tag `dryrun-<sha>`. Tidak ada GitHub Release dibuat, `:latest` tidak pernah disentuh. |
 
 ### `validate` job (read-only)

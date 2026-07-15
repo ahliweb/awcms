@@ -55,7 +55,7 @@ erDiagram
 ## Global column standard
 
 | Kolom             | Tipe        | Fungsi                                        |
-| ----------------- | ----------- | ---------------------------------------------- |
+| ----------------- | ----------- | --------------------------------------------- |
 | `id`              | uuid        | Primary key                                   |
 | `tenant_id`       | uuid        | Isolasi tenant                                |
 | `code`            | text        | Kode bisnis                                   |
@@ -75,27 +75,27 @@ erDiagram
 
 ## Table ownership matrix (rencana)
 
-| Module               | Table utama (rencana)                                                                                                                                                                                    |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Foundation           | `awcms_modules`, `awcms_schema_migrations`, `awcms_system_events`                                                                                                                                        |
-| Tenant Admin         | `awcms_tenants`, `awcms_offices`, `awcms_physical_locations`, `awcms_tenant_settings`                                                                                                                    |
-| Profile Identity     | `awcms_profiles`, `awcms_profile_identifiers`, `awcms_profile_channels`, `awcms_profile_addresses`, `awcms_profile_entity_links`, `awcms_profile_merge_requests`                                         |
-| Identity Access      | `awcms_identities`, `awcms_tenant_users`, `awcms_sessions`, `awcms_password_reset_tokens`, `awcms_roles`, `awcms_permissions`, `awcms_abac_policies`, `awcms_abac_decision_logs`                         |
-| Master Data Inventory| `awcms_items`, `awcms_item_categories`, `awcms_units`, `awcms_item_prices`, `awcms_stock_balances`, `awcms_stock_movements`                                                                              |
-| Finance & GL         | `awcms_chart_of_accounts`, `awcms_journal_batches`, `awcms_journal_lines`, `awcms_financial_documents`, `awcms_idempotency_keys`                                                                          |
-| Shared Stock Routing | `awcms_stock_pools`, `awcms_stock_pool_members`, `awcms_transaction_routing_rules`, `awcms_transaction_routing_decisions`                                                                                |
-| Warehouse            | `awcms_warehouses`, `awcms_warehouse_zones`, `awcms_warehouse_bins`, `awcms_inventory_lots`, `awcms_inventory_serials`, `awcms_warehouse_bin_balances`, `awcms_warehouse_transfer_orders`, `awcms_cycle_count_plans` |
-| Accounting Tax       | `awcms_tax_profiles`, `awcms_tax_business_units`, `awcms_party_tax_profiles`, `awcms_product_tax_profiles`, `awcms_vat_invoices`, `awcms_coretax_batches`                                                |
-| Procurement          | `awcms_vendors`, `awcms_purchase_requests`, `awcms_purchase_orders`, `awcms_purchase_order_lines`, `awcms_goods_receipts`, `awcms_message_outbox`, `awcms_message_attempts`                              |
-| Sync Storage         | `awcms_sync_nodes`, `awcms_sync_outbox`, `awcms_sync_inbox`, `awcms_sync_conflicts`, `awcms_object_sync_queue`                                                                                            |
-| Email (base)         | `awcms_email_templates`, `awcms_email_messages`, `awcms_email_delivery_attempts`, `awcms_email_suppression_list`                                                                                         |
-| AI Analyst           | `awcms_ai_sessions`, `awcms_ai_messages`, `awcms_ai_tool_calls`, `awcms_ai_tool_policies`                                                                                                                |
-| Logging              | `awcms_log_events`, `awcms_audit_events`, `awcms_security_events`                                                                                                                                        |
-| Workflow             | `awcms_workflow_definitions`, `awcms_workflow_instances`, `awcms_workflow_tasks`, `awcms_workflow_decisions`                                                                                              |
-| Reporting            | report views/materialized views                                                                                                                                                                          |
-| Production Security  | `awcms_security_controls`, `awcms_security_readiness_assessments`, `awcms_security_findings`, `awcms_go_live_gates`                                                                                      |
-| Module Management    | `awcms_modules` (extended), `awcms_tenant_modules`, `awcms_module_dependencies`, `awcms_module_settings`, `awcms_module_navigation`, `awcms_module_jobs`, `awcms_module_health_checks`                   |
-| Data Lifecycle       | `awcms_data_lifecycle_legal_holds`, `awcms_data_lifecycle_cursors`, `awcms_data_lifecycle_archive_manifests`, `awcms_data_lifecycle_runs`                                                                |
+| Module                | Table utama (rencana)                                                                                                                                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation            | `awcms_modules`, `awcms_schema_migrations`, `awcms_system_events`                                                                                                                                                    |
+| Tenant Admin          | `awcms_tenants`, `awcms_offices`, `awcms_physical_locations`, `awcms_tenant_settings`                                                                                                                                |
+| Profile Identity      | `awcms_profiles`, `awcms_profile_identifiers`, `awcms_profile_channels`, `awcms_profile_addresses`, `awcms_profile_entity_links`, `awcms_profile_merge_requests`                                                     |
+| Identity Access       | `awcms_identities`, `awcms_tenant_users`, `awcms_sessions`, `awcms_password_reset_tokens`, `awcms_roles`, `awcms_permissions`, `awcms_abac_policies`, `awcms_abac_decision_logs`                                     |
+| Master Data Inventory | `awcms_items`, `awcms_item_categories`, `awcms_units`, `awcms_item_prices`, `awcms_stock_balances`, `awcms_stock_movements`                                                                                          |
+| Finance & GL          | `awcms_chart_of_accounts`, `awcms_journal_batches`, `awcms_journal_lines`, `awcms_financial_documents`, `awcms_idempotency_keys`                                                                                     |
+| Shared Stock Routing  | `awcms_stock_pools`, `awcms_stock_pool_members`, `awcms_transaction_routing_rules`, `awcms_transaction_routing_decisions`                                                                                            |
+| Warehouse             | `awcms_warehouses`, `awcms_warehouse_zones`, `awcms_warehouse_bins`, `awcms_inventory_lots`, `awcms_inventory_serials`, `awcms_warehouse_bin_balances`, `awcms_warehouse_transfer_orders`, `awcms_cycle_count_plans` |
+| Accounting Tax        | `awcms_tax_profiles`, `awcms_tax_business_units`, `awcms_party_tax_profiles`, `awcms_product_tax_profiles`, `awcms_vat_invoices`, `awcms_coretax_batches`                                                            |
+| Procurement           | `awcms_vendors`, `awcms_purchase_requests`, `awcms_purchase_orders`, `awcms_purchase_order_lines`, `awcms_goods_receipts`, `awcms_message_outbox`, `awcms_message_attempts`                                          |
+| Sync Storage          | `awcms_sync_nodes`, `awcms_sync_outbox`, `awcms_sync_inbox`, `awcms_sync_conflicts`, `awcms_object_sync_queue`                                                                                                       |
+| Email (base)          | `awcms_email_templates`, `awcms_email_messages`, `awcms_email_delivery_attempts`, `awcms_email_suppression_list`                                                                                                     |
+| AI Analyst            | `awcms_ai_sessions`, `awcms_ai_messages`, `awcms_ai_tool_calls`, `awcms_ai_tool_policies`                                                                                                                            |
+| Logging               | `awcms_log_events`, `awcms_audit_events`, `awcms_security_events`                                                                                                                                                    |
+| Workflow              | `awcms_workflow_definitions`, `awcms_workflow_instances`, `awcms_workflow_tasks`, `awcms_workflow_decisions`                                                                                                         |
+| Reporting             | report views/materialized views                                                                                                                                                                                      |
+| Production Security   | `awcms_security_controls`, `awcms_security_readiness_assessments`, `awcms_security_findings`, `awcms_go_live_gates`                                                                                                  |
+| Module Management     | `awcms_modules` (extended), `awcms_tenant_modules`, `awcms_module_dependencies`, `awcms_module_settings`, `awcms_module_navigation`, `awcms_module_jobs`, `awcms_module_health_checks`                               |
+| Data Lifecycle        | `awcms_data_lifecycle_legal_holds`, `awcms_data_lifecycle_cursors`, `awcms_data_lifecycle_archive_manifests`, `awcms_data_lifecycle_runs`                                                                            |
 
 Modul lanjutan seperti Manufacturing dan HR/Payroll belum memiliki table ownership matrix final — akan ditambahkan saat modul tersebut dirancang detail (mengikuti pola penamaan `awcms_<domain>_<entity>` yang sama).
 
@@ -119,14 +119,14 @@ Index: unique `tenant_code`.
 
 ### `awcms_offices`
 
-| Kolom              | Tipe | Keterangan                                        |
-| ------------------ | ---- | -------------------------------------------------- |
-| `tenant_id`        | uuid | Tenant scope                                       |
-| `office_code`      | text | Unik per tenant                                    |
-| `office_name`      | text | Nama kantor/toko/gudang/pabrik                     |
-| `office_type`      | text | head_office/branch/store/warehouse/factory/other   |
-| `parent_office_id` | uuid | Hierarki                                           |
-| `status`           | text | active/inactive                                    |
+| Kolom              | Tipe | Keterangan                                       |
+| ------------------ | ---- | ------------------------------------------------ |
+| `tenant_id`        | uuid | Tenant scope                                     |
+| `office_code`      | text | Unik per tenant                                  |
+| `office_name`      | text | Nama kantor/toko/gudang/pabrik                   |
+| `office_type`      | text | head_office/branch/store/warehouse/factory/other |
+| `parent_office_id` | uuid | Hierarki                                         |
+| `status`           | text | active/inactive                                  |
 
 Index: `(tenant_id, office_code)`, `(tenant_id, office_type)`.
 
@@ -264,12 +264,12 @@ Aturan:
 
 Soft delete adalah mekanisme default untuk master/config/draft tenant-scoped yang perlu bisa diarsipkan tanpa memutus referensi historis.
 
-| Kategori data                                                                                                   | Kebijakan                                                                                |
-| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Tenant/office/location, profile/contact/channel, item/category/brand/unit, warehouse zone/bin, rule/config       | Soft delete didukung jika tidak melanggar constraint bisnis aktif                        |
-| Draft jurnal/PO/PR                                                                                                | Boleh cancel/soft delete sesuai lifecycle                                                |
-| Posted jurnal, posted financial document, posted stock movement, audit/security log, exported tax batch          | Tidak boleh soft delete; gunakan reversal/cancel/return/adjustment/status                |
-| Data sensitif PII/tax/payroll                                                                                     | Soft delete tidak menghapus kewajiban masking; purge/anonymize mengikuti retention/legal |
+| Kategori data                                                                                              | Kebijakan                                                                                |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Tenant/office/location, profile/contact/channel, item/category/brand/unit, warehouse zone/bin, rule/config | Soft delete didukung jika tidak melanggar constraint bisnis aktif                        |
+| Draft jurnal/PO/PR                                                                                         | Boleh cancel/soft delete sesuai lifecycle                                                |
+| Posted jurnal, posted financial document, posted stock movement, audit/security log, exported tax batch    | Tidak boleh soft delete; gunakan reversal/cancel/return/adjustment/status                |
+| Data sensitif PII/tax/payroll                                                                              | Soft delete tidak menghapus kewajiban masking; purge/anonymize mengikuti retention/legal |
 
 Aturan implementasi:
 
@@ -323,11 +323,11 @@ flowchart LR
 ## Sensitive data classification
 
 | Data                   | Level       | Kontrol                   |
-| ----------------------- | ----------- | -------------------------- |
+| ---------------------- | ----------- | ------------------------- |
 | Password hash          | Critical    | Never expose              |
 | API key/provider token | Critical    | Env only                  |
 | NPWP/NIK/NITKU         | High        | Mask, ABAC tax role       |
-| Data gaji/payroll      | Critical    | Mask, ABAC HR role         |
+| Data gaji/payroll      | Critical    | Mask, ABAC HR role        |
 | Phone/WhatsApp/email   | High        | Mask/hash lookup          |
 | Address                | Medium/High | Need-to-know              |
 | Transaksi finance      | Medium      | Tenant RLS, audit         |
@@ -336,17 +336,17 @@ flowchart LR
 
 ## Retention awal
 
-| Data                       | Retention                     |
-| --------------------------- | ------------------------------ |
-| Idempotency key             | 7–30 hari                     |
-| HTTP request log            | 30–90 hari                    |
-| Security/audit log          | 1–5 tahun sesuai kebutuhan     |
-| `awcms_audit_events`        | Default 730 hari (2 tahun), dikonfigurasi via `AUDIT_LOG_RETENTION_DAYS`; dipurge oleh job terjadwal internal, batch per tenant per pass, aksi purge itu sendiri direkam sebagai audit event baru |
-| Tax records                 | Sesuai regulasi dan SOP        |
-| Notifikasi vendor/HR log    | 1 tahun                        |
-| `awcms_email_messages`/`_delivery_attempts` | Kandidat purge fisik setelah status terminal melewati retention window, meniru pola `awcms_audit_events` |
-| AI session                  | 90–365 hari                    |
-| Sync conflict               | Resolved + 1 tahun              |
-| Jurnal/stock movement       | Long-term/archive               |
+| Data                                        | Retention                                                                                                                                                                                         |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Idempotency key                             | 7–30 hari                                                                                                                                                                                         |
+| HTTP request log                            | 30–90 hari                                                                                                                                                                                        |
+| Security/audit log                          | 1–5 tahun sesuai kebutuhan                                                                                                                                                                        |
+| `awcms_audit_events`                        | Default 730 hari (2 tahun), dikonfigurasi via `AUDIT_LOG_RETENTION_DAYS`; dipurge oleh job terjadwal internal, batch per tenant per pass, aksi purge itu sendiri direkam sebagai audit event baru |
+| Tax records                                 | Sesuai regulasi dan SOP                                                                                                                                                                           |
+| Notifikasi vendor/HR log                    | 1 tahun                                                                                                                                                                                           |
+| `awcms_email_messages`/`_delivery_attempts` | Kandidat purge fisik setelah status terminal melewati retention window, meniru pola `awcms_audit_events`                                                                                          |
+| AI session                                  | 90–365 hari                                                                                                                                                                                       |
+| Sync conflict                               | Resolved + 1 tahun                                                                                                                                                                                |
+| Jurnal/stock movement                       | Long-term/archive                                                                                                                                                                                 |
 
 Catatan: kebijakan retensi detail per tabel modul ERP baru (finance, procurement, manufaktur, HR/payroll) akan ditetapkan saat modul tersebut dirancang, mengikuti mekanisme `data_lifecycle` generik yang sama (legal hold, dry-run, archive-purge) yang sudah terbukti pada base sebelumnya.

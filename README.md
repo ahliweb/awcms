@@ -17,7 +17,7 @@ Setelah seluruh komponen (mcp, public, admin) selesai dipindah dan Supabase tida
 
 ## Arah baru: berbasis teknologi awcms-mini, skop bisnis ERP
 
-Repo ini **mengadopsi stack dan standar teknis dari [awcms-mini](https://github.com/ahliweb/awcms-mini)** — *modular monolith standard* AhliWeb — sebagai basis teknologi, namun **bukan sekadar turunan/derivatif base generik**. Fokus pengembangan di repo ini:
+Repo ini **mengadopsi stack dan standar teknis dari [awcms-mini](https://github.com/ahliweb/awcms-mini)** — _modular monolith standard_ AhliWeb — sebagai basis teknologi, namun **bukan sekadar turunan/derivatif base generik**. Fokus pengembangan di repo ini:
 
 - **ERP** — modul keuangan/akuntansi, inventori/warehouse, procurement, manufaktur, HR/payroll, dsb., masing-masing sebagai modul domain dalam satu modular monolith.
 - **Integrasi solusi bisnis lain** — konektor/adapter ke sistem eksternal (mis. e-commerce, payment gateway, marketplace, sistem pajak/Coretax, layanan logistik), memakai pola outbox/queue yang sama seperti sync di awcms-mini agar tetap offline-first-safe.
@@ -25,14 +25,14 @@ Repo ini **mengadopsi stack dan standar teknis dari [awcms-mini](https://github.
 
 Basis teknologi yang diadopsi dari awcms-mini:
 
-| Aspek | Sebelumnya (repo lama) | Sekarang (basis awcms-mini) |
-|---|---|---|
-| Runtime | Node.js | **Bun** (Bun-only, lihat ADR-0002) |
-| Web framework | Vite + React (admin/public terpisah) | **Astro 7** (SSR di atas Bun, satu shell modular monolith) |
-| Database | Supabase (Postgres terkelola) | **PostgreSQL** dengan **RLS wajib** (ADR-0003) |
-| Arsitektur | Aplikasi terpisah (mcp, public, admin) | **Modular monolith, microservice-ready** (ADR-0001), modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) |
-| Mode operasi | Online-dependent | **Offline-first / LAN-first** dengan sync outbox HMAC-signed (ADR-0006) |
-| Kontrak API | Ad-hoc | OpenAPI/AsyncAPI tervalidasi, response helper standar |
+| Aspek         | Sebelumnya (repo lama)                 | Sekarang (basis awcms-mini)                                                                                                                       |
+| ------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime       | Node.js                                | **Bun** (Bun-only, lihat ADR-0002)                                                                                                                |
+| Web framework | Vite + React (admin/public terpisah)   | **Astro 7** (SSR di atas Bun, satu shell modular monolith)                                                                                        |
+| Database      | Supabase (Postgres terkelola)          | **PostgreSQL** dengan **RLS wajib** (ADR-0003)                                                                                                    |
+| Arsitektur    | Aplikasi terpisah (mcp, public, admin) | **Modular monolith, microservice-ready** (ADR-0001), modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) |
+| Mode operasi  | Online-dependent                       | **Offline-first / LAN-first** dengan sync outbox HMAC-signed (ADR-0006)                                                                           |
+| Kontrak API   | Ad-hoc                                 | OpenAPI/AsyncAPI tervalidasi, response helper standar                                                                                             |
 
 Modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) dari awcms-mini dipakai apa adanya sebagai fondasi; modul domain ERP dan integrasi bisnis dikembangkan **di atas fondasi tersebut, dalam repo ini (awcms)**.
 

@@ -45,7 +45,7 @@ mengubah setiap route.
 `getDatabaseClient()` mengonfigurasi `Bun.SQL` dengan:
 
 | Opsi                           | Sumber                          | Default |
-| ------------------------------- | ------------------------------- | ------- |
+| ------------------------------ | ------------------------------- | ------- |
 | `max`                          | `DATABASE_POOL_MAX`             | `20`    |
 | `prepare`                      | `DATABASE_PGBOUNCER !== "true"` | `true`  |
 | `connection.statement_timeout` | `DATABASE_STATEMENT_TIMEOUT_MS` | `15000` |
@@ -66,13 +66,13 @@ dipakai, hanya untuk mencatat kegagalan koneksi ke logger terstruktur.
 `src/lib/database/work-class.ts` adalah semaphore in-memory per proses (bukan
 lintas-instance). Lima work class dan batas konkurensinya:
 
-| Work class             | Contoh (target ERP)                        | Prioritas | Max |
-| ----------------------- | -------------------------------------------- | --------- | --: |
+| Work class             | Contoh (target ERP)                                | Prioritas | Max |
+| ---------------------- | -------------------------------------------------- | --------- | --: |
 | `critical_transaction` | Posting jurnal/ledger, payroll run, stock movement | Tertinggi |  10 |
-| `interactive`          | CRUD admin, search master data                | Tinggi    |   8 |
-| `reporting`            | Laporan keuangan/inventori, dashboard          | Sedang    |   4 |
-| `background_sync`      | Sync push/pull, outbox, integrasi eksternal    | Rendah    |   4 |
-| `maintenance`          | Migration, backup                              | Terjadwal |   1 |
+| `interactive`          | CRUD admin, search master data                     | Tinggi    |   8 |
+| `reporting`            | Laporan keuangan/inventori, dashboard              | Sedang    |   4 |
+| `background_sync`      | Sync push/pull, outbox, integrasi eksternal        | Rendah    |   4 |
+| `maintenance`          | Migration, backup                                  | Terjadwal |   1 |
 
 Angka ini kecil dan tetap (tidak env-tunable) secara sengaja — jumlahnya jauh
 di bawah `DATABASE_POOL_MAX` (default 20) sehingga masih ada headroom di pool
@@ -334,6 +334,6 @@ contoh perhitungan, SOP incident saturasi/connection-storm).
   concurrency gate — lihat `database-capacity-runbook.md` §Known
   limitation untuk alasan dan status follow-up.
 - Belum ada endpoint domain ERP nyata yang memanfaatkan klasifikasi
-  work-class di atas — validasi ulang klasifikasi begitu modul finance/
-  inventory/payroll pertama diimplementasikan.
+work-class di atas — validasi ulang klasifikasi begitu modul finance/
+inventory/payroll pertama diimplementasikan.
 </content>

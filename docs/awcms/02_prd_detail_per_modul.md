@@ -26,18 +26,18 @@ flowchart LR
 
 ## Persona utama
 
-| Persona          | Kebutuhan                                                        |
-| ---------------- | ------------------------------------------------------------------ |
-| Owner            | Monitoring kinerja bisnis, kas, stok, approval, laporan, risiko    |
-| Admin            | Setup tenant, user, master data, konfigurasi                       |
-| Staf Keuangan    | Jurnal, AP/AR, rekonsiliasi, laporan keuangan                      |
-| Petugas Gudang   | Transfer, receiving, cycle count, stok bin/lot                    |
-| Staf Procurement | Purchase request, purchase order, penerimaan barang, vendor        |
-| Tax Officer      | Tax profile, faktur pajak, Coretax batch export                   |
-| Staf HR/Payroll  | Data karyawan, absensi, komponen gaji, payroll run                 |
-| Business Analyst | Laporan agregat dan AI insight aman                                |
-| Vendor/Supplier  | Melihat status PO, invoice, pembayaran                             |
-| Admin Teknis     | Deployment, backup, restore, troubleshooting                       |
+| Persona          | Kebutuhan                                                       |
+| ---------------- | --------------------------------------------------------------- |
+| Owner            | Monitoring kinerja bisnis, kas, stok, approval, laporan, risiko |
+| Admin            | Setup tenant, user, master data, konfigurasi                    |
+| Staf Keuangan    | Jurnal, AP/AR, rekonsiliasi, laporan keuangan                   |
+| Petugas Gudang   | Transfer, receiving, cycle count, stok bin/lot                  |
+| Staf Procurement | Purchase request, purchase order, penerimaan barang, vendor     |
+| Tax Officer      | Tax profile, faktur pajak, Coretax batch export                 |
+| Staf HR/Payroll  | Data karyawan, absensi, komponen gaji, payroll run              |
+| Business Analyst | Laporan agregat dan AI insight aman                             |
+| Vendor/Supplier  | Melihat status PO, invoice, pembayaran                          |
+| Admin Teknis     | Deployment, backup, restore, troubleshooting                    |
 
 ## Modul 1 — Tenant Admin
 

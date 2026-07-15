@@ -83,13 +83,13 @@ Legenda: Wajib = perlu untuk boot; Sensitif = jangan bocor ke log/response.
 
 ### Inti aplikasi
 
-| Var                         | Wajib | Default                 | Sensitif | Fungsi                                                                       |
-| --------------------------- | ----- | ----------------------- | -------- | ------------------------------------------------------------------------------ |
-| `APP_ENV`                   | Ya    | `development`           | –        | development/staging/production                                                |
-| `APP_URL`                   | Ya    | `http://localhost:4321` | –        | Base URL aplikasi                                                              |
-| `LOG_LEVEL`                 | –     | `info`                  | –        | debug/info/warn/error                                                          |
-| `AUDIT_LOG_RETENTION_DAYS`  | –     | `730`                   | –        | Retensi `awcms_audit_events` (hari), dipakai job purge audit log               |
-| `FORM_DRAFT_RETENTION_DAYS` | –     | `30`                    | –        | Retensi draft form `expired`/`abandoned` (hari)                                |
+| Var                         | Wajib | Default                 | Sensitif | Fungsi                                                           |
+| --------------------------- | ----- | ----------------------- | -------- | ---------------------------------------------------------------- |
+| `APP_ENV`                   | Ya    | `development`           | –        | development/staging/production                                   |
+| `APP_URL`                   | Ya    | `http://localhost:4321` | –        | Base URL aplikasi                                                |
+| `LOG_LEVEL`                 | –     | `info`                  | –        | debug/info/warn/error                                            |
+| `AUDIT_LOG_RETENTION_DAYS`  | –     | `730`                   | –        | Retensi `awcms_audit_events` (hari), dipakai job purge audit log |
+| `FORM_DRAFT_RETENTION_DAYS` | –     | `30`                    | –        | Retensi draft form `expired`/`abandoned` (hari)                  |
 
 Timezone/locale default per tenant/entitas direncanakan dari data
 (`awcms_tenants`/`awcms_tenant_settings`), bukan env var — mengikuti pola
@@ -98,17 +98,17 @@ var karena nilai efektifnya selalu berasal dari DB per tenant.
 
 ### Database & pool
 
-| Var                             | Wajib | Default                         | Sensitif | Fungsi                                                                                                   |
-| -------------------------------- | ----- | ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                  | Ya    | –                               | Ya       | Koneksi PostgreSQL (role `awcms_app`)                                                                     |
-| `AWCMS_APP_DB_PASSWORD`         | –     | –                                | Ya       | Password role `awcms_app` dipakai script init container; harus sama dengan password di `DATABASE_URL`     |
-| `DATABASE_POOL_MAX`             | –     | `20`                             | –        | Maks koneksi pool (role `app`; default untuk `worker`/`setup` juga, kecuali di-override)                   |
-| `DATABASE_POOL_MAX_WORKER`      | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus role `awcms_worker`                                                     |
-| `DATABASE_POOL_MAX_SETUP`       | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus role `awcms_setup`                                                      |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | –     | `15000`                         | –        | Timeout statement                                                                                          |
-| `DATABASE_PGBOUNCER`            | –     | `false`                         | –        | Mode PgBouncer (transaction)                                                                                |
-| `WORKER_DATABASE_URL`           | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi role `awcms_worker` (background job/cron)                                                          |
-| `SETUP_DATABASE_URL`            | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi role `awcms_setup` (`POST /api/v1/setup/initialize`)                                               |
+| Var                             | Wajib | Default                         | Sensitif | Fungsi                                                                                                |
+| ------------------------------- | ----- | ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                  | Ya    | –                               | Ya       | Koneksi PostgreSQL (role `awcms_app`)                                                                 |
+| `AWCMS_APP_DB_PASSWORD`         | –     | –                               | Ya       | Password role `awcms_app` dipakai script init container; harus sama dengan password di `DATABASE_URL` |
+| `DATABASE_POOL_MAX`             | –     | `20`                            | –        | Maks koneksi pool (role `app`; default untuk `worker`/`setup` juga, kecuali di-override)              |
+| `DATABASE_POOL_MAX_WORKER`      | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus role `awcms_worker`                                                 |
+| `DATABASE_POOL_MAX_SETUP`       | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus role `awcms_setup`                                                  |
+| `DATABASE_STATEMENT_TIMEOUT_MS` | –     | `15000`                         | –        | Timeout statement                                                                                     |
+| `DATABASE_PGBOUNCER`            | –     | `false`                         | –        | Mode PgBouncer (transaction)                                                                          |
+| `WORKER_DATABASE_URL`           | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi role `awcms_worker` (background job/cron)                                                     |
+| `SETUP_DATABASE_URL`            | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi role `awcms_setup` (`POST /api/v1/setup/initialize`)                                          |
 
 #### Model role database (target)
 
@@ -141,22 +141,22 @@ awcms-mini — pool/work-class per proses vs kapasitas PostgreSQL/PgBouncer
 yang disetujui untuk seluruh armada instance, divalidasi lewat perintah
 `database:capacity:check` sebelum go-live.
 
-| Var                                             | Wajib | Default | Sensitif | Fungsi                                                                                                                                       |
-| ------------------------------------------------ | ----- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_WORK_CLASS_QUEUE_MULTIPLIER`          | –     | `4`     | –        | Kedalaman antrean FIFO per work class = max konkurensi x angka ini; penuh -> reject langsung (503 + `Retry-After`)                          |
-| `DATABASE_CAPACITY_APP_INSTANCES_MIN`           | –     | `1`     | –        | Instance `app` (web/SSR) minimum yang diharapkan berjalan bersamaan                                                                          |
-| `DATABASE_CAPACITY_APP_INSTANCES_EXPECTED`      | –     | `1`     | –        | Instance `app` steady-state yang diharapkan                                                                                                 |
-| `DATABASE_CAPACITY_APP_INSTANCES_MAX`           | –     | `1`     | –        | Batas atas horizontal instance `app`                                                                                                         |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_MIN`        | –     | `0`     | –        | Instance `worker` minimum (script periodik, bukan daemon selalu-jalan)                                                                       |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_EXPECTED`   | –     | `1`     | –        | Instance `worker` steady-state yang diharapkan                                                                                              |
-| `DATABASE_CAPACITY_WORKER_INSTANCES_MAX`        | –     | `1`     | –        | Batas atas horizontal instance `worker`                                                                                                      |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_MIN`         | –     | `0`     | –        | Instance `setup` minimum                                                                                                                     |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_EXPECTED`    | –     | `0`     | –        | Instance `setup` steady-state yang diharapkan                                                                                               |
-| `DATABASE_CAPACITY_SETUP_INSTANCES_MAX`         | –     | `1`     | –        | Batas atas horizontal instance `setup`                                                                                                       |
-| `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN`   | –     | `200`   | –        | `pgbouncer.ini`'s `max_client_conn` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                                                          |
-| `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE` | –     | `20`    | –        | `pgbouncer.ini`'s `default_pool_size` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                                                        |
-| `DATABASE_CAPACITY_APPROVED_CONNECTIONS`        | –     | `100`   | –        | Budget koneksi PostgreSQL/PgBouncer yang disetujui untuk deployment ini                                                                      |
-| `DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS`  | –     | `5`     | –        | Koneksi dicadangkan untuk admin/migration/backup-restore — tidak pernah dipakai sizing runtime app/worker/setup                             |
+| Var                                             | Wajib | Default | Sensitif | Fungsi                                                                                                             |
+| ----------------------------------------------- | ----- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_WORK_CLASS_QUEUE_MULTIPLIER`          | –     | `4`     | –        | Kedalaman antrean FIFO per work class = max konkurensi x angka ini; penuh -> reject langsung (503 + `Retry-After`) |
+| `DATABASE_CAPACITY_APP_INSTANCES_MIN`           | –     | `1`     | –        | Instance `app` (web/SSR) minimum yang diharapkan berjalan bersamaan                                                |
+| `DATABASE_CAPACITY_APP_INSTANCES_EXPECTED`      | –     | `1`     | –        | Instance `app` steady-state yang diharapkan                                                                        |
+| `DATABASE_CAPACITY_APP_INSTANCES_MAX`           | –     | `1`     | –        | Batas atas horizontal instance `app`                                                                               |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_MIN`        | –     | `0`     | –        | Instance `worker` minimum (script periodik, bukan daemon selalu-jalan)                                             |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_EXPECTED`   | –     | `1`     | –        | Instance `worker` steady-state yang diharapkan                                                                     |
+| `DATABASE_CAPACITY_WORKER_INSTANCES_MAX`        | –     | `1`     | –        | Batas atas horizontal instance `worker`                                                                            |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_MIN`         | –     | `0`     | –        | Instance `setup` minimum                                                                                           |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_EXPECTED`    | –     | `0`     | –        | Instance `setup` steady-state yang diharapkan                                                                      |
+| `DATABASE_CAPACITY_SETUP_INSTANCES_MAX`         | –     | `1`     | –        | Batas atas horizontal instance `setup`                                                                             |
+| `DATABASE_CAPACITY_PGBOUNCER_MAX_CLIENT_CONN`   | –     | `200`   | –        | `pgbouncer.ini`'s `max_client_conn` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                               |
+| `DATABASE_CAPACITY_PGBOUNCER_DEFAULT_POOL_SIZE` | –     | `20`    | –        | `pgbouncer.ini`'s `default_pool_size` yang diharapkan (bila `DATABASE_PGBOUNCER=true`)                             |
+| `DATABASE_CAPACITY_APPROVED_CONNECTIONS`        | –     | `100`   | –        | Budget koneksi PostgreSQL/PgBouncer yang disetujui untuk deployment ini                                            |
+| `DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS`  | –     | `5`     | –        | Koneksi dicadangkan untuk admin/migration/backup-restore — tidak pernah dipakai sizing runtime app/worker/setup    |
 
 Default di atas ditujukan aman untuk topologi LAN-first satu-instance tanpa
 PgBouncer. Naikkan var instance MAX hanya saat benar-benar scale-out
@@ -164,39 +164,39 @@ horizontal.
 
 ### Auth & keamanan
 
-| Var                                         | Wajib          | Default | Sensitif | Fungsi                                                                                             |
-| -------------------------------------------- | -------------- | ------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `AUTH_SESSION_TTL_MIN`                      | –              | `120`   | –        | Umur sesi (token opaque, disimpan sebagai `token_hash` — bukan JWT)                                |
-| `AUTH_COOKIE_SECURE`                        | –              | `true`  | –        | Cookie hanya HTTPS di prod                                                                          |
-| `AUTH_LOGIN_MAX_ATTEMPTS`                   | –              | `5`     | –        | Lockout login (per identitas)                                                                       |
-| `AUTH_LOGIN_RATE_LIMIT_MAX`                 | –              | `20`    | –        | Rate limit login per sumber+tenant                                                                  |
-| `AUTH_LOGIN_RATE_LIMIT_WINDOW_SEC`          | –              | `60`    | –        | Jendela waktu rate limit login (detik)                                                              |
-| `AUTH_PASSWORD_RESET_TOKEN_TTL_MIN`         | –              | `30`    | –        | Umur token reset password                                                                            |
-| `AUTH_PASSWORD_RESET_RATE_LIMIT_MAX`        | –              | `5`     | –        | Rate limit forgot/reset per sumber+tenant                                                           |
-| `AUTH_PASSWORD_RESET_RATE_LIMIT_WINDOW_SEC` | –              | `900`   | –        | Jendela waktu rate limit reset password (detik)                                                     |
-| `AUTH_ONLINE_SECURITY_ENABLED`              | –              | `false` | –        | Gate full-online-only auth hardening — lihat §Full-online auth security hardening di bawah          |
-| `AUTH_ONLINE_SECURITY_PROFILE`              | –              | `disabled` | –     | `disabled` (default) atau `full_online`; wajib `full_online` bila `AUTH_ONLINE_SECURITY_ENABLED=true` |
-| `TURNSTILE_ENABLED`                         | –              | `false` | –        | Cloudflare Turnstile bot protection                                                                  |
-| `TURNSTILE_SITE_KEY`                        | bila Turnstile | –       | –        | Site key publik (bukan secret) — dirender di widget `/login`                                        |
-| `TURNSTILE_SECRET_KEY`                      | bila Turnstile | –       | Ya       | Secret key — hanya untuk verifikasi server-side                                                     |
-| `TURNSTILE_VERIFY_TIMEOUT_MS`               | –              | `5000`  | –        | Timeout panggilan siteverify Cloudflare (ms)                                                        |
-| `AUTH_MFA_ENABLED`                          | –              | `false` | –        | MFA/TOTP login challenge                                                                             |
-| `AUTH_MFA_SECRET_ENCRYPTION_KEY`            | bila MFA       | –       | Ya       | Key AES-256-GCM (base64, 32 byte) untuk enkripsi-at-rest TOTP secret                                 |
-| `AUTH_MFA_TOTP_ISSUER`                      | –              | `AWCMS` | –        | Nama issuer yang tampil di aplikasi authenticator                                                    |
-| `AUTH_MFA_TOTP_PERIOD_SEC`                  | –              | `30`    | –        | Panjang time-step TOTP (detik)                                                                       |
-| `AUTH_MFA_TOTP_DIGITS`                      | –              | `6`     | –        | Jumlah digit kode TOTP (`6` atau `8`)                                                                |
-| `AUTH_MFA_CHALLENGE_TTL_SEC`                | –              | `300`   | –        | Umur challenge MFA login (detik)                                                                     |
-| `AUTH_MFA_RATE_LIMIT_MAX`                   | –              | `5`     | –        | Rate limit verifikasi MFA per sumber+tenant                                                          |
-| `AUTH_MFA_RATE_LIMIT_WINDOW_SEC`            | –              | `300`   | –        | Jendela waktu rate limit verifikasi MFA (detik)                                                      |
-| `AUTH_GOOGLE_LOGIN_ENABLED`                 | –              | `false` | –        | Google OIDC login                                                                                    |
-| `AUTH_GOOGLE_CLIENT_ID`                     | bila Google    | –       | –        | OAuth client ID dari Google Cloud Console                                                            |
-| `AUTH_GOOGLE_CLIENT_SECRET`                 | bila Google    | –       | Ya       | OAuth client secret — hanya untuk token exchange server-side                                        |
-| `AUTH_GOOGLE_ALLOWED_DOMAINS`               | –              | –       | –        | Daftar domain email (dipisah koma) yang boleh auto-link; kosong = auto-link selalu ditolak          |
-| `AUTH_GOOGLE_REDIRECT_PATH`                 | –              | `/api/v1/auth/providers/google/callback` | – | Path callback OAuth di bawah `APP_URL`                                            |
-| `AUTH_SSO_ENABLED`                          | –              | `false` | –        | Generic tenant OIDC SSO                                                                              |
-| `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY`        | bila SSO       | –       | Ya       | Key AES-256-GCM (base64, 32 byte) untuk enkripsi-at-rest client secret provider — beda dari key MFA |
-| `AUTH_SSO_DISCOVERY_TIMEOUT_MS`             | –              | `5000`  | –        | Timeout discovery/JWKS/token-exchange OIDC provider tenant (ms)                                     |
-| `AUTH_SSO_MAX_PROVIDERS_PER_TENANT`         | –              | `20`    | –        | Batas jumlah baris provider aktif per tenant                                                         |
+| Var                                         | Wajib          | Default                                  | Sensitif | Fungsi                                                                                                |
+| ------------------------------------------- | -------------- | ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `AUTH_SESSION_TTL_MIN`                      | –              | `120`                                    | –        | Umur sesi (token opaque, disimpan sebagai `token_hash` — bukan JWT)                                   |
+| `AUTH_COOKIE_SECURE`                        | –              | `true`                                   | –        | Cookie hanya HTTPS di prod                                                                            |
+| `AUTH_LOGIN_MAX_ATTEMPTS`                   | –              | `5`                                      | –        | Lockout login (per identitas)                                                                         |
+| `AUTH_LOGIN_RATE_LIMIT_MAX`                 | –              | `20`                                     | –        | Rate limit login per sumber+tenant                                                                    |
+| `AUTH_LOGIN_RATE_LIMIT_WINDOW_SEC`          | –              | `60`                                     | –        | Jendela waktu rate limit login (detik)                                                                |
+| `AUTH_PASSWORD_RESET_TOKEN_TTL_MIN`         | –              | `30`                                     | –        | Umur token reset password                                                                             |
+| `AUTH_PASSWORD_RESET_RATE_LIMIT_MAX`        | –              | `5`                                      | –        | Rate limit forgot/reset per sumber+tenant                                                             |
+| `AUTH_PASSWORD_RESET_RATE_LIMIT_WINDOW_SEC` | –              | `900`                                    | –        | Jendela waktu rate limit reset password (detik)                                                       |
+| `AUTH_ONLINE_SECURITY_ENABLED`              | –              | `false`                                  | –        | Gate full-online-only auth hardening — lihat §Full-online auth security hardening di bawah            |
+| `AUTH_ONLINE_SECURITY_PROFILE`              | –              | `disabled`                               | –        | `disabled` (default) atau `full_online`; wajib `full_online` bila `AUTH_ONLINE_SECURITY_ENABLED=true` |
+| `TURNSTILE_ENABLED`                         | –              | `false`                                  | –        | Cloudflare Turnstile bot protection                                                                   |
+| `TURNSTILE_SITE_KEY`                        | bila Turnstile | –                                        | –        | Site key publik (bukan secret) — dirender di widget `/login`                                          |
+| `TURNSTILE_SECRET_KEY`                      | bila Turnstile | –                                        | Ya       | Secret key — hanya untuk verifikasi server-side                                                       |
+| `TURNSTILE_VERIFY_TIMEOUT_MS`               | –              | `5000`                                   | –        | Timeout panggilan siteverify Cloudflare (ms)                                                          |
+| `AUTH_MFA_ENABLED`                          | –              | `false`                                  | –        | MFA/TOTP login challenge                                                                              |
+| `AUTH_MFA_SECRET_ENCRYPTION_KEY`            | bila MFA       | –                                        | Ya       | Key AES-256-GCM (base64, 32 byte) untuk enkripsi-at-rest TOTP secret                                  |
+| `AUTH_MFA_TOTP_ISSUER`                      | –              | `AWCMS`                                  | –        | Nama issuer yang tampil di aplikasi authenticator                                                     |
+| `AUTH_MFA_TOTP_PERIOD_SEC`                  | –              | `30`                                     | –        | Panjang time-step TOTP (detik)                                                                        |
+| `AUTH_MFA_TOTP_DIGITS`                      | –              | `6`                                      | –        | Jumlah digit kode TOTP (`6` atau `8`)                                                                 |
+| `AUTH_MFA_CHALLENGE_TTL_SEC`                | –              | `300`                                    | –        | Umur challenge MFA login (detik)                                                                      |
+| `AUTH_MFA_RATE_LIMIT_MAX`                   | –              | `5`                                      | –        | Rate limit verifikasi MFA per sumber+tenant                                                           |
+| `AUTH_MFA_RATE_LIMIT_WINDOW_SEC`            | –              | `300`                                    | –        | Jendela waktu rate limit verifikasi MFA (detik)                                                       |
+| `AUTH_GOOGLE_LOGIN_ENABLED`                 | –              | `false`                                  | –        | Google OIDC login                                                                                     |
+| `AUTH_GOOGLE_CLIENT_ID`                     | bila Google    | –                                        | –        | OAuth client ID dari Google Cloud Console                                                             |
+| `AUTH_GOOGLE_CLIENT_SECRET`                 | bila Google    | –                                        | Ya       | OAuth client secret — hanya untuk token exchange server-side                                          |
+| `AUTH_GOOGLE_ALLOWED_DOMAINS`               | –              | –                                        | –        | Daftar domain email (dipisah koma) yang boleh auto-link; kosong = auto-link selalu ditolak            |
+| `AUTH_GOOGLE_REDIRECT_PATH`                 | –              | `/api/v1/auth/providers/google/callback` | –        | Path callback OAuth di bawah `APP_URL`                                                                |
+| `AUTH_SSO_ENABLED`                          | –              | `false`                                  | –        | Generic tenant OIDC SSO                                                                               |
+| `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY`        | bila SSO       | –                                        | Ya       | Key AES-256-GCM (base64, 32 byte) untuk enkripsi-at-rest client secret provider — beda dari key MFA   |
+| `AUTH_SSO_DISCOVERY_TIMEOUT_MS`             | –              | `5000`                                   | –        | Timeout discovery/JWKS/token-exchange OIDC provider tenant (ms)                                       |
+| `AUTH_SSO_MAX_PROVIDERS_PER_TENANT`         | –              | `20`                                     | –        | Batas jumlah baris provider aktif per tenant                                                          |
 
 ### Full-online auth security hardening (opsional, target)
 
@@ -267,11 +267,11 @@ PAYLOAD_TOO_LARGE`.
 
 ### Sync & node
 
-| Var                       | Wajib     | Default          | Sensitif | Fungsi                                    |
-| -------------------------- | --------- | ---------------- | -------- | -------------------------------------------- |
-| `AWCMS_SYNC_ENABLED`      | –         | `false`          | –        | Aktifkan sync hybrid (offline-first outbox) |
-| `AWCMS_SYNC_HMAC_SECRET`  | bila sync | –                | Ya       | Signature HMAC                              |
-| `AWCMS_SYNC_MAX_SKEW_SEC` | –         | `300`            | –        | Toleransi anti-replay                       |
+| Var                       | Wajib     | Default | Sensitif | Fungsi                                      |
+| ------------------------- | --------- | ------- | -------- | ------------------------------------------- |
+| `AWCMS_SYNC_ENABLED`      | –         | `false` | –        | Aktifkan sync hybrid (offline-first outbox) |
+| `AWCMS_SYNC_HMAC_SECRET`  | bila sync | –       | Ya       | Signature HMAC                              |
+| `AWCMS_SYNC_MAX_SKEW_SEC` | –         | `300`   | –        | Toleransi anti-replay                       |
 
 Identitas node direncanakan berasal dari tabel `awcms_sync_nodes` (DB),
 teregistrasi otomatis lewat header/HMAC saat request sync pertama — bukan
@@ -280,14 +280,14 @@ env var terpisah (mengikuti temuan awcms-mini yang men-deprecate
 
 ### Storage
 
-| Var                             | Wajib   | Default | Sensitif | Fungsi                                                                       |
-| --------------------------------- | ------- | ------- | -------- | -------------------------------------------------------------------------------- |
+| Var                             | Wajib   | Default | Sensitif | Fungsi                                                                            |
+| ------------------------------- | ------- | ------- | -------- | --------------------------------------------------------------------------------- |
 | `R2_ENABLED`                    | –       | `false` | –        | Aktifkan object storage R2 (mis. lampiran dokumen finance, foto barang inventory) |
-| `R2_ACCOUNT_ID`                 | bila R2 | –       | –        | Akun R2 (identifier, bukan kredensial)                                          |
-| `R2_ACCESS_KEY_ID`              | bila R2 | –       | Ya       | Kredensial R2                                                                    |
-| `R2_SECRET_ACCESS_KEY`          | bila R2 | –       | Ya       | Kredensial R2                                                                    |
+| `R2_ACCOUNT_ID`                 | bila R2 | –       | –        | Akun R2 (identifier, bukan kredensial)                                            |
+| `R2_ACCESS_KEY_ID`              | bila R2 | –       | Ya       | Kredensial R2                                                                     |
+| `R2_SECRET_ACCESS_KEY`          | bila R2 | –       | Ya       | Kredensial R2                                                                     |
 | `R2_BUCKET`                     | bila R2 | –       | –        | Bucket                                                                            |
-| `OBJECT_SYNC_UPLOAD_TIMEOUT_MS` | –       | `10000` | –        | Timeout upload dispatcher                                                        |
+| `OBJECT_SYNC_UPLOAD_TIMEOUT_MS` | –       | `10000` | –        | Timeout upload dispatcher                                                         |
 
 Storage lokal filesystem (`STORAGE_DRIVER`/`LOCAL_STORAGE_PATH`) sengaja
 tidak dijadikan env var terpisah — mengikuti temuan awcms-mini bahwa
@@ -299,14 +299,14 @@ Direncanakan sebagai modul base reusable untuk password reset, system
 announcement, dan notifikasi workflow (mis. approval finance/procurement
 yang butuh persetujuan berjenjang) — provider-neutral.
 
-| Var                             | Wajib           | Default | Sensitif | Fungsi                                                |
-| ---------------------------------- | ---------------- | ------- | -------- | -------------------------------------------------------- |
-| `EMAIL_ENABLED`                 | –               | `false` | –        | Aktifkan modul email                                    |
-| `EMAIL_PROVIDER`                | bila aktif      | –       | –        | Adapter provider email (`log` untuk dev tanpa kredensial) |
-| `EMAIL_FROM_ADDRESS`            | bila aktif      | –       | –        | Alamat pengirim default                                 |
-| `EMAIL_FROM_NAME`               | –               | `AWCMS` | –        | Nama pengirim default                                   |
-| `EMAIL_SEND_TIMEOUT_MS`         | –               | `10000` | –        | Timeout satu percobaan kirim (dispatcher)               |
-| `EMAIL_SEND_MAX_RETRIES`        | –               | `5`     | –        | Batas percobaan retry sebelum `failed` final            |
+| Var                      | Wajib      | Default | Sensitif | Fungsi                                                    |
+| ------------------------ | ---------- | ------- | -------- | --------------------------------------------------------- |
+| `EMAIL_ENABLED`          | –          | `false` | –        | Aktifkan modul email                                      |
+| `EMAIL_PROVIDER`         | bila aktif | –       | –        | Adapter provider email (`log` untuk dev tanpa kredensial) |
+| `EMAIL_FROM_ADDRESS`     | bila aktif | –       | –        | Alamat pengirim default                                   |
+| `EMAIL_FROM_NAME`        | –          | `AWCMS` | –        | Nama pengirim default                                     |
+| `EMAIL_SEND_TIMEOUT_MS`  | –          | `10000` | –        | Timeout satu percobaan kirim (dispatcher)                 |
+| `EMAIL_SEND_MAX_RETRIES` | –          | `5`     | –        | Batas percobaan retry sebelum `failed` final              |
 
 Kredensial provider email konkret (mis. `EMAIL_<PROVIDER>_API_TOKEN`)
 ditambahkan begitu adapter provider tersebut benar-benar diimplementasikan —
@@ -319,9 +319,9 @@ lintas modul dan mesin lifecycle (retensi/partisi/arsip/legal
 hold/purge aman) — relevan untuk data finance/transaksi ERP yang bervolume
 tinggi dan punya kewajiban retensi/audit jangka panjang.
 
-| Var                                | Wajib | Default                        | Sensitif | Fungsi                                                                         |
-| ------------------------------------ | ----- | ------------------------------- | -------- | ---------------------------------------------------------------------------------- |
-| `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH` | –     | `./var/data-lifecycle-archive` | –        | Root filesystem tempat local/offline archive adapter menulis artefak arsip        |
+| Var                                | Wajib | Default                        | Sensitif | Fungsi                                                                     |
+| ---------------------------------- | ----- | ------------------------------ | -------- | -------------------------------------------------------------------------- |
+| `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH` | –     | `./var/data-lifecycle-archive` | –        | Root filesystem tempat local/offline archive adapter menulis artefak arsip |
 
 ### ERP & integrasi bisnis — placeholder
 
@@ -421,11 +421,11 @@ EMAIL_SEND_MAX_RETRIES=5
 
 ## Profil per-environment
 
-| Environment         | Karakteristik                                                                     |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| development         | Semua provider off, DB lokal, cookie tidak secure                                 |
-| staging             | Meniru prod, data uji, backup aktif                                               |
-| production (online) | HTTPS, secret manager, backup+restore teruji, sync opsional                       |
+| Environment         | Karakteristik                                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| development         | Semua provider off, DB lokal, cookie tidak secure                                                              |
+| staging             | Meniru prod, data uji, backup aktif                                                                            |
+| production (online) | HTTPS, secret manager, backup+restore teruji, sync opsional                                                    |
 | **offline/LAN**     | Tanpa internet; sync/R2/provider eksternal off atau tertunda; operasional inti tetap penuh jalan; backup lokal |
 
 ## Topologi deployment LAN-first

@@ -5,7 +5,7 @@ AWCMS is a Bun + Astro 7 + PostgreSQL ERP and business-integration platform buil
 ## Supported Versions
 
 | Version                            | Supported                                                        |
-| ----------------------------------- | ------------------------------------------------------------------ |
+| ---------------------------------- | ---------------------------------------------------------------- |
 | `main` / latest tagged release     | Yes — actively developed and supported                           |
 | Older tagged releases (not latest) | Best-effort only; upgrading to latest is the primary remediation |
 
@@ -51,7 +51,7 @@ Do not open public issues for exploitable vulnerabilities. Public issues are acc
 Best-effort targets for good-faith private reports:
 
 | Stage                       | Target                                                    |
-| ---------------------------- | ------------------------------------------------------------ |
+| --------------------------- | --------------------------------------------------------- |
 | Acknowledge receipt         | within 3 business days                                    |
 | Initial severity assessment | within 7 business days                                    |
 | Fix or mitigation plan      | within 30 days for high/critical                          |

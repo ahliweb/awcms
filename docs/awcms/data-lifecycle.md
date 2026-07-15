@@ -56,13 +56,13 @@ ada; atau `"generic"` — dieksekusi langsung oleh mesin ini). Divalidasi
 Descriptor di bawah adalah **contoh target ERP** (belum terdaftar di
 kode — belum ada modul finance/inventory/HR-payroll):
 
-| Descriptor key                       | Tabel                            | Owner               | Mode        | Kelas retensi            |
-| ------------------------------------- | --------------------------------- | -------------------- | ----------- | -------------------------- |
-| `logging.audit_events`               | `awcms_audit_events`        | `logging`           | `delegated` | `audit_security`         |
-| `finance.ledger_entries`             | `awcms_ledger_entries`      | `finance`           | `delegated` | `financial_record`       |
-| `hr_payroll.payroll_records`         | `awcms_payroll_records`     | `hr_payroll`        | `delegated` | `payroll_record`          |
-| `integration.webhook_delivery_events`| `awcms_webhook_delivery_events` | `integration`   | `delegated` | `operational_telemetry`  |
-| `data_lifecycle.data_lifecycle_runs` | `awcms_data_lifecycle_runs` | `data_lifecycle`    | `generic`   | `operational_queue`      |
+| Descriptor key                        | Tabel                           | Owner            | Mode        | Kelas retensi           |
+| ------------------------------------- | ------------------------------- | ---------------- | ----------- | ----------------------- |
+| `logging.audit_events`                | `awcms_audit_events`            | `logging`        | `delegated` | `audit_security`        |
+| `finance.ledger_entries`              | `awcms_ledger_entries`          | `finance`        | `delegated` | `financial_record`      |
+| `hr_payroll.payroll_records`          | `awcms_payroll_records`         | `hr_payroll`     | `delegated` | `payroll_record`        |
+| `integration.webhook_delivery_events` | `awcms_webhook_delivery_events` | `integration`    | `delegated` | `operational_telemetry` |
+| `data_lifecycle.data_lifecycle_runs`  | `awcms_data_lifecycle_runs`     | `data_lifecycle` | `generic`   | `operational_queue`     |
 
 ## Retensi data (per descriptor)
 
@@ -74,13 +74,13 @@ generik yang dipaksakan ke semua data. Untuk AWCMS, ini berarti kelas
 retensi pajak/pembukuan aktual (lihat catatan di atas), bukan sekadar
 disalin dari kelas `audit_security`/`analytics_telemetry` warisan base.
 
-| Descriptor                            | Default (ilustratif)  | Batas aman (min–max, ilustratif) | Rasional                                                                                                                           |
-| --------------------------------------- | ---------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `logging.audit_events`                | 730 hari                | 365–1825 hari                       | Security/audit log: 1–5 tahun sesuai kebutuhan — titik tengah rentang                                                              |
-| `finance.ledger_entries`              | **belum ditetapkan**    | **wajib review legal/pajak**         | Kewajiban penyimpanan bukti pembukuan/transaksi finansial biasanya jauh melebihi retensi audit log teknis — jangan default ke angka generik base |
-| `hr_payroll.payroll_records`          | **belum ditetapkan**    | **wajib review legal/ketenagakerjaan** | Kewajiban retensi data gaji/ketenagakerjaan bervariasi per yurisdiksi/kontrak — perlu keputusan eksplisit, bukan warisan default    |
-| `integration.webhook_delivery_events` | 90 hari                 | 7–730 hari                          | Telemetry integrasi eksternal (payment gateway/marketplace/logistik) — retensi jauh lebih pendek dari data finansial itu sendiri    |
-| `data_lifecycle.data_lifecycle_runs`  | 180 hari                | 30–1825 hari                        | Riwayat eksekusi lifecycle ITU SENDIRI adalah bukti kepatuhan (ISO 27001/22301) — retensi menengah, diarsipkan sebelum purge fisik |
+| Descriptor                            | Default (ilustratif) | Batas aman (min–max, ilustratif)       | Rasional                                                                                                                                         |
+| ------------------------------------- | -------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `logging.audit_events`                | 730 hari             | 365–1825 hari                          | Security/audit log: 1–5 tahun sesuai kebutuhan — titik tengah rentang                                                                            |
+| `finance.ledger_entries`              | **belum ditetapkan** | **wajib review legal/pajak**           | Kewajiban penyimpanan bukti pembukuan/transaksi finansial biasanya jauh melebihi retensi audit log teknis — jangan default ke angka generik base |
+| `hr_payroll.payroll_records`          | **belum ditetapkan** | **wajib review legal/ketenagakerjaan** | Kewajiban retensi data gaji/ketenagakerjaan bervariasi per yurisdiksi/kontrak — perlu keputusan eksplisit, bukan warisan default                 |
+| `integration.webhook_delivery_events` | 90 hari              | 7–730 hari                             | Telemetry integrasi eksternal (payment gateway/marketplace/logistik) — retensi jauh lebih pendek dari data finansial itu sendiri                 |
+| `data_lifecycle.data_lifecycle_runs`  | 180 hari             | 30–1825 hari                           | Riwayat eksekusi lifecycle ITU SENDIRI adalah bukti kepatuhan (ISO 27001/22301) — retensi menengah, diarsipkan sebelum purge fisik               |
 
 `retentionDaysOverride` (dry-run on-demand, `POST
 /api/v1/data-lifecycle/dry-run`) selalu di-clamp ke `[retentionMinDays,
@@ -280,24 +280,24 @@ kode diporting.
 
 ### UU PDP (Undang-Undang Pelindungan Data Pribadi, UU No. 27/2022)
 
-| Prinsip UU PDP                                                     | Implementasi (target)                                                                                                                                                                                                                         |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pembatasan penyimpanan (data disimpan tidak lebih lama dari perlu) | Setiap descriptor mendeklarasikan `retentionMinDays`/`retentionMaxDays`/`defaultRetentionDays` eksplisit; dry-run mengekspos backlog "eligible" sebelum purge nyata dijalankan                                                       |
+| Prinsip UU PDP                                                     | Implementasi (target)                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pembatasan penyimpanan (data disimpan tidak lebih lama dari perlu) | Setiap descriptor mendeklarasikan `retentionMinDays`/`retentionMaxDays`/`defaultRetentionDays` eksplisit; dry-run mengekspos backlog "eligible" sebelum purge nyata dijalankan                                                                                                                                   |
 | Hak penghapusan/permintaan subjek data                             | Purge bounded + audit ada sebagai MEKANISME; keputusan KAPAN menghapus atas permintaan subjek tetap keputusan operasional operator, bukan otomatis dari modul ini — untuk data payroll/HR, keputusan ini juga harus mempertimbangkan kewajiban retensi ketenagakerjaan yang mungkin mengalahkan permintaan hapus |
-| Akuntabilitas pemrosesan                                           | Setiap purge (mode `"generic"`) diaudit `critical` dengan `descriptorKey`/`purgedCount`/`cutoffIso`; run history menyimpan bukti eksekusi teragregasi                                                                                |
-| Legal hold vs hak hapus                                            | Legal hold OVERRIDE hak penghapusan rutin — kepatuhan terhadap kewajiban hukum lain (mis. audit pajak, sengketa ketenagakerjaan) yang sah secara hukum mengalahkan permintaan hapus rutin, konsisten dengan pengecualian lazim UU PDP untuk kewajiban hukum |
+| Akuntabilitas pemrosesan                                           | Setiap purge (mode `"generic"`) diaudit `critical` dengan `descriptorKey`/`purgedCount`/`cutoffIso`; run history menyimpan bukti eksekusi teragregasi                                                                                                                                                            |
+| Legal hold vs hak hapus                                            | Legal hold OVERRIDE hak penghapusan rutin — kepatuhan terhadap kewajiban hukum lain (mis. audit pajak, sengketa ketenagakerjaan) yang sah secara hukum mengalahkan permintaan hapus rutin, konsisten dengan pengecualian lazim UU PDP untuk kewajiban hukum                                                      |
 
 ### PP PSTE (Penyelenggaraan Sistem dan Transaksi Elektronik, PP No. 71/2019)
 
-| Aspek                                                             | Implementasi (target)                                                                                                                                                                            |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Aspek                                                             | Implementasi (target)                                                                                                                                                                           |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Kewajiban retensi data elektronik untuk keperluan penegakan hukum | Legal hold mechanism eksplisit memungkinkan operator mem-preserve data melebihi retensi rutin saat diminta otoritas berwenang, dengan `authorityReference` sebagai bukti dasar hukum permintaan |
 | Keandalan sistem elektronik                                       | Bounded batch (tidak pernah unbounded DELETE), advisory lock (tidak pernah purge ganda konkuren), checksum arsip (integritas terverifikasi)                                                     |
 
 ### ISO/IEC 27001:2022 Annex A (kontrol relevan-kode)
 
-| Kontrol                              | Implementasi (target)                                                                                                                               |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kontrol                              | Implementasi (target)                                                                                                                              |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A.5.33 Protection of records         | Archive manifest + checksum + restore procedure sebelum purge fisik (untuk descriptor archivable)                                                  |
 | A.5.34 Privacy and protection of PII | Dry-run/run history mengagregasi count, tidak pernah row content/PII individual                                                                    |
 | A.8.10 Information deletion          | Bounded, audited, permission-gated purge; `deletion.mode` eksplisit per tabel                                                                      |
@@ -315,13 +315,13 @@ eksplisit per descriptor (`hard_delete`/`anonymize`/
 
 ### ISO/IEC 27005:2023 (manajemen risiko)
 
-| Risiko                                    | Mitigasi (target)                                                                                                                                               |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Purge tak terbatas mengunci tabel lama    | `batchLimit` wajib per descriptor (divalidasi registry gate, maksimum absolut 50.000), statement bounded, tidak pernah `DELETE` tanpa `LIMIT`                          |
-| Legal hold dilewati diam-diam             | Precedence dicek unconditional sebelum cabang purge mana pun; `legalHold.applicable` bukan gerbang teknis (lihat §Legal hold)                                          |
-| Purge lintas-tenant tak sengaja           | RLS FORCE + filter `tenant_id` eksplisit di setiap query; job iterasi tenant SATU PER SATU via transaksi tenant-scoped terpisah, tidak pernah satu query lintas-tenant |
-| Artefak arsip korup/tidak bisa dipulihkan | Checksum SHA-256 wajib per manifest, `verify()` sebelum pemakaian, diuji end-to-end                                                                                |
-| Kredensial bocor lewat log/arsip          | `artifactLocation` selalu path/URI, tidak pernah kredensial; tidak ada mekanisme baru yang menulis raw secret ke log                                              |
+| Risiko                                                  | Mitigasi (target)                                                                                                                                                                                        |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purge tak terbatas mengunci tabel lama                  | `batchLimit` wajib per descriptor (divalidasi registry gate, maksimum absolut 50.000), statement bounded, tidak pernah `DELETE` tanpa `LIMIT`                                                            |
+| Legal hold dilewati diam-diam                           | Precedence dicek unconditional sebelum cabang purge mana pun; `legalHold.applicable` bukan gerbang teknis (lihat §Legal hold)                                                                            |
+| Purge lintas-tenant tak sengaja                         | RLS FORCE + filter `tenant_id` eksplisit di setiap query; job iterasi tenant SATU PER SATU via transaksi tenant-scoped terpisah, tidak pernah satu query lintas-tenant                                   |
+| Artefak arsip korup/tidak bisa dipulihkan               | Checksum SHA-256 wajib per manifest, `verify()` sebelum pemakaian, diuji end-to-end                                                                                                                      |
+| Kredensial bocor lewat log/arsip                        | `artifactLocation` selalu path/URI, tidak pernah kredensial; tidak ada mekanisme baru yang menulis raw secret ke log                                                                                     |
 | Purge dini data finance/payroll melanggar retensi hukum | Descriptor `finance.*`/`hr_payroll.*` wajib review legal sebelum `retentionMinDays`/`retentionMaxDays` ditetapkan (lihat catatan di awal dokumen) — risiko yang tidak ada padanannya di base CMS generik |
 
 ### ISO/IEC 27701:2025 (ekstensi privasi untuk ISO 27001, PIMS)
@@ -360,6 +360,6 @@ backup database rutin).
 - **Adapter object-storage eksternal** — `local_offline` saja pada
   target implementasi awal.
 - **Cursor tie edge case** — lihat §Ketepatan batas cursor di atas; batas
-  1ms yang mungkin tersisa setelah fix (berdasarkan pengalaman base),
-  tidak dieliminasi sepenuhnya secara teoretis.
+1ms yang mungkin tersisa setelah fix (berdasarkan pengalaman base),
+tidak dieliminasi sepenuhnya secara teoretis.
 </content>

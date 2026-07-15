@@ -64,20 +64,20 @@ gantt
   S12 Production Readiness  :s12, after s11, 1
 ```
 
-| Sprint | Fokus                        | Output utama                                              |
-| -----: | ---------------------------- | ----------------------------------------------------------- |
-|      1 | Repository Foundation        | Skeleton, migration runner, OpenAPI/AsyncAPI, health        |
-|      2 | Tenant, Identity, Profile     | Tenant, office, setup, login, profile resolver               |
-|      3 | RBAC, ABAC, RLS               | Role, policy, evaluator, decision log                        |
-|      4 | Finance/Accounting Core       | Chart of account, jurnal, ledger entry, posting              |
-|      5 | Inventory & Warehouse MVP     | Item master, stock balance, movement, warehouse/bin          |
-|      6 | Logging & Pooling             | Structured log, audit, DB pool, backpressure                 |
-|      7 | Procurement & Vendor          | PO, vendor, penerimaan barang, approval workflow             |
-|      8 | Offline Sync & R2             | Sync push/pull, conflict, object queue                       |
-|      9 | Manufacturing                 | BOM, work order, production posting                          |
-|     10 | HR/Payroll & Tax/Coretax      | Payroll run, komponen gaji, tax profile, Coretax batch        |
-|     11 | UI/UX, Reporting, Integrasi   | Admin UI, reports, integrasi payment gateway/marketplace/logistik |
-|     12 | Production Readiness          | Workflow, security readiness, deployment, handover           |
+| Sprint | Fokus                       | Output utama                                                      |
+| -----: | --------------------------- | ----------------------------------------------------------------- |
+|      1 | Repository Foundation       | Skeleton, migration runner, OpenAPI/AsyncAPI, health              |
+|      2 | Tenant, Identity, Profile   | Tenant, office, setup, login, profile resolver                    |
+|      3 | RBAC, ABAC, RLS             | Role, policy, evaluator, decision log                             |
+|      4 | Finance/Accounting Core     | Chart of account, jurnal, ledger entry, posting                   |
+|      5 | Inventory & Warehouse MVP   | Item master, stock balance, movement, warehouse/bin               |
+|      6 | Logging & Pooling           | Structured log, audit, DB pool, backpressure                      |
+|      7 | Procurement & Vendor        | PO, vendor, penerimaan barang, approval workflow                  |
+|      8 | Offline Sync & R2           | Sync push/pull, conflict, object queue                            |
+|      9 | Manufacturing               | BOM, work order, production posting                               |
+|     10 | HR/Payroll & Tax/Coretax    | Payroll run, komponen gaji, tax profile, Coretax batch            |
+|     11 | UI/UX, Reporting, Integrasi | Admin UI, reports, integrasi payment gateway/marketplace/logistik |
+|     12 | Production Readiness        | Workflow, security readiness, deployment, handover                |
 
 ## Sprint acceptance criteria ringkas
 
@@ -262,15 +262,15 @@ Piramida: banyak unit test di dasar, sedikit end-to-end di puncak; security & pe
 
 ### Performance test awal
 
-| Area                          |               Target awal |
-| ------------------------------ | -------------------------: |
-| Pencarian item/produk           |                   < 300 ms |
-| Tambah baris dokumen transaksi  |                   < 300 ms |
-| Post transaksi finansial normal |                    < 1.5 s |
-| Cetak dokumen (invoice/slip)    |                      < 3 s |
-| Laporan keuangan harian         | < 2 s data kecil-menengah  |
-| Pool acquire critical           |            < 500 ms normal |
-| Sync push small batch           |                      < 2 s |
+| Area                            |               Target awal |
+| ------------------------------- | ------------------------: |
+| Pencarian item/produk           |                  < 300 ms |
+| Tambah baris dokumen transaksi  |                  < 300 ms |
+| Post transaksi finansial normal |                   < 1.5 s |
+| Cetak dokumen (invoice/slip)    |                     < 3 s |
+| Laporan keuangan harian         | < 2 s data kecil-menengah |
+| Pool acquire critical           |           < 500 ms normal |
+| Sync push small batch           |                     < 2 s |
 
 > **Suite performa berbasis generik (diwarisi dari `awcms-mini`).** Base
 > teknis sudah menyediakan suite performa nyata dan berjalan:

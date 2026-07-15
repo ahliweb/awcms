@@ -16,12 +16,12 @@ flowchart LR
 
 Empat profil target dan berkas `deploy/*` yang relevan untuk masing-masing (berkas-berkas ini **belum ada** di repo — direncanakan mengikuti pola yang sama dengan basis `awcms-mini`):
 
-| Profil                  | Karakteristik                                                                                                | Berkas `deploy/`/root yang relevan (rencana)                                                                                                                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **development**          | Semua provider off, DB lokal, cookie tidak secure                                                            | `bun run dev` langsung (tidak perlu `deploy/*` atau `docker-compose.yml`); `.env` disalin dari `.env.example` apa adanya                                                                                     |
-| **staging**              | Meniru produksi, data uji, backup aktif                                                                      | Sama seperti production (di bawah), plus data/tenant uji                                                                                                                                                     |
-| **production (online)**  | HTTPS, secret manager, backup+restore teruji, sync opsional (mis. Coretax/payment gateway/marketplace)       | `deploy/systemd/awcms.service.example`, `deploy/nginx/awcms.conf.example` (TLS termination), `deploy/backup/*`, opsional `deploy/pgbouncer/*` bila banyak koneksi pendek                                     |
-| **offline/LAN**          | Tanpa internet; sync/integrasi eksternal off atau tertunda; operasional ERP (transaksi, gudang, HR) tetap jalan penuh; backup lokal | `deploy/systemd/awcms.service.example` (atau `docker-compose.yml`) menjalankan app langsung di port 4321 — **nginx dapat dilewati sepenuhnya**, tidak ada eksposur publik; `deploy/backup/*` tetap wajib (backup lokal) |
+| Profil                  | Karakteristik                                                                                                                       | Berkas `deploy/`/root yang relevan (rencana)                                                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **development**         | Semua provider off, DB lokal, cookie tidak secure                                                                                   | `bun run dev` langsung (tidak perlu `deploy/*` atau `docker-compose.yml`); `.env` disalin dari `.env.example` apa adanya                                                                                                |
+| **staging**             | Meniru produksi, data uji, backup aktif                                                                                             | Sama seperti production (di bawah), plus data/tenant uji                                                                                                                                                                |
+| **production (online)** | HTTPS, secret manager, backup+restore teruji, sync opsional (mis. Coretax/payment gateway/marketplace)                              | `deploy/systemd/awcms.service.example`, `deploy/nginx/awcms.conf.example` (TLS termination), `deploy/backup/*`, opsional `deploy/pgbouncer/*` bila banyak koneksi pendek                                                |
+| **offline/LAN**         | Tanpa internet; sync/integrasi eksternal off atau tertunda; operasional ERP (transaksi, gudang, HR) tetap jalan penuh; backup lokal | `deploy/systemd/awcms.service.example` (atau `docker-compose.yml`) menjalankan app langsung di port 4321 — **nginx dapat dilewati sepenuhnya**, tidak ada eksposur publik; `deploy/backup/*` tetap wajib (backup lokal) |
 
 Prinsip pemilihan: nginx (`deploy/nginx/`) hanya dibutuhkan saat butuh terminasi TLS untuk klien di luar mesin/jaringan tepercaya atau saat memfasadkan beberapa instance upstream — topologi LAN-first satu server bisa langsung menyajikan aplikasi di port 4321 tanpa reverse proxy sama sekali. PgBouncer (`deploy/pgbouncer/`) hanya untuk skenario koneksi pendek bervolume tinggi (mis. banyak worker sync integrasi eksternal berjalan bersamaan) — bukan kebutuhan default.
 
@@ -81,14 +81,14 @@ Compose juga mewujudkan model dua-peran di bawah tanpa langkah manual: service `
 
 Perbedaan kunci vs `docker-compose.yml`'s `app` service:
 
-| Aspek       | `docker-compose.yml` (`app`)                                | `docker-compose.prod.yml` (`app`) / `Dockerfile.production`                            |
-| ----------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Sumber kode | Bind-mount repo langsung (`volumes: - .:/app`)              | `COPY` ke dalam image saat build — immutable setelah dibuat                              |
-| Build       | Saat container start (`bun install && bun run build`)       | Saat `docker build` (multi-stage) — start container jadi instan                          |
-| User        | Host user (`APP_UID`/`APP_GID`) — perlu bind-mount writable | User bawaan image `oven/bun:1.3.14`, `bun` (non-root, uid 1000)                          |
-| Filesystem  | Writable (bind mount + install/build di dalamnya)           | `read_only: true` + `tmpfs: [/tmp]`                                                       |
-| Migration   | Service `migrate` terpisah dalam compose yang sama          | Tidak disertakan — jalankan `bun run db:migrate` terpisah                                |
-| Cocok untuk | LAN-first satu server, operator `git pull` in-place         | Registry/CI-push, orkestrator container (Coolify/k8s/ECS)                                |
+| Aspek       | `docker-compose.yml` (`app`)                                | `docker-compose.prod.yml` (`app`) / `Dockerfile.production`     |
+| ----------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
+| Sumber kode | Bind-mount repo langsung (`volumes: - .:/app`)              | `COPY` ke dalam image saat build — immutable setelah dibuat     |
+| Build       | Saat container start (`bun install && bun run build`)       | Saat `docker build` (multi-stage) — start container jadi instan |
+| User        | Host user (`APP_UID`/`APP_GID`) — perlu bind-mount writable | User bawaan image `oven/bun:1.3.14`, `bun` (non-root, uid 1000) |
+| Filesystem  | Writable (bind mount + install/build di dalamnya)           | `read_only: true` + `tmpfs: [/tmp]`                             |
+| Migration   | Service `migrate` terpisah dalam compose yang sama          | Tidak disertakan — jalankan `bun run db:migrate` terpisah       |
+| Cocok untuk | LAN-first satu server, operator `git pull` in-place         | Registry/CI-push, orkestrator container (Coolify/k8s/ECS)       |
 
 Dua cara menjalankan image ini (rencana) — pilih salah satu:
 
@@ -128,12 +128,12 @@ Image ini **tidak** menjalankan migration — peran runtime-nya (`awcms_app`, le
 
 Aplikasi ini **tidak pernah** melakukan terminasi TLS sendiri (tidak ada kode HTTPS listener) — di setiap topologi, TLS (bila ada) adalah tanggung jawab lapisan **di depan** aplikasi:
 
-| Topologi                                                                            | Di mana TLS berhenti                                                                                                   | Trust boundary                                                                                                                                                                  |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **offline/LAN**                                                                     | Tidak ada TLS — `http://` langsung ke port 4321                                                                        | Batas kepercayaan = jaringan LAN itu sendiri (fisik/WiFi tepercaya); tidak ada eksposur internet, PostgreSQL tidak public berlaku sama untuk app port ini                       |
-| **production (online), bare-metal**                                                 | `deploy/nginx/awcms.conf.example` (reverse proxy TLS termination)                                                       | Publik ↔ nginx = batas TLS; nginx ↔ app (`localhost:4321`) = plaintext HTTP di **dalam** mesin yang sama, tidak melewati jaringan                                               |
-| **production (online), container (`docker-compose.yml`/`docker-compose.prod.yml`)** | Reverse proxy di **luar** compose stack (nginx/Caddy/Coolify's built-in proxy) — compose sendiri tidak menyediakan TLS | Publik ↔ reverse proxy = batas TLS **hanya jika** reverse proxy benar-benar satu-satunya jalur masuk                                                                            |
-| **PostgreSQL (`db`)/PgBouncer**                                                     | Tidak ada TLS by default (`sslmode` tidak dipaksa) — koneksi Postgres dalam Docker network internal                    | Trust boundary = Docker network compose itu sendiri (`db`/`pgbouncer` tidak publish port host, jadi tidak reachable dari luar mesin sama sekali)                              |
+| Topologi                                                                            | Di mana TLS berhenti                                                                                                   | Trust boundary                                                                                                                                            |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **offline/LAN**                                                                     | Tidak ada TLS — `http://` langsung ke port 4321                                                                        | Batas kepercayaan = jaringan LAN itu sendiri (fisik/WiFi tepercaya); tidak ada eksposur internet, PostgreSQL tidak public berlaku sama untuk app port ini |
+| **production (online), bare-metal**                                                 | `deploy/nginx/awcms.conf.example` (reverse proxy TLS termination)                                                      | Publik ↔ nginx = batas TLS; nginx ↔ app (`localhost:4321`) = plaintext HTTP di **dalam** mesin yang sama, tidak melewati jaringan                         |
+| **production (online), container (`docker-compose.yml`/`docker-compose.prod.yml`)** | Reverse proxy di **luar** compose stack (nginx/Caddy/Coolify's built-in proxy) — compose sendiri tidak menyediakan TLS | Publik ↔ reverse proxy = batas TLS **hanya jika** reverse proxy benar-benar satu-satunya jalur masuk                                                      |
+| **PostgreSQL (`db`)/PgBouncer**                                                     | Tidak ada TLS by default (`sslmode` tidak dipaksa) — koneksi Postgres dalam Docker network internal                    | Trust boundary = Docker network compose itu sendiri (`db`/`pgbouncer` tidak publish port host, jadi tidak reachable dari luar mesin sama sekali)          |
 
 Implikasi operasional:
 
@@ -183,13 +183,13 @@ Prinsip konfigurasi wajib: "Konfigurasi tervalidasi saat boot; nilai wajib yang 
 
 Pola dispatcher CLI terjadwal (bukan endpoint HTTP) adalah standar untuk semua job yang bergantung provider eksternal (email, sync object storage, integrasi payment gateway/marketplace/Coretax/logistik) — direncanakan mengikuti pola `scripts/*.ts` yang idempoten (claim-lease `FOR UPDATE SKIP LOCKED`), aman dijalankan berulang, dengan retry/backoff dan circuit breaker per provider. Tidak melakukan apa pun (exit 0, tanpa efek) bila fitur terkait dimatikan di env — profil mana pun yang mematikan sebuah integrasi (mis. offline/LAN) aman menjalankan dispatcher tanpa efek samping.
 
-| Profil                                       | Cara menjadwalkan                                                                                                                                                          |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **development**                               | Jalankan manual sesuai kebutuhan. Fitur eksternal biasanya `false` di `.env` dev — tidak perlu dijadwalkan sama sekali.                                                     |
-| **offline/LAN**                               | Integrasi eksternal biasanya off atau tertunda. Bila diaktifkan (mis. relay lokal), jadwalkan seperti profil systemd di bawah.                                              |
-| **staging/production (bare-metal, systemd)**  | `cron` atau systemd timer terpisah dari service utama (`awcms.service`).                                                                                                    |
-| **container (`docker-compose.yml`)**          | Jalankan sebagai `docker compose exec app bun run <job>` lewat cron host, atau tambahkan service terjadwal terpisah.                                                        |
-| **Coolify/VPS**                               | Scheduled Task Coolify (bila tersedia) atau cron di VPS yang menjalankan `docker exec <container-app> bun run <job>` — lihat [`deploy-coolify.md`](deploy-coolify.md).      |
+| Profil                                       | Cara menjadwalkan                                                                                                                                                      |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **development**                              | Jalankan manual sesuai kebutuhan. Fitur eksternal biasanya `false` di `.env` dev — tidak perlu dijadwalkan sama sekali.                                                |
+| **offline/LAN**                              | Integrasi eksternal biasanya off atau tertunda. Bila diaktifkan (mis. relay lokal), jadwalkan seperti profil systemd di bawah.                                         |
+| **staging/production (bare-metal, systemd)** | `cron` atau systemd timer terpisah dari service utama (`awcms.service`).                                                                                               |
+| **container (`docker-compose.yml`)**         | Jalankan sebagai `docker compose exec app bun run <job>` lewat cron host, atau tambahkan service terjadwal terpisah.                                                   |
+| **Coolify/VPS**                              | Scheduled Task Coolify (bila tersedia) atau cron di VPS yang menjalankan `docker exec <container-app> bun run <job>` — lihat [`deploy-coolify.md`](deploy-coolify.md). |
 
 Contoh crontab (bare-metal/systemd, setiap 2 menit — pola generik untuk dispatcher email/sync):
 
@@ -214,15 +214,15 @@ Catatan operasional (standar wajib untuk setiap dispatcher yang dibangun):
 
 Setiap modul (ERP maupun fondasi) yang mendaftarkan command operasional terjadwal (dispatcher, purge retensi, rekonsiliasi) direncanakan mengikuti registry metadata trusted per modul (`ModuleDescriptor.jobs`), dibaca lewat `GET /api/v1/modules/{moduleKey}/jobs` — pola yang sama dipertahankan dari basis. Contoh kategori job yang direncanakan untuk ERP:
 
-| Command (contoh)               | Kategori                                                          | Jadwal disarankan                                        |
-| ------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------- |
-| `sync:objects:dispatch`         | Sync storage/object queue                                          | Setiap 1-2 menit                                          |
-| `logs:audit:purge`              | Audit retention                                                    | Harian                                                    |
-| `finance:posting:dispatch`      | Posting transaksi finansial ke ledger/Coretax (outbox)             | Setiap 1-2 menit                                          |
-| `payroll:run:dispatch`          | Eksekusi payroll run terjadwal                                     | Sesuai periode payroll (bulanan/mingguan)                 |
-| `inventory:sync:dispatch`       | Sinkronisasi stok ke marketplace/warehouse eksternal               | Setiap 1-5 menit                                          |
-| `domain-events:dispatch`        | Domain event runtime (fan-out lintas modul)                        | Setiap 30-60 detik                                        |
-| `data-lifecycle:archive-purge`  | Arsip/purge retensi data lintas modul                              | Harian                                                    |
+| Command (contoh)               | Kategori                                               | Jadwal disarankan                         |
+| ------------------------------ | ------------------------------------------------------ | ----------------------------------------- |
+| `sync:objects:dispatch`        | Sync storage/object queue                              | Setiap 1-2 menit                          |
+| `logs:audit:purge`             | Audit retention                                        | Harian                                    |
+| `finance:posting:dispatch`     | Posting transaksi finansial ke ledger/Coretax (outbox) | Setiap 1-2 menit                          |
+| `payroll:run:dispatch`         | Eksekusi payroll run terjadwal                         | Sesuai periode payroll (bulanan/mingguan) |
+| `inventory:sync:dispatch`      | Sinkronisasi stok ke marketplace/warehouse eksternal   | Setiap 1-5 menit                          |
+| `domain-events:dispatch`       | Domain event runtime (fan-out lintas modul)            | Setiap 30-60 detik                        |
+| `data-lifecycle:archive-purge` | Arsip/purge retensi data lintas modul                  | Harian                                    |
 
 Semua bersifat operasi database murni kecuali yang secara eksplisit menyentuh provider eksternal (bila fiturnya aktif) — aman dijadwalkan di profil offline/LAN sekalipun untuk job yang murni internal (audit purge, domain events, data lifecycle).
 

@@ -73,20 +73,20 @@ Route tipis → guard → validasi → service → repository → DB. Data sensi
 
 Standar di dokumen ini **akan** ditegakkan oleh skill proyek di `.claude/skills/` begitu modul pertama mulai dikerjakan, mengikuti pola yang sama dengan repo `awcms-mini`. Tabel berikut adalah **rencana penamaan**, bukan skill yang sudah ada hari ini.
 
-| Bagian standar                      | Skill (rencana)         |
-| ------------------------------------ | ------------------------ |
-| Struktur modul & descriptor         | `awcms-new-module`      |
-| SQL migration standard              | `awcms-new-migration`   |
-| API handler rules & response helper | `awcms-new-endpoint`    |
-| Domain event envelope               | `awcms-new-event`       |
-| Idempotency wrapper rules           | `awcms-idempotency`     |
-| ABAC guard                          | `awcms-abac-guard`      |
-| Audit helper & redaction            | `awcms-audit-log`       |
-| Masking/redaction data sensitif     | `awcms-sensitive-data`  |
-| Sync HMAC standard                  | `awcms-sync-hmac`       |
-| Pull request checklist              | `awcms-pr-review`       |
-| UI/komponen                         | `awcms-ui-screen`       |
-| Rilis & CHANGELOG                   | `awcms-release`         |
+| Bagian standar                      | Skill (rencana)        |
+| ----------------------------------- | ---------------------- |
+| Struktur modul & descriptor         | `awcms-new-module`     |
+| SQL migration standard              | `awcms-new-migration`  |
+| API handler rules & response helper | `awcms-new-endpoint`   |
+| Domain event envelope               | `awcms-new-event`      |
+| Idempotency wrapper rules           | `awcms-idempotency`    |
+| ABAC guard                          | `awcms-abac-guard`     |
+| Audit helper & redaction            | `awcms-audit-log`      |
+| Masking/redaction data sensitif     | `awcms-sensitive-data` |
+| Sync HMAC standard                  | `awcms-sync-hmac`      |
+| Pull request checklist              | `awcms-pr-review`      |
+| UI/komponen                         | `awcms-ui-screen`      |
+| Rilis & CHANGELOG                   | `awcms-release`        |
 
 ## Struktur modul
 

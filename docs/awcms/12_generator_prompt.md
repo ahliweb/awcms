@@ -10,28 +10,28 @@ Dokumen ini berisi prompt untuk coding agent/developer agar implementasi AWCMS b
 
 Begitu dibuat, prompt di dokumen ini akan tersedia sebagai **skill proyek** di `.claude/skills/`. Tabel berikut memetakan kebutuhan ke nama skill yang **akan** dibuat.
 
-| Prompt / kebutuhan            | Skill (rencana)                                                                                                    |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Prompt Induk / Per Issue      | `awcms-implement-issue`                                                                                             |
-| Prompt Skeleton / Sprint      | `awcms-implement-issue` + `awcms-new-module` / `awcms-new-migration` / `awcms-new-endpoint` / `awcms-new-event`  |
-| Idempotent posting (finance/inventory) | `awcms-idempotency`                                                                                       |
-| RBAC/ABAC                     | `awcms-abac-guard`                                                                                                  |
-| Sync HMAC                     | `awcms-sync-hmac`                                                                                                   |
-| Logging/masking               | `awcms-audit-log` + `awcms-sensitive-data`                                                                        |
-| Prompt Review PR              | `awcms-pr-review`                                                                                                   |
-| Prompt Security Review        | `awcms-security-review`                                                                                             |
-| Prompt Production Preflight   | `awcms-production-preflight`                                                                                        |
-| Testing                       | `awcms-testing`                                                                                                     |
-| UI/UX                         | `awcms-ui-screen`                                                                                                   |
-| Release/versioning            | `awcms-release`                                                                                                     |
+| Prompt / kebutuhan                     | Skill (rencana)                                                                                                 |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Prompt Induk / Per Issue               | `awcms-implement-issue`                                                                                         |
+| Prompt Skeleton / Sprint               | `awcms-implement-issue` + `awcms-new-module` / `awcms-new-migration` / `awcms-new-endpoint` / `awcms-new-event` |
+| Idempotent posting (finance/inventory) | `awcms-idempotency`                                                                                             |
+| RBAC/ABAC                              | `awcms-abac-guard`                                                                                              |
+| Sync HMAC                              | `awcms-sync-hmac`                                                                                               |
+| Logging/masking                        | `awcms-audit-log` + `awcms-sensitive-data`                                                                      |
+| Prompt Review PR                       | `awcms-pr-review`                                                                                               |
+| Prompt Security Review                 | `awcms-security-review`                                                                                         |
+| Prompt Production Preflight            | `awcms-production-preflight`                                                                                    |
+| Testing                                | `awcms-testing`                                                                                                 |
+| UI/UX                                  | `awcms-ui-screen`                                                                                               |
+| Release/versioning                     | `awcms-release`                                                                                                 |
 
 Selain skill, prompt utama juga direncanakan tersedia sebagai **subagent** siap-delegasi di `.claude/agents/` begitu dibuat:
 
-| Prompt                   | Subagent (rencana)          | Mode                       |
-| ------------------------ | ---------------------------- | -------------------------- |
-| Prompt Induk / Per Issue | `awcms-coder`               | Implementasi penuh         |
-| Prompt Review PR         | `awcms-reviewer`            | Read-only                  |
-| Prompt Security Review   | `awcms-security-auditor`    | Read-only, verdict go-live |
+| Prompt                   | Subagent (rencana)       | Mode                       |
+| ------------------------ | ------------------------ | -------------------------- |
+| Prompt Induk / Per Issue | `awcms-coder`            | Implementasi penuh         |
+| Prompt Review PR         | `awcms-reviewer`         | Read-only                  |
+| Prompt Security Review   | `awcms-security-auditor` | Read-only, verdict go-live |
 
 Alur otomasi target: issue → `awcms-coder` → `awcms-reviewer` → (modul sensitif finance/tax/payroll) `awcms-security-auditor` → merge.
 

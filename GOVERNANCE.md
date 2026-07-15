@@ -8,11 +8,11 @@ AWCMS adalah **platform ERP dan integrasi solusi bisnis** milik AhliWeb, dibangu
 
 ## Peran
 
-| Peran                  | Tanggung jawab                                                                                                                         |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Peran                  | Tanggung jawab                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Maintainer**         | Menetapkan arah produk ERP, meninjau & merge PR, menjaga standar dokumen, merilis versi. Tercantum di [`.github/CODEOWNERS`](.github/CODEOWNERS) (bila ada). |
-| **Kontributor**        | Siapa pun yang mengirim issue/PR sesuai [`CONTRIBUTING.md`](CONTRIBUTING.md).                                                          |
-| **Security responder** | Maintainer yang menangani laporan kerentanan privat (lihat [`SECURITY.md`](SECURITY.md)).                                              |
+| **Kontributor**        | Siapa pun yang mengirim issue/PR sesuai [`CONTRIBUTING.md`](CONTRIBUTING.md).                                                                                |
+| **Security responder** | Maintainer yang menangani laporan kerentanan privat (lihat [`SECURITY.md`](SECURITY.md)).                                                                    |
 
 ## Pengambilan keputusan
 

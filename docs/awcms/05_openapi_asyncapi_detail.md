@@ -49,24 +49,24 @@ Response error:
 
 ## Header standard
 
-| Header               |                       Wajib | Fungsi                  |
-| ---------------------- | ---------------------------: | ------------------------ |
-| `Authorization`      |           Ya kecuali public | Bearer token            |
-| `X-AWCMS-Tenant-ID`  |  Ya untuk tenant-scoped API | Tenant aktif            |
-| `Idempotency-Key`    | Ya untuk mutation high-risk | Anti duplicate mutation |
-| `X-Correlation-ID`   |                    Opsional | Trace request           |
-| `X-Request-ID`       |                    Opsional | Trace client request    |
-| `Accept-Language`    |                    Opsional | Locale                  |
-| `X-AWCMS-Node-ID`    |               Ya untuk sync | Sync node               |
-| `X-AWCMS-Timestamp`  |        Ya untuk signed sync | Anti replay             |
-| `X-AWCMS-Signature`  |               Ya untuk sync | HMAC signature          |
+| Header              |                       Wajib | Fungsi                  |
+| ------------------- | --------------------------: | ----------------------- |
+| `Authorization`     |           Ya kecuali public | Bearer token            |
+| `X-AWCMS-Tenant-ID` |  Ya untuk tenant-scoped API | Tenant aktif            |
+| `Idempotency-Key`   | Ya untuk mutation high-risk | Anti duplicate mutation |
+| `X-Correlation-ID`  |                    Opsional | Trace request           |
+| `X-Request-ID`      |                    Opsional | Trace client request    |
+| `Accept-Language`   |                    Opsional | Locale                  |
+| `X-AWCMS-Node-ID`   |               Ya untuk sync | Sync node               |
+| `X-AWCMS-Timestamp` |        Ya untuk signed sync | Anti replay             |
+| `X-AWCMS-Signature` |               Ya untuk sync | HMAC signature          |
 
 ## Soft delete API standard
 
 DELETE pada resource tenant-scoped yang deletable berarti **soft delete**, bukan physical delete. Endpoint harus terdokumentasi di OpenAPI dengan perilaku berikut:
 
 | Pola                                   | Fungsi                  | Catatan                                                                            |
-| --------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| -------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------- |
 | `DELETE /<resources>/{id}`             | Soft delete resource    | Isi `deleted_at`, `deleted_by`, `delete_reason`; high-risk perlu `Idempotency-Key` |
 | `POST /<resources>/{id}/restore`       | Restore resource        | Validasi konflik unique key, status lifecycle, ABAC, dan audit                     |
 | `POST /<resources>/{id}/purge-request` | Request purge/anonymize | Hanya retention/legal; approval bila policy aktif                                  |
@@ -102,7 +102,7 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 ## Error code standard
 
 | Code                         | HTTP | Keterangan                                                       |
-| ----------------------------- | ---: | -------------------------------------------------------------------- |
+| ---------------------------- | ---: | ---------------------------------------------------------------- |
 | `VALIDATION_ERROR`           |  400 | Data tidak valid                                                 |
 | `AUTH_REQUIRED`              |  401 | Belum login                                                      |
 | `TOKEN_EXPIRED`              |  401 | Token kadaluarsa                                                 |
@@ -131,7 +131,7 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 ### Tenant Admin
 
 | Method   | Endpoint                      | Fungsi                       |
-| -------- | ------------------------------ | ----------------------------- |
+| -------- | ----------------------------- | ---------------------------- |
 | GET      | `/setup/status`               | Status setup                 |
 | POST     | `/setup/initialize`           | Setup tenant pertama         |
 | GET      | `/tenants/current`            | Tenant aktif                 |
@@ -143,7 +143,7 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 ### Identity & Access
 
 | Method | Endpoint                | Fungsi                 |
-| ------ | ------------------------- | ----------------------- |
+| ------ | ----------------------- | ---------------------- |
 | POST   | `/auth/login`           | Login                  |
 | POST   | `/auth/logout`          | Logout                 |
 | GET    | `/auth/me`              | User aktif             |
@@ -155,7 +155,7 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 ### Profile Identity
 
 | Method   | Endpoint                        | Fungsi                             |
-| -------- | ---------------------------------- | ------------------------------------ |
+| -------- | ------------------------------- | ---------------------------------- |
 | GET/POST | `/profiles`                     | List/create profile                |
 | GET      | `/profiles/{profileId}`         | Detail profile                     |
 | POST     | `/profiles/resolve`             | Resolve/create profile             |
@@ -167,34 +167,34 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 
 ### Master Data & Inventory
 
-| Method    | Endpoint                              | Fungsi                |
-| --------- | ---------------------------------------- | ----------------------- |
-| GET/POST  | `/inventory/items`                     | List/create item      |
-| GET/PATCH | `/inventory/items/{itemId}`            | Detail/update item     |
-| DELETE    | `/inventory/items/{itemId}`            | Soft delete item       |
-| POST      | `/inventory/items/{itemId}/restore`    | Restore item           |
-| GET       | `/inventory/stock-balances`            | Stok                  |
-| GET       | `/inventory/stock-movements`           | Mutasi stok           |
-| POST      | `/inventory/stock-adjustment-requests` | Request adjustment    |
-| GET       | `/inventory/lots`                      | Lot/batch             |
+| Method    | Endpoint                               | Fungsi             |
+| --------- | -------------------------------------- | ------------------ |
+| GET/POST  | `/inventory/items`                     | List/create item   |
+| GET/PATCH | `/inventory/items/{itemId}`            | Detail/update item |
+| DELETE    | `/inventory/items/{itemId}`            | Soft delete item   |
+| POST      | `/inventory/items/{itemId}/restore`    | Restore item       |
+| GET       | `/inventory/stock-balances`            | Stok               |
+| GET       | `/inventory/stock-movements`           | Mutasi stok        |
+| POST      | `/inventory/stock-adjustment-requests` | Request adjustment |
+| GET       | `/inventory/lots`                      | Lot/batch          |
 
 ### Finance & General Ledger
 
-| Method | Endpoint                                  | Fungsi                |
-| ------ | -------------------------------------------- | ----------------------- |
-| POST   | `/finance/journal-batches`                 | Buat jurnal draft     |
-| GET    | `/finance/journal-batches/{id}`            | Detail jurnal         |
-| POST   | `/finance/journal-batches/{id}/lines`      | Tambah baris jurnal   |
-| PATCH  | `/finance/journal-batches/{id}/lines/{lineId}` | Update baris jurnal |
-| DELETE | `/finance/journal-batches/{id}/lines/{lineId}` | Hapus baris jurnal   |
-| POST   | `/finance/journal-batches/{id}/post`       | Posting jurnal        |
-| GET    | `/finance/documents/{id}`                  | Detail financial document |
-| POST   | `/finance/documents/{id}/cancel-request`   | Request cancel        |
+| Method | Endpoint                                       | Fungsi                    |
+| ------ | ---------------------------------------------- | ------------------------- |
+| POST   | `/finance/journal-batches`                     | Buat jurnal draft         |
+| GET    | `/finance/journal-batches/{id}`                | Detail jurnal             |
+| POST   | `/finance/journal-batches/{id}/lines`          | Tambah baris jurnal       |
+| PATCH  | `/finance/journal-batches/{id}/lines/{lineId}` | Update baris jurnal       |
+| DELETE | `/finance/journal-batches/{id}/lines/{lineId}` | Hapus baris jurnal        |
+| POST   | `/finance/journal-batches/{id}/post`           | Posting jurnal            |
+| GET    | `/finance/documents/{id}`                      | Detail financial document |
+| POST   | `/finance/documents/{id}/cancel-request`       | Request cancel            |
 
 ### Warehouse Management
 
 | Method   | Endpoint                                         | Fungsi                            |
-| -------- | ---------------------------------------------------- | ------------------------------------ |
+| -------- | ------------------------------------------------ | --------------------------------- |
 | GET/POST | `/warehouses`                                    | List/create warehouse             |
 | GET      | `/warehouses/{warehouseId}/stock`                | Stok gudang                       |
 | GET/POST | `/warehouses/{warehouseId}/bins`                 | Bin list/create                   |
@@ -209,7 +209,7 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 ### Accounting Tax/Coretax
 
 | Method   | Endpoint                          | Fungsi               |
-| -------- | ------------------------------------ | ---------------------- |
+| -------- | --------------------------------- | -------------------- |
 | GET/POST | `/tax/profiles`                   | Tax profile          |
 | GET/POST | `/tax/business-units`             | NITKU/ID TKU         |
 | GET/POST | `/tax/party-profiles`             | Party tax profile    |
@@ -220,28 +220,28 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 
 ### Procurement & Vendor Management
 
-| Method   | Endpoint                                | Fungsi                       |
-| -------- | ------------------------------------------- | ------------------------------- |
-| GET/POST | `/procurement/vendors`                   | Vendor master                |
-| GET/POST | `/procurement/purchase-requests`         | Purchase request              |
-| POST     | `/procurement/purchase-requests/{id}/approve` | Approve PR                |
-| GET/POST | `/procurement/purchase-orders`           | Purchase order                |
-| POST     | `/procurement/purchase-orders/{id}/approve` | Approve PO                  |
-| POST     | `/procurement/purchase-orders/{id}/receive` | Terima barang (goods receipt) |
-| GET      | `/procurement/vendors/{id}/invoices`     | Invoice vendor                |
-| DELETE   | `/procurement/vendors/{id}`              | Soft delete vendor             |
-| POST     | `/procurement/vendors/{id}/restore`      | Restore vendor                 |
-| POST     | `/webhooks/procurement/vendor-portal`    | Webhook vendor portal          |
+| Method   | Endpoint                                      | Fungsi                        |
+| -------- | --------------------------------------------- | ----------------------------- |
+| GET/POST | `/procurement/vendors`                        | Vendor master                 |
+| GET/POST | `/procurement/purchase-requests`              | Purchase request              |
+| POST     | `/procurement/purchase-requests/{id}/approve` | Approve PR                    |
+| GET/POST | `/procurement/purchase-orders`                | Purchase order                |
+| POST     | `/procurement/purchase-orders/{id}/approve`   | Approve PO                    |
+| POST     | `/procurement/purchase-orders/{id}/receive`   | Terima barang (goods receipt) |
+| GET      | `/procurement/vendors/{id}/invoices`          | Invoice vendor                |
+| DELETE   | `/procurement/vendors/{id}`                   | Soft delete vendor            |
+| POST     | `/procurement/vendors/{id}/restore`           | Restore vendor                |
+| POST     | `/webhooks/procurement/vendor-portal`         | Webhook vendor portal         |
 
 ### Sync Storage
 
 | Method | Endpoint                       | Fungsi                |
-| ------ | --------------------------------- | ----------------------- |
+| ------ | ------------------------------ | --------------------- |
 | POST   | `/sync/push`                   | Push event            |
-| POST   | `/sync/pull`                   | Pull event             |
-| GET    | `/sync/status`                 | Sync status            |
-| GET    | `/sync/conflicts`              | List conflict          |
-| POST   | `/sync/conflicts/{id}/resolve` | Resolve conflict       |
+| POST   | `/sync/pull`                   | Pull event            |
+| GET    | `/sync/status`                 | Sync status           |
+| GET    | `/sync/conflicts`              | List conflict         |
+| POST   | `/sync/conflicts/{id}/resolve` | Resolve conflict      |
 | POST   | `/sync/objects/presign`        | Object upload/presign |
 
 ### Module Management
@@ -249,7 +249,7 @@ Default response list/detail tidak menampilkan soft-deleted record. Detail soft-
 Database-backed, tenant-aware module registry — generic infrastructure for managing every other registered module, not a domain-specific feature.
 
 | Method | Endpoint                               | Fungsi                                                     |
-| ------ | ----------------------------------------- | -------------------------------------------------------------- |
+| ------ | -------------------------------------- | ---------------------------------------------------------- |
 | GET    | `/modules`                             | Katalog modul (code + DB registry)                         |
 | GET    | `/modules/{moduleKey}`                 | Detail satu modul                                          |
 | POST   | `/modules/sync`                        | Sync descriptor code → DB registry                         |
@@ -267,14 +267,14 @@ Tidak ada event AsyncAPI baru untuk modul ini — perubahan lifecycle/config mod
 
 ### AI, Reports, Logs, Workflow, Security
 
-| Modul    | Endpoint utama                                                     |
-| -------- | ---------------------------------------------------------------------- |
-| AI       | `POST /ai/business-analyst/chat`                                   |
-| Reports  | `GET /reports/finance/daily`, `GET /reports/warehouse/dashboard`  |
+| Modul    | Endpoint utama                                                   |
+| -------- | ---------------------------------------------------------------- |
+| AI       | `POST /ai/business-analyst/chat`                                 |
+| Reports  | `GET /reports/finance/daily`, `GET /reports/warehouse/dashboard` |
 | Logs     | `GET /logs/recent`, `GET /logs/audit`, `GET /logs/security`      |
-| DB Pool  | `GET /database/pool/health`                                        |
+| DB Pool  | `GET /database/pool/health`                                      |
 | Workflow | `GET /workflow/tasks`, `POST /workflow/tasks/{id}/decision`      |
-| Security | `POST /security/go-live-gates/evaluate`                            |
+| Security | `POST /security/go-live-gates/evaluate`                          |
 
 Modul lanjutan (Manufacturing, HR & Payroll, integrasi payment gateway/marketplace/logistik) belum memiliki daftar endpoint final — akan ditambahkan saat modul tersebut dirancang detail, mengikuti pola base path `/api/v1/<module>` yang sama.
 
@@ -338,27 +338,27 @@ flowchart LR
 
 ## Event utama (rencana)
 
-| Event                            | Producer         | Consumer                              |
-| ---------------------------------- | ------------------ | ---------------------------------------- |
-| `tenant.created`                 | Tenant Admin      | Audit, reporting                       |
-| `identity.login.succeeded`       | Identity          | Audit/security                         |
-| `profile.created`                | Profile           | Procurement, reporting                 |
-| `inventory.item.created`         | Master Data       | Reporting, sync                        |
-| `inventory.item.soft_deleted`    | Master Data       | Reporting, sync                        |
-| `inventory.item.restored`        | Master Data       | Reporting, sync                        |
-| `finance.journal.posted`         | Finance & GL      | Inventory, Tax, Procurement, Sync, Reporting |
-| `finance.document.generated`     | Finance & GL      | Reporting, sync                        |
-| `warehouse.transfer.shipped`     | Warehouse         | Inventory, Sync, Reporting              |
-| `warehouse.transfer.received`    | Warehouse         | Inventory, Sync, Reporting              |
-| `tax.vat_invoice.generated`      | Tax               | Reporting, audit                       |
-| `tax.coretax.batch_exported`     | Tax               | Sync, audit                            |
-| `procurement.purchase_order.approved` | Procurement  | Reporting, audit                       |
-| `procurement.goods_receipt.posted` | Procurement    | Inventory, Reporting                    |
-| `sync.conflict.detected`         | Sync              | Workflow, audit                        |
-| `workflow.task.approved`         | Workflow          | Requesting module                       |
-| `database.pool.saturated`        | DB Connectivity   | Observability, security                 |
-| `database.pool.rejected`         | DB Connectivity   | Observability, security                 |
-| `security.golive.blocked`        | Security          | Owner/admin                             |
+| Event                                 | Producer        | Consumer                                     |
+| ------------------------------------- | --------------- | -------------------------------------------- |
+| `tenant.created`                      | Tenant Admin    | Audit, reporting                             |
+| `identity.login.succeeded`            | Identity        | Audit/security                               |
+| `profile.created`                     | Profile         | Procurement, reporting                       |
+| `inventory.item.created`              | Master Data     | Reporting, sync                              |
+| `inventory.item.soft_deleted`         | Master Data     | Reporting, sync                              |
+| `inventory.item.restored`             | Master Data     | Reporting, sync                              |
+| `finance.journal.posted`              | Finance & GL    | Inventory, Tax, Procurement, Sync, Reporting |
+| `finance.document.generated`          | Finance & GL    | Reporting, sync                              |
+| `warehouse.transfer.shipped`          | Warehouse       | Inventory, Sync, Reporting                   |
+| `warehouse.transfer.received`         | Warehouse       | Inventory, Sync, Reporting                   |
+| `tax.vat_invoice.generated`           | Tax             | Reporting, audit                             |
+| `tax.coretax.batch_exported`          | Tax             | Sync, audit                                  |
+| `procurement.purchase_order.approved` | Procurement     | Reporting, audit                             |
+| `procurement.goods_receipt.posted`    | Procurement     | Inventory, Reporting                         |
+| `sync.conflict.detected`              | Sync            | Workflow, audit                              |
+| `workflow.task.approved`              | Workflow        | Requesting module                            |
+| `database.pool.saturated`             | DB Connectivity | Observability, security                      |
+| `database.pool.rejected`              | DB Connectivity | Observability, security                      |
+| `security.golive.blocked`             | Security        | Owner/admin                                  |
 
 ## Contract testing requirement
 

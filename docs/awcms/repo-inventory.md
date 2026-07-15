@@ -10,9 +10,9 @@
 
 Belum ada modul terdaftar di `src/modules/index.ts`'s `listModules()` — repo ini baru berisi keputusan rebuild (ADR-0001), `AGENTS.md`, dan dokumen governance. Begitu implementasi dimulai, tabel ini akan diisi otomatis dengan bentuk yang sama seperti basis:
 
-| Key                    | Version | Status | Type     | Dependencies |
-| ---------------------- | ------- | ------ | -------- | -------------- |
-| _(belum ada)_          | —       | —      | —        | —              |
+| Key           | Version | Status | Type | Dependencies |
+| ------------- | ------- | ------ | ---- | ------------ |
+| _(belum ada)_ | —       | —      | —    | —            |
 
 Urutan modul yang direncanakan (lihat `AGENTS.md` §Peta modul, [`01_canvas_induk.md`](01_canvas_induk.md)):
 
@@ -30,9 +30,9 @@ Modul baru wajib mengikuti struktur modular monolith yang sama dengan basis (`mo
 
 Belum ada berkas migrasi di `sql/`. Konvensi penomoran yang wajib diikuti (lihat ADR-0001 dan referensi ADR-0014 milik basis soal reserved namespace): base modular monolith standar (fondasi tenant/identity/access/sync/dsb., bila di-porting literal dari `awcms-mini`) memakai namespace `1-899`; migrasi modul ERP/integrasi milik `awcms` sendiri **dimulai dari `900` ke atas**, agar tidak pernah bentrok dengan nomor migrasi fondasi yang di-porting atau di-referensikan dari basis.
 
-| #   | File |
-| --- | ---- |
-| _(belum ada migrasi)_ | — |
+| #                     | File |
+| --------------------- | ---- |
+| _(belum ada migrasi)_ | —    |
 
 ## Tabel & Row-Level Security
 
@@ -40,12 +40,12 @@ Belum ada tabel. Begitu migrasi pertama diterapkan, standar wajib (`AGENTS.md` "
 
 **Kandidat allow-list exempt RLS** (pola yang sama seperti basis — hanya berlaku untuk tabel infra/registry global, bukan data bisnis):
 
-| Tabel (pola)                     | Alasan                                                                                                    |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `awcms_schema_migrations`         | Ledger migrasi — infra bookkeeping, bukan data tenant.                                                     |
-| `awcms_tenants`                    | Registry tenant itu sendiri — tabel root yang direferensikan `tenant_id` tabel lain.                        |
-| `awcms_permissions`                | Katalog permission — global, RLS-free.                                                                     |
-| `awcms_modules`                    | Registry modul — katalog global yang sama untuk setiap tenant.                                             |
+| Tabel (pola)              | Alasan                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| `awcms_schema_migrations` | Ledger migrasi — infra bookkeeping, bukan data tenant.                               |
+| `awcms_tenants`           | Registry tenant itu sendiri — tabel root yang direferensikan `tenant_id` tabel lain. |
+| `awcms_permissions`       | Katalog permission — global, RLS-free.                                               |
+| `awcms_modules`           | Registry modul — katalog global yang sama untuk setiap tenant.                       |
 
 Tidak ada tabel bisnis ERP (jurnal, transaksi stok, payroll run, dst.) yang boleh masuk daftar exempt ini — seluruh tabel semacam itu wajib RLS+FORCE tanpa pengecualian.
 

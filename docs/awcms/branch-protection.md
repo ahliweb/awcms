@@ -37,7 +37,7 @@ do not assume it is already in sync:
 | `Repo hygiene (Bun-only + no secrets)`                 | `ci.yml` / `hygiene`              | Bun-only tooling convention, no committed `.env`, both `docker-compose*.yml` files parse                                                                                                             |
 | `Analyze (actions)`                                    | `codeql.yml` / `analyze`          | CodeQL static analysis of GitHub Actions workflow files                                                                                                                                              |
 | `Analyze (javascript-typescript)`                      | `codeql.yml` / `analyze`          | CodeQL static analysis (security-extended + security-and-quality queries) of the TypeScript/Astro source                                                                                             |
-| `Changeset required for behavior changes`              | `changesets.yml` / `policy-check` | Fails a PR touching non-docs/non-agent-tooling files without a new `.changeset/*.md` — see `release-process.md` §PR-time gate (belum ditulis di awcms)                                              |
+| `Changeset required for behavior changes`              | `changesets.yml` / `policy-check` | Fails a PR touching non-docs/non-agent-tooling files without a new `.changeset/*.md` — see `release-process.md` §PR-time gate (belum ditulis di awcms)                                               |
 
 `GitGuardian Security Checks` (a GitHub App check, not a workflow file in
 this repo) should also be included in the required list once the org's
