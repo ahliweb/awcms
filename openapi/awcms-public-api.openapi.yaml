@@ -1,0 +1,816 @@
+openapi: 3.1.0
+info:
+  title: AWCMS Public API
+  version: 0.1.0
+  description: |-
+    REST contract for the AWCMS foundation modules (tenant-admin, profile-identity,
+    identity-access, logging). Every endpoint that accepts a body enforces an
+    application-level size cap (default 128 KiB) independent of any reverse-proxy
+    limit; a body over the limit is rejected with `413 Payload Too Large` /
+    `PAYLOAD_TOO_LARGE`, using the same envelope as every other error response.
+servers:
+  - url: http://localhost:4321
+    description: Local development
+tags:
+  - name: Foundation
+    description: Foundation and platform endpoints.
+  - name: Tenant Admin
+    description: Tenant, office, tenant settings, and the one-time setup wizard.
+  - name: Identity & Access
+    description: Login identity, session authentication, and tenant user membership.
+  - name: Profile Identity
+    description: Canonical person/organization profile lifecycle, identifiers, and entity links.
+  - name: Logging & Audit
+    description: Cross-module audit trail (awcms_audit_events) and its read API.
+security:
+  - bearerAuth: []
+    tenantHeader: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque session token issued by POST /auth/login.
+    tenantHeader:
+      type: apiKey
+      in: header
+      name: X-AWCMS-Tenant-ID
+      description: Active tenant context for tenant-scoped API.
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Validation error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+    Unauthorized:
+      description: Missing or invalid session.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+    Forbidden:
+      description: Access denied by RBAC/ABAC.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+  schemas:
+    ApiMeta:
+      type: object
+      properties:
+        correlationId: { type: string }
+        requestId: { type: string }
+    ApiError:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, enum: [false] }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+        meta: { $ref: "#/components/schemas/ApiMeta" }
+    Office:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        officeCode: { type: string }
+        officeName: { type: string }
+        officeType: { type: string }
+        parentOfficeId: { type: string, format: uuid, nullable: true }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProfileMasked:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        profileType: { type: string }
+        displayName: { type: string }
+        legalName: { type: string, nullable: true }
+        status: { type: string }
+        verificationStatus: { type: string }
+        riskLevel: { type: string }
+        mergedIntoProfileId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: string, format: date-time, nullable: true }
+        deleteReason: { type: string, nullable: true }
+        restoredAt: { type: string, format: date-time, nullable: true }
+    ProfileIdentifierMasked:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        profileId: { type: string, format: uuid }
+        identifierType: { type: string }
+        maskedValue: { type: string }
+        isPrimary: { type: boolean }
+        verificationStatus: { type: string }
+    ProfileEntityLink:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        moduleKey: { type: string }
+        entityType: { type: string }
+        entityId: { type: string, format: uuid }
+        linkRole: { type: string }
+        createdAt: { type: string, format: date-time }
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        actorTenantUserId: { type: string, format: uuid, nullable: true }
+        moduleKey: { type: string }
+        action: { type: string }
+        resourceType: { type: string }
+        resourceId: { type: string, nullable: true }
+        severity: { type: string }
+        message: { type: string }
+        attributes: { type: object, nullable: true }
+        correlationId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      tags: [Foundation]
+      summary: Liveness/module-count probe.
+      security: []
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string }
+                      service: { type: string }
+                      runtime: { type: string }
+                      moduleCount: { type: integer }
+                      generatedAt: { type: string, format: date-time }
+  /api/v1/setup/status:
+    get:
+      operationId: getSetupStatus
+      tags: [Tenant Admin]
+      summary: Whether the one-time setup wizard has already run.
+      security: []
+      responses:
+        "200":
+          description: Setup lock state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      locked: { type: boolean }
+                      tenantId: { type: string, format: uuid }
+                      lockedAt: { type: string, format: date-time }
+  /api/v1/setup/initialize:
+    post:
+      operationId: postSetupInitialize
+      tags: [Tenant Admin]
+      summary: Bootstrap the first tenant, owner, office, role, and access assignment. Rejected once already locked.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                [
+                  tenantCode,
+                  tenantName,
+                  officeCode,
+                  officeName,
+                  ownerLoginIdentifier,
+                  ownerPassword,
+                  ownerDisplayName
+                ]
+              properties:
+                tenantCode: { type: string }
+                tenantName: { type: string }
+                officeCode: { type: string }
+                officeName: { type: string }
+                ownerLoginIdentifier: { type: string }
+                ownerPassword: { type: string, minLength: 8 }
+                ownerDisplayName: { type: string }
+      responses:
+        "200":
+          description: Tenant bootstrapped.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      tenantId: { type: string, format: uuid }
+                      officeId: { type: string, format: uuid }
+                      ownerProfileId: { type: string, format: uuid }
+                      ownerIdentityId: { type: string, format: uuid }
+                      ownerTenantUserId: { type: string, format: uuid }
+                      ownerRoleId: { type: string, format: uuid }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403":
+          description: Setup already completed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+  /api/v1/auth/login:
+    post:
+      operationId: postAuthLogin
+      tags: [Identity & Access]
+      summary: Authenticate with a login identifier and password; issues a session token.
+      security: []
+      parameters:
+        - name: X-AWCMS-Tenant-ID
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [loginIdentifier, password]
+              properties:
+                loginIdentifier: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Session issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      token: { type: string }
+                      expiresAt: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429":
+          description: Too many login attempts from this source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+  /api/v1/auth/logout:
+    post:
+      operationId: postAuthLogout
+      tags: [Identity & Access]
+      summary: Revoke the current session.
+      responses:
+        "200":
+          description: Logged out.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      loggedOut: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/me:
+    get:
+      operationId: getAuthMe
+      tags: [Identity & Access]
+      summary: Current authenticated identity.
+      responses:
+        "200":
+          description: Current identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      identityId: { type: string, format: uuid }
+                      loginIdentifier: { type: string }
+                      profileId: { type: string, format: uuid }
+                      status: { type: string }
+                      lastLoginAt:
+                        { type: string, format: date-time, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/settings:
+    get:
+      operationId: getSettings
+      tags: [Tenant Admin]
+      summary: Current tenant's settings.
+      responses:
+        "200":
+          description: Tenant settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      tenantId: { type: string, format: uuid }
+                      tenantName: { type: string }
+                      legalName: { type: string, nullable: true }
+                      defaultLocale: { type: string }
+                      defaultTheme: { type: string }
+                      timezone: { type: string }
+                      featureFlags: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    patch:
+      operationId: patchSettings
+      tags: [Tenant Admin]
+      summary: Update tenant settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tenantName: { type: string }
+                legalName: { type: string, nullable: true }
+                defaultLocale: { type: string, enum: [id, en, ms, ar] }
+                defaultTheme: { type: string, enum: [light, dark, system] }
+                timezone: { type: string }
+                featureFlags: { type: object }
+      responses:
+        "200":
+          description: Updated tenant settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { type: object }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/offices:
+    get:
+      operationId: listOffices
+      tags: [Tenant Admin]
+      summary: List offices for the current tenant.
+      responses:
+        "200":
+          description: Office list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/Office" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createOffice
+      tags: [Tenant Admin]
+      summary: Create an office.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [officeCode, officeName]
+              properties:
+                officeCode: { type: string }
+                officeName: { type: string }
+                officeType:
+                  {
+                    type: string,
+                    enum: [head_office, branch, store, warehouse, other]
+                  }
+                parentOfficeId: { type: string, format: uuid, nullable: true }
+      responses:
+        "200":
+          description: Office created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { $ref: "#/components/schemas/Office" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/offices/{id}:
+    get:
+      operationId: getOffice
+      tags: [Tenant Admin]
+      summary: Fetch one office.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Office detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { $ref: "#/components/schemas/Office" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateOffice
+      tags: [Tenant Admin]
+      summary: Update an office.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                officeName: { type: string }
+                officeType:
+                  {
+                    type: string,
+                    enum: [head_office, branch, store, warehouse, other]
+                  }
+                status: { type: string, enum: [active, inactive] }
+      responses:
+        "200":
+          description: Office updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { $ref: "#/components/schemas/Office" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/profiles:
+    get:
+      operationId: listProfiles
+      tags: [Profile Identity]
+      summary: List/search profiles for the current tenant.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema: { type: string, enum: [person, organization] }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Profile list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/ProfileMasked" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createProfile
+      tags: [Profile Identity]
+      summary: Create a person/organization profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profileType, displayName]
+              properties:
+                profileType: { type: string, enum: [person, organization] }
+                displayName: { type: string }
+                legalName: { type: string, nullable: true }
+                riskLevel: { type: string, enum: [low, normal, high] }
+      responses:
+        "200":
+          description: Profile created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { $ref: "#/components/schemas/ProfileMasked" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/profiles/resolve:
+    get:
+      operationId: resolveProfile
+      tags: [Profile Identity]
+      summary: Resolve a profile by a typed identifier (email/phone/national_id/tax_id/...).
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            {
+              type: string,
+              enum:
+                [
+                  email,
+                  phone,
+                  whatsapp,
+                  national_id,
+                  tax_id,
+                  external_code,
+                  other
+                ]
+            }
+        - name: value
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Matching profile, if any.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    nullable: true
+                    properties:
+                      profile: { $ref: "#/components/schemas/ProfileMasked" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/profiles/{id}:
+    get:
+      operationId: getProfile
+      tags: [Profile Identity]
+      summary: Fetch one profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Profile detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { $ref: "#/components/schemas/ProfileMasked" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateProfile
+      tags: [Profile Identity]
+      summary: Update a profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName: { type: string }
+                legalName: { type: string, nullable: true }
+                riskLevel: { type: string, enum: [low, normal, high] }
+                verificationStatus:
+                  { type: string, enum: [unverified, pending, verified] }
+                status: { type: string, enum: [active, inactive] }
+      responses:
+        "200":
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { $ref: "#/components/schemas/ProfileMasked" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteProfile
+      tags: [Profile Identity]
+      summary: Soft delete a profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: Profile soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      status: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/profiles/{id}/identifiers:
+    post:
+      operationId: addProfileIdentifier
+      tags: [Profile Identity]
+      summary: Attach a typed identifier (email/phone/national_id/tax_id/...) to a profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifierType, value]
+              properties:
+                identifierType:
+                  {
+                    type: string,
+                    enum:
+                      [
+                        email,
+                        phone,
+                        whatsapp,
+                        national_id,
+                        tax_id,
+                        external_code,
+                        other
+                      ]
+                  }
+                value: { type: string }
+                isPrimary: { type: boolean }
+      responses:
+        "200":
+          description: Identifier attached (masked value returned).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { $ref: "#/components/schemas/ProfileIdentifierMasked" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/profiles/{id}/links:
+    get:
+      operationId: listProfileLinks
+      tags: [Profile Identity]
+      summary: List cross-module entity links for a profile (e.g. employee, vendor, customer).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Entity link list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          { $ref: "#/components/schemas/ProfileEntityLink" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/logs/audit:
+    get:
+      operationId: listAuditEvents
+      tags: [Logging & Audit]
+      summary: List audit trail events for the current tenant.
+      parameters:
+        - name: resourceType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Audit event list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/AuditEvent" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }

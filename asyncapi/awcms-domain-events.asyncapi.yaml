@@ -1,0 +1,51 @@
+asyncapi: 3.0.0
+info:
+  title: AWCMS Domain Events
+  version: 0.1.0
+  description: |-
+    Domain event contract for AWCMS. No module publishes a domain event yet in
+    Sprint 1/2 — this file exists so `bun run api:spec:check` can validate that
+    every `ModuleDescriptor.events.publishes` entry has a matching channel here
+    as soon as one is added (docs/awcms/10_template_kode_coding_standard.md
+    §Domain event envelope).
+channels: {}
+operations: {}
+components:
+  schemas:
+    DomainEventEnvelope:
+      type: object
+      required:
+        [
+          eventId,
+          eventType,
+          eventVersion,
+          tenantId,
+          aggregateType,
+          aggregateId,
+          occurredAt,
+          payload,
+          metadata
+        ]
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        eventVersion: { type: string }
+        tenantId: { type: string, format: uuid }
+        nodeId: { type: string, format: uuid }
+        aggregateType: { type: string }
+        aggregateId: { type: string }
+        occurredAt: { type: string, format: date-time }
+        actor:
+          type: object
+          properties:
+            tenantUserId: { type: string, format: uuid }
+            profileId: { type: string, format: uuid }
+        correlationId: { type: string }
+        causationId: { type: string }
+        payload: {}
+        metadata:
+          type: object
+          required: [sourceModule, schemaVersion]
+          properties:
+            sourceModule: { type: string }
+            schemaVersion: { type: string }
