@@ -2,7 +2,7 @@
 
 ## Ringkasan proyek
 
-AWCMS adalah **platform ERP dan integrasi solusi bisnis** milik AhliWeb. Repo ini dibangun ulang (lihat [ADR-0001](docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) di atas basis teknologi **awcms-mini** — *modular monolith standard* Bun + Astro 7 + PostgreSQL — namun skop produknya jauh lebih besar: modul ERP (keuangan, inventori, procurement, manufaktur, HR/payroll) dan integrasi dengan solusi bisnis eksternal (payment gateway, marketplace, Coretax, logistik).
+AWCMS adalah **platform ERP dan integrasi solusi bisnis** milik AhliWeb. Repo ini dibangun ulang (lihat [ADR-0001](docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) di atas basis teknologi **awcms-mini** — _modular monolith standard_ Bun + Astro 7 + PostgreSQL — namun skop produknya jauh lebih besar: modul ERP (keuangan, inventori, procurement, manufaktur, HR/payroll) dan integrasi dengan solusi bisnis eksternal (payment gateway, marketplace, Coretax, logistik).
 
 Baca dokumen ini sebelum mengerjakan task apa pun di repo ini. Ini adalah kontrak kerja teknis — aturan wajib, guardrail keamanan, dan alur task.
 
@@ -56,15 +56,15 @@ docs/
 
 ## Peta modul (target awal)
 
-| Kategori           | Modul contoh                                         |
-| ------------------ | ------------------------------------------------------ |
+| Kategori                        | Modul contoh                                                             |
+| ------------------------------- | ------------------------------------------------------------------------ |
 | Fondasi (dari basis awcms-mini) | Tenant, Identity, Profile, Access (RBAC/ABAC), Sync, Workflow, Reporting |
-| ERP — Finance       | General ledger, AP/AR, tax/Coretax export             |
-| ERP — Inventory     | Warehouse, stock adjustment, transfer                 |
-| ERP — Procurement   | Purchase request/order, vendor management             |
-| ERP — Manufacturing | BOM, production order                                 |
-| ERP — HR/Payroll    | Employee, payroll run, attendance                      |
-| Integrasi           | Payment gateway, marketplace, logistik, Coretax        |
+| ERP — Finance                   | General ledger, AP/AR, tax/Coretax export                                |
+| ERP — Inventory                 | Warehouse, stock adjustment, transfer                                    |
+| ERP — Procurement               | Purchase request/order, vendor management                                |
+| ERP — Manufacturing             | BOM, production order                                                    |
+| ERP — HR/Payroll                | Employee, payroll run, attendance                                        |
+| Integrasi                       | Payment gateway, marketplace, logistik, Coretax                          |
 
 Modul baru mengikuti urutan: fondasi (tenant/identity/access) → modul ERP yang saling bergantung sesuai domain (mis. inventory sebelum manufacturing) → integrasi eksternal.
 
@@ -82,9 +82,20 @@ Lihat [`CONTRIBUTING.md`](CONTRIBUTING.md#definition-of-done).
 - [`GOVERNANCE.md`](GOVERNANCE.md) — tata kelola & pengambilan keputusan.
 - [`docs/adr/`](docs/adr/README.md) — keputusan arsitektural (fondasi & ERP-spesifik).
 - [`docs/awcms/`](docs/awcms/README.md) — paket dokumen teknis detail per modul (PRD/SRS/ERD/OpenAPI/AsyncAPI), disusun bertahap seiring modul ERP dikembangkan.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — apa yang **sudah ada di kode** (fondasi Sprint 1–2) vs target.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — proses kontribusi & Definition of Done.
 - [`SECURITY.md`](SECURITY.md) — kebijakan keamanan & pelaporan kerentanan.
 
+## Skill & subagent (Claude Code)
+
+Repo ini dilengkapi playbook pengembangan berbasis agent, diadaptasi dari [awcms-mini](https://github.com/ahliweb/awcms-mini):
+
+- [`.claude/skills/`](.claude/skills/README.md) — 45 skill tingkat-proyek yang meng-encode standar `docs/awcms/` (scaffold modul, migration, endpoint, ABAC guard, audit log, testing, security review, deploy, dst.). Dipanggil otomatis oleh model atau manual via `/<nama-skill>`.
+- [`.claude/agents/`](.claude/skills/README.md#subagents-claudeagents) — subagent `awcms-coder` (implementasi issue end-to-end), `awcms-reviewer` (review PR read-only), `awcms-security-auditor` (audit keamanan read-only).
+- [`docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf`](docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf) — panduan penggunaan keluarga agent AWCMS.
+
+Skill/agent mendeskripsikan pola **target** standar — padankan ke skop ERP repo ini (peta sprint di [`docs/awcms/11_implementation_blueprint.md`](docs/awcms/11_implementation_blueprint.md)); nomor issue `#NNN` di dalamnya merujuk epik repo acuan sebagai contoh, bukan tracker repo ini.
+
 ## Mulai dari sini
 
-Repo ini masih tahap fondasi ulang — belum ada kode modul ERP. Sebelum menambah modul pertama, pastikan skeleton Astro + Bun + migration runner tersedia (lihat referensi arsitektur di ADR-0001), lalu tambah modul fondasi (tenant/identity/access) sebelum modul domain ERP.
+Skeleton Astro + Bun + migration runner dan modul fondasi Sprint 1–2 (`logging`, `tenant-admin`, `profile-identity`, `identity-access`) **sudah ada** (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)). Untuk melanjutkan: pilih modul berikut dari peta sprint, mulai dari `awcms-implement-issue`/`awcms-new-module`, dan lengkapi RBAC/ABAC + Module Management sebelum modul domain ERP.

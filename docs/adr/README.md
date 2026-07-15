@@ -1,12 +1,12 @@
 # Architecture Decision Records (ADR)
 
-Folder ini menyimpan **catatan keputusan arsitektural** AWCMS (platform ERP & integrasi bisnis). Setiap keputusan penting (arsitektur, runtime, kontrak, keamanan, atau penyimpangan dari standar dasar awcms) dicatat sebagai satu berkas ADR agar konteks dan alasannya awet.
+Folder ini menyimpan **catatan keputusan arsitektural** AWCMS (platform ERP & integrasi bisnis). Setiap keputusan penting (arsitektur, runtime, kontrak, keamanan, atau penyimpangan dari standar dasar) dicatat sebagai satu berkas ADR agar konteks dan alasannya awet.
 
-## Hubungan dengan ADR awcms
+## Hubungan dengan repo acuan awcms-mini
 
-Repo ini dibangun di atas fondasi teknis [awcms](https://github.com/ahliweb/awcms) (lihat [ADR-0001](0001-rebuild-on-awcms-foundation-erp-scope.md)). Standar dasar — runtime, RLS, ABAC, offline-first, kontrak API/event — mengikuti ADR di [`awcms/docs/adr/`](https://github.com/ahliweb/awcms/tree/main/docs/adr) **kecuali** ada ADR lokal di sini yang menyatakan penyesuaian eksplisit. ADR di folder ini fokus pada keputusan yang **spesifik untuk skop ERP dan integrasi bisnis** repo ini.
+AWCMS dibangun ulang (lihat [ADR-0001](0001-rebuild-on-awcms-foundation-erp-scope.md)) di atas basis teknis modular monolith [`ahliweb/awcms-mini`](https://github.com/ahliweb/awcms-mini). Namun repo ini bersifat **standalone** — ia menanggung sendiri seluruh fondasi (tidak berbagi base terpisah), sehingga ADR fondasi (runtime, RLS, ABAC, offline-first, kontrak API/event, admission modul) **hidup lokal di folder ini** sebagai ADR-0002…0021, hasil adaptasi dari ADR acuan awcms-mini. ADR yang **spesifik untuk skop ERP & integrasi bisnis** ditambahkan di atasnya.
 
-Relevan khusus: awcms ADR-0013 sudah mendefinisikan lapisan ekstensi **"ERP Extension"** sebagai salah satu boundary model resmi — repo ini adalah realisasi dari lapisan tersebut.
+> Catatan penomoran: ADR-0001 di repo ini adalah keputusan **rebuild** (skop ERP). Prinsip modular monolith yang mendasarinya diadopsi eksplisit oleh ADR-0001 tersebut dan dirinci oleh ADR fondasi 0002–0021 serta [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ## Aturan
 
@@ -28,8 +28,28 @@ flowchart LR
 
 ## Indeks
 
-| ADR                                                                    | Judul                                                                | Status   |
-| ----------------------------------------------------------------------- | --------------------------------------------------------------------- | -------- |
-| [0001](0001-rebuild-on-awcms-foundation-erp-scope.md)              | Rebuild AWCMS di atas fondasi awcms dengan skop bisnis ERP      | Accepted |
+| ADR                                                             | Judul                                                                                        | Status   |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------- |
+| [0001](0001-rebuild-on-awcms-foundation-erp-scope.md)           | Rebuild AWCMS sebagai platform ERP di atas standar modular monolith                          | Accepted |
+| [0002](0002-bun-only-runtime.md)                                | Runtime & tooling Bun-only                                                                   | Accepted |
+| [0003](0003-postgresql-rls-multi-tenant.md)                     | PostgreSQL + RLS untuk isolasi multi-tenant                                                  | Accepted |
+| [0004](0004-rbac-abac-default-deny.md)                          | RBAC + ABAC default-deny sebagai baseline akses                                              | Accepted |
+| [0005](0005-soft-delete-and-immutability.md)                    | Soft delete untuk master/config, immutability untuk data posted                              | Accepted |
+| [0006](0006-offline-first-sync-outbox.md)                       | Offline-first + transactional outbox + sync HMAC                                             | Accepted |
+| [0007](0007-openapi-asyncapi-contracts.md)                      | OpenAPI & AsyncAPI sebagai kontrak wajib                                                     | Accepted |
+| [0008](0008-independent-contract-and-module-versioning.md)      | Versioning independen: package, kontrak API/event, module descriptor                         | Accepted |
+| [0009](0009-public-tenant-scoped-routes.md)                     | Resolusi tenant untuk rute publik (tanpa sesi)                                               | Accepted |
+| [0010](0010-public-host-tenant-routing.md)                      | Host/domain-based public tenant routing                                                      | Accepted |
+| [0011](0011-capability-ports-for-cross-module-collaboration.md) | Capability ports untuk kolaborasi lintas-modul                                               | Accepted |
+| [0012](0012-module-admission-and-trusted-registry-boundary.md)  | Module admission categories & trusted static registry boundary                               | Accepted |
+| [0013](0013-extension-layers-and-boundary-model.md)             | Lapisan ekstensi platform, batas tenant/bisnis, kriteria ekstraksi layanan                   | Accepted |
+| [0014](0014-deterministic-build-time-module-composition.md)     | Komposisi modul deterministik build-time (registry base + aplikasi turunan)                  | Accepted |
+| [0015](0015-derived-application-compatibility-manifest.md)      | Derived-application compatibility manifest, test kit, semantic-version gates                 | Accepted |
+| [0016](0016-organization-structure-module-admission.md)         | Admission `organization_structure` (Official Optional Business Foundation)                   | Accepted |
+| [0017](0017-document-infrastructure-module-admission.md)        | Admission `document_infrastructure` (Official Optional Business Foundation)                  | Accepted |
+| [0018](0018-data-exchange-module-admission.md)                  | Admission `data_exchange` (Official Optional Business Foundation)                            | Accepted |
+| [0019](0019-integration-hub-module-admission.md)                | Admission `integration_hub` (System Foundation)                                              | Accepted |
+| [0020](0020-erp-extension-readiness-contracts.md)               | Kontrak kesiapan ekstensi ERP (business transaction, posting, period-lock, item, projection) | Accepted |
+| [0021](0021-reference-data-module-admission.md)                 | Admission `reference_data` (Official Optional Business Foundation)                           | Accepted |
 
-ADR fondasi teknis (runtime, RLS, ABAC, offline-first, kontrak) selengkapnya ada di [indeks ADR awcms](https://github.com/ahliweb/awcms/blob/main/docs/adr/README.md).
+ADR spesifik skop ERP & integrasi bisnis ditambahkan mulai nomor berikutnya seiring keputusan diambil.
