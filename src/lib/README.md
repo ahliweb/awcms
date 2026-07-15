@@ -29,15 +29,21 @@ Primitive lintas-modul lain ada di `src/modules/_shared/`: `idempotency.ts`
 
 ## Status wiring
 
-Pooling lanjutan (`work-class`/`circuit-breaker`/`capacity-config`) dan
-`jobs`/`observability` tersedia sebagai **library** dan sudah ada unit
-test-nya, tetapi belum dirangkai otomatis ke jalur runtime: `withTenant()`
-saat ini masih menerapkan RLS `SET LOCAL` saja — gate work-class + circuit
-breaker di depan pool dirangkai saat modul ERP bervolume tinggi
-membutuhkannya (lihat [`docs/awcms/database-pooling.md`](../../docs/awcms/database-pooling.md)).
-Metrics-port juga belum punya endpoint `/metrics`; adapter Prometheus siap
-dipasang saat observability diaktifkan. Ini disengaja — fondasi disediakan
-lebih dulu agar modul berikutnya tinggal memakainya.
+Pooling lanjutan **sudah dirangkai** ke jalur runtime: `withTenant()` kini
+menerapkan gate work-class + circuit breaker di depan pool (503
+`DATABASE_BUSY` + `Retry-After` saat breaker open / work-class saturasi),
+lalu RLS `SET LOCAL`. Setiap route yang sudah memakai `withTenant` otomatis
+terproteksi tanpa mengubah file route — teruskan `{ workClass }` untuk beban
+non-interaktif (mis. laporan/`background_sync`/`maintenance`). Endpoint
+`GET /api/v1/database/pool/health` mengekspos saturasi work-class + state
+circuit breaker + kapasitas pool per-proses (dipakai `bun run db:pool:health`;
+lihat [`docs/awcms/database-pooling.md`](../../docs/awcms/database-pooling.md)).
+
+`jobs`/`observability` tersedia sebagai **library** (dengan unit test) namun
+belum ada runner terjadwal maupun endpoint `/metrics`: adapter Prometheus
+(`observability/adapters/`) opt-in via `setMetricsPort`, dipasang saat
+observability diaktifkan. Ini disengaja — fondasi disediakan lebih dulu agar
+modul berikutnya tinggal memakainya.
 
 Semua kode di folder ini wajib Bun-only, tidak menyimpan secret, dan mengikuti
 lapisan service/repository di `docs/awcms/10_template_kode_coding_standard.md`

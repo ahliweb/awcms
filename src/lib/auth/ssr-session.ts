@@ -37,7 +37,7 @@ export async function resolveSsrContext(
     const sql = getDatabaseClient();
     const tokenHash = hashSessionToken(sessionToken);
 
-    return await withTenant(sql, tenantId, async (tx) => {
+    const result = await withTenant(sql, tenantId, async (tx) => {
       const context = await resolveTenantContext(tx, tenantId, tokenHash, now);
       if (!context) return null;
 
@@ -55,6 +55,16 @@ export async function resolveSsrContext(
         permissions
       };
     });
+
+    // When the DB circuit breaker is open / a work-class queue is saturated,
+    // `withTenant` returns a `503` `Response` (cast to the callback's return
+    // type) instead of running the callback. For SSR session resolution that
+    // means "can't confirm the session right now" — degrade to unauthenticated
+    // (the SSR guard then redirects to /login) rather than leaking a Response
+    // where an SsrContext is expected.
+    if (result instanceof Response) return null;
+
+    return result;
   } catch {
     return null;
   }

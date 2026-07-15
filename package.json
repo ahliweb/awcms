@@ -38,6 +38,7 @@
     "start": "bun ./dist/server/entry.mjs",
     "db:migrate": "bun scripts/db-migrate.ts",
     "api:spec:check": "bun scripts/api-spec-check.ts",
+    "db:pool:health": "bun scripts/db-pool-health.ts",
     "modules:dag:check": "bun scripts/validate-module-graph.ts",
     "logging:lint:check": "bun scripts/logging-lint-check.ts",
     "config:validate": "bun scripts/validate-env.ts",

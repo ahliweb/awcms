@@ -8,13 +8,14 @@ worker per-modul menyusul begitu modul ERP-nya ada.
 
 ## Aktif (fondasi)
 
-| Target               | Skrip                      | Fungsi                                                                               | Di `check`?   |
-| -------------------- | -------------------------- | ------------------------------------------------------------------------------------ | ------------- |
-| `db:migrate`         | `db-migrate.ts`            | Runner migration SQL (checksum + advisory lock)                                      | —             |
-| `api:spec:check`     | `api-spec-check.ts`        | Validasi OpenAPI/AsyncAPI + route parity `src/pages/api/v1`                          | ✅            |
-| `modules:dag:check`  | `validate-module-graph.ts` | Validasi seluruh registry modul membentuk DAG (no cycle/self/dup/missing dependency) | ✅            |
-| `logging:lint:check` | `logging-lint-check.ts`    | Gate: tak ada error/console.error mentah tanpa redaksi di `src/**`, `scripts/**`     | ✅            |
-| `config:validate`    | `validate-env.ts`          | Validasi kontrak env (`process.env` atau `--file <path>`) sebelum boot/deploy        | — (butuh env) |
+| Target               | Skrip                      | Fungsi                                                                               | Di `check`?      |
+| -------------------- | -------------------------- | ------------------------------------------------------------------------------------ | ---------------- |
+| `db:migrate`         | `db-migrate.ts`            | Runner migration SQL (checksum + advisory lock)                                      | —                |
+| `api:spec:check`     | `api-spec-check.ts`        | Validasi OpenAPI/AsyncAPI + route parity `src/pages/api/v1`                          | ✅               |
+| `modules:dag:check`  | `validate-module-graph.ts` | Validasi seluruh registry modul membentuk DAG (no cycle/self/dup/missing dependency) | ✅               |
+| `logging:lint:check` | `logging-lint-check.ts`    | Gate: tak ada error/console.error mentah tanpa redaksi di `src/**`, `scripts/**`     | ✅               |
+| `config:validate`    | `validate-env.ts`          | Validasi kontrak env (`process.env` atau `--file <path>`) sebelum boot/deploy        | — (butuh env)    |
+| `db:pool:health`     | `db-pool-health.ts`        | Probe `GET /api/v1/database/pool/health` (pool/work-class/circuit-breaker)           | — (butuh server) |
 
 `bun run check` = `lint → api:spec:check → modules:dag:check → logging:lint:check → typecheck → test → build`.
 
@@ -34,7 +35,7 @@ belum dibangun di repo ini. Diadaptasi begitu prasyaratnya ada:
 | `config:docs:check`                                                                                                                                                                                                                                                                     | Rekonsiliasi 3-arah `.env.example` ↔ doc 18 (butuh doc 18 disamakan ke env repo ini) |
 | `modules:sync`, `modules:compose:check`, `extension:check`, `modules:composition:inventory:*`                                                                                                                                                                                           | Modul Module Management + `application-registry` (aplikasi turunan)                  |
 | `db:work-class:generate` / `:check`                                                                                                                                                                                                                                                     | Tabel/registry work-class                                                            |
-| `db:pool:health`, `database:capacity:check`                                                                                                                                                                                                                                             | Endpoint health pool DB + server berjalan                                            |
+| `database:capacity:check`                                                                                                                                                                                                                                                               | Validasi kapasitas lintas-instance (preflight)                                       |
 | `logs:audit:purge`                                                                                                                                                                                                                                                                      | Modul `data-lifecycle` (retensi) — modul `logging` sudah ada, worker menyusul        |
 | `domain-events:dispatch`, `sync:objects:dispatch`                                                                                                                                                                                                                                       | Modul domain-event-runtime + outbox                                                  |
 | `i18n:extract` / `:pot:check` / `:parity:check`                                                                                                                                                                                                                                         | Setup i18n (`.po`/`.pot`) + UI                                                       |

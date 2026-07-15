@@ -16,6 +16,7 @@ const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 /** Endpoints allowed to declare `security: []` — every other `security: []` operation fails the check. */
 const ALLOWED_PUBLIC_OPERATIONS = new Set([
   "getHealth",
+  "getDatabasePoolHealth",
   "getSetupStatus",
   "postSetupInitialize",
   "postAuthLogin"

@@ -31,11 +31,17 @@ sesi, RBAC/ABAC dasar).
 ## Tenant context & RLS
 
 Setiap request tenant-scoped berjalan lewat `withTenant()`
-(`src/lib/database/tenant-context.ts`): membuka transaksi, menjalankan
-`SET LOCAL app.current_tenant_id = '<tenantId>'`, lalu memanggil fungsi
-handler. Setiap tabel tenant-scoped punya RLS policy yang membandingkan
-`tenant_id` dengan `current_setting('app.current_tenant_id')`. RLS adalah
-lapis kedua — query tetap wajib memfilter `tenant_id` secara eksplisit.
+(`src/lib/database/tenant-context.ts`): melewati gate work-class + circuit
+breaker (`src/lib/database/`) di depan pool — mengembalikan `503
+DATABASE_BUSY` + `Retry-After` saat breaker open atau work-class saturasi,
+alih-alih cascading timeout — lalu membuka transaksi, menjalankan
+`SET LOCAL app.current_tenant_id = '<tenantId>'`, dan memanggil fungsi
+handler (mencatat sukses/gagal ke breaker; error input Postgres 22/23
+dikecualikan agar tidak men-trip breaker). Setiap tabel tenant-scoped punya
+RLS policy yang membandingkan `tenant_id` dengan
+`current_setting('app.current_tenant_id')`. RLS adalah lapis kedua — query
+tetap wajib memfilter `tenant_id` secara eksplisit. State pool/breaker
+diekspos di `GET /api/v1/database/pool/health`.
 
 **Penting (diverifikasi manual terhadap PostgreSQL asli):** PostgreSQL
 mengecualikan role superuser (dan role pemilik tabel tanpa `FORCE ROW LEVEL
