@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1.7
+#
+# Dockerfile.production — image registry-based deployment (ADR-0001,
+# docs/awcms/deployment-profiles.md §production (online) — image registry).
+# Immutable, built once in CI (release.yml), pulled+run identically per
+# environment. NOT the LAN-first default (docker-compose.yml bind-mount
+# path) — this is the opt-in registry/orchestrator path.
+#
+# Does NOT run migrations — the runtime role (awcms_app, least-privilege)
+# has no DDL/GRANT rights. Run `bun run db:migrate` as a separate step
+# against a privileged connection before this container's first start
+# (docs/awcms/deployment-profiles.md §Model dua-peran basis data).
+
+FROM oven/bun:1.3.14 AS base
+WORKDIR /home/bun/app
+
+# ---- deps: full deps (incl. dev) needed to build ----
+FROM base AS deps
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+# ---- build: astro build (server output, node adapter standalone) ----
+FROM base AS build
+COPY --from=deps /home/bun/app/node_modules ./node_modules
+COPY . .
+RUN bun run build
+
+# ---- prod-deps: production-only deps for the final runtime image ----
+FROM base AS prod-deps
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
+
+# ---- runtime: minimal, non-root, read-only-filesystem compatible ----
+FROM base AS runtime
+ENV APP_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=4321
+
+COPY --from=prod-deps --chown=bun:bun /home/bun/app/node_modules ./node_modules
+COPY --from=build --chown=bun:bun /home/bun/app/dist ./dist
+COPY --chown=bun:bun package.json ./
+
+USER bun
+EXPOSE 4321
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD bun -e "fetch('http://localhost:'+(process.env.PORT||4321)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["bun", "./dist/server/entry.mjs"]

@@ -1,0 +1,255 @@
+# Release AWCMS — Changesets version → tag → validate → build+SBOM →
+# keyless sign + provenance/SBOM attest → publish. Design: docs/awcms/release-process.md.
+#
+# Two entry points, same job graph (docs/awcms/release-process.md §2):
+#   - push tag `v*.*.*`   -> REAL release (image :latest moved, GitHub Release published)
+#   - workflow_dispatch   -> REHEARSAL (image tag `dryrun-<sha>`, no GitHub Release, :latest untouched)
+#
+# `validate` runs identically on both triggers — rehearsal only skips the
+# ancestor-of-main guard and release:verify (both `if: github.event_name ==
+# 'push'`); `bun run check` itself always runs. See ADR-0024 for why the
+# current tag (v5.0.0) continues the pre-rebuild legacy major line.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate (read-only)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_USER: awcms
+          POSTGRES_PASSWORD: awcms_password
+          POSTGRES_DB: awcms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U awcms"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://awcms:awcms_password@localhost:5432/awcms
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      # Rilis nyata saja: tag yang commit-nya bukan ancestor origin/main
+      # ditolak sebelum apa pun dibangun (pengganti level-workflow untuk
+      # "publish hanya dari branch terproteksi" selama belum ada branch
+      # protection rule di `main`).
+      - name: Ancestor-of-main guard (real release only)
+        if: github.event_name == 'push'
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main || {
+            echo "::error::Tag ${{ github.ref_name }} bukan ancestor origin/main — ditolak."
+            exit 1
+          }
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify tag matches package.json/CHANGELOG (real release only)
+        if: github.event_name == 'push'
+        run: bun run release:verify
+        env:
+          RELEASE_VERIFY_TAG: ${{ github.ref_name }}
+
+      - name: Apply migrations against validate-time Postgres
+        run: bun run db:migrate
+
+      - name: Full quality gate (bun run check)
+        run: bun run check
+
+  build:
+    name: Build image + SBOM
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-digest: ${{ steps.push.outputs.digest }}
+      image-ref: ${{ steps.tags.outputs.primary }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            TAGS="ghcr.io/ahliweb/awcms:${VERSION}
+          ghcr.io/ahliweb/awcms:sha-${GITHUB_SHA::12}
+          ghcr.io/ahliweb/awcms:latest"
+            PRIMARY="ghcr.io/ahliweb/awcms:${VERSION}"
+          else
+            TAGS="ghcr.io/ahliweb/awcms:dryrun-${GITHUB_SHA::12}"
+            PRIMARY="ghcr.io/ahliweb/awcms:dryrun-${GITHUB_SHA::12}"
+          fi
+          {
+            echo "tags<<EOF"
+            echo "$TAGS"
+            echo "EOF"
+            echo "primary=$PRIMARY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile.production
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          provenance: false # provenance handled explicitly below (attest-build-provenance), not buildx's own
+          sbom: false # SBOM handled explicitly below (anchore/sbom-action), not buildx's own
+
+      - name: SBOM — source tree
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom-source.cdx.json
+          upload-artifact: false
+
+      - name: SBOM — built image
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.tags.outputs.primary }}@${{ steps.push.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom-image.cdx.json
+          upload-artifact: false
+
+      - name: Source tarball
+        run: git archive --format=tar.gz --output=source.tar.gz HEAD
+
+      - name: Checksums
+        run: sha256sum sbom-source.cdx.json sbom-image.cdx.json source.tar.gz > CHECKSUMS.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-artifacts
+          path: |
+            sbom-source.cdx.json
+            sbom-image.cdx.json
+            source.tar.gz
+            CHECKSUMS.txt
+          retention-days: 1
+
+  sign-attest-publish:
+    name: Sign, attest, publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # gh release create (real release only)
+      id-token: write # keyless OIDC signing/attestation
+      attestations: write
+      packages: write # cosign sign against ghcr.io digest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-artifacts
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Keyless sign image digest
+        run: cosign sign --yes "${{ needs.build.outputs.image-ref }}@${{ needs.build.outputs.image-digest }}"
+
+      - name: Attest build provenance — image
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ needs.build.outputs.image-ref }}
+          subject-digest: ${{ needs.build.outputs.image-digest }}
+          push-to-registry: true
+
+      - name: Attest build provenance — source artifacts
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: |
+            CHECKSUMS.txt
+            sbom-source.cdx.json
+            source.tar.gz
+
+      - name: Attest SBOM — image
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ needs.build.outputs.image-ref }}
+          subject-digest: ${{ needs.build.outputs.image-digest }}
+          sbom-path: sbom-image.cdx.json
+          push-to-registry: true
+
+      - name: Extract CHANGELOG section for this version (real release only)
+        if: github.event_name == 'push'
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION_RE=$(printf '%s' "$VERSION" | sed 's/[.[\*^$]/\\&/g')
+          awk -v ver="$VERSION_RE" '
+            $0 ~ "^## \\[?" ver "\\]?[[:space:]]*$" { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+
+      - name: Publish GitHub Release (real release only)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes-file release-notes.md \
+            CHECKSUMS.txt sbom-source.cdx.json sbom-image.cdx.json source.tar.gz

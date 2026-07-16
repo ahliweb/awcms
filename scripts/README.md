@@ -8,17 +8,18 @@ worker per-modul menyusul begitu modul ERP-nya ada.
 
 ## Aktif (fondasi)
 
-| Target                    | Skrip                        | Fungsi                                                                               | Di `check`?                                                  |
-| ------------------------- | ---------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `db:migrate`              | `db-migrate.ts`              | Runner migration SQL (checksum + advisory lock)                                      | —                                                            |
-| `check:docs`              | `check-docs.mjs`             | Mermaid, tautan internal, penamaan (sisa `awcms_mini_`), nama service docker compose | ✅                                                           |
-| `check:docs:translation`  | `check-docs-translation.mjs` | Staleness terjemahan docs: `*.id.md` (sumber ID) vs `*.md` (Inggris, ADR-0023)       | ✅                                                           |
-| `api:spec:check`          | `api-spec-check.ts`          | Validasi OpenAPI/AsyncAPI + route parity `src/pages/api/v1`                          | ✅                                                           |
-| `modules:dag:check`       | `validate-module-graph.ts`   | Validasi seluruh registry modul membentuk DAG (no cycle/self/dup/missing dependency) | ✅                                                           |
-| `logging:lint:check`      | `logging-lint-check.ts`      | Gate: tak ada error/console.error mentah tanpa redaksi di `src/**`, `scripts/**`     | ✅                                                           |
-| `config:validate`         | `validate-env.ts`            | Validasi kontrak env (`process.env` atau `--file <path>`) sebelum boot/deploy        | — (butuh env)                                                |
-| `db:pool:health`          | `db-pool-health.ts`          | Probe `GET /api/v1/database/pool/health` (pool/work-class/circuit-breaker)           | — (butuh server)                                             |
-| `changesets:policy:check` | `changeset-policy-check.ts`  | Wajibkan changeset baru untuk PR yang mengubah file non-docs/non-agent-tooling       | — (PR-diff-shaped, lihat `.github/workflows/changesets.yml`) |
+| Target                    | Skrip                        | Fungsi                                                                                 | Di `check`?                                                  |
+| ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `db:migrate`              | `db-migrate.ts`              | Runner migration SQL (checksum + advisory lock)                                        | —                                                            |
+| `check:docs`              | `check-docs.mjs`             | Mermaid, tautan internal, penamaan (sisa `awcms_mini_`), nama service docker compose   | ✅                                                           |
+| `check:docs:translation`  | `check-docs-translation.mjs` | Staleness terjemahan docs: `*.id.md` (sumber ID) vs `*.md` (Inggris, ADR-0023)         | ✅                                                           |
+| `api:spec:check`          | `api-spec-check.ts`          | Validasi OpenAPI/AsyncAPI + route parity `src/pages/api/v1`                            | ✅                                                           |
+| `modules:dag:check`       | `validate-module-graph.ts`   | Validasi seluruh registry modul membentuk DAG (no cycle/self/dup/missing dependency)   | ✅                                                           |
+| `logging:lint:check`      | `logging-lint-check.ts`      | Gate: tak ada error/console.error mentah tanpa redaksi di `src/**`, `scripts/**`       | ✅                                                           |
+| `config:validate`         | `validate-env.ts`            | Validasi kontrak env (`process.env` atau `--file <path>`) sebelum boot/deploy          | — (butuh env)                                                |
+| `db:pool:health`          | `db-pool-health.ts`          | Probe `GET /api/v1/database/pool/health` (pool/work-class/circuit-breaker)             | — (butuh server)                                             |
+| `changesets:policy:check` | `changeset-policy-check.ts`  | Wajibkan changeset baru untuk PR yang mengubah file non-docs/non-agent-tooling         | — (PR-diff-shaped, lihat `.github/workflows/changesets.yml`) |
+| `release:verify`          | `release-verify.ts`          | Tag rilis == versi package.json, CHANGELOG.md punya section, tak ada changeset pending | — (tag-shaped, lihat `.github/workflows/release.yml`)        |
 
 `bun run check` = `lint → check:docs → api:spec:check → modules:dag:check → logging:lint:check → typecheck → test → build`.
 
@@ -30,6 +31,10 @@ jalankan manual sebelum deploy, mis. `bun run config:validate` (membaca
 (membandingkan `origin/main...HEAD`) — dijalankan sebagai workflow CI
 terpisah (`.github/workflows/changesets.yml`), bukan bagian dari check yang
 aman dijalankan di satu checkout lokal mana pun.
+
+`release:verify` tidak masuk `check` karena hanya bermakna tepat pada
+commit yang di-tag `vX.Y.Z` (real release) — dijalankan sebagai bagian
+`validate` job `.github/workflows/release.yml`, bukan pada checkout biasa.
 
 ## Ditunda (butuh infrastruktur yang belum ada)
 

@@ -42,6 +42,7 @@
     "api:spec:check": "bun scripts/api-spec-check.ts",
     "db:pool:health": "bun scripts/db-pool-health.ts",
     "changesets:policy:check": "bun scripts/changeset-policy-check.ts",
+    "release:verify": "bun scripts/release-verify.ts",
     "modules:dag:check": "bun scripts/validate-module-graph.ts",
     "logging:lint:check": "bun scripts/logging-lint-check.ts",
     "config:validate": "bun scripts/validate-env.ts",

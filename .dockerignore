@@ -1,0 +1,29 @@
+# Never ship secrets into the build context/image
+.env
+.env.*
+!.env.example
+
+# Dependencies (reinstalled inside the image)
+node_modules/
+
+# Build output (rebuilt inside the image)
+dist/
+.astro/
+build/
+
+# VCS / editor / CI
+.git/
+.github/
+.claude/
+.vscode/
+
+# Local-only state
+storage/
+*.dump
+*.sql.gz
+*.log
+docker-compose.override.yml
+userlist.txt
+
+# Docs (not needed at runtime, keeps build context small)
+docs/
