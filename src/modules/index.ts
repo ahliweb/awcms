@@ -8,6 +8,7 @@ import { domainEventRuntimeModule } from "./domain-event-runtime/module";
 import { syncStorageModule } from "./sync-storage/module";
 import { workflowApprovalModule } from "./workflow-approval/module";
 import { emailModule } from "./email/module";
+import { reportingModule } from "./reporting/module";
 
 export const modules: ModuleDescriptor[] = [
   loggingModule,
@@ -18,7 +19,8 @@ export const modules: ModuleDescriptor[] = [
   domainEventRuntimeModule,
   syncStorageModule,
   workflowApprovalModule,
-  emailModule
+  emailModule,
+  reportingModule
 ];
 
 export function listModules(): ModuleDescriptor[] {

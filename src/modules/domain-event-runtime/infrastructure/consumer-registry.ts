@@ -5,6 +5,8 @@ import {
   SAMPLE_RECORDED_EVENT_TYPE,
   SAMPLE_RECORDED_EVENT_VERSION
 } from "../domain/event-type-registry";
+import { applyEventActivityProjectionIncrement } from "../../reporting/application/event-activity-projection";
+import { EVENT_ACTIVITY_PROJECTOR_CONSUMER_NAME } from "../../reporting/domain/projection-keys";
 
 /**
  * Two representative consumers ("provide at least two representative
@@ -108,9 +110,51 @@ export const activityRollupProjectorConsumer: DomainEventConsumerDefinition = {
   }
 };
 
+/**
+ * Reporting module consumer (ported from awcms-mini Issue #753): projects a
+ * `sample.recorded` domain event into `reporting`'s own
+ * `awcms_reporting_projection_metrics`
+ * (`reporting.event_activity_summary`/`sample_recorded_count` counter) via
+ * `applyEventActivityProjectionIncrement`. This IS the one deliberate
+ * cross-module edge that wires `domain_event_runtime` -> `reporting/
+ * application` — safe against an import cycle because `reporting`'s own
+ * `application`/`domain` files import nothing back from
+ * `domain_event_runtime` (its rebuild path reads `awcms_domain_events` via
+ * a plain SQL table name, never a cross-module TypeScript import).
+ *
+ * Idempotency: `applyConsumerEffectOnce` (this module's own, reused
+ * unchanged) guards against a redelivered event double-incrementing the
+ * counter; `reporting`'s own `applyEventActivityProjectionIncrement`
+ * ADDITIONALLY defers (throws) while a rebuild owns this projection and
+ * uses a rebuild watermark to avoid double-counting on retry — see that
+ * file's header comment.
+ */
+export const eventActivityProjectorConsumer: DomainEventConsumerDefinition = {
+  name: EVENT_ACTIVITY_PROJECTOR_CONSUMER_NAME,
+  description:
+    "reporting module consumer — projects a sample.recorded domain event into awcms_reporting_projection_metrics' reporting.event_activity_summary/sample_recorded_count counter.",
+  eventTypes: [SAMPLE_RECORDED_EVENT_TYPE],
+  eventVersions: [SAMPLE_RECORDED_EVENT_VERSION],
+  handler: async (tx, event, ctx) => {
+    await applyConsumerEffectOnce(
+      tx,
+      ctx.tenantId,
+      EVENT_ACTIVITY_PROJECTOR_CONSUMER_NAME,
+      event.id,
+      () =>
+        applyEventActivityProjectionIncrement(
+          tx,
+          ctx.tenantId,
+          event.occurredAt
+        )
+    );
+  }
+};
+
 const BASE_DOMAIN_EVENT_CONSUMERS: readonly DomainEventConsumerDefinition[] = [
   sampleAuditProjectorConsumer,
-  activityRollupProjectorConsumer
+  activityRollupProjectorConsumer,
+  eventActivityProjectorConsumer
 ];
 
 /**

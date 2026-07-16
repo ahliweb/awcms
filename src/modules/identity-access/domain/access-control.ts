@@ -34,7 +34,14 @@ export type AccessAction =
   | "cancel"
   | "reassign"
   | "force_decide"
-  | "revoke";
+  | "revoke"
+  // Reporting actions (ported alongside the reporting module): `rebuild`
+  // and `export` mutate/produce artifacts (high-risk); `analyze` is a
+  // read-only reconciliation analysis (not high-risk, same posture as a
+  // dry-run).
+  | "rebuild"
+  | "analyze"
+  | "export";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -68,7 +75,9 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   "cancel",
   "reassign",
   "force_decide",
-  "revoke"
+  "revoke",
+  "rebuild",
+  "export"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

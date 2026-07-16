@@ -88,6 +88,8 @@ describe("fetchModuleJobs", () => {
         "bun run email:dispatch",
         "bun run email:provider:health",
         "bun run email:templates:seed-defaults",
+        "bun run reporting:exports:dispatch",
+        "bun run reporting:projections:refresh",
         "bun run sync:objects:dispatch",
         "bun run workflow:escalations:dispatch"
       ].sort()

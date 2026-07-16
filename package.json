@@ -43,6 +43,9 @@
     "email:dispatch": "bun scripts/email-dispatch.ts",
     "email:provider:health": "bun scripts/email-provider-health.ts",
     "email:templates:seed-defaults": "bun scripts/email-templates-seed-defaults.ts",
+    "reporting:projections:refresh": "bun scripts/reporting-projections-refresh.ts",
+    "reporting:projections:registry:check": "bun scripts/reporting-projection-registry-check.ts",
+    "reporting:exports:dispatch": "bun scripts/reporting-exports-dispatch.ts",
     "check:docs": "bun scripts/check-docs.mjs",
     "check:docs:translation": "bun scripts/check-docs-translation.mjs",
     "api:spec:check": "bun scripts/api-spec-check.ts",
@@ -57,7 +60,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
-    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run modules:dag:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
+    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run modules:dag:check && bun run reporting:projections:registry:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:status": "changeset status"
