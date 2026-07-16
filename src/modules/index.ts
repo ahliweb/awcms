@@ -6,6 +6,7 @@ import { identityAccessModule } from "./identity-access/module";
 import { moduleManagementModule } from "./module-management/module";
 import { domainEventRuntimeModule } from "./domain-event-runtime/module";
 import { syncStorageModule } from "./sync-storage/module";
+import { workflowApprovalModule } from "./workflow-approval/module";
 
 export const modules: ModuleDescriptor[] = [
   loggingModule,
@@ -14,7 +15,8 @@ export const modules: ModuleDescriptor[] = [
   identityAccessModule,
   moduleManagementModule,
   domainEventRuntimeModule,
-  syncStorageModule
+  syncStorageModule,
+  workflowApprovalModule
 ];
 
 export function listModules(): ModuleDescriptor[] {

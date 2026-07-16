@@ -31,6 +31,86 @@ channels:
       `infrastructure/consumer-registry.ts`'s two reference consumers
       (a same-process cross-module audit projector and a self-contained
       read-model activity-rollup projection).
+  awcms.workflow.instance.started:
+    address: awcms.workflow.instance.started
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A workflow instance was started, pinned to the currently-active
+      workflow definition version. Producer:
+      `workflow-approval/application/workflow-instance.ts`'s
+      `startWorkflowInstance`, via `appendDomainEvent` in the same
+      transaction as the instance's creation.
+  awcms.workflow.instance.advanced:
+    address: awcms.workflow.instance.advanced
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A workflow instance's active task was decided (or force-decided) and
+      the instance advanced to its next node(s), without yet reaching a
+      terminal outcome. Producer:
+      `workflow-approval/application/workflow-instance-decision.ts`'s
+      `completeApprovalTaskAndAdvance`.
+  awcms.workflow.instance.approved:
+    address: awcms.workflow.instance.approved
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A workflow instance reached an `end` node with outcome `approved`.
+      Producer: `workflow-approval/application/workflow-instance.ts` /
+      `workflow-instance-decision.ts`.
+  awcms.workflow.instance.rejected:
+    address: awcms.workflow.instance.rejected
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A workflow instance reached an `end` node with outcome `rejected`, or
+      was force-rejected. Producer:
+      `workflow-approval/application/workflow-instance.ts` /
+      `workflow-instance-decision.ts`.
+  awcms.workflow.instance.cancelled:
+    address: awcms.workflow.instance.cancelled
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      An administrator cancelled a running workflow instance. Producer:
+      `workflow-approval/application/workflow-recovery.ts`'s
+      `cancelWorkflowInstance`, via
+      `POST /api/v1/workflows/instances/{id}/cancel`.
+  awcms.workflow.task.escalated:
+    address: awcms.workflow.task.escalated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A pending workflow task passed its due date and was escalated by the
+      scheduled escalation/timeout job. Producer:
+      `workflow-approval/application/workflow-escalation.ts`'s
+      `escalateDueTasksForTenant`, run via
+      `bun run workflow:escalations:dispatch`.
+  awcms.workflow.delegation.created:
+    address: awcms.workflow.delegation.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A workflow delegation/substitute assignment was created. Producer:
+      `workflow-approval/application/workflow-delegation-directory.ts`'s
+      `createWorkflowDelegation`.
+  awcms.workflow.delegation.revoked:
+    address: awcms.workflow.delegation.revoked
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A workflow delegation/substitute assignment was revoked. Producer:
+      `workflow-approval/application/workflow-delegation-directory.ts`'s
+      `revokeWorkflowDelegation`.
 operations:
   publishDomainEventRuntimeSampleRecorded:
     action: send
@@ -44,6 +124,54 @@ operations:
       $ref: "#/channels/awcms.domain-event-runtime.sample.recorded"
     messages:
       - $ref: "#/channels/awcms.domain-event-runtime.sample.recorded/messages/DomainEvent"
+  publishWorkflowInstanceStarted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.workflow.instance.started"
+    messages:
+      - $ref: "#/channels/awcms.workflow.instance.started/messages/DomainEvent"
+  publishWorkflowInstanceAdvanced:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.workflow.instance.advanced"
+    messages:
+      - $ref: "#/channels/awcms.workflow.instance.advanced/messages/DomainEvent"
+  publishWorkflowInstanceApproved:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.workflow.instance.approved"
+    messages:
+      - $ref: "#/channels/awcms.workflow.instance.approved/messages/DomainEvent"
+  publishWorkflowInstanceRejected:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.workflow.instance.rejected"
+    messages:
+      - $ref: "#/channels/awcms.workflow.instance.rejected/messages/DomainEvent"
+  publishWorkflowInstanceCancelled:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.workflow.instance.cancelled"
+    messages:
+      - $ref: "#/channels/awcms.workflow.instance.cancelled/messages/DomainEvent"
+  publishWorkflowTaskEscalated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.workflow.task.escalated"
+    messages:
+      - $ref: "#/channels/awcms.workflow.task.escalated/messages/DomainEvent"
+  publishWorkflowDelegationCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.workflow.delegation.created"
+    messages:
+      - $ref: "#/channels/awcms.workflow.delegation.created/messages/DomainEvent"
+  publishWorkflowDelegationRevoked:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.workflow.delegation.revoked"
+    messages:
+      - $ref: "#/channels/awcms.workflow.delegation.revoked/messages/DomainEvent"
 components:
   messages:
     DomainEvent:

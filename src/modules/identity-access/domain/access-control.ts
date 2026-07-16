@@ -27,7 +27,14 @@ export type AccessAction =
   | "disable"
   | "check"
   | "replay"
-  | "manage";
+  | "manage"
+  // Workflow-approval actions (ported alongside the workflow module).
+  | "publish"
+  | "retire"
+  | "cancel"
+  | "reassign"
+  | "force_decide"
+  | "revoke";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -55,7 +62,13 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   "enable",
   "disable",
   "replay",
-  "manage"
+  "manage",
+  "publish",
+  "retire",
+  "cancel",
+  "reassign",
+  "force_decide",
+  "revoke"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {
@@ -83,6 +96,32 @@ export function evaluateAccess(
       allowed: false,
       reason: "Resource belongs to a different tenant.",
       matchedPolicy: "tenant_isolation"
+    };
+  }
+
+  // Self-approval guard (ported alongside workflow-approval). When a caller
+  // opts a request into it by supplying `requestedByTenantUserId`, an actor
+  // may never approve a request they themselves filed. Two directions are
+  // covered: the ordinary `approve` action, and the administrative
+  // `force_decide` override (which bypasses quorum entirely — a caller who
+  // filed their own instance AND holds `workflow.recovery.force_decide`
+  // would otherwise be able to force-approve their own request, structurally
+  // bypassing the `approve`-only check). No pre-existing call site sets
+  // `requestedByTenantUserId`, so this is inert for every other endpoint.
+  const requestedBy = request.resourceAttributes?.requestedByTenantUserId;
+
+  if (
+    (request.action === "approve" || request.action === "force_decide") &&
+    requestedBy !== undefined &&
+    requestedBy === context.tenantUserId
+  ) {
+    return {
+      allowed: false,
+      reason:
+        request.action === "approve"
+          ? "Self-approval is not allowed."
+          : "Self-administered force-decision is not allowed.",
+      matchedPolicy: "self_approval_deny"
     };
   }
 

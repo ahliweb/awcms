@@ -39,6 +39,7 @@
     "db:migrate": "bun scripts/db-migrate.ts",
     "domain-events:dispatch": "bun scripts/domain-events-dispatch.ts",
     "sync:objects:dispatch": "bun scripts/object-sync-dispatch.ts",
+    "workflow:escalations:dispatch": "bun scripts/workflow-escalations-dispatch.ts",
     "check:docs": "bun scripts/check-docs.mjs",
     "check:docs:translation": "bun scripts/check-docs-translation.mjs",
     "api:spec:check": "bun scripts/api-spec-check.ts",
