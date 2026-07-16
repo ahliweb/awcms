@@ -19,7 +19,11 @@ export type AccessAction =
   | "assign"
   | "configure"
   | "restore"
-  | "purge";
+  | "purge"
+  | "sync"
+  | "enable"
+  | "disable"
+  | "check";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -41,7 +45,10 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   "assign",
   "configure",
   "restore",
-  "purge"
+  "purge",
+  "sync",
+  "enable",
+  "disable"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

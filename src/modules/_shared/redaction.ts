@@ -82,6 +82,127 @@ export function redactSensitiveAttributes(
   return redactRecord(input);
 }
 
+function collectKeysDeep(value: unknown, keys: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectKeysDeep(item, keys);
+    }
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(
+      value as Record<string, unknown>
+    )) {
+      keys.add(key);
+      collectKeysDeep(nested, keys);
+    }
+  }
+}
+
+/**
+ * Every secret-shaped KEY NAME anywhere in `input` (top-level or nested in
+ * objects/arrays), by name — used to *reject* input containing a key like
+ * `apiToken`/`credential` outright (module settings), rather than silently
+ * redact-and-store it, since a value the app never persisted can't leak
+ * later. `redactSensitiveAttributes` above stays the read-side/
+ * defense-in-depth complement for values already at rest.
+ */
+export function findSensitiveKeys(
+  input: Record<string, unknown> | undefined
+): string[] {
+  if (input === undefined) {
+    return [];
+  }
+
+  const keys = new Set<string>();
+  collectKeysDeep(input, keys);
+
+  return [...keys].filter(isSensitiveKey);
+}
+
+/**
+ * Value-shape complement to `findSensitiveKeys` (module settings): a
+ * credential can still be written into an innocently-named field like
+ * `publicLabel`, which key-name checking alone can't catch. Deliberately
+ * conservative — only patterns that are essentially never a legitimate
+ * label/URL/flag value — to keep false positives near zero: a JWT (three
+ * base64url segments), a PEM private key block, an AWS access key id, a raw
+ * `Bearer `/`Basic ` auth-header value, or a connection string with an
+ * embedded `user:pass@` credential.
+ *
+ * This is a heuristic, not a DLP solution — it closes the
+ * "innocent/accidental paste" gap the key-name check can't, not every
+ * adversarial exfiltration path.
+ */
+const SECRET_VALUE_PATTERNS: readonly RegExp[] = [
+  // Third (signature) segment deliberately unbounded (`*`, not `{5,}`) — a
+  // truncated/short-signature JWT still leaks its header/payload claims and
+  // must still be flagged.
+  /^eyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]*$/,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  /^AKIA[0-9A-Z]{16}$/,
+  /^(Bearer|Basic)\s+\S+/i,
+  // Password character class deliberately excludes only `/` and whitespace
+  // (not `:`/`@`, which are common password characters); the greedy `+`
+  // backtracks to the LAST `@` in the run, correctly separating "password"
+  // from "host" when both appear inside the password itself.
+  /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^:@/\s]+:[^/\s]+@/
+];
+
+function isSecretShapedValue(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    SECRET_VALUE_PATTERNS.some((pattern) => pattern.test(value))
+  );
+}
+
+function collectSecretShapedValuePaths(
+  value: unknown,
+  path: string,
+  paths: string[]
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      collectSecretShapedValuePaths(item, `${path}[${index}]`, paths)
+    );
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(
+      value as Record<string, unknown>
+    )) {
+      collectSecretShapedValuePaths(
+        nested,
+        path ? `${path}.${key}` : key,
+        paths
+      );
+    }
+    return;
+  }
+
+  if (isSecretShapedValue(value)) {
+    paths.push(path);
+  }
+}
+
+/**
+ * Every key path (dot notation, e.g. `webhook.publicLabel`, array indices as
+ * `[n]`) whose string value looks like a credential, *regardless of the
+ * key's own name*. Never includes the value itself, only the path, so a
+ * rejection message stays safe to return to the client.
+ */
+export function findSecretShapedValues(
+  input: Record<string, unknown> | undefined
+): string[] {
+  if (input === undefined) {
+    return [];
+  }
+
+  const paths: string[] = [];
+  collectSecretShapedValuePaths(input, "", paths);
+
+  return paths;
+}
+
 const TEXT_SECRET_PATTERNS: ReadonlyArray<{
   pattern: RegExp;
   replacement: string;
