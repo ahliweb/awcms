@@ -4,13 +4,15 @@ import { tenantAdminModule } from "./tenant-admin/module";
 import { profileIdentityModule } from "./profile-identity/module";
 import { identityAccessModule } from "./identity-access/module";
 import { moduleManagementModule } from "./module-management/module";
+import { domainEventRuntimeModule } from "./domain-event-runtime/module";
 
 export const modules: ModuleDescriptor[] = [
   loggingModule,
   tenantAdminModule,
   profileIdentityModule,
   identityAccessModule,
-  moduleManagementModule
+  moduleManagementModule,
+  domainEventRuntimeModule
 ];
 
 export function listModules(): ModuleDescriptor[] {

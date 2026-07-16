@@ -37,6 +37,7 @@
     "preview": "bun --bun astro preview",
     "start": "bun ./dist/server/entry.mjs",
     "db:migrate": "bun scripts/db-migrate.ts",
+    "domain-events:dispatch": "bun scripts/domain-events-dispatch.ts",
     "check:docs": "bun scripts/check-docs.mjs",
     "check:docs:translation": "bun scripts/check-docs-translation.mjs",
     "api:spec:check": "bun scripts/api-spec-check.ts",

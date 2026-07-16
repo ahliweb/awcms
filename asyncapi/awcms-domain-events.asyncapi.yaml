@@ -3,14 +3,55 @@ info:
   title: AWCMS Domain Events
   version: 0.1.0
   description: |-
-    Domain event contract for AWCMS. No module publishes a domain event yet in
-    Sprint 1/2 — this file exists so `bun run api:spec:check` can validate that
-    every `ModuleDescriptor.events.publishes` entry has a matching channel here
-    as soon as one is added (docs/awcms/10_template_kode_coding_standard.md
-    §Domain event envelope).
-channels: {}
-operations: {}
+    Domain event contract for AWCMS. The `domain_event_runtime` module ships
+    exactly one self-contained reference event
+    (`awcms.domain-event-runtime.sample.recorded`) that exercises the
+    transactional outbox, dispatcher, ordering, retry/backoff, dead-letter,
+    and replay mechanism end-to-end. Real producer modules add their OWN
+    channels here (and their own `ModuleDescriptor.events.publishes` entries)
+    when they start calling `appendDomainEvent`
+    (docs/awcms/10_template_kode_coding_standard.md §Domain event envelope).
+channels:
+  awcms.domain-event-runtime.sample.recorded:
+    address: awcms.domain-event-runtime.sample.recorded
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Reference/example event used to exercise the domain-event-runtime
+      outbox, dispatcher, ordering, retry/backoff, dead-letter, and replay
+      mechanism end-to-end. Real producer modules publish their OWN event
+      types the same way, via `appendDomainEvent` — this one is intentionally
+      self-contained rather than tied to another module's business logic in
+      this foundation module (see
+      `src/modules/domain-event-runtime/domain/event-type-registry.ts`'s own
+      doc comment). Producer: any caller of
+      `application/append-domain-event.ts`'s `appendDomainEvent` for this
+      event type; consumers:
+      `infrastructure/consumer-registry.ts`'s two reference consumers
+      (a same-process cross-module audit projector and a self-contained
+      read-model activity-rollup projection).
+operations:
+  publishDomainEventRuntimeSampleRecorded:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.domain-event-runtime.sample.recorded"
+    messages:
+      - $ref: "#/channels/awcms.domain-event-runtime.sample.recorded/messages/DomainEvent"
+  subscribeDomainEventRuntimeSampleRecorded:
+    action: receive
+    channel:
+      $ref: "#/channels/awcms.domain-event-runtime.sample.recorded"
+    messages:
+      - $ref: "#/channels/awcms.domain-event-runtime.sample.recorded/messages/DomainEvent"
 components:
+  messages:
+    DomainEvent:
+      name: DomainEvent
+      title: Domain event envelope
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/DomainEventEnvelope"
   schemas:
     DomainEventEnvelope:
       type: object

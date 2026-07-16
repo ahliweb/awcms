@@ -81,7 +81,9 @@ describe("fetchModuleJobs", () => {
     const jobs = fetchModuleJobs();
     const commands = jobs!.map((job) => job.command).sort();
 
-    expect(commands).toEqual(["bun run config:validate"].sort());
+    expect(commands).toEqual(
+      ["bun run config:validate", "bun run domain-events:dispatch"].sort()
+    );
   });
 
   test("every real registered job descriptor passes shape validation", () => {
