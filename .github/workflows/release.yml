@@ -102,27 +102,30 @@ jobs:
     outputs:
       image-digest: ${{ steps.push.outputs.digest }}
       image-ref: ${{ steps.tags.outputs.primary }}
+      image-repo: ${{ steps.tags.outputs.repo }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Compute image tags
         id: tags
         run: |
+          REPO="ghcr.io/ahliweb/awcms"
           if [ "${{ github.event_name }}" = "push" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
-            TAGS="ghcr.io/ahliweb/awcms:${VERSION}
-          ghcr.io/ahliweb/awcms:sha-${GITHUB_SHA::12}
-          ghcr.io/ahliweb/awcms:latest"
-            PRIMARY="ghcr.io/ahliweb/awcms:${VERSION}"
+            TAGS="${REPO}:${VERSION}
+          ${REPO}:sha-${GITHUB_SHA::12}
+          ${REPO}:latest"
+            PRIMARY="${REPO}:${VERSION}"
           else
-            TAGS="ghcr.io/ahliweb/awcms:dryrun-${GITHUB_SHA::12}"
-            PRIMARY="ghcr.io/ahliweb/awcms:dryrun-${GITHUB_SHA::12}"
+            TAGS="${REPO}:dryrun-${GITHUB_SHA::12}"
+            PRIMARY="${REPO}:dryrun-${GITHUB_SHA::12}"
           fi
           {
             echo "tags<<EOF"
             echo "$TAGS"
             echo "EOF"
             echo "primary=$PRIMARY"
+            echo "repo=$REPO"
           } >> "$GITHUB_OUTPUT"
 
       - name: Setup Docker Buildx
@@ -213,7 +216,7 @@ jobs:
       - name: Attest build provenance — image
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
-          subject-name: ${{ needs.build.outputs.image-ref }}
+          subject-name: ${{ needs.build.outputs.image-repo }}
           subject-digest: ${{ needs.build.outputs.image-digest }}
           push-to-registry: true
 
@@ -228,7 +231,7 @@ jobs:
       - name: Attest SBOM — image
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
-          subject-name: ${{ needs.build.outputs.image-ref }}
+          subject-name: ${{ needs.build.outputs.image-repo }}
           subject-digest: ${{ needs.build.outputs.image-digest }}
           sbom-path: sbom-image.cdx.json
           push-to-registry: true
