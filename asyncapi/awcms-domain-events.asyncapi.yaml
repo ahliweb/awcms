@@ -111,6 +111,60 @@ channels:
       A workflow delegation/substitute assignment was revoked. Producer:
       `workflow-approval/application/workflow-delegation-directory.ts`'s
       `revokeWorkflowDelegation`.
+  awcms.email.message.queued:
+    address: awcms.email.message.queued
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      An email message was enqueued into `awcms_email_messages`. Documented
+      contract only, same convention as `database.pool.saturated` — the
+      concrete producer is the structured JSON logger, invoked from
+      `email/application/announcement-directory.ts`'s `enqueueAnnouncement`
+      (`email.message.queued` log line).
+  awcms.email.message.sent:
+    address: awcms.email.message.sent
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      The email dispatcher (`bun run email:dispatch`) delivered a message
+      through the configured provider. Documented contract only; producer is
+      the structured JSON logger (`email/application/email-dispatch.ts`'s
+      `email.dispatch.sent` log line).
+  awcms.email.message.failed:
+    address: awcms.email.message.failed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      The email dispatcher exhausted retries (or hit a non-retryable failure)
+      for a queued message. Documented contract only; producer is the
+      structured JSON logger (`email/application/email-dispatch.ts`'s
+      `email.dispatch.failed` log line).
+  awcms.email.message.suppressed:
+    address: awcms.email.message.suppressed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      The email dispatcher found a claimed message's recipient newly present
+      on `awcms_email_suppression_list` (added after enqueue, before dispatch)
+      and skipped the provider call entirely. Documented contract only;
+      producer is the structured JSON logger
+      (`email/application/email-dispatch.ts`'s `email.dispatch.suppressed`
+      log line).
+  awcms.email.message.cancelled:
+    address: awcms.email.message.cancelled
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      An operator cancelled a still-queued message
+      (`POST /api/v1/email/messages/{id}/cancel`) before dispatch. Documented
+      contract only; producer is the structured JSON logger
+      (`pages/api/v1/email/messages/[id]/cancel.ts`'s `email.message.cancelled`
+      log line).
 operations:
   publishDomainEventRuntimeSampleRecorded:
     action: send
@@ -172,6 +226,36 @@ operations:
       $ref: "#/channels/awcms.workflow.delegation.revoked"
     messages:
       - $ref: "#/channels/awcms.workflow.delegation.revoked/messages/DomainEvent"
+  publishEmailMessageQueued:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.email.message.queued"
+    messages:
+      - $ref: "#/channels/awcms.email.message.queued/messages/DomainEvent"
+  publishEmailMessageSent:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.email.message.sent"
+    messages:
+      - $ref: "#/channels/awcms.email.message.sent/messages/DomainEvent"
+  publishEmailMessageFailed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.email.message.failed"
+    messages:
+      - $ref: "#/channels/awcms.email.message.failed/messages/DomainEvent"
+  publishEmailMessageSuppressed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.email.message.suppressed"
+    messages:
+      - $ref: "#/channels/awcms.email.message.suppressed/messages/DomainEvent"
+  publishEmailMessageCancelled:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.email.message.cancelled"
+    messages:
+      - $ref: "#/channels/awcms.email.message.cancelled/messages/DomainEvent"
 components:
   messages:
     DomainEvent:

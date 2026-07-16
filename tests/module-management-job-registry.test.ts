@@ -85,6 +85,9 @@ describe("fetchModuleJobs", () => {
       [
         "bun run config:validate",
         "bun run domain-events:dispatch",
+        "bun run email:dispatch",
+        "bun run email:provider:health",
+        "bun run email:templates:seed-defaults",
         "bun run sync:objects:dispatch",
         "bun run workflow:escalations:dispatch"
       ].sort()

@@ -17,7 +17,7 @@ administrative recovery (reassign/cancel/force-decision).
   `awcms_workflow_join_arrivals`, `awcms_workflow_decisions` (append-only),
   and `awcms_workflow_delegations`. All tenant-scoped tables have RLS
   tenant-isolation policies with FORCE, FK indexes, `timestamptz`, and the 14
-  workflow permission rows. The mini's `GRANT ... TO awcms_mini_worker`
+  workflow permission rows. The upstream `GRANT ... TO <worker-role>`
   least-privilege blocks are intentionally omitted (this base has no separate
   worker/app database roles).
 - Registers 8 domain event types (`awcms.workflow.instance.*`,
