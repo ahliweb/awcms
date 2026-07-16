@@ -38,6 +38,7 @@
     "start": "bun ./dist/server/entry.mjs",
     "db:migrate": "bun scripts/db-migrate.ts",
     "check:docs": "bun scripts/check-docs.mjs",
+    "check:docs:translation": "bun scripts/check-docs-translation.mjs",
     "api:spec:check": "bun scripts/api-spec-check.ts",
     "db:pool:health": "bun scripts/db-pool-health.ts",
     "changesets:policy:check": "bun scripts/changeset-policy-check.ts",
@@ -49,7 +50,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
-    "check": "bun run lint && bun run check:docs && bun run api:spec:check && bun run modules:dag:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
+    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run modules:dag:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:status": "changeset status"
