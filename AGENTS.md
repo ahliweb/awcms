@@ -6,6 +6,10 @@ AWCMS adalah **platform ERP dan integrasi solusi bisnis** milik AhliWeb. Repo in
 
 Baca dokumen ini sebelum mengerjakan task apa pun di repo ini. Ini adalah kontrak kerja teknis — aturan wajib, guardrail keamanan, dan alur task.
 
+## Relasi dengan awcms-mini (wajib dibaca)
+
+AWCMS adalah rebuild ber-skop ERP di atas fondasi **awcms-mini** (repo standar). **Setiap penambahan/perubahan fitur diuji lebih dulu di awcms-mini, baru di-port ke repo ini** — repo ini bukan tempat merintis fitur dari nol. Alur port, langkah rename prefix `awcms_mini_…` → `awcms_…`, dan implikasinya untuk agent ada di [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md).
+
 ## Alur kerja wajib setiap task
 
 1. Mulai dari issue/ADR yang jelas scope-nya. Bila mengubah standar dasar, buat ADR dulu (lihat [`GOVERNANCE.md`](GOVERNANCE.md)).
@@ -82,6 +86,7 @@ Lihat [`CONTRIBUTING.md`](CONTRIBUTING.md#definition-of-done).
 - [`GOVERNANCE.md`](GOVERNANCE.md) — tata kelola & pengambilan keputusan.
 - [`docs/adr/`](docs/adr/README.md) — keputusan arsitektural (fondasi & ERP-spesifik).
 - [`docs/awcms/`](docs/awcms/README.md) — paket dokumen teknis detail per modul (PRD/SRS/ERD/OpenAPI/AsyncAPI), disusun bertahap seiring modul ERP dikembangkan.
+- [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md) — kontrak alur "uji di awcms-mini dulu, lalu port ke awcms" & langkah port.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — apa yang **sudah ada di kode** (fondasi Sprint 1–2) vs target.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — proses kontribusi & Definition of Done.
 - [`SECURITY.md`](SECURITY.md) — kebijakan keamanan & pelaporan kerentanan.

@@ -10,6 +10,8 @@ import {
   headingSlugs,
   checkNaming,
   NAMING_EXEMPTIONS,
+  checkKnownScripts,
+  AUTHORITATIVE_SCRIPT_DOC_FILES,
   extractLinks,
   classifyLink,
   splitTarget,
@@ -138,6 +140,37 @@ describe("checkNaming", () => {
       "referensi historis `AWCMS_MINI_APP_DB_PASSWORD`"
     ].join("\n");
     expect(checkNaming(file ?? "", lines(md))).toEqual([]);
+  });
+});
+
+describe("checkKnownScripts", () => {
+  const known = new Set(["check", "db:migrate", "api:spec:check"]);
+
+  test("melaporkan rujukan bun run yang tidak ada di package.json", () => {
+    const md = "Jalankan `bun run repo:inventory:check` sebelum PR.";
+    const problems = checkKnownScripts("README.md", lines(md), known);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.line).toBe(1);
+    expect(problems[0]?.message).toContain("repo:inventory:check");
+  });
+
+  test("membiarkan rujukan bun run yang terdaftar", () => {
+    const md = "Validasi dengan `bun run check` dan `bun run db:migrate`.";
+    expect(checkKnownScripts("AGENTS.md", lines(md), known)).toEqual([]);
+  });
+
+  test("mendeteksi beberapa rujukan pada satu baris", () => {
+    const md = "`bun run ghost:one` lalu `bun run ghost:two`.";
+    const problems = checkKnownScripts("README.md", lines(md), known);
+    expect(problems).toHaveLength(2);
+  });
+
+  test("daftar berkas current-state berisi README dan AGENTS", () => {
+    expect(AUTHORITATIVE_SCRIPT_DOC_FILES.has("README.md")).toBe(true);
+    expect(AUTHORITATIVE_SCRIPT_DOC_FILES.has("AGENTS.md")).toBe(true);
+    expect(AUTHORITATIVE_SCRIPT_DOC_FILES.has("docs/awcms/README.md")).toBe(
+      false
+    );
   });
 });
 

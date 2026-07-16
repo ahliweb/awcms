@@ -23,6 +23,8 @@ import { execFileSync } from "node:child_process";
 import {
   checkMermaid,
   checkNaming,
+  checkKnownScripts,
+  AUTHORITATIVE_SCRIPT_DOC_FILES,
   extractLinks,
   classifyLink,
   splitTarget,
@@ -122,6 +124,15 @@ function checkLinks(file, content) {
   return problems;
 }
 
+/**
+ * Nama script yang terdaftar di `package.json` root.
+ * @returns {Set<string>}
+ */
+function loadPackageScripts() {
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  return new Set(Object.keys(pkg.scripts ?? {}));
+}
+
 /** @returns {Problem[]} */
 export function runChecks() {
   /** @type {Problem[]} */
@@ -130,6 +141,7 @@ export function runChecks() {
   const composeServiceNames = hasComposeFiles
     ? loadComposeServiceNames()
     : null;
+  const knownScripts = loadPackageScripts();
 
   for (const file of listMarkdown()) {
     const content = readFileSync(join(ROOT, file), "utf8");
@@ -137,6 +149,9 @@ export function runChecks() {
     problems.push(...checkMermaid(file, lines));
     problems.push(...checkLinks(file, content));
     problems.push(...checkNaming(file, lines));
+    if (AUTHORITATIVE_SCRIPT_DOC_FILES.has(file)) {
+      problems.push(...checkKnownScripts(file, lines, knownScripts));
+    }
     if (composeServiceNames) {
       problems.push(
         ...checkComposeServiceNames(file, content, composeServiceNames)
@@ -155,6 +170,6 @@ if (import.meta.main) {
     process.exit(1);
   }
   console.log(
-    "check:docs OK — mermaid, tautan internal, dan penamaan valid (cek nama service docker compose menyusul begitu docker-compose*.yml ada)."
+    "check:docs OK — mermaid, tautan internal, penamaan, dan rujukan `bun run` di dokumen current-state valid (cek nama service docker compose menyusul begitu docker-compose*.yml ada)."
   );
 }

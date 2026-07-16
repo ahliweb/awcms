@@ -1,5 +1,15 @@
 # Audit Standar Pengembangan Software AWCMS — 2026-07-04
 
+> **⚠️ Dokumen warisan / historis — jangan dibaca sebagai state repo saat ini.**
+> Audit ini diadaptasi dari basis `awcms-mini` dan menggambarkan keadaan repo
+> acuan, bukan repo `awcms` sekarang. Ia menyebut migrasi (mis. `sql/013_..._enforce_rls`,
+> `sql/007_..._sync_storage_outbox`) dan env berprefix `AWCMS_MINI_` (sync HMAC
+> secret, app DB password) serta modul (`sync_storage`, `workflow_approval`)
+> yang **tidak ada** di repo ini — `sql/007` yang nyata adalah `audit_logging`,
+> dan prefix env repo ini adalah `AWCMS_` saja. Untuk keadaan
+> kode yang benar, lihat [`../ARCHITECTURE.md`](../ARCHITECTURE.md); untuk status
+> paket dokumen, lihat [`README.md`](README.md) §Status.
+
 ## Ringkasan verdict
 
 Status repository terbaru: **PASS untuk baseline perencanaan dan foundation skeleton Issue 0.1**. Runtime aplikasi penuh belum selesai karena tenant/auth/RBAC/sync/deployment masih berada di backlog, tetapi scaffold Astro/Bun, health endpoint, module contract, response helper, soft-delete convention, dan folder standar sudah tersedia.

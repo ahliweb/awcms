@@ -1,4 +1,5 @@
 {
+  "_disclaimer": "ARTEFAK WARISAN awcms-mini — BUKAN state repo awcms ini. Daftar route di bawah menggambarkan ~284 route awcms-mini; repo awcms saat ini hanya punya ~16 route nyata di src/pages/api/v1/ (route lain di bawah adalah HANTU). Generator (bun run db:work-class:generate / repo:inventory:generate) belum ada di repo ini; berkas ini akan diregenerasi dari route nyata begitu tooling & modulnya di-port. Jangan jadikan sumber kebenaran. Lihat docs/awcms/README.md §Status & docs/ARCHITECTURE.md.",
   "routes": [
     {
       "path": "src/pages/api/v1/access/assignments.ts",

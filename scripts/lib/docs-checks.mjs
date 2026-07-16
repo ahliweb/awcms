@@ -128,8 +128,8 @@ export function headingSlugs(md) {
  */
 export const NAMING_EXEMPTIONS = new Set([
   "docs/awcms/18_configuration_env_reference.md:279",
-  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md:149",
-  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md:221"
+  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md:159",
+  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md:231"
 ]);
 
 /**
@@ -159,6 +159,51 @@ export function checkNaming(file, lines) {
       message:
         "kemungkinan sisa penamaan repo acuan yang belum diadaptasi (gunakan prefix awcms_/AWCMS_, bukan awcms_mini_/AWCMS_MINI_)"
     });
+  });
+  return problems;
+}
+
+/**
+ * Berkas dokumentasi "current-state" — mendeskripsikan keadaan repo saat ini,
+ * bukan pola/target awcms-mini. Di sini setiap `bun run <x>` WAJIB menunjuk
+ * script yang benar-benar ada di `package.json`. Dokumen di `docs/awcms/` dan
+ * `.claude/skills/` sengaja TIDAK termasuk — isinya diadaptasi dari awcms-mini
+ * sebagai target (lihat `docs/awcms/README.md` §Status) dan boleh menyebut
+ * script yang belum diimplementasikan.
+ * @type {Set<string>}
+ */
+export const AUTHORITATIVE_SCRIPT_DOC_FILES = new Set([
+  "README.md",
+  "README.id.md",
+  "AGENTS.md",
+  "CONTRIBUTING.md",
+  "docs/ARCHITECTURE.md"
+]);
+
+/**
+ * Deteksi rujukan `bun run <script>` yang tidak terdaftar di `package.json`.
+ * Hanya dipanggil untuk berkas current-state (lihat
+ * `AUTHORITATIVE_SCRIPT_DOC_FILES`) agar tidak salah menandai command "target"
+ * di docs/skills yang memang belum diimplementasikan.
+ * @param {string} file
+ * @param {string[]} lines
+ * @param {Set<string>} knownScripts nama script dari `package.json`
+ * @returns {Problem[]}
+ */
+export function checkKnownScripts(file, lines, knownScripts) {
+  /** @type {Problem[]} */
+  const problems = [];
+  const pattern = /\bbun run ([a-zA-Z0-9][a-zA-Z0-9:._-]*)/g;
+  lines.forEach((line, i) => {
+    for (const match of line.matchAll(pattern)) {
+      const script = match[1];
+      if (script === undefined || knownScripts.has(script)) continue;
+      problems.push({
+        file,
+        line: i + 1,
+        message: `rujukan \`bun run ${script}\` tidak ada di package.json (dokumen current-state wajib menunjuk script nyata)`
+      });
+    }
   });
   return problems;
 }
