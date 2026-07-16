@@ -101,7 +101,7 @@ membersihkan `token_reference` ke `NULL` (bukan sekadar flip status).
 **Temuan security-auditor round 1 (PR #731, High, DITUTUP)**: cek
 awal hanya punya 4 pola (JWT/EAA/ya29./gh[a-z]_) plus satu catch-all blob
 64+ karakter yang mengecualikan SEMUA string berisi titik dua — token Bot
-API Telegram asli (`110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw`, ~44
+API Telegram (bentuk `123456789:AAExampleFakeTelegramBotToken0000`, ~44
 karakter) lolos: terlalu pendek untuk catch-all, dan bentuknya tidak cocok
 4 pola lain. Ini gap nyata untuk provider BERIKUTNYA di epic ini (#646),
 bukan hipotetis. Diperbaiki dengan (1) pola penolakan eksplisit
