@@ -16,12 +16,23 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > [`docs/awcms/11_implementation_blueprint.md`](../../docs/awcms/11_implementation_blueprint.md)
 > saat mengerjakan modul AWCMS yang setara.
 
+> **Command `bun run <x>` di dalam skill adalah target.** Banyak skill merujuk
+> script (mis. `repo:inventory:check`, `openapi:bundle`, `extension:check`,
+> `data-lifecycle:*`, `reporting:*`) yang **belum diimplementasikan** di repo ini —
+> hanya ~23 script yang benar-benar terdaftar di `package.json`. Sebelum
+> menjalankan sebuah command dari skill, **verifikasi keberadaannya di
+> `package.json`**; bila belum ada, itu bagian standar yang masih perlu di-port
+> dari awcms-mini (lihat
+> [`docs/awcms/alur-pengembangan-mini-first.md`](../../docs/awcms/alur-pengembangan-mini-first.md)),
+> bukan perintah yang bisa langsung dieksekusi.
+
 ## Katalog
 
 | Skill                                        | Kapan dipakai                                                                                                                                                                            | Sumber docs                                                  |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `awcms-implement-issue`                      | Orkestrator: kerjakan satu issue/sprint atomic end-to-end                                                                                                                                | 06, 11, 12                                                   |
 | `awcms-new-module`                           | Scaffold modul baru di `src/modules/`                                                                                                                                                    | 10, 11                                                       |
+| `awcms-port-from-mini`                       | Port modul matang dari awcms-mini ke awcms (rename prefix, konsolidasi migrasi, drop dep/toolchain absen, DoD, commit atomic)                                                            | alur-pengembangan-mini-first.md                              |
 | `awcms-module-management`                    | Kelola/konsumsi sistem Module Management (registry, lifecycle, settings, health)                                                                                                         | module-management/README.md                                  |
 | `awcms-new-migration`                        | Buat/ubah migration SQL (tabel, index, RLS)                                                                                                                                              | 04, 10                                                       |
 | `awcms-new-endpoint`                         | Tambah/ubah endpoint REST + OpenAPI                                                                                                                                                      | 05, 10                                                       |

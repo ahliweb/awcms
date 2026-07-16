@@ -97,6 +97,21 @@ export async function readJsonBody<T = unknown>(
   }
 }
 
+/** Drop-in replacement for `await request.text()`, capped at `tier`'s limit. */
+export async function readTextBody(
+  request: Request,
+  tier: BodySizeTier = "default"
+): Promise<BodyReadResult<string>> {
+  const limitBytes = resolveLimitBytes(tier);
+  const textResult = await readCappedText(request, limitBytes);
+
+  if (textResult.tooLarge) {
+    return { tooLarge: true, limitBytes };
+  }
+
+  return { tooLarge: false, value: textResult.text };
+}
+
 export function bodyTooLargeResponse(limitBytes: number): Response {
   return fail(
     413,

@@ -43,6 +43,19 @@ RLS policy yang membandingkan `tenant_id` dengan
 tetap wajib memfilter `tenant_id` secara eksplisit. State pool/breaker
 diekspos di `GET /api/v1/database/pool/health`.
 
+**Pengecualian RLS yang disengaja (allow-list eksplisit).** Satu tabel sengaja
+tanpa RLS: `awcms_setup_state` (migrasi `006`) — singleton global first-run
+(dijamin satu baris oleh `awcms_setup_state_singleton CHECK (id)`) yang
+dibaca/ditulis **sebelum** tenant mana pun ada, sehingga bukan tabel
+tenant-scoped dan tak punya `app.current_tenant_id` untuk difilter. `tenant_id`
+di tabel itu nullable dan hanya mencatat tenant pertama yang menyelesaikan
+wizard, bukan pembatas isolasi; akses dijaga di lapisan aplikasi (endpoint setup
+hanya aktif saat unlocked). Ini pengecualian sah dari aturan "RLS wajib untuk
+tabel tenant-scoped", bukan kelalaian. Semua tabel tenant-scoped lain (offices,
+tenant_settings, profiles, identifiers, entity_links, identities, tenant_users,
+sessions, roles, role_permissions, access_assignments, abac_policies,
+decision_logs, audit_events) memakai RLS.
+
 **Penting (diverifikasi manual terhadap PostgreSQL asli):** PostgreSQL
 mengecualikan role superuser (dan role pemilik tabel tanpa `FORCE ROW LEVEL
 SECURITY`) dari RLS. `DATABASE_URL` di `.env.example` untuk dev lokal boleh
