@@ -24,6 +24,8 @@ tags:
     description: Cross-module audit trail (awcms_audit_events) and its read API.
   - name: Module Management
     description: Database-backed module registry, tenant module lifecycle, settings, permission sync, jobs, and health.
+  - name: Sync Storage
+    description: Offline-first sync node registration, HMAC-signed push/pull, conflict tracking, and the object sync upload queue.
 security:
   - bearerAuth: []
     tenantHeader: []
@@ -38,11 +40,37 @@ components:
       in: header
       name: X-AWCMS-Tenant-ID
       description: Active tenant context for tenant-scoped API.
+    syncHmac:
+      type: apiKey
+      in: header
+      name: X-AWCMS-Signature
+      description: HMAC-SHA256 signature over "<timestamp>.<body>" for machine-to-machine sync endpoints (with X-AWCMS-Node-ID and X-AWCMS-Timestamp).
   parameters:
     CorrelationId:
       name: X-Correlation-ID
       in: header
       required: false
+      schema:
+        type: string
+    SyncNodeId:
+      name: X-AWCMS-Node-ID
+      in: header
+      required: true
+      description: Node code identifying the calling sync node (auto-registers on first contact).
+      schema:
+        type: string
+    SyncTimestamp:
+      name: X-AWCMS-Timestamp
+      in: header
+      required: true
+      description: ISO-8601 timestamp of the request, validated against the allowed skew (anti-replay).
+      schema:
+        type: string
+    SyncSignature:
+      name: X-AWCMS-Signature
+      in: header
+      required: true
+      description: HMAC-SHA256 signature over "<timestamp>.<body>".
       schema:
         type: string
   responses:
@@ -1540,3 +1568,375 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApiError" }
         "413": { $ref: "#/components/responses/BadRequest" }
+  /api/v1/sync/push:
+    post:
+      operationId: syncPush
+      tags: [Sync Storage]
+      summary: Push a batch of local events to the server (idempotent per batchId, HMAC-authenticated).
+      security:
+        - syncHmac: []
+          tenantHeader: []
+      parameters:
+        - $ref: "#/components/parameters/SyncNodeId"
+        - $ref: "#/components/parameters/SyncTimestamp"
+        - $ref: "#/components/parameters/SyncSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batchId, events]
+              properties:
+                batchId: { type: string }
+                events:
+                  type: array
+                  items:
+                    type: object
+                    required: [eventType, aggregateType, payload]
+                    properties:
+                      eventType: { type: string }
+                      aggregateType: { type: string }
+                      aggregateId: { type: string, format: uuid }
+                      baseVersion: { type: integer, minimum: 0 }
+                      payload: {}
+      responses:
+        "200":
+          description: Batch accepted (or already applied, if the batchId was seen before).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      batchId: { type: string }
+                      accepted: { type: integer }
+                      conflicted: { type: integer }
+                      duplicate: { type: boolean }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/BadRequest" }
+  /api/v1/sync/pull:
+    post:
+      operationId: syncPull
+      tags: [Sync Storage]
+      summary: Pull events newer than the node's stored checkpoint (HMAC-authenticated).
+      security:
+        - syncHmac: []
+          tenantHeader: []
+      parameters:
+        - $ref: "#/components/parameters/SyncNodeId"
+        - $ref: "#/components/parameters/SyncTimestamp"
+        - $ref: "#/components/parameters/SyncSignature"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        "200":
+          description: Events since the node's last checkpoint, and the new checkpoint.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      events: { type: array, items: { type: object } }
+                      checkpoint: { type: integer }
+                      hasMore: { type: boolean }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/BadRequest" }
+  /api/v1/sync/status:
+    get:
+      operationId: syncGetStatus
+      tags: [Sync Storage]
+      summary: Get the calling node's sync status (HMAC-authenticated).
+      security:
+        - syncHmac: []
+          tenantHeader: []
+      parameters:
+        - $ref: "#/components/parameters/SyncNodeId"
+        - $ref: "#/components/parameters/SyncTimestamp"
+        - $ref: "#/components/parameters/SyncSignature"
+      responses:
+        "200":
+          description: Sync node status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/sync/objects:
+    post:
+      operationId: syncEnqueueObjects
+      tags: [Sync Storage]
+      summary: Enqueue local objects for object-storage sync (upsert by objectKey, HMAC-authenticated).
+      security:
+        - syncHmac: []
+          tenantHeader: []
+      parameters:
+        - $ref: "#/components/parameters/SyncNodeId"
+        - $ref: "#/components/parameters/SyncTimestamp"
+        - $ref: "#/components/parameters/SyncSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [objects]
+              properties:
+                objects:
+                  type: array
+                  items:
+                    type: object
+                    required: [objectKey, localPath, checksumSha256, byteSize]
+                    properties:
+                      objectKey: { type: string }
+                      localPath: { type: string }
+                      checksumSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+                      byteSize: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Objects queued (re-enqueuing an existing objectKey upserts it back to pending).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      queued: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/BadRequest" }
+  /api/v1/sync/objects/status:
+    get:
+      operationId: syncGetObjectsStatus
+      tags: [Sync Storage]
+      summary: List this node's pending/failed object sync queue entries (HMAC-authenticated).
+      security:
+        - syncHmac: []
+          tenantHeader: []
+      parameters:
+        - $ref: "#/components/parameters/SyncNodeId"
+        - $ref: "#/components/parameters/SyncTimestamp"
+        - $ref: "#/components/parameters/SyncSignature"
+      responses:
+        "200":
+          description: Non-sent object sync queue entries for this node (limit 100), oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      objects: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/sync/nodes:
+    get:
+      operationId: syncListNodes
+      tags: [Sync Storage]
+      summary: List sync nodes for the tenant (bearer session or SSR cookie, not HMAC).
+      description: Admin-facing view of node registrations — distinct from the machine-to-machine HMAC endpoints (/sync/push, /sync/pull, /sync/status, /sync/objects*).
+      responses:
+        "200":
+          description: All sync nodes registered for the tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      nodes: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/sync/nodes/{id}:
+    patch:
+      operationId: syncUpdateNode
+      tags: [Sync Storage]
+      summary: Activate/deactivate or rename a sync node (audited).
+      description: "Deactivating a node takes effect immediately: every HMAC sync endpoint already rejects a non-active node with 403."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [active, inactive] }
+                nodeName: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Sync node updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { type: object }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/BadRequest" }
+  /api/v1/sync/conflicts:
+    get:
+      operationId: syncListConflicts
+      tags: [Sync Storage]
+      summary: List sync conflicts for the tenant (bearer session, not HMAC).
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [open, resolved] }
+      responses:
+        "200":
+          description: Recent sync conflicts, newest first (limit 50).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      conflicts: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/sync/conflicts/{id}/resolve:
+    post:
+      operationId: syncResolveConflict
+      tags: [Sync Storage]
+      summary: Resolve a sync conflict (bearer session, not HMAC, audited).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution]
+              properties:
+                resolution: { type: string, enum: [accept_incoming, keep_existing, manual] }
+                note: { type: string }
+      responses:
+        "200":
+          description: Conflict resolved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { type: object }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Conflict is already resolved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+        "413": { $ref: "#/components/responses/BadRequest" }
+  /api/v1/sync/object-queue:
+    get:
+      operationId: syncListObjectQueue
+      tags: [Sync Storage]
+      summary: List object sync queue entries tenant-wide (bearer session, not HMAC).
+      description: Admin-facing, all-nodes view — distinct from the node-scoped HMAC GET /sync/objects/status.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [pending, sent, failed] }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Object sync queue entries tenant-wide (limit 200), newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      objects: { type: array, items: { type: object } }
+                      nextCursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/sync/object-queue/{id}/retry:
+    post:
+      operationId: syncRetryObjectQueueEntry
+      tags: [Sync Storage]
+      summary: Manually retry a failed object sync queue entry (audited).
+      description: Human override of the automatic exponential-backoff schedule. Only `failed` entries are eligible; `pending`/`sent` are rejected with 409.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Entry reset to pending.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data: { type: object }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Only failed entries can be retried.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }

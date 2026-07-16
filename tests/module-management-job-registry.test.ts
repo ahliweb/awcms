@@ -82,7 +82,11 @@ describe("fetchModuleJobs", () => {
     const commands = jobs!.map((job) => job.command).sort();
 
     expect(commands).toEqual(
-      ["bun run config:validate", "bun run domain-events:dispatch"].sort()
+      [
+        "bun run config:validate",
+        "bun run domain-events:dispatch",
+        "bun run sync:objects:dispatch"
+      ].sort()
     );
   });
 

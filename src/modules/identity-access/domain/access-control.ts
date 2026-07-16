@@ -16,10 +16,12 @@ export type AccessAction =
   | "create"
   | "update"
   | "delete"
+  | "approve"
   | "assign"
   | "configure"
   | "restore"
   | "purge"
+  | "retry"
   | "sync"
   | "enable"
   | "disable"
@@ -44,6 +46,7 @@ export type AccessDecision = {
 
 const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   "delete",
+  "approve",
   "assign",
   "configure",
   "restore",
