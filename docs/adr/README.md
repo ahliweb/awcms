@@ -1,12 +1,12 @@
 # Architecture Decision Records (ADR)
 
-Folder ini menyimpan **catatan keputusan arsitektural** AWCMS (platform ERP & integrasi bisnis). Setiap keputusan penting (arsitektur, runtime, kontrak, keamanan, atau penyimpangan dari standar dasar) dicatat sebagai satu berkas ADR agar konteks dan alasannya awet.
+Folder ini menyimpan **catatan keputusan arsitektural** AWCMS — **basis/fondasi platform tempat ERP & solusi bisnis dibangun di atasnya** (bukan sebuah ERP; lihat [ADR-0022](0022-erp-modules-live-in-extension-repos.md)). Setiap keputusan penting (arsitektur, runtime, kontrak, keamanan, atau penyimpangan dari standar dasar) dicatat sebagai satu berkas ADR agar konteks dan alasannya awet.
 
 ## Hubungan dengan repo acuan awcms-mini
 
 AWCMS dibangun ulang (lihat [ADR-0001](0001-rebuild-on-awcms-foundation-erp-scope.md)) di atas basis teknis modular monolith [`ahliweb/awcms-mini`](https://github.com/ahliweb/awcms-mini). Namun repo ini bersifat **standalone** — ia menanggung sendiri seluruh fondasi (tidak berbagi base terpisah), sehingga ADR fondasi (runtime, RLS, ABAC, offline-first, kontrak API/event, admission modul) **hidup lokal di folder ini** sebagai ADR-0002…0021, hasil adaptasi dari ADR acuan awcms-mini. ADR yang **spesifik untuk skop ERP & integrasi bisnis** ditambahkan di atasnya.
 
-> Catatan penomoran: ADR-0001 di repo ini adalah keputusan **rebuild** (skop ERP). Prinsip modular monolith yang mendasarinya diadopsi eksplisit oleh ADR-0001 tersebut dan dirinci oleh ADR fondasi 0002–0021 serta [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
+> Catatan penomoran: ADR-0001 di repo ini adalah keputusan **rebuild**. Framing awalnya ("platform ERP", modul ERP di `src/modules/`) telah **di-amend oleh [ADR-0022](0022-erp-modules-live-in-extension-repos.md)**: AWCMS adalah **basis** tempat ERP dibangun (di repo ekstensi terpisah), bukan sebuah ERP. Prinsip modular monolith yang mendasarinya diadopsi eksplisit oleh ADR-0001 dan dirinci oleh ADR fondasi 0002–0021 serta [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ## Aturan
 
@@ -51,5 +51,6 @@ flowchart LR
 | [0019](0019-integration-hub-module-admission.md)                | Admission `integration_hub` (System Foundation)                                              | Accepted |
 | [0020](0020-erp-extension-readiness-contracts.md)               | Kontrak kesiapan ekstensi ERP (business transaction, posting, period-lock, item, projection) | Accepted |
 | [0021](0021-reference-data-module-admission.md)                 | Admission `reference_data` (Official Optional Business Foundation)                           | Accepted |
+| [0022](0022-erp-modules-live-in-extension-repos.md)             | Modul domain ERP hidup di repo ekstensi, bukan di base (amandemen ADR-0001 poin 3)           | Accepted |
 
-ADR spesifik skop ERP & integrasi bisnis ditambahkan mulai nomor berikutnya seiring keputusan diambil.
+ADR spesifik skop fondasi ERP & integrasi bisnis ditambahkan mulai nomor berikutnya seiring keputusan diambil.

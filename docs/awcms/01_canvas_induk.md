@@ -1,10 +1,10 @@
 # Bagian 1 — Canvas Induk Tahapan Pengembangan AWCMS
 
-> **Status dokumen:** target/rencana arsitektur, bukan status implementasi. Repo `awcms` saat ini baru berisi keputusan rebuild (`docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md`), `AGENTS.md`, dan dokumen governance — **belum ada kode modul ERP yang diimplementasikan**. Dokumen ini menggambarkan fondasi teknis dan modul yang **direncanakan dibangun**, diadaptasi dari standar base modular monolith yang sudah terbukti (lihat riwayat migrasi ADR-013..023).
+> **Status dokumen:** target/rencana arsitektur, bukan status implementasi. Dokumen ini menggambarkan **fondasi base** (modul reusable + kontrak kesiapan ERP) yang direncanakan/dibangun di repo ini, diadaptasi dari standar base modular monolith yang sudah terbukti (lihat riwayat migrasi ADR-013..023). **Modul domain ERP tidak diimplementasikan di repo ini** — ia dibangun di repo ekstensi/turunan terpisah di atas base ini ([ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)); yang direncanakan di sini adalah fondasi dan kontrak yang dikonsumsi ekstensi itu.
 
 ## Objective
 
-Membangun **AWCMS Modular Monolith Platform ERP** sebagai fondasi yang aman, offline-first, dan siap dikembangkan bertahap untuk menjadi basis platform ERP (multi-tenant, RBAC/ABAC, audit, sync) sekaligus mengakomodasi modul bisnis yang lebih luas: keuangan/akuntansi, inventori/gudang, procurement, manufaktur, HR/payroll, serta integrasi dengan payment gateway, marketplace, sistem pajak/Coretax, dan logistik. AWCMS bukan sekadar CMS — cakupan bisnisnya adalah **platform ERP dan integrasi solusi bisnis**.
+Membangun **AWCMS Modular Monolith** sebagai **basis/fondasi** yang aman, offline-first, dan multi-tenant (RBAC/ABAC, audit, sync) tempat aplikasi **ERP & solusi bisnis dibangun di atasnya** — di repo ekstensi/turunan terpisah, bukan di dalam base ini ([ADR-0013](../adr/0013-extension-layers-and-boundary-model.md), [ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)). AWCMS **bukan sebuah ERP** dan bukan sekadar CMS: ia menyediakan modul fondasi reusable + **kontrak netral** kesiapan ERP (business transaction, posting, period-lock, item/UoM, inventory movement, reporting projection — [ADR-0020](../adr/0020-erp-extension-readiness-contracts.md)). Domain ERP sesungguhnya (keuangan/akuntansi, inventori/gudang, procurement, manufaktur, HR/payroll) dan integrasi bisnis (payment gateway, marketplace, pajak/Coretax, logistik) diimplementasikan oleh ekstensi di repo terpisah yang mengonsumsi kontrak itu.
 
 ## Stack final (rencana)
 
@@ -28,8 +28,12 @@ Membangun **AWCMS Modular Monolith Platform ERP** sebagai fondasi yang aman, off
 flowchart TB
   subgraph Presentation["Presentation (Astro pages)"]
     Admin[Admin shell]
-    App[Modul domain ERP<br/>finance · inventory · procurement · manufaktur · HR]
+    App[Modul fondasi reusable<br/>tenant · identity · profile · workflow · reporting]
   end
+  subgraph Ext["Ekstensi/turunan — repo TERPISAH, di atas base"]
+    ERP[Modul domain ERP<br/>finance · inventory · procurement · manufaktur · HR]
+  end
+  ERP -.konsumsi kontrak netral.-> Interface
   subgraph Interface["Interface (API /api/v1)"]
     Routes[Routes tipis]
     Middleware[Auth · Tenant · ABAC · Idempotency · Audit · Logging]
@@ -71,15 +75,15 @@ flowchart LR
   SEC[Production Security] -.gates.-> ALL
 ```
 
-> Modul domain ERP (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll, integrasi payment gateway/marketplace/pajak/logistik) menambah node-nya sendiri di diagram ketergantungan modul-modul tersebut — belum digambar di sini karena belum diimplementasikan; mengikuti fondasi base yang sama.
+> Modul domain ERP (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll, integrasi payment gateway/marketplace/pajak/logistik) **tidak digambar sebagai node base** — ia hidup di repo ekstensi terpisah dan bergantung pada base ini hanya lewat kontrak netral (port/event berversi), bukan sebagai modul internal `src/modules/`.
 
-> Desain teknis implementasi mengikuti pola dokumen lanjutan setara: UI/UX, frontend & integrasi/offline-first, backend data access & database, seed/RBAC/ABAC, konfigurasi/environment — akan ditambahkan di repo ini seiring modul ERP dibangun.
+> Desain teknis implementasi base mengikuti pola dokumen lanjutan setara: UI/UX, frontend & integrasi/offline-first, backend data access & database, seed/RBAC/ABAC, konfigurasi/environment. Aplikasi turunan menambah dokumen setara miliknya sendiri di repo-nya (pola: [`docs/awcms/derived-application-guide.md`](derived-application-guide.md)).
 
 ## Prinsip desain
 
 1. Sistem harus bisa berjalan lokal tanpa internet.
 2. Internet hanya dibutuhkan untuk sync, R2, atau integrasi eksternal opsional (payment gateway, marketplace, Coretax, logistik).
-3. Modul ERP tidak boleh bergantung pada provider eksternal untuk operasi intinya.
+3. Modul (base maupun ekstensi turunan) tidak boleh bergantung pada provider eksternal untuk operasi intinya.
 4. Semua transaksi/dokumen yang sudah posted (jurnal, faktur, dokumen gudang, dsb.) harus immutable.
 5. Mutation high-risk wajib idempotent.
 6. Database harus tenant-aware.
@@ -104,7 +108,7 @@ flowchart LR
 | Management Reporting  | Dashboard dan laporan generik                      |
 | Production Security   | Readiness, finding, go-live gates                  |
 
-Modul domain ERP (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll, integrasi payment gateway/marketplace/pajak-Coretax/logistik) **bukan bagian base ini** — direncanakan ditambahkan sebagai modul di `src/modules/` di atas base yang sama, mengikuti kontrak modular monolith (module.ts + domain/application/infrastructure/api).
+Modul domain ERP (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll, integrasi payment gateway/marketplace/pajak-Coretax/logistik) **bukan bagian base ini dan tidak dibangun di `src/modules/` repo ini** — ia dikembangkan di **repo ekstensi/turunan terpisah** (lapisan _ERP Extension_/_Derived Application_, [ADR-0013](../adr/0013-extension-layers-and-boundary-model.md)/[ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)), disusun lewat komposisi modul build-time ([ADR-0014](../adr/0014-deterministic-build-time-module-composition.md)) dan mengonsumsi kontrak netral kesiapan ERP base ([ADR-0020](../adr/0020-erp-extension-readiness-contracts.md)). Base ini sendiri **bukan ERP** — tidak ada GL, jurnal, AR/AP, valuasi inventori, payroll, atau perhitungan pajak di sini.
 
 ## Fase pengembangan (base, rencana)
 
@@ -165,11 +169,11 @@ flowchart LR
 - Deployment profile.
 - Handover.
 
-Setelah Fase 0–5 (base) selesai, modul ERP domain (finance, inventory, procurement, manufaktur, HR/payroll) dan modul integrasi bisnis eksternal direncanakan dibangun bertahap di atas base ini, masing-masing sebagai modul terpisah dengan fase pengembangannya sendiri.
+Setelah Fase 0–5 (base) selesai, modul ERP domain (finance, inventory, procurement, manufaktur, HR/payroll) dan modul integrasi bisnis dibangun **di repo ekstensi/turunan terpisah di atas base ini** — masing-masing dengan fase pengembangannya sendiri, mengikuti [`docs/awcms/derived-application-guide.md`](derived-application-guide.md). Base ini tidak menambah modul ERP ke `src/modules/`-nya sendiri.
 
 ## Base-ready boundary (target)
 
-AWCMS base akan dianggap siap dipakai (untuk mulai membangun modul ERP) jika:
+AWCMS base akan dianggap siap dipakai (untuk mulai membangun ekstensi/aplikasi turunan ERP di atasnya) jika:
 
 - Tenant setup berhasil.
 - Owner/admin login.
