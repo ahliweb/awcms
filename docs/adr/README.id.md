@@ -55,5 +55,6 @@ flowchart LR
 | [0021](0021-reference-data-module-admission.md)                  | Admission `reference_data` (Official Optional Business Foundation)                           | Accepted |
 | [0022](0022-erp-modules-live-in-extension-repos.md)              | Modul domain ERP hidup di repo ekstensi, bukan di base (amandemen ADR-0001 poin 3)           | Accepted |
 | [0023](0023-bilingual-docs-indonesian-source-english-default.md) | Dokumentasi dwibahasa: sumber Indonesia, Inggris default, digerbang staleness                | Accepted |
+| [0024](0024-semver-numbering-continues-legacy-major-line.md)     | Penomoran SemVer melanjutkan lini major legacy (lompat ke 5.0.0), bukan reset ke 1.0.0       | Accepted |
 
 ADR spesifik skop fondasi ERP & integrasi bisnis ditambahkan mulai nomor berikutnya seiring keputusan diambil.

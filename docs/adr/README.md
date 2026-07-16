@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:879cb95633ce05fcd63296a0aee30495dbe364b9b936335bf0f427b1f5e084a6 -->
+<!-- i18n-source-hash: sha256:4b1e5d487e5d479796aa2c2be11f1595a717f911f6525598fa0f952301a0f440 -->
 
 # Architecture Decision Records (ADR)
 
@@ -57,5 +57,6 @@ flowchart LR
 | [0021](0021-reference-data-module-admission.md)                  | Admission of `reference_data` (Official Optional Business Foundation)                            | Accepted |
 | [0022](0022-erp-modules-live-in-extension-repos.md)              | ERP domain modules live in extension repos, not the base (amends ADR-0001 point 3)               | Accepted |
 | [0023](0023-bilingual-docs-indonesian-source-english-default.md) | Bilingual docs: Indonesian source, English default, staleness-gated                              | Accepted |
+| [0024](0024-semver-numbering-continues-legacy-major-line.md)     | SemVer numbering continues the legacy major line (jump to 5.0.0), not a reset to 1.0.0           | Accepted |
 
 ADRs specific to the ERP-foundation & business-integration scope are added starting at the next number as decisions are made.

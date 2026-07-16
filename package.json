@@ -1,8 +1,8 @@
 {
   "name": "awcms",
-  "version": "0.1.0",
+  "version": "5.0.0",
   "private": true,
-  "description": "AWCMS — Platform ERP & integrasi solusi bisnis, dibangun di atas fondasi awcms (Bun + Astro + PostgreSQL)",
+  "description": "AWCMS — basis/fondasi modular monolith untuk pengembangan ERP & solusi bisnis (Bun + Astro + PostgreSQL)",
   "license": "MIT",
   "author": "AhliWeb",
   "homepage": "https://github.com/ahliweb/awcms#readme",
