@@ -95,7 +95,7 @@ Lihat [`CONTRIBUTING.md`](CONTRIBUTING.md#definition-of-done).
 
 Repo ini dilengkapi playbook pengembangan berbasis agent, diadaptasi dari [awcms-mini](https://github.com/ahliweb/awcms-mini):
 
-- [`.claude/skills/`](.claude/skills/README.md) — 45 skill tingkat-proyek yang meng-encode standar `docs/awcms/` (scaffold modul, migration, endpoint, ABAC guard, audit log, testing, security review, deploy, dst.). Dipanggil otomatis oleh model atau manual via `/<nama-skill>`.
+- [`.claude/skills/`](.claude/skills/README.md) — 46 skill tingkat-proyek yang meng-encode standar `docs/awcms/` (scaffold modul, migration, endpoint, ABAC guard, audit log, testing, security review, deploy, dst.). Dipanggil otomatis oleh model atau manual via `/<nama-skill>`.
 - [`.claude/agents/`](.claude/skills/README.md#subagents-claudeagents) — subagent `awcms-coder` (implementasi issue end-to-end), `awcms-reviewer` (review PR read-only), `awcms-security-auditor` (audit keamanan read-only).
 - [`docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf`](docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf) — panduan penggunaan keluarga agent AWCMS.
 
