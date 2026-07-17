@@ -4,11 +4,17 @@
  * every bug under test is a property of PostgreSQL's READ COMMITTED snapshot
  * and row-locking semantics, so a stubbed driver would prove nothing.
  *
- * Requires a throwaway database. Set `WORKFLOW_TEST_DATABASE_URL` to a
- * PostgreSQL URL whose schema has had `sql/` applied (`bun run db:migrate`);
- * the suite skips entirely when it is unset, so the default `bun test` run
- * stays hermetic. The suite only ever touches tenants it creates itself, and
- * deletes them again afterwards.
+ * Requires a throwaway database whose schema has had `sql/` applied
+ * (`bun run db:migrate`). Gated on `DATABASE_URL` — the same convention
+ * `reporting-projection-rebuild-lock.test.ts` uses, and the reason this suite
+ * actually executes somewhere: `ci.yml` has no database so it skips cleanly
+ * there, while `release.yml` provides a throwaway `postgres:18.4` service and
+ * sets `DATABASE_URL`. Gating on a bespoke variable instead would mean these
+ * tests never run in any pipeline. `WORKFLOW_TEST_DATABASE_URL` still
+ * overrides it for a local run against a scratch database.
+ *
+ * The suite only ever touches tenants it creates itself, and deletes them
+ * again afterwards.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
@@ -19,13 +25,18 @@ import {
   recordWorkflowTaskDecision
 } from "../src/modules/workflow-approval/application/workflow-instance-decision";
 import { escalateDueTasksForTenant } from "../src/modules/workflow-approval/application/workflow-escalation";
+import {
+  WorkflowRecoveryError,
+  reassignWorkflowTask
+} from "../src/modules/workflow-approval/application/workflow-recovery";
 import type { WorkflowGraph } from "../src/modules/workflow-approval/domain/workflow-graph";
 import {
   WORKFLOW_INSTANCE_ADVANCED_EVENT_TYPE,
   WORKFLOW_INSTANCE_APPROVED_EVENT_TYPE
 } from "../src/modules/domain-event-runtime/domain/event-type-registry";
 
-const DATABASE_URL = process.env.WORKFLOW_TEST_DATABASE_URL;
+const DATABASE_URL =
+  process.env.WORKFLOW_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const USER_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const REQUESTER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -420,5 +431,53 @@ describeOrSkip("workflow approval concurrency (real PostgreSQL)", () => {
       SELECT status FROM awcms_workflow_instances WHERE id = ${seeded.instanceId}
     `) as { status: string }[];
     expect(instanceRows[0]!.status).toBe("pending");
+  });
+  test("a rejected reassign must not retire the task's live seats — a 4xx returned from inside the transaction still COMMITS", async () => {
+    const graph = approvalGraph("all", [USER_A, USER_B]);
+    const { tenantId, taskId } = await seed(graph, [USER_A, USER_B], "all");
+
+    // USER_A decides; USER_B keeps a live 'pending' seat.
+    await sql`
+      UPDATE awcms_workflow_task_assignments SET status = 'decided'
+      WHERE tenant_id = ${tenantId} AND workflow_task_id = ${taskId}
+        AND tenant_user_id = ${USER_A}
+    `;
+
+    // Mirror the route EXACTLY: it catches WorkflowRecoveryError INSIDE the
+    // withTenant callback and returns a 409 response. Returning (rather than
+    // throwing) is what makes the transaction COMMIT — throwing out of
+    // sql.begin would roll back and hide the bug entirely.
+    const outcome = await sql.begin(async (tx: Bun.SQL) => {
+      await tx.unsafe(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
+      try {
+        await reassignWorkflowTask(tx, {
+          tenantId,
+          taskId,
+          toTenantUserId: USER_A,
+          reassignedByTenantUserId: REQUESTER,
+          reason: "mistake"
+        });
+        return "reassigned";
+      } catch (error) {
+        if (error instanceof WorkflowRecoveryError) return "409";
+        throw error;
+      }
+    });
+
+    expect(outcome).toBe("409");
+
+    // ...without having retired USER_B on the way out. The route maps
+    // WorkflowRecoveryError to a 409 from INSIDE the withTenant callback, so a
+    // throw that lands after the retirement UPDATE would commit it and leave
+    // the task with zero deciders while reporting failure.
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+    const live = (await sql`
+      SELECT tenant_user_id, status FROM awcms_workflow_task_assignments
+      WHERE tenant_id = ${tenantId} AND workflow_task_id = ${taskId}
+        AND status = 'pending'
+    `) as { tenant_user_id: string; status: string }[];
+
+    expect(live).toHaveLength(1);
+    expect(live[0]!.tenant_user_id).toBe(USER_B);
   });
 });

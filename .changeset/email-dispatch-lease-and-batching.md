@@ -31,6 +31,12 @@ template per `template_key` dalam satu pass — satu batch 25 pesan announcement
 dengan `template_key` sama sebelumnya membuat 25 transaksi berisi 25 query
 identik.
 
-Perilaku HTTP tidak berubah (response shape endpoint announcement tetap sama,
-tidak ada perubahan OpenAPI/schema), dan panggilan provider tetap di luar
-transaksi (ADR-0006).
+Response endpoint announcement bertambah field `truncated` (additive), begitu
+juga endpoint preview-nya — keduanya beserta OpenAPI-nya diperbarui. Tanpa itu
+pemanggil menerima `200 OK` berisi `recipientCount: 5000` dan tidak punya cara
+tahu bahwa sisa audiensnya tidak pernah di-enqueue; `matchedCount` di preview
+pun akan diam-diam berarti "maksimal 5000", padahal preview justru dipakai
+admin untuk menjawab "berapa yang akan terjangkau?" sebelum mengirim.
+
+Panggilan provider tetap di luar transaksi (ADR-0006), satu panggilan per pesan
+— cache template tidak menggabungkan pengiriman.

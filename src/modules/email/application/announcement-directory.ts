@@ -178,7 +178,10 @@ export async function resolveAnnouncementTargets(
 }
 
 export type AnnouncementPreviewResult = {
+  /** Capped at `ANNOUNCEMENT_MAX_RECIPIENTS`; read together with `truncated`. */
   matchedCount: number;
+  /** `true` when more users matched than the cap — preview is the screen an admin uses to answer "how many will this reach?", so a capped count must say so rather than under-report silently (Issue #153). */
+  truncated: boolean;
   sample: {
     subject: string;
     textBody?: string;
@@ -205,7 +208,11 @@ export async function previewAnnouncement(
     return null;
   }
 
-  const recipients = await resolveAnnouncementTargets(tx, tenantId, target);
+  const resolved = await resolveBoundedAnnouncementTargets(
+    tx,
+    tenantId,
+    target
+  );
   const sampleVariables = {
     ...buildSyntheticSampleVariables(templateKey),
     ...variables
@@ -217,7 +224,11 @@ export async function previewAnnouncement(
     locale
   );
 
-  return { matchedCount: recipients.length, sample: rendered };
+  return {
+    matchedCount: resolved.recipients.length,
+    truncated: resolved.truncated,
+    sample: rendered
+  };
 }
 
 export type EnqueueAnnouncementResult = {

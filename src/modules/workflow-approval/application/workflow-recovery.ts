@@ -54,9 +54,14 @@ export async function reassignWorkflowTask(
   const tenantId = assertUuid(params.tenantId);
   const taskId = assertUuid(params.taskId);
 
+  // `FOR UPDATE`: without it this is the one task-row writer left outside the
+  // serialisation added for Issue #140 — it could read 'pending', a concurrent
+  // decision could complete the task, and this would then retire seats on an
+  // already-completed task.
   const taskRows = (await tx`
     SELECT status FROM awcms_workflow_tasks
     WHERE tenant_id = ${tenantId} AND id = ${taskId}
+    FOR UPDATE
   `) as { status: string }[];
 
   if (!taskRows[0]) {
@@ -69,6 +74,24 @@ export async function reassignWorkflowTask(
     );
   }
 
+  // Checked BEFORE the retirement UPDATE below, and deliberately not after it:
+  // the route maps `WorkflowRecoveryError` to a 4xx from INSIDE the
+  // `withTenant` callback, so returning a response COMMITS the transaction.
+  // Throwing after the UPDATE would therefore retire every live seat and still
+  // report failure, stranding the task with zero deciders — the very deadlock
+  // Issue #140 exists to remove. Every throw here must happen before any write.
+  const decidedRows = (await tx`
+    SELECT 1 FROM awcms_workflow_task_assignments
+    WHERE tenant_id = ${tenantId} AND workflow_task_id = ${taskId}
+      AND tenant_user_id = ${params.toTenantUserId} AND status = 'decided'
+  `) as unknown[];
+
+  if (decidedRows[0]) {
+    throw new WorkflowRecoveryError(
+      "That user has already decided this task, so it cannot be reassigned to them."
+    );
+  }
+
   await tx`
     UPDATE awcms_workflow_task_assignments
     SET status = 'reassigned', reassigned_to_tenant_user_id = ${params.toTenantUserId},
@@ -77,15 +100,13 @@ export async function reassignWorkflowTask(
     WHERE tenant_id = ${tenantId} AND workflow_task_id = ${taskId} AND status = 'pending'
   `;
 
-  // The UPDATE above already retired every 'pending' row on this task, so the
-  // only way this can conflict with migration 018's partial unique index
-  // (one live assignment per person per task, GHSA-9qwq-cmr5-6wfc) is a
-  // 'decided' row: the target has ALREADY decided this task and is now being
-  // reassigned it. Handing them a fresh 'pending' seat there would let their
-  // single person-worth of authority count twice toward quorum — exactly the
-  // bypass 018 closes. `DO NOTHING` + an empty RETURNING turns that into a
-  // clean domain error (the route maps `WorkflowRecoveryError` to a 4xx)
-  // rather than a raw 23505 surfacing as a 500.
+  // The UPDATE above retired every 'pending' row on this task, and a 'decided'
+  // row for the target was already rejected before any write, so migration
+  // 018's partial unique index (one live assignment per person per task,
+  // GHSA-9qwq-cmr5-6wfc) cannot conflict here. `DO NOTHING` is kept only as a
+  // belt-and-braces guard against a raw 23505 becoming a 500; it must NOT be
+  // turned back into a post-write throw — see the comment on the decided-row
+  // check above for why that strands the task.
   const newAssignmentRows = (await tx`
     INSERT INTO awcms_workflow_task_assignments
       (tenant_id, workflow_task_id, tenant_user_id, status)
@@ -95,8 +116,13 @@ export async function reassignWorkflowTask(
   `) as { id: string }[];
 
   if (!newAssignmentRows[0]) {
-    throw new WorkflowRecoveryError(
-      "That user has already decided this task, so it cannot be reassigned to them."
+    // Unreachable via the checked paths above. Deliberately NOT a
+    // `WorkflowRecoveryError`: that maps to a 4xx returned from inside the
+    // transaction callback, which commits. A plain throw propagates out of
+    // `withTenant` and rolls the retirement UPDATE back, which is the only
+    // safe outcome when the state is not what we proved it was.
+    throw new Error(
+      "Reassign could not seat the target after retiring the task's assignments."
     );
   }
 
