@@ -24,7 +24,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   checkAppDbUserNotSuperuser,
   checkLeastPrivilegeRoleProvisioned,
-  checkRlsEnabled
+  checkRlsEnabled,
+  checkRuntimeRoleGrants
 } from "../scripts/security-readiness";
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -141,3 +142,142 @@ describeOrSkip("security:readiness RLS checks (real PostgreSQL)", () => {
     expect(["pass", "fail"]).toContain(result.status);
   });
 });
+
+/**
+ * Issue #160 — real-PostgreSQL tests for `checkRuntimeRoleGrants`, the grant
+ * check that closes the gap `checkRlsEnabled` structurally cannot see: a
+ * table's RLS FLAGS say nothing about whether `awcms_app` can actually reach
+ * it. This is a property of PostgreSQL's grant system (`has_table_privilege`,
+ * `ALTER DEFAULT PRIVILEGES` being executing-role-bound), so a stubbed driver
+ * would prove nothing — same reasoning as the RLS suite above.
+ */
+describeOrSkip(
+  "security:readiness runtime-role grant check (real PostgreSQL)",
+  () => {
+    let sql: Bun.SQL;
+
+    beforeAll(async () => {
+      sql = new Bun.SQL(DATABASE_URL!, { max: 2 });
+    });
+
+    afterAll(async () => {
+      await sql.close({ timeout: 1 });
+    });
+
+    async function awcmsAppExists(): Promise<boolean> {
+      const rows = (await sql`
+      SELECT 1 AS present FROM pg_roles WHERE rolname = 'awcms_app'
+    `) as { present: number }[];
+      return rows.length > 0;
+    }
+
+    async function connectionIsSuperuser(): Promise<boolean> {
+      const rows = (await sql`
+      SELECT rolsuper FROM pg_roles WHERE rolname = current_user
+    `) as { rolsuper: boolean }[];
+      return rows[0]?.rolsuper === true;
+    }
+
+    test("passes on a correctly-narrowed, fully-migrated database", async () => {
+      if (!(await awcmsAppExists())) {
+        // Pre-sql/019 database: the check is non-blocking by design. Its own
+        // unit-level "role absent -> pass" path is asserted separately; here we
+        // only guard against a false failure when the role is simply not present.
+        const result = await checkRuntimeRoleGrants();
+        expect(result.severity).toBe("critical");
+        expect(result.status).toBe("pass");
+        return;
+      }
+
+      // Independently derive the two halves of the expectation from the database,
+      // NOT from the check under test: sql/021 must have removed the residual
+      // writes, and the tenant root must still be reachable for the writes real
+      // code paths use. This proves the migration actually took effect AND that
+      // the check agrees with reality.
+      const probes = (await sql`
+      SELECT
+        has_table_privilege('awcms_app', 'awcms_tenants', 'DELETE') AS tenants_delete,
+        has_table_privilege('awcms_app', 'awcms_permissions', 'INSERT') AS perms_insert,
+        has_table_privilege('awcms_app', 'awcms_schema_migrations', 'DELETE') AS migrations_delete,
+        has_table_privilege('awcms_app', 'awcms_tenants', 'INSERT') AS tenants_insert,
+        has_table_privilege('awcms_app', 'awcms_tenants', 'UPDATE') AS tenants_update
+    `) as {
+        tenants_delete: boolean;
+        perms_insert: boolean;
+        migrations_delete: boolean;
+        tenants_insert: boolean;
+        tenants_update: boolean;
+      }[];
+      const p = probes[0]!;
+
+      // The residual #160 closes.
+      expect(p.tenants_delete).toBe(false);
+      expect(p.perms_insert).toBe(false);
+      expect(p.migrations_delete).toBe(false);
+      // The grants the setup fallback + tenant-settings screen depend on.
+      expect(p.tenants_insert).toBe(true);
+      expect(p.tenants_update).toBe(true);
+
+      const result = await checkRuntimeRoleGrants();
+      expect(result.severity).toBe("critical");
+      expect(result.status).toBe("pass");
+    });
+
+    test("flags a tenant-scoped table that is RLS-forced but ungranted", async () => {
+      if (!(await awcmsAppExists()) || !(await connectionIsSuperuser())) {
+        // The setup needs to CREATE a table owned by a DIFFERENT role than the
+        // one `ALTER DEFAULT PRIVILEGES` is bound to (the exact bug: a db:migrate
+        // under a second superuser). That requires superuser + the role present.
+        // Where either is missing (e.g. connected as awcms_app itself), skip
+        // rather than assert a scenario we cannot construct.
+        return;
+      }
+
+      const probeTable = "awcms_grant_probe_ungranted_owner";
+      const probeOwner = "awcms_grant_probe_owner_role";
+
+      try {
+        await sql.unsafe(`DROP TABLE IF EXISTS ${probeTable}`);
+        await sql.unsafe(`
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${probeOwner}') THEN
+            CREATE ROLE ${probeOwner} NOLOGIN;
+          END IF;
+        END $$;
+      `);
+        await sql.unsafe(`GRANT CREATE ON SCHEMA public TO ${probeOwner}`);
+        // Create the table AS the probe owner so the migration owner's default
+        // privileges do NOT fire — awcms_app ends up with zero grant on it, i.e.
+        // RLS-forced-but-ungranted once RLS is enforced.
+        await sql.unsafe(`SET ROLE ${probeOwner}`);
+        await sql.unsafe(`
+        CREATE TABLE ${probeTable} (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id uuid NOT NULL
+        )
+      `);
+        await sql.unsafe(`RESET ROLE`);
+        await sql.unsafe(`ALTER TABLE ${probeTable} ENABLE ROW LEVEL SECURITY`);
+        await sql.unsafe(`ALTER TABLE ${probeTable} FORCE ROW LEVEL SECURITY`);
+
+        // Guard the guard: awcms_app really holds no privilege on the probe.
+        const priv = (await sql.unsafe(`
+        SELECT has_table_privilege('awcms_app', '${probeTable}', 'SELECT') AS sel
+      `)) as { sel: boolean }[];
+        expect(priv[0]?.sel).toBe(false);
+
+        const result = await checkRuntimeRoleGrants();
+
+        expect(result.severity).toBe("critical");
+        expect(result.status).toBe("fail");
+        expect(result.evidence).toContain(probeTable);
+        expect(result.evidence).toContain("permission denied");
+      } finally {
+        await sql.unsafe(`RESET ROLE`);
+        await sql.unsafe(`DROP TABLE IF EXISTS ${probeTable}`);
+        await sql.unsafe(`REVOKE CREATE ON SCHEMA public FROM ${probeOwner}`);
+        await sql.unsafe(`DROP ROLE IF EXISTS ${probeOwner}`);
+      }
+    });
+  }
+);

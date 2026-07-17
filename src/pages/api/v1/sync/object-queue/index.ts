@@ -8,14 +8,8 @@ import {
   authorizeInTransaction,
   resolveAuthInputs
 } from "../../../../../modules/identity-access/application/access-guard";
-import {
-  fetchObjectQueueEntries,
-  OBJECT_QUEUE_LIMIT
-} from "../../../../../modules/sync-storage/application/sync-directory";
-import {
-  decodeKeysetCursor,
-  encodeKeysetCursor
-} from "../../../../../modules/_shared/keyset-pagination";
+import { fetchObjectQueueEntries } from "../../../../../modules/sync-storage/application/sync-directory";
+import { decodeKeysetCursor } from "../../../../../modules/_shared/keyset-pagination";
 
 const READ_GUARD = {
   moduleKey: "sync_storage",
@@ -75,20 +69,12 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
       return auth.denied;
     }
 
-    const objects = await fetchObjectQueueEntries(
+    const { objects, nextCursor } = await fetchObjectQueueEntries(
       tx,
       tenantId,
       (statusParam as "pending" | "sent" | "failed" | null) ?? undefined,
       cursor ?? undefined
     );
-
-    const nextCursor =
-      objects.length === OBJECT_QUEUE_LIMIT
-        ? encodeKeysetCursor(
-            new Date(objects[objects.length - 1]!.createdAt),
-            objects[objects.length - 1]!.objectQueueId
-          )
-        : null;
 
     return ok({ objects, nextCursor });
   });

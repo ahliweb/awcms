@@ -6,7 +6,10 @@
  * Access & Users endpoints and `admin/access-users.astro`.
  */
 
-import type { KeysetCursor } from "../../_shared/keyset-pagination";
+import {
+  encodeKeysetCursor,
+  type KeysetCursor
+} from "../../_shared/keyset-pagination";
 
 export type SyncNodeSummary = {
   nodeId: string;
@@ -82,6 +85,14 @@ type ObjectQueueRow = {
   requires_upload: boolean;
   uploaded_at: Date | null;
   created_at: Date;
+  // Full-precision cursor text (Issue #158) — kept out of the response DTO;
+  // see `_shared/keyset-pagination` for why a JS `Date` cannot carry it.
+  created_at_cursor: string;
+};
+
+export type ObjectQueuePage = {
+  objects: ObjectQueueEntry[];
+  nextCursor: string | null;
 };
 
 export const OBJECT_QUEUE_LIMIT = 200;
@@ -109,17 +120,18 @@ export const OBJECT_QUEUE_LIMIT = 200;
  * `cursor` (optional, keyset `(created_at, id) < (cursor)`, doc: skill
  * `awcms-performance` §Pagination keyset) lets `GET
  * /api/v1/sync/object-queue` page past the first `OBJECT_QUEUE_LIMIT`
- * (200) rows without `OFFSET`. `admin/sync.astro`'s SSR call (only ever
- * `status: "failed"`, first page) omits it, so its existing
- * `Awaited<ReturnType<typeof fetchObjectQueueEntries>>`/array usage is
- * unaffected.
+ * (200) rows without `OFFSET`. `nextCursor` is built HERE, from the
+ * full-precision `created_at_cursor` text, rather than in the route — a route
+ * that rebuilt it from the DTO's `createdAt` (a JS `Date`) would floor the
+ * microseconds and skip every row sharing that millisecond across the page
+ * boundary (Issue #158).
  */
 export async function fetchObjectQueueEntries(
   tx: Bun.SQL,
   tenantId: string,
   statusFilter?: "pending" | "sent" | "failed",
   cursor?: KeysetCursor
-): Promise<ObjectQueueEntry[]> {
+): Promise<ObjectQueuePage> {
   const cursorCreatedAt = cursor?.createdAt ?? null;
   const cursorId = cursor?.id ?? null;
 
@@ -128,10 +140,11 @@ export async function fetchObjectQueueEntries(
       ? await tx`
         SELECT q.id, q.node_id, n.node_code, q.object_key, q.status, q.retry_count,
                q.next_retry_at, q.last_error, q.byte_size, q.requires_upload,
-               q.uploaded_at, q.created_at
+               q.uploaded_at, q.created_at, q.created_at_cursor
         FROM (
           SELECT id, node_id, object_key, status, retry_count, next_retry_at,
                  last_error, byte_size, requires_upload, uploaded_at, created_at,
+                 to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
                  tenant_id
           FROM awcms_object_sync_queue
           WHERE tenant_id = ${tenantId} AND status = ${statusFilter}
@@ -148,10 +161,11 @@ export async function fetchObjectQueueEntries(
       : await tx`
         SELECT q.id, q.node_id, n.node_code, q.object_key, q.status, q.retry_count,
                q.next_retry_at, q.last_error, q.byte_size, q.requires_upload,
-               q.uploaded_at, q.created_at
+               q.uploaded_at, q.created_at, q.created_at_cursor
         FROM (
           SELECT id, node_id, object_key, status, retry_count, next_retry_at,
                  last_error, byte_size, requires_upload, uploaded_at, created_at,
+                 to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
                  tenant_id
           FROM awcms_object_sync_queue
           WHERE tenant_id = ${tenantId}
@@ -167,18 +181,27 @@ export async function fetchObjectQueueEntries(
       `
   ) as ObjectQueueRow[];
 
-  return rows.map((row) => ({
-    objectQueueId: row.id,
-    nodeId: row.node_id,
-    nodeCode: row.node_code,
-    objectKey: row.object_key,
-    status: row.status,
-    retryCount: Number(row.retry_count),
-    nextRetryAt: row.next_retry_at?.toISOString() ?? null,
-    lastError: row.last_error,
-    byteSize: Number(row.byte_size),
-    requiresUpload: row.requires_upload,
-    uploadedAt: row.uploaded_at?.toISOString() ?? null,
-    createdAt: row.created_at.toISOString()
-  }));
+  const last = rows[rows.length - 1];
+  const nextCursor =
+    rows.length === OBJECT_QUEUE_LIMIT && last
+      ? encodeKeysetCursor(last.created_at_cursor, last.id)
+      : null;
+
+  return {
+    objects: rows.map((row) => ({
+      objectQueueId: row.id,
+      nodeId: row.node_id,
+      nodeCode: row.node_code,
+      objectKey: row.object_key,
+      status: row.status,
+      retryCount: Number(row.retry_count),
+      nextRetryAt: row.next_retry_at?.toISOString() ?? null,
+      lastError: row.last_error,
+      byteSize: Number(row.byte_size),
+      requiresUpload: row.requires_upload,
+      uploadedAt: row.uploaded_at?.toISOString() ?? null,
+      createdAt: row.created_at.toISOString()
+    })),
+    nextCursor
+  };
 }

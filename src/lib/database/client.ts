@@ -125,7 +125,12 @@ function buildClient(databaseUrl: string, kind: ClientKind): Bun.SQL {
  *   deployment activates LOGIN + a secret and points `DATABASE_URL` at it —
  *   doc 18 §Model role database). Not superuser, not BYPASSRLS, not the
  *   tables' owner, so RLS is genuinely enforced against it, with a
- *   fail-closed default `app.current_tenant_id` GUC as the backstop.
+ *   fail-closed default `app.current_tenant_id` GUC as the backstop. Its
+ *   blanket DML on the RLS-free global tables was narrowed by
+ *   `sql/021_awcms_db_role_grants_narrow.sql` (Issue #160): it can no longer
+ *   DELETE `awcms_tenants`, DELETE `awcms_schema_migrations`, or write
+ *   `awcms_permissions`. The worker/setup role split (mini's migration 045)
+ *   is still deferred — see below.
  * - `worker` -> `WORKER_DATABASE_URL`, `setup` -> `SETUP_DATABASE_URL` —
  *   these are connection/pool seams ONLY. This repo ships NO `awcms_worker`
  *   / `awcms_setup` role for them to point at (that is awcms-mini's later

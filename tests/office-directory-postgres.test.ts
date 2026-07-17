@@ -347,17 +347,18 @@ describeOrSkip("office directory (real PostgreSQL)", () => {
     });
 
     /**
-     * The worst case for the cursor's millisecond precision, and the reason
-     * `listOffices` truncates its sort key to milliseconds rather than
-     * comparing bare `created_at`: rows created inside ONE transaction share
-     * `created_at` exactly (it is transaction time), so a page boundary landing
-     * inside such a group is decided entirely by the `id` tiebreaker.
+     * The worst case for cursor precision, and the reason the shared keyset
+     * cursor now carries the full microsecond `created_at` as text (Issue #158)
+     * instead of a millisecond-precision JS `Date`: rows created inside ONE
+     * transaction share `created_at` exactly (it is transaction time), so a page
+     * boundary landing inside such a group is decided entirely by the `id`
+     * tiebreaker.
      *
-     * Against a bare `(created_at, id) < (cursor)` this returned 100 of 103 —
-     * page 2 came back EMPTY, because the millisecond-precision cursor sorts
-     * strictly before every microsecond-bearing row it was built from, and
-     * three offices became permanently unreachable through the API. Asserting
-     * the partition (rather than just the lengths) is what catches that:
+     * Against the old millisecond cursor this returned 100 of 103 — page 2 came
+     * back EMPTY, because a millisecond-precision cursor sorts strictly before
+     * every microsecond-bearing row it was built from, and three offices became
+     * permanently unreachable through the API. Asserting the partition (rather
+     * than just the lengths) is what catches that:
      * silent loss looks like success to a caller who only checks page 1.
      */
     test("pages correctly when created_at ties across the page boundary", async () => {

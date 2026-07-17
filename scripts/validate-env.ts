@@ -82,6 +82,7 @@ const RULES: readonly Rule[] = [
     secret: true
   },
   { name: "AWCMS_SYNC_MAX_SKEW_SEC", required: false, type: "int", min: 1 },
+  { name: "SYNC_HMAC_ALLOW_LEGACY", required: false, type: "bool" },
 
   {
     name: "STORAGE_DRIVER",

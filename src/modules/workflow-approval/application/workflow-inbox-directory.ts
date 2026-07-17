@@ -9,7 +9,10 @@
  * `awcms_audit_events`) rather than a new dedicated history table.
  */
 import { assertUuid } from "../../../lib/database/tenant-context";
-import { encodeKeysetCursor } from "../../_shared/keyset-pagination";
+import {
+  encodeKeysetCursor,
+  type KeysetCursor
+} from "../../_shared/keyset-pagination";
 
 export type WorkflowTaskListFilters = {
   workflowKey?: string;
@@ -54,7 +57,7 @@ export async function listWorkflowInboxTasks(
   tenantId: string,
   filters: WorkflowTaskListFilters,
   now: Date,
-  cursor: { createdAt: Date; id: string } | null
+  cursor: KeysetCursor | null
 ): Promise<WorkflowTaskListResult> {
   const safeTenantId = assertUuid(tenantId);
   const statusFilter = filters.status ?? "pending";
@@ -71,6 +74,8 @@ export async function listWorkflowInboxTasks(
     quorum_rule: string;
     due_at: Date | null;
     created_at: Date;
+    // Full-precision cursor text (Issue #158) — see `_shared/keyset-pagination`.
+    created_at_cursor: string;
     instance_id: string;
     resource_type: string;
     resource_id: string;
@@ -82,6 +87,7 @@ export async function listWorkflowInboxTasks(
 
   const rows = (await tx`
     SELECT t.id, t.node_id, t.status, t.quorum_rule, t.due_at, t.created_at,
+           to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
            i.id AS instance_id, i.resource_type, i.resource_id,
            i.requested_by_tenant_user_id,
            d.id AS definition_id, d.workflow_key, d.name AS definition_name
@@ -110,7 +116,7 @@ export async function listWorkflowInboxTasks(
   const nextCursor =
     rows.length === TASK_LIST_LIMIT
       ? encodeKeysetCursor(
-          rows[rows.length - 1]!.created_at,
+          rows[rows.length - 1]!.created_at_cursor,
           rows[rows.length - 1]!.id
         )
       : null;
