@@ -743,7 +743,8 @@ paths:
           schema: { type: string }
         - name: status
           in: query
-          schema: { type: string, enum: [pending, completed, skipped, cancelled] }
+          schema:
+            { type: string, enum: [pending, completed, skipped, cancelled] }
         - name: overdue
           in: query
           schema: { type: boolean }
@@ -1636,7 +1637,8 @@ paths:
                     properties:
                       modules:
                         type: array
-                        items: { $ref: "#/components/schemas/ModuleCatalogEntry" }
+                        items:
+                          { $ref: "#/components/schemas/ModuleCatalogEntry" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
   /api/v1/modules/sync:
@@ -1778,7 +1780,8 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean, enum: [true] }
-                  data: { $ref: "#/components/schemas/ModulePermissionSyncReport" }
+                  data:
+                    { $ref: "#/components/schemas/ModulePermissionSyncReport" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -2115,7 +2118,8 @@ paths:
         - name: status
           in: query
           required: false
-          schema: { type: string, enum: [pending, delivered, dead_letter, skipped] }
+          schema:
+            { type: string, enum: [pending, delivered, dead_letter, skipped] }
         - name: consumerName
           in: query
           required: false
@@ -2356,7 +2360,8 @@ paths:
                     properties:
                       objectKey: { type: string }
                       localPath: { type: string }
-                      checksumSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+                      checksumSha256:
+                        { type: string, pattern: "^[a-f0-9]{64}$" }
                       byteSize: { type: integer, minimum: 0 }
       responses:
         "200":
@@ -2501,7 +2506,11 @@ paths:
               type: object
               required: [resolution]
               properties:
-                resolution: { type: string, enum: [accept_incoming, keep_existing, manual] }
+                resolution:
+                  {
+                    type: string,
+                    enum: [accept_incoming, keep_existing, manual]
+                  }
                 note: { type: string }
       responses:
         "200":
@@ -2806,7 +2815,8 @@ paths:
           required: false
           schema:
             type: string
-            enum: [queued, sending, sent, failed, retry_wait, cancelled, suppressed]
+            enum:
+              [queued, sending, sent, failed, retry_wait, cancelled, suppressed]
         - name: cursor
           in: query
           required: false

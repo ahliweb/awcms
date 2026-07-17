@@ -95,7 +95,10 @@ export async function resolveAnnouncementTargets(
 
   return rows
     .filter((row) => {
-      const normalized = normalizeIdentifierValue("email", row.login_identifier);
+      const normalized = normalizeIdentifierValue(
+        "email",
+        row.login_identifier
+      );
       return !suppressedHashes.has(hashIdentifierValue(normalized));
     })
     .map((row) => ({
@@ -181,7 +184,10 @@ export async function enqueueAnnouncement(
   const priority = target.type === "tenant" ? "normal" : "high";
 
   for (const recipient of recipients) {
-    const normalized = normalizeIdentifierValue("email", recipient.loginIdentifier);
+    const normalized = normalizeIdentifierValue(
+      "email",
+      recipient.loginIdentifier
+    );
     const recipientVariables = {
       ...variables,
       userName: recipient.displayName

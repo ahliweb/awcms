@@ -66,16 +66,16 @@ representative consumers, to exercise the full mechanism end-to-end:
 
 ## HTTP surface (`/api/v1/domain-events`)
 
-| Method & path | Permission | Notes |
-| --- | --- | --- |
-| `GET /events` | `events.read` | Bounded list, redacted payload projections only. |
-| `GET /events/{id}` | `events.read` | Redacted payload projection only. |
-| `GET /deliveries` | `deliveries.read` | `status=dead_letter` is the DLQ view. |
-| `GET /deliveries/{id}` | `deliveries.read` | Single-record DLQ inspection with joined event. |
-| `POST /deliveries/{id}/replay` | `deliveries.replay` | Reason-required, `Idempotency-Key`, audited. |
-| `GET /consumers` | `consumers.read` | Registry + pause state + backlog counts. |
-| `POST /consumers/{name}/pause` | `consumers.manage` | Reason-required, audited (naturally idempotent). |
-| `POST /consumers/{name}/resume` | `consumers.manage` | Audited (naturally idempotent). |
+| Method & path                   | Permission          | Notes                                            |
+| ------------------------------- | ------------------- | ------------------------------------------------ |
+| `GET /events`                   | `events.read`       | Bounded list, redacted payload projections only. |
+| `GET /events/{id}`              | `events.read`       | Redacted payload projection only.                |
+| `GET /deliveries`               | `deliveries.read`   | `status=dead_letter` is the DLQ view.            |
+| `GET /deliveries/{id}`          | `deliveries.read`   | Single-record DLQ inspection with joined event.  |
+| `POST /deliveries/{id}/replay`  | `deliveries.replay` | Reason-required, `Idempotency-Key`, audited.     |
+| `GET /consumers`                | `consumers.read`    | Registry + pause state + backlog counts.         |
+| `POST /consumers/{name}/pause`  | `consumers.manage`  | Reason-required, audited (naturally idempotent). |
+| `POST /consumers/{name}/resume` | `consumers.manage`  | Audited (naturally idempotent).                  |
 
 All endpoints are tenant-scoped, guarded by default-deny ABAC
 (`authorizeInTransaction`), and run inside `withTenant` so RLS enforces

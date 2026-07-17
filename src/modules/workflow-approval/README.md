@@ -9,9 +9,9 @@ Implementation of Issue 11.1 (`docs/awcms/06_github_issues_detail.md` §Issue 11
 | One `status: active/inactive` per definition       | `version` + `lifecycle_status: draft/active/retired`, full version history, immutable published/retired rows  |
 | `steps` (ordered jsonb list)                       | `graph` (nodes/transitions — approval/condition/parallel/join/notify/end)                                     |
 | No public create-definition endpoint               | `POST/PUT/DELETE /workflows/definitions`, `.../publish`, `.../retire`, `.../new-version`, `.../validate`      |
-| `current_step_order` (single int)                  | `awcms_workflow_tasks` rows (one per activated node) — supports multiple concurrently-active nodes       |
-| One implicit assignee (whoever calls the decision) | `awcms_workflow_task_assignments` — explicit assignees, quorum/any/all, delegation-resolved deciders     |
-| No delegation                                      | `awcms_workflow_delegations` — effective-dated, scoped, reason, audited, revocable                       |
+| `current_step_order` (single int)                  | `awcms_workflow_tasks` rows (one per activated node) — supports multiple concurrently-active nodes            |
+| One implicit assignee (whoever calls the decision) | `awcms_workflow_task_assignments` — explicit assignees, quorum/any/all, delegation-resolved deciders          |
+| No delegation                                      | `awcms_workflow_delegations` — effective-dated, scoped, reason, audited, revocable                            |
 | No escalation/timeout                              | Per-node `escalation` config + `bun run workflow:escalations:dispatch`, idempotent via optimistic concurrency |
 | No administrative recovery                         | Reassign / cancel / force-approve / force-reject, permission-gated + `Idempotency-Key` + audit                |
 | `GET /workflows/tasks` (offset-free, no filters)   | Keyset-paginated, filterable (workflow key/resource type/status/overdue), safe search, action-history view    |

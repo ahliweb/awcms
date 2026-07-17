@@ -52,21 +52,21 @@ that needs the registry row to exist (`enableTenantModule`,
 
 ## API surface
 
-| Method + Path                                     | Permission                          |
-| ------------------------------------------------- | ----------------------------------- |
-| `GET /api/v1/modules`                             | `module_management.modules.read`    |
-| `GET /api/v1/modules/{moduleKey}`                 | `module_management.modules.read`    |
-| `POST /api/v1/modules/sync`                       | `module_management.modules.sync`    |
-| `GET /api/v1/modules/{moduleKey}/health`          | `module_management.health.read`     |
-| `POST /api/v1/modules/{moduleKey}/health/check`   | `module_management.health.check`    |
-| `GET /api/v1/modules/{moduleKey}/jobs`            | `module_management.jobs.read`       |
-| `GET /api/v1/modules/{moduleKey}/permissions`     | `module_management.permissions.read`|
-| `GET /api/v1/tenant/modules`                      | `module_management.tenant_modules.read`   |
-| `POST /api/v1/tenant/modules/{moduleKey}/enable`  | `module_management.tenant_modules.enable`  |
-| `POST /api/v1/tenant/modules/{moduleKey}/disable` | `module_management.tenant_modules.disable` |
-| `GET /api/v1/tenant/modules/{moduleKey}/settings` | `module_management.settings.read`   |
-| `PATCH /api/v1/tenant/modules/{moduleKey}/settings` | `module_management.settings.update` |
-| `GET /api/v1/access/modules`                      | `identity_access.access_control.read` |
+| Method + Path                                       | Permission                                 |
+| --------------------------------------------------- | ------------------------------------------ |
+| `GET /api/v1/modules`                               | `module_management.modules.read`           |
+| `GET /api/v1/modules/{moduleKey}`                   | `module_management.modules.read`           |
+| `POST /api/v1/modules/sync`                         | `module_management.modules.sync`           |
+| `GET /api/v1/modules/{moduleKey}/health`            | `module_management.health.read`            |
+| `POST /api/v1/modules/{moduleKey}/health/check`     | `module_management.health.check`           |
+| `GET /api/v1/modules/{moduleKey}/jobs`              | `module_management.jobs.read`              |
+| `GET /api/v1/modules/{moduleKey}/permissions`       | `module_management.permissions.read`       |
+| `GET /api/v1/tenant/modules`                        | `module_management.tenant_modules.read`    |
+| `POST /api/v1/tenant/modules/{moduleKey}/enable`    | `module_management.tenant_modules.enable`  |
+| `POST /api/v1/tenant/modules/{moduleKey}/disable`   | `module_management.tenant_modules.disable` |
+| `GET /api/v1/tenant/modules/{moduleKey}/settings`   | `module_management.settings.read`          |
+| `PATCH /api/v1/tenant/modules/{moduleKey}/settings` | `module_management.settings.update`        |
+| `GET /api/v1/access/modules`                        | `identity_access.access_control.read`      |
 
 All high-risk mutations (sync, enable, disable, settings update, health check)
 write an audit event to `awcms_audit_events` with

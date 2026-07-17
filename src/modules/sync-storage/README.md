@@ -53,7 +53,7 @@ Schema: `sql/011_awcms_sync_storage_conflict_schema.sql`.
 
 - `awcms_object_sync_queue` — queue of local objects (e.g. receipt/attachment
   files) awaiting upload to object storage. Unique `(tenant_id, node_id,
-  object_key)` — re-enqueuing the same `objectKey` upserts (not duplicates):
+object_key)` — re-enqueuing the same `objectKey` upserts (not duplicates):
   `local_path`, `checksum_sha256`, `byte_size`, `requires_upload` are updated
   and the row is reset to `status='pending'`.
 - `requires_upload` is set from `R2_ENABLED` at enqueue time. Enqueue itself

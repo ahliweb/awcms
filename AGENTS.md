@@ -17,7 +17,7 @@ AWCMS adalah rebuild ber-skop ERP di atas fondasi **awcms-mini** (repo standar).
 3. Kerjakan atomic — satu PR = satu perubahan yang jelas dan terisolasi.
 4. Tulis test yang gagal sebelum fix, lulus sesudahnya.
 5. Perbarui dokumentasi (OpenAPI/AsyncAPI/docs/awcms) dan changeset bila perilaku berubah.
-6. Validasi lokal (`bun run check`) sebelum membuka PR.
+6. Validasi lokal **`bun run check` PENUH** sebelum membuka PR — bukan subset. `check` mencakup `lint` (prettier `--check`) dan `build`; melewati keduanya adalah penyebab tersering "hijau lokal, merah di CI" (`.github/workflows/ci.yml` menjalankan keduanya). Jalankan `bun run format` dulu bila perlu, lalu `bun run check`.
 
 ## Aturan wajib (non-negotiable)
 
