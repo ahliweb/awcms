@@ -9,6 +9,7 @@ import type { AccessRequest, TenantContext } from "../domain/access-control";
 import { evaluateAccess } from "../domain/access-control";
 import {
   fetchGrantedPermissionKeys,
+  resolveModuleEnabled,
   resolveTenantContext
 } from "./auth-context";
 import { recordDecisionLog } from "./decision-log";
@@ -65,6 +66,38 @@ export async function authorizeInTransaction(
     return {
       allowed: false,
       denied: fail(401, "AUTH_REQUIRED", "Session is invalid or expired.")
+    };
+  }
+
+  // Disabling a module must block its endpoints server-side, not just hide
+  // them from the navigation — checked here, before permissions are even
+  // looked up, so a disabled module is refused no matter what the actor was
+  // granted. `module_management` is `isCore` and cannot be disabled, so its
+  // own lifecycle endpoints can never lock a tenant out of re-enabling.
+  const moduleEnabled = await resolveModuleEnabled(
+    tx,
+    tenantId,
+    guard.moduleKey
+  );
+
+  if (!moduleEnabled) {
+    const decision = {
+      allowed: false,
+      reason: "Module is disabled for this tenant.",
+      matchedPolicy: "module_disabled"
+    };
+
+    await recordDecisionLog(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      guard,
+      decision
+    );
+
+    return {
+      allowed: false,
+      denied: fail(403, "MODULE_DISABLED", decision.reason)
     };
   }
 
