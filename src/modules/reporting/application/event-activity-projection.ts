@@ -83,14 +83,24 @@
  * - `occurredAt > cursor` (or the cursor was never set, i.e. no rebuild
  *   ever ran) — never counted by anything; apply the increment normally.
  *
- * See `tests/integration/reporting-projections.integration.test.ts`'s
- * "a live event delivery during an in-progress rebuild is RETRIED" test
- * (rebuild completes normally — must NOT double-count) and its
- * "ADVERSARIAL: cancelling a rebuild does not permanently lose an event"
- * test (rebuild cancelled before reaching the event — must still count
- * it exactly once) for both halves of this fix.
+ * Both halves of that watermark fix were ported from awcms-mini together
+ * with the rest of this module and are NOT covered by a test in this
+ * repository yet — the mini-side integration test the original text here
+ * pointed at (`tests/integration/reporting-projections.integration.test.ts`)
+ * has no counterpart here (this repo has no `tests/integration/` suite at
+ * all). `tests/reporting-projection-rebuild-lock.test.ts` covers the
+ * Issue #151 lock this function now also takes, not the watermark
+ * comparison itself.
+ *
+ * Issue #151 — the "is a rebuild running" check plus the watermark read
+ * below are a check-then-act sequence that a concurrently committing
+ * `triggerOrResumeRebuild` could slip between (READ COMMITTED re-snapshots
+ * per statement, even within one transaction), so this function takes the
+ * (tenant, projection) advisory lock first, like every other writer of
+ * these rows. See `projection-lock.ts`.
  */
 import { findRunningRebuild } from "./rebuild-run-store";
+import { lockProjectionForWrite } from "./projection-lock";
 import { applyMetricDeltas } from "./projection-metric-store";
 import { getStreamCursor } from "./projection-cursor-store";
 import { recordProjectionSuccess } from "./projection-state-store";
@@ -117,6 +127,19 @@ export async function applyEventActivityProjectionIncrement(
   tenantId: string,
   eventOccurredAt: Date
 ): Promise<void> {
+  // Issue #151 — FIRST, before both the rebuild check and the watermark
+  // read below: at READ COMMITTED each of those statements takes its own
+  // snapshot, so without this lock a `triggerOrResumeRebuild` committing
+  // between them is invisible to the check and visible to the watermark
+  // read (cursor reset to NULL => "never counted" => increment), while the
+  // rebuild's own re-scan counts the same event again from the source
+  // table. See `projection-lock.ts`.
+  await lockProjectionForWrite(
+    tx,
+    tenantId,
+    EVENT_ACTIVITY_SUMMARY_PROJECTION_KEY
+  );
+
   const runningRebuild = await findRunningRebuild(
     tx,
     tenantId,

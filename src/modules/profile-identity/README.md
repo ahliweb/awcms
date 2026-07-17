@@ -10,11 +10,15 @@ Profil person/organization sebagai identitas kanonik lintas modul.
 
 Skema: `sql/003_awcms_central_profile_schema.sql`.
 
+### Masking
+
+`maskIdentifierValue` (`domain/identifier.ts`) punya dua bentuk: nilai berbentuk email (ada `@` dengan local part tidak kosong) menyisakan domain + huruf pertama local part (`b***********@example.com`) supaya admin masih bisa membedakan baris di email outbox/suppression list; sisanya (phone/NIK/tax id/...) hanya menyisakan 4 karakter terakhir, dan tidak menyisakan apa pun bila nilainya <= 4 karakter. Cabang email dideteksi dari nilainya sendiri, bukan argumen tipe — modul email memakai fungsi ini untuk alamat yang tidak pernah jadi profile identifier dan tidak punya `IdentifierType` untuk dioper.
+
 ## Endpoint
 
 - `GET/POST /api/v1/profiles`, `GET/PATCH/DELETE /api/v1/profiles/{id}` — guard `profile_identity.profile_management.{read,create,update,delete}`.
 - `GET /api/v1/profiles/resolve?type=&value=` — resolve profile dari identifier (mis. email/NPWP), guard `read`.
-- `POST /api/v1/profiles/{id}/identifiers` — tempel identifier baru ke profile, guard `create`.
+- `POST /api/v1/profiles/{id}/identifiers` — tempel identifier baru ke profile, guard `create`. `409 IDENTIFIER_ALREADY_EXISTS` bila identifier (tipe + nilai) sudah ada di tenant ini — unique index-nya (`23505`) diterjemahkan jadi `DuplicateIdentifierError` di `application/identifier-directory.ts`, lalu dipetakan ke 409 **di dalam** `withTenant` (kalau lolos ke luar, error itu bukan `PostgresError` sehingga ikut menghitung circuit breaker database).
 - `GET /api/v1/profiles/{id}/links` — baca entity link (kosong sampai modul lain menulis lewat kode).
 
 ## Belum tersedia

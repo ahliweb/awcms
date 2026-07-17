@@ -45,10 +45,23 @@
  *    STATE incremental path (both the `cursor_table` worker and the
  *    `domain_event` live consumer) skips that (tenant, projection)
  *    entirely (see `projection-incremental-worker.ts`'s
- *    `isRebuildRunning` guard and `event-activity-projection.ts`'s own
+ *    `runCursorStreamPass` guard and `event-activity-projection.ts`'s own
  *    check) — this is what prevents the rebuild's full re-scan and a
  *    concurrent live update from BOTH counting the same newly-arrived
  *    row.
+ * 4. Issue #151 — points 1-3 above are all "check, then act" sequences,
+ *    and at READ COMMITTED a check and an act are NOT atomic with respect
+ *    to a concurrently committing writer even inside one transaction
+ *    (every statement re-snapshots). Every writer of a (tenant,
+ *    projection)'s cursor/metric rows — `triggerOrResumeRebuild` and
+ *    `runRebuildStreamPass` here, `runCursorStreamPass` in the incremental
+ *    worker, `applyEventActivityProjectionIncrement` in the event consumer
+ *    — therefore takes that pair's `pg_advisory_xact_lock`
+ *    (`projection-lock.ts`) as the FIRST statement of its transaction.
+ *    That is what actually makes points 1-3 hold; without it, the reset in
+ *    point 1 could land in the middle of an already-in-flight incremental
+ *    pass and both paths would apply the same delta. See
+ *    `projection-lock.ts`'s header for the full argument.
  */
 import { withTenant } from "../../../lib/database/tenant-context";
 import {
@@ -65,6 +78,7 @@ import {
   resetProjectionCursors,
   upsertStreamCursor
 } from "./projection-cursor-store";
+import { lockProjectionForWrite } from "./projection-lock";
 import {
   applyMetricDeltas,
   resetProjectionMetrics,
@@ -142,6 +156,14 @@ export async function triggerOrResumeRebuild(
     correlationId?: string | null;
   }
 ): Promise<TriggerRebuildResult> {
+  // Issue #151 — FIRST statement, before the check this function then acts
+  // on. Migration 015's partial unique index already stops two concurrent
+  // TRIGGERS from both resetting; this lock additionally stops a reset from
+  // interleaving with an in-flight incremental/rebuild PASS transaction,
+  // which the unique index knows nothing about. Re-acquiring is a no-op for
+  // a caller that already holds it (`projection-lock.ts`).
+  await lockProjectionForWrite(tx, tenantId, descriptor.key);
+
   const existing = await findRunningRebuild(tx, tenantId, descriptor.key);
   if (existing) {
     return { run: existing, resumed: true };
@@ -216,6 +238,11 @@ async function runRebuildStreamPass(
     sql,
     tenantId,
     async (tx) => {
+      // Issue #151 — same lock, same reason as the incremental pass: this
+      // transaction reads the cursor and then applies a delta derived from
+      // it, so nothing else may reset or advance that cursor in between.
+      await lockProjectionForWrite(tx, tenantId, descriptor.key);
+
       const run = await getRebuildRunById(tx, tenantId, runId);
       if (!run || run.status !== "running") {
         return { count: 0, cancelled: false };

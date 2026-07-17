@@ -3,9 +3,12 @@
  * (Issue #753) — `awcms_reporting_projection_cursors`. Shared by the
  * steady-state incremental worker (`projection-incremental-worker.ts`) and
  * a rebuild-in-progress (`projection-rebuild.ts`) — mutual exclusion
- * between the two is enforced by the caller (both check
- * `isRebuildRunning` from `rebuild-run-store.ts` before touching this
- * table for a given (tenant, projection)), never by this store itself.
+ * between the two is enforced by the caller, never by this store itself:
+ * every caller takes the (tenant, projection) `pg_advisory_xact_lock`
+ * (`projection-lock.ts`) and re-checks `findRunningRebuild` from
+ * `rebuild-run-store.ts` as the first statements of the SAME transaction
+ * that then touches this table (Issue #151 — doing either in a separate,
+ * earlier transaction is a TOCTOU that double-counts).
  */
 
 export async function getStreamCursor(

@@ -48,8 +48,8 @@ describe("maskIdentifierValue", () => {
     expect(masked.endsWith("com")).toBe(true);
   });
 
-  test("handles short values without throwing", () => {
-    expect(maskIdentifierValue("ab")).toBe("*b");
+  test("handles short values without throwing, revealing no character", () => {
+    expect(maskIdentifierValue("ab")).toBe("**");
     expect(maskIdentifierValue("")).toBe("");
   });
 });

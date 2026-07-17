@@ -126,8 +126,11 @@ export function headingSlugs(md) {
  * porting yang belum diadaptasi — tambahkan entri baru hanya dengan alasan
  * tercatat di commit yang menambahkannya.
  */
+// NOTE: keyed by line number, so ANY edit above an exempted line silently
+// breaks the exemption and fails the gate on untouched text. Re-point the
+// line rather than reasoning about the finding itself when that happens.
 export const NAMING_EXEMPTIONS = new Set([
-  "docs/awcms/18_configuration_env_reference.md:279",
+  "docs/awcms/18_configuration_env_reference.md:281",
   "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md:159",
   "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md:231"
 ]);

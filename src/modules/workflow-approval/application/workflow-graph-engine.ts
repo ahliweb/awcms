@@ -88,10 +88,17 @@ async function createApprovalTask(
   const taskId = taskRows[0]!.id;
 
   for (const assigneeTenantUserId of node.assigneeTenantUserIds) {
+    // ON CONFLICT DO NOTHING (GHSA-9qwq-cmr5-6wfc): `validateWorkflowGraph`
+    // does not reject a node whose `assigneeTenantUserIds` repeats a user, so
+    // this loop could give one person two live assignment rows on one task —
+    // which inflated the quorum's eligible-approver count and let them clear a
+    // multi-person quorum alone. Collapsing to one row per person is both the
+    // fix and what migration 018's partial unique index now enforces.
     await tx`
       INSERT INTO awcms_workflow_task_assignments
         (tenant_id, workflow_task_id, tenant_user_id, status)
       VALUES (${tenantId}, ${taskId}, ${assigneeTenantUserId}, 'pending')
+      ON CONFLICT DO NOTHING
     `;
   }
 }
@@ -213,11 +220,35 @@ export async function activateNode(
     }
 
     // node.type === "end"
-    await tx`
+    //
+    // `AND status = 'pending'` (Issue #152) matches the guard
+    // `cancelWorkflowInstance` (`workflow-recovery.ts`) already uses. Without
+    // it this UPDATE overwrote the status unconditionally, so a decision that
+    // was in flight when the instance got cancelled RESURRECTED it as
+    // approved/rejected — silently undoing the cancellation.
+    //
+    // Zero rows means someone else moved the instance out of 'pending' (a
+    // concurrent cancel) while this decision was mid-flight. Throwing rolls
+    // the whole transaction back, which is the only safe answer: returning
+    // `finished: false` would leave the task marked 'completed' and the
+    // decision recorded against an instance that never finished, and any
+    // task/notification this traversal already created would survive. The
+    // task-row `FOR UPDATE` in `fetchTaskWithInstanceForDecision` makes this
+    // near-unreachable (a cancel marks this task 'cancelled', so the route
+    // 409s long before here) — this is the defence-in-depth backstop for the
+    // remaining lock-order window, not the primary guard.
+    const finishedRows = (await tx`
       UPDATE awcms_workflow_instances
       SET status = ${node.outcome}, updated_at = ${now}
-      WHERE tenant_id = ${tenantId} AND id = ${instanceId}
-    `;
+      WHERE tenant_id = ${tenantId} AND id = ${instanceId} AND status = 'pending'
+      RETURNING id
+    `) as { id: string }[];
+
+    if (!finishedRows[0]) {
+      throw new Error(
+        `Workflow instance ${instanceId} is no longer pending (concurrently cancelled or finished); refusing to overwrite its status with "${node.outcome}".`
+      );
+    }
 
     return { finished: true, status: node.outcome };
   }

@@ -29,6 +29,17 @@ claim lease), calls `EmailProvider.send` **outside** any transaction, then
 finalizes to `sent`/`retry_wait`/`failed`/`suppressed` and records an
 `awcms_email_delivery_attempts` row.
 
+The claim lease is **read back**, not just written (Issue #143): a row left
+`sending` by a worker that died mid-pass is re-claimed once its lease
+(`EMAIL_DISPATCH_LEASE_MINUTES`) expires — same rule as
+`sync-storage/application/object-dispatch.ts`. Without that, such a row is
+permanent limbo: every finalize is guarded by `status = 'sending'` and
+`cancelEmailMessage` refuses `sending`. The accepted trade-off is one possible
+duplicate send when the crash lands between "provider accepted" and FINALIZE;
+the attempts ledger is idempotent per `(message_id, attempt_no)`, so a
+re-claim can never abort the pass. Templates are looked up once per distinct
+`template_key` per pass, not once per message.
+
 ### Adapters
 
 - `infrastructure/mailketing-provider.ts` — the real adapter.
@@ -98,6 +109,13 @@ rejected at create (fail-closed).
 - One `awcms_email_messages` row per recipient sharing a `correlation_id`;
   the subject is rendered per-recipient at enqueue. Audit is one row per
   request (`announcement_sent`) with counts only, never a recipient list.
+- **Bounded + batched** (Issue #153) — `role`/`tenant` targets resolve at most
+  `ANNOUNCEMENT_MAX_RECIPIENTS` (5000) rows, ordered deterministically, and are
+  enqueued with multi-row `unnest` INSERTs of 500 rows each rather than one
+  INSERT per recipient. Hitting the cap returns `truncated: true` from
+  `enqueueAnnouncement` and logs `email.announcement.recipients_truncated` at
+  `warning` — reaching an audience larger than the cap needs an async enqueue
+  job, which does not exist yet.
 
 ## Observability & ops
 

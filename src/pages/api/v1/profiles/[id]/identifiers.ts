@@ -12,7 +12,10 @@ import {
   authorizeInTransaction,
   resolveAuthInputs
 } from "../../../../../modules/identity-access/application/access-guard";
-import { addIdentifierToProfile } from "../../../../../modules/profile-identity/application/identifier-directory";
+import {
+  addIdentifierToProfile,
+  DuplicateIdentifierError
+} from "../../../../../modules/profile-identity/application/identifier-directory";
 import { validateAddIdentifierInput } from "../../../../../modules/profile-identity/domain/identifier-validation";
 
 const CREATE_GUARD = {
@@ -60,16 +63,32 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
     );
     if (!auth.allowed) return auth.denied;
 
-    const record = await addIdentifierToProfile(
-      tx,
-      tenantId,
-      auth.context.tenantUserId,
-      profileId,
-      validation.value,
-      correlationId
-    );
-    if (!record) return fail(404, "RESOURCE_NOT_FOUND", "Profile not found.");
+    try {
+      const record = await addIdentifierToProfile(
+        tx,
+        tenantId,
+        auth.context.tenantUserId,
+        profileId,
+        validation.value,
+        correlationId
+      );
+      if (!record) return fail(404, "RESOURCE_NOT_FOUND", "Profile not found.");
 
-    return ok(record);
+      return ok(record);
+    } catch (error) {
+      // Caught inside `withTenant`, deliberately: a `DuplicateIdentifierError`
+      // escaping the callback is not a `Bun.SQL.PostgresError`, so
+      // `tenant-context.ts`'s client-input carve-out would not recognise it and
+      // a burst of duplicate submits would count against the shared database
+      // circuit breaker. The unique violation has already aborted this
+      // transaction — nothing further may be written to `tx` here (an audit
+      // event for the rejected attempt would itself fail with 25P02 and turn
+      // this 409 back into a 500), so we only translate and return.
+      if (error instanceof DuplicateIdentifierError) {
+        return fail(409, "IDENTIFIER_ALREADY_EXISTS", error.message);
+      }
+
+      throw error;
+    }
   });
 };

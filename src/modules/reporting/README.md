@@ -121,10 +121,19 @@ reference; summary:
    own header comment for the full analysis (security-auditor finding,
    PR #781).
 
-Adversarial test (bounded pass -> simulated crash -> resumed
-continuation -> exact correct total, never double/under-counted) and a
-`provisionWorkerRole()`-based least-privilege test both live in
-`tests/integration/reporting-projections.integration.test.ts`.
+Mutual exclusion between a rebuild and the steady-state incremental path
+rests on a per-(tenant, projection) `pg_advisory_xact_lock`
+(`application/projection-lock.ts`) taken as the first statement of every
+transaction that writes a projection's cursor/metric rows — read that
+file's header before touching any of them (Issue #151). It is covered by
+`tests/reporting-projection-rebuild-lock.test.ts`, which runs against a
+real PostgreSQL and skips cleanly when `REPORTING_TEST_DATABASE_URL` is
+unset.
+
+Not yet ported from awcms-mini: that repo's adversarial test (bounded
+pass -> simulated crash -> resumed continuation -> exact correct total)
+and its `provisionWorkerRole()`-based least-privilege test. This
+repository has no `tests/integration/` suite for them to live in yet.
 
 ### Freshness — computed live, never cached
 

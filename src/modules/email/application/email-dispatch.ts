@@ -10,7 +10,9 @@
  * 1. CLAIM — one short transaction flips eligible `queued`/`retry_wait`
  *    rows to a transient `sending` status (`FOR UPDATE SKIP LOCKED`),
  *    reusing `next_attempt_at` as the claim lease expiry (no new column —
- *    same reuse `sql/020`'s own comment documents).
+ *    same reuse `sql/020`'s own comment documents). The lease is
+ *    *readable*, not write-only: a `sending` row whose lease has expired is
+ *    re-claimed by a later pass (Issue #143).
  * 2. SEND — for each claimed row, renders the body from its
  *    `template_key`/`variables` (`../domain/email-template-render.ts`,
  *    safe rendering: per-category variable allowlist + locale resolution,
@@ -101,6 +103,24 @@ function toStringVariables(
   return output;
 }
 
+/**
+ * Issue #143 — the claim predicate must mirror the lease it writes.
+ * `next_attempt_at = ${leaseExpiry}` is the claim lease; a worker that dies
+ * between CLAIM and FINALIZE leaves the row `sending` forever, and since
+ * every finalize is guarded by `status = 'sending'` and
+ * `cancelEmailMessage` refuses `sending`, such a row becomes permanent
+ * limbo — unsendable, uncancellable, unretryable. Re-claiming expired
+ * leases (`OR (status = 'sending' AND next_attempt_at <= ${now})`) is
+ * exactly what the sibling dispatcher
+ * `sync-storage/application/object-dispatch.ts` already does.
+ *
+ * The accepted trade-off (identical to `object-dispatch`'s): a crash in the
+ * narrow window *after* the provider accepted the message but *before*
+ * FINALIZE can produce one duplicate send. Mailketing is single-recipient
+ * per call, so the blast radius is one duplicate email — strictly better
+ * than a message stuck forever. `recordDeliveryAttempt` is idempotent per
+ * `(message_id, attempt_no)` so the re-claim cannot crash the pass.
+ */
 async function claimEligibleEntries(
   sql: Bun.SQL,
   tenantId: string,
@@ -121,8 +141,11 @@ async function claimEligibleEntries(
         WHERE id IN (
           SELECT id FROM awcms_email_messages
           WHERE tenant_id = ${tenantId}
-            AND status IN ('queued', 'retry_wait')
-            AND (next_attempt_at IS NULL OR next_attempt_at <= ${now})
+            AND (
+              (status IN ('queued', 'retry_wait')
+                AND (next_attempt_at IS NULL OR next_attempt_at <= ${now}))
+              OR (status = 'sending' AND next_attempt_at <= ${now})
+            )
           ORDER BY
             CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
             created_at
@@ -150,6 +173,17 @@ async function fetchTenantDefaultLocale(
   return rows[0]?.default_locale ?? DEFAULT_RENDER_LOCALE;
 }
 
+/**
+ * `ON CONFLICT DO NOTHING` on `awcms_email_delivery_attempts_unique_attempt`
+ * (`UNIQUE (message_id, attempt_no)`, `sql/014`) — required by the expired-
+ * lease re-claim above (Issue #143). A crash *after* this insert but
+ * *before* FINALIZE leaves `retry_count` untouched, so the re-claiming pass
+ * computes the same `attempt_no` and would hit the unique constraint; an
+ * unhandled `23505` would abort the whole dispatch pass and take the other
+ * claimed messages down with it. The ledger keeps the first record for that
+ * attempt number, which is the truthful one: it is the attempt that actually
+ * reached the provider.
+ */
 async function recordDeliveryAttempt(
   sql: Bun.SQL,
   tenantId: string,
@@ -170,6 +204,8 @@ async function recordDeliveryAttempt(
         ${tenantId}, ${messageId}, ${attemptNo}, ${outcome}, ${providerName},
         ${providerResponseSnippet}, ${errorMessage}
       )
+      ON CONFLICT ON CONSTRAINT awcms_email_delivery_attempts_unique_attempt
+      DO NOTHING
     `,
     { workClass: "background_sync" }
   );
@@ -269,6 +305,44 @@ async function finalizeFailure(
 }
 
 /**
+ * Per-pass template cache (Issue #153). `fetchActiveEmailTemplateByKey` was
+ * called inside the per-message loop, each wrapped in its own `withTenant`
+ * transaction — a batch of 25 announcement rows sharing one `template_key`
+ * cost 25 transactions running 25 identical queries. Templates are
+ * low-cardinality admin data; one lookup per distinct key per pass is
+ * enough. Cache lifetime is deliberately a single `dispatchEmailQueue`
+ * call: a template edited between passes is picked up by the next pass, and
+ * every message in one pass renders from one consistent template version.
+ * Negative results (`null` — no active template) are cached too, so 25
+ * messages pointing at a deleted template also cost one query.
+ */
+function createTemplateLoader(
+  sql: Bun.SQL,
+  tenantId: string
+): (templateKey: string) => Promise<EmailTemplateSource | null> {
+  const cache = new Map<string, EmailTemplateSource | null>();
+
+  return async (templateKey: string) => {
+    const cached = cache.get(templateKey);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const template = await withTenant(
+      sql,
+      tenantId,
+      (tx) => fetchActiveEmailTemplateByKey(tx, tenantId, templateKey),
+      { workClass: "background_sync" }
+    );
+
+    cache.set(templateKey, template);
+
+    return template;
+  };
+}
+
+/**
  * Dispatches one batch (default `EMAIL_DISPATCH_DEFAULT_LIMIT` rows) of due
  * `awcms_email_messages` entries for a single tenant. Safe to call
  * repeatedly (claim-lease pattern); the CLI script loops per tenant to
@@ -327,6 +401,7 @@ export async function dispatchEmailQueue(
   const fromAddress = options.fromAddress ?? env.EMAIL_FROM_ADDRESS ?? "";
   const fromName = options.fromName ?? env.EMAIL_FROM_NAME ?? "";
   const renderLocale = await fetchTenantDefaultLocale(sql, tenantId);
+  const loadTemplate = createTemplateLoader(sql, tenantId);
   const suppressedHashes = await withTenant(
     sql,
     tenantId,
@@ -354,13 +429,7 @@ export async function dispatchEmailQueue(
     let template: EmailTemplateSource | null = null;
 
     if (entry.template_key) {
-      template = await withTenant(
-        sql,
-        tenantId,
-        (tx) =>
-          fetchActiveEmailTemplateByKey(tx, tenantId, entry.template_key!),
-        { workClass: "background_sync" }
-      );
+      template = await loadTemplate(entry.template_key);
     }
 
     if (!template) {

@@ -901,7 +901,11 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: Idempotency-Key reused with a different request, or the task is not pending.
+          description: >-
+            Idempotency-Key reused with a different request, the task is not
+            pending, or the target has already decided this task (reassigning
+            to them would let one person's authority count twice toward
+            quorum).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiError" }
@@ -1557,6 +1561,11 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: An identifier of this type with the same value already exists for this tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /api/v1/profiles/{id}/links:
     get:
       operationId: listProfileLinks
@@ -2970,7 +2979,18 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean, enum: [true] }
-                  data: { type: object }
+                  data:
+                    type: object
+                    properties:
+                      recipientCount: { type: integer }
+                      truncated:
+                        type: boolean
+                        description: >-
+                          True when more users matched the target than the
+                          per-request recipient cap, so the remainder were NOT
+                          enqueued. Callers must treat a truncated response as
+                          a partial send and re-target the remainder.
+                      correlationId: { type: string }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -3007,7 +3027,21 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean, enum: [true] }
-                  data: { type: object }
+                  data:
+                    type: object
+                    properties:
+                      matchedCount:
+                        type: integer
+                        description: >-
+                          Capped at the per-request recipient cap. Read together
+                          with `truncated` — a capped preview under-reports the
+                          real audience.
+                      truncated:
+                        type: boolean
+                        description: >-
+                          True when more users matched the target than the cap,
+                          so `matchedCount` is the cap and not the real total.
+                      sample: { type: object }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }

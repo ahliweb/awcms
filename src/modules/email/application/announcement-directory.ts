@@ -22,6 +22,33 @@ import type { AnnouncementTarget } from "../domain/announcement-validation";
 
 const MODULE_KEY = "email";
 
+/**
+ * Hard cap on how many recipients one announcement resolves to (Issue
+ * #153). `target.type: "users"` is already bounded to 500 by
+ * `announcement-validation.ts`; `tenant`/`role` were unbounded, so a
+ * tenant-wide announcement on a 50k-user tenant resolved 50k rows inside
+ * one HTTP request's transaction.
+ *
+ * This is a safety bound, not a product decision: enqueue stays synchronous
+ * and bounded rather than silently degrading into a request timeout that
+ * enqueues *nobody*. When the cap bites, the recipients that were resolved
+ * are still enqueued, `truncated: true` is returned, and
+ * `email.announcement.recipients_truncated` is logged at `warning` so it is
+ * visible rather than silent. Sending to a tenant larger than this cap
+ * needs the async enqueue job #153 lists as the alternative fix — that is
+ * deliberately out of scope here.
+ */
+export const ANNOUNCEMENT_MAX_RECIPIENTS = 5000;
+
+/**
+ * Rows per multi-row INSERT. Postgres binds parameters per statement; with
+ * `unnest` the row count does not multiply the parameter count (one array
+ * parameter per column), but chunking still keeps each statement's payload
+ * and memory bounded. 500 matches the `MAX_EXPLICIT_USER_IDS` order of
+ * magnitude already used by the validation layer.
+ */
+const INSERT_BATCH_SIZE = 500;
+
 export type ResolvedRecipient = {
   tenantUserId: string;
   loginIdentifier: string;
@@ -34,17 +61,30 @@ type TargetRow = {
   display_name: string;
 };
 
+export type BoundedTargets = {
+  recipients: ResolvedRecipient[];
+  /** `true` when the target query hit `ANNOUNCEMENT_MAX_RECIPIENTS` and more matching users exist than were resolved. */
+  truncated: boolean;
+};
+
 /**
  * Active tenant_user + active identity only (skips deactivated accounts),
  * and always excludes anyone on `awcms_email_suppression_list`
  * (bounce/complaint/manual/unsubscribe — built in #494, this is its first
  * real consumer).
+ *
+ * Bounded by `ANNOUNCEMENT_MAX_RECIPIENTS` (Issue #153). The `ORDER BY
+ * tu.created_at, tu.id` on the capped queries makes the truncation
+ * deterministic (oldest accounts first) instead of leaving it to whatever
+ * order the planner happens to produce — the same set is previewed and
+ * enqueued, and a re-run of the same announcement does not resolve a
+ * different arbitrary slice.
  */
-export async function resolveAnnouncementTargets(
+export async function resolveBoundedAnnouncementTargets(
   tx: Bun.SQL,
   tenantId: string,
   target: AnnouncementTarget
-): Promise<ResolvedRecipient[]> {
+): Promise<BoundedTargets> {
   let rows: TargetRow[];
 
   if (target.type === "tenant") {
@@ -56,6 +96,8 @@ export async function resolveAnnouncementTargets(
       JOIN awcms_profiles p
         ON p.id = i.profile_id AND p.tenant_id = tu.tenant_id
       WHERE tu.tenant_id = ${tenantId} AND tu.status = 'active' AND i.status = 'active'
+      ORDER BY tu.created_at, tu.id
+      LIMIT ${ANNOUNCEMENT_MAX_RECIPIENTS}
     `) as TargetRow[];
   } else if (target.type === "role") {
     rows = (await tx`
@@ -69,6 +111,8 @@ export async function resolveAnnouncementTargets(
         ON p.id = i.profile_id AND p.tenant_id = tu.tenant_id
       WHERE aa.tenant_id = ${tenantId} AND aa.role_id = ${target.roleId}
         AND tu.status = 'active' AND i.status = 'active'
+      ORDER BY tu.created_at, tu.id
+      LIMIT ${ANNOUNCEMENT_MAX_RECIPIENTS}
     `) as TargetRow[];
   } else {
     // `tx.array(...)` — direct `= ANY(${array})` interpolation fails with
@@ -87,13 +131,21 @@ export async function resolveAnnouncementTargets(
     `) as TargetRow[];
   }
 
+  // `truncated` is decided on the *pre-suppression* row count: the cap is a
+  // property of the target query, and suppression filtering happens after it
+  // in application code. A resolve that came back exactly at the cap is
+  // reported as truncated even in the rare case the tenant has exactly that
+  // many active users — over-reporting a bound is safe, under-reporting a
+  // silently dropped recipient is not.
+  const truncated = rows.length >= ANNOUNCEMENT_MAX_RECIPIENTS;
+
   if (rows.length === 0) {
-    return [];
+    return { recipients: [], truncated };
   }
 
   const suppressedHashes = await fetchSuppressedRecipientHashes(tx, tenantId);
 
-  return rows
+  const recipients = rows
     .filter((row) => {
       const normalized = normalizeIdentifierValue(
         "email",
@@ -106,10 +158,30 @@ export async function resolveAnnouncementTargets(
       loginIdentifier: row.login_identifier,
       displayName: row.display_name
     }));
+
+  return { recipients, truncated };
+}
+
+/** Unchanged signature kept for existing callers (and derived apps) that only need the list. */
+export async function resolveAnnouncementTargets(
+  tx: Bun.SQL,
+  tenantId: string,
+  target: AnnouncementTarget
+): Promise<ResolvedRecipient[]> {
+  const resolved = await resolveBoundedAnnouncementTargets(
+    tx,
+    tenantId,
+    target
+  );
+
+  return resolved.recipients;
 }
 
 export type AnnouncementPreviewResult = {
+  /** Capped at `ANNOUNCEMENT_MAX_RECIPIENTS`; read together with `truncated`. */
   matchedCount: number;
+  /** `true` when more users matched than the cap — preview is the screen an admin uses to answer "how many will this reach?", so a capped count must say so rather than under-report silently (Issue #153). */
+  truncated: boolean;
   sample: {
     subject: string;
     textBody?: string;
@@ -136,7 +208,11 @@ export async function previewAnnouncement(
     return null;
   }
 
-  const recipients = await resolveAnnouncementTargets(tx, tenantId, target);
+  const resolved = await resolveBoundedAnnouncementTargets(
+    tx,
+    tenantId,
+    target
+  );
   const sampleVariables = {
     ...buildSyntheticSampleVariables(templateKey),
     ...variables
@@ -148,12 +224,18 @@ export async function previewAnnouncement(
     locale
   );
 
-  return { matchedCount: recipients.length, sample: rendered };
+  return {
+    matchedCount: resolved.recipients.length,
+    truncated: resolved.truncated,
+    sample: rendered
+  };
 }
 
 export type EnqueueAnnouncementResult = {
   recipientCount: number;
   correlationId: string;
+  /** `true` when `ANNOUNCEMENT_MAX_RECIPIENTS` capped the audience — the enqueued recipients were sent, but not every matching user was reached (Issue #153). Additive field; the HTTP layer's response shape is unchanged. */
+  truncated: boolean;
 };
 
 /**
@@ -180,10 +262,18 @@ export async function enqueueAnnouncement(
     return null;
   }
 
-  const recipients = await resolveAnnouncementTargets(tx, tenantId, target);
+  const { recipients, truncated } = await resolveBoundedAnnouncementTargets(
+    tx,
+    tenantId,
+    target
+  );
   const priority = target.type === "tenant" ? "normal" : "high";
 
-  for (const recipient of recipients) {
+  // Rendering is pure and in-process (`renderEmailTemplate`), so every row is
+  // materialized first and the database is touched only by the batched
+  // INSERTs below. No provider call happens here at all — enqueue only
+  // (ADR-0006); the dispatcher sends later, outside any transaction.
+  const rows = recipients.map((recipient) => {
     const normalized = normalizeIdentifierValue(
       "email",
       recipient.loginIdentifier
@@ -199,17 +289,65 @@ export async function enqueueAnnouncement(
       locale
     );
 
+    return {
+      toAddress: normalized,
+      toAddressHash: hashIdentifierValue(normalized),
+      toAddressMasked: maskIdentifierValue(normalized),
+      subject: rendered.subject,
+      variables: JSON.stringify(recipientVariables)
+    };
+  });
+
+  // Batched (one round trip per `INSERT_BATCH_SIZE` rows, via `unnest`)
+  // instead of one INSERT per recipient — Issue #153, same shape as the
+  // `awcms_object_sync_queue` batch insert in
+  // `src/pages/api/v1/sync/objects/index.ts` (Issue #435's N+1 audit).
+  // A tenant-wide announcement to 5000 recipients drops from 5000
+  // sequential round trips to 10.
+  for (let offset = 0; offset < rows.length; offset += INSERT_BATCH_SIZE) {
+    const chunk = rows.slice(offset, offset + INSERT_BATCH_SIZE);
+
     await tx`
       INSERT INTO awcms_email_messages
         (tenant_id, correlation_id, category, template_key, to_address,
          to_address_hash, to_address_masked, subject, variables, priority)
-      VALUES (
-        ${tenantId}, ${correlationId}, ${templateKey}, ${templateKey},
-        ${normalized}, ${hashIdentifierValue(normalized)},
-        ${maskIdentifierValue(normalized)}, ${rendered.subject},
-        ${recipientVariables}, ${priority}
-      )
+      SELECT ${tenantId}, ${correlationId}, ${templateKey}, ${templateKey},
+             t.to_address, t.to_address_hash, t.to_address_masked, t.subject,
+             t.variables::jsonb, ${priority}
+      FROM unnest(
+        ${tx.array(
+          chunk.map((row) => row.toAddress),
+          "text"
+        )},
+        ${tx.array(
+          chunk.map((row) => row.toAddressHash),
+          "text"
+        )},
+        ${tx.array(
+          chunk.map((row) => row.toAddressMasked),
+          "text"
+        )},
+        ${tx.array(
+          chunk.map((row) => row.subject),
+          "text"
+        )},
+        ${tx.array(
+          chunk.map((row) => row.variables),
+          "text"
+        )}
+      ) AS t(to_address, to_address_hash, to_address_masked, subject, variables)
     `;
+  }
+
+  if (truncated) {
+    log("warning", "email.announcement.recipients_truncated", {
+      correlationId,
+      tenantId,
+      moduleKey: MODULE_KEY,
+      category: templateKey,
+      count: recipients.length,
+      limit: ANNOUNCEMENT_MAX_RECIPIENTS
+    });
   }
 
   log("info", "email.message.queued", {
@@ -220,5 +358,5 @@ export async function enqueueAnnouncement(
     count: recipients.length
   });
 
-  return { recipientCount: recipients.length, correlationId };
+  return { recipientCount: recipients.length, correlationId, truncated };
 }
