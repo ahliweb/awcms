@@ -213,12 +213,38 @@ const TEXT_SECRET_PATTERNS: ReadonlyArray<{
     replacement: "[REDACTED_PRIVATE_KEY]"
   },
   {
+    // Fallback for a TRUNCATED PEM block with no matching END marker (a log
+    // line cut off by a buffer limit before the key finished): the paired
+    // pattern above cannot match at all in that case, so the raw base64 key
+    // body would pass through unredacted. MUST stay ordered after the paired
+    // pattern — that one has already consumed every well-formed block, so
+    // this only ever finds a genuinely unterminated one. Over-redacts any
+    // trailing non-key text after a lone BEGIN marker, which is the safe
+    // direction to err in.
+    pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*$/g,
+    replacement: "[REDACTED_PRIVATE_KEY]"
+  },
+  {
     pattern: /eyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]*/g,
     replacement: "[REDACTED_JWT]"
   },
   {
+    pattern: /AKIA[0-9A-Z]{16}/g,
+    replacement: "[REDACTED_AWS_KEY]"
+  },
+  {
     pattern: /\b(Bearer|Basic)\s+\S+/gi,
     replacement: "$1 [REDACTED]"
+  },
+  {
+    // Connection-string credentials (`DATABASE_URL`/`WORKER_DATABASE_URL` are
+    // DSNs, so this is the app's own primary secret leaking through any DB
+    // error text). Free-text twin of the anchored DSN entry in
+    // `SECRET_VALUE_PATTERNS`. The password class excludes only `/` and
+    // whitespace so that `:`/`@` inside a password still match; the greedy
+    // `+` backtracks to the LAST `@`, which is what makes such passwords work.
+    pattern: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^:@/\s]+:[^/\s]+@/g,
+    replacement: "$1[REDACTED]@"
   },
   {
     pattern:
