@@ -78,7 +78,10 @@ export async function addIdentifierToProfile(
     input.value
   );
   const valueHash = hashIdentifierValue(normalizedValue);
-  const maskedValue = maskIdentifierValue(normalizedValue);
+  const maskedValue = maskIdentifierValue(
+    normalizedValue,
+    input.identifierType
+  );
 
   let rows: IdentifierRow[];
 

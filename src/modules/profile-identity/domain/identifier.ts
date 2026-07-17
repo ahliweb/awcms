@@ -48,15 +48,25 @@ export function hashIdentifierValue(normalizedValue: string): string {
  *   last 4 characters, and nothing at all when the value is that short — a
  *   4-character value has no non-leaking tail to show.
  *
- * The email branch is detected from the value itself rather than from an
- * `identifierType` argument, so every existing call site keeps working
- * unchanged (the email module masks addresses it never stores as profile
- * identifiers, and has no `IdentifierType` to pass).
+ * Pass `identifierType` whenever it is known. Without it the email branch is
+ * chosen from the value's SHAPE, which is only safe when the caller always
+ * handles addresses — that is true of the email module (it masks recipients it
+ * never stores as profile identifiers and has no `IdentifierType` to pass) but
+ * NOT of stored identifiers: `national_id`/`tax_id`/`external_code`/`other`
+ * are only trimmed, never format-checked, so an `external_code` such as
+ * `acct@KONTRAK-RAHASIA-9931` would take the email branch and publish
+ * everything after the `@` verbatim. Typed callers therefore opt into the
+ * email branch explicitly; everyone else falls back to the tail mask.
  */
-export function maskIdentifierValue(normalizedValue: string): string {
+export function maskIdentifierValue(
+  normalizedValue: string,
+  identifierType?: IdentifierType
+): string {
   const atIndex = normalizedValue.indexOf("@");
+  const emailShaped =
+    identifierType === undefined || identifierType === "email";
 
-  if (atIndex > 0) {
+  if (atIndex > 0 && emailShaped) {
     const localPart = normalizedValue.slice(0, atIndex);
     const domainPart = normalizedValue.slice(atIndex);
 

@@ -209,6 +209,19 @@ export function validateEnv(env: EnvBag): string[] {
     problems.push("AUTH_COOKIE_SECURE harus true di produksi.");
   }
 
+  // Tidak ada default yang aman untuk dua-duanya, jadi produksi wajib memilih
+  // sadar. Profil production repo ini adalah nginx TLS-termination
+  // (deployment-profiles.md), dan di sana `false` membuat setiap request
+  // terlihat berasal dari IP nginx: bucket rate limit login runtuh jadi satu
+  // per tenant, sehingga 20 login gagal/menit mengunci seluruh pengguna tenant
+  // itu. Sebaliknya `true` pada app yang terekspos langsung membuat rate limit
+  // bisa dilucuti dengan merotasi header X-Forwarded-For.
+  if (isProduction && (env.TRUSTED_PROXY_ENABLED ?? "").trim() === "") {
+    problems.push(
+      "TRUSTED_PROXY_ENABLED wajib diset eksplisit di produksi: `true` bila ada proxy tepercaya yang MENIMPA X-Forwarded-For (mis. profil nginx), `false` bila app terekspos langsung."
+    );
+  }
+
   return problems;
 }
 

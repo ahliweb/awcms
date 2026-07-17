@@ -55,6 +55,33 @@ describe("maskIdentifierValue — email branch (Issue #144)", () => {
   });
 });
 
+describe("maskIdentifierValue — the email branch is opt-in by type, not by shape", () => {
+  test("a non-email identifier containing '@' is NOT treated as an email", () => {
+    // `external_code`/`national_id`/`tax_id`/`other` are only trimmed, never
+    // format-checked, so shape detection alone would publish everything after
+    // the '@' verbatim to anyone holding only masked-read rights.
+    expect(
+      maskIdentifierValue("acct@KONTRAK-RAHASIA-9931", "external_code")
+    ).toBe("*********************9931");
+    expect(
+      maskIdentifierValue("acct@KONTRAK-RAHASIA-9931", "external_code")
+    ).not.toContain("KONTRAK");
+    expect(
+      maskIdentifierValue("x@3175012509990002", "national_id")
+    ).not.toContain("317501");
+  });
+
+  test("an explicit email type still gets the readable email mask", () => {
+    expect(maskIdentifierValue("budi@example.com", "email")).toBe(
+      "b***@example.com"
+    );
+  });
+
+  test("callers with no type (the email module) keep the shape-detected branch", () => {
+    expect(maskIdentifierValue("budi@example.com")).toBe("b***@example.com");
+  });
+});
+
 describe("maskIdentifierValue — tail branch (Issue #144, short-value leak)", () => {
   test("short values are fully masked instead of leaking their last character", () => {
     expect(maskIdentifierValue("7788")).toBe("****");

@@ -16,3 +16,12 @@ Atribut audit dibatasi ke `method`/`reason`/`ipHash`/`userAgent` lewat `src/lib/
 4. **Ambang env NaN mematikan kontrol secara diam-diam** — `Number(process.env.AUTH_LOGIN_MAX_ATTEMPTS ?? 5)` dengan nilai `5x` menghasilkan `NaN`, `failedLoginCount >= NaN` selalu `false`, lockout mati total tanpa peringatan. Helper `parsePositiveIntEnv` kini menolak non-finite/non-integer/`<= 0`, jatuh ke default, dan menulis `log("warning", ...)`.
 
 **Env baru (opsional, keduanya aman secara default):** `TRUSTED_PROXY_ENABLED` (default `false`) dan `AUTH_IP_HASH_SECRET` (meng-key HMAC `ipHash`; bila kosong/placeholder dipakai kunci acak per proses — tetap non-reversible, tapi `ipHash` tidak sebanding lintas restart/instance, dan satu warning ditulis).
+
+**Wajib saat upgrade:** deployment produksi harus menyetel `TRUSTED_PROXY_ENABLED`
+secara eksplisit — `bun scripts/validate-env.ts` kini menolak produksi yang
+membiarkannya kosong. Tidak ada default yang aman untuk dua topologi sekaligus:
+pada profil production repo ini (nginx TLS-termination) `false` membuat setiap
+request terlihat berasal dari IP nginx, sehingga bucket rate limit login runtuh
+jadi satu per tenant dan 20 login gagal per menit cukup untuk mengunci seluruh
+pengguna tenant tersebut; sebaliknya `true` pada app yang terekspos langsung
+membuat rate limit bisa dilucuti dengan merotasi header `X-Forwarded-For`.
