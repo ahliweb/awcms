@@ -1,7 +1,8 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 
 import * as realDatabaseClient from "../src/lib/database/client";
 import * as realTenantContext from "../src/lib/database/tenant-context";
+import * as realAccessGuard from "../src/modules/identity-access/application/access-guard";
 import { maskIdentifierValue } from "../src/modules/profile-identity/domain/identifier";
 
 /**
@@ -223,6 +224,22 @@ describe("addIdentifierToProfile — duplicate handling (Issue #150)", () => {
 });
 
 describe("POST /api/v1/profiles/{id}/identifiers — duplicate maps to 409 (Issue #150)", () => {
+  // `mock.module` mutates the process-wide module registry and is NOT undone
+  // when this suite ends, so the stubs below would leak into every file that
+  // runs after this one — `tenant-context-circuit-breaker` asserts the REAL
+  // `withTenant` trips the breaker and would receive the pass-through stub
+  // instead. Whether that bites depends on bun's file order, which follows
+  // filesystem order and differs between a local run and CI, so restore the
+  // real modules explicitly rather than relying on this file running last.
+  afterAll(() => {
+    mock.module("../src/lib/database/client", () => realDatabaseClient);
+    mock.module("../src/lib/database/tenant-context", () => realTenantContext);
+    mock.module(
+      "../src/modules/identity-access/application/access-guard",
+      () => realAccessGuard
+    );
+  });
+
   test("returns 409 IDENTIFIER_ALREADY_EXISTS instead of an unhandled 500", async () => {
     const { tx } = fakeTx({
       profileFound: true,
