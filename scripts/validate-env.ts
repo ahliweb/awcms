@@ -66,6 +66,13 @@ const RULES: readonly Rule[] = [
     type: "int",
     min: 1
   },
+  { name: "TRUSTED_PROXY_ENABLED", required: false, type: "bool" },
+  {
+    name: "AUTH_IP_HASH_SECRET",
+    required: false,
+    type: "string",
+    secret: true
+  },
 
   { name: "AWCMS_SYNC_ENABLED", required: false, type: "bool" },
   {

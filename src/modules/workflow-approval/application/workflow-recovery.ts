@@ -77,14 +77,30 @@ export async function reassignWorkflowTask(
     WHERE tenant_id = ${tenantId} AND workflow_task_id = ${taskId} AND status = 'pending'
   `;
 
+  // The UPDATE above already retired every 'pending' row on this task, so the
+  // only way this can conflict with migration 018's partial unique index
+  // (one live assignment per person per task, GHSA-9qwq-cmr5-6wfc) is a
+  // 'decided' row: the target has ALREADY decided this task and is now being
+  // reassigned it. Handing them a fresh 'pending' seat there would let their
+  // single person-worth of authority count twice toward quorum — exactly the
+  // bypass 018 closes. `DO NOTHING` + an empty RETURNING turns that into a
+  // clean domain error (the route maps `WorkflowRecoveryError` to a 4xx)
+  // rather than a raw 23505 surfacing as a 500.
   const newAssignmentRows = (await tx`
     INSERT INTO awcms_workflow_task_assignments
       (tenant_id, workflow_task_id, tenant_user_id, status)
     VALUES (${tenantId}, ${taskId}, ${params.toTenantUserId}, 'pending')
+    ON CONFLICT DO NOTHING
     RETURNING id
   `) as { id: string }[];
 
-  return { assignmentId: newAssignmentRows[0]!.id };
+  if (!newAssignmentRows[0]) {
+    throw new WorkflowRecoveryError(
+      "That user has already decided this task, so it cannot be reassigned to them."
+    );
+  }
+
+  return { assignmentId: newAssignmentRows[0].id };
 }
 
 export type CancelWorkflowInstanceParams = {

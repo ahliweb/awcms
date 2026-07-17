@@ -179,6 +179,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         targetType: input.target.type,
         templateKey: input.templateKey,
         recipientCount: result.recipientCount,
+        truncated: result.truncated,
         correlationId: result.correlationId,
         dispatchStatus: "queued"
       },
@@ -187,6 +188,10 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
     const responseBody = ok({
       recipientCount: result.recipientCount,
+      // Surfaced, not just logged: without this the caller sees 200 + a
+      // recipient count and cannot tell that matching users beyond
+      // ANNOUNCEMENT_MAX_RECIPIENTS were never enqueued.
+      truncated: result.truncated,
       correlationId: result.correlationId
     });
     const responseJson = await responseBody.clone().json();

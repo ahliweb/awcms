@@ -79,6 +79,40 @@ function toDomainDelegationRow(row: DelegationDbRow): WorkflowDelegationRow {
   };
 }
 
+/**
+ * CONCURRENCY (Issue #140) — `FOR UPDATE OF t` serialises every decision on
+ * the same task. Without it, two approvers deciding at the same instant each
+ * evaluated quorum against READ COMMITTED snapshots that could not see the
+ * other's uncommitted decision: `quorumRule: 'all'` left BOTH concluding
+ * `complete: false` (task stuck 'pending' forever with every assignment
+ * 'decided' -> `findEligibleAssignment` returns null -> everyone 403s, and the
+ * escalation worker re-escalates forever), while `quorumRule: 'any'` left both
+ * concluding `complete: true` -> `activateNode` twice -> duplicate downstream
+ * tasks and doubled events.
+ *
+ * Row lock over `pg_advisory_xact_lock(hashtext(taskId))`, deliberately:
+ *
+ *  1. `t.status` IS the invariant being guarded, and the lock is ON that row.
+ *     Under READ COMMITTED a blocked `FOR UPDATE` re-evaluates its qual against
+ *     the winner's committed row version and returns THAT version, so the
+ *     caller's existing `task.status !== 'pending'` check (route
+ *     `tasks/[id]/decisions.ts`) becomes the completeness gate for free. An
+ *     advisory lock would hand back the same stale row it did before and would
+ *     need a separate re-read to be correct.
+ *  2. The other writers of this row — `cancelWorkflowInstance`,
+ *     `reassignWorkflowTask`, `forceWorkflowTaskDecision`, and the escalation
+ *     worker — already take real row locks here via their own UPDATEs, so a
+ *     row lock interlocks with all of them. An advisory lock would only
+ *     serialise decisions against other decisions and would silently NOT
+ *     protect against those paths.
+ *  3. `hashtext` is 32-bit and the advisory-lock space is global (not
+ *     tenant-scoped), so unrelated tasks in unrelated tenants would
+ *     occasionally alias onto the same key.
+ *
+ * `OF t` is load-bearing: a bare `FOR UPDATE` would also lock the joined
+ * `awcms_workflow_definitions` row, serialising every decision across every
+ * instance sharing that definition.
+ */
 export async function fetchTaskWithInstanceForDecision(
   tx: Bun.SQL,
   tenantId: string,
@@ -93,6 +127,7 @@ export async function fetchTaskWithInstanceForDecision(
     JOIN awcms_workflow_instances i ON i.id = t.workflow_instance_id
     JOIN awcms_workflow_definitions d ON d.id = i.workflow_definition_id
     WHERE t.tenant_id = ${tenantId} AND t.id = ${taskId}
+    FOR UPDATE OF t
   `) as TaskWithInstanceRow[];
 
   return rows[0];
@@ -202,8 +237,16 @@ export async function recordWorkflowTaskDecision(
     WHERE tenant_id = ${tenantId} AND id = ${params.assignment.id}
   `;
 
+  // COUNT(DISTINCT tenant_user_id), not COUNT(*) (GHSA-9qwq-cmr5-6wfc):
+  // quorum counts PEOPLE, not assignment rows. With COUNT(*), a user holding
+  // two live assignment rows on one task (they were an original assignee AND
+  // the node's escalation target, or the node listed them twice) read as two
+  // eligible approvers, letting them clear a 2-person quorum alone. Migration
+  // 018's partial unique index now makes that duplication impossible; this
+  // stays DISTINCT anyway so the count is right by construction rather than
+  // by relying on the index — the two guards are independent.
   const eligibleCountRows = (await tx`
-    SELECT COUNT(*) AS count
+    SELECT COUNT(DISTINCT tenant_user_id) AS count
     FROM awcms_workflow_task_assignments
     WHERE tenant_id = ${tenantId} AND workflow_task_id = ${taskId}
       AND status IN ('pending', 'decided')

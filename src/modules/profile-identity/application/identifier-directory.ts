@@ -43,6 +43,25 @@ function toIdentifierDTO(row: IdentifierRow): ProfileIdentifierMaskedDTO {
   };
 }
 
+/**
+ * Issue #150 — the partial unique index on
+ * `awcms_profile_identifiers (tenant_id, identifier_type, value_hash)`
+ * (`sql/003_awcms_central_profile_schema.sql`) is a caller-visible rule, not
+ * an internal invariant: re-attaching an identifier that already exists is a
+ * conflict the client can act on, so it must not surface as an unhandled
+ * `PostgresError` (500).
+ */
+export class DuplicateIdentifierError extends Error {
+  constructor() {
+    super(
+      "An identifier of this type with the same value already exists for this tenant."
+    );
+    this.name = "DuplicateIdentifierError";
+  }
+}
+
+const POSTGRES_UNIQUE_VIOLATION = "23505";
+
 export async function addIdentifierToProfile(
   tx: Bun.SQL,
   tenantId: string,
@@ -61,15 +80,28 @@ export async function addIdentifierToProfile(
   const valueHash = hashIdentifierValue(normalizedValue);
   const maskedValue = maskIdentifierValue(normalizedValue);
 
-  const rows = (await tx`
-    INSERT INTO awcms_profile_identifiers
-      (tenant_id, profile_id, identifier_type, normalized_value, value_hash, masked_value, is_primary)
-    VALUES (
-      ${tenantId}, ${profileId}, ${input.identifierType}, ${normalizedValue}, ${valueHash},
-      ${maskedValue}, ${input.isPrimary}
-    )
-    RETURNING id, profile_id, identifier_type, masked_value, is_primary, verification_status
-  `) as IdentifierRow[];
+  let rows: IdentifierRow[];
+
+  try {
+    rows = (await tx`
+      INSERT INTO awcms_profile_identifiers
+        (tenant_id, profile_id, identifier_type, normalized_value, value_hash, masked_value, is_primary)
+      VALUES (
+        ${tenantId}, ${profileId}, ${input.identifierType}, ${normalizedValue}, ${valueHash},
+        ${maskedValue}, ${input.isPrimary}
+      )
+      RETURNING id, profile_id, identifier_type, masked_value, is_primary, verification_status
+    `) as IdentifierRow[];
+  } catch (error) {
+    if (
+      error instanceof Bun.SQL.PostgresError &&
+      String(error.errno) === POSTGRES_UNIQUE_VIOLATION
+    ) {
+      throw new DuplicateIdentifierError();
+    }
+
+    throw error;
+  }
 
   const record = toIdentifierDTO(rows[0]!);
 

@@ -1557,6 +1557,11 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: An identifier of this type with the same value already exists for this tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /api/v1/profiles/{id}/links:
     get:
       operationId: listProfileLinks
@@ -2970,7 +2975,18 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean, enum: [true] }
-                  data: { type: object }
+                  data:
+                    type: object
+                    properties:
+                      recipientCount: { type: integer }
+                      truncated:
+                        type: boolean
+                        description: >-
+                          True when more users matched the target than the
+                          per-request recipient cap, so the remainder were NOT
+                          enqueued. Callers must treat a truncated response as
+                          a partial send and re-target the remainder.
+                      correlationId: { type: string }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }

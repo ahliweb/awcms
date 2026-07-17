@@ -18,16 +18,34 @@
  *
  * MUTUAL EXCLUSION WITH REBUILD (Issue #753 critical requirement —
  * idempotent rebuild must never double-count): before touching a (tenant,
- * projection)'s cursor/metric rows, `runIncrementalUpdateForTenant` checks
- * `findRunningRebuild` and SKIPS entirely if a rebuild currently owns this
- * projection. This is deliberately simple (skip, don't try to interleave)
- * — a rebuild re-derives the projection's ENTIRE state from a full re-scan
- * of the authoritative source table, so any row written to that table
- * during the rebuild window is guaranteed to already be included in the
- * rebuild's own scan by the time it reaches that row; letting the
- * steady-state path ALSO apply the same row concurrently would double-
- * count it. The same guard is applied by the event-driven consumer
- * handler (`event-activity-projection.ts`) for the one `domain_event`
+ * projection)'s cursor/metric rows, `runCursorStreamPass` takes that
+ * (tenant, projection)'s `pg_advisory_xact_lock` (`projection-lock.ts`)
+ * and THEN checks `findRunningRebuild` — both INSIDE the same transaction
+ * that goes on to read the cursor and apply the deltas — and SKIPS
+ * entirely if a rebuild currently owns this projection. This is
+ * deliberately simple (skip, don't try to interleave) — a rebuild
+ * re-derives the projection's ENTIRE state from a full re-scan of the
+ * authoritative source table, so any row written to that table during the
+ * rebuild window is guaranteed to already be included in the rebuild's own
+ * scan by the time it reaches that row; letting the steady-state path ALSO
+ * apply the same row concurrently would double-count it. The same lock +
+ * guard is applied by the rebuild engine itself (`projection-rebuild.ts`)
+ * and by the event-driven consumer handler
+ * (`event-activity-projection.ts`) for the one `domain_event` strategy
+ * projection, for the identical reason.
+ *
+ * Issue #151 (bug fix): this guard used to live in `runIncrementalUpdateForTenant`
+ * and open a `withTenant` transaction of its OWN, separate from the one
+ * each pass then opened — a textbook TOCTOU. A rebuild triggered in that
+ * window reset the cursor to NULL and the metrics to 0 AFTER the guard
+ * said "no rebuild is running", so the incremental pass re-scanned the
+ * source table from the beginning and the rebuild's own passes did too —
+ * both applying the same delta to the same metric row (they serialize on
+ * that row lock and therefore SUM). See `projection-lock.ts`'s header for
+ * why the lock, and not merely relocating the check, is what actually
+ * closes this (READ COMMITTED re-snapshots per STATEMENT, so a check and
+ * an act in one transaction are still not atomic with respect to a
+ * concurrently committing writer).
  *
  * KNOWN LIMITATION (cursor ties, inherited from `data_lifecycle`'s own
  * documented limitation — see `archive-purge-job.ts`'s header): resume is
@@ -44,9 +62,8 @@
  * for a test that seeds many rows inside one transaction (`now()` is
  * STABLE for the whole transaction in Postgres) — such a test MUST
  * assign each row a distinct, explicit `created_at` rather than relying
- * on the column's own `DEFAULT now()` (see `tests/integration/
- * reporting-projections.integration.test.ts`'s `seedDecisionLogs`).
- * strategy projection, for the identical reason.
+ * on the column's own `DEFAULT now()` (`tests/reporting-projection-
+ * rebuild-lock.test.ts`'s `seedSourceRows` does exactly this).
  */
 import {
   applyCursorBoundarySafetyMargin,
@@ -63,6 +80,7 @@ import {
   runBoundedBatches
 } from "../../../lib/jobs/batching";
 import { getStreamCursor, upsertStreamCursor } from "./projection-cursor-store";
+import { lockProjectionForWrite } from "./projection-lock";
 import { applyMetricDeltas, type MetricDelta } from "./projection-metric-store";
 import {
   recordProjectionFailure,
@@ -108,12 +126,26 @@ function computeMetricDeltas(
   });
 }
 
+export type CursorStreamPassResult = {
+  count: number;
+  /** `true` when this pass found a rebuild owning the projection and applied nothing at all (Issue #151) — surfaced so `runIncrementalUpdateForTenant` can report the skip instead of it looking like "caught up, zero rows left". */
+  skippedRebuildInProgress: boolean;
+};
+
 /**
- * One bounded pass over a single stream: SELECT the next `batchLimit` rows
- * strictly after the stored cursor, compute per-metric deltas, apply them,
- * and advance the cursor — all in ONE transaction (pure DB operation, no
- * external I/O, ADR-0006-compliant single-transaction shape). Returns
- * `{ count: 0 }` once the stream has caught up to the current backlog.
+ * One bounded pass over a single stream: take the (tenant, projection)
+ * lock, verify no rebuild owns this projection, SELECT the next
+ * `batchLimit` rows strictly after the stored cursor, compute per-metric
+ * deltas, apply them, and advance the cursor — all in ONE transaction
+ * (pure DB operation, no external I/O, ADR-0006-compliant
+ * single-transaction shape). Returns `{ count: 0 }` once the stream has
+ * caught up to the current backlog.
+ *
+ * The lock + rebuild check are the FIRST things this transaction does
+ * (Issue #151) — every statement after them is protected against a
+ * concurrently committing `triggerOrResumeRebuild`, which cannot even
+ * begin its reset until this transaction commits or rolls back. See
+ * `projection-lock.ts`.
  */
 export async function runCursorStreamPass(
   sql: Bun.SQL,
@@ -121,7 +153,7 @@ export async function runCursorStreamPass(
   projectionKey: string,
   stream: ProjectionCursorStream,
   batchLimit: number
-): Promise<{ count: number }> {
+): Promise<CursorStreamPassResult> {
   const tableName = assertSafeIdentifier(stream.tableName, "table");
   const tenantColumn = assertSafeIdentifier(
     stream.tenantColumn ?? "tenant_id",
@@ -143,6 +175,12 @@ export async function runCursorStreamPass(
     sql,
     tenantId,
     async (tx) => {
+      await lockProjectionForWrite(tx, tenantId, projectionKey);
+
+      if (await findRunningRebuild(tx, tenantId, projectionKey)) {
+        return { count: 0, skippedRebuildInProgress: true };
+      }
+
       const cursor = await getStreamCursor(
         tx,
         tenantId,
@@ -170,7 +208,7 @@ export async function runCursorStreamPass(
       ) as Record<string, unknown>[];
 
       if (rows.length === 0) {
-        return { count: 0 };
+        return { count: 0, skippedRebuildInProgress: false };
       }
 
       const deltas = computeMetricDeltas(rows, stream.metrics);
@@ -185,24 +223,10 @@ export async function runCursorStreamPass(
         newCursorValue
       );
 
-      return { count: rows.length };
+      return { count: rows.length, skippedRebuildInProgress: false };
     },
     { workClass: "maintenance" }
   );
-}
-
-async function isRebuildRunning(
-  sql: Bun.SQL,
-  tenantId: string,
-  projectionKey: string
-): Promise<boolean> {
-  const running = await withTenant(
-    sql,
-    tenantId,
-    (tx) => findRunningRebuild(tx, tenantId, projectionKey),
-    { workClass: "maintenance" }
-  );
-  return running !== null;
 }
 
 export type IncrementalUpdateOutcome = {
@@ -233,17 +257,8 @@ export async function runIncrementalUpdateForTenant(
     );
   }
 
-  if (await isRebuildRunning(sql, tenantId, descriptor.key)) {
-    return {
-      projectionKey: descriptor.key,
-      tenantId,
-      skippedRebuildInProgress: true,
-      rowsProcessed: 0,
-      failed: false
-    };
-  }
-
   let rowsProcessed = 0;
+  let skippedRebuildInProgress = false;
 
   try {
     for (const stream of descriptor.source.streams) {
@@ -259,6 +274,33 @@ export async function runIncrementalUpdateForTenant(
         { maxPasses }
       );
       rowsProcessed += outcome.totalCount;
+
+      // Issue #151 — the rebuild check now lives inside each pass's own
+      // transaction (see this file's header), so "a rebuild owns this
+      // projection" surfaces as a pass RESULT rather than something this
+      // function could have established up front. A skip reported by ANY
+      // pass means this tenant/descriptor did no work at all: bail out of
+      // the remaining streams immediately (they would each take the lock
+      // only to reach the same conclusion) and report the skip.
+      if (outcome.passes.some((pass) => pass.skippedRebuildInProgress)) {
+        skippedRebuildInProgress = true;
+        break;
+      }
+    }
+
+    if (skippedRebuildInProgress) {
+      // Deliberately NOT `recordProjectionSuccess`: nothing was applied, so
+      // advancing `last_success_at` here would make the freshness read path
+      // report `"current"` for a projection this worker never actually
+      // updated. A rebuild-in-progress is already visible to operators via
+      // `findRunningRebuild`/`projection-directory.ts`.
+      return {
+        projectionKey: descriptor.key,
+        tenantId,
+        skippedRebuildInProgress: true,
+        rowsProcessed: 0,
+        failed: false
+      };
     }
 
     await withTenant(

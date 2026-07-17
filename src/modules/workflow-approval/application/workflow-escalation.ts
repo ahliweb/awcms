@@ -97,10 +97,20 @@ export async function escalateDueTasksForTenant(
           continue;
         }
 
+        // ON CONFLICT DO NOTHING (GHSA-9qwq-cmr5-6wfc): the escalation target
+        // is frequently ALSO an original assignee of the task (escalating a
+        // manager's task to that same manager's own queue is normal). This
+        // INSERT used to hand them a SECOND live assignment row, which the
+        // quorum evaluation then counted as a second eligible approver —
+        // letting one person satisfy a 2-person quorum by themselves. If they
+        // already hold a live ('pending'/'decided') assignment there is
+        // nothing to add: they can already decide. Migration 018's partial
+        // unique index is what this conflicts against.
         await tx`
           INSERT INTO awcms_workflow_task_assignments
             (tenant_id, workflow_task_id, tenant_user_id, status)
           VALUES (${tenantId}, ${row.id}, ${node.escalation.escalateToTenantUserId}, 'pending')
+          ON CONFLICT DO NOTHING
         `;
 
         await appendDomainEvent(tx, tenantId, {

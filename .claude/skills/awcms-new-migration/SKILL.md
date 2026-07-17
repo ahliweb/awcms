@@ -35,17 +35,17 @@ TRANSACTION;` — `scripts/db-migrate.ts` mengelola transaksi migration
 9. **Tidak** menyimpan password/API key/secret plaintext.
 10. Tabel master/config/draft yang deletable wajib soft delete (`deleted_at`, `deleted_by`, `delete_reason`) + index/partial unique aktif.
 11. Tabel BARU tanpa `tenant_id`/RLS (global, dibaca/ditulis lintas
-    tenant — mis. katalog konfigurasi, registry) **tidak** ikut
-    `ALTER DEFAULT PRIVILEGES` di migration 013 yang otomatis meng-grant
-    tabel tenant-scoped ke `awcms_app` (Issue #683, epic #679, lihat
-    `sql/045_awcms_db_role_separation.sql`'s header) — grant
-    eksplisit di migration ANDA sendiri, hanya hak yang benar-benar
-    dipakai jalur kode (jangan blanket `SELECT/INSERT/UPDATE/DELETE`),
-    dan tambahkan tabel itu ke `RLS_FREE_TABLES` DAN
-    `ALLOWED_GLOBAL_TABLE_GRANTS` di `scripts/security-readiness.ts` —
-    tanpa keduanya, `checkRuntimeRoleGlobalTableGrants` akan GAGAL
-    (critical, blocking go-live) begitu migration Anda memberi grant apa
-    pun ke tabel itu tanpa terdaftar di allowlist.
+    tenant — mis. katalog konfigurasi, registry): cukup dokumentasikan
+    alasannya di header migration. Base ini **belum** punya role
+    least-privilege (`awcms_app`/`awcms_worker`) maupun
+    `scripts/security-readiness.ts` — tidak ada `CREATE ROLE`/`GRANT` di
+    seluruh `sql/`, dan aplikasi connect sebagai pemilik migration via
+    `DATABASE_URL`. Jadi JANGAN tulis blok `GRANT ... TO awcms_app` (akan
+    gagal: role-nya tidak ada), dan jangan mendaftarkan tabel ke
+    `RLS_FREE_TABLES`/`ALLOWED_GLOBAL_TABLE_GRANTS` (script-nya tidak ada
+    di sini — itu masih milik awcms-mini). Keduanya sedang dilacak: role
+    least-privilege di Issue #141, port `security-readiness.ts` di Issue
+    #142. Perbarui butir ini begitu keduanya mendarat.
 
 ## Template
 
@@ -75,14 +75,46 @@ CREATE INDEX IF NOT EXISTS awcms_<name>_active_idx
   ON awcms_<name> (tenant_id, created_at DESC)
   WHERE deleted_at IS NULL;
 -- Konvensi nama index: SUFFIX `_idx` (unique: `_uidx` atau `_key`), bukan
--- prefix `idx_` — lihat 15 migration terakhir/83 index nyata
--- (mis. sql/071, sql/075: `awcms_data_exchange_import_batches_tenant_status_idx`,
--- `awcms_reference_tenant_codes_tenant_active_idx`).
+-- prefix `idx_` — mis. sql/013, sql/015:
+-- `awcms_workflow_task_assignments_task_idx`,
+-- `awcms_reporting_projection_state_tenant_idx`.
 
 ALTER TABLE awcms_<name> ENABLE ROW LEVEL SECURITY;
 ALTER TABLE awcms_<name> FORCE ROW LEVEL SECURITY;
 CREATE POLICY awcms_<name>_tenant_isolation ON awcms_<name>
   USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+```
+
+### `ENABLE` tanpa `FORCE` = RLS mati, bukan RLS lemah
+
+**`FORCE` bukan pengetat opsional — tanpanya policy-mu tidak pernah dievaluasi.**
+PostgreSQL melewati RLS untuk **pemilik tabel**, dan aplikasi ini connect
+sebagai pemilik migration via `DATABASE_URL`. Jadi `ENABLE` sendirian
+menghasilkan tabel yang _terlihat_ terlindungi — policy ada, `relrowsecurity`
+true — sementara setiap query mengembalikan baris semua tenant.
+
+Ini bukan hipotetis: migration 002-008 dan 010-012 mengirim **23 tabel**
+seperti itu (termasuk `awcms_identities`, `awcms_sessions`), dan sebuah audit
+sebelumnya justru mencatat "RLS ENABLE di semua tabel tenant-scoped" sebagai
+bukti sehat. Diperbaiki `sql/017_awcms_enforce_rls_force.sql`.
+
+Saat me-review/mengaudit RLS: **grep `FORCE`, bukan `ENABLE`**, dan periksa role
+koneksi aplikasi. Koneksi `SUPERUSER`/`BYPASSRLS` melewati RLS _bahkan dengan_
+`FORCE` — itu lapisan terpisah (role least-privilege `awcms_app`).
+
+Cara membuktikan policy benar-benar menegakkan (bukan sekadar terdaftar): buat
+DB sekali-pakai + role `NOSUPERUSER NOBYPASSRLS`, jalankan migration **sebagai
+role itu** supaya ia jadi pemilik, seed dua tenant, lalu baca data tenant B
+dengan `app.current_tenant_id` disetel ke tenant A. Harus nol baris.
+
+**FK tidak dilindungi RLS.** Pemeriksaan integritas referensial dijalankan
+dengan hak pemilik dan melewati RLS, jadi FK yang tidak tenant-scoped tetap
+menerima nilai lintas tenant meski `FORCE` aktif. Untuk kolom self-reference
+atau FK antar-tabel tenant-scoped, pakai FK **komposit**:
+
+```sql
+-- butuh UNIQUE (tenant_id, id) di tabel target
+FOREIGN KEY (tenant_id, parent_id) REFERENCES awcms_<target> (tenant_id, id)
 ```
 
 ## Menggunakan `SECURITY DEFINER` (bootstrap read sebelum tenant context ada)
@@ -92,8 +124,10 @@ Kadang sebuah query harus jalan **sebelum** tenant context ada sama sekali
 tabelnya `FORCE ROW LEVEL SECURITY`. Jangan lepas `FORCE ROW LEVEL
 SECURITY` untuk mengakalinya — buat fungsi `SECURITY DEFINER` yang sempit.
 Checklist wajib (detail lengkap + alasan tiap butir:
-`docs/adr/0003-postgresql-rls-multi-tenant.md` §Checklist; contoh kanonik:
-`sql/033_awcms_tenant_domain_lookup_function.sql`, Issue #559):
+`docs/adr/0003-postgresql-rls-multi-tenant.md` §Checklist). Base ini belum
+punya contoh `SECURITY DEFINER` sendiri — rujukan kanoniknya ada di repo
+awcms-mini (migration 033, tenant domain lookup function; Issue #559 di repo
+itu), bukan di `sql/` repo ini:
 
 1. Konfirmasi role pemilik migration benar-benar superuser (`SELECT
 rolsuper FROM pg_roles`) — keamanan mekanisme ini datang dari situ, bukan
