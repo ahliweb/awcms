@@ -1,5 +1,7 @@
 🇮🇩 Bahasa Indonesia (sumber) · 🇬🇧 [English (default)](README.md)
 
+[![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
+
 # AWCMS — Basis Platform untuk ERP & Solusi Bisnis
 
 > **AWCMS bukan sebuah ERP.** Ia adalah **basis/fondasi modular monolith** tempat aplikasi ERP & solusi bisnis dibangun di atasnya (di repo ekstensi/turunan terpisah). Tidak ada chart of accounts, general ledger, jurnal, AR/AP, valuasi inventori, payroll, atau perhitungan pajak di repo ini — dan tidak akan pernah ada; base hanya menyediakan modul fondasi reusable + **kontrak netral** kesiapan ERP. Lihat [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md), [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md), [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md), dan [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
