@@ -22,6 +22,8 @@ Skema: `sql/004_awcms_identity_login_schema.sql`, `sql/005_awcms_abac_access_con
 
 `domain/access-control.ts` — `evaluateAccess()`: default deny, deny overrides allow, permission diidentifikasi `module_key.activity_code.action`. `application/access-guard.ts` — `authorizeInTransaction()` adalah satu-satunya chokepoint yang dipanggil setiap route terproteksi.
 
+Status disabled sebuah modul bukan sekadar sinyal UI: `authorizeInTransaction` mengecek `resolveModuleEnabled(tx, tenantId, guard.moduleKey)` (`auth-context.ts`) **sebelum** permission di-lookup, sehingga modul yang dinonaktifkan untuk sebuah tenant ditolak `403 MODULE_DISABLED` apa pun permission yang dipegang aktor, dan penolakannya tetap tercatat di decision log (`matchedPolicy: "module_disabled"`). Karena guard ini dipakai setiap endpoint terproteksi, satu cek ini menutup seluruh endpoint milik modul nonaktif tanpa menyentuh tiap route. `module_management` sendiri `isCore` (tidak bisa dinonaktifkan), jadi tenant tak pernah terkunci dari mengaktifkannya kembali.
+
 ## Belum tersedia (Sprint 3+)
 
-Evaluator ABAC penuh (business-scope/office hierarchy, segregation-of-duties), module-management (enable/disable modul per tenant — `authorizeInTransaction` belum mengecek status modul), endpoint manajemen user/role (`/users`, `/roles`), MFA/OIDC/SSO/Turnstile.
+Evaluator ABAC penuh (business-scope/office hierarchy, segregation-of-duties), endpoint manajemen user/role (`/users`, `/roles`), MFA/OIDC/SSO/Turnstile.
