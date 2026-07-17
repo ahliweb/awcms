@@ -16,8 +16,7 @@ import type { ModuleJobDescriptor } from "../../_shared/module-contract";
 export type JobRegistryEntry = ModuleJobDescriptor & { moduleKey: string };
 
 export type JobDescriptorValidationResult =
-  | { valid: true }
-  | { valid: false; errors: string[] };
+  { valid: true } | { valid: false; errors: string[] };
 
 const COMMAND_PATTERN = /^bun run [a-z0-9][a-z0-9:_-]*$/;
 

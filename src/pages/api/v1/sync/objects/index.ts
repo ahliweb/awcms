@@ -21,11 +21,7 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   if (!nodeCode) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "X-AWCMS-Node-ID header is required."
-    );
+    return fail(400, "VALIDATION_ERROR", "X-AWCMS-Node-ID header is required.");
   }
 
   const bodyRead = await readTextBody(request, "large");

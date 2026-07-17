@@ -22,6 +22,7 @@ grep -rl "<mod>\|<Symbol>" $M/tests                               # test (port y
 grep -rn "<mod>:" $M/package.json                                 # script (dispatcher/worker)
 ls -1 $A/sql | tail -1                                            # nomor migrasi terakhir di awcms → +1
 ```
+
 Kalau salah satu dependency modul **belum** ada di awcms → port dependency itu dulu (urut dependensi), atau adaptasi agar tak mengimpornya (§4).
 
 ## 2. Aturan rename (non-negotiable)
@@ -64,6 +65,7 @@ bun run modules:dag:check
 bun run logging:lint:check
 bun run check:docs
 ```
+
 JANGAN jalankan `config:validate` (butuh env) atau `db:migrate` tanpa DB. Untuk **memvalidasi migrasi terhadap Postgres nyata** tanpa konektivitas host→container, pakai skill `docker-host-container-network` §7 (`docker cp sql/` + `psql -f` di dalam container). Tambah changeset **minor**.
 
 ## 7. Commit atomic

@@ -87,9 +87,9 @@ describe("validateDomainEventPayload", () => {
 
 describe("isValidEventType / isValidEventVersion", () => {
   test("accepts a well-formed namespace.aggregate.action event type", () => {
-    expect(
-      isValidEventType("awcms.domain-event-runtime.sample.recorded")
-    ).toBe(true);
+    expect(isValidEventType("awcms.domain-event-runtime.sample.recorded")).toBe(
+      true
+    );
   });
 
   test("rejects an event type without at least one dot-separated segment", () => {

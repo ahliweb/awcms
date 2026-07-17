@@ -11,15 +11,15 @@
 AWCMS bukan repo tunggal — ia hidup berpasangan dengan repo standarnya,
 **awcms-mini**.
 
-| Aspek         | **awcms-mini** (fondasi/standar)                             | **awcms** (repo ini)                                             |
-| ------------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
+| Aspek         | **awcms-mini** (fondasi/standar)                            | **awcms** (repo ini)                                                                                                                                    |
+| ------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Peran         | _Modular monolith standard_ — laboratorium & sumber standar | **Fondasi + kontrak kesiapan ERP** ber-skop ERP; modul ERP nyata hidup di repo turunan ([ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)) |
-| Kematangan    | Matang — banyak modul sudah teruji end-to-end               | Tahap fondasi (Sprint 1–2), tumbuh bertahap                     |
-| Modul di kode | ~23 modul (fondasi + CMS + pendukung)                       | Baru 4: `logging`, `tenant-admin`, `profile-identity`, `identity-access` |
-| Migrasi SQL   | 76 (`001`–`076`)                                            | 7 (`001`–`007`)                                                  |
-| Route API     | ~290                                                        | ~16                                                             |
-| Prefix DB     | `awcms_mini_…`                                              | `awcms_…`                                                        |
-| Sifat         | Referensi/standar yang stabil                               | Produk turunan yang mengonsumsi & memperluas standar            |
+| Kematangan    | Matang — banyak modul sudah teruji end-to-end               | Tahap fondasi (Sprint 1–2), tumbuh bertahap                                                                                                             |
+| Modul di kode | ~23 modul (fondasi + CMS + pendukung)                       | Baru 4: `logging`, `tenant-admin`, `profile-identity`, `identity-access`                                                                                |
+| Migrasi SQL   | 76 (`001`–`076`)                                            | 7 (`001`–`007`)                                                                                                                                         |
+| Route API     | ~290                                                        | ~16                                                                                                                                                     |
+| Prefix DB     | `awcms_mini_…`                                              | `awcms_…`                                                                                                                                               |
+| Sifat         | Referensi/standar yang stabil                               | Produk turunan yang mengonsumsi & memperluas standar                                                                                                    |
 
 **Rantai tiga lapis:** `awcms-mini` (standar terbukti) → **`awcms`** (fondasi ber-skop ERP, port bertahap) → repo turunan/ekstensi (modul ERP & vertikal nyata di atas awcms). Repo ini menyediakan fondasi + kontrak kesiapan ERP — **bukan** tempat membangun modul domain ERP itu sendiri (ADR-0022).
 

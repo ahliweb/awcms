@@ -128,17 +128,17 @@ rejected at create (fail-closed).
 
 ## Configuration
 
-| Var                             | Required          | Default | Function                              |
-| ------------------------------- | ----------------- | ------- | ------------------------------------- |
-| `EMAIL_ENABLED`                 | –                 | `false` | Enable the email module               |
-| `EMAIL_PROVIDER`                | when enabled      | –       | `"mailketing"` or `"log"`             |
-| `EMAIL_FROM_ADDRESS`            | when enabled      | –       | Default sender address                |
-| `EMAIL_FROM_NAME`               | –                 | `AWCMS` | Default sender name                   |
-| `EMAIL_SEND_TIMEOUT_MS`         | –                 | `10000` | Per-attempt send timeout              |
-| `EMAIL_SEND_MAX_RETRIES`        | –                 | `5`     | Retry ceiling before `failed`         |
-| `EMAIL_MAILKETING_ACCOUNT_ID`   | when mailketing   | –       | Operator label (never sent)           |
-| `EMAIL_MAILKETING_API_TOKEN`    | when mailketing   | –       | Mailketing API token (secret)         |
-| `EMAIL_MAILKETING_API_BASE_URL` | when mailketing   | –       | Mailketing API base URL               |
+| Var                             | Required        | Default | Function                      |
+| ------------------------------- | --------------- | ------- | ----------------------------- |
+| `EMAIL_ENABLED`                 | –               | `false` | Enable the email module       |
+| `EMAIL_PROVIDER`                | when enabled    | –       | `"mailketing"` or `"log"`     |
+| `EMAIL_FROM_ADDRESS`            | when enabled    | –       | Default sender address        |
+| `EMAIL_FROM_NAME`               | –               | `AWCMS` | Default sender name           |
+| `EMAIL_SEND_TIMEOUT_MS`         | –               | `10000` | Per-attempt send timeout      |
+| `EMAIL_SEND_MAX_RETRIES`        | –               | `5`     | Retry ceiling before `failed` |
+| `EMAIL_MAILKETING_ACCOUNT_ID`   | when mailketing | –       | Operator label (never sent)   |
+| `EMAIL_MAILKETING_API_TOKEN`    | when mailketing | –       | Mailketing API token (secret) |
+| `EMAIL_MAILKETING_API_BASE_URL` | when mailketing | –       | Mailketing API base URL       |
 
 All `.env.example` values are placeholders, never real credentials. When
 `EMAIL_ENABLED=false` (the default) nothing blocks the app: messages sit in

@@ -106,14 +106,12 @@ export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
     {
       eventType: WORKFLOW_DELEGATION_CREATED_EVENT_TYPE,
       eventVersion: WORKFLOW_EVENT_VERSION,
-      description:
-        "A workflow delegation/substitute assignment was created."
+      description: "A workflow delegation/substitute assignment was created."
     },
     {
       eventType: WORKFLOW_DELEGATION_REVOKED_EVENT_TYPE,
       eventVersion: WORKFLOW_EVENT_VERSION,
-      description:
-        "A workflow delegation/substitute assignment was revoked."
+      description: "A workflow delegation/substitute assignment was revoked."
     }
   ];
 
