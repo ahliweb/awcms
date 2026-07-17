@@ -49,17 +49,18 @@ Response error:
 
 ## Header standard
 
-| Header              |                       Wajib | Fungsi                  |
-| ------------------- | --------------------------: | ----------------------- |
-| `Authorization`     |           Ya kecuali public | Bearer token            |
-| `X-AWCMS-Tenant-ID` |  Ya untuk tenant-scoped API | Tenant aktif            |
-| `Idempotency-Key`   | Ya untuk mutation high-risk | Anti duplicate mutation |
-| `X-Correlation-ID`  |                    Opsional | Trace request           |
-| `X-Request-ID`      |                    Opsional | Trace client request    |
-| `Accept-Language`   |                    Opsional | Locale                  |
-| `X-AWCMS-Node-ID`   |               Ya untuk sync | Sync node               |
-| `X-AWCMS-Timestamp` |        Ya untuk signed sync | Anti replay             |
-| `X-AWCMS-Signature` |               Ya untuk sync | HMAC signature          |
+| Header                      |                       Wajib | Fungsi                                                        |
+| --------------------------- | --------------------------: | ------------------------------------------------------------- |
+| `Authorization`             |           Ya kecuali public | Bearer token                                                  |
+| `X-AWCMS-Tenant-ID`         |  Ya untuk tenant-scoped API | Tenant aktif                                                  |
+| `Idempotency-Key`           | Ya untuk mutation high-risk | Anti duplicate mutation                                       |
+| `X-Correlation-ID`          |                    Opsional | Trace request                                                 |
+| `X-Request-ID`              |                    Opsional | Trace client request                                          |
+| `Accept-Language`           |                    Opsional | Locale                                                        |
+| `X-AWCMS-Node-ID`           |               Ya untuk sync | Sync node                                                     |
+| `X-AWCMS-Timestamp`         |        Ya untuk signed sync | Anti replay                                                   |
+| `X-AWCMS-Signature`         |               Ya untuk sync | HMAC signature                                                |
+| `X-AWCMS-Signature-Version` |  Disarankan untuk sync (v2) | Versi skema signature; `"2"` mengikat tenant+node (GHSA-c972) |
 
 ## Soft delete API standard
 
