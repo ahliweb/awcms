@@ -1,6 +1,8 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:3ee7d3e62741206daf218bc4d73a43b59ccd6fd06b379c851deb13a540739e3f -->
+<!-- i18n-source-hash: sha256:eff502bf089aa19e67a05036e2858dedcfd9e781c701906cb383d1ea4e70bf73 -->
+
+[![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
 # AWCMS — Foundation Platform for ERP & Business Solutions
 
