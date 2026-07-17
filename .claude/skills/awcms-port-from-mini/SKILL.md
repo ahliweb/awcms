@@ -58,15 +58,18 @@ Kalau salah satu dependency modul **belum** ada di awcms → port dependency itu
 ```bash
 cd /home/data/dev_bun/awcms
 git add -A                       # agar check:docs memindai .md baru (changeset/README)
+bun run format                   # WAJIB dulu: prettier --write (file buatan subagent sering belum terformat)
+bun run lint                     # WAJIB: prettier --check — CI gagal bila ada 1 file tak terformat
 bun run typecheck
 bun test
 bun run api:spec:check
 bun run modules:dag:check
 bun run logging:lint:check
 bun run check:docs
+bun run build                    # WAJIB: CI menjalankan build; port bisa lolos typecheck tapi gagal build
 ```
 
-JANGAN jalankan `config:validate` (butuh env) atau `db:migrate` tanpa DB. Untuk **memvalidasi migrasi terhadap Postgres nyata** tanpa konektivitas host→container, pakai skill `docker-host-container-network` §7 (`docker cp sql/` + `psql -f` di dalam container). Tambah changeset **minor**.
+**Jangan cukup dengan subset.** CI (`.github/workflows/ci.yml`) menjalankan `lint` (prettier) DAN `build` selain cek di atas — melewati keduanya adalah penyebab paling umum "hijau lokal tapi merah di CI". Selalu `bun run format` + `bun run lint` + `bun run build` sebelum commit/PR (setara `bun run check` penuh). JANGAN jalankan `config:validate` (butuh env) atau `db:migrate` tanpa DB. Untuk **memvalidasi migrasi terhadap Postgres nyata** tanpa konektivitas host→container, pakai skill `docker-host-container-network` §7 (`docker cp sql/` + `psql -f` di dalam container). Tambah changeset **minor**.
 
 ## 7. Commit atomic
 
