@@ -81,6 +81,93 @@ describe("computeSyncSignatureV2 binds tenant + node", () => {
   });
 });
 
+// --- L1: delimiter ambiguity between tenantId and nodeCode is closed ---------
+//
+// Regression guard for audit finding L1 (PR #161, GHSA-c972-3q5p-g3h4). Before
+// the fix the v2 material `v2:<tenantId>:<nodeCode>:...` was ambiguous because
+// `nodeCode` may contain `:` (schema `node_code text`, no format constraint):
+//   (tenantId="A",   nodeCode="x:y")  ->  "v2:A:x:y:<ts>:<body>"
+//   (tenantId="A:x", nodeCode="y")    ->  "v2:A:x:y:<ts>:<body>"
+// Identical material -> byte-identical signature -> mutually accepted. The fix
+// (Option A) requires `tenantId` to be a UUID at the v2 boundary; a UUID is a
+// fixed 36 chars with no `:`, so the tenant/node boundary is unambiguous. Both
+// colliding shapes carry a non-UUID tenantId, so both are now rejected. Only
+// `tenantId` is constrained — `nodeCode` is untouched (zero regression for real
+// UUID-tenant nodes).
+describe("v2 delimiter hardening (L1): tenantId must be a UUID", () => {
+  const timestamp = "2026-07-18T00:00:00.000Z";
+  const body = "{}";
+
+  test("the two historically-colliding shapes can no longer be produced", () => {
+    // Both carry a non-UUID tenantId ("A" and "A:x"); compute now throws for
+    // each, so the ambiguous material is never even minted.
+    expect(() =>
+      computeSyncSignatureV2(SECRET, "A", "x:y", timestamp, body)
+    ).toThrow(/tenantId must be a UUID/);
+    expect(() =>
+      computeSyncSignatureV2(SECRET, "A:x", "y", timestamp, body)
+    ).toThrow(/tenantId must be a UUID/);
+  });
+
+  test("verify fails closed on a non-UUID tenantId (no cross-accept)", () => {
+    // A legitimately-signed v2 request for tenant A + node "x:y" ...
+    const sig = computeSyncSignatureV2(
+      SECRET,
+      TENANT_A,
+      "x:y",
+      timestamp,
+      body
+    );
+    expect(
+      verifySyncSignatureV2(SECRET, TENANT_A, "x:y", timestamp, body, sig)
+    ).toBe(true);
+
+    // ... cannot be re-attributed by shifting the tenant/node boundary into a
+    // non-UUID tenantId. verify rejects (returns false, never throws).
+    expect(
+      verifySyncSignatureV2(SECRET, "A:x", "y", timestamp, body, sig)
+    ).toBe(false);
+    // And the reverse-shaped forgery of tenant A's signature is rejected too.
+    const forged = TENANT_A + ":x";
+    expect(
+      verifySyncSignatureV2(SECRET, forged, "y", timestamp, body, sig)
+    ).toBe(false);
+  });
+
+  test("a nodeCode containing ':' still verifies for a valid UUID tenant", () => {
+    // nodeCode is deliberately NOT constrained — a real node whose code
+    // contains ':' keeps working, as long as its tenantId is a UUID.
+    const sig = computeSyncSignatureV2(
+      SECRET,
+      TENANT_A,
+      "kasir:pos:1",
+      timestamp,
+      body
+    );
+    expect(
+      verifySyncSignatureV2(
+        SECRET,
+        TENANT_A,
+        "kasir:pos:1",
+        timestamp,
+        body,
+        sig
+      )
+    ).toBe(true);
+    // Tenant-swap between two valid UUIDs is still rejected.
+    expect(
+      verifySyncSignatureV2(
+        SECRET,
+        TENANT_B,
+        "kasir:pos:1",
+        timestamp,
+        body,
+        sig
+      )
+    ).toBe(false);
+  });
+});
+
 describe("verifySyncHeaders (versioned)", () => {
   const ENV_KEYS = [
     "AWCMS_SYNC_ENABLED",
@@ -155,6 +242,23 @@ describe("verifySyncHeaders (versioned)", () => {
     const sig = computeSyncSignature(SECRET, ts, body);
 
     const result = verifySyncHeaders(TENANT_A, NODE, ts, sig, null, body);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(401);
+    }
+  });
+
+  test("v2: a non-UUID tenant header is rejected (L1 delimiter guard)", () => {
+    const ts = freshTimestamp();
+    const body = "{}";
+    // Even if an attacker crafts material with a colon-bearing "tenantId", the
+    // v2 verify boundary fails closed on the non-UUID tenant id -> 401. The
+    // signature value is irrelevant: verify rejects before any comparison (and
+    // compute would itself refuse to mint ambiguous material), so a dummy
+    // 64-char hex digest stands in here.
+    const sig = "0".repeat(64);
+    const result = verifySyncHeaders("A:x", "y", ts, sig, "2", body);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

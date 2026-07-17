@@ -373,13 +373,14 @@ export function checkLoginLockoutImplemented(): SecurityCheckResult {
 // ---------------------------------------------------------------------------
 
 /**
- * Tables that are intentionally RLS-free because they are not tenant-scoped
- * (no per-tenant row ownership) — derived by reading `sql/*.sql` directly,
- * not guessed. Cross-checked against the migrations: these are exactly the
- * `awcms_%` tables that are `CREATE TABLE`d but never
- * `ENABLE ROW LEVEL SECURITY`d.
+ * Single source of truth for every GLOBAL, RLS-free table. Maps each table's
+ * name to the privileges `awcms_app` must NOT hold on it at runtime — and, by
+ * its KEYS, defines the set of `awcms_%` tables that are intentionally RLS-free
+ * because they are not tenant-scoped (no per-tenant row ownership). Derived by
+ * reading `sql/*.sql` directly, not guessed: these are exactly the `awcms_%`
+ * tables that are `CREATE TABLE`d but never `ENABLE ROW LEVEL SECURITY`d.
  *
- * - `awcms_schema_migrations` (sql/001) — migration bookkeeping.
+ * - `awcms_schema_migrations` (sql/001) — migration bookkeeping ledger.
  * - `awcms_modules` (sql/008) — global module registry, no `tenant_id`.
  * - `awcms_module_dependencies`, `awcms_module_navigation`,
  *   `awcms_module_jobs`, `awcms_module_health_checks` (sql/008) —
@@ -395,25 +396,63 @@ export function checkLoginLockoutImplemented(): SecurityCheckResult {
  * - `awcms_setup_state` (sql/006) — global singleton setup lock that exists
  *   before any tenant does.
  *
- * Anything NOT in this set that matches `awcms_%` is treated as
- * tenant-scoped and MUST have both `relrowsecurity` and
- * `relforcerowsecurity`. That default-deny direction is the point: a new
- * migration adding a tenant table with `ENABLE` but no `FORCE` fails this
- * check without anyone having to remember to register it anywhere. A new
- * genuinely-global table is the case that requires a deliberate edit here,
- * with a reason — which is the correct place to force that conversation.
+ * ## Why ONE map, not two lists (Issue #162 / L2)
+ *
+ * This used to be two independent structures: an `RLS_FREE_TABLES` set (read by
+ * `checkRlsEnabled`) plus a separate forbidden-privilege map (read by
+ * `checkRuntimeRoleGrants`). The auditor of PR #161 flagged the "one-list
+ * omission" gap: a future global RLS-free table added to the SET (to satisfy
+ * `checkRlsEnabled`) but forgotten in the forbidden-privilege MAP was
+ * `continue`d as "full DML kept by design" and passed silently — the exact "a
+ * new global table inherits blanket DML from `ALTER DEFAULT PRIVILEGES`"
+ * regression this whole check exists to catch. Merging them means you cannot
+ * register a table in one place without the other: adding a key here FORCES an
+ * explicit privilege declaration for it, and `checkRuntimeRoleGrants` fails
+ * closed ("assert zero write") on any RLS-free table still missing one.
+ *
+ * The value is the list of privileges FORBIDDEN for `awcms_app`:
+ * - `[]` — full DML legitimately kept. The five module-registry tables are
+ *   written at request time by `descriptor-sync.ts`/`health-registry.ts` (see
+ *   `sql/021`'s header). A DELIBERATE, explicit "allow" a reviewer can see and
+ *   challenge — not an implicit default.
+ * - `["INSERT", "UPDATE", "DELETE"]` — read-only at runtime, every write
+ *   forbidden: `awcms_permissions` (global permission catalog, never written by
+ *   the app) and `awcms_schema_migrations` (migration ledger, only `db:migrate`
+ *   as owner writes it).
+ * - `["DELETE"]` — keep SELECT/INSERT/UPDATE, forbid DELETE only:
+ *   `awcms_tenants` (tenant-settings write path + setup-fallback bootstrap) and
+ *   `awcms_setup_state` (setup-fallback singleton).
+ *
+ * Anything NOT keyed here that matches `awcms_%` is treated as tenant-scoped and
+ * MUST have both `relrowsecurity` and `relforcerowsecurity` (`checkRlsEnabled`)
+ * AND all four grants (`checkRuntimeRoleGrants`). That default-deny direction is
+ * the point: a new migration adding a tenant table needs no registration to be
+ * protected; a new genuinely-global table is the one case that requires a
+ * deliberate edit here, with a reason — the correct place to force that
+ * conversation.
  */
-const RLS_FREE_TABLES = new Set([
-  "awcms_schema_migrations",
-  "awcms_modules",
-  "awcms_module_dependencies",
-  "awcms_module_navigation",
-  "awcms_module_jobs",
-  "awcms_module_health_checks",
-  "awcms_tenants",
-  "awcms_permissions",
-  "awcms_setup_state"
-]);
+const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
+  // Module registry (sql/008) — global, code-derived, full DML kept by design.
+  awcms_modules: [],
+  awcms_module_dependencies: [],
+  awcms_module_navigation: [],
+  awcms_module_jobs: [],
+  awcms_module_health_checks: [],
+  // Read-only at runtime — every write forbidden.
+  awcms_permissions: ["INSERT", "UPDATE", "DELETE"],
+  awcms_schema_migrations: ["INSERT", "UPDATE", "DELETE"],
+  // Write-limited — only DELETE forbidden.
+  awcms_tenants: ["DELETE"],
+  awcms_setup_state: ["DELETE"]
+};
+
+/**
+ * The set of intentionally RLS-free tables, DERIVED from the single source of
+ * truth above so the two can never diverge (see that comment for the L2 gap
+ * this closes). Read by `checkRlsEnabled` to know which `awcms_%` tables are
+ * exempt from the RLS-forced requirement.
+ */
+const RLS_FREE_TABLES = new Set(Object.keys(GLOBAL_TABLE_FORBIDDEN_PRIVILEGES));
 
 type RlsRow = {
   relname: string;
@@ -658,23 +697,15 @@ export async function checkLeastPrivilegeRoleProvisioned(): Promise<SecurityChec
 // ---------------------------------------------------------------------------
 
 /**
- * Privileges `awcms_app` must NOT hold on each GLOBAL, RLS-free table after
- * `sql/021_awcms_db_role_grants_narrow.sql` narrows the blanket grant. This is
- * the OTHER half of the residual `sql/019` documented and #160 closes: RLS
- * cannot claw anything back on these tables because they have none, so an
- * over-broad grant here is a real, un-mitigated privilege. Absence from this
- * map = "full DML legitimately kept" (the five module-registry tables, written
- * at request time — see `sql/021`'s header). `awcms_tenants`/`awcms_setup_state`
- * keep SELECT/INSERT/UPDATE (setup-fallback + tenant-settings write paths); only
- * DELETE is forbidden. `awcms_permissions`/`awcms_schema_migrations` are
- * read-only at runtime, so every write is forbidden.
+ * The three write privileges. A GLOBAL, RLS-free table that is registered as
+ * RLS-free (in `RLS_FREE_TABLES`) but has NO entry in
+ * `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` is asserted fail-closed against this list
+ * — "zero write allowed" — so a forgotten registration FAILS the check instead
+ * of silently keeping blanket DML (Issue #162 / L2). In practice the two are
+ * derived from one map so this cannot happen in shipped code; the fail-closed
+ * default is the belt-and-suspenders guard against any future re-split.
  */
-const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
-  awcms_permissions: ["INSERT", "UPDATE", "DELETE"],
-  awcms_schema_migrations: ["INSERT", "UPDATE", "DELETE"],
-  awcms_tenants: ["DELETE"],
-  awcms_setup_state: ["DELETE"]
-};
+const ALL_WRITE_PRIVILEGES = ["INSERT", "UPDATE", "DELETE"];
 
 /**
  * Privileges every TENANT-SCOPED table must grant `awcms_app`. `sql/019` grants
@@ -714,6 +745,15 @@ type RoleGrantRow = {
  *   forbidden write — the residual #160 closes, and its regression guard for a
  *   FUTURE global table silently inheriting blanket DML from default privileges.
  *
+ * The over-granted direction is FAIL-CLOSED (Issue #162 / L2): a table that is
+ * RLS-free (present in `rlsFreeTables`) but carries NO explicit privilege
+ * declaration in `forbiddenPrivileges` is asserted to hold ZERO writes. Any
+ * write it does hold is reported as an over-grant with a "register the allowed
+ * privileges" message, rather than being skipped as "full DML by design". This
+ * closes the exact gap the auditor of #161 flagged: a future global table added
+ * to the RLS-free set but forgotten in the forbidden-privilege map now FAILS
+ * instead of passing silently.
+ *
  * Uses `has_table_privilege(role, oid, priv)` so it reports the EFFECTIVE grant
  * (direct + default-privilege + PUBLIC), which is what the runtime actually
  * gets — reading `relacl` directly would miss default-privilege grants. The
@@ -726,10 +766,39 @@ type RoleGrantRow = {
  * cry wolf over a merely-un-migrated state — the missing-role signal is already
  * the job of `checkLeastPrivilegeRoleProvisioned` (warning). Once the role
  * exists, wrong grants ARE `critical`.
+ *
+ * `policy` is injectable purely so tests can simulate the divergence the guard
+ * defends against — an RLS-free table absent from the forbidden map — without
+ * mutating shared module state (the `mock.module` cross-file-leak trap). It
+ * defaults to the single source of truth, which is always internally consistent.
  */
-export async function checkRuntimeRoleGrants(): Promise<SecurityCheckResult> {
+export type RuntimeRoleGrantsPolicy = {
+  rlsFreeTables: ReadonlySet<string>;
+  forbiddenPrivileges: Record<string, string[]>;
+};
+
+/**
+ * The real, internally-consistent policy `checkRuntimeRoleGrants` uses by
+ * default. Exposed so tests can build a DIVERGENT policy from it (e.g. an
+ * RLS-free table registered in `rlsFreeTables` but absent from
+ * `forbiddenPrivileges`) to exercise the fail-closed guard, without mutating
+ * shared module state.
+ */
+export function defaultRuntimeRoleGrantsPolicy(): RuntimeRoleGrantsPolicy {
+  return {
+    rlsFreeTables: RLS_FREE_TABLES,
+    forbiddenPrivileges: GLOBAL_TABLE_FORBIDDEN_PRIVILEGES
+  };
+}
+
+export async function checkRuntimeRoleGrants(
+  policy?: Partial<RuntimeRoleGrantsPolicy>
+): Promise<SecurityCheckResult> {
   const name = "Runtime role table grants match least-privilege matrix";
   const severity: CheckSeverity = "critical";
+  const rlsFreeTables = policy?.rlsFreeTables ?? RLS_FREE_TABLES;
+  const forbiddenPrivileges =
+    policy?.forbiddenPrivileges ?? GLOBAL_TABLE_FORBIDDEN_PRIVILEGES;
 
   try {
     if (!process.env.DATABASE_URL) {
@@ -787,21 +856,27 @@ export async function checkRuntimeRoleGrants(): Promise<SecurityCheckResult> {
 
     for (const row of rows) {
       const privileges = held(row);
-      const forbidden = GLOBAL_TABLE_FORBIDDEN_PRIVILEGES[row.relname];
 
-      if (forbidden) {
+      if (rlsFreeTables.has(row.relname)) {
+        // Global, RLS-free table. RLS can claw nothing back here (no policy),
+        // so any write `awcms_app` holds is a real, un-mitigated privilege. The
+        // table MUST carry an explicit privilege declaration. A registered
+        // RLS-free table missing from `forbiddenPrivileges` is asserted
+        // FAIL-CLOSED against every write (zero-write allowed) — the L2 guard:
+        // a forgotten registration FAILS instead of silently keeping blanket
+        // DML (Issue #162).
+        const declared = forbiddenPrivileges[row.relname];
+        const forbidden = declared ?? ALL_WRITE_PRIVILEGES;
         const excess = forbidden.filter((privilege) => privileges[privilege]);
 
         if (excess.length > 0) {
-          overGranted.push(`${row.relname} (still has ${excess.join(", ")})`);
+          overGranted.push(
+            declared === undefined
+              ? `${row.relname} (RLS-free but not declared in GLOBAL_TABLE_FORBIDDEN_PRIVILEGES — register the privileges awcms_app may hold; asserted zero-write until then, found ${excess.join(", ")})`
+              : `${row.relname} (still has ${excess.join(", ")})`
+          );
         }
 
-        continue;
-      }
-
-      if (RLS_FREE_TABLES.has(row.relname)) {
-        // Global table with full DML kept by design (module registry). Not
-        // asserted in either direction.
         continue;
       }
 
@@ -838,16 +913,18 @@ export async function checkRuntimeRoleGrants(): Promise<SecurityCheckResult> {
     }
 
     const tenantScopedCount = rows.filter(
-      (row) =>
-        !RLS_FREE_TABLES.has(row.relname) &&
-        !GLOBAL_TABLE_FORBIDDEN_PRIVILEGES[row.relname]
+      (row) => !rlsFreeTables.has(row.relname)
     ).length;
+    const narrowedGlobalTables = Object.entries(forbiddenPrivileges)
+      .filter(([, forbidden]) => forbidden.length > 0)
+      .map(([table]) => table)
+      .join(", ");
 
     return {
       name,
       severity,
       status: "pass",
-      evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" holds SELECT/INSERT/UPDATE/DELETE on all ${tenantScopedCount} tenant-scoped table(s) and none of the forbidden writes on the narrowed global tables (${Object.keys(GLOBAL_TABLE_FORBIDDEN_PRIVILEGES).join(", ")}).`
+      evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" holds SELECT/INSERT/UPDATE/DELETE on all ${tenantScopedCount} tenant-scoped table(s) and none of the forbidden writes on the narrowed global tables (${narrowedGlobalTables}).`
     };
   } catch (error) {
     return {
