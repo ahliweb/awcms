@@ -8,7 +8,12 @@
  *  2. Tautan relatif Markdown menunjuk ke berkas/anchor yang ada.
  *  3. Regresi penamaan: sisa identifier repo acuan (`awcms_mini_`/`AWCMS_MINI_`)
  *     yang belum diadaptasi ke prefix repo ini (`awcms_`/`AWCMS_`).
- *  4. Nama service `docker compose`/`docker-compose` dalam prosa benar-benar
+ *  4. Rujukan migration hantu: setiap `sql/NNN` yang disebut dokumentasi
+ *     (termasuk `.claude/skills/`, yang DIIKUTI agen) benar-benar ada di
+ *     `sql/` — penomoran awcms-mini yang terbawa saat adaptasi dokumen
+ *     membuat agen menulis migration/query terhadap file yang tak pernah ada
+ *     di sini (Issue #156).
+ *  5. Nama service `docker compose`/`docker-compose` dalam prosa benar-benar
  *     ada di `docker-compose*.yml` — HANYA dijalankan begitu minimal satu
  *     `docker-compose*.yml` sungguhan ada di repo (belum ada saat ini; docs
  *     terkait masih deskripsi rencana deployment, bukan konfigurasi yang
@@ -17,13 +22,14 @@
  * Logika murni ada di `scripts/lib/docs-checks.mjs`; berkas ini menangani
  * I/O (git, filesystem) dan exit code. Jalankan: `bun run check:docs`.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   checkMermaid,
   checkNaming,
   checkKnownScripts,
+  checkSqlMigrationReferences,
   AUTHORITATIVE_SCRIPT_DOC_FILES,
   extractLinks,
   classifyLink,
@@ -133,6 +139,18 @@ function loadPackageScripts() {
   return new Set(Object.keys(pkg.scripts ?? {}));
 }
 
+/**
+ * Basename setiap migration di `sql/` — sumber kebenaran untuk
+ * `checkSqlMigrationReferences`. Dibaca dari disk (bukan git index) supaya
+ * migration yang baru ditulis tapi belum di-stage tetap dianggap ada.
+ * @returns {Set<string>}
+ */
+function loadSqlFileNames() {
+  const dir = join(ROOT, "sql");
+  if (!existsSync(dir)) return new Set();
+  return new Set(readdirSync(dir).filter((name) => name.endsWith(".sql")));
+}
+
 /** @returns {Problem[]} */
 export function runChecks() {
   /** @type {Problem[]} */
@@ -142,6 +160,7 @@ export function runChecks() {
     ? loadComposeServiceNames()
     : null;
   const knownScripts = loadPackageScripts();
+  const sqlFileNames = loadSqlFileNames();
 
   for (const file of listMarkdown()) {
     const content = readFileSync(join(ROOT, file), "utf8");
@@ -149,6 +168,7 @@ export function runChecks() {
     problems.push(...checkMermaid(file, lines));
     problems.push(...checkLinks(file, content));
     problems.push(...checkNaming(file, lines));
+    problems.push(...checkSqlMigrationReferences(file, lines, sqlFileNames));
     if (AUTHORITATIVE_SCRIPT_DOC_FILES.has(file)) {
       problems.push(...checkKnownScripts(file, lines, knownScripts));
     }
@@ -170,6 +190,6 @@ if (import.meta.main) {
     process.exit(1);
   }
   console.log(
-    "check:docs OK — mermaid, tautan internal, penamaan, dan rujukan `bun run` di dokumen current-state valid (cek nama service docker compose menyusul begitu docker-compose*.yml ada)."
+    "check:docs OK — mermaid, tautan internal, penamaan, rujukan migration `sql/NNN`, dan rujukan `bun run` di dokumen current-state valid (cek nama service docker compose menyusul begitu docker-compose*.yml ada)."
   );
 }

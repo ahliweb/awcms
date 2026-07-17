@@ -112,20 +112,36 @@ function buildClient(databaseUrl: string, kind: ClientKind): Bun.SQL {
 }
 
 /**
- * Issue #683 (epic #679, platform-hardening) — each named client kind maps
- * to its own least-privilege Postgres role (`sql/045_awcms_db_role_
- * separation.sql`): `app` -> `awcms_app` (`DATABASE_URL`, unchanged
- * name/var for backward compatibility), `worker` -> `awcms_worker`
- * (`WORKER_DATABASE_URL`), `setup` -> `awcms_setup`
- * (`SETUP_DATABASE_URL`). `worker`/`setup` fall back to `DATABASE_URL` (the
- * `app` connection) when their own env var isn't set — small/offline
- * deployments that don't want to manage 3 connection strings can still run
- * everything through the single narrowed `awcms_app` role; operators
- * who want the extra defense-in-depth isolation set the dedicated vars.
+ * Resolves the connection string for one named client kind.
+ *
+ * ROLE MAPPING — what this repo actually ships (Issue #141; the previous
+ * wording here cited awcms-mini's migration-045 filename, which has no
+ * counterpart in this repo's `sql/`, and on that basis asserted an isolation
+ * property this base did not have. `tests/db-role-separation-migration.test.ts`
+ * now fails if any migration path cited here stops existing):
+ *
+ * - `app` -> `DATABASE_URL` -> role `awcms_app`, created by
+ *   `sql/019_awcms_db_role_separation.sql` (NOLOGIN + passwordless there;
+ *   deployment activates LOGIN + a secret and points `DATABASE_URL` at it —
+ *   doc 18 §Model role database). Not superuser, not BYPASSRLS, not the
+ *   tables' owner, so RLS is genuinely enforced against it, with a
+ *   fail-closed default `app.current_tenant_id` GUC as the backstop.
+ * - `worker` -> `WORKER_DATABASE_URL`, `setup` -> `SETUP_DATABASE_URL` —
+ *   these are connection/pool seams ONLY. This repo ships NO `awcms_worker`
+ *   / `awcms_setup` role for them to point at (that is awcms-mini's later
+ *   migration 045, which narrows per-script grants on the RLS-free global
+ *   tables; porting it needs a per-write-path audit and is not done here).
+ *   Unset -> both fall back to `DATABASE_URL`, which is the supported
+ *   default. An operator who sets them must point them at a role they have
+ *   granted themselves; nothing in `sql/` creates one.
+ *
  * Each kind gets its OWN lazily-created, memoized `Bun.SQL` pool — never
  * shared across kinds, even when they resolve to the same URL by fallback
  * (simpler than trying to dedupe pools by URL, and pool-per-kind is cheap:
- * `Bun.SQL` pools are lazy, an unused one opens zero connections).
+ * `Bun.SQL` pools are lazy, an unused one opens zero connections). That is
+ * why the seams are worth keeping even without dedicated roles: they give
+ * per-kind pool sizing (`resolvePoolMaxForKind`) and keep a slow background
+ * job from exhausting the pool serving HTTP requests.
  */
 function getNamedDatabaseClient(kind: ClientKind): Bun.SQL {
   const existing = sharedClients.get(kind);
@@ -153,17 +169,17 @@ function getNamedDatabaseClient(kind: ClientKind): Bun.SQL {
   return client;
 }
 
-/** The "web runtime" connection (`awcms_app`) — every ordinary HTTP request. */
+/** The "web runtime" connection (role `awcms_app`, `sql/019`) — every ordinary HTTP request. */
 export function getDatabaseClient(): Bun.SQL {
   return getNamedDatabaseClient("app");
 }
 
-/** The "background worker" connection (`awcms_worker`) — the 9 unattended cron-style scripts with no corresponding web endpoint (count corrected by Issue #743, ground truth = `grep -rl getWorkerDatabaseClient scripts/`, see `src/lib/database/work-class-registry.ts`'s `JOB_WORK_CLASS_REGISTRY` for the exact current list; migration 045's header predates that count). Falls back to `DATABASE_URL` if `WORKER_DATABASE_URL` isn't set. */
+/** The "background worker" connection — the unattended cron-style scripts with no corresponding web endpoint (ground truth = `grep -rl getWorkerDatabaseClient scripts/`; see `src/lib/database/work-class-registry.ts`'s `JOB_WORK_CLASS_REGISTRY` for the current list). Its own pool, but NOT its own role: falls back to `DATABASE_URL` (`awcms_app`) unless `WORKER_DATABASE_URL` is set, and no `awcms_worker` role exists in `sql/` (see the mapping note above). */
 export function getWorkerDatabaseClient(): Bun.SQL {
   return getNamedDatabaseClient("worker");
 }
 
-/** The "bootstrap/setup" connection (`awcms_setup`) — used ONLY by `tenant-admin/application/platform-bootstrap.ts`'s one-time setup wizard. Falls back to `DATABASE_URL` if `SETUP_DATABASE_URL` isn't set. */
+/** The "bootstrap/setup" connection — used ONLY by `tenant-admin/application/platform-bootstrap.ts`'s one-time setup wizard. Its own pool, but NOT its own role: falls back to `DATABASE_URL` (`awcms_app`) unless `SETUP_DATABASE_URL` is set, and no `awcms_setup` role exists in `sql/` (see the mapping note above). */
 export function getSetupDatabaseClient(): Bun.SQL {
   return getNamedDatabaseClient("setup");
 }

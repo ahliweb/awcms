@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 /**
  * Cross-cutting idempotency store helper (doc 10 §Idempotency wrapper rules,
  * doc 16 §Idempotency store, skill `awcms-idempotency`). Backed by the
- * generic `awcms_idempotency_keys` table (migration 012), first
+ * generic `awcms_idempotency_keys` table (migration 009 — awcms-mini numbers
+ * it 012, which this comment used to cite by mistake), first
  * consumed by the workflow decision endpoint (Issue 11.1) — any future
  * high-risk mutation endpoint in a derived app can reuse the same table with
  * its own `requestScope` string.

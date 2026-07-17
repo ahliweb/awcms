@@ -1,9 +1,23 @@
 ---
 name: awcms-news-portal
-description: Kerjakan bagian mana pun dari epic news_portal AWCMS (Issue #631-#642, #649). Gunakan saat menambah/mengubah preset full-online R2-only, media object registry, presigned upload flow, R2 readiness checks, homepage composer, ad/video/quality-checklist berbasis media R2, tag linking, atau SEO/social preview `/news`. Merangkum keputusan arsitektur yang sudah dibuat (docs/awcms/news-portal/) supaya issue lanjutan tidak mengulang/kontradiksi.
+description: BACAAN SAJA — modul news_portal BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuatnya, tidak ada migration-nya di `sql/`; bergantung pada blog_content/tenant_domain yang juga belum di-port). Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #631-#642, #649). Gunakan saat menambah/mengubah preset full-online R2-only, media object registry, presigned upload flow, R2 readiness checks, homepage composer, ad/video/quality-checklist berbasis media R2, tag linking, atau SEO/social preview `/news`. Merangkum keputusan arsitektur yang sudah dibuat (docs/awcms/news-portal/) supaya issue lanjutan tidak mengulang/kontradiksi.
 ---
 
 # AWCMS — News Portal (full-online R2-only media)
+
+<!-- sql-refs: awcms-mini — modul belum di-port; setiap `sql/NNN` di file ini penomoran awcms-mini, bukan repo ini -->
+
+> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
+> `news_portal` ada di **awcms-mini**, bukan di sini: `ls src/modules` TIDAK
+> memuat modulnya, dan `sql/` tidak memuat migration-nya. Ia juga
+> **bergantung** pada `blog_content` dan `tenant_domain` yang sama-sama
+> belum di-port. Semua rujukan `src/modules/...`, tabel `awcms_news_*`, dan
+> `sql/NNN` di bawah adalah artefak awcms-mini — **jangan
+> `import`/`SELECT`/mengklaim ada** di repo ini. Nomor `sql/NNN` memakai
+> penomoran awcms-mini dan akan berubah saat di-port (melanjutkan dari
+> migration terakhir repo ini). Pakai skill ini sebagai spesifikasi target
+> port (via `awcms-port-from-mini`), bukan peta kode yang bisa dipanggil.
+> Verifikasi `ls src/modules` sebelum mengklaim apa pun ada.
 
 Epic `news_portal` (#631-#642, #649) menambah lapisan editorial +
 media di atas `blog_content` (base module, sudah `active`) dan online

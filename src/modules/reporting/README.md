@@ -16,7 +16,7 @@ Lima view reporting **generik** (aplikasi turunan menambah view domainnya sendir
 
 ## Guard
 
-Kelima endpoint memakai pola identik dengan `GET /api/v1/sync/conflicts` dan `POST /api/v1/access/evaluate`: bearer session (`Authorization: Bearer <token>` + header `X-AWCMS-Mini-Tenant-ID`), `resolveTenantContext` + `fetchGrantedPermissionKeys` + `evaluateAccess` (default deny) + `recordDecisionLog` (dicatat untuk setiap panggilan, allow maupun deny), digerbang oleh `{ moduleKey: "reporting", activityCode: "dashboard", action: "read" }`. Akses ditolak → `403 ACCESS_DENIED`, bukan data kosong diam-diam.
+Kelima endpoint memakai pola identik dengan `GET /api/v1/sync/conflicts` dan `POST /api/v1/access/evaluate`: bearer session (`Authorization: Bearer <token>` + header `X-AWCMS-Tenant-ID`), `resolveTenantContext` + `fetchGrantedPermissionKeys` + `evaluateAccess` (default deny) + `recordDecisionLog` (dicatat untuk setiap panggilan, allow maupun deny), digerbang oleh `{ moduleKey: "reporting", activityCode: "dashboard", action: "read" }`. Akses ditolak → `403 ACCESS_DENIED`, bukan data kosong diam-diam.
 
 ## Dashboard SSR (`/admin`)
 

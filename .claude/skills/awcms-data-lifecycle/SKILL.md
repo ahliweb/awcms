@@ -1,9 +1,21 @@
 ---
 name: awcms-data-lifecycle
-description: Daftarkan tabel bervolume tinggi ke registry lifecycle AWCMS (retensi/partisi/arsip/legal hold/purge), atau kerjakan bagian mana pun modul data_lifecycle sendiri. Gunakan saat menambah tabel baru yang tumbuh besar (log, telemetry, outbox, queue, provider attempt) dan butuh kebijakan retensi/purge aman, saat membuat/melepas legal hold, atau saat mengubah engine dry-run/archive/purge/archive-port. Sesuai Issue #745, epic #738 platform-evolution, `src/modules/data-lifecycle/README.md`, dan `docs/awcms/data-lifecycle.md`.
+description: BACAAN SAJA — modul data_lifecycle BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `data-lifecycle`, `HighVolumeTableDescriptor`/registry belum ada). Rujukan modul/tabel/registry di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan mendaftarkan tabel ke registry yang belum ada — verifikasi `ls src/modules` dulu. Konteks port (Issue #745, epic #738 platform-evolution).
 ---
 
 # AWCMS — Data Lifecycle (Registry, Legal Hold, Dry-Run, Archive/Purge)
+
+> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
+> `data_lifecycle` ada di **awcms-mini**, bukan di sini: `ls src/modules`
+> TIDAK memuat `data-lifecycle`, dan `sql/` tidak memuat migration-nya —
+> begitu pula `HighVolumeTableDescriptor` di `_shared/module-contract.ts`
+> yang dirujuk di bawah. Semua rujukan `src/modules/data-lifecycle/...`,
+> `docs/awcms/data-lifecycle.md`, dan tabel `awcms_data_lifecycle_*` adalah
+> artefak awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo
+> ini, dan jangan daftarkan tabel baru ke registry yang belum ada. Pakai
+> skill ini sebagai spesifikasi target port (via `awcms-port-from-mini`),
+> bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
+> mengklaim apa pun ada.
 
 Sumber kebenaran: `src/modules/_shared/module-contract.ts`
 (`HighVolumeTableDescriptor`), `src/modules/data-lifecycle/` (domain/

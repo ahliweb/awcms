@@ -11,6 +11,8 @@ import {
   checkNaming,
   NAMING_EXEMPTIONS,
   checkKnownScripts,
+  checkSqlMigrationReferences,
+  SQL_REF_UNCHECKED_FILES,
   AUTHORITATIVE_SCRIPT_DOC_FILES,
   extractLinks,
   classifyLink,
@@ -129,17 +131,37 @@ describe("checkNaming", () => {
     expect(checkNaming("f.md", lines(md))).toEqual([]);
   });
 
-  test("exemption path:line yang terdaftar tidak dilaporkan", () => {
+  test("exemption berbasis konten (file::identifier) tidak dilaporkan, di baris mana pun", () => {
     const exemptKey = Array.from(NAMING_EXEMPTIONS)[0];
     if (!exemptKey) throw new Error("NAMING_EXEMPTIONS kosong");
-    const [file, lineStr] = exemptKey.split(":");
-    const lineNumber = Number(lineStr);
-    const before = Array.from({ length: lineNumber - 1 }, () => "");
+    const [file, identifier] = exemptKey.split("::");
+    if (!file || !identifier) throw new Error("format exemption tak terduga");
+    // Identifier ter-exempt boleh muncul di baris mana pun — tidak lagi
+    // dikunci nomor baris. Sisipkan di baris ke-3 (bukan baris tertentu)
+    // untuk membuktikan kekebalan terhadap pergeseran baris.
     const md = [
-      ...before,
-      "referensi historis `AWCMS_MINI_APP_DB_PASSWORD`"
+      "baris1",
+      "baris2",
+      `referensi historis \`${identifier}\``
     ].join("\n");
-    expect(checkNaming(file ?? "", lines(md))).toEqual([]);
+    expect(checkNaming(file, lines(md))).toEqual([]);
+  });
+
+  test("identifier ter-exempt di SATU file tidak meng-exempt file lain", () => {
+    const exemptKey = Array.from(NAMING_EXEMPTIONS)[0];
+    if (!exemptKey) throw new Error("NAMING_EXEMPTIONS kosong");
+    const identifier = exemptKey.split("::")[1];
+    if (!identifier) throw new Error("format exemption tak terduga");
+    const problems = checkNaming(
+      "file-lain.md",
+      lines(`teks \`${identifier}\``)
+    );
+    expect(problems).toHaveLength(1);
+  });
+
+  test("prefix AWCMS_MINI_ telanjang (tanpa suffix) tidak ditandai", () => {
+    const md = "sebutan sejarah `AWCMS_MINI_` tanpa suffix apa pun";
+    expect(checkNaming("f.md", lines(md))).toEqual([]);
   });
 });
 
@@ -171,6 +193,103 @@ describe("checkKnownScripts", () => {
     expect(AUTHORITATIVE_SCRIPT_DOC_FILES.has("docs/awcms/README.md")).toBe(
       false
     );
+  });
+});
+
+describe("checkSqlMigrationReferences", () => {
+  // Isi `sql/` tiruan: hanya 001, 014, 017 (bernama penuh) yang "ada".
+  const sqlFiles = new Set([
+    "001_awcms_foundation_schema.sql",
+    "014_awcms_email_schema.sql",
+    "017_awcms_enforce_rls_force.sql"
+  ]);
+
+  test("melaporkan rujukan nomor hantu (sql/020 tak ada)", () => {
+    const md = "INSERT ke `awcms_email_messages` (`sql/020`) di transaksi.";
+    const problems = checkSqlMigrationReferences(
+      ".claude/skills/x/SKILL.md",
+      lines(md),
+      sqlFiles
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.line).toBe(1);
+    expect(problems[0]?.message).toContain("sql/020");
+  });
+
+  test("melaporkan nama berkas penuh hantu (nomor ada, nama beda/mini)", () => {
+    // 014 ADA tapi dengan nama email; nama tenant-domain di 014 = hantu.
+    const md = "lihat `sql/014_awcms_tenant_domain_permissions.sql`";
+    const problems = checkSqlMigrationReferences(
+      "docs/x.md",
+      lines(md),
+      sqlFiles
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.message).toContain(
+      "sql/014_awcms_tenant_domain_permissions.sql"
+    );
+  });
+
+  test("membiarkan rujukan nomor yang ADA (sql/014)", () => {
+    const md = "seed di `sql/014` sudah benar.";
+    expect(
+      checkSqlMigrationReferences("docs/x.md", lines(md), sqlFiles)
+    ).toEqual([]);
+  });
+
+  test("membiarkan nama berkas penuh yang PERSIS ada", () => {
+    const md = "diperbaiki `sql/017_awcms_enforce_rls_force.sql`.";
+    expect(
+      checkSqlMigrationReferences("docs/x.md", lines(md), sqlFiles)
+    ).toEqual([]);
+  });
+
+  test("mengabaikan tanda baca kalimat setelah nama berkas (.sql. di akhir)", () => {
+    const md = "diperbaiki `sql/017_awcms_enforce_rls_force.sql`.";
+    // titik penutup kalimat tidak boleh menurunkan kelas jadi cek-nomor.
+    expect(
+      checkSqlMigrationReferences(
+        "docs/x.md",
+        lines(md.replace("`.", ".")),
+        sqlFiles
+      )
+    ).toEqual([]);
+  });
+
+  test("penanda file-level `sql-refs: awcms-mini` mematikan cek untuk seluruh berkas", () => {
+    const md = [
+      "<!-- sql-refs: awcms-mini — modul belum di-port -->",
+      "tabel di `sql/053_awcms_social_publishing_schema.sql` dan `sql/999`."
+    ].join("\n");
+    expect(
+      checkSqlMigrationReferences(
+        ".claude/skills/x/SKILL.md",
+        lines(md),
+        sqlFiles
+      )
+    ).toEqual([]);
+  });
+
+  test("berkas di SQL_REF_UNCHECKED_FILES dilewati sepenuhnya", () => {
+    const unchecked = Array.from(SQL_REF_UNCHECKED_FILES)[0];
+    if (!unchecked) throw new Error("SQL_REF_UNCHECKED_FILES kosong");
+    const md = "rujukan `sql/033` dan `sql/999_hantu.sql`.";
+    expect(checkSqlMigrationReferences(unchecked, lines(md), sqlFiles)).toEqual(
+      []
+    );
+  });
+
+  test("beberapa rujukan hantu pada baris berbeda dilaporkan masing-masing", () => {
+    const md =
+      "baris `sql/031`\nlain `sql/066_awcms_document_infrastructure_schema.sql`";
+    const problems = checkSqlMigrationReferences(
+      "docs/x.md",
+      lines(md),
+      sqlFiles
+    );
+    expect(problems).toHaveLength(2);
+    expect(problems[0]?.line).toBe(1);
+    expect(problems[1]?.line).toBe(2);
   });
 });
 

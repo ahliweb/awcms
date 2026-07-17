@@ -1,9 +1,22 @@
 ---
 name: awcms-blog-content
-description: Kerjakan bagian mana pun dari epic blog_content AWCMS (Issue #537-#543, epic #536 — SELESAI) — posts, pages, taxonomi, search, rute publik, revisi/scheduled publishing, template/menu/widget/ads/theme/multilingual/gallery, admin UI blog, atau blog settings API. Gunakan saat menambah endpoint/logic ke src/modules/blog-content, src/pages/blog, atau src/pages/admin/blog, mengubah schema blog, atau mengerjakan issue susulan di luar epic ini. Merangkum keputusan yang sudah dibuat di Issue #537-#543 supaya tidak diulang/dikontradiksi.
+description: BACAAN SAJA — modul blog_content BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `blog-content`, tidak ada schema blog di `sql/`). Rujukan `src/modules/blog-content`/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (epic #536, Issue #537-#543) — posts, pages, taxonomi, search, rute publik, revisi/scheduled publishing, template/menu/widget/ads/theme/multilingual/gallery, admin UI blog, atau blog settings API. Gunakan saat menambah endpoint/logic ke src/modules/blog-content, src/pages/blog, atau src/pages/admin/blog, mengubah schema blog, atau mengerjakan issue susulan di luar epic ini. Merangkum keputusan yang sudah dibuat di Issue #537-#543 supaya tidak diulang/dikontradiksi.
 ---
 
 # AWCMS — Blog Content Module
+
+<!-- sql-refs: awcms-mini — modul belum di-port; setiap `sql/NNN` di file ini penomoran awcms-mini, bukan repo ini -->
+
+> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
+> `blog_content` ada di **awcms-mini**, bukan di sini: `ls src/modules`
+> TIDAK memuat `blog-content`, dan `sql/` tidak memuat migration-nya. Semua
+> rujukan `src/modules/blog-content/...`, `src/pages/blog`, tabel
+> `awcms_blog_*`, dan `sql/NNN` di bawah adalah artefak awcms-mini —
+> **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Nomor `sql/NNN`
+> memakai penomoran awcms-mini dan akan berubah saat di-port (melanjutkan
+> dari migration terakhir repo ini). Pakai skill ini sebagai spesifikasi
+> target port (via `awcms-port-from-mini`), bukan peta kode yang bisa
+> dipanggil. Verifikasi `ls src/modules` sebelum mengklaim apa pun ada.
 
 `blog_content` (`src/modules/blog-content`) adalah **modul domain pertama
 yang didaftarkan langsung di repo base ini** (epic #536, bukan di aplikasi

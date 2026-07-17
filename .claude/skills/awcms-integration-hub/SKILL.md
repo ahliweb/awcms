@@ -1,9 +1,19 @@
 ---
 name: awcms-integration-hub
-description: Kerjakan bagian mana pun dari modul integration_hub AWCMS (Issue #754, epic platform-evolution #738 Wave 3). Gunakan saat menambah inbound webhook endpoint, outbound event subscription, adapter provider baru, atau mengubah SSRF guard/replay protection/circuit-breaker/secret-reference validation. Modul ini punya security surface tinggi (2 findings PR #784 sebelum merge) — merangkum invariant yang wajib dipertahankan supaya tidak diregresi.
+description: BACAAN SAJA — modul integration_hub BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `integration-hub`, tidak ada migration-nya di `sql/`). Rujukan modul/tabel/adapter di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #754, epic platform-evolution #738 Wave 3). Gunakan saat menambah inbound webhook endpoint, outbound event subscription, adapter provider baru, atau mengubah SSRF guard/replay protection/circuit-breaker/secret-reference validation. Modul ini punya security surface tinggi (2 findings PR #784 sebelum merge) — merangkum invariant yang wajib dipertahankan supaya tidak diregresi.
 ---
 
 # AWCMS — Integration Hub Module
+
+> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
+> `integration_hub` ada di **awcms-mini**, bukan di sini: `ls src/modules`
+> TIDAK memuat `integration-hub`, dan `sql/` tidak memuat migration-nya.
+> Semua rujukan `src/modules/integration-hub/...`, tabel
+> `awcms_integration_hub_*`, dan ADR-0019 di bawah adalah artefak
+> awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Pakai
+> skill ini sebagai spesifikasi target port (via `awcms-port-from-mini`),
+> bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
+> mengklaim apa pun ada.
 
 `integration_hub` (`src/modules/integration-hub`, Issue #754, epic
 `platform-evolution` #738 Wave 3, `type: "system"` — ADR-0013 §1/§6, admission

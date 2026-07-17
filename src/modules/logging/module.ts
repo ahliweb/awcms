@@ -18,5 +18,17 @@ export const loggingModule = defineModule({
       action: "read",
       description: "Read audit trail events"
     }
+  ],
+  jobs: [
+    {
+      command: "bun run logs:audit:purge",
+      purpose:
+        "Delete awcms_audit_events rows past retention (AUDIT_LOG_RETENTION_DAYS, default 730 days) for every active tenant, in bounded batches, recording each purge as its own audit event.",
+      recommendedSchedule:
+        "Daily, off-peak (e.g. 03:00) via cron/systemd timer. Run with --dry-run first on a database that has never been purged — the first real run's backlog is every event ever written past the cutoff.",
+      environmentNotes:
+        "Pure PostgreSQL operation — no external network egress. Safe in offline/LAN deployments. Without this job scheduled, AUDIT_LOG_RETENTION_DAYS has no effect at all (Issue #146).",
+      safeInOfflineLan: true
+    }
   ]
 });

@@ -1194,10 +1194,16 @@ paths:
     get:
       operationId: listOffices
       tags: [Tenant Admin]
-      summary: List offices for the current tenant.
+      summary: List offices for the current tenant — keyset-paginated, newest first.
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor from a previous response's nextCursor. A malformed value is rejected with 400.
+          schema: { type: string }
       responses:
         "200":
-          description: Office list.
+          description: Live offices for the tenant (limit 100), newest first, with an opaque nextCursor for the next page (null on the last page).
           content:
             application/json:
               schema:
@@ -1210,6 +1216,8 @@ paths:
                       items:
                         type: array
                         items: { $ref: "#/components/schemas/Office" }
+                      nextCursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
     post:
@@ -1231,7 +1239,11 @@ paths:
                     type: string,
                     enum: [head_office, branch, store, warehouse, other]
                   }
-                parentOfficeId: { type: string, format: uuid, nullable: true }
+                parentOfficeId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Must reference a live office in the SAME tenant. An id that is unknown, soft-deleted, or belongs to another tenant is rejected identically with 400 — the responses are deliberately indistinguishable so the field cannot be used to probe for office ids elsewhere on the platform.
       responses:
         "200":
           description: Office created.
@@ -1245,6 +1257,11 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: officeCode is already taken by a live office in this tenant (OFFICE_CODE_ALREADY_EXISTS).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
   /api/v1/offices/{id}:
     get:
       operationId: getOffice
