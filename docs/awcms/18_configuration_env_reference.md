@@ -134,13 +134,30 @@ Yang **benar-benar ada** di repo ini (Issue #141) adalah **dua** role:
    baris**, bukan error `unrecognized configuration parameter` dan bukan data
    tenant lain.
 
-Batas yang diakui terbuka: di tabel **global tanpa RLS** (`awcms_tenants`,
-`awcms_permissions`, `awcms_setup_state`, `awcms_schema_migrations`,
-`awcms_modules` + turunannya) `awcms_app` memegang DML penuh yang tidak semuanya
-dipakai. Penyempitannya adalah migration `045` awcms-mini (yang memecah runtime
-jadi `awcms_app`/`awcms_worker`/`awcms_setup`) dan **belum diport** ke sini —
-butuh audit per-jalur-tulis. Dibanding kondisi sebelum 019 (semuanya lewat
-superuser), ini tetap perbaikan tegas, bukan kemunduran.
+Penyempitan grant tabel global (Issue #160,
+`sql/021_awcms_db_role_grants_narrow.sql`): pada tabel **global tanpa RLS**,
+`awcms_app` **tidak lagi** memegang DML berlebih yang jadi residual #159 —
+sekarang **read-only** pada `awcms_permissions` (katalog permission, hanya diseed
+migration) dan `awcms_schema_migrations` (ledger migrasi, hanya ditulis
+`db:migrate` sebagai owner), dan **tidak bisa `DELETE`** `awcms_tenants` maupun
+`awcms_setup_state`. Yang **sengaja dipertahankan** karena benar-benar dipakai
+jalur kode `awcms_app`: `INSERT`/`UPDATE`/`SELECT` pada `awcms_tenants` (INSERT
+lewat wizard setup yang fallback ke koneksi `awcms_app`; UPDATE lewat layar
+tenant-settings) dan `awcms_setup_state` (lock singleton via jalur setup), plus
+DML penuh pada tabel module-registry (`awcms_modules` + turunannya) yang ditulis
+saat request oleh module-management. Regresi (tabel global baru ikut terbawa
+blanket DML dari default privileges, atau tabel tenant-scoped baru RLS-forced
+tapi **ungranted** → `permission denied`) ditangkap cek `security:readiness`
+"Runtime role table grants match least-privilege matrix".
+
+Batas yang masih terbuka (defense-in-depth, bukan residual #159): pemecahan
+runtime jadi role `awcms_worker`/`awcms_setup` sungguhan (migration `045`
+awcms-mini) **belum diport** — butuh audit per-jalur-tulis atas tujuh script
+worker + bootstrap setup, dan perubahan fallback `client.ts` yang breaking untuk
+setiap deployment yang belum opt-in ke `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL`.
+Karena `awcms_app` sudah dipersempit di atas, residual konkret #159 sudah
+tertutup tanpa pemecahan itu. Dibanding kondisi sebelum 019 (semuanya lewat
+superuser), ini perbaikan tegas berlapis, bukan kemunduran.
 
 Karena itu `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` **bukan** pemetaan role:
 tidak ada role `awcms_worker`/`awcms_setup` di `sql/`. Keduanya adalah seam
@@ -286,11 +303,12 @@ PAYLOAD_TOO_LARGE`.
 
 ### Sync & node
 
-| Var                       | Wajib     | Default | Sensitif | Fungsi                                      |
-| ------------------------- | --------- | ------- | -------- | ------------------------------------------- |
-| `AWCMS_SYNC_ENABLED`      | –         | `false` | –        | Aktifkan sync hybrid (offline-first outbox) |
-| `AWCMS_SYNC_HMAC_SECRET`  | bila sync | –       | Ya       | Signature HMAC                              |
-| `AWCMS_SYNC_MAX_SKEW_SEC` | –         | `300`   | –        | Toleransi anti-replay                       |
+| Var                       | Wajib     | Default | Sensitif | Fungsi                                                                                                    |
+| ------------------------- | --------- | ------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `AWCMS_SYNC_ENABLED`      | –         | `false` | –        | Aktifkan sync hybrid (offline-first outbox)                                                               |
+| `AWCMS_SYNC_HMAC_SECRET`  | bila sync | –       | Ya       | Signature HMAC                                                                                            |
+| `AWCMS_SYNC_MAX_SKEW_SEC` | –         | `300`   | –        | Toleransi anti-replay                                                                                     |
+| `SYNC_HMAC_ALLOW_LEGACY`  | –         | `true`  | –        | Terima signature v1 (tak mengikat tenant/node, rentan GHSA-c972); set `false` setelah semua node kirim v2 |
 
 Identitas node direncanakan berasal dari tabel `awcms_sync_nodes` (DB),
 teregistrasi otomatis lewat header/HMAC saat request sync pertama — bukan
@@ -424,6 +442,7 @@ AUTH_SSO_MAX_PROVIDERS_PER_TENANT=20
 AWCMS_SYNC_ENABLED=false
 AWCMS_SYNC_HMAC_SECRET=change-me
 AWCMS_SYNC_MAX_SKEW_SEC=300
+SYNC_HMAC_ALLOW_LEGACY=true
 
 # Storage
 OBJECT_SYNC_UPLOAD_TIMEOUT_MS=10000

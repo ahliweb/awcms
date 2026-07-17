@@ -8,7 +8,10 @@
  * keyset-pagination shape. Never selects `to_address` — only
  * `to_address_masked` (doc 04 §Alur perlindungan data sensitif).
  */
-import type { KeysetCursor } from "../../_shared/keyset-pagination";
+import {
+  encodeKeysetCursor,
+  type KeysetCursor
+} from "../../_shared/keyset-pagination";
 
 export const EMAIL_MESSAGE_LIST_LIMIT = 100;
 
@@ -46,7 +49,15 @@ type EmailMessageRow = {
   retry_count: number;
   last_error: string | null;
   created_at: Date;
+  // Full-precision cursor text (Issue #158) — kept out of the response DTO;
+  // see `_shared/keyset-pagination` for why a JS `Date` cannot carry it.
+  created_at_cursor: string;
   sent_at: Date | null;
+};
+
+export type EmailMessageListPage = {
+  messages: EmailMessageEntry[];
+  nextCursor: string | null;
 };
 
 function toView(row: EmailMessageRow): EmailMessageEntry {
@@ -65,12 +76,22 @@ function toView(row: EmailMessageRow): EmailMessageEntry {
   };
 }
 
+/**
+ * One keyset-paginated page of email messages, newest first.
+ *
+ * The cursor is generated HERE (not in the route) so the full microsecond
+ * precision of `created_at` survives — a route that rebuilt the cursor from
+ * the response DTO's `createdAt` (a JS `Date`/ISO-ms string) would floor the
+ * microseconds and silently skip every message sharing that millisecond
+ * across the page boundary (Issue #158). `created_at_cursor` carries the
+ * full-precision text and never leaves this function.
+ */
 export async function fetchEmailMessageEntries(
   tx: Bun.SQL,
   tenantId: string,
   statusFilter?: EmailMessageStatus,
   cursor?: KeysetCursor
-): Promise<EmailMessageEntry[]> {
+): Promise<EmailMessageListPage> {
   const cursorCreatedAt = cursor?.createdAt ?? null;
   const cursorId = cursor?.id ?? null;
 
@@ -78,7 +99,9 @@ export async function fetchEmailMessageEntries(
     statusFilter
       ? await tx`
         SELECT id, correlation_id, category, status, priority, to_address_masked,
-               subject, retry_count, last_error, created_at, sent_at
+               subject, retry_count, last_error, created_at,
+               to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+               sent_at
         FROM awcms_email_messages
         WHERE tenant_id = ${tenantId} AND status = ${statusFilter}
           AND (
@@ -90,7 +113,9 @@ export async function fetchEmailMessageEntries(
       `
       : await tx`
         SELECT id, correlation_id, category, status, priority, to_address_masked,
-               subject, retry_count, last_error, created_at, sent_at
+               subject, retry_count, last_error, created_at,
+               to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor,
+               sent_at
         FROM awcms_email_messages
         WHERE tenant_id = ${tenantId}
           AND (
@@ -102,7 +127,13 @@ export async function fetchEmailMessageEntries(
       `
   ) as EmailMessageRow[];
 
-  return rows.map(toView);
+  const last = rows[rows.length - 1];
+  const nextCursor =
+    rows.length === EMAIL_MESSAGE_LIST_LIMIT && last
+      ? encodeKeysetCursor(last.created_at_cursor, last.id)
+      : null;
+
+  return { messages: rows.map(toView), nextCursor };
 }
 
 export type CancelEmailMessageResult =

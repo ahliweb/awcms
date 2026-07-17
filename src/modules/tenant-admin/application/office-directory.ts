@@ -106,34 +106,22 @@ export type OfficeListPage = {
  * tiebreaker in both the comparison and the ORDER BY, such rows would be
  * skipped or repeated across a page boundary.
  *
- * WHY `date_trunc('milliseconds', ...)` AND NOT BARE `created_at`:
- * the sort key must be expressed at the SAME precision the cursor can carry,
- * or the keyset silently loses rows. `encodeKeysetCursor` serialises a JS
- * `Date`, which holds milliseconds, while `timestamptz` holds MICROSECONDS —
- * and the driver has already floored them on the way out (`...:45.029058+00`
- * arrives as `...:45.029Z`; verified against PostgreSQL 18 that the driver
- * truncates rather than rounds, for `.029058`, `.029958` and `.029999`
- * alike). A cursor built from that Date therefore denotes an instant strictly
- * EARLIER than the row it came from, so a bare `(created_at, id) < (cursor)`
- * excludes every row sharing that millisecond regardless of id — including
- * rows never yet shown, which no subsequent cursor can reach either. Measured
- * on this table before this guard: 105 offices, page 1 returned 100, page 2
- * returned 4. One office silently unreachable.
+ * PRECISION (Issue #158): the cursor must round-trip `created_at` at the SAME
+ * precision it is compared on, or the keyset silently loses rows. A JS `Date`
+ * holds only milliseconds while `timestamptz` holds MICROSECONDS (the driver
+ * floors them on the way out — `...:45.029058+00` arrives as `...:45.029Z`),
+ * so a cursor built from a `Date` denotes an instant strictly EARLIER than
+ * the row it came from and `(created_at, id) < (cursor)` would skip every row
+ * sharing that millisecond. Measured before the fix: 105 offices → page 1
+ * returned 100, page 2 returned 4; one office silently unreachable.
  *
- * `date_trunc('milliseconds', created_at)` matches the driver's flooring
- * exactly, making the SQL-side key identical to what the cursor round-trips.
- * The pair `(trunc_ms(created_at), id)` is still a total order (`id` is
- * unique), so paging remains exact: no row skipped, none repeated. The only
- * concession is that offices created within the same millisecond order by
- * `id` rather than by microsecond — an ordering the driver cannot represent
- * to a client anyway.
- *
- * NOTE: the same precision trap applies to every other caller of the shared
- * helper (workflow inbox, object sync queue, email messages), which do compare
- * on bare `created_at`. Fixing it centrally — carrying microseconds through
- * the cursor — belongs in `_shared/keyset-pagination.ts` and is reported
- * separately; this guard keeps offices correct in the meantime and stays
- * correct either way.
+ * The fix is central (`_shared/keyset-pagination.ts`): `created_at_cursor`
+ * carries the FULL microsecond precision as UTC ISO-8601 text, the cursor
+ * stores it verbatim, and the WHERE clause binds it back with `::timestamptz`.
+ * This keeps `ORDER BY (created_at, id)` on the bare column — index-friendly
+ * (`(tenant_id, created_at DESC)`) — instead of an expression the planner
+ * might not match. This replaced an earlier local `date_trunc('milliseconds',
+ * ...)` guard, removed here now that the shared helper carries microseconds.
  */
 export async function listOffices(
   tx: Bun.SQL,
@@ -144,22 +132,23 @@ export async function listOffices(
   const cursorId = cursor?.id ?? null;
 
   const rows = (await tx`
-    SELECT id, office_code, office_name, office_type, parent_office_id, status, created_at, updated_at
+    SELECT id, office_code, office_name, office_type, parent_office_id, status, created_at, updated_at,
+           to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
     FROM awcms_offices
     WHERE tenant_id = ${tenantId}
       AND deleted_at IS NULL
       AND (
         ${cursorCreatedAt}::timestamptz IS NULL
-        OR (date_trunc('milliseconds', created_at), id) < (${cursorCreatedAt}, ${cursorId})
+        OR (created_at, id) < (${cursorCreatedAt}, ${cursorId})
       )
-    ORDER BY date_trunc('milliseconds', created_at) DESC, id DESC
+    ORDER BY created_at DESC, id DESC
     LIMIT ${OFFICE_LIST_LIMIT}
-  `) as OfficeRow[];
+  `) as (OfficeRow & { created_at_cursor: string })[];
 
   const last = rows[rows.length - 1];
   const nextCursor =
     rows.length === OFFICE_LIST_LIMIT && last
-      ? encodeKeysetCursor(last.created_at, last.id)
+      ? encodeKeysetCursor(last.created_at_cursor, last.id)
       : null;
 
   return { items: rows.map(toRecord), nextCursor };

@@ -79,15 +79,36 @@ Schema: `sql/012_awcms_object_sync_queue_schema.sql`.
 The node-to-node endpoints (`/sync/push`, `/sync/pull`, `/sync/status`,
 `/sync/objects`, `/sync/objects/status`) are machine-to-machine and do **not**
 use bearer token/session. They authenticate via HMAC headers
-(`X-AWCMS-Node-ID`, `X-AWCMS-Timestamp`, `X-AWCMS-Signature`) with a single
-deployment-wide secret from the environment (`AWCMS_SYNC_HMAC_SECRET`). The
-signature is `HMAC-SHA256("<timestamp>.<body>")`, verified with a timing-safe
-compare against a max skew (`AWCMS_SYNC_MAX_SKEW_SEC`, default 300s) for
-anti-replay. `X-AWCMS-Tenant-ID` is required for tenant isolation.
+(`X-AWCMS-Node-ID`, `X-AWCMS-Timestamp`, `X-AWCMS-Signature`,
+`X-AWCMS-Signature-Version`) with a single deployment-wide secret from the
+environment (`AWCMS_SYNC_HMAC_SECRET`), verified with a timing-safe compare
+against a max skew (`AWCMS_SYNC_MAX_SKEW_SEC`, default 300s) for anti-replay.
+`X-AWCMS-Tenant-ID` is required for tenant isolation.
+
+### Signature versions (security advisory GHSA-c972-3q5p-g3h4)
+
+- **v2 (canonical)** — `HMAC-SHA256("v2:<tenantId>:<nodeCode>:<timestamp>:<body>")`.
+  The tenant and node are **inside** the signed material, so a signature minted
+  for one tenant no longer verifies when `X-AWCMS-Tenant-ID` is swapped to
+  another tenant. Nodes send `X-AWCMS-Signature-Version: 2`. This is the
+  canonical scheme, mirrored across awcms, awcms-mini, and the `awcms-sync-hmac`
+  skill.
+- **v1 (legacy, VULNERABLE)** — `HMAC-SHA256("<timestamp>.<body>")`, used when no
+  `X-AWCMS-Signature-Version` header is sent. Neither tenant nor node is bound,
+  so it is **cross-tenant forgeable** and is kept only so already-deployed nodes
+  keep working during migration. It is accepted while `SYNC_HMAC_ALLOW_LEGACY`
+  is not `false` (env, default allow). **Set `SYNC_HMAC_ALLOW_LEGACY=false` once
+  every node has moved to v2 to reject v1 and close the cross-tenant hole
+  completely.** The advisory is only fully closed when legacy is disabled AND
+  every node is on v2.
 
 Endpoints return `403` when `AWCMS_SYNC_ENABLED` is not `true`, and `403` for
-any node whose status is not `active` (deactivating a node via the admin
-endpoint takes effect immediately across push/pull/status/objects).
+any node whose status is not `active`. First-contact nodes now auto-register
+`inactive` (advisory GHSA-c972-3q5p-g3h4) — an admin must approve them via
+`PATCH /api/v1/sync/nodes/{id}` (`status: "active"`) before they can push/pull.
+This quarantines a forged first-contact node id for another tenant. Nodes
+already `active` are unaffected; deactivating a node via the admin endpoint
+takes effect immediately across push/pull/status/objects.
 
 ## Admin surfaces (session-authenticated)
 

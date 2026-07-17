@@ -653,6 +653,213 @@ export async function checkLeastPrivilegeRoleProvisioned(): Promise<SecurityChec
 }
 
 // ---------------------------------------------------------------------------
+// 7b. Runtime role table grants match least-privilege matrix (critical) —
+//     Issue #160
+// ---------------------------------------------------------------------------
+
+/**
+ * Privileges `awcms_app` must NOT hold on each GLOBAL, RLS-free table after
+ * `sql/021_awcms_db_role_grants_narrow.sql` narrows the blanket grant. This is
+ * the OTHER half of the residual `sql/019` documented and #160 closes: RLS
+ * cannot claw anything back on these tables because they have none, so an
+ * over-broad grant here is a real, un-mitigated privilege. Absence from this
+ * map = "full DML legitimately kept" (the five module-registry tables, written
+ * at request time — see `sql/021`'s header). `awcms_tenants`/`awcms_setup_state`
+ * keep SELECT/INSERT/UPDATE (setup-fallback + tenant-settings write paths); only
+ * DELETE is forbidden. `awcms_permissions`/`awcms_schema_migrations` are
+ * read-only at runtime, so every write is forbidden.
+ */
+const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
+  awcms_permissions: ["INSERT", "UPDATE", "DELETE"],
+  awcms_schema_migrations: ["INSERT", "UPDATE", "DELETE"],
+  awcms_tenants: ["DELETE"],
+  awcms_setup_state: ["DELETE"]
+};
+
+/**
+ * Privileges every TENANT-SCOPED table must grant `awcms_app`. `sql/019` grants
+ * all four blanket + an `ALTER DEFAULT PRIVILEGES` that re-grants all four on
+ * future tables. Requiring all four here is the exact mirror of that — and it
+ * catches the failure mode `checkRlsEnabled` structurally cannot: a table
+ * created by a DIFFERENT owner than the one the default privileges are bound to
+ * ends up RLS-forced (so the RLS check passes) but UNGRANTED, which is
+ * `permission denied` at runtime, not "no data". The reviewer of #159 flagged
+ * exactly this (`ALTER DEFAULT PRIVILEGES` is executing-role-bound, so a
+ * `db:migrate` under a second superuser produces forced-but-ungranted tables).
+ */
+const TENANT_SCOPED_REQUIRED_PRIVILEGES = [
+  "SELECT",
+  "INSERT",
+  "UPDATE",
+  "DELETE"
+];
+
+type RoleGrantRow = {
+  relname: string;
+  sel: boolean;
+  ins: boolean;
+  upd: boolean;
+  del: boolean;
+};
+
+/**
+ * A grant check, distinct from `checkRlsEnabled` (flags) and
+ * `checkLeastPrivilegeRoleProvisioned` (role attributes). Two directions, both
+ * of which the other checks miss:
+ *
+ * - UNDER-granted: a tenant-scoped table missing any of SELECT/INSERT/UPDATE/
+ *   DELETE for `awcms_app` — RLS-forced but unreachable, `permission denied`
+ *   at runtime. The `ALTER DEFAULT PRIVILEGES`-is-executing-role-bound gap.
+ * - OVER-granted: a global RLS-free table where `awcms_app` still holds a
+ *   forbidden write — the residual #160 closes, and its regression guard for a
+ *   FUTURE global table silently inheriting blanket DML from default privileges.
+ *
+ * Uses `has_table_privilege(role, oid, priv)` so it reports the EFFECTIVE grant
+ * (direct + default-privilege + PUBLIC), which is what the runtime actually
+ * gets — reading `relacl` directly would miss default-privilege grants. The
+ * function is available to any role and does not require membership in the
+ * checked role, so this runs correctly even when `security:readiness` is run
+ * AS `awcms_app` (the recommended way to run it).
+ *
+ * Non-blocking when `awcms_app` does not exist: a database migrated before
+ * `sql/019` legitimately has no such role, and a `critical` fail there would
+ * cry wolf over a merely-un-migrated state — the missing-role signal is already
+ * the job of `checkLeastPrivilegeRoleProvisioned` (warning). Once the role
+ * exists, wrong grants ARE `critical`.
+ */
+export async function checkRuntimeRoleGrants(): Promise<SecurityCheckResult> {
+  const name = "Runtime role table grants match least-privilege matrix";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+
+    const roleRows = (await sql`
+      SELECT 1 AS present FROM pg_roles WHERE rolname = ${LEAST_PRIVILEGE_APP_ROLE}
+    `) as { present: number }[];
+
+    if (roleRows.length === 0) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" does not exist (this database has not been migrated onto sql/019 yet) — grants cannot be checked. The "Dedicated least-privilege app DB role is provisioned" warning covers the missing-role state; this check does not block for it.`
+      };
+    }
+
+    const rows = (await sql`
+      SELECT
+        c.relname,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'SELECT') AS sel,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'INSERT') AS ins,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'UPDATE') AS upd,
+        has_table_privilege(${LEAST_PRIVILEGE_APP_ROLE}, c.oid, 'DELETE') AS del
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname LIKE 'awcms\\_%' AND c.relkind IN ('r', 'p')
+        AND n.nspname = current_schema()
+      ORDER BY c.relname
+    `) as RoleGrantRow[];
+
+    if (rows.length === 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence:
+          "No awcms_% tables found in pg_class — has `bun run db:migrate` been run against this database?"
+      };
+    }
+
+    const held = (row: RoleGrantRow): Record<string, boolean> => ({
+      SELECT: row.sel,
+      INSERT: row.ins,
+      UPDATE: row.upd,
+      DELETE: row.del
+    });
+
+    const overGranted: string[] = [];
+    const underGranted: string[] = [];
+
+    for (const row of rows) {
+      const privileges = held(row);
+      const forbidden = GLOBAL_TABLE_FORBIDDEN_PRIVILEGES[row.relname];
+
+      if (forbidden) {
+        const excess = forbidden.filter((privilege) => privileges[privilege]);
+
+        if (excess.length > 0) {
+          overGranted.push(`${row.relname} (still has ${excess.join(", ")})`);
+        }
+
+        continue;
+      }
+
+      if (RLS_FREE_TABLES.has(row.relname)) {
+        // Global table with full DML kept by design (module registry). Not
+        // asserted in either direction.
+        continue;
+      }
+
+      const missing = TENANT_SCOPED_REQUIRED_PRIVILEGES.filter(
+        (privilege) => !privileges[privilege]
+      );
+
+      if (missing.length > 0) {
+        underGranted.push(`${row.relname} (missing ${missing.join(", ")})`);
+      }
+    }
+
+    if (overGranted.length > 0 || underGranted.length > 0) {
+      const parts: string[] = [];
+
+      if (overGranted.length > 0) {
+        parts.push(
+          `over-granted on global RLS-free table(s): ${overGranted.join("; ")}`
+        );
+      }
+
+      if (underGranted.length > 0) {
+        parts.push(
+          `tenant-scoped table(s) unreachable at runtime (RLS-forced but ungranted -> permission denied; ALTER DEFAULT PRIVILEGES is executing-role-bound, see sql/021): ${underGranted.join("; ")}`
+        );
+      }
+
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" grants do not match the least-privilege matrix — ${parts.join(". ")}.`
+      };
+    }
+
+    const tenantScopedCount = rows.filter(
+      (row) =>
+        !RLS_FREE_TABLES.has(row.relname) &&
+        !GLOBAL_TABLE_FORBIDDEN_PRIVILEGES[row.relname]
+    ).length;
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" holds SELECT/INSERT/UPDATE/DELETE on all ${tenantScopedCount} tenant-scoped table(s) and none of the forbidden writes on the narrowed global tables (${Object.keys(GLOBAL_TABLE_FORBIDDEN_PRIVILEGES).join(", ")}).`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify runtime role grants: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 8. ABAC default-deny works (critical)
 // ---------------------------------------------------------------------------
 
@@ -913,11 +1120,6 @@ export function checkSecurityHeadersBuilt(): SecurityCheckResult {
 
 export const OUT_OF_SCOPE_ITEMS: OutOfScopeItem[] = [
   {
-    name: "Runtime role grant allowlist (per-table, per-role)",
-    reason:
-      "mini's equivalent check compares real `pg_class.relacl` grants against the per-table matrix in its own role-separation migration, to catch a new GLOBAL (non-RLS) table silently inheriting a blanket default-privileges grant. This repo's `sql/019_awcms_db_role_separation.sql` (Issue #141) grants `awcms_app` SELECT/INSERT/UPDATE/DELETE on ALL TABLES uniformly, plus matching ALTER DEFAULT PRIVILEGES — there is no differentiated matrix to compare against yet, so the check would have nothing to assert. Add it if/when grants are narrowed per table."
-  },
-  {
     name: "Audit log retention is actually being executed",
     reason:
       "`bun run logs:audit:purge` (Issue #146) implements retention, but whether it is SCHEDULED is a deployment concern (cron/systemd timer/k8s CronJob) this script cannot observe from the repo. Run `bun run logs:audit:purge --dry-run` against the target database to see the real backlog past cutoff."
@@ -959,6 +1161,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkRlsEnabled(),
     await checkAppDbUserNotSuperuser(),
     await checkLeastPrivilegeRoleProvisioned(),
+    await checkRuntimeRoleGrants(),
     checkAbacDefaultDeny(),
     await checkAuditLogTableReachable(),
     checkEnvConfigValid(),

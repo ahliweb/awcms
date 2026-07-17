@@ -9,14 +9,10 @@ import {
   resolveAuthInputs
 } from "../../../../../modules/identity-access/application/access-guard";
 import {
-  EMAIL_MESSAGE_LIST_LIMIT,
   fetchEmailMessageEntries,
   type EmailMessageStatus
 } from "../../../../../modules/email/application/email-message-directory";
-import {
-  decodeKeysetCursor,
-  encodeKeysetCursor
-} from "../../../../../modules/_shared/keyset-pagination";
+import { decodeKeysetCursor } from "../../../../../modules/_shared/keyset-pagination";
 
 const READ_GUARD = {
   moduleKey: "email",
@@ -88,20 +84,12 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
       return auth.denied;
     }
 
-    const messages = await fetchEmailMessageEntries(
+    const { messages, nextCursor } = await fetchEmailMessageEntries(
       tx,
       tenantId,
       (statusParam as EmailMessageStatus | null) ?? undefined,
       cursor ?? undefined
     );
-
-    const nextCursor =
-      messages.length === EMAIL_MESSAGE_LIST_LIMIT
-        ? encodeKeysetCursor(
-            new Date(messages[messages.length - 1]!.createdAt),
-            messages[messages.length - 1]!.id
-          )
-        : null;
 
     return ok({ messages, nextCursor });
   });

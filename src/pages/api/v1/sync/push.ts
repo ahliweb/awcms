@@ -33,8 +33,11 @@ export const POST: APIRoute = async ({ request }) => {
 
   const rawBody = bodyRead.value;
   const authResult = verifySyncHeaders(
+    tenantId,
+    nodeCode,
     request.headers.get("x-awcms-timestamp"),
     request.headers.get("x-awcms-signature"),
+    request.headers.get("x-awcms-signature-version"),
     rawBody
   );
 
