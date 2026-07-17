@@ -1,9 +1,23 @@
 ---
 name: awcms-document-infrastructure
-description: Kerjakan bagian mana pun dari modul document_infrastructure AWCMS (Issue #751, epic platform-evolution #738 Wave 3; fast-follow #780/#787/#795/#798). Gunakan saat menambah endpoint/logic ke src/modules/document-infrastructure, menautkan dokumen ke resource modul lain lewat capability port document_resource_relations, mengubah numbering sequence/reservation, atau mengubah confidentiality-tier gating. Merangkum invariant konkurensi dan idempotency-hash-binding yang sudah diperbaiki supaya tidak diregresi.
+description: BACAAN SAJA — modul document_infrastructure BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `document-infrastructure`, tidak ada migration-nya di `sql/`). Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #751, epic platform-evolution #738 Wave 3; fast-follow #780/#787/#795/#798). Gunakan saat menambah endpoint/logic ke src/modules/document-infrastructure, menautkan dokumen ke resource modul lain lewat capability port document_resource_relations, mengubah numbering sequence/reservation, atau mengubah confidentiality-tier gating. Merangkum invariant konkurensi dan idempotency-hash-binding yang sudah diperbaiki supaya tidak diregresi.
 ---
 
 # AWCMS — Document Infrastructure Module
+
+<!-- sql-refs: awcms-mini — modul belum di-port; setiap `sql/NNN` di file ini penomoran awcms-mini, bukan repo ini -->
+
+> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
+> `document_infrastructure` ada di **awcms-mini**, bukan di sini:
+> `ls src/modules` TIDAK memuat `document-infrastructure`, dan `sql/` tidak
+> memuat migration-nya. Semua rujukan `src/modules/document-infrastructure/...`,
+> tabel `awcms_document*`/`awcms_documents`, dan `sql/NNN` di bawah adalah
+> artefak awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo
+> ini. Nomor `sql/NNN` memakai penomoran awcms-mini dan akan berubah saat
+> di-port (melanjutkan dari migration terakhir repo ini). Pakai skill ini
+> sebagai spesifikasi target port (via `awcms-port-from-mini`), bukan peta
+> kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum mengklaim
+> apa pun ada.
 
 `document_infrastructure` (`src/modules/document-infrastructure`, Issue #751,
 epic `platform-evolution` #738 Wave 3, admission decision

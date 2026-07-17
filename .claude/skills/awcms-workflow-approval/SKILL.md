@@ -99,8 +99,14 @@ bounded batch, advisory lock, `--dry-run`. **Idempotency guard**: `UPDATE`
 escalation dikondisikan `WHERE status = 'pending' AND escalation_step =
 <value dibaca pass ini>` — race yang kalah (run konkuren, atau pass yang
 di-retry) mempengaruhi nol baris dan diam-diam di-skip, tidak pernah
-escalate dobel. Berjalan sebagai role least-privilege `awcms_worker`
-(`SELECT`-only sejak fix PR #778, lihat §Security finding).
+escalate dobel. **Role DB-nya**: di mini job ini berjalan sebagai role
+least-privilege `awcms_worker` (`SELECT`-only sejak fix PR #778, lihat
+§Security finding). **Repo ini tidak punya role `awcms_worker`** —
+`WORKER_DATABASE_URL` fallback ke `DATABASE_URL` (owner migrasi), jadi job
+ini hari ini berjalan dengan hak penuh dan pemisahan privilege itu BELUM
+ada di sini. Role yang ada baru `awcms_app` (`sql/019`, Issue #141).
+Jangan tulis `GRANT ... TO awcms_worker` di migration repo ini — akan gagal
+jalan.
 
 ## Administrative recovery (`application/workflow-recovery.ts`)
 
@@ -136,10 +142,13 @@ baru atau transisi status ter-guard.
    mengandalkan ownership check; permission `revoke` yang sudah diseed
    (doc 17: Owner/Manager `RCV`) jadi dead code. Fix: gate pada
    `workflow.delegation.revoke`.
-4. **Worker role escalation-job over-grant (Low)** — migration `060`
+4. **Worker role escalation-job over-grant (Low)** — di mini, migrasi 060
    memberi `SELECT, UPDATE` di `awcms_workflow_instances` ke
    `awcms_worker`, padahal escalation job hanya pernah `SELECT` dari
-   tabel itu. Dipangkas jadi `SELECT`-only.
+   tabel itu. Dipangkas jadi `SELECT`-only. **Temuan ini vacuous di repo
+   ini**: tidak ada role `awcms_worker` maupun migrasi 060 di sini — GRANT
+   yang over-scope itu tidak pernah ada untuk dipangkas. Relevan hanya
+   sebagai pelajaran saat pemisahan worker role akhirnya di-port.
 
 **Pelajaran generik dari keempatnya**: endpoint action baru pada resource
 yang punya konsep "pemilik/requester" WAJIB (a) lookup requester SEBELUM

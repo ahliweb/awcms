@@ -119,31 +119,41 @@ export function headingSlugs(md) {
 }
 
 /**
- * Escape hatch untuk `checkNaming`, keyed `"relative/path:lineNumber"` — untuk
- * referensi historis yang SAH ke identifier `awcms-mini`/`AWCMS_MINI_` milik
- * repo acuan (mis. dokumen audit yang mencatat fakta sejarah pengembangan
- * awcms-mini, bukan kontrak repo ini). Bukan untuk menyembunyikan sisa
- * porting yang belum diadaptasi — tambahkan entri baru hanya dengan alasan
- * tercatat di commit yang menambahkannya.
+ * Escape hatch untuk `checkNaming`, keyed `"relative/path::identifier"` (dua
+ * titik dua), dengan `identifier` = token `awcms(_|-)mini_...` yang di-LOWERCASE
+ * — untuk referensi historis yang SAH ke identifier `awcms-mini`/`AWCMS_MINI_`
+ * milik repo acuan (mis. dokumen audit yang mencatat fakta sejarah
+ * pengembangan awcms-mini, bukan kontrak repo ini). Bukan untuk menyembunyikan
+ * sisa porting yang belum diadaptasi — tambahkan entri baru hanya dengan
+ * alasan tercatat di commit yang menambahkannya.
+ *
+ * Sengaja **berbasis konten, bukan nomor baris** (desain lama keyed
+ * `file:line` patah tiap kali baris disisipkan di atasnya — termasuk oleh
+ * agen paralel yang mengedit dokumen yang sama, tanpa menyentuh teks
+ * ter-exempt itu sendiri). Kunci identifier ikut hidup di dalam berkas yang
+ * ia kecualikan, jadi tahan terhadap pergeseran baris.
  */
-// NOTE: keyed by line number, so ANY edit above an exempted line silently
-// breaks the exemption and fails the gate on untouched text. Re-point the
-// line rather than reasoning about the finding itself when that happens.
 export const NAMING_EXEMPTIONS = new Set([
-  "docs/awcms/18_configuration_env_reference.md:281",
-  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md:159",
-  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md:231"
+  "docs/awcms/18_configuration_env_reference.md::awcms_mini_node_id",
+  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md::awcms_mini_sync_enabled",
+  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md::awcms_mini_sync_hmac_secret",
+  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md::awcms_mini_app_db_password"
 ]);
 
 /**
  * Deteksi sisa penamaan repo acuan yang belum diadaptasi: `awcms_mini_x` /
  * `awcms-mini_x` / `AWCMS_MINI_X` — identifier tabel/env-var bergaya
  * `awcms(-|_)mini_<suffix>` yang seharusnya menjadi `awcms_<suffix>` /
- * `AWCMS_<SUFFIX>` di repo ini. Regex mewajibkan underscore tepat setelah
- * "mini" (bukan hyphen) supaya referensi majemuk yang sah ke repo acuan
- * (mis. nama skill `awcms-mini-ui-screen`, tautan `docs/awcms-mini/`, atau
- * sebutan bare "awcms-mini") tidak pernah cocok — pola itu selalu memakai
- * hyphen kedua, tidak pernah underscore.
+ * `AWCMS_<SUFFIX>` di repo ini. Regex mewajibkan underscore + minimal satu
+ * alfanumerik tepat setelah "mini" (bukan hyphen, bukan underscore telanjang)
+ * supaya referensi majemuk yang sah ke repo acuan (mis. nama skill
+ * `awcms-mini-ui-screen`, tautan `docs/awcms-mini/`, sebutan bare
+ * "awcms-mini", atau prefix env `AWCMS_MINI_` yang berdiri sendiri) tidak
+ * pernah cocok.
+ *
+ * Satu temuan per baris: sebuah baris ditandai bila memuat SETIDAKNYA satu
+ * token mini yang belum di-exempt. Baris yang setiap token mini-nya terdaftar
+ * di `NAMING_EXEMPTIONS` (per identifier, bukan per nomor baris) dilewati.
  * @param {string} file
  * @param {string[]} lines
  * @returns {Problem[]}
@@ -151,14 +161,18 @@ export const NAMING_EXEMPTIONS = new Set([
 export function checkNaming(file, lines) {
   /** @type {Problem[]} */
   const problems = [];
-  const pattern = /awcms[_-]mini_[a-z0-9]/i;
+  const pattern = /awcms[_-]mini_[a-z0-9][a-z0-9_]*/gi;
   lines.forEach((line, i) => {
-    if (!pattern.test(line)) return;
-    const lineNumber = i + 1;
-    if (NAMING_EXEMPTIONS.has(`${file}:${lineNumber}`)) return;
+    let hasUnexempted = false;
+    for (const match of line.matchAll(pattern)) {
+      const identifier = (match[0] ?? "").toLowerCase();
+      if (NAMING_EXEMPTIONS.has(`${file}::${identifier}`)) continue;
+      hasUnexempted = true;
+    }
+    if (!hasUnexempted) return;
     problems.push({
       file,
-      line: lineNumber,
+      line: i + 1,
       message:
         "kemungkinan sisa penamaan repo acuan yang belum diadaptasi (gunakan prefix awcms_/AWCMS_, bukan awcms_mini_/AWCMS_MINI_)"
     });
@@ -205,6 +219,115 @@ export function checkKnownScripts(file, lines, knownScripts) {
         file,
         line: i + 1,
         message: `rujukan \`bun run ${script}\` tidak ada di package.json (dokumen current-state wajib menunjuk script nyata)`
+      });
+    }
+  });
+  return problems;
+}
+
+/**
+ * Penanda file-level yang menyatakan: SELURUH rujukan `sql/NNN` di berkas ini
+ * memakai penomoran migration **awcms-mini**, bukan repo ini — jadi
+ * `checkSqlMigrationReferences` tidak boleh memvalidasinya ke `sql/` di sini.
+ * Dipakai oleh dokumen "BACAAN SAJA" yang mendeskripsikan modul yang belum
+ * di-port (lihat `.claude/skills/README.md` §Status modul).
+ *
+ * Sengaja **file-level dan bebas nomor baris** (tidak seperti
+ * `NAMING_EXEMPTIONS` yang keyed `file:line` dan patah tiap kali ada baris
+ * disisipkan di atasnya): penanda ikut hidup di dalam berkas yang ia
+ * kecualikan, jadi tidak bisa basi karena editan di tempat lain.
+ */
+export const SQL_REF_MINI_MARKER = /<!--\s*sql-refs:\s*awcms-mini\b/i;
+
+/**
+ * Escape hatch **berbasis path** untuk `checkSqlMigrationReferences` — berkas
+ * yang tidak bisa/tidak boleh membawa `SQL_REF_MINI_MARKER` di dalamnya.
+ * Path-based, bukan nomor baris, karena alasan yang sama seperti di atas.
+ *
+ * Dua kategori, dengan umur yang berbeda:
+ *
+ * 1. **Permanen** — `AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md` adalah catatan
+ *    sejarah audit repo acuan awcms-mini; nomor + nama berkas migration di
+ *    dalamnya adalah kutipan keadaan mini saat audit itu ditulis, bukan klaim
+ *    tentang `sql/` repo ini. Sama semangatnya dengan `NAMING_EXEMPTIONS`.
+ * 2. **Baseline sementara (harus MENYUSUT, tidak boleh tumbuh)** — tiga ADR
+ *    yang masih mengutip penomoran mini (`sql/033` tenant-domain lookup,
+ *    `sql/068` document-infrastructure confidentiality). Keduanya modul yang
+ *    belum di-port; rujukannya perlu ditulis ulang seperti skill terkait
+ *    (Issue #156 follow-up). Dicatat di sini supaya gate ini bisa mendarat
+ *    dan menjaga sisa repo, bukan supaya temuannya hilang.
+ *
+ * Menambah entri baru = menyembunyikan bug. Jangan, kecuali kategori (1).
+ * @type {Set<string>}
+ */
+export const SQL_REF_UNCHECKED_FILES = new Set([
+  "docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md",
+  "docs/adr/0003-postgresql-rls-multi-tenant.md",
+  "docs/adr/0010-public-host-tenant-routing.md",
+  "docs/adr/0017-document-infrastructure-module-admission.md"
+]);
+
+/**
+ * Deteksi rujukan migration hantu: `sql/NNN...` di prosa/dokumentasi yang
+ * berkasnya TIDAK ada di `sql/`. Kelas bug nyata (Issue #156): skill dan docs
+ * diadaptasi dari awcms-mini membawa serta penomoran migration mini, sehingga
+ * agen yang PATUH mengikuti instruksi menulis migration/query terhadap
+ * migration yang tidak pernah ada di repo ini.
+ *
+ * Dua bentuk rujukan diperlakukan berbeda, sengaja:
+ * - **Nama berkas penuh** (`sql/017_awcms_enforce_rls_force.sql`) → dicocokkan
+ *   PERSIS ke isi `sql/`. Nomor yang benar dengan nama mini (mis.
+ *   `sql/013_awcms_enforce_rls_least_privilege.sql`, nama mini untuk nomor
+ *   yang di sini berisi workflow approval) ikut tertangkap.
+ * - **Nomor saja** (`sql/020`, `sql/013_..._enforce_rls`) → hanya keberadaan
+ *   nomornya yang diverifikasi; tidak ada nama lengkap untuk dicocokkan.
+ *
+ * Sengaja sempit: hanya token berawalan `sql/` yang diperiksa. Prosa seperti
+ * "migration 059" atau "`sql/066`–`068`" (endpoint kedua rentang tidak
+ * berawalan `sql/`) TIDAK diperiksa — menebak maksudnya akan menghasilkan
+ * false positive, dan bentuk `sql/NNN`-lah yang menyesatkan karena terbaca
+ * sebagai path nyata di repo ini.
+ * @param {string} file
+ * @param {string[]} lines
+ * @param {ReadonlySet<string>} sqlFileNames basename berkas di `sql/`
+ * @returns {Problem[]}
+ */
+export function checkSqlMigrationReferences(file, lines, sqlFileNames) {
+  if (SQL_REF_UNCHECKED_FILES.has(file)) return [];
+  if (lines.some((line) => SQL_REF_MINI_MARKER.test(line))) return [];
+
+  /** @type {Set<string>} */
+  const knownNumbers = new Set();
+  for (const name of sqlFileNames) {
+    const m = /^(\d{3})_/.exec(name);
+    if (m?.[1]) knownNumbers.add(m[1]);
+  }
+
+  /** @type {Problem[]} */
+  const problems = [];
+  const pattern = /\bsql\/(\d{3})([A-Za-z0-9_.-]*)/g;
+  lines.forEach((line, i) => {
+    for (const match of line.matchAll(pattern)) {
+      const number = match[1] ?? "";
+      // Buang tanda baca kalimat yang ikut tertelan (`...schema.sql.` di akhir
+      // kalimat) supaya rujukan bernama penuh tetap dikenali sebagai nama
+      // penuh, bukan diam-diam turun kelas jadi cek-nomor-saja.
+      const suffix = (match[2] ?? "").replace(/\.+$/, "");
+      const referenced = `${number}${suffix}`;
+      if (suffix.endsWith(".sql")) {
+        if (sqlFileNames.has(referenced)) continue;
+        problems.push({
+          file,
+          line: i + 1,
+          message: `rujukan migration hantu: \`sql/${referenced}\` tidak ada di sql/ (nomor/nama migration awcms-mini? perbaiki ke migration repo ini, atau nyatakan eksplisit bahwa itu awcms-mini)`
+        });
+        continue;
+      }
+      if (knownNumbers.has(number)) continue;
+      problems.push({
+        file,
+        line: i + 1,
+        message: `rujukan migration hantu: \`sql/${number}\` tidak ada di sql/ (nomor migration awcms-mini? perbaiki ke migration repo ini, atau nyatakan eksplisit bahwa itu awcms-mini)`
       });
     }
   });

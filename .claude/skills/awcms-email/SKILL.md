@@ -37,7 +37,7 @@ Ikuti `src/modules/email/README.md` (arsitektur lengkap: kontrak provider, adapt
      dan audit satu baris per request. `POST .../preview` untuk dry-run
      (jumlah + sampel render, tidak pernah daftar penerima nyata).
    - **Kasus lain (mis. modul domain turunan sendiri)** — INSERT langsung
-     ke `awcms_email_messages` (`sql/020`) di dalam transaksi bisnis
+     ke `awcms_email_messages` (`sql/014`) di dalam transaksi bisnis
      Anda sendiri (ADR-0006: pemanggilan provider **tidak boleh** di dalam
      transaction — outbox pattern yang memisahkan ini). Isi
      `to_address`/`to_address_hash`/`to_address_masked` pakai
@@ -77,14 +77,14 @@ Ikuti `src/modules/email/README.md` (arsitektur lengkap: kontrak provider, adapt
   (permission `email.message.read`) — diagnostik admin, `to_address_masked`
   saja, tidak pernah alamat mentah.
 - **Batalkan pesan yang belum terkirim**: `POST /api/v1/email/messages/{id}/cancel`
-  (permission `email.message.cancel`, diseed `sql/024`) — hanya
+  (permission `email.message.cancel`, diseed `sql/014`) — hanya
   `queued`/`retry_wait` yang bisa dibatalkan; mitigasi teknis untuk
   insiden "accidental bulk send".
 - **Kesehatan antrean**: `GET /api/v1/reports/email-health` — hitungan
   queued/retry_wait/failed/suppressed + `isHealthy`.
 - **Suppression list manual**: `GET/POST /api/v1/email/suppressions`,
   `DELETE /api/v1/email/suppressions/{id}` (permission
-  `email.suppression.{read,create,delete}`, diseed sejak `sql/020`,
+  `email.suppression.{read,create,delete}`, diseed `sql/014`,
   endpoint-nya baru ada di Issue #499). Dispatcher juga re-check
   suppression list tepat sebelum kirim (bukan hanya saat enqueue) —
   penerima yang baru disuppress setelah enqueue tetap dikecualikan.

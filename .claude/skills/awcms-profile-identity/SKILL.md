@@ -1,18 +1,32 @@
 ---
 name: awcms-profile-identity
-description: Kerjakan bagian mana pun dari modul profile_identity AWCMS (Issue 2.2 fondasi, dilengkapi penuh Issue #748 epic platform-evolution #738 Wave 2 — party CRUD, identifier/alamat/channel effective-dated, relasi party-to-party generik, deteksi duplikat, workflow merge approval-gated). Gunakan saat mengubah profile CRUD, merge workflow, cross-tenant guard, atau capability port PartyDirectoryPort. PR #777 punya kesalahan review yang sempat lolos draft — merangkum invariant supaya tidak diregresi.
+description: "SEBAGIAN BACAAN SAJA — hanya fondasi (Issue 2.2: profile CRUD, identifier, entity link, `sql/003`) yang ada di repo ini; seluruh lapis Issue #748 yang dijelaskan di bawah (merge workflow, relasi party-to-party, deteksi duplikat, merge history) ADA DI awcms-mini dan BELUM di-port ke sini. Gunakan saat mengubah profile CRUD/identifier/masking/cross-tenant guard, ATAU saat mem-port lapis #748 dari mini — bagian #748 di skill ini adalah spesifikasi target, bukan deskripsi kode yang bisa dipanggil hari ini."
 ---
 
 # AWCMS — Profile Identity Module
 
-`profile_identity` (`src/modules/profile-identity`, fondasi Issue 2.2,
-dilengkapi penuh Issue #748 epic `platform-evolution` #738 Wave 2) adalah
-siklus hidup party (person/organization) KANONIK: CRUD lengkap,
-identifier/alamat/channel effective-dated, relasi generik party-to-party,
-deteksi duplikat, dan workflow merge approval-gated. Baca
-`src/modules/profile-identity/README.md` untuk detail lengkap tiap tabel;
-skill ini merangkum invariant keamanan (cross-tenant guard, self-approval,
-field-conflict snapshot) yang WAJIB dipertahankan.
+`profile_identity` (`src/modules/profile-identity`) adalah siklus hidup
+party (person/organization) KANONIK. Baca
+`src/modules/profile-identity/README.md` untuk keadaan repo ini yang
+sebenarnya; skill ini merangkum invariant keamanan (cross-tenant guard,
+self-approval, field-conflict snapshot) yang WAJIB dipertahankan.
+
+## STATUS — baca duluan, dua lapis dengan realitas BERBEDA
+
+| Lapis                                                                                                                                                                                                 | Di repo ini                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Fondasi (Issue 2.2, `sql/003`)** — `awcms_profiles`, `awcms_profile_identifiers`, `awcms_profile_entity_links`, masking, resolve                                                                    | **ADA** — kode nyata, boleh dijadikan acuan implementasi.                                                                                                                                  |
+| **Issue #748** (epic `platform-evolution` #738 Wave 2) — merge workflow, `profile_relationships`, `profile_duplicate_candidates`, `profile_merge_requests`/`_history`, channel/alamat effective-dated | **TIDAK ADA** — ada di awcms-mini (migrasi 059 di sana), belum di-port. Tabel, endpoint, `domain/merge.ts`, `domain/relationship.ts` yang disebut di bawah **tidak ada file-nya di sini**. |
+
+Konsekuensinya, jangan: (1) memanggil/mengimpor `domain/merge.ts`,
+`domain/relationship.ts`, `application/merge-workflow.ts`,
+`duplicate-candidate-directory.ts`, atau
+`_shared/ports/party-directory-port.ts` — tidak ada di repo ini;
+(2) `SELECT` dari tabel merge/relationship/duplicate-candidate;
+(3) mengklaim ke user bahwa merge workflow "sudah ada". `README.md` modul
+ini menyebut mereka di §"Belum tersedia" — itulah yang akurat. Bagian
+sisa skill ini berguna sebagai **spesifikasi target port** (invariant apa
+yang WAJIB ikut saat lapis #748 di-port dari mini) — bukan peta kode.
 
 ## Kapan pakai skill ini vs skill generik
 
@@ -22,7 +36,7 @@ Melengkapi `awcms-sensitive-data` (normalize/hash/mask identifier —
 `awcms-idempotency`. Skill ini menyediakan konteks merge-workflow dan
 cross-tenant guard spesifik modul ini.
 
-## Tabel (`sql/003` fondasi, `sql/059` Issue #748)
+## Tabel (`sql/003` fondasi = ADA; tabel bertanda **[#748 — mini]** = BELUM ADA di sini)
 
 - `awcms_profiles` — profile kanonik, soft delete,
   `merged_into_profile_id` untuk hasil merge, `status`
@@ -31,43 +45,55 @@ cross-tenant guard spesifik modul ini.
 - `awcms_profile_identifiers` — identifier sensitif (email/phone/
   whatsapp/national_id/tax_id/external_code), dedup lewat `value_hash`
   (unique parsial per tenant+type selama belum soft-deleted),
-  `masked_value` untuk tampilan aman, plus `provenance`/`verified_at`/
-  `verified_by`/`valid_from`/`valid_until` (Issue #748).
-- `awcms_profile_channels` — preferensi channel, mengacu ke
-  `profile_identifiers` (TIDAK menduplikasi nilai sensitif); `is_default`
-  = flag "preferred channel per type".
-- `awcms_profile_addresses` — alamat per profile, effective-dated.
+  `masked_value` untuk tampilan aman. Kolom `provenance`/`verified_at`/
+  `verified_by`/`valid_from`/`valid_until` = **[#748 — mini]**, tidak ada
+  di `sql/003` repo ini.
+- **[#748 — mini]** `awcms_profile_channels` — preferensi channel, mengacu
+  ke `profile_identifiers` (TIDAK menduplikasi nilai sensitif);
+  `is_default` = flag "preferred channel per type".
+- **[#748 — mini]** `awcms_profile_addresses` — alamat per profile,
+  effective-dated.
 - `awcms_profile_entity_links` — tautan profile ke entity modul
   lain (`module_key`/`entity_type`/`entity_id`), unique per entity — SET
   REFERENSI yang direpoint saat merge dieksekusi.
-- `awcms_profile_relationships` (Issue #748) — relasi party-to-party
+- **[#748 — mini]** `awcms_profile_relationships` — relasi party-to-party
   effective-dated, GENERIK: `relationship_type` teks bebas snake_case,
   TIDAK ADA CHECK enum peran bisnis (customer/supplier/employee). Authorized
   representative hanyalah baris relasi `is_authorized_representative = true`.
-- `awcms_profile_duplicate_candidates` (Issue #748) — kandidat
+- **[#748 — mini]** `awcms_profile_duplicate_candidates` — kandidat
   duplikat: `match_basis`/`match_score`/`match_reasons` (jsonb, SELALU
   explainable), `status` (`pending`/`confirmed_duplicate`/`not_duplicate`).
   Pasangan disimpan terurut (`profile_id_a < profile_id_b`).
-- `awcms_profile_merge_requests` — `source`(loser)/`target`(survivor),
+- **[#748 — mini]** `awcms_profile_merge_requests` — `source`(loser)/`target`(survivor),
   `source_profile_id <> target_profile_id` (constraint DB + `domain/merge.ts`),
   `requires_approval`, `field_conflict_snapshot`, `reference_impact_snapshot`.
-- `awcms_profile_merge_history` (Issue #748) — **append-only,
+  Permission `profile_identity.profile_management.restore` sudah diseed
+  `sql/005` di sini tapi belum punya konsumen — jangan simpulkan dari
+  keberadaan permission bahwa endpoint/tabelnya ada.
+- **[#748 — mini]** `awcms_profile_merge_history` — **append-only,
   immutable**, TERPISAH dari `merge_requests` yang statusnya mutable.
   Dasar untuk operator menalar/memulihkan efek merge yang keliru.
-- `awcms_profile_audit_logs` — dead schema, dideklarasikan migration
-  003 tapi TIDAK PERNAH ditulis kode aplikasi; audit high-risk
-  sesungguhnya lewat `logging` module's `recordAuditEvent`. Jangan tulis
-  ke tabel ini, jangan asumsikan itu sumber audit trail modul ini.
+- `awcms_profile_audit_logs` — **tidak ada di repo ini sama sekali** (di
+  mini ia dead schema: dideklarasikan tapi tak pernah ditulis kode; di
+  sini `sql/003` tidak mendeklarasikannya). Audit high-risk lewat `logging`
+  module's `recordAuditEvent`/`awcms_audit_events`. Jangan buat ulang tabel
+  ini "karena skill menyebutnya".
 
-Semua tabel tenant-scoped `ENABLE`+`FORCE ROW LEVEL SECURITY` — 7 tabel
-migration 003 mendapat `FORCE` sejak migration `013_awcms_enforce_rls_least_privilege.sql`
-(PR #777 review correction — **draft awal PR #777 salah mengklaim migration
-059 yang menutup gap ini**; statement `FORCE` yang diulang di 059 sebenarnya
-no-op aman, sekadar keterbacaan mandiri file itu — kalau menyelidiki
-"kapan RLS FORCE mulai berlaku untuk tabel profile", jawabannya migration
-013, BUKAN 059, meski 059 juga menyebut `FORCE` di statement-nya).
+Tabel tenant-scoped `sql/003` mendapat `ENABLE`+`FORCE ROW LEVEL SECURITY`
+lewat `sql/017_awcms_enforce_rls_force.sql` (Issue #139 — sebelum itu hanya
+`ENABLE`, yang **inert** selama app connect sebagai owner tabel). Kalau
+menyelidiki "kapan RLS FORCE mulai berlaku untuk tabel profile" di repo
+INI, jawabannya `sql/017` — bukan migration 013 (nomor itu penomoran mini
+untuk `enforce_rls_least_privilege`; di sini 013 adalah workflow approval).
+Catatan `FORCE` saja belum cukup: superuser/BYPASSRLS tetap melewatinya —
+lihat header `sql/019_awcms_db_role_separation.sql` (Issue #141) untuk role
+`awcms_app` yang membuat policy ini benar-benar dievaluasi.
 
-## Merge workflow (Issue #748) — 3 langkah, approval WAJIB di setiap merge
+## [#748 — mini] Merge workflow — 3 langkah, approval WAJIB di setiap merge
+
+> Seluruh §ini mendeskripsikan kode di **awcms-mini**. Di repo ini belum ada
+> satu pun endpoint/fungsi merge. Baca sebagai kontrak yang WAJIB
+> dipertahankan saat mem-port, bukan sebagai API yang bisa dipanggil.
 
 1. **Create** (`profile_merge.create`) — `sourceProfileId` (loser) +
    `targetProfileId` (survivor) + `reason`. Menghitung dan menyimpan
@@ -110,10 +136,11 @@ secara MANUAL/terarah — jejak audit di atas adalah yang dibutuhkan
 operator, bukan mekanisme otomatis. **Jangan janjikan/bangun tombol
 "undo merge" satu-klik tanpa issue baru eksplisit.**
 
-## CRITICAL — cross-tenant guard, DUA lapis, keduanya wajib
+## [#748 — mini] CRITICAL — cross-tenant guard, DUA lapis, keduanya wajib
 
-Cross-tenant matching/merge DILARANG KERAS. Ditegakkan di dua lapis
-independen:
+Cross-tenant matching/merge DILARANG KERAS. Ditegakkan di mini lewat dua
+lapis independen — **kontrak WAJIB yang harus ikut saat lapis #748 di-port
+ke sini**, bukan kode yang sudah berjalan di repo ini:
 
 1. **RLS** (`FORCE ROW LEVEL SECURITY`) — koneksi role aplikasi biasa
    tidak akan pernah melihat baris tenant lain sama sekali.
@@ -124,10 +151,12 @@ independen:
    tenant id yang dibawa objek lama. `fetchPartyForMerge` SENGAJA TIDAK
    memfilter `tenant_id` di `WHERE`-nya (mengandalkan RLS untuk jalur
    normal) justru supaya lapis kedua ini GENUINELY teruji lewat test
-   terhadap koneksi privileged (bypass RLS) — lihat
+   terhadap koneksi privileged (bypass RLS) — di mini:
    `tests/integration/profile-identity.integration.test.ts`'s test
    "application-layer guard: assertSameTenant/CrossTenantMergeError fires
-   even when RLS is bypassed". **Endpoint merge/match baru wajib
+   even when RLS is bypassed". **Repo ini belum punya `tests/integration/`
+   sama sekali (Issue #154)** — port lapis #748 tanpa mem-port test itu
+   berarti guard kedua tidak terverifikasi. **Endpoint merge/match baru wajib
    memanggil `assertSameTenant` di titik eksekusi, jangan andalkan RLS
    saja** — RLS adalah lapis pertama, bukan satu-satunya.
 
@@ -137,31 +166,38 @@ profile lintas tenant.
 
 ## Business role BUKAN hardcoded (persyaratan eksplisit Issue #748)
 
-Tidak ada tabel/kolom/enum di modul ini yang mengenkode peran bisnis
-kontekstual (customer/supplier/employee/donor/merchant/student/patient).
-`relationship_type` teks bebas tervalidasi FORMAT saja;
-`domain/relationship.ts` bahkan MENOLAK eksplisit beberapa kata peran
-bisnis sebagai guard defensif terhadap regresi. Aplikasi turunan bebas
+Berlaku untuk KEDUA lapis. Tidak ada tabel/kolom/enum di modul ini yang
+mengenkode peran bisnis kontekstual (customer/supplier/employee/donor/
+merchant/student/patient). **[#748 — mini]** `relationship_type` teks bebas
+tervalidasi FORMAT saja; `domain/relationship.ts` (mini) bahkan MENOLAK
+eksplisit beberapa kata peran bisnis sebagai guard defensif terhadap
+regresi. Aplikasi turunan bebas
 membangun semantik domain-spesifik DI ATAS relasi generik ini — **jangan
 tambah CHECK constraint/enum peran bisnis apa pun ke modul base ini.**
 
-## Tiga kontrak proyeksi eksplisit (`domain/projection.ts`)
+## Kontrak proyeksi (`domain/projection.ts`)
 
-`PartyFullDTO` (internal), `PartyMaskedAdminDTO` (API admin — TANPA
-`tenantId`/actor id), `PartyPublicSafeDTO` (3 field saja: `id`/
-`profileType`/`displayName`, `null` untuk profile soft-deleted/merged/
-inactive). **Endpoint/response baru wajib pilih SATU dari tiga kontrak
-ini secara eksplisit** — jangan bikin bentuk DTO ad-hoc baru yang
-membocorkan field internal.
+Di repo ini `domain/projection.ts` mengekspor **satu** kontrak:
+`PartyMaskedAdminDTO` (API admin — TANPA `tenantId`/actor id) +
+`toPartyMaskedAdminDTO`. **Endpoint/response baru wajib memakainya secara
+eksplisit** — jangan bikin bentuk DTO ad-hoc baru yang membocorkan field
+internal.
 
-## Capability port
+**[#748 — mini]** `PartyFullDTO` (internal) dan `PartyPublicSafeDTO` (3
+field saja: `id`/`profileType`/`displayName`, `null` untuk profile
+soft-deleted/merged/inactive) **belum ada di sini** — kalau butuh proyeksi
+public-safe, port `PartyPublicSafeDTO` dari mini apa adanya, jangan bikin
+varian baru.
 
-`_shared/ports/party-directory-port.ts` (`PartyDirectoryPort`) —
-`exists`/`resolveSummary`/`resolveMergeSurvivor` (mengikuti rantai
-`merged_into_profile_id`)/`resolvePublicSafeSummary`. Implementasi:
-`application/party-directory-port-adapter.ts`. Belum ada consumer
-in-repo (didaftarkan lebih dulu sebelum consumer nyata, pola sama
-`legal-hold-guard-port.ts`).
+## [#748 — mini] Capability port — BELUM ADA di repo ini
+
+`_shared/ports/` di sini hanya berisi `workflow-condition-port.ts` dan
+`workflow-notification-port.ts`. `party-directory-port.ts`
+(`PartyDirectoryPort` — `exists`/`resolveSummary`/`resolveMergeSurvivor`
+mengikuti rantai `merged_into_profile_id`/`resolvePublicSafeSummary`),
+adapter-nya, dan `legal-hold-guard-port.ts` yang disebut sebagai preseden
+semuanya ada di mini saja. **Jangan `import` salah satunya di repo ini** —
+port dulu kalau memang dibutuhkan.
 
 ## Pitfall umum
 
@@ -171,26 +207,32 @@ in-repo (didaftarkan lebih dulu sebelum consumer nyata, pola sama
    manapun, `masked_value` adalah satu-satunya bentuk baca yang diizinkan
    hari ini.
 3. Jangan asumsikan `awcms_profile_audit_logs` adalah sumber audit
-   trail — itu dead schema, gunakan `recordAuditEvent`/`awcms_audit_events`.
+   trail — tabelnya tidak ada di sini sama sekali; gunakan
+   `recordAuditEvent`/`awcms_audit_events`.
 4. Jangan bikin merge/match tanpa memanggil `assertSameTenant` ulang di
    titik eksekusi, meski RLS "seharusnya" sudah mencegahnya.
 5. Jangan tambah CHECK enum peran bisnis ke `relationship_type` atau
    tabel lain di modul ini.
-6. Kalau menelusuri sejarah "kapan RLS FORCE mulai berlaku" untuk tabel
-   migration 003, jawabannya migration 013 — bukan 059 (kesalahan draft
-   PR #777, sudah dikoreksi di README, jangan diulang di dokumen lain).
+6. Kalau menelusuri "kapan RLS FORCE mulai berlaku" untuk tabel `sql/003`
+   **di repo ini**, jawabannya `sql/017` (Issue #139). Nomor 013/059 yang
+   beredar di dokumen warisan adalah penomoran awcms-mini.
+7. **Jangan perlakukan §bertanda [#748 — mini] sebagai kode yang ada.**
+   Verifikasi ke `src/modules/profile-identity/` + `sql/003` dulu sebelum
+   memanggil/mengklaim apa pun dari sana.
 
 ## Verifikasi
 
-`tests/integration/profile-identity.integration.test.ts` — termasuk test
-cross-tenant guard yang sengaja bypass RLS (koneksi privileged) untuk
-membuktikan lapis kedua (`assertSameTenant`) benar-benar independen dari
-RLS, bukan cuma "seharusnya tidak pernah terjadi". Jalankan `bun test`
-dengan `DATABASE_URL` — `bun run check` tanpa `DATABASE_URL` melewatkan
-test integration secara diam-diam.
+Repo ini **belum punya `tests/integration/` sama sekali** (Issue #154) —
+termasuk `profile-identity.integration.test.ts` yang disebut di atas; itu
+milik mini. Yang ada di sini: unit test `tests/*.test.ts` (jalankan
+`bun test`). Saat mem-port lapis #748, test cross-tenant guard yang sengaja
+bypass RLS (koneksi privileged) adalah bagian WAJIB dari port — bukan
+opsional — karena itulah satu-satunya yang membuktikan lapis kedua
+independen dari RLS.
 
-## Belum tersedia (di luar scope Issue #748)
+## Belum tersedia di repo ini
 
-Endpoint reveal identifier mentah (raw value), un-merge otomatis,
+Seluruh lapis #748 (lihat §STATUS), plus — di mini pun sengaja di luar
+scope — endpoint reveal identifier mentah (raw value), un-merge otomatis,
 pencarian full-text (masih substring `ILIKE`), dan business role/entitas
-domain (customer/supplier/dll.) — semuanya sengaja di luar scope.
+domain (customer/supplier/dll.).

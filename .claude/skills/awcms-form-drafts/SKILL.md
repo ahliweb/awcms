@@ -1,9 +1,19 @@
 ---
 name: awcms-form-drafts
-description: Simpan progress form/wizard di server (resume lintas sesi/perangkat) memakai API generik form-drafts AWCMS. Gunakan saat wizard-client.ts's in-memory state saja tidak cukup — user perlu melanjutkan draft setelah menutup tab, ganti perangkat, atau payload draft mengandung lebih dari UX scratch state murni. Sesuai src/modules/form-drafts/README.md.
+description: BACAAN SAJA — modul form_drafts BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `form-drafts`, tidak ada migration-nya di `sql/`). Rujukan `src/modules/form-drafts`/tabel/API di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Untuk wizard multi-step yang benar-benar ada di repo ini, pakai skill `awcms-wizard-form` (client-only state).
 ---
 
 # AWCMS — Server-Side Form Draft Persistence
+
+> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
+> `form_drafts` ada di **awcms-mini**, bukan di sini: `ls src/modules` TIDAK
+> memuat `form-drafts`, dan `sql/` tidak memuat migration-nya. Semua rujukan
+> `src/modules/form-drafts/...`, tabel `awcms_form_drafts`, dan
+> `src/pages/admin/examples/wizard.astro` di bawah adalah artefak
+> awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Pakai
+> skill ini sebagai spesifikasi target port (via `awcms-port-from-mini`),
+> bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
+> mengklaim apa pun ada.
 
 Ikuti `src/modules/form-drafts/README.md` (modul) dan
 `docs/awcms/examples/wizard-form-pattern.md` §Server-side draft

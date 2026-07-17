@@ -1,9 +1,23 @@
 ---
 name: awcms-idn-admin-regions
-description: Kerjakan bagian mana pun dari epic idn_admin_regions AWCMS (Issue #655-#664, epic #654 — master data wilayah administratif Indonesia dari cahyadsn/wilayah). Gunakan saat menambah/mengubah vendoring source metadata, schema dataset region, parser/normalizer SQL upstream, validation gate, import pipeline, activation/rollback/diff, lookup API, atau admin UI untuk modul `idn_admin_regions`. Merangkum keputusan yang sudah dibuat supaya issue lanjutan tidak mengulang investigasi/kontradiksi.
+description: BACAAN SAJA — modul idn_admin_regions BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `idn-admin-regions`, tidak ada migration-nya di `sql/`). Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #655-#664, epic #654 — master data wilayah administratif Indonesia dari cahyadsn/wilayah). Gunakan saat menambah/mengubah vendoring source metadata, schema dataset region, parser/normalizer SQL upstream, validation gate, import pipeline, activation/rollback/diff, lookup API, atau admin UI untuk modul `idn_admin_regions`. Merangkum keputusan yang sudah dibuat supaya issue lanjutan tidak mengulang investigasi/kontradiksi.
 ---
 
 # AWCMS — Indonesia Administrative Regions (`idn_admin_regions`)
+
+<!-- sql-refs: awcms-mini — modul belum di-port; setiap `sql/NNN` di file ini penomoran awcms-mini, bukan repo ini -->
+
+> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
+> `idn_admin_regions` ada di **awcms-mini**, bukan di sini: `ls src/modules`
+> TIDAK memuat `idn-admin-regions`, dan `sql/` tidak memuat migration-nya.
+> Semua rujukan `src/modules/idn-admin-regions/...`, tabel
+> `awcms_idn_admin_regions_*`, dan `sql/NNN` di bawah adalah artefak
+> awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo ini.
+> Nomor `sql/NNN` memakai penomoran awcms-mini dan akan berubah saat
+> di-port (melanjutkan dari migration terakhir repo ini). Pakai skill ini
+> sebagai spesifikasi target port (via `awcms-port-from-mini`), bukan peta
+> kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum mengklaim
+> apa pun ada.
 
 Epic #654 (Issue #655-#664): master data wilayah administratif Indonesia
 (provinsi/kabupaten-kota/kecamatan/desa-kelurahan) sebagai modul

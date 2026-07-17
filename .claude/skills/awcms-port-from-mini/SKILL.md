@@ -35,8 +35,9 @@ Kalau salah satu dependency modul **belum** ada di awcms → port dependency itu
 ## 3. Migrasi
 
 - Nomor lanjutan (`NNN` = terakhir+1), nama `NNN_awcms_<area>_<desc>.sql`. Konsolidasikan beberapa migrasi mini menjadi bentuk final koheren (fresh DB, tanpa langkah backfill legacy).
-- WAJIB per tabel tenant-scoped: `tenant_id uuid NOT NULL REFERENCES awcms_tenants(id)`, `ENABLE ROW LEVEL SECURITY` + policy `tenant_id = current_setting('app.current_tenant_id')::uuid` (ikuti gaya `sql/005`/`008`/`013`). Index untuk tiap FK, `timestamptz`, `numeric` (bukan float).
-- **DROP blok `GRANT ... TO awcms_worker/awcms_app`** dari mini (role least-privilege belum ada di awcms) — catat di header migrasi. Store idempotensi generik `awcms_idempotency_keys` sudah ada (migrasi 009) — jangan buat ulang.
+- WAJIB per tabel tenant-scoped: `tenant_id uuid NOT NULL REFERENCES awcms_tenants(id)`, `ENABLE ROW LEVEL SECURITY` **+ `FORCE ROW LEVEL SECURITY`** + policy `tenant_id = current_setting('app.current_tenant_id')::uuid` (ikuti gaya `sql/005`/`008`/`013`). `ENABLE` tanpa `FORCE` **inert** selama app connect sebagai owner tabel — itulah gap yang `sql/017` tutup untuk 23 tabel; jangan bikin gap baru. Index untuk tiap FK, `timestamptz`, `numeric` (bukan float).
+- **GRANT**: role `awcms_app` SUDAH ADA sejak `sql/019_awcms_db_role_separation.sql` (Issue #141) — pertahankan/adaptasi `GRANT ... TO awcms_app` dari mini, jangan di-drop lagi. Role **`awcms_worker` TIDAK ada** di sini: DROP blok `GRANT ... TO awcms_worker` (akan gagal jalan) dan catat di header migrasi. Baca header `sql/019` untuk batasannya sebelum menyalin pola grant mini apa pun.
+- Store idempotensi generik `awcms_idempotency_keys` sudah ada (`sql/009`) — jangan buat ulang.
 
 ## 4. Adaptasi kontrak & dependensi
 

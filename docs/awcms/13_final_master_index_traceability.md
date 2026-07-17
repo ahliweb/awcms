@@ -148,7 +148,7 @@ struktur repo NYATA, sehingga mengikuti data real, bukan ilustrasi.
 
 | Modul (`key`)                | Migration                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _(Foundation, lintas-modul)_ | `001_awcms_foundation_schema.sql`, `013_awcms_enforce_rls_least_privilege.sql`, `045_awcms_db_role_separation.sql`                                                                                                                                                                                                                                                                                                                      |
+| _(Foundation, lintas-modul)_ | `001_awcms_foundation_schema.sql`, `017_awcms_enforce_rls_force.sql`, `019_awcms_db_role_separation.sql`                                                                                                                                                                                                                                                                                                                                |
 | `tenant_admin`               | `002_awcms_tenant_office_schema.sql`, `006_awcms_setup_wizard_schema.sql`, `015_awcms_tenant_settings_management_permission_schema.sql`, `016_awcms_tenant_default_locale_english_schema.sql`                                                                                                                                                                                                                                           |
 | `profile_identity`           | `003_awcms_central_profile_management_schema.sql`                                                                                                                                                                                                                                                                                                                                                                                       |
 | `identity_access`            | `004_awcms_identity_login_schema.sql`, `005_awcms_abac_access_control_schema.sql`, `022_awcms_password_reset_schema.sql`, `034_awcms_mfa_totp_schema.sql`, `035_awcms_google_oidc_schema.sql`, `036_awcms_tenant_oidc_sso_schema.sql`, `037_awcms_tenant_oidc_sso_permissions.sql`                                                                                                                                                      |
@@ -169,10 +169,22 @@ struktur repo NYATA, sehingga mengikuti data real, bukan ilustrasi.
 Tiga migration di baris "Foundation, lintas-modul" tidak dipetakan ke
 satu modul karena sifatnya benar-benar lintas-modul: `001` adalah
 bootstrap murni (ledger migrasi + extension Postgres, sebelum modul
-apa pun terdaftar); `013` dan `045` adalah hardening keamanan
-lintas-tabel (RLS enforcement, pemisahan role DB least-privilege) yang
-menyentuh tabel banyak modul sekaligus, bukan schema satu modul — lihat
-`docs/awcms/20_threat_model_security_architecture.md`.
+apa pun terdaftar); `017` dan `019` adalah hardening keamanan
+lintas-tabel (RLS `FORCE` di 23 tabel, lalu role runtime `awcms_app`
+least-privilege + default GUC fail-closed) yang menyentuh tabel banyak
+modul sekaligus, bukan schema satu modul — lihat
+`docs/awcms/20_threat_model_security_architecture.md` dan
+`docs/awcms/18_configuration_env_reference.md` §Model role database.
+
+> **Peringatan akurasi (Issue #155).** Baris `001`/`017`/`019` di atas sudah
+> dicocokkan dengan `sql/` nyata. **Baris modul lain di tabel ini belum**:
+> sebagian besar masih memakai penomoran/penamaan awcms-mini (mis.
+> `045_awcms_db_role_separation.sql` yang dulu tercantum di baris Foundation
+> tidak pernah ada di repo ini — `sql/` berhenti di `019`), sehingga nomor
+> yang tercantum di baris lain bisa menunjuk file yang tidak ada. Sumber
+> kebenaran migration adalah isi direktori `sql/` dan
+> `docs/awcms/repo-inventory.md`, bukan tabel ini, sampai rekonsiliasi
+> menyeluruh dikerjakan.
 
 ## Matrix Modul vs Security Control
 

@@ -10,7 +10,7 @@ menulis ulang idempotency/pooling/observability. Diadaptasi dari
 | Folder           | Isi                                                                                                                                                                                                                                                |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `auth/`          | `password.ts` (argon2id), `session-token.ts` (token buram + hash), `ssr-session.ts` (cookie SSR admin)                                                                                                                                             |
-| `database/`      | `client.ts` (pool per-kind app/worker/setup, `resolvePoolMaxForKind`), `tenant-context.ts` (`withTenant` + RLS), pooling di bawah                                                                                                                  |
+| `database/`      | `client.ts` (pool per-kind app/worker/setup, `resolvePoolMaxForKind`), `tenant-context.ts` (`withTenant` + RLS), pooling di bawah, role DB di bawah                                                                                                |
 | `logging/`       | `logger.ts` (JSON terstruktur + `setLogSink` extension point), `error-sanitizer.ts` (`sanitizeErrorForLog`/`safeErrorDetail`), `error-log.ts` (`logAdminPageError`/`logScriptFailure`), `correlation-response.ts` (propagasi `meta.correlationId`) |
 | `observability/` | `metrics-port.ts` (counter/gauge/histogram port), `in-memory-metrics-port.ts`, `adapters/prometheus-text-adapter.ts`                                                                                                                               |
 | `jobs/`          | `job-runner.ts` (runner cron/worker), `advisory-lock.ts` (koordinasi lintas-proses), `batching.ts`, `retry-classification.ts`                                                                                                                      |
@@ -38,6 +38,22 @@ non-interaktif (mis. laporan/`background_sync`/`maintenance`). Endpoint
 `GET /api/v1/database/pool/health` mengekspos saturasi work-class + state
 circuit breaker + kapasitas pool per-proses (dipakai `bun run db:pool:health`;
 lihat [`docs/awcms/database-pooling.md`](../../docs/awcms/database-pooling.md)).
+
+### Role database di balik `client.ts`
+
+`client.ts` punya tiga _kind_ pool (`app`/`worker`/`setup`) tapi repo ini hanya
+menyediakan **satu** role runtime: `awcms_app`, dibuat
+[`sql/019_awcms_db_role_separation.sql`](../../sql/019_awcms_db_role_separation.sql)
+(bukan superuser, bukan BYPASSRLS, bukan pemilik tabel, DML saja) dengan default
+GUC fail-closed `app.current_tenant_id` = UUID nol — tanpa `withTenant()` hasilnya
+nol baris, bukan error dan bukan data tenant lain. Baru dengan role inilah RLS
+`FORCE` (migration 017) benar-benar menjadi batas keamanan, karena
+SUPERUSER/BYPASSRLS melewati RLS apa pun FORCE-nya.
+
+`WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` **tidak** memetakan ke role
+`awcms_worker`/`awcms_setup` — role itu milik awcms-mini (migration 045-nya) dan
+belum diport. Kosong → fallback ke `DATABASE_URL`. Kind terpisah tetap berguna
+untuk **isolasi pool**. Detail operator: doc 18 §Model role database.
 
 `jobs`/`observability` tersedia sebagai **library** (dengan unit test) namun
 belum ada runner terjadwal maupun endpoint `/metrics`: adapter Prometheus

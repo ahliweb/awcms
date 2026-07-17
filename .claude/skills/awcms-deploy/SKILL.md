@@ -79,6 +79,20 @@ least-privilege, `FORCE ROW LEVEL SECURITY` ditegakkan untuknya. Jangan
 pernah menjalankan aplikasi sebagai superuser/owner — `bun run
 security:readiness` memblokir go-live bila terdeteksi.
 
+**Status konkret di repo ini** (jangan asumsikan lebih dari ini):
+
+- Role `awcms_app` dibuat `sql/019_awcms_db_role_separation.sql` (Issue
+  #141). Ia **tidak dipakai otomatis** — `DATABASE_URL` default masih
+  menunjuk owner migrasi. Deployment WAJIB mengarahkan `DATABASE_URL`
+  runtime ke `awcms_app` secara eksplisit; selama tidak, setiap policy
+  `*_tenant_isolation` inert (superuser/owner melewati RLS meski `FORCE`).
+- **Tidak ada role `awcms_worker`/`awcms_setup`.**
+  `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` adalah seam pool nyata
+  (`src/lib/database/client.ts`) tapi fallback ke `DATABASE_URL` bila
+  kosong — mengarahkannya ke role yang belum ada = `permission denied` di
+  setiap background job. Baca header `sql/019` sebelum menjanjikan
+  pemisahan app/worker ke siapa pun.
+
 ## Rollback
 
 Image immutable (Pola registry) → redeploy tag sebelumnya. **Migration

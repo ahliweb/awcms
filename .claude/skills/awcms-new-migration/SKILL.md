@@ -35,17 +35,21 @@ TRANSACTION;` — `scripts/db-migrate.ts` mengelola transaksi migration
 9. **Tidak** menyimpan password/API key/secret plaintext.
 10. Tabel master/config/draft yang deletable wajib soft delete (`deleted_at`, `deleted_by`, `delete_reason`) + index/partial unique aktif.
 11. Tabel BARU tanpa `tenant_id`/RLS (global, dibaca/ditulis lintas
-    tenant — mis. katalog konfigurasi, registry): cukup dokumentasikan
-    alasannya di header migration. Base ini **belum** punya role
-    least-privilege (`awcms_app`/`awcms_worker`) maupun
-    `scripts/security-readiness.ts` — tidak ada `CREATE ROLE`/`GRANT` di
-    seluruh `sql/`, dan aplikasi connect sebagai pemilik migration via
-    `DATABASE_URL`. Jadi JANGAN tulis blok `GRANT ... TO awcms_app` (akan
-    gagal: role-nya tidak ada), dan jangan mendaftarkan tabel ke
-    `RLS_FREE_TABLES`/`ALLOWED_GLOBAL_TABLE_GRANTS` (script-nya tidak ada
-    di sini — itu masih milik awcms-mini). Keduanya sedang dilacak: role
-    least-privilege di Issue #141, port `security-readiness.ts` di Issue
-    #142. Perbarui butir ini begitu keduanya mendarat.
+    tenant — mis. katalog konfigurasi, registry): dokumentasikan alasannya
+    di header migration, lalu daftarkan nama tabelnya ke `RLS_FREE_TABLES`
+    di `scripts/security-readiness.ts` — kalau tidak, `checkRlsEnabled`
+    menganggapnya tabel tenant-scoped tanpa RLS dan **memblokir go-live**.
+    (`ALLOWED_GLOBAL_TABLE_GRANTS` **tidak ada** di script ini — itu masih
+    milik awcms-mini; jangan cari/daftarkan ke sana.)
+12. **JANGAN tulis blok `GRANT` per tabel.** Role `awcms_app` ada sejak
+    `sql/019_awcms_db_role_separation.sql` (Issue #141), dan 019 memasang
+    `ALTER DEFAULT PRIVILEGES` sehingga tabel/sequence baru yang dibuat
+    pemilik migration **otomatis** ter-grant ke `awcms_app` — GRANT manual
+    murni derau. Yang TIDAK otomatis: `FUNCTION` (lihat §SECURITY DEFINER)
+    dan objek yang dibuat role LAIN. Role **`awcms_worker`/`awcms_setup`
+    tidak ada** — `GRANT ... TO awcms_worker` yang disalin dari mini akan
+    gagal jalan. Baca header `sql/019`: ia sengaja bukan port penuh
+    pemisahan app/worker mini.
 
 ## Template
 
@@ -77,7 +81,7 @@ CREATE INDEX IF NOT EXISTS awcms_<name>_active_idx
 -- Konvensi nama index: SUFFIX `_idx` (unique: `_uidx` atau `_key`), bukan
 -- prefix `idx_` — mis. sql/013, sql/015:
 -- `awcms_workflow_task_assignments_task_idx`,
--- `awcms_reporting_projection_state_tenant_idx`.
+-- `awcms_reporting_export_runs_scheduled_idx`.
 
 ALTER TABLE awcms_<name> ENABLE ROW LEVEL SECURITY;
 ALTER TABLE awcms_<name> FORCE ROW LEVEL SECURITY;
@@ -138,7 +142,9 @@ rolsuper FROM pg_roles`) — keamanan mekanisme ini datang dari situ, bukan
    benar-benar dibutuhkan.
 4. `REVOKE ALL ... FROM PUBLIC` lalu `GRANT EXECUTE` eksplisit ke role
    spesifik (mis. `awcms_app`) — ini **tidak** otomatis tercakup
-   `ALTER DEFAULT PRIVILEGES` migration 013 (itu hanya tabel/sequence).
+   `ALTER DEFAULT PRIVILEGES` di `sql/019_awcms_db_role_separation.sql`
+   (itu hanya `TABLES`/`SEQUENCES`, bukan `FUNCTIONS`). Nomor 013 di
+   awcms-mini; di repo ini default-privilege awcms_app dipasang `sql/019`.
 5. `SET search_path = public, pg_temp` di definisi fungsi.
 6. `STABLE`/`IMMUTABLE` untuk fungsi read-only, bukan `VOLATILE` default.
 7. Verifikasi empiris terhadap DB yang berjalan (bukan asumsi dari

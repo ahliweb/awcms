@@ -1,9 +1,23 @@
 ---
 name: awcms-tenant-domain-routing
-description: Kerjakan bagian mana pun dari epic online public tenant routing & tenant domain management AWCMS (Issue #556-#567, epic #555). Gunakan saat menambah/mengubah PUBLIC_* env config, skema/API/UI tenant domain, resolver tenant berbasis host, rute publik `/news`, module presets, atau adapter Cloudflare DNS. Merangkum keputusan yang sudah dibuat supaya issue lanjutan tidak mengulang/kontradiksi.
+description: BACAAN SAJA — modul tenant_domain routing BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuatnya, tidak ada migration/fungsi lookup-nya di `sql/`). Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Routing publik yang ADA di repo ini `/blog/{tenantCode}` (ADR-0009). Konteks port (Issue #556-#567, epic #555). Gunakan saat menambah/mengubah PUBLIC_* env config, skema/API/UI tenant domain, resolver tenant berbasis host, rute publik `/news`, module presets, atau adapter Cloudflare DNS. Merangkum keputusan yang sudah dibuat supaya issue lanjutan tidak mengulang/kontradiksi.
 ---
 
 # AWCMS — Online Public Tenant Routing & Tenant Domain Management
+
+<!-- sql-refs: awcms-mini — modul belum di-port; setiap `sql/NNN` di file ini penomoran awcms-mini, bukan repo ini -->
+
+> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
+> `tenant_domain` routing ada di **awcms-mini**, bukan di sini:
+> `ls src/modules` TIDAK memuatnya, dan `sql/` tidak memuat migration-nya
+> (termasuk fungsi `SECURITY DEFINER` lookup host→tenant). Semua rujukan
+> `src/modules/...`, tabel `awcms_tenant_domain*`, dan `sql/NNN` di bawah
+> adalah artefak awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di
+> repo ini. Nomor `sql/NNN` memakai penomoran awcms-mini dan akan berubah
+> saat di-port (melanjutkan dari migration terakhir repo ini). Pakai skill
+> ini sebagai spesifikasi target port (via `awcms-port-from-mini`), bukan
+> peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
+> mengklaim apa pun ada.
 
 Epic #555 menambah **mode routing publik online-primary** (domain/subdomain
 → tenant, tanpa perlu `tenantCode` di path) sambil **mempertahankan**

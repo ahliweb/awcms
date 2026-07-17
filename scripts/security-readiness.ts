@@ -1,0 +1,1027 @@
+/**
+ * security-readiness.ts — `bun run security:readiness`.
+ *
+ * Issue #142. Ported from awcms-mini's own `scripts/security-readiness.ts`
+ * and adapted to THIS repo's real surface (no tax/CRM/AI/POS/analytics/social
+ * modules here, no `docker-compose.yml`, no per-area `checkXxxConfig`
+ * exports in `scripts/validate-env.ts`). Runs a fixed list of named security
+ * checks against the REAL codebase/database/environment — every check below
+ * is backed by a real signal (a DB query, a grep over tracked source files,
+ * a call into a real domain function, or an env var read). None of them are
+ * hardcoded to "pass".
+ *
+ * ## Why this script exists (the bug it is built to catch)
+ *
+ * Migrations 002-008 and 010-012 shipped 23 tenant-scoped tables with only
+ * `ENABLE ROW LEVEL SECURITY` and never `FORCE` — PostgreSQL lets a table's
+ * OWNER bypass RLS unless `FORCE` is set, and this app connects as the
+ * migration owner. So `awcms_*_tenant_isolation` policies were never
+ * evaluated: RLS was inert for two years' worth of migrations and NOT ONE
+ * check caught it (found by manual audit, fixed by `sql/017`). The
+ * `"RLS enabled AND forced on tenant-scoped tables"` check below exists
+ * precisely so that class of regression fails loudly the next time: it
+ * requires `relforcerowsecurity`, not just `relrowsecurity`. Its companion
+ * `"App DB connection role does not bypass RLS"` closes the other half —
+ * `FORCE` still does nothing against a SUPERUSER/BYPASSRLS connection role.
+ *
+ * ## Gate rule
+ *
+ * Any `critical` check with `status: "fail"` blocks go-live (non-zero exit
+ * code). `warning`/`info` findings are printed but never block.
+ *
+ * ## Not part of `bun run check`
+ *
+ * Deliberately: the DB-backed checks need a real, migrated database, and
+ * `.github/workflows/ci.yml` has no Postgres service. This is an operator/
+ * go-live command (run it with the APP's `DATABASE_URL`, not a privileged
+ * migration/superuser URL — see `checkAppDbUserNotSuperuser`), and it is
+ * wired into the `logging` module's job descriptor list, not into the
+ * per-commit lint gate. `OUT_OF_SCOPE_ITEMS` below records the checklist
+ * items that genuinely cannot be automated from this repo alone, with a
+ * reason each — never silently dropped.
+ */
+import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+
+import { getDatabaseClient } from "../src/lib/database/client";
+import { hashPassword } from "../src/lib/auth/password";
+import { evaluateAccess } from "../src/modules/identity-access/domain/access-control";
+import { evaluateLoginAttempt } from "../src/modules/identity-access/domain/login-policy";
+import { checkRateLimit } from "../src/lib/security/rate-limit";
+import { buildSecurityHeaders } from "../src/lib/security/security-headers";
+import { validateEnv } from "./validate-env";
+
+export type CheckSeverity = "critical" | "warning" | "info";
+export type CheckStatus = "pass" | "fail";
+
+export type SecurityCheckResult = {
+  name: string;
+  severity: CheckSeverity;
+  status: CheckStatus;
+  evidence: string;
+};
+
+export type OutOfScopeItem = {
+  name: string;
+  reason: string;
+};
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// ---------------------------------------------------------------------------
+// 1. No hardcoded secret (critical)
+// ---------------------------------------------------------------------------
+
+/**
+ * Heuristic, not a full secret-scanner. It flags lines that look like
+ * `<name containing password/secret/apiKey/token> = "<literal>"` (or the
+ * object-literal form `name: "<literal>"`), where:
+ *
+ * - the line does NOT mention `process.env` (a fallback like
+ *   `token: process.env.TOKEN ?? "..."` reads from env, not hardcoded);
+ * - the assignment is not a member-expression write like `url.password =
+ *   "****"` (excluded by requiring the char before the name not be `.`) —
+ *   `scripts/db-migrate.ts` masks a URL password with the literal `"****"`,
+ *   which is a redaction placeholder, not a secret;
+ * - the literal isn't an obvious placeholder (`change-me`, `xxx`, `***`,
+ *   `...`, `redacted`, `todo`) or an i18n/error-code lookup key.
+ *
+ * Known limitations (documented, not silently hidden):
+ * - Cannot see through string concatenation/template interpolation.
+ * - A variable whose name merely contains one of the four keywords (e.g. a
+ *   `tokenType = "Bearer"` constant) would false-positive. No such case
+ *   exists in this repo today (verified by running this script).
+ * - Only scans `src/`, `scripts/`, and root config files. `tests/` is
+ *   excluded so test fixtures never count as findings.
+ */
+const HARDCODED_SECRET_PATTERN =
+  /(^|[^.\w])([A-Za-z0-9_$]*(?:password|secret|api[_-]?key|token)[A-Za-z0-9_$]*)\s*(?<![=!<>])[:=](?!=)\s*["'`]([^"'`]{3,})["'`]/i;
+
+const PLACEHOLDER_VALUE_PATTERN = /^(\*+|x+|change-?me|redacted|todo|\.{3})$/i;
+
+/**
+ * An i18n/error-code lookup key (e.g. `"error.token_expired"`) — a lowercase
+ * dot-namespaced identifier with no entropy. Real secrets are never valid
+ * instances of this shape: they are read from `process.env` (already
+ * excluded above) or are high-entropy opaque strings.
+ */
+const I18N_KEY_LIKE_VALUE_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
+
+/**
+ * A constant holding the NAME of an env var, not a secret — e.g.
+ * `const IP_HASH_SECRET_ENV = "AUTH_IP_HASH_SECRET";`
+ * (`src/lib/security/client-fingerprint.ts`). Found live by running this
+ * script against this repo on the very first run: the variable name contains
+ * "SECRET" (matching `HARDCODED_SECRET_PATTERN`'s name group) but the value
+ * is the identifier the code later looks up in `process.env` — the line
+ * itself never mentions `process.env`, so the existing exclusion misses it.
+ * Without this, `bun run security:readiness` reports a false `critical` on
+ * unmodified, already-merged, genuinely-secure code and blocks go-live for
+ * no reason — the exact way a gate teaches people to ignore it.
+ *
+ * Deliberately narrow: BOTH the variable name must end in `_ENV` AND the
+ * value must be SCREAMING_SNAKE_CASE with at least one underscore (the shape
+ * of an env var name). A real leaked credential (`API_SECRET =
+ * "AKIAIOSFODNN7EXAMPLE"`) satisfies neither and still fires.
+ */
+const ENV_VAR_NAME_HOLDER_NAME_PATTERN = /_ENV$/;
+const ENV_VAR_NAME_LIKE_VALUE_PATTERN = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
+
+const SECRET_SCAN_PATHSPECS = [
+  "src/**/*.ts",
+  "src/**/*.astro",
+  "src/**/*.mjs",
+  "scripts/**/*.ts",
+  "scripts/**/*.mjs",
+  "astro.config.mjs",
+  "package.json"
+];
+
+// This script's own file is excluded: it legitimately declares constants
+// whose *names* contain "secret" (the sync placeholder below) while holding
+// known-safe placeholder strings. A secret scanner should not flag itself.
+const SECRET_SCAN_SELF_EXCLUDE = "scripts/security-readiness.ts";
+
+export function scanLineForHardcodedSecret(line: string): string | null {
+  if (line.includes("process.env")) {
+    return null;
+  }
+
+  const match = HARDCODED_SECRET_PATTERN.exec(line);
+
+  if (!match) {
+    return null;
+  }
+
+  const name = match[2];
+  const value = match[3];
+
+  if (
+    !name ||
+    !value ||
+    PLACEHOLDER_VALUE_PATTERN.test(value) ||
+    I18N_KEY_LIKE_VALUE_PATTERN.test(value) ||
+    (ENV_VAR_NAME_HOLDER_NAME_PATTERN.test(name) &&
+      ENV_VAR_NAME_LIKE_VALUE_PATTERN.test(value))
+  ) {
+    return null;
+  }
+
+  return name;
+}
+
+export async function checkNoHardcodedSecret(
+  rootDir = process.cwd()
+): Promise<SecurityCheckResult> {
+  const name = "No hardcoded secret";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    const trackedOutput = execFileSync(
+      "git",
+      ["ls-files", ...SECRET_SCAN_PATHSPECS],
+      { cwd: rootDir, encoding: "utf8" }
+    );
+    const trackedFiles = trackedOutput
+      .split("\n")
+      .filter(Boolean)
+      .filter((file) => file !== SECRET_SCAN_SELF_EXCLUDE);
+
+    const findings: string[] = [];
+
+    for (const file of trackedFiles) {
+      const content = await readFile(path.join(rootDir, file), "utf8");
+      const lines = content.split("\n");
+
+      lines.forEach((line, index) => {
+        const hit = scanLineForHardcodedSecret(line);
+
+        if (hit) {
+          findings.push(`${file}:${index + 1} (variable "${hit}")`);
+        }
+      });
+    }
+
+    if (findings.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `Suspicious literal assigned to a secret-like variable: ${findings.join("; ")}.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `Scanned ${trackedFiles.length} tracked file(s) under src/, scripts/, and config — no literal secret-like assignment found (heuristic regex, see source comment for limits).`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not run the secret scan: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. .env not tracked by git (critical)
+// ---------------------------------------------------------------------------
+
+export function checkEnvNotTracked(
+  rootDir = process.cwd()
+): SecurityCheckResult {
+  const name = ".env not tracked by git";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    const output = execFileSync("git", ["ls-files"], {
+      cwd: rootDir,
+      encoding: "utf8"
+    });
+    const trackedEnvFiles = output
+      .split("\n")
+      .filter(Boolean)
+      .filter((file) => file === ".env" || file.endsWith("/.env"));
+
+    if (trackedEnvFiles.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `.env file(s) are tracked by git: ${trackedEnvFiles.join(", ")}.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence:
+        "git ls-files does not include any .env file (only .env.example is tracked)."
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not run "git ls-files": ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3. Password hashing is modern (argon2id) (critical)
+// ---------------------------------------------------------------------------
+
+/**
+ * Deliberately does NOT grep `src/lib/auth/password.ts` for the literal
+ * `"argon2id"` — that string does not appear there. `hashPassword` calls
+ * `Bun.password.hash(password)` with no explicit algorithm, relying on Bun's
+ * documented `argon2id` default. A literal grep would report a false "fail"
+ * against secure, working code. This calls the real function and inspects
+ * the hash it actually produces — a stronger signal, and immune to Bun
+ * changing its default (which grepping would also miss).
+ */
+export async function checkPasswordHashingModern(): Promise<SecurityCheckResult> {
+  const name = "Password hashing is modern (argon2id)";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    const hash = await hashPassword("security-readiness-synthetic-check");
+
+    if (hash.startsWith("$argon2id$")) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence:
+          "hashPassword() produced a $argon2id$ hash (Bun.password.hash's documented default algorithm)."
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `hashPassword() produced a hash that is not argon2id: "${hash.slice(0, 16)}...".`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not call hashPassword(): ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Login lockout is implemented (critical)
+// ---------------------------------------------------------------------------
+
+export function checkLoginLockoutImplemented(): SecurityCheckResult {
+  const name = "Login lockout is implemented";
+  const severity: CheckSeverity = "critical";
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const maxFailedAttempts = 5;
+
+  // Synthetic "5th consecutive failed attempt": identity already has 4
+  // recorded failures; one more invalid password attempt should push the
+  // count to 5 (== maxFailedAttempts) and trigger a lockout.
+  const result = evaluateLoginAttempt({
+    now,
+    tenantStatus: "active",
+    identity: { status: "active", failedLoginCount: 4, lockedUntil: null },
+    tenantUserStatus: "active",
+    passwordMatches: false,
+    maxFailedAttempts,
+    lockoutMinutes: 15
+  });
+
+  const lockedOut =
+    result.outcome === "deny" &&
+    result.failedLoginCount === maxFailedAttempts &&
+    result.lockedUntil instanceof Date;
+
+  if (lockedOut) {
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence:
+        'evaluateLoginAttempt() with 5 consecutive failed attempts (maxFailedAttempts=5) returns outcome="deny" with a lockedUntil timestamp.'
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "fail",
+    evidence: `evaluateLoginAttempt() did not lock out at the configured threshold; result=${JSON.stringify(result)}.`
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 5. RLS enabled AND forced on tenant-scoped tables (critical) — Issue #142
+// ---------------------------------------------------------------------------
+
+/**
+ * Tables that are intentionally RLS-free because they are not tenant-scoped
+ * (no per-tenant row ownership) — derived by reading `sql/*.sql` directly,
+ * not guessed. Cross-checked against the migrations: these are exactly the
+ * `awcms_%` tables that are `CREATE TABLE`d but never
+ * `ENABLE ROW LEVEL SECURITY`d.
+ *
+ * - `awcms_schema_migrations` (sql/001) — migration bookkeeping.
+ * - `awcms_modules` (sql/008) — global module registry, no `tenant_id`.
+ * - `awcms_module_dependencies`, `awcms_module_navigation`,
+ *   `awcms_module_jobs`, `awcms_module_health_checks` (sql/008) —
+ *   code-derived module registry metadata (dependency graph, admin nav,
+ *   job/command catalog, instance-level health check history), synced from
+ *   trusted per-module descriptors (each module's own `module.ts`), never
+ *   tenant-writable.
+ * - `awcms_tenants` (sql/002) — the tenant table itself; each row IS a
+ *   tenant, it does not belong to one. `sql/017`'s header and
+ *   `src/lib/jobs/batching.ts` both rely on this being RLS-free.
+ * - `awcms_permissions` (sql/005) — global `module.activity.action`
+ *   permission catalog, shared by every tenant.
+ * - `awcms_setup_state` (sql/006) — global singleton setup lock that exists
+ *   before any tenant does.
+ *
+ * Anything NOT in this set that matches `awcms_%` is treated as
+ * tenant-scoped and MUST have both `relrowsecurity` and
+ * `relforcerowsecurity`. That default-deny direction is the point: a new
+ * migration adding a tenant table with `ENABLE` but no `FORCE` fails this
+ * check without anyone having to remember to register it anywhere. A new
+ * genuinely-global table is the case that requires a deliberate edit here,
+ * with a reason — which is the correct place to force that conversation.
+ */
+const RLS_FREE_TABLES = new Set([
+  "awcms_schema_migrations",
+  "awcms_modules",
+  "awcms_module_dependencies",
+  "awcms_module_navigation",
+  "awcms_module_jobs",
+  "awcms_module_health_checks",
+  "awcms_tenants",
+  "awcms_permissions",
+  "awcms_setup_state"
+]);
+
+type RlsRow = {
+  relname: string;
+  relrowsecurity: boolean;
+  relforcerowsecurity: boolean;
+};
+
+/**
+ * THE check this issue exists for. `relrowsecurity` alone (what migrations
+ * 002-008/010-012 set) is NOT enforcement: PostgreSQL exempts a table's
+ * owner from RLS unless `relforcerowsecurity` is also set, and this app
+ * connects as the migration owner by default. Requiring BOTH flags is the
+ * difference between a policy that runs and a policy that is decorative.
+ *
+ * `relkind IN ('r', 'p')` — ordinary AND partitioned tables. There is no
+ * partitioned table in this repo today; including `'p'` costs nothing and
+ * means a future partitioned high-volume log table (an obvious candidate:
+ * `awcms_abac_decision_logs`) cannot slip past this check by being a
+ * different relkind. Note that RLS flags on a partitioned parent are what
+ * matter — Postgres applies the parent's policies to partition access.
+ */
+export async function checkRlsEnabled(): Promise<SecurityCheckResult> {
+  const name = "RLS enabled AND forced on tenant-scoped tables";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const rows = (await sql`
+      SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname LIKE 'awcms\\_%' AND c.relkind IN ('r', 'p')
+        AND n.nspname = current_schema()
+      ORDER BY c.relname
+    `) as RlsRow[];
+
+    if (rows.length === 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence:
+          "No awcms_% tables found in pg_class — has `bun run db:migrate` been run against this database?"
+      };
+    }
+
+    const tenantScoped = rows.filter(
+      (row) => !RLS_FREE_TABLES.has(row.relname)
+    );
+    const notEnforced = tenantScoped.filter(
+      (row) => !row.relrowsecurity || !row.relforcerowsecurity
+    );
+    const excludedFound = [...RLS_FREE_TABLES].filter((table) =>
+      rows.some((row) => row.relname === table)
+    );
+
+    if (notEnforced.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `Tenant-scoped table(s) not fully enforced (need relrowsecurity AND relforcerowsecurity — ENABLE without FORCE leaves RLS inert for the table owner, see sql/017): ${notEnforced
+          .map(
+            (row) =>
+              `${row.relname}(rls=${row.relrowsecurity},force=${row.relforcerowsecurity})`
+          )
+          .join(", ")}.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `${tenantScoped.length} tenant-scoped table(s) all have relrowsecurity=true AND relforcerowsecurity=true. Excluded as documented RLS-free (non-tenant-scoped): ${excludedFound.join(", ")}.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not connect to the database to verify RLS: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 6. App DB connection role does not bypass RLS (critical) — Issue #142
+// ---------------------------------------------------------------------------
+
+/**
+ * The other half of the RLS gate. `FORCE ROW LEVEL SECURITY` still does not
+ * apply to a SUPERUSER or a role with BYPASSRLS — so if the app's own
+ * connection role is either, every policy on every table is skipped and
+ * `checkRlsEnabled` passing above means nothing. This inspects the role of
+ * the CURRENT connection (`DATABASE_URL`), which is the app's real posture:
+ * run `security:readiness` with the app's `DATABASE_URL`, not a privileged
+ * migration/superuser URL, or the result is meaningless.
+ */
+export async function checkAppDbUserNotSuperuser(): Promise<SecurityCheckResult> {
+  const name = "App DB connection role does not bypass RLS";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const rows = (await sql`
+      SELECT rolname, rolsuper, rolbypassrls
+      FROM pg_roles WHERE rolname = current_user
+    `) as { rolname: string; rolsuper: boolean; rolbypassrls: boolean }[];
+    const role = rows[0];
+
+    if (!role) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: "Could not resolve the current connection role."
+      };
+    }
+
+    if (role.rolsuper || role.rolbypassrls) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `The app connects as "${role.rolname}" which is ${role.rolsuper ? "a SUPERUSER" : "BYPASSRLS"} — it bypasses RLS entirely regardless of FORCE, so tenant isolation is not enforced at the database. Connect as a least-privilege role instead (see the least-privilege role work tracked by Issue #141).`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `The app connects as "${role.rolname}" (rolsuper=false, rolbypassrls=false) — RLS policies are enforced for this role.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the connection role: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Dedicated least-privilege runtime role (warning) — Issue #141 in flight
+// ---------------------------------------------------------------------------
+
+const LEAST_PRIVILEGE_APP_ROLE = "awcms_app";
+
+/**
+ * `warning`, not `critical`, ON PURPOSE — and this severity is expected to
+ * be revisited exactly once.
+ *
+ * `sql/017`'s header states the split: closing the table-owner bypass was
+ * part 1; a least-privilege `awcms_app` role is part 2, deferred because
+ * introducing a role is a deployment-affecting change. Issue #141 adds that
+ * role (`sql/019_awcms_db_role_separation.sql`, `CREATE ROLE awcms_app
+ * NOLOGIN` + grants). This check works either side of that line by design:
+ * a database migrated BEFORE 019 legitimately has no such role, and failing
+ * `critical` there would block go-live for a state that is merely
+ * un-migrated rather than insecure — the gate would be crying wolf, which is
+ * how gates get ignored or disabled. What it buys meanwhile: the gap is
+ * reported loudly and by name instead of being invisible, which was the
+ * whole complaint behind #142.
+ *
+ * Promote to `critical` once 019 has landed AND deployments have been
+ * migrated onto it.
+ *
+ * Note this check is about the role EXISTING in the cluster, which is a
+ * weaker statement than "the app actually connects as it" — that stronger
+ * property is what `checkAppDbUserNotSuperuser` above already verifies
+ * independently, and it is `critical` today.
+ */
+export async function checkLeastPrivilegeRoleProvisioned(): Promise<SecurityCheckResult> {
+  const name = "Dedicated least-privilege app DB role is provisioned";
+  const severity: CheckSeverity = "warning";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const rows = (await sql`
+      SELECT rolname, rolsuper, rolbypassrls, rolcanlogin
+      FROM pg_roles WHERE rolname = ${LEAST_PRIVILEGE_APP_ROLE}
+    `) as {
+      rolname: string;
+      rolsuper: boolean;
+      rolbypassrls: boolean;
+      rolcanlogin: boolean;
+    }[];
+    const role = rows[0];
+
+    if (!role) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" does not exist in this cluster. Expected until Issue #141 (least-privilege DB role) has landed AND this database has been migrated — reported, not blocking. Today the app connects as the migration owner, so tenant isolation rests on FORCE RLS (sql/017) alone, with no defense left if a future change adds BYPASSRLS/SUPERUSER to that owner.`
+      };
+    }
+
+    if (role.rolsuper || role.rolbypassrls) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" exists but is ${role.rolsuper ? "a SUPERUSER" : "BYPASSRLS"} — it is not least-privilege and would bypass every RLS policy.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" exists (rolsuper=false, rolbypassrls=false, rolcanlogin=${role.rolcanlogin}). Whether the app actually CONNECTS as it is verified separately by "App DB connection role does not bypass RLS".`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify the least-privilege role: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8. ABAC default-deny works (critical)
+// ---------------------------------------------------------------------------
+
+export function checkAbacDefaultDeny(): SecurityCheckResult {
+  const name = "ABAC default-deny works";
+  const severity: CheckSeverity = "critical";
+
+  const decision = evaluateAccess(
+    {
+      tenantId: "00000000-0000-0000-0000-000000000000",
+      tenantUserId: "00000000-0000-0000-0000-0000000000aa",
+      identityId: "00000000-0000-0000-0000-0000000000bb",
+      roles: []
+    },
+    {
+      moduleKey: "identity_access",
+      activityCode: "user_management",
+      action: "read"
+    },
+    new Set()
+  );
+
+  if (decision.allowed === false && decision.matchedPolicy === "default_deny") {
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence:
+        'evaluateAccess() with an empty granted-permission set returns allowed=false (matchedPolicy="default_deny").'
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "fail",
+    evidence: `evaluateAccess() with an empty granted-permission set unexpectedly allowed access: ${JSON.stringify(decision)}.`
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 9. Audit log table exists and reachable (critical)
+// ---------------------------------------------------------------------------
+
+export async function checkAuditLogTableReachable(): Promise<SecurityCheckResult> {
+  const name = "Audit log table exists and reachable";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const rows = (await sql`
+      SELECT to_regclass('awcms_audit_events') AS to_regclass
+    `) as { to_regclass: string | null }[];
+    const value = rows[0]?.to_regclass ?? null;
+
+    if (value) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence: `to_regclass('awcms_audit_events') = ${value}.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence:
+        "to_regclass('awcms_audit_events') returned null — the audit table does not exist."
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not query the database for the audit table: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 10. Environment configuration is valid (critical)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reuses `validateEnv` from `scripts/validate-env.ts` VERBATIM rather than
+ * re-deriving any env rule a second, divergent way. Unlike mini — whose
+ * `validate-env.ts` exports a per-area `checkEmailConfig`/`checkMfaConfig`/
+ * ... family this file wraps one-by-one — this repo's `validate-env.ts`
+ * exports a single `validateEnv(env): string[]` (a list of problems). So
+ * this is ONE check, not a dozen; splitting it would mean re-implementing
+ * that file's internals here, which is exactly what the "don't diverge"
+ * rule forbids.
+ */
+export function checkEnvConfigValid(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name = "Environment configuration is valid";
+  const severity: CheckSeverity = "critical";
+  const problems = validateEnv(env);
+
+  if (problems.length > 0) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `validate-env reported ${problems.length} problem(s): ${problems.join("; ")}.`
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence:
+      "validateEnv() (the same rules `bun run config:validate` enforces) reports no problem for the current environment."
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 11. Sync HMAC secret is not left at its documented default (warning/info)
+// ---------------------------------------------------------------------------
+
+const SYNC_SECRET_PLACEHOLDER = "change-me"; // literal default from .env.example
+
+export function checkSyncHmacSecretNotDefault(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name = "Sync HMAC secret is not left at its documented default";
+
+  if (env.AWCMS_SYNC_ENABLED !== "true") {
+    return {
+      name,
+      severity: "info",
+      status: "pass",
+      evidence: `AWCMS_SYNC_ENABLED is not "true" — sync is disabled by design, so its HMAC secret is not a live risk (not checked).`
+    };
+  }
+
+  const secret = env.AWCMS_SYNC_HMAC_SECRET;
+
+  if (!secret || secret === SYNC_SECRET_PLACEHOLDER) {
+    return {
+      name,
+      severity: "warning",
+      status: "fail",
+      evidence: `AWCMS_SYNC_ENABLED=true but AWCMS_SYNC_HMAC_SECRET is unset or still the documented placeholder ("${SYNC_SECRET_PLACEHOLDER}").`
+    };
+  }
+
+  return {
+    name,
+    severity: "warning",
+    status: "pass",
+    evidence:
+      "AWCMS_SYNC_ENABLED=true and AWCMS_SYNC_HMAC_SECRET has been changed from its documented placeholder."
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 12. Login rate limiting is implemented (warning)
+// ---------------------------------------------------------------------------
+
+export function checkLoginRateLimitImplemented(): SecurityCheckResult {
+  const name = "Login rate limiting is implemented (source-scoped volumetric)";
+  const severity: CheckSeverity = "warning";
+  const key = `security-readiness-synthetic-rate-limit-check-${crypto.randomUUID()}`;
+  const config = { maxAttempts: 3, windowMs: 60_000 };
+  const now = 1_000_000;
+
+  checkRateLimit(key, config, now);
+  checkRateLimit(key, config, now + 1);
+  checkRateLimit(key, config, now + 2);
+  const fourth = checkRateLimit(key, config, now + 3);
+
+  if (!fourth.allowed) {
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `checkRateLimit() with maxAttempts=3 denies the 4th call within the same window (retryAfterSec=${fourth.retryAfterSec}).`
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "fail",
+    evidence: `checkRateLimit() did not deny the 4th call after exceeding maxAttempts=3; result=${JSON.stringify(fourth)}.`
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 13. Security response headers are built (warning)
+// ---------------------------------------------------------------------------
+
+const REQUIRED_SECURITY_HEADERS = [
+  "Content-Security-Policy",
+  "X-Content-Type-Options",
+  "X-Frame-Options",
+  "Referrer-Policy"
+];
+
+/**
+ * Calls the real `buildSecurityHeaders` (which `src/middleware.ts` applies to
+ * every response) rather than `fetch`ing a running server the way mini's
+ * equivalent does. This repo is API-only — it has no `/login` page to GET,
+ * and a readiness gate that silently downgrades to "not checked — no server
+ * reachable" whenever it is run without a live server (mini's behavior) is a
+ * check that mostly does not run. Calling the builder is deterministic and
+ * needs no server; the residual gap is that it cannot prove middleware is
+ * actually wired, which `tests/security-headers-csp.test.ts` covers.
+ */
+export function checkSecurityHeadersBuilt(): SecurityCheckResult {
+  const name = "Security response headers are built (CSP/X-Frame-Options/etc.)";
+  const severity: CheckSeverity = "warning";
+  const headers = new Map(buildSecurityHeaders({ isProduction: true }));
+  const missing = REQUIRED_SECURITY_HEADERS.filter(
+    (header) => !headers.has(header)
+  );
+
+  if (missing.length > 0) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `buildSecurityHeaders({ isProduction: true }) is missing header(s): ${missing.join(", ")}.`
+    };
+  }
+
+  if (!headers.has("Strict-Transport-Security")) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence:
+        "buildSecurityHeaders({ isProduction: true }) did not include Strict-Transport-Security — HSTS is expected for a production (TLS) deployment."
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence: `buildSecurityHeaders({ isProduction: true }) includes all of: ${REQUIRED_SECURITY_HEADERS.join(", ")}, Strict-Transport-Security.`
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Out-of-scope items — printed as their own report section, never silently
+// dropped.
+// ---------------------------------------------------------------------------
+
+export const OUT_OF_SCOPE_ITEMS: OutOfScopeItem[] = [
+  {
+    name: "Runtime role grant allowlist (per-table, per-role)",
+    reason:
+      "mini's equivalent check compares real `pg_class.relacl` grants against the per-table matrix in its own role-separation migration, to catch a new GLOBAL (non-RLS) table silently inheriting a blanket default-privileges grant. This repo's `sql/019_awcms_db_role_separation.sql` (Issue #141) grants `awcms_app` SELECT/INSERT/UPDATE/DELETE on ALL TABLES uniformly, plus matching ALTER DEFAULT PRIVILEGES — there is no differentiated matrix to compare against yet, so the check would have nothing to assert. Add it if/when grants are narrowed per table."
+  },
+  {
+    name: "Audit log retention is actually being executed",
+    reason:
+      "`bun run logs:audit:purge` (Issue #146) implements retention, but whether it is SCHEDULED is a deployment concern (cron/systemd timer/k8s CronJob) this script cannot observe from the repo. Run `bun run logs:audit:purge --dry-run` against the target database to see the real backlog past cutoff."
+  },
+  {
+    name: "Tax data masking / CRM opt-out / AI read-only / POS smoke test",
+    reason:
+      "No tax/CRM/AI/POS module exists in this generic base — domain concern of a derived app (e.g. AWPOS)."
+  },
+  {
+    name: "PostgreSQL not publicly exposed",
+    reason:
+      "Deployment-profile concern — network exposure is set by the operator, not verifiable from this repo. Check the actual deployed network exposure manually."
+  },
+  {
+    name: "Backup/restore tested",
+    reason:
+      "Requires a real backup/restore run against a provisioned environment. Manual — run it and verify a restored row count."
+  },
+  {
+    name: "PostgreSQL version pinned",
+    reason:
+      "Deployment-profile concern; this repo has no docker-compose.yml. Confirm the running server manually (`SELECT version();`)."
+  }
+];
+
+// ---------------------------------------------------------------------------
+// Orchestration
+// ---------------------------------------------------------------------------
+
+export async function runSecurityReadinessChecks(): Promise<
+  SecurityCheckResult[]
+> {
+  return [
+    await checkNoHardcodedSecret(),
+    checkEnvNotTracked(),
+    await checkPasswordHashingModern(),
+    checkLoginLockoutImplemented(),
+    await checkRlsEnabled(),
+    await checkAppDbUserNotSuperuser(),
+    await checkLeastPrivilegeRoleProvisioned(),
+    checkAbacDefaultDeny(),
+    await checkAuditLogTableReachable(),
+    checkEnvConfigValid(),
+    checkSyncHmacSecretNotDefault(),
+    checkLoginRateLimitImplemented(),
+    checkSecurityHeadersBuilt()
+  ];
+}
+
+function statusIcon(result: SecurityCheckResult): string {
+  return result.status === "pass" ? "PASS" : "FAIL";
+}
+
+export function printReport(results: SecurityCheckResult[]): boolean {
+  console.log("security:readiness — production security readiness checklist");
+  console.log("");
+
+  for (const result of results) {
+    console.log(
+      `[${statusIcon(result)}] (${result.severity}) ${result.name}\n    ${result.evidence}`
+    );
+  }
+
+  console.log("");
+  console.log("Out of scope for this base (documented, not silently dropped):");
+
+  for (const item of OUT_OF_SCOPE_ITEMS) {
+    console.log(`  - ${item.name}: ${item.reason}`);
+  }
+
+  const criticalFailures = results.filter(
+    (result) => result.severity === "critical" && result.status === "fail"
+  );
+  const warningFailures = results.filter(
+    (result) => result.severity === "warning" && result.status === "fail"
+  );
+
+  console.log("");
+  console.log(
+    `Summary: ${results.length} check(s) run, ${criticalFailures.length} critical failure(s), ${warningFailures.length} warning failure(s).`
+  );
+
+  if (criticalFailures.length > 0) {
+    console.log("GO-LIVE DIBLOKIR — critical finding(s) present:");
+    for (const failure of criticalFailures) {
+      console.log(`  - ${failure.name}: ${failure.evidence}`);
+    }
+    return false;
+  }
+
+  console.log("No critical findings — security:readiness passes.");
+  return true;
+}
+
+async function main() {
+  const results = await runSecurityReadinessChecks();
+  const passed = printReport(results);
+
+  if (!passed) {
+    process.exitCode = 1;
+  }
+}
+
+if (import.meta.main) {
+  await main();
+}
