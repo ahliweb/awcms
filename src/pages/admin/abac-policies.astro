@@ -1,0 +1,106 @@
+---
+/**
+ * ABAC policy management screen (Issue #166, Stage 3b). SSR-reads via the same
+ * `listAbacPolicies` the `GET /api/v1/abac/policies` endpoint uses, gated on
+ * `identity_access.access_control.read`. Read-only.
+ *
+ * Note: like awcms-mini, the base ships this table seeded-EMPTY — the ABAC
+ * evaluator uses built-in role/permission rules by default, and per-tenant
+ * custom policies are an opt-in extension surface. An empty table here is the
+ * expected default, not an error.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listAbacPolicies,
+  type AbacPolicyView
+} from "../../modules/identity-access/application/access-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(
+  permissionKey("identity_access", "access_control", "read")
+);
+
+let policies: AbacPolicyView[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, (tx) =>
+      listAbacPolicies(tx, ssr.tenantId)
+    );
+    if (result instanceof Response) loadError = true;
+    else policies = result;
+  } catch {
+    loadError = true;
+  }
+}
+---
+
+<AdminLayout title="ABAC policies" active="abac-policies">
+  <h1 id="abac-policies-heading">ABAC policies</h1>
+
+  {
+    !canRead && (
+      <p class="state-notice" id="abac-policies-denied">
+        You do not have permission to view ABAC policies.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice" id="abac-policies-error">
+        Policies could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <div class="data-table-scroll">
+        <table class="data-table" id="abac-policies-table">
+          <caption>{policies.length} policy(ies)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Effect</th>
+              <th scope="col">Description</th>
+              <th scope="col">Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            {policies.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan="4">
+                  No custom policies — the built-in role/permission rules apply.
+                </td>
+              </tr>
+            ) : (
+              policies.map((policy) => (
+                <tr>
+                  <td>{policy.policyCode}</td>
+                  <td>
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        policy.effect === "allow" ? "success" : "warning"
+                      }
+                    >
+                      {policy.effect}
+                    </span>
+                  </td>
+                  <td>{policy.description ?? "—"}</td>
+                  <td>{policy.isActive ? "yes" : "no"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>

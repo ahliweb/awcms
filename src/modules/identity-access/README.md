@@ -14,6 +14,22 @@ Login identity, sesi, tenant user membership, dan RBAC/ABAC dasar.
 
 Skema: `sql/004_awcms_identity_login_schema.sql`, `sql/005_awcms_abac_access_control_schema.sql`.
 
+## Access-management reads (admin, read-only — Issue #166)
+
+`application/access-directory.ts` mengekspos tiga list bertenant, semua di-gate
+`identity_access.access_control.read` dan dipakai oleh endpoint JSON **dan**
+layar admin SSR (`src/pages/admin/{users,roles,abac-policies}.astro`):
+
+- `listTenantUsers` → `GET /api/v1/users` — user tenant + kode role yang
+  di-assign. `login_identifier` **selalu ter-mask** via `maskIdentifierValue`
+  (PII tak pernah dikembalikan mentah di list).
+- `listRoles` → `GET /api/v1/roles` — role tenant non-deleted + jumlah permission.
+- `listAbacPolicies` → `GET /api/v1/abac/policies` — policy ABAC tenant
+  (default seeded-kosong; evaluator generik memakai aturan built-in).
+
+Semua bounded `LIMIT 100` (config low-cardinality, tanpa cursor), tenant-filtered,
+dan berjalan di dalam `withTenant` (RLS FORCE batas nyata).
+
 ## Auth flow
 
 `POST /api/v1/auth/login` — header `X-AWCMS-Tenant-ID` wajib, rate limit per `clientIp:tenantId` (backstop di luar lockout per-identity), verifikasi password, set cookie httpOnly (`awcms_session`/`awcms_tenant_id`) + kembalikan token untuk klien API. `POST /api/v1/auth/logout` merevoke sesi. `GET /api/v1/auth/me` hanya menerima bearer token.

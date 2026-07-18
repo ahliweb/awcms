@@ -77,6 +77,25 @@ test.describe("admin offices (authenticated)", () => {
     await page.goto("/admin/profiles");
     await expect(page.locator("#profiles-table")).toBeVisible();
     await expect(page.locator("#profiles-denied")).toHaveCount(0);
+
+    // RBAC/ABAC screens (Stage 3b): the seeded owner IS a tenant-user holding
+    // the "owner" role and every permission, so all three render with data (or,
+    // for ABAC policies, the expected empty built-in-rules state).
+    await page.goto("/admin/users");
+    await expect(page.locator("#users-table")).toBeVisible();
+    // The owner's masked login identifier appears — never the raw address.
+    await expect(page.locator("#users-table")).toContainText("@example.com");
+    await expect(page.locator("#users-table")).not.toContainText(
+      "e2e-owner@example.com"
+    );
+
+    await page.goto("/admin/roles");
+    await expect(page.locator("#roles-table")).toBeVisible();
+    await expect(page.locator("#roles-table")).toContainText("owner");
+
+    await page.goto("/admin/abac-policies");
+    await expect(page.locator("#abac-policies-table")).toBeVisible();
+    await expect(page.locator("#abac-policies-denied")).toHaveCount(0);
   });
 
   test("rejects a wrong password with a generic error, not a stack trace", async ({

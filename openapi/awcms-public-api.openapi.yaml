@@ -132,6 +132,34 @@ components:
         status: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    TenantUserMasked:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        loginIdentifierMasked:
+          type: string
+          description: Masked login identifier — PII is never returned raw in a list.
+        status: { type: string }
+        roles:
+          type: array
+          items: { type: string }
+          description: Assigned role codes (empty when the user holds no role).
+    Role:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        roleCode: { type: string }
+        roleName: { type: string }
+        isSystem: { type: boolean }
+        permissionCount: { type: integer }
+    AbacPolicy:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        policyCode: { type: string }
+        effect: { type: string, enum: [allow, deny] }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean }
     ProfileMasked:
       type: object
       properties:
@@ -1049,6 +1077,75 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiError" }
+  /api/v1/users:
+    get:
+      operationId: listTenantUsers
+      tags: [Identity & Access]
+      summary: List the current tenant's users with their assigned role codes (login identifiers masked).
+      responses:
+        "200":
+          description: The tenant's users (limit 100), with masked login identifiers and assigned role codes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/TenantUserMasked" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/roles:
+    get:
+      operationId: listRoles
+      tags: [Identity & Access]
+      summary: List the current tenant's (non-deleted) roles with a permission count.
+      responses:
+        "200":
+          description: The tenant's roles (limit 100), each with a permission count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/Role" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/abac/policies:
+    get:
+      operationId: listAbacPolicies
+      tags: [Identity & Access]
+      summary: List the current tenant's ABAC policies (seeded-empty by default; built-in rules apply).
+      responses:
+        "200":
+          description: The tenant's ABAC policies (limit 100).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, enum: [true] }
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/AbacPolicy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/v1/auth/login:
     post:
       operationId: postAuthLogin
