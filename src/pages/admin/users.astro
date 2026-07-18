@@ -1,16 +1,29 @@
 ---
 /**
- * User (tenant users) management screen (Issue #166, Stage 3b). SSR-reads via
- * the same `listTenantUsers` the `GET /api/v1/users` endpoint uses, gated on
- * `identity_access.access_control.read`. Login identifiers are masked (PII).
- * Read-only.
+ * User (tenant users) management screen (Issue #166 read + Issue #171 writes).
+ * SSR-reads via the same `listTenantUsers` the `GET /api/v1/users` endpoint
+ * uses, gated on `identity_access.access_control.read`. Login identifiers are
+ * masked (PII) both in the render and everywhere they are logged.
+ *
+ * Write controls (Issue #171), each UX-gated on the permission its endpoint
+ * enforces (the endpoint guard is the real authority — the gate only hides
+ * controls a user cannot use):
+ *  - activate / deactivate a user (`PATCH /api/v1/users/{id}`), gated on
+ *    `identity_access.access_control.configure`.
+ *  - assign / unassign a role (`POST` / `DELETE /api/v1/access/assignments`),
+ *    gated on `identity_access.access_control.assign`.
+ *
+ * `listTenantUsers` returns each user's assigned role CODES; the unassign
+ * endpoint needs the role ID, so we resolve code → id here from `listRoles`.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
+  listRoles,
   listTenantUsers,
+  type RoleView,
   type TenantUserView
 } from "../../modules/identity-access/application/access-directory";
 
@@ -18,22 +31,38 @@ const ssr = Astro.locals.ssrContext!;
 const canRead = ssr.permissions.has(
   permissionKey("identity_access", "access_control", "read")
 );
+const canConfigure = ssr.permissions.has(
+  permissionKey("identity_access", "access_control", "configure")
+);
+const canAssign = ssr.permissions.has(
+  permissionKey("identity_access", "access_control", "assign")
+);
 
 let users: TenantUserView[] = [];
+let roles: RoleView[] = [];
 let loadError = false;
 
 if (canRead) {
   try {
     const sql = getDatabaseClient();
-    const result = await withTenant(sql, ssr.tenantId, (tx) =>
-      listTenantUsers(tx, ssr.tenantId)
-    );
+    const result = await withTenant(sql, ssr.tenantId, async (tx) => ({
+      users: await listTenantUsers(tx, ssr.tenantId),
+      roles: await listRoles(tx, ssr.tenantId)
+    }));
     if (result instanceof Response) loadError = true;
-    else users = result;
+    else {
+      users = result.users;
+      roles = result.roles;
+    }
   } catch {
     loadError = true;
   }
 }
+
+// role code -> role id, so a user's assigned role codes can be turned into
+// removable controls carrying the id the unassign endpoint expects.
+const roleIdByCode = new Map(roles.map((role) => [role.roleCode, role.id]));
+const showActions = canConfigure || canAssign;
 ---
 
 <AdminLayout title="Users" active="users">
@@ -57,44 +86,264 @@ if (canRead) {
 
   {
     canRead && !loadError && (
-      <div class="data-table-scroll">
-        <table class="data-table" id="users-table">
-          <caption>{users.length} user(s)</caption>
-          <thead>
-            <tr>
-              <th scope="col">Login identifier</th>
-              <th scope="col">Status</th>
-              <th scope="col">Roles</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 ? (
+      <>
+        <p
+          id="users-action-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+        <div class="data-table-scroll">
+          <table class="data-table" id="users-table">
+            <caption>{users.length} user(s)</caption>
+            <thead>
               <tr>
-                <td class="data-table-empty" colspan="3">
-                  No users yet.
-                </td>
+                <th scope="col">Login identifier</th>
+                <th scope="col">Status</th>
+                <th scope="col">Roles</th>
+                {showActions && <th scope="col">Actions</th>}
               </tr>
-            ) : (
-              users.map((user) => (
+            </thead>
+            <tbody>
+              {users.length === 0 ? (
                 <tr>
-                  <td>{user.loginIdentifierMasked}</td>
-                  <td>
-                    <span
-                      class="status-badge"
-                      data-variant={
-                        user.status === "active" ? "success" : "neutral"
-                      }
-                    >
-                      {user.status}
-                    </span>
+                  <td class="data-table-empty" colspan={showActions ? 4 : 3}>
+                    No users yet.
                   </td>
-                  <td>{user.roles.length > 0 ? user.roles.join(", ") : "—"}</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                users.map((user) => (
+                  <tr>
+                    <td>{user.loginIdentifierMasked}</td>
+                    <td>
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          user.status === "active" ? "success" : "neutral"
+                        }
+                      >
+                        {user.status}
+                      </span>
+                    </td>
+                    <td>
+                      {user.roles.length === 0 ? (
+                        "—"
+                      ) : (
+                        <ul class="role-chip-list">
+                          {user.roles.map((code) => (
+                            <li>
+                              <span class="role-chip">{code}</span>
+                              {canAssign && roleIdByCode.has(code) && (
+                                <button
+                                  type="button"
+                                  class="link-button js-unassign-role"
+                                  data-user-id={user.id}
+                                  data-role-id={roleIdByCode.get(code)}
+                                  aria-label={`Remove role ${code}`}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                    {showActions && (
+                      <td>
+                        {canConfigure && (
+                          <button
+                            type="button"
+                            class="module-toggle js-user-status"
+                            data-user-id={user.id}
+                            data-next-status={
+                              user.status === "active" ? "inactive" : "active"
+                            }
+                          >
+                            {user.status === "active"
+                              ? "Deactivate"
+                              : "Activate"}
+                          </button>
+                        )}
+                        {canAssign && roles.length > 0 && (
+                          <span class="assign-role-control">
+                            <label
+                              class="visually-hidden"
+                              for={`assign-role-${user.id}`}
+                            >
+                              Role to assign
+                            </label>
+                            <select
+                              id={`assign-role-${user.id}`}
+                              class="js-assign-role-select"
+                            >
+                              {roles.map((role) => (
+                                <option value={role.id}>{role.roleCode}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              class="module-toggle js-assign-role"
+                              data-user-id={user.id}
+                              data-select-id={`assign-role-${user.id}`}
+                            >
+                              Assign
+                            </button>
+                          </span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
     )
   }
 </AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it — an import-free script would inline and
+  // be blocked. See admin-form-client.ts. Handlers are attached via event
+  // delegation so they bind whether or not any given control rendered.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const errorBox = document.getElementById("users-action-error");
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  async function run(
+    button: HTMLButtonElement,
+    action: () => Promise<{ ok: boolean; errorCode: string | null }>,
+    failureMessage: string
+  ): Promise<void> {
+    if (button.disabled) return;
+    if (errorBox) errorBox.hidden = true;
+    const unlock = lockElement(button, "Please wait…");
+
+    const result = await action();
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+    showError(failureMessage);
+    unlock();
+  }
+
+  document.addEventListener("click", (event) => {
+    const target = (event.target as HTMLElement | null)?.closest("button");
+    if (!(target instanceof HTMLButtonElement)) return;
+
+    if (target.classList.contains("js-user-status")) {
+      const userId = target.dataset.userId;
+      const nextStatus = target.dataset.nextStatus;
+      if (!userId || !nextStatus) return;
+      void run(
+        target,
+        () =>
+          sendJson("PATCH", `/api/v1/users/${userId}`, { status: nextStatus }),
+        "Could not update the user status. Please try again."
+      );
+      return;
+    }
+
+    if (target.classList.contains("js-assign-role")) {
+      const userId = target.dataset.userId;
+      const selectId = target.dataset.selectId;
+      if (!userId || !selectId) return;
+      const select = document.getElementById(
+        selectId
+      ) as HTMLSelectElement | null;
+      const roleId = select?.value;
+      if (!roleId) return;
+      void run(
+        target,
+        () =>
+          sendJson("POST", "/api/v1/access/assignments", {
+            tenantUserId: userId,
+            roleId
+          }),
+        "Could not assign the role. It may already be assigned."
+      );
+      return;
+    }
+
+    if (target.classList.contains("js-unassign-role")) {
+      const userId = target.dataset.userId;
+      const roleId = target.dataset.roleId;
+      if (!userId || !roleId) return;
+      void run(
+        target,
+        () =>
+          sendJson("DELETE", "/api/v1/access/assignments", {
+            tenantUserId: userId,
+            roleId
+          }),
+        "Could not remove the role. Please try again."
+      );
+    }
+  });
+</script>
+
+<style>
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .role-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .role-chip-list li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+  }
+
+  .role-chip {
+    padding: var(--sp-1) var(--sp-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    font-size: var(--fs-sm);
+  }
+
+  .link-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-text-muted);
+    font-size: var(--fs-sm);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .assign-role-control {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-inline-start: var(--sp-2);
+  }
+</style>

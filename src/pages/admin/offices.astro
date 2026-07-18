@@ -12,13 +12,24 @@
  * clean "no access" notice instead of an empty table. A create-office form is
  * shown to users holding `office_management.create` and posts to the existing
  * `POST /api/v1/offices` (cookie auth) — the endpoint's ABAC guard is the real
- * authority; the form gate is UX-only. Edit/delete remain a later increment.
+ * authority; the form gate is UX-only.
+ *
+ * Write increment (Issue #171): users holding `office_management.update` get
+ * per-row inline edit (name + status → `PATCH /api/v1/offices/{id}`) plus a
+ * restore control on soft-deleted rows (`POST /api/v1/offices/{id}/restore`);
+ * users holding `office_management.delete` get a per-row soft-delete control
+ * (`DELETE /api/v1/offices/{id}`). Every gate here is UX-only — the endpoint
+ * guards are the authority. Deleted offices are listed in their own section so
+ * they are reachable for restore.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
-import { listOffices } from "../../modules/tenant-admin/application/office-directory";
+import {
+  listDeletedOffices,
+  listOffices
+} from "../../modules/tenant-admin/application/office-directory";
 
 type OfficeRow = {
   id: string;
@@ -35,8 +46,20 @@ const canRead = ssr.permissions.has(
 const canCreate = ssr.permissions.has(
   permissionKey("tenant_admin", "office_management", "create")
 );
+const canUpdate = ssr.permissions.has(
+  permissionKey("tenant_admin", "office_management", "update")
+);
+const canDelete = ssr.permissions.has(
+  permissionKey("tenant_admin", "office_management", "delete")
+);
+
+const OFFICE_STATUS_OPTIONS = ["active", "inactive"];
+
+// One action column is rendered when the viewer can edit and/or delete.
+const showActions = canUpdate || canDelete;
 
 let offices: OfficeRow[] = [];
+let deletedOffices: OfficeRow[] = [];
 let loadError = false;
 
 if (canRead) {
@@ -44,7 +67,15 @@ if (canRead) {
     const sql = getDatabaseClient();
     const result = await withTenant(sql, ssr.tenantId, async (tx) => {
       const page = await listOffices(tx, ssr.tenantId, null);
-      return page.items as OfficeRow[];
+      // Only fetch the deleted set for viewers who can act on it (restore is
+      // gated on `update`); otherwise it is noise they cannot use.
+      const deleted = canUpdate
+        ? await listDeletedOffices(tx, ssr.tenantId)
+        : [];
+      return {
+        active: page.items as OfficeRow[],
+        deleted: deleted as OfficeRow[]
+      };
     });
     // `withTenant` returns a 503 `Response` when the DB circuit breaker is
     // open / a work-class queue is saturated — degrade to an error notice
@@ -52,7 +83,8 @@ if (canRead) {
     if (result instanceof Response) {
       loadError = true;
     } else {
-      offices = result;
+      offices = result.active;
+      deletedOffices = result.deleted;
     }
   } catch {
     loadError = true;
@@ -125,6 +157,17 @@ if (canRead) {
 
   {
     canRead && !loadError && (
+      <p
+        id="office-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canRead && !loadError && (
       <div class="data-table-scroll">
         <table class="data-table" id="offices-table">
           <caption>{offices.length} office(s)</caption>
@@ -134,37 +177,130 @@ if (canRead) {
               <th scope="col">Name</th>
               <th scope="col">Type</th>
               <th scope="col">Status</th>
+              {showActions && <th scope="col">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {offices.length === 0 ? (
               <tr>
-                <td class="data-table-empty" colspan="4">
+                <td class="data-table-empty" colspan={showActions ? 5 : 4}>
                   No offices yet.
                 </td>
               </tr>
             ) : (
               offices.map((office) => (
-                <tr>
+                <tr data-office-row={office.id}>
                   <td>{office.officeCode}</td>
-                  <td>{office.officeName}</td>
+                  <td>
+                    {canUpdate ? (
+                      <input
+                        class="office-name-input"
+                        type="text"
+                        value={office.officeName}
+                        aria-label={`Office name for ${office.officeCode}`}
+                        data-office-name={office.id}
+                      />
+                    ) : (
+                      office.officeName
+                    )}
+                  </td>
                   <td>{office.officeType}</td>
                   <td>
-                    <span
-                      class="status-badge"
-                      data-variant={
-                        office.status === "active" ? "success" : "neutral"
-                      }
-                    >
-                      {office.status}
-                    </span>
+                    {canUpdate ? (
+                      <select
+                        class="office-status-select"
+                        aria-label={`Status for ${office.officeCode}`}
+                        data-office-status={office.id}
+                      >
+                        {OFFICE_STATUS_OPTIONS.map((value) => (
+                          <option
+                            value={value}
+                            selected={office.status === value}
+                          >
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          office.status === "active" ? "success" : "neutral"
+                        }
+                      >
+                        {office.status}
+                      </span>
+                    )}
                   </td>
+                  {showActions && (
+                    <td>
+                      {canUpdate && (
+                        <button
+                          type="button"
+                          class="office-save-btn"
+                          data-office-id={office.id}
+                        >
+                          Save
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          class="office-delete-btn"
+                          data-office-id={office.id}
+                          data-office-code={office.officeCode}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+    )
+  }
+
+  {
+    canRead && !loadError && canUpdate && deletedOffices.length > 0 && (
+      <section id="deleted-offices">
+        <h2>Deleted offices</h2>
+        <div class="data-table-scroll">
+          <table class="data-table" id="deleted-offices-table">
+            <caption>{deletedOffices.length} deleted office(s)</caption>
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deletedOffices.map((office) => (
+                <tr data-deleted-office-row={office.id}>
+                  <td>{office.officeCode}</td>
+                  <td>{office.officeName}</td>
+                  <td>{office.officeType}</td>
+                  <td>
+                    <button
+                      type="button"
+                      class="office-restore-btn"
+                      data-office-id={office.id}
+                      data-office-code={office.officeCode}
+                    >
+                      Restore
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     )
   }
 </AdminLayout>
@@ -177,7 +313,11 @@ if (canRead) {
   // bundle this script EXTERNAL (an import-free script would be inlined, and
   // inline
   // scripts are blocked by this app's CSP). See admin-form-client.ts.
-  import { lockElement, postJson } from "../../lib/ui/admin-form-client";
+  import {
+    lockElement,
+    postJson,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
   const form = document.getElementById(
     "office-create-form"
@@ -226,4 +366,107 @@ if (canRead) {
     );
     unlock();
   });
+
+  // Per-row edit / delete / restore (Issue #171). All three bind
+  // unconditionally: the controls only render when the matching permission
+  // gate passed server-side, so `querySelectorAll` finds none for a viewer who
+  // lacks them and the listeners simply never fire. The endpoint guard is the
+  // real authority; these gates are UX-only.
+  const actionError = document.getElementById("office-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  function clearActionError(): void {
+    if (actionError) actionError.hidden = true;
+  }
+
+  // Save: PATCH the row's current name + status.
+  document
+    .querySelectorAll<HTMLButtonElement>(".office-save-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.officeId;
+        if (!id) return;
+        clearActionError();
+        const unlock = lockElement(button, "Saving…");
+
+        const nameInput = document.querySelector<HTMLInputElement>(
+          `[data-office-name="${id}"]`
+        );
+        const statusSelect = document.querySelector<HTMLSelectElement>(
+          `[data-office-status="${id}"]`
+        );
+        const officeName = nameInput?.value.trim() ?? "";
+        const status = statusSelect?.value ?? "";
+
+        const result = await sendJson("PATCH", `/api/v1/offices/${id}`, {
+          officeName,
+          status
+        });
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        showActionError("Could not save the office. Please try again.");
+        unlock();
+      });
+    });
+
+  // Delete: bodyless soft-delete after an explicit confirm.
+  document
+    .querySelectorAll<HTMLButtonElement>(".office-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.officeId;
+        if (!id) return;
+        const code = button.dataset.officeCode ?? "this office";
+        if (!window.confirm(`Delete ${code}? It can be restored later.`)) {
+          return;
+        }
+        clearActionError();
+        const unlock = lockElement(button, "Deleting…");
+
+        const result = await sendJson("DELETE", `/api/v1/offices/${id}`);
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        showActionError("Could not delete the office. Please try again.");
+        unlock();
+      });
+    });
+
+  // Restore: bodyless POST; a 409 means the code was retaken by a live office.
+  document
+    .querySelectorAll<HTMLButtonElement>(".office-restore-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.officeId;
+        if (!id) return;
+        clearActionError();
+        const unlock = lockElement(button, "Restoring…");
+
+        const result = await sendJson("POST", `/api/v1/offices/${id}/restore`);
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        showActionError(
+          result.errorCode === "OFFICE_CODE_ALREADY_EXISTS"
+            ? "Cannot restore: another office already uses this code."
+            : "Could not restore the office. Please try again."
+        );
+        unlock();
+      });
+    });
 </script>

@@ -282,3 +282,145 @@ export async function updateOffice(
 
   return record;
 }
+
+/**
+ * One page of SOFT-DELETED offices, most-recently-deleted first, so the admin
+ * screen can offer a restore control. The active-office `listOffices` filters
+ * `deleted_at IS NULL`, so deleted rows are otherwise unreachable from the UI;
+ * this is their only read path. Bounded by the same page limit — the deleted
+ * set is expected to be small, and an unbounded scan is exactly what Issue #149
+ * forbids.
+ */
+export async function listDeletedOffices(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<OfficeRecord[]> {
+  const rows = (await tx`
+    SELECT id, office_code, office_name, office_type, parent_office_id, status, created_at, updated_at
+    FROM awcms_offices
+    WHERE tenant_id = ${tenantId} AND deleted_at IS NOT NULL
+    ORDER BY deleted_at DESC, id DESC
+    LIMIT ${OFFICE_LIST_LIMIT}
+  `) as OfficeRow[];
+
+  return rows.map(toRecord);
+}
+
+/**
+ * Soft-deletes a live office: stamps `deleted_at`/`deleted_by`/`delete_reason`
+ * and audits the removal (severity `warning`, a high-risk lifecycle action).
+ * Returns `false` when the id is absent, in another tenant, or ALREADY
+ * soft-deleted (`deleted_at IS NULL` guard) — the route maps that to 404.
+ * Soft delete, never a hard `DELETE`: the row must remain restorable, and the
+ * partial unique index (`WHERE deleted_at IS NULL`) frees the office code for
+ * reuse the instant it is deleted.
+ */
+export async function softDeleteOffice(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  officeId: string,
+  reason: string | null,
+  correlationId?: string
+): Promise<boolean> {
+  const rows = await tx`
+    UPDATE awcms_offices
+    SET deleted_at = now(), deleted_by = ${actorTenantUserId},
+        delete_reason = ${reason}, updated_at = now()
+    WHERE tenant_id = ${tenantId} AND id = ${officeId} AND deleted_at IS NULL
+    RETURNING id
+  `;
+
+  if (rows.length === 0) return false;
+
+  await recordAuditEvent(tx, {
+    tenantId,
+    actorTenantUserId,
+    moduleKey: AUDIT_MODULE_KEY,
+    action: "delete",
+    resourceType: AUDIT_RESOURCE_TYPE,
+    resourceId: officeId,
+    severity: "warning",
+    message: "Office soft-deleted.",
+    attributes: { reason },
+    correlationId
+  });
+
+  return true;
+}
+
+/**
+ * Restores a soft-deleted office: clears the delete stamps, records
+ * `restored_at`/`restored_by`, and audits it (`warning`). Returns `null` when
+ * the id is absent, in another tenant, or NOT currently soft-deleted
+ * (`deleted_at IS NOT NULL` guard) → 404 at the route. Restoring is idempotent-
+ * safe: a second restore is a 404, not a duplicate.
+ *
+ * @throws {DuplicateOfficeCodeError} restoring would resurrect a code that a
+ *   DIFFERENT live office has taken while this one was deleted. The partial
+ *   unique index (`awcms_offices_tenant_code_key WHERE deleted_at IS NULL`)
+ *   raises 23505 on the UPDATE; that is caller-actionable (rename or delete the
+ *   conflicting office) so it must surface as 409, not 500.
+ */
+export async function restoreOffice(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  officeId: string,
+  correlationId?: string
+): Promise<OfficeRecord | null> {
+  // Read the deleted row's code first: it names the DuplicateOfficeCodeError
+  // precisely AND is the existence check (a live/absent id yields no row → the
+  // caller gets a 404 before any write is attempted).
+  const deletedRows = (await tx`
+    SELECT office_code FROM awcms_offices
+    WHERE tenant_id = ${tenantId} AND id = ${officeId} AND deleted_at IS NOT NULL
+  `) as { office_code: string }[];
+
+  if (deletedRows.length === 0) return null;
+  const officeCode = deletedRows[0]!.office_code;
+
+  let rows: OfficeRow[];
+
+  try {
+    rows = (await tx`
+      UPDATE awcms_offices
+      SET deleted_at = NULL, deleted_by = NULL, delete_reason = NULL,
+          restored_at = now(), restored_by = ${actorTenantUserId}, updated_at = now()
+      WHERE tenant_id = ${tenantId} AND id = ${officeId} AND deleted_at IS NOT NULL
+      RETURNING id, office_code, office_name, office_type, parent_office_id, status, created_at, updated_at
+    `) as OfficeRow[];
+  } catch (error) {
+    if (
+      error instanceof Bun.SQL.PostgresError &&
+      String(error.errno) === POSTGRES_UNIQUE_VIOLATION
+    ) {
+      // The 23505 has already ABORTED this transaction. The route catches this
+      // and returns 409 on `withTenant`'s normal path, whose commit degrades
+      // to a rollback — and NO audit event may be written past this point, or
+      // it would fail 25P02 and turn the 409 into a 500 (same rule as
+      // createOffice's duplicate handling).
+      throw new DuplicateOfficeCodeError(officeCode);
+    }
+
+    throw error;
+  }
+
+  if (rows.length === 0) return null;
+
+  const record = toRecord(rows[0]!);
+
+  await recordAuditEvent(tx, {
+    tenantId,
+    actorTenantUserId,
+    moduleKey: AUDIT_MODULE_KEY,
+    action: "restore",
+    resourceType: AUDIT_RESOURCE_TYPE,
+    resourceId: record.id,
+    severity: "warning",
+    message: `Office restored: ${record.officeCode}.`,
+    correlationId
+  });
+
+  return record;
+}
