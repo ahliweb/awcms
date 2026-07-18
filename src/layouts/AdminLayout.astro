@@ -1,0 +1,111 @@
+---
+/**
+ * Admin shell (Issue #166 — ported from awcms-mini's `AdminLayout.astro`,
+ * stripped to awcms's fondasi scope). Deliberately minimal vs mini: NO
+ * TenantBadge / SyncIndicator / ThemeToggle / LanguageSwitcher / responsive
+ * drawer / i18n — those drag in visitor-analytics, theme persistence, and the
+ * gettext catalog awcms does not have yet. Kept: brand, the signed-in user's
+ * roles, a permission-agnostic sidebar, logout, and the page slot.
+ *
+ * Auth is NOT enforced here — `src/middleware.ts` already guards `/admin/*`
+ * (resolves the session, redirects to `/login` when absent, and sets
+ * `Astro.locals.ssrContext`). This layout only READS that context; a missing
+ * one is a middleware invariant violation, not a user-facing state, so it
+ * throws rather than rendering a half-authenticated page.
+ *
+ * CSP (see astro.config.mjs / security-headers.ts): styles come from external
+ * stylesheets (`tokens.css` + `admin.css`, emitted as <link> by
+ * `inlineStylesheets: "never"`) and the only script is the Astro-bundled
+ * logout module below — no inline script/style, so `default-src 'self'` holds.
+ */
+import "../styles/tokens.css";
+import "../styles/admin.css";
+
+interface Props {
+  title: string;
+  /** Sidebar key to mark `aria-current="page"`. */
+  active?: "dashboard" | "offices";
+}
+
+const { title, active } = Astro.props;
+const ssr = Astro.locals.ssrContext;
+
+if (!ssr) {
+  throw new Error(
+    "AdminLayout rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
+  );
+}
+
+const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · AWCMS</title>
+  </head>
+  <body class="admin-body">
+    <header class="admin-topbar">
+      <a href="/admin" class="admin-brand">AWCMS</a>
+      <div class="admin-topbar-right">
+        <span class="admin-roles" id="admin-roles">{roles}</span>
+        <button type="button" id="admin-logout" class="admin-logout">
+          Sign out
+        </button>
+      </div>
+    </header>
+
+    <div class="admin-layout">
+      <aside class="admin-sidebar">
+        <nav aria-label="Admin">
+          <a
+            href="/admin"
+            aria-current={active === "dashboard" ? "page" : undefined}
+          >
+            Dashboard
+          </a>
+          <a
+            href="/admin/offices"
+            aria-current={active === "offices" ? "page" : undefined}
+          >
+            Offices
+          </a>
+        </nav>
+      </aside>
+
+      <main class="admin-main">
+        <slot />
+      </main>
+    </div>
+
+    <script>
+      // The import forces Astro to bundle this to an EXTERNAL file — an
+      // import-free script would be inlined, and inline scripts are blocked by
+      // the middleware CSP (`default-src 'self'`). See admin-form-client.ts.
+      import { lockElement } from "../lib/ui/admin-form-client";
+
+      const logoutButton = document.getElementById(
+        "admin-logout"
+      ) as HTMLButtonElement | null;
+
+      logoutButton?.addEventListener("click", async () => {
+        if (logoutButton.disabled) return;
+        lockElement(logoutButton, "Signing out…");
+        try {
+          await fetch("/api/v1/auth/logout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin"
+          });
+        } catch {
+          // Even if the network call fails, send the user to /login — the
+          // cookie may already be cleared, and staying on a stale admin page
+          // is worse than an optimistic redirect.
+        }
+        window.location.href = "/login";
+      });
+    </script>
+  </body>
+</html>

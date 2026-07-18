@@ -1,0 +1,26 @@
+---
+/**
+ * Admin dashboard (Issue #166). The simplest real authenticated page: it
+ * renders only from `Astro.locals.ssrContext` (already resolved + guarded by
+ * `src/middleware.ts`), so it needs no additional DB read of its own. Proves
+ * the login → session-cookie → `/admin` guard → SSR render loop end to end.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+
+const ssr = Astro.locals.ssrContext!;
+const permissionCount = ssr.permissions.size;
+---
+
+<AdminLayout title="Dashboard" active="dashboard">
+  <h1 id="admin-dashboard-heading">Dashboard</h1>
+  <p>You are signed in.</p>
+  <dl>
+    <dt>Tenant</dt>
+    <dd id="dashboard-tenant-id">{ssr.tenantId}</dd>
+    <dt>Roles</dt>
+    <dd>{ssr.roles.length > 0 ? ssr.roles.join(", ") : "—"}</dd>
+    <dt>Granted permissions</dt>
+    <dd id="dashboard-permission-count">{permissionCount}</dd>
+  </dl>
+  <p><a href="/admin/offices">Manage offices →</a></p>
+</AdminLayout>

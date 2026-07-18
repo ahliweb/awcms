@@ -1,0 +1,195 @@
+/*
+ * Design tokens — AWCMS (Issue 8.1 — Build Admin Layout Shell).
+ *
+ * Nilai persis mengikuti tabel `docs/awcms/14_ui_ux_design_system.md`
+ * §Design tokens. Ini adalah placeholder brand-neutral, boleh diganti brand
+ * tenant oleh aplikasi turunan. Di-scope ke `:root` (light, default) dengan
+ * override `:root[data-theme="dark"]`; resolusi tema (system/light/dark)
+ * dilakukan oleh skrip inline di `src/layouts/AdminLayout.astro`.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Warna semantik (light) */
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef1f5;
+  --color-border: #d8dee6;
+  --color-text: #1a1f26;
+  --color-text-muted: #5b6672;
+  --color-primary: #2563eb;
+  --color-primary-contrast: #ffffff;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0891b2;
+  --color-focus: #2563eb;
+
+  /*
+   * "-strong" variants — Issue #434 (UX/UI audit). `--color-primary`,
+   * `--color-success`, `--color-danger` above are tuned for use as *text* or
+   * *border* color against a light/tinted surface (links, status text,
+   * icons) — that is a different contrast job than a *solid fill* with
+   * `--color-primary-contrast` (white) text on top of it (buttons, solid
+   * status badges, error banners). Measured against WCAG 2.1 AA (4.5:1,
+   * see docs/awcms/14_ui_ux_design_system.md §Aksesibilitas): the plain
+   * tokens fail that second job in several cases (e.g. dark-theme
+   * `--color-primary` + white text is only 3.68:1). These derived, slightly
+   * darker values keep the same hue while restoring >=4.5:1 with white text
+   * in both themes. Use these — not the plain token — whenever
+   * `--color-primary-contrast` text sits directly on the fill.
+   */
+  --color-primary-strong: #2563eb;
+  --color-success-strong: #12873d;
+  --color-danger-strong: #dc2626;
+  /* Reviewer Medium finding on PR #720: StatusBadge's `info` variant used
+     the plain --color-info token as a solid fill with white text, only
+     3.68:1 (light) / 2.43:1 (dark) — below the 4.5:1 this same doc-comment
+     already promises. Measured: 5.36:1 against white in both themes. */
+  --color-info-strong: #0e7490;
+
+  /* Font */
+  --font-sans: system-ui, -apple-system, "Inter", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+
+  /* Font size (xs .. 2xl) */
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-base: 16px;
+  --fs-md: 18px;
+  --fs-lg: 20px;
+  --fs-xl: 24px;
+  --fs-2xl: 32px;
+
+  /* Spacing (1 .. 8) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.18);
+
+  /* Z-index */
+  --z-nav: 100;
+  /* Mobile admin sidebar drawer + its scrim (Issue #693) — above the sticky
+     topbar (`--z-nav`) so the drawer visually overlays it when open, below
+     `--z-dropdown` since a dropdown opened from within the drawer (if any)
+     must still render on top of the drawer itself. */
+  --z-drawer: 150;
+  --z-dropdown: 200;
+  --z-dialog: 300;
+  --z-toast: 400;
+
+  /* Breakpoint (referensi dokumentasi — dipakai di media query literal,
+     custom property tidak bisa dipakai langsung sebagai kondisi @media) */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0e1116;
+  --color-surface: #161b22;
+  --color-surface-2: #1f262e;
+  --color-border: #2b333c;
+  --color-text: #e6edf3;
+  --color-text-muted: #9aa7b2;
+  --color-primary: #3b82f6;
+  --color-primary-contrast: #ffffff;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #06b6d4;
+  --color-focus: #60a5fa;
+
+  /* See :root's comment above — darkened so white text on a solid fill of
+     these stays >=4.5:1 in the dark theme too (the plain tokens above are
+     tuned brighter for legibility as text-on-dark-surface instead). */
+  --color-primary-strong: #3472d8;
+  --color-success-strong: #178841;
+  --color-danger-strong: #d73d3d;
+  /* Reviewer Medium finding on PR #720 — see :root's --color-info-strong
+     comment. Same value works in both themes since the contrast math is
+     against the constant white fill-text, not the page background. */
+  --color-info-strong: #0e7490;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+/* Reset minimal */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+picture,
+svg {
+  max-width: 100%;
+  display: block;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+/* Fokus terlihat (WCAG 2.1 AA) — jangan pernah outline:none tanpa pengganti */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

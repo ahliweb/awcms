@@ -195,11 +195,17 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > pertama `not-found.e2e.ts` menguji route catch-all 404
 > (`src/pages/[...path].ts`, memakai ulang `src/lib/html/error-responses.ts`):
 > browser membuka path asing → dapat halaman 404 HTML bersih tanpa bocor
-> detail internal (Issue #540). Dijalankan di CI oleh job `e2e-smoke`
-> (`.github/workflows/ci.yml`) — belum menyalakan Postgres karena spec 404 tak
-> butuh DB. Spec berikutnya (layar admin/manajemen: login, offices, dst.)
-> ditambah begitu halaman `.astro` pertama landing, dan job CI-nya akan
-> menyalakan Postgres + `db:migrate` + seed mengikuti pola dua-fase awcms-mini.
+> detail internal (Issue #540). Halaman `.astro` pertama kini **sudah ada**
+> (Issue #166): `login.astro`, `admin/index.astro` (dashboard), dan
+> `admin/offices.astro` (layar manajemen office, SSR-read via `listOffices`),
+> memakai `AdminLayout` + design token doc 14 (`src/styles/tokens.css`). Spec
+> `login.e2e.ts` menguji render + properti CSP (script eksternal bukan inline —
+> `default-src 'self'`), dan `admin-offices.e2e.ts` menguji alur
+> ter-autentikasi penuh (login → cookie sesi → guard `/admin` → render tabel
+> offices). Dijalankan di CI oleh job `e2e-smoke` (`.github/workflows/ci.yml`),
+> yang menyalakan `postgres:18.4`, `db:migrate`, lalu men-seed satu
+> tenant+owner lewat `POST /api/v1/setup/initialize` (bootstrap sungguhan) dan
+> mengoperkan kredensialnya ke spec via env.
 
 > **Runner test.** Runner = **`bun test`** (`bun:test`), berkas di
 > `tests/`. Daftar target di bawah bersifat **target rencana modul ERP**,

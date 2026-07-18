@@ -17,24 +17,23 @@
  * returned from endpoints, not rendered pages.
  *
  * `src/middleware.ts` applies these headers to EVERY response, so setting
- * the policy here is what actually covers this app's real surface. The
- * hand-rolled-hash-drift hazard that ruled this approach out for mini does
- * not exist here: this repo ships no `.astro` component, no inline script,
- * no inline style, no inline event handler, and no external origin (grep
- * `is:inline|define:vars|<script|<style|on[a-z]+=|https://` over `src/` —
- * all empty), so there is nothing for `'self'` to break and no hash list to
- * keep in sync.
+ * the policy here is what actually covers this app's real surface — the JSON
+ * API, the HTML 404 (`src/lib/html/error-responses.ts`), AND the admin
+ * `.astro` pages (#166). This builder stays the SINGLE CSP owner.
  *
- * IF THIS BASE EVER GAINS REAL `.astro` PAGES (read before doing so):
- * enabling Astro's `security.csp` at that point would NOT compose with this
- * — Astro would set its own `content-security-policy` (including the
- * script-src/style-src hashes its inlined assets need) during page render,
- * and `src/middleware.ts`'s `headers.set(...)` would then silently REPLACE
- * it with the policy below, which allows no inline script at all. The
- * result is a broken page with no obvious cause. Whoever adds the first
- * page must pick ONE owner for this header: either extend this builder to
- * skip HTML page responses that Astro already stamped, or drop this
- * directive set here and move it into `security.csp`'s `directives`.
+ * REAL `.astro` PAGES EXIST NOW (login + admin, #166) — how they stay
+ * compatible with this `default-src 'self'` (no `'unsafe-inline'`) policy,
+ * WITHOUT enabling Astro's own `security.csp` (which would set a SECOND,
+ * conflicting `content-security-policy` during page render that this
+ * middleware's `headers.set(...)` then silently replaces — a broken page
+ * with no obvious cause): the pages ship NO inline script and NO inline
+ * style. `astro.config.mjs`'s `build.inlineStylesheets: "never"` forces every
+ * stylesheet (including Astro scoped `<style>`) out to an external `<link>`
+ * from this origin, and every page `<script>` is an Astro-bundled module
+ * (never `is:inline`), also external from this origin — both satisfied by
+ * `'self'`. So there is still nothing inline for this policy to break, and no
+ * hash list to keep in sync. A future page that genuinely needs inline
+ * script/style must revisit the single-owner decision (see astro.config.mjs).
  *
  * Directives mirror mini's set, minus `frame-src` and the Turnstile/YouTube
  * origins it allowlists — this base has no widget, no embed, and no iframe
