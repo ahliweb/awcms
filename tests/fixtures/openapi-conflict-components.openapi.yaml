@@ -1,0 +1,19 @@
+# Conflict fixture (Issue #182): a fragment that declares an UNSUPPORTED
+# `components` section (`responses`). The bundler only carries a fragment's
+# `paths` and `components.schemas`; any other section would be silently dropped,
+# leaving a dangling `$ref` in the bundle. The bundler must reject it fail-closed
+# instead. Used only by tests/openapi-bundle.test.ts.
+paths:
+  /api/v1/example-crm/widget:
+    get:
+      tags:
+        - Example CRM
+      summary: Fixture path referencing a fragment-local response.
+      operationId: getExampleCrmWidget
+      responses:
+        "200":
+          $ref: "#/components/responses/WidgetOk"
+components:
+  responses:
+    WidgetOk:
+      description: A fragment-local reusable response (unsupported by the bundler).

@@ -104,6 +104,14 @@ Wajib dipenuhi modul domain baru sebelum dianggap siap produksi (turunan dari do
 - [ ] **Test berlapis** — unit (domain logic), integration (Postgres nyata), keamanan (RLS/ABAC dipaksa gagal untuk membuktikan gate benar-benar memblokir, bukan hanya "pass" diam-diam).
 - [ ] **`bun run production:preflight`** hijau sebelum go-live.
 
+### Tanggung jawab CI aplikasi turunan (composition & kontrak API)
+
+Composition dan kontrak API divalidasi saat **build/CI**, bukan runtime — aplikasi turunan wajib menjalankannya sendiri:
+
+- [ ] **`bun run modules:compose:check` (dan `bun run check` penuh)** hijau di CI turunan. `listModules()` sengaja tetap data murni (tidak memvalidasi saat load, sama seperti base); melewati gate ini bisa membuat app boot dengan registry ber-duplicate-key yang meracuni seeding permission/navigasi. Jangan mengandalkan base untuk menangkap ini.
+- [ ] **Deklarasikan `migrationNamespace`** pada `ApplicationModuleRegistry` (mulai ≥ 900, tidak overlap `1..899` base). Bila dihilangkan, cek `migration_namespace_overlap` **dilewati** dan penomoran migrasi turunan bisa bentrok dengan base tanpa peringatan.
+- [ ] **Kebijakan operasi publik fragment turunan** (`security: []`) ditegakkan oleh **`api:spec:check` milik repo turunan dengan allow-list-nya sendiri** — base membundel tanpa fragment turunan, jadi tidak bisa melihatnya. Setiap operasi publik baru harus masuk allow-list turunan yang direview.
+
 ## Referensi
 
 - [`examples/minimal-domain-module.md`](examples/minimal-domain-module.md)

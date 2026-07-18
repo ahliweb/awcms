@@ -24,6 +24,7 @@ import {
 } from "../scripts/openapi-bundle";
 import {
   collectOperationIdProblems,
+  collectPathParameterProblems,
   collectStandardErrorSchemaProblems
 } from "../scripts/api-spec-check";
 
@@ -120,6 +121,20 @@ describe("openapi bundle — merge conflict detection", () => {
     const conflicting = path.join(
       ROOT,
       "tests/fixtures/openapi-conflict-schema.openapi.yaml"
+    );
+    await expect(
+      buildBundledDocument(ROOT, { extraFragmentFiles: [conflicting] })
+    ).rejects.toBeInstanceOf(BundleConflictError);
+  });
+
+  test("a fragment declaring an unsupported components section (responses) throws BundleConflictError", async () => {
+    // The bundler carries only `paths` + `components.schemas`; a fragment-local
+    // `components.responses` would otherwise be silently dropped, leaving a
+    // dangling 2xx `$ref` that the 4xx/5xx-only error-envelope gate never
+    // catches. Must fail closed with an actionable message.
+    const conflicting = path.join(
+      ROOT,
+      "tests/fixtures/openapi-conflict-components.openapi.yaml"
     );
     await expect(
       buildBundledDocument(ROOT, { extraFragmentFiles: [conflicting] })
@@ -272,5 +287,35 @@ describe("api-spec-check gate functions (unit)", () => {
       }
     };
     expect(collectStandardErrorSchemaProblems(doc)).toEqual([]);
+  });
+
+  test("collectPathParameterProblems flags a template param with no matching declaration", () => {
+    const doc = {
+      paths: {
+        "/api/v1/things/{id}": {
+          get: { operationId: "getThing", parameters: [] }
+        }
+      }
+    };
+    const problems = collectPathParameterProblems(doc);
+    expect(problems.some((p) => p.includes('"{id}"'))).toBe(true);
+  });
+
+  test("collectPathParameterProblems accepts a param declared at the path-item level (shared across methods)", () => {
+    // Valid OpenAPI: `{id}` is factored up to the path item, not repeated on
+    // each operation. Must NOT false-positive — this is the exact ergonomics a
+    // derived contributor relies on.
+    // Path-item-level `parameters` is valid OpenAPI but not part of the method
+    // map's element type, so cast to the function's parameter type.
+    const doc = {
+      paths: {
+        "/api/v1/things/{id}": {
+          parameters: [{ name: "id", in: "path", required: true }],
+          get: { operationId: "getThing" },
+          delete: { operationId: "deleteThing" }
+        }
+      }
+    } as Parameters<typeof collectPathParameterProblems>[0];
+    expect(collectPathParameterProblems(doc)).toEqual([]);
   });
 });

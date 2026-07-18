@@ -148,7 +148,28 @@ export async function buildBundledDocument(
   for (const { label: fileName, absolutePath } of fragmentSources) {
     const moduleDoc = asRecord(await readYaml(absolutePath));
     const modulePaths = asRecord(moduleDoc.paths);
-    const moduleSchemas = asRecord(asRecord(moduleDoc.components).schemas);
+    const moduleComponents = asRecord(moduleDoc.components);
+    const moduleSchemas = asRecord(moduleComponents.schemas);
+
+    // Fail closed: the bundler only carries a fragment's `paths` and
+    // `components.schemas` into the bundle. Any OTHER `components` section
+    // (responses, parameters, securitySchemes, requestBodies, headers, ...)
+    // declared by a fragment would be SILENTLY dropped — a `$ref` to it from a
+    // 2xx response then dangles in the bundle and slips past
+    // `collectStandardErrorSchemaProblems` (which only guards 4xx/5xx). Reject
+    // it explicitly so a (derived) contributor gets an actionable error instead
+    // of a broken bundle: those sections are root-owned (`awcms-public-api.src.yaml`),
+    // or inline the shape into the fragment's own `components.schemas`.
+    const unsupportedComponentSections = Object.keys(moduleComponents).filter(
+      (section) => section !== "schemas"
+    );
+    if (unsupportedComponentSections.length > 0) {
+      throw new BundleConflictError(
+        `Fragment ${fileName} declares unsupported components section(s) [${unsupportedComponentSections.join(
+          ", "
+        )}]. A fragment may only contribute "paths" and "components.schemas"; reusable responses/parameters/securitySchemes are root-owned (openapi/awcms-public-api.src.yaml) or must be inlined into the fragment's own schemas.`
+      );
+    }
 
     for (const [pathKey, pathItem] of Object.entries(modulePaths)) {
       const existing = pathOwner.get(pathKey);

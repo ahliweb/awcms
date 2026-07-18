@@ -150,13 +150,26 @@ function checkPublicAllowListUsed(doc: OpenApiDocument): void {
   }
 }
 
-function checkPathParameters(doc: OpenApiDocument): void {
-  for (const [routePath, operations] of Object.entries(doc.paths ?? {})) {
+export function collectPathParameterProblems(doc: OpenApiDocument): string[] {
+  const problems: string[] = [];
+  for (const [routePath, pathItem] of Object.entries(doc.paths ?? {})) {
     const templateParams = [...routePath.matchAll(/\{([^}]+)\}/g)]
       .map((m) => m[1])
       .filter((param): param is string => param !== undefined);
 
-    for (const [method, operation] of Object.entries(operations)) {
+    // Path-item-level `parameters` (valid OpenAPI, shared by every method under
+    // this path) count as declared for ALL operations — otherwise a contributor
+    // who factors a common `{id}` param up to the path item gets a false
+    // "no matching in: path parameter". `parameters` is not in the method map,
+    // so read it off the raw path-item record.
+    const pathLevelParams = (
+      (pathItem as { parameters?: OpenApiOperation["parameters"] })
+        .parameters ?? []
+    )
+      .filter((p) => p.in === "path")
+      .map((p) => p.name);
+
+    for (const [method, operation] of Object.entries(pathItem)) {
       if (
         !HTTP_METHODS.includes(
           method.toUpperCase() as (typeof HTTP_METHODS)[number]
@@ -164,13 +177,16 @@ function checkPathParameters(doc: OpenApiDocument): void {
       )
         continue;
 
-      const declaredParams = (operation.parameters ?? [])
-        .filter((p) => p.in === "path")
-        .map((p) => p.name);
+      const declaredParams = [
+        ...pathLevelParams,
+        ...(operation.parameters ?? [])
+          .filter((p) => p.in === "path")
+          .map((p) => p.name)
+      ];
 
       for (const templateParam of templateParams) {
         if (!declaredParams.includes(templateParam)) {
-          fail(
+          problems.push(
             `${method.toUpperCase()} ${routePath}: path parameter "{${templateParam}}" has no matching "in: path" parameter.`
           );
         }
@@ -178,13 +194,14 @@ function checkPathParameters(doc: OpenApiDocument): void {
 
       for (const declaredParam of declaredParams) {
         if (!templateParams.includes(declaredParam)) {
-          fail(
+          problems.push(
             `${method.toUpperCase()} ${routePath}: declares path parameter "${declaredParam}" not present in the path template.`
           );
         }
       }
     }
   }
+  return problems;
 }
 
 /**
@@ -385,7 +402,7 @@ async function main() {
 
   for (const problem of collectOperationIdProblems(openApiDoc)) fail(problem);
   checkPublicAllowListUsed(openApiDoc);
-  checkPathParameters(openApiDoc);
+  for (const problem of collectPathParameterProblems(openApiDoc)) fail(problem);
   for (const problem of collectStandardErrorSchemaProblems(openApiDoc)) {
     fail(problem);
   }
