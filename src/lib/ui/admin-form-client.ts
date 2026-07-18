@@ -37,24 +37,30 @@ export function lockElement(
 }
 
 /**
- * POSTs a JSON body to a same-origin admin API endpoint using COOKIE auth: the
- * session + tenant cookies ride along automatically (`credentials:
- * "same-origin"`), and `resolveAuthInputs` reads the tenant from the
- * `awcms_tenant_id` cookie — so an admin-page form needs no manual
- * `X-AWCMS-Tenant-ID` header. Returns a narrow `{ ok, errorCode }` so callers
- * show a generic message keyed off `errorCode` and never surface internal
- * detail (Issue #540). Never throws.
+ * Sends a JSON body to a same-origin admin API endpoint with the given HTTP
+ * method, using COOKIE auth: the session + tenant cookies ride along
+ * automatically (`credentials: "same-origin"`), and `resolveAuthInputs` reads
+ * the tenant from the `awcms_tenant_id` cookie — so an admin-page form needs no
+ * manual `X-AWCMS-Tenant-ID` header. Returns a narrow `{ ok, errorCode }` so
+ * callers show a generic message keyed off `errorCode` and never surface
+ * internal detail (Issue #540). Never throws.
+ *
+ * `body` is optional so a bodyless mutation (e.g. `DELETE /roles/{id}`, a
+ * restore/toggle) can be sent without an empty-object payload; when omitted no
+ * request body and no `Content-Type` header are attached.
  */
-export async function postJson(
+export async function sendJson(
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
   url: string,
-  body: unknown
+  body?: unknown
 ): Promise<{ ok: boolean; errorCode: string | null }> {
   try {
+    const hasBody = body !== undefined;
     const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method,
+      headers: hasBody ? { "Content-Type": "application/json" } : undefined,
       credentials: "same-origin",
-      body: JSON.stringify(body)
+      body: hasBody ? JSON.stringify(body) : undefined
     });
     const payload = (await response.json().catch(() => null)) as {
       success?: boolean;
@@ -68,4 +74,16 @@ export async function postJson(
   } catch {
     return { ok: false, errorCode: "NETWORK_ERROR" };
   }
+}
+
+/**
+ * POSTs a JSON body to a same-origin admin API endpoint. Thin wrapper over
+ * {@link sendJson} kept for the existing create-form call sites; new edit /
+ * delete / toggle forms should call `sendJson` with the appropriate method.
+ */
+export async function postJson(
+  url: string,
+  body: unknown
+): Promise<{ ok: boolean; errorCode: string | null }> {
+  return sendJson("POST", url, body);
 }

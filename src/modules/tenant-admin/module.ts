@@ -29,6 +29,11 @@ export const tenantAdminModule = defineModule({
       description: "Update office records"
     },
     {
+      activityCode: "office_management",
+      action: "delete",
+      description: "Soft-delete office records"
+    },
+    {
       activityCode: "tenant_settings",
       action: "read",
       description: "Read tenant settings"

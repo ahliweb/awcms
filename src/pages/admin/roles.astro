@@ -1,8 +1,21 @@
 ---
 /**
- * Role (RBAC) management screen (Issue #166, Stage 3b). SSR-reads via the same
- * `listRoles` the `GET /api/v1/roles` endpoint uses, gated on
- * `identity_access.access_control.read`. Read-only.
+ * Role (RBAC) management screen (Issue #166 read; write CRUD + permission
+ * management added #171). SSR-reads via the same `listRoles` the
+ * `GET /api/v1/roles` endpoint uses, gated on
+ * `identity_access.access_control.read`.
+ *
+ * Users holding `identity_access.access_control.configure` ("Manage roles and
+ * role permissions") additionally get: a create-role form, per-row rename /
+ * soft-delete controls, a per-role manage-permissions panel (grant/revoke from
+ * the global permission catalog), and a restore control for soft-deleted roles.
+ * All write forms/buttons post to the `/api/v1/roles/**` endpoints via cookie
+ * auth — the endpoints' ABAC `configure` guard is the real authority; these
+ * gates are UX-only. System roles (e.g. `owner`) are never offered a delete
+ * button (the endpoint also rejects it with 409).
+ *
+ * The permission-management data (catalog + per-role grants + deleted roles) is
+ * only loaded when `canConfigure`, so a read-only viewer pays no extra reads.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { getDatabaseClient } from "../../lib/database/client";
@@ -12,27 +25,80 @@ import {
   listRoles,
   type RoleView
 } from "../../modules/identity-access/application/access-directory";
+import {
+  listDeletedRoles,
+  listPermissionCatalog,
+  listRolePermissions,
+  type DeletedRoleView,
+  type PermissionCatalogEntry
+} from "../../modules/identity-access/application/role-admin";
 
 const ssr = Astro.locals.ssrContext!;
 const canRead = ssr.permissions.has(
   permissionKey("identity_access", "access_control", "read")
 );
+const canConfigure = ssr.permissions.has(
+  permissionKey("identity_access", "access_control", "configure")
+);
+
+type RolePermRow = {
+  role: RoleView;
+  granted: PermissionCatalogEntry[];
+  available: PermissionCatalogEntry[];
+};
 
 let roles: RoleView[] = [];
+let rolePerms: RolePermRow[] = [];
+let deletedRoles: DeletedRoleView[] = [];
 let loadError = false;
+
+function permLabel(p: PermissionCatalogEntry): string {
+  return `${p.moduleKey}.${p.activityCode}.${p.action}`;
+}
 
 if (canRead) {
   try {
     const sql = getDatabaseClient();
-    const result = await withTenant(sql, ssr.tenantId, (tx) =>
-      listRoles(tx, ssr.tenantId)
-    );
-    if (result instanceof Response) loadError = true;
-    else roles = result;
+    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+      const liveRoles = await listRoles(tx, ssr.tenantId);
+      if (!canConfigure) {
+        return {
+          liveRoles,
+          rolePerms: [] as RolePermRow[],
+          deletedRoles: [] as DeletedRoleView[]
+        };
+      }
+      const catalog = await listPermissionCatalog(tx);
+      const perms: RolePermRow[] = [];
+      for (const role of liveRoles) {
+        const granted = await listRolePermissions(tx, ssr.tenantId, role.id);
+        const grantedIds = new Set(granted.map((p) => p.id));
+        const available = catalog.filter((p) => !grantedIds.has(p.id));
+        perms.push({ role, granted, available });
+      }
+      const deleted = await listDeletedRoles(tx, ssr.tenantId);
+      return { liveRoles, rolePerms: perms, deletedRoles: deleted };
+    });
+    // `withTenant` returns a 503 `Response` when the DB circuit breaker is open
+    // / a work-class queue is saturated — degrade to an error notice.
+    if (result instanceof Response) {
+      loadError = true;
+    } else {
+      roles = result.liveRoles;
+      rolePerms = result.rolePerms;
+      deletedRoles = result.deletedRoles;
+    }
   } catch {
     loadError = true;
   }
 }
+
+// A uniform row list so the table renders the same whether or not the viewer
+// can configure (a read-only viewer gets empty grant/available lists).
+const rows: RolePermRow[] = canConfigure
+  ? rolePerms
+  : roles.map((role) => ({ role, granted: [], available: [] }));
+const colCount = canConfigure ? 5 : 4;
 ---
 
 <AdminLayout title="Roles" active="roles">
@@ -55,6 +121,52 @@ if (canRead) {
   }
 
   {
+    canConfigure && !loadError && (
+      <p
+        id="roles-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canConfigure && !loadError && (
+      <form id="role-create-form" class="admin-create-form">
+        <p
+          id="role-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="role-code">Role code</label>
+        <input
+          id="role-code"
+          name="roleCode"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <label for="role-name">Role name</label>
+        <input
+          id="role-name"
+          name="roleName"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <button type="submit" id="role-create-submit">
+          Create role
+        </button>
+      </form>
+    )
+  }
+
+  {
     canRead && !loadError && (
       <div class="data-table-scroll">
         <table class="data-table" id="roles-table">
@@ -65,17 +177,18 @@ if (canRead) {
               <th scope="col">Name</th>
               <th scope="col">System</th>
               <th scope="col">Permissions</th>
+              {canConfigure && <th scope="col">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {roles.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
-                <td class="data-table-empty" colspan="4">
+                <td class="data-table-empty" colspan={colCount}>
                   No roles yet.
                 </td>
               </tr>
             ) : (
-              roles.map((role) => (
+              rows.map(({ role, granted, available }) => (
                 <tr>
                   <td>{role.roleCode}</td>
                   <td>{role.roleName}</td>
@@ -88,6 +201,67 @@ if (canRead) {
                     </span>
                   </td>
                   <td>{role.permissionCount}</td>
+                  {canConfigure && (
+                    <td>
+                      <button
+                        type="button"
+                        data-role-action="rename"
+                        data-role-id={role.id}
+                        data-role-name={role.roleName}
+                      >
+                        Rename
+                      </button>
+                      {!role.isSystem && (
+                        <button
+                          type="button"
+                          data-role-action="delete"
+                          data-role-id={role.id}
+                          data-role-code={role.roleCode}
+                        >
+                          Delete
+                        </button>
+                      )}
+                      <details class="role-permissions">
+                        <summary>Permissions ({granted.length})</summary>
+                        <ul>
+                          {granted.length === 0 ? (
+                            <li>No permissions granted.</li>
+                          ) : (
+                            granted.map((p) => (
+                              <li>
+                                <code>{permLabel(p)}</code>{" "}
+                                <button
+                                  type="button"
+                                  data-role-action="revoke"
+                                  data-role-id={role.id}
+                                  data-permission-id={p.id}
+                                >
+                                  Remove
+                                </button>
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                        {available.length > 0 && (
+                          <form
+                            class="admin-create-form"
+                            data-role-grant-form
+                            data-role-id={role.id}
+                          >
+                            <label for={`grant-${role.id}`}>
+                              Add permission
+                            </label>
+                            <select id={`grant-${role.id}`} name="permissionId">
+                              {available.map((p) => (
+                                <option value={p.id}>{permLabel(p)}</option>
+                              ))}
+                            </select>
+                            <button type="submit">Add</button>
+                          </form>
+                        )}
+                      </details>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -96,4 +270,213 @@ if (canRead) {
       </div>
     )
   }
+
+  {
+    canConfigure && !loadError && deletedRoles.length > 0 && (
+      <section id="deleted-roles">
+        <h2>Deleted roles</h2>
+        <div class="data-table-scroll">
+          <table class="data-table" id="deleted-roles-table">
+            <caption>{deletedRoles.length} deleted role(s)</caption>
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deletedRoles.map((role) => (
+                <tr>
+                  <td>{role.roleCode}</td>
+                  <td>{role.roleName}</td>
+                  <td>
+                    <button
+                      type="button"
+                      data-role-action="restore"
+                      data-role-id={role.id}
+                      data-role-code={role.roleCode}
+                    >
+                      Restore
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
 </AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time, so it
+  // can't be runtime-conditional). Harmless for users without the configure
+  // permission: the forms/buttons only render when `canConfigure`, so the
+  // listeners find no targets. The import forces Astro to bundle this script
+  // EXTERNAL — an import-free script would be inlined, and inline scripts are
+  // blocked by this app's CSP. See admin-form-client.ts.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("roles-action-error");
+  const createError = document.getElementById("role-create-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  function showCreateError(message: string): void {
+    if (!createError) return;
+    createError.textContent = message;
+    createError.hidden = false;
+  }
+
+  // Create-role and grant-permission are both form submits, routed by id/attr.
+  document.addEventListener("submit", async (event) => {
+    const form = (event.target as HTMLElement).closest("form");
+    if (!form) return;
+
+    if (form.id === "role-create-form") {
+      event.preventDefault();
+      const submit = form.querySelector<HTMLButtonElement>(
+        "#role-create-submit"
+      );
+      if (!submit || submit.disabled) return;
+      const unlock = lockElement(submit, "Please wait…");
+      if (createError) createError.hidden = true;
+
+      const data = new FormData(form);
+      const roleCode = String(data.get("roleCode") ?? "").trim();
+      const roleName = String(data.get("roleName") ?? "").trim();
+
+      const result = await sendJson("POST", "/api/v1/roles", {
+        roleCode,
+        roleName
+      });
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+      // Generic message only — never surface internal detail (Issue #540).
+      showCreateError(
+        "Could not create the role. Check the code is unique and valid."
+      );
+      unlock();
+      return;
+    }
+
+    if (form.hasAttribute("data-role-grant-form")) {
+      event.preventDefault();
+      const roleId = form.getAttribute("data-role-id");
+      const submit = form.querySelector<HTMLButtonElement>(
+        "button[type='submit']"
+      );
+      const select = form.querySelector<HTMLSelectElement>(
+        "select[name='permissionId']"
+      );
+      if (!roleId || !submit || submit.disabled || !select) return;
+      const permissionId = select.value;
+      if (!permissionId) return;
+
+      const unlock = lockElement(submit, "Please wait…");
+      if (actionError) actionError.hidden = true;
+
+      const result = await sendJson(
+        "POST",
+        `/api/v1/roles/${encodeURIComponent(roleId)}/permissions`,
+        { permissionId }
+      );
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+      showActionError("Could not grant the permission. Please try again.");
+      unlock();
+      return;
+    }
+  });
+
+  // Rename / delete / restore / revoke are all button clicks.
+  document.addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      "button[data-role-action]"
+    );
+    if (!button || button.disabled) return;
+
+    const action = button.dataset.roleAction;
+    const roleId = button.dataset.roleId;
+    if (!roleId) return;
+
+    if (actionError) actionError.hidden = true;
+
+    if (action === "rename") {
+      const current = button.dataset.roleName ?? "";
+      const next = window.prompt("New role name?", current);
+      if (next === null || next.trim().length === 0) return;
+      const unlock = lockElement(button, "…");
+      const result = await sendJson(
+        "PATCH",
+        `/api/v1/roles/${encodeURIComponent(roleId)}`,
+        { roleName: next.trim() }
+      );
+      if (result.ok) return void window.location.reload();
+      showActionError("Could not rename the role. Please try again.");
+      unlock();
+      return;
+    }
+
+    if (action === "delete") {
+      const code = button.dataset.roleCode ?? roleId;
+      if (!window.confirm(`Soft-delete role "${code}"?`)) return;
+      const reason = window.prompt("Reason for deleting (optional)?") ?? "";
+      const trimmed = reason.trim();
+      const unlock = lockElement(button, "…");
+      const result = await sendJson(
+        "DELETE",
+        `/api/v1/roles/${encodeURIComponent(roleId)}`,
+        trimmed.length > 0 ? { reason: trimmed } : undefined
+      );
+      if (result.ok) return void window.location.reload();
+      showActionError(
+        "Could not delete the role. System roles cannot be deleted."
+      );
+      unlock();
+      return;
+    }
+
+    if (action === "restore") {
+      const code = button.dataset.roleCode ?? roleId;
+      if (!window.confirm(`Restore role "${code}"?`)) return;
+      const unlock = lockElement(button, "…");
+      const result = await sendJson(
+        "POST",
+        `/api/v1/roles/${encodeURIComponent(roleId)}/restore`
+      );
+      if (result.ok) return void window.location.reload();
+      showActionError(
+        "Could not restore the role. Its code may now be in use."
+      );
+      unlock();
+      return;
+    }
+
+    if (action === "revoke") {
+      const permissionId = button.dataset.permissionId;
+      if (!permissionId) return;
+      if (!window.confirm("Remove this permission from the role?")) return;
+      const unlock = lockElement(button, "…");
+      const result = await sendJson(
+        "DELETE",
+        `/api/v1/roles/${encodeURIComponent(roleId)}/permissions`,
+        { permissionId }
+      );
+      if (result.ok) return void window.location.reload();
+      showActionError("Could not revoke the permission. Please try again.");
+      unlock();
+      return;
+    }
+  });
+</script>

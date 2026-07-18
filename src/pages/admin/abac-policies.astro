@@ -1,8 +1,18 @@
 ---
 /**
- * ABAC policy management screen (Issue #166, Stage 3b). SSR-reads via the same
- * `listAbacPolicies` the `GET /api/v1/abac/policies` endpoint uses, gated on
- * `identity_access.access_control.read`. Read-only.
+ * ABAC policy management screen (Issue #166 read; write authoring + toggle added
+ * #171). SSR-reads via the same `listAbacPolicies` the
+ * `GET /api/v1/abac/policies` endpoint uses, gated on
+ * `identity_access.access_control.read`.
+ *
+ * A create-policy form and per-row Edit / Enable-Disable controls both post to
+ * `POST` / `PATCH /api/v1/abac/policies[/{id}]`, gated on
+ * `identity_access.access_control.configure` — the access-control
+ * administration permission. That activity seeds only `read`/`assign`/
+ * `configure` (no `create`/`update`), and the owner is granted only seeded
+ * permissions, so `configure` is the write gate for policy authoring. The gates
+ * are UX-only — the endpoints' ABAC guards are the real authority; the buttons
+ * just avoid rendering controls the user can't use.
  *
  * Note: like awcms-mini, the base ships this table seeded-EMPTY — the ABAC
  * evaluator uses built-in role/permission rules by default, and per-tenant
@@ -22,6 +32,13 @@ const ssr = Astro.locals.ssrContext!;
 const canRead = ssr.permissions.has(
   permissionKey("identity_access", "access_control", "read")
 );
+// Both write surfaces gate on `configure` — the only seeded write action for
+// this activity (no `create`/`update` exist in the catalog).
+const canConfigure = ssr.permissions.has(
+  permissionKey("identity_access", "access_control", "configure")
+);
+const canCreate = canConfigure;
+const canUpdate = canConfigure;
 
 let policies: AbacPolicyView[] = [];
 let loadError = false;
@@ -60,6 +77,57 @@ if (canRead) {
   }
 
   {
+    canCreate && (
+      <form id="policy-create-form" class="admin-create-form">
+        <p
+          id="policy-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="policy-code">Policy code</label>
+        <input
+          id="policy-code"
+          name="policyCode"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <label for="policy-effect">Effect</label>
+        <select id="policy-effect" name="effect">
+          <option value="allow">allow</option>
+          <option value="deny">deny</option>
+        </select>
+
+        <label for="policy-description">Description (optional)</label>
+        <input
+          id="policy-description"
+          name="description"
+          type="text"
+          autocomplete="off"
+        />
+
+        <button type="submit" id="policy-create-submit">
+          Create policy
+        </button>
+      </form>
+    )
+  }
+
+  {
+    canUpdate && (
+      <p
+        id="policy-update-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
     canRead && !loadError && (
       <div class="data-table-scroll">
         <table class="data-table" id="abac-policies-table">
@@ -70,12 +138,13 @@ if (canRead) {
               <th scope="col">Effect</th>
               <th scope="col">Description</th>
               <th scope="col">Active</th>
+              {canUpdate && <th scope="col">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {policies.length === 0 ? (
               <tr>
-                <td class="data-table-empty" colspan="4">
+                <td class="data-table-empty" colspan={canUpdate ? 5 : 4}>
                   No custom policies — the built-in role/permission rules apply.
                 </td>
               </tr>
@@ -95,6 +164,28 @@ if (canRead) {
                   </td>
                   <td>{policy.description ?? "—"}</td>
                   <td>{policy.isActive ? "yes" : "no"}</td>
+                  {canUpdate && (
+                    <td>
+                      <button
+                        type="button"
+                        class="policy-edit"
+                        data-policy-id={policy.id}
+                        data-policy-code={policy.policyCode}
+                        data-effect={policy.effect}
+                        data-description={policy.description ?? ""}
+                      >
+                        Edit
+                      </button>{" "}
+                      <button
+                        type="button"
+                        class="policy-toggle"
+                        data-policy-id={policy.id}
+                        data-active={policy.isActive ? "true" : "false"}
+                      >
+                        {policy.isActive ? "Disable" : "Enable"}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -104,3 +195,142 @@ if (canRead) {
     )
   }
 </AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time, so it
+  // can't be runtime-conditional). Harmless for users without create/update
+  // permission: the form and buttons only render when their gate passes, so the
+  // lookups below find nothing and no listener binds. The import forces Astro to
+  // bundle this script EXTERNAL — an import-free script would be inlined, and
+  // inline scripts are blocked by this app's CSP. See admin-form-client.ts.
+  import {
+    lockElement,
+    postJson,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+
+  const createForm = document.getElementById(
+    "policy-create-form"
+  ) as HTMLFormElement | null;
+  const createError = document.getElementById("policy-create-error");
+  const createSubmit = document.getElementById(
+    "policy-create-submit"
+  ) as HTMLButtonElement | null;
+  const updateError = document.getElementById("policy-update-error");
+
+  function show(box: HTMLElement | null, message: string): void {
+    if (!box) return;
+    box.textContent = message;
+    box.hidden = false;
+  }
+
+  // --- Create ---------------------------------------------------------------
+  createForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!createSubmit || createSubmit.disabled) return;
+    const unlock = lockElement(createSubmit, "Please wait…");
+    if (createError) createError.hidden = true;
+
+    const formData = new FormData(createForm);
+    const policyCode = String(formData.get("policyCode") ?? "").trim();
+    const effect = String(formData.get("effect") ?? "").trim();
+    const description = String(formData.get("description") ?? "").trim();
+
+    const result = await postJson("/api/v1/abac/policies", {
+      policyCode,
+      effect,
+      // Empty string clears / omits the description; the endpoint normalises
+      // it to null.
+      description: description.length > 0 ? description : null
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    // Generic message only — never surface internal detail (Issue #540).
+    show(
+      createError,
+      "Could not create the policy. Check the code is unique and try again."
+    );
+    unlock();
+  });
+
+  // --- Edit effect / description --------------------------------------------
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "button.policy-edit"
+  )) {
+    button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const policyId = button.dataset.policyId;
+      if (!policyId) return;
+
+      const currentEffect = button.dataset.effect ?? "allow";
+      const nextEffect = window.prompt(
+        `Effect for "${button.dataset.policyCode}" (allow or deny):`,
+        currentEffect
+      );
+      if (nextEffect === null) return; // cancelled
+      const effect = nextEffect.trim();
+      if (effect !== "allow" && effect !== "deny") {
+        show(updateError, "Effect must be exactly 'allow' or 'deny'.");
+        return;
+      }
+
+      const nextDescription = window.prompt(
+        "Description (leave blank to clear):",
+        button.dataset.description ?? ""
+      );
+      if (nextDescription === null) return; // cancelled
+
+      const unlock = lockElement(button, "Please wait…");
+      if (updateError) updateError.hidden = true;
+
+      const result = await sendJson(
+        "PATCH",
+        `/api/v1/abac/policies/${encodeURIComponent(policyId)}`,
+        {
+          effect,
+          description:
+            nextDescription.trim().length > 0 ? nextDescription.trim() : null
+        }
+      );
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+      show(updateError, "Could not update the policy. Please try again.");
+      unlock();
+    });
+  }
+
+  // --- Enable / disable toggle ----------------------------------------------
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "button.policy-toggle"
+  )) {
+    button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const policyId = button.dataset.policyId;
+      if (!policyId) return;
+
+      const currentlyActive = button.dataset.active === "true";
+      const unlock = lockElement(button, "Please wait…");
+      if (updateError) updateError.hidden = true;
+
+      const result = await sendJson(
+        "PATCH",
+        `/api/v1/abac/policies/${encodeURIComponent(policyId)}`,
+        { isActive: !currentlyActive }
+      );
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+      show(updateError, "Could not change the policy state. Please try again.");
+      unlock();
+    });
+  }
+</script>

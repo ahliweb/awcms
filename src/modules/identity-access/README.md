@@ -30,6 +30,42 @@ layar admin SSR (`src/pages/admin/{users,roles,abac-policies}.astro`):
 Semua bounded `LIMIT 100` (config low-cardinality, tanpa cursor), tenant-filtered,
 dan berjalan di dalam `withTenant` (RLS FORCE batas nyata).
 
+## Access-management writes (admin — Issue #171)
+
+Layar admin `roles`/`abac-policies`/`users` kini punya aksi tulis, masing-masing
+di-gate default-deny oleh `authorizeInTransaction` di dalam `withTenant`; gate
+UI hanya UX, endpoint-lah otoritasnya. Setiap tulis adalah high-risk →
+menulis audit event (severity `warning`) SETELAH tulis sukses (tak ada audit
+di jalur 409/404).
+
+**Catatan permission (penting).** Katalog `awcms_permissions` (`sql/005`)
+menyemai aktivitas `identity_access.access_control` HANYA dengan
+`read`/`assign`/`configure` — TIDAK ada `create`/`update`/`delete`. Owner
+di-grant seluruh baris katalog saat bootstrap, jadi guard pada action
+tak-ter-seed akan men-deny bahkan owner. Karena itu semua tulis di sini memakai
+action ter-seed:
+
+- `POST /api/v1/roles`, `PATCH`/`DELETE /api/v1/roles/{id}`,
+  `POST /api/v1/roles/{id}/restore`, `POST`/`DELETE /api/v1/roles/{id}/permissions`
+  (`application/role-admin.ts`) — buat/rename/soft-delete/restore role + grant/
+  revoke permission. Gate **`configure`** ("Manage roles and role permissions").
+  Role sistem (`is_system`) tak bisa di-soft-delete (409). Duplikat role code /
+  duplikat grant → 409 di dalam `withTenant`.
+- `POST /api/v1/abac/policies`, `PATCH /api/v1/abac/policies/{id}`
+  (`application/abac-admin.ts`) — author + edit + enable/disable policy. Gate
+  **`configure`** (administrasi access-control). Duplikat `policyCode` → 409.
+- `PATCH /api/v1/users/{id}` (`application/user-admin.ts` `setTenantUserStatus`)
+  — activate/deactivate (tak ada `deleted_at`; `status` `active`/`inactive`).
+  Gate **`configure`**.
+- `POST`/`DELETE /api/v1/access/assignments` (`application/user-admin.ts`
+  `assignRole`/`unassignRole`) — assign/unassign role↔user. Gate **`assign`**.
+  Assign idempotent di unique index `(tenant_id, tenant_user_id, role_id)`
+  (23505→409); target tak ada → 404 sebelum tulis (anti existence-oracle).
+
+Klien admin memakai helper `sendJson(method, url, body?)`
+(`src/lib/ui/admin-form-client.ts`) untuk PATCH/DELETE — script eksternal
+(CSP-safe).
+
 ## Auth flow
 
 `POST /api/v1/auth/login` — header `X-AWCMS-Tenant-ID` wajib, rate limit per `clientIp:tenantId` (backstop di luar lockout per-identity), verifikasi password, set cookie httpOnly (`awcms_session`/`awcms_tenant_id`) + kembalikan token untuk klien API. `POST /api/v1/auth/logout` merevoke sesi. `GET /api/v1/auth/me` hanya menerima bearer token.

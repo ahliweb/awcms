@@ -22,11 +22,18 @@ Skema: `sql/002_awcms_tenant_office_schema.sql`, `sql/006_awcms_setup_wizard_sch
 
 ## Offices
 
-`GET/POST /api/v1/offices`, `GET/PATCH /api/v1/offices/{id}` — guard `tenant_admin.office_management.{read,create,update}`. Soft delete belum punya endpoint (belum ada permission `delete` yang di-seed — tambahkan lewat migration terpisah bila dibutuhkan).
+`GET/POST /api/v1/offices`, `GET/PATCH/DELETE /api/v1/offices/{id}`, `POST /api/v1/offices/{id}/restore` — guard `tenant_admin.office_management.{read,create,update,delete}`.
 
 `GET /api/v1/offices` **keyset-paginated**: maksimal 100 baris per halaman, urut **terbaru dulu**, plus `nextCursor` opaque (`null` di halaman terakhir). Cursor rusak → `400`, bukan diam-diam menyajikan halaman 1.
 
-Layar admin `admin/offices.astro` kini punya form **create office** yang di-gate permission `tenant_admin.office_management.create` (hanya render bila user punya izin), POST ke `POST /api/v1/offices` via cookie auth (CSP-safe: script bundled eksternal).
+### Soft-delete + restore (Issue #171)
+
+- `DELETE /api/v1/offices/{id}` — guard `office_management.delete`. Soft delete (`deleted_at/deleted_by/delete_reason`), **bukan** hard delete: baris tetap restorable dan kode office langsung bebas dipakai ulang (partial unique index `WHERE deleted_at IS NULL`). Body opsional/bodyless — `reason` yang ada disimpan+diaudit, `reason` kosong ditolak. Audit `delete` severity `warning`. 404 bila id tak ada/tenant lain/sudah terhapus.
+- `POST /api/v1/offices/{id}/restore` — guard **`office_management.update`** (bukan `delete`, bukan action `restore` tersendiri: activity ini tak punya permission `restore`, dan un-delete adalah edit siklus-hidup record — otoritas yang sama dengan mengubah office). Membersihkan stempel delete, mengisi `restored_at/restored_by`, audit `restore` severity `warning`. Idempotent-safe: restore ulang → 404. **409 `OFFICE_CODE_ALREADY_EXISTS`** bila office live lain sudah mengambil kode itu selagi terhapus — partial unique index memicu 23505 pada UPDATE; ditangkap **di dalam** `withTenant` (tanpa tulis apa pun setelahnya) dan dipetakan 409, aturan yang sama dengan `createOffice`.
+
+`restoreOffice` membaca `office_code` baris terhapus **sebelum** UPDATE — untuk menamai `DuplicateOfficeCodeError` dengan presisi sekaligus jadi cek eksistensi (id live/absen → tak ada baris → 404 sebelum tulis apa pun).
+
+Layar admin `admin/offices.astro`: form **create office** (gate `.create`), plus **inline edit per-baris** (name + status → PATCH, gate `.update`), tombol **soft-delete** per-baris (gate `.delete`), dan section **"Deleted offices"** dengan tombol **Restore** (gate `.update`). Semua gate UI hanya UX — otoritas tetap guard endpoint. Script bundled eksternal (CSP-safe), pakai `sendJson(method,url,body?)` dari `admin-form-client.ts` termasuk DELETE/restore bodyless.
 
 ### Kenapa FK-nya komposit (GHSA-r7cx-c4jh-cvvw)
 

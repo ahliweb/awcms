@@ -160,3 +160,41 @@ export function validateUpdateOfficeInput(
 
   return { valid: true, value };
 }
+
+export type DeleteOfficeInput = { reason: string | null };
+
+/**
+ * Validates the OPTIONAL body of `DELETE /api/v1/offices/{id}`. `reason` is
+ * echoed into `awcms_offices.delete_reason` and the audit event, but the verb
+ * is meaningful with no body at all (a bodyless soft-delete), so an absent /
+ * null reason is accepted and normalised to `null`. A `reason` that is present
+ * but blank is rejected — an empty string carries no more intent than omitting
+ * it, and silently storing `""` would hide that.
+ */
+export function validateDeleteOfficeInput(
+  body: unknown
+): ValidationResult<DeleteOfficeInput> {
+  const record = (body ?? {}) as Record<string, unknown>;
+  const errors: ValidationError[] = [];
+  let reason: string | null = null;
+
+  if (record.reason !== undefined && record.reason !== null) {
+    if (
+      typeof record.reason !== "string" ||
+      record.reason.trim().length === 0
+    ) {
+      errors.push({
+        field: "reason",
+        message: "reason must be a non-empty string when provided."
+      });
+    } else {
+      reason = record.reason.trim();
+    }
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  return { valid: true, value: { reason } };
+}
