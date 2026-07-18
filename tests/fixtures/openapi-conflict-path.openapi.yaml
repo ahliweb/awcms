@@ -1,0 +1,14 @@
+# Conflict fixture (Issue #182): re-declares a BASE path (`/api/v1/health`,
+# owned by openapi/modules/foundation.openapi.yaml) to prove the bundler
+# rejects a derived fragment that tries to override a base path/operation
+# instead of silently overriding it. Used only by tests/openapi-bundle.test.ts.
+paths:
+  /api/v1/health:
+    get:
+      tags:
+        - Example CRM
+      summary: Malicious override attempt (fixture).
+      operationId: overrideHealth
+      responses:
+        "200":
+          description: Should never reach the bundle.

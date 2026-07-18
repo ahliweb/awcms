@@ -50,6 +50,33 @@ that needs the registry row to exist (`enableTenantModule`,
 `syncModuleDescriptors(tx)` itself first — do not assume an operator ran
 `POST /api/v1/modules/sync` beforehand.
 
+## Build-time module composition (Issue #178, ADR-0025)
+
+Distinct from the tenant lifecycle above: **which modules exist in the code**
+is composed at build/compile time, not at runtime and never from tenant input.
+
+- **`domain/module-composition.ts`** — the pure validation engine.
+  `mergeModuleRegistries(base, application)` concatenates the base registry
+  (`listBaseModules()`) with an optional `ApplicationModuleRegistry`
+  (`src/modules/application-registry.ts` — `undefined` in this base repo, a
+  real registry in a derived repo). `composeModuleRegistry()` /
+  `validateComposedModuleRegistry()` reject: duplicate module key, prohibited
+  base override, `type: base/system` from an application module, missing/cyclic
+  dependency (reuses `_shared/module-dependency-graph.ts`), capability provider
+  conflict/missing (`ModuleCapabilityContract`), migration-namespace overlap
+  (base reserves `1-899`, derived starts at `900`), deployment-profile
+  incompatibility, navigation path conflict, and invalid job descriptor (reuses
+  `domain/job-registry.ts`). It lives here — not `_shared/` — so both reused
+  validators are imported cleanly (DAG down from `_shared/`, job-registry as a
+  sibling); see the file header and ADR-0025 for the placement rationale.
+- **`buildComposedModuleInventory()`** — a deterministic, sorted-by-key,
+  timestamp-free snapshot for CI/release evidence
+  (`docs/awcms/module-composition-inventory.json`).
+- **Gates** (all in `bun run check` + CI): `modules:compose:check`,
+  `modules:composition:inventory:generate`/`:check`, `extension:check`.
+- Fixture: `tests/fixtures/derived-application-example/` (one dummy domain
+  module), exercised by `tests/module-composition-fixture.test.ts`.
+
 ## API surface
 
 | Method + Path                                       | Permission                                 |
@@ -74,10 +101,15 @@ write an audit event to `awcms_audit_events` with
 
 ## Adapted for this base
 
-Relative to the awcms-mini source, the following are intentionally **not**
-ported (they depend on toolchain/UI that does not exist in this foundation
-repo): build-time module composition (`modules:compose:check`), the derived
-application compatibility manifest (`extension:check`), tenant module presets,
-the tenant-module matrix, module audit summary (admin UI), and the live email
-provider health check. The core registry, lifecycle, settings, permission
-sync, navigation, jobs, and health services are all present.
+Relative to the awcms-mini source, build-time module composition IS now ported
+(Issue #178 — `modules:compose:check`, `modules:composition:inventory:*`, and
+the `extension:check` seam; see the section above). The following remain
+intentionally **not** ported (they depend on toolchain/UI that does not exist
+in this foundation repo, or are scheduled separately): the FULL derived
+application compatibility manifest — SemVer-range/migration-checksum/capability
+validation against a published `extension.manifest.json` (planned Issue #183,
+ADR-0015; `extension:check` currently validates the composition seam only),
+tenant module presets, the tenant-module matrix, module audit summary (admin
+UI), and the live email provider health check. The core registry, lifecycle,
+settings, permission sync, navigation, jobs, health, and build-time composition
+services are all present.

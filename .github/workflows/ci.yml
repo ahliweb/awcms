@@ -69,11 +69,23 @@ jobs:
       - name: Docs translation staleness check (ADR-0023)
         run: bun run check:docs:translation
 
-      - name: API spec + route contract check
+      - name: API spec + route contract check (fragments + bundle freshness)
         run: bun run api:spec:check
+
+      - name: API reference docs freshness check (Issue #182)
+        run: bun run api:docs:check
 
       - name: Module dependency graph check
         run: bun run modules:dag:check
+
+      - name: Module composition check (Issue #178)
+        run: bun run modules:compose:check
+
+      - name: Module composition inventory freshness check (Issue #178)
+        run: bun run modules:composition:inventory:check
+
+      - name: Extension seam check (Issue #178)
+        run: bun run extension:check
 
       - name: Reporting projection registry check
         run: bun run reporting:projections:registry:check

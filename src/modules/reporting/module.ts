@@ -57,7 +57,7 @@ export const reportingModule = defineModule({
     "domain_event_runtime"
   ],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    openApiPath: "openapi/modules/reporting.openapi.yaml",
     basePath: "/api/v1/reports"
   },
   permissions: [

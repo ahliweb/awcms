@@ -9,7 +9,7 @@ export const profileIdentityModule = defineModule({
     "Canonical person/organization profile lifecycle: CRUD/list/search/soft-delete, typed identifiers (email/phone/national_id/tax_id/...) with normalization/hashing/masking, and cross-module entity links (employee, vendor, customer, tax party, ...).",
   dependencies: ["tenant_admin"],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    openApiPath: "openapi/modules/profile-identity.openapi.yaml",
     basePath: "/api/v1/profiles"
   },
   permissions: [

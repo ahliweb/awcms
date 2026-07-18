@@ -41,9 +41,9 @@ Kalau salah satu dependency modul **belum** ada di awcms → port dependency itu
 
 ## 4. Adaptasi kontrak & dependensi
 
-- Kontrak `ModuleDescriptor` awcms (`src/modules/_shared/module-contract.ts`) lebih ramping dari mini — DROP field tak didukung (mis. `capabilities`/`deploymentProfiles`) bila belum ada; tambah field ke kontrak **hanya** bila modul benar-benar butuh (naikkan `MODULE_CONTRACT_VERSION`).
+- Kontrak `ModuleDescriptor` awcms (`src/modules/_shared/module-contract.ts`) lebih ramping dari mini, TAPI sejak Issue #178 (contract v1.2.0) sudah memodelkan `capabilities` (`provides`/`consumes`, ADR-0011) dan `compatibility.deploymentProfiles` — jadi field itu **boleh dipertahankan** saat porting (divalidasi `bun run modules:compose:check`). `ModuleType` awcms masih TANPA `"derived"` (CHECK constraint DB `sql/008` cuma base/system/domain/integration) — modul turunan pakai `"domain"`. Field lain yang belum ada tetap DROP; tambah ke kontrak hanya bila benar-benar butuh (naikkan `MODULE_CONTRACT_VERSION`).
 - **JANGAN tambah navigation entry** (belum ada admin UI di awcms — nav ke halaman tak ada = 404).
-- **JANGAN rujuk toolchain yang tak ada di awcms**: `repo:inventory`, `work-class`, `i18n:*`, `openapi:bundle`, `extension:check`, `api:docs:*`, `modules:compose:*`. Hanya ~23 script nyata (cek `package.json`).
+- **Toolchain komposisi SUDAH ADA (Issue #178)**: `modules:compose:check`, `modules:composition:inventory:generate`/`:check`, `extension:check` — pakai bila relevan. Yang MASIH belum ada di awcms (JANGAN rujuk): `repo:inventory`, `work-class`, `i18n:*`, `openapi:bundle`, `api:docs:*`. Cek `package.json` untuk daftar script nyata.
 - Bila mini mengimpor modul yang **belum** diport (email, reporting, integration-hub, dst.) → DROP route/consumer/adapter itu, atau jadikan no-op/seam opsional yang tak mengimpor modul absen. Catat tiap drop.
 - Daftarkan module di `src/modules/index.ts` (urut agar DAG valid).
 

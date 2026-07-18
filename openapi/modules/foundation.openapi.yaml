@@ -1,0 +1,110 @@
+# Source fragment for the "foundation" module (Issue #182, epic #177).
+#
+# Owns every path whose operations carry this module's OpenAPI tag(s), plus
+# every components.schemas entry referenced ONLY by this module's operations.
+# Schemas shared by 2+ modules (or referenced by none) live in the root
+# fragment (openapi/awcms-public-api.src.yaml) instead.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses and cross-module schemas) only resolve
+# after `bun run openapi:bundle` merges this file with the root fragment and
+# every sibling module fragment into openapi/awcms-public-api.openapi.yaml.
+# Edit this file (or the root fragment for shared components), never the
+# generated bundle.
+paths:
+  /api/v1/database/pool/health:
+    get:
+      operationId: getDatabasePoolHealth
+      tags:
+        - Foundation
+      summary: Database pool/work-class saturation, circuit-breaker state, and per-process capacity for this instance.
+      security: []
+      responses:
+        "200":
+          description: Aggregate pool health (never exposes tenant data or query content).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum:
+                          - healthy
+                          - degraded
+                          - unhealthy
+                      databaseReachable:
+                        type: boolean
+                      circuitBreakerState:
+                        type: string
+                        enum:
+                          - closed
+                          - open
+                          - half_open
+                      workClasses:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            workClass:
+                              type: string
+                            active:
+                              type: integer
+                            max:
+                              type: integer
+                            queued:
+                              type: integer
+                      capacity:
+                        type: object
+                        properties:
+                          processClass:
+                            type: string
+                          poolMax:
+                            type: integer
+                          approvedConnections:
+                            type: integer
+                          reservedAdminHeadroom:
+                            type: integer
+                      generatedAt:
+                        type: string
+                        format: date-time
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      tags:
+        - Foundation
+      summary: Liveness/module-count probe.
+      security: []
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                      service:
+                        type: string
+                      runtime:
+                        type: string
+                      moduleCount:
+                        type: integer
+                      generatedAt:
+                        type: string
+                        format: date-time

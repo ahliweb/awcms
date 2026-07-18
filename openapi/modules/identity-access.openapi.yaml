@@ -1,0 +1,856 @@
+# Source fragment for the "identity-access" module (Issue #182, epic #177).
+#
+# Owns every path whose operations carry this module's OpenAPI tag(s), plus
+# every components.schemas entry referenced ONLY by this module's operations.
+# Schemas shared by 2+ modules (or referenced by none) live in the root
+# fragment (openapi/awcms-public-api.src.yaml) instead.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses and cross-module schemas) only resolve
+# after `bun run openapi:bundle` merges this file with the root fragment and
+# every sibling module fragment into openapi/awcms-public-api.openapi.yaml.
+# Edit this file (or the root fragment for shared components), never the
+# generated bundle.
+paths:
+  /api/v1/abac/policies:
+    get:
+      operationId: listAbacPolicies
+      tags:
+        - Identity & Access
+      summary: List the current tenant's ABAC policies (seeded-empty by default; built-in rules apply).
+      responses:
+        "200":
+          description: The tenant's ABAC policies (limit 100).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AbacPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createAbacPolicy
+      tags:
+        - Identity & Access
+      summary: Author a new ABAC policy for the current tenant (high-risk access-control change; audit-logged).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - policyCode
+                - effect
+              properties:
+                policyCode:
+                  type: string
+                  description: Unique per tenant. Starts alphanumeric; letters, digits, '.', '_', '-' only (max 100 chars).
+                effect:
+                  type: string
+                  enum:
+                    - allow
+                    - deny
+                description:
+                  type: string
+                  nullable: true
+      responses:
+        "201":
+          description: Policy created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/AbacPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: policyCode is already taken in this tenant (POLICY_CODE_ALREADY_EXISTS).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/abac/policies/{id}:
+    patch:
+      operationId: updateAbacPolicy
+      tags:
+        - Identity & Access
+      summary: Update an ABAC policy's effect/description and/or enable-disable it (high-risk; audit-logged).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        description: Provide at least one of effect, description, isActive. A null description clears it.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                effect:
+                  type: string
+                  enum:
+                    - allow
+                    - deny
+                description:
+                  type: string
+                  nullable: true
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Policy updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/AbacPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/access/assignments:
+    post:
+      operationId: createRoleAssignment
+      tags:
+        - Identity & Access
+      summary: Assign a role to a tenant user (high-risk, audited, idempotent).
+      description: Grants a role to a tenant user. Idempotent at the DB unique index — a repeat assign returns 409. Gated on `identity_access.access_control.assign`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenantUserId
+                - roleId
+              properties:
+                tenantUserId:
+                  type: string
+                  format: uuid
+                roleId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: The created assignment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      tenantUserId:
+                        type: string
+                        format: uuid
+                      roleId:
+                        type: string
+                        format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The role is already assigned to this tenant user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteRoleAssignment
+      tags:
+        - Identity & Access
+      summary: Revoke a role from a tenant user (high-risk, audited).
+      description: Removes a role assignment. 404 when no such assignment exists. Gated on `identity_access.access_control.assign`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenantUserId
+                - roleId
+              properties:
+                tenantUserId:
+                  type: string
+                  format: uuid
+                roleId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: The assignment was removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      removed:
+                        type: boolean
+                        enum:
+                          - true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/auth/login:
+    post:
+      operationId: postAuthLogin
+      tags:
+        - Identity & Access
+      summary: Authenticate with a login identifier and password; issues a session token.
+      security: []
+      parameters:
+        - name: X-AWCMS-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - loginIdentifier
+                - password
+              properties:
+                loginIdentifier:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Session issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Too many login attempts from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/logout:
+    post:
+      operationId: postAuthLogout
+      tags:
+        - Identity & Access
+      summary: Revoke the current session.
+      responses:
+        "200":
+          description: Logged out.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      loggedOut:
+                        type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/me:
+    get:
+      operationId: getAuthMe
+      tags:
+        - Identity & Access
+      summary: Current authenticated identity.
+      responses:
+        "200":
+          description: Current identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      identityId:
+                        type: string
+                        format: uuid
+                      loginIdentifier:
+                        type: string
+                      profileId:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                      lastLoginAt:
+                        type: string
+                        format: date-time
+                        nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/roles:
+    get:
+      operationId: listRoles
+      tags:
+        - Identity & Access
+      summary: List the current tenant's (non-deleted) roles with a permission count.
+      responses:
+        "200":
+          description: The tenant's roles (limit 100), each with a permission count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createRole
+      tags:
+        - Identity & Access
+      summary: Create a custom role for the current tenant (audited; requires access_control.configure).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roleCode
+                - roleName
+              properties:
+                roleCode:
+                  type: string
+                  description: "Slug: 2–64 chars, lowercase letters, digits, '_' or '-'. Unique per tenant among live roles."
+                roleName:
+                  type: string
+      responses:
+        "201":
+          description: Role created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: roleCode is already taken by a live role in this tenant (ROLE_CODE_ALREADY_EXISTS).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/roles/{id}:
+    patch:
+      operationId: updateRole
+      tags:
+        - Identity & Access
+      summary: Rename a role (audited; requires access_control.configure).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roleName
+              properties:
+                roleName:
+                  type: string
+      responses:
+        "200":
+          description: Role updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteRole
+      tags:
+        - Identity & Access
+      summary: Soft-delete a role (audited; requires access_control.configure). System roles are rejected with 409.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Optional free-text reason echoed into the soft-delete audit event.
+      responses:
+        "200":
+          description: Role soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The role is a system role and cannot be deleted (ROLE_SYSTEM_PROTECTED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/roles/{id}/permissions:
+    post:
+      operationId: grantRolePermission
+      tags:
+        - Identity & Access
+      summary: Grant a catalogued permission to a role (audited; requires access_control.configure).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissionId
+              properties:
+                permissionId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Permission granted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      roleId:
+                        type: string
+                        format: uuid
+                      permissionId:
+                        type: string
+                        format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The permission is already granted to this role (ROLE_PERMISSION_ALREADY_GRANTED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: revokeRolePermission
+      tags:
+        - Identity & Access
+      summary: Revoke a permission from a role (audited; requires access_control.configure).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissionId
+              properties:
+                permissionId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Permission revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      roleId:
+                        type: string
+                        format: uuid
+                      permissionId:
+                        type: string
+                        format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/roles/{id}/restore:
+    post:
+      operationId: restoreRole
+      tags:
+        - Identity & Access
+      summary: Restore a soft-deleted role (audited; requires access_control.configure).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Role restored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The role's code was re-used by a live role while it was deleted (ROLE_CODE_ALREADY_EXISTS).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/users:
+    get:
+      operationId: listTenantUsers
+      tags:
+        - Identity & Access
+      summary: List the current tenant's users with their assigned role codes (login identifiers masked).
+      responses:
+        "200":
+          description: The tenant's users (limit 100), with masked login identifiers and assigned role codes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TenantUserMasked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/users/{id}:
+    patch:
+      operationId: setTenantUserStatus
+      tags:
+        - Identity & Access
+      summary: Activate or deactivate a tenant user (high-risk, audited).
+      description: Sets the tenant user's status. `awcms_tenant_users` has no `deleted_at`, so deactivate = status `inactive`, reactivate = status `active`. Gated on `identity_access.access_control.configure`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                    - active
+                    - inactive
+      responses:
+        "200":
+          description: The tenant user's new status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum:
+                          - active
+                          - inactive
+                      updatedAt:
+                        type: string
+                        format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  schemas:
+    AbacPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        policyCode:
+          type: string
+        effect:
+          type: string
+          enum:
+            - allow
+            - deny
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        roleCode:
+          type: string
+        roleName:
+          type: string
+        isSystem:
+          type: boolean
+        permissionCount:
+          type: integer
+    TenantUserMasked:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        loginIdentifierMasked:
+          type: string
+          description: Masked login identifier — PII is never returned raw in a list.
+        status:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+          description: Assigned role codes (empty when the user holds no role).

@@ -11,7 +11,7 @@ export const moduleManagementModule = defineModule({
   type: "system",
   isCore: true,
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    openApiPath: "openapi/modules/module-management.openapi.yaml",
     basePath: "/api/v1/modules"
   },
   permissions: [

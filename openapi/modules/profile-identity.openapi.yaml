@@ -1,0 +1,498 @@
+# Source fragment for the "profile-identity" module (Issue #182, epic #177).
+#
+# Owns every path whose operations carry this module's OpenAPI tag(s), plus
+# every components.schemas entry referenced ONLY by this module's operations.
+# Schemas shared by 2+ modules (or referenced by none) live in the root
+# fragment (openapi/awcms-public-api.src.yaml) instead.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses and cross-module schemas) only resolve
+# after `bun run openapi:bundle` merges this file with the root fragment and
+# every sibling module fragment into openapi/awcms-public-api.openapi.yaml.
+# Edit this file (or the root fragment for shared components), never the
+# generated bundle.
+paths:
+  /api/v1/profiles:
+    get:
+      operationId: listProfiles
+      tags:
+        - Profile Identity
+      summary: List/search profiles for the current tenant.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - person
+              - organization
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Profile list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ProfileMasked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createProfile
+      tags:
+        - Profile Identity
+      summary: Create a person/organization profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - profileType
+                - displayName
+              properties:
+                profileType:
+                  type: string
+                  enum:
+                    - person
+                    - organization
+                displayName:
+                  type: string
+                legalName:
+                  type: string
+                  nullable: true
+                riskLevel:
+                  type: string
+                  enum:
+                    - low
+                    - normal
+                    - high
+      responses:
+        "200":
+          description: Profile created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProfileMasked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/profiles/{id}:
+    get:
+      operationId: getProfile
+      tags:
+        - Profile Identity
+      summary: Fetch one profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Profile detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProfileMasked"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateProfile
+      tags:
+        - Profile Identity
+      summary: Update a profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                legalName:
+                  type: string
+                  nullable: true
+                riskLevel:
+                  type: string
+                  enum:
+                    - low
+                    - normal
+                    - high
+                verificationStatus:
+                  type: string
+                  enum:
+                    - unverified
+                    - pending
+                    - verified
+                status:
+                  type: string
+                  enum:
+                    - active
+                    - inactive
+      responses:
+        "200":
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProfileMasked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteProfile
+      tags:
+        - Profile Identity
+      summary: Soft delete a profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Profile soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/profiles/{id}/identifiers:
+    post:
+      operationId: addProfileIdentifier
+      tags:
+        - Profile Identity
+      summary: Attach a typed identifier (email/phone/national_id/tax_id/...) to a profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - identifierType
+                - value
+              properties:
+                identifierType:
+                  type: string
+                  enum:
+                    - email
+                    - phone
+                    - whatsapp
+                    - national_id
+                    - tax_id
+                    - external_code
+                    - other
+                value:
+                  type: string
+                isPrimary:
+                  type: boolean
+      responses:
+        "200":
+          description: Identifier attached (masked value returned).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProfileIdentifierMasked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: An identifier of this type with the same value already exists for this tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/profiles/{id}/links:
+    get:
+      operationId: listProfileLinks
+      tags:
+        - Profile Identity
+      summary: List cross-module entity links for a profile (e.g. employee, vendor, customer).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Entity link list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ProfileEntityLink"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/profiles/resolve:
+    get:
+      operationId: resolveProfile
+      tags:
+        - Profile Identity
+      summary: Resolve a profile by a typed identifier (email/phone/national_id/tax_id/...).
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - email
+              - phone
+              - whatsapp
+              - national_id
+              - tax_id
+              - external_code
+              - other
+        - name: value
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching profile, if any.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    nullable: true
+                    properties:
+                      profile:
+                        $ref: "#/components/schemas/ProfileMasked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+components:
+  schemas:
+    ProfileEntityLink:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        moduleKey:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+          format: uuid
+        linkRole:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ProfileIdentifierMasked:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        profileId:
+          type: string
+          format: uuid
+        identifierType:
+          type: string
+        maskedValue:
+          type: string
+        isPrimary:
+          type: boolean
+        verificationStatus:
+          type: string
+    ProfileMasked:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        profileType:
+          type: string
+        displayName:
+          type: string
+        legalName:
+          type: string
+          nullable: true
+        status:
+          type: string
+        verificationStatus:
+          type: string
+        riskLevel:
+          type: string
+        mergedIntoProfileId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deleteReason:
+          type: string
+          nullable: true
+        restoredAt:
+          type: string
+          format: date-time
+          nullable: true

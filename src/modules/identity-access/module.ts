@@ -9,7 +9,7 @@ export const identityAccessModule = defineModule({
     "Login identity, password hashing, tenant user membership, session-based authentication, and RBAC/ABAC access control (roles, permissions, assignments, decision log).",
   dependencies: ["tenant_admin", "profile_identity"],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    openApiPath: "openapi/modules/identity-access.openapi.yaml",
     basePath: "/api/v1/auth"
   },
   permissions: [
