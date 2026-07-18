@@ -71,6 +71,8 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 | `awcms-integration-hub`                      | Kerjakan bagian mana pun modul integration_hub — inbound webhook, outbound subscription, adapter health, SSRF guard (Issue #754)                                                         | integration-hub/SKILL.md                                     |
 | `awcms-workflow-approval`                    | Kerjakan bagian mana pun modul workflow_approval — graph engine, quorum, delegation, escalation (Issue 11.1, evolved #747)                                                               | workflow-approval/SKILL.md                                   |
 | `awcms-profile-identity`                     | Kerjakan bagian mana pun modul profile_identity — party CRUD, dedup, merge workflow, cross-tenant guard (Issue 2.2, dilengkapi #748)                                                     | profile-identity/SKILL.md                                    |
+| `awcms-tenant-admin`                         | Kelola/konsumsi modul tenant_admin — office directory CRUD, soft delete/restore, tenant settings, setup-wizard bootstrap                                                                 | tenant-admin/SKILL.md                                        |
+| `awcms-reporting`                            | Kerjakan/konsumsi modul reporting — report view, projection registry/rebuild/reconcile/export, TOCTOU rebuild-lock (Issue #151)                                                          | reporting/SKILL.md                                           |
 
 ## Katalog peningkatan (improvement/hardening)
 

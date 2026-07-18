@@ -8,8 +8,12 @@
  *
  * Requires a throwaway database whose schema has had `sql/` applied
  * (`bun run db:migrate`). Gated on `DATABASE_URL` — same convention as
- * `workflow-approval-concurrency.test.ts`: `ci.yml` has no database so this
- * skips cleanly, `release.yml` provides one and sets `DATABASE_URL`.
+ * `workflow-approval-concurrency.test.ts`: `ci.yml`'s `quality` job has no
+ * database so this skips cleanly there; it actually executes in `ci.yml`'s
+ * `integration-tests` job and `release.yml`'s `validate` job, each in a
+ * dedicated `bun test <legacy files>` step run separately from the
+ * harness-based `tests/integration/` suite (see `tests/integration/
+ * harness.ts` — the two collide if run together in one `bun test` process).
  *
  * The suite only ever touches tenants it creates itself, and deletes them
  * again afterwards.

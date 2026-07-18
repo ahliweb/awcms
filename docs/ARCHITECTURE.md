@@ -4,9 +4,11 @@ Status per [ADR-0001](adr/0001-rebuild-on-awcms-foundation-erp-scope.md) (amende
 [ADR-0022](adr/0022-erp-modules-live-in-extension-repos.md)): repo ini adalah **fondasi
 modular monolith reusable** — bukan platform ERP itu sendiri. Modul domain ERP (finance,
 inventory, procurement, manufacturing, hr-payroll, dst.) dikembangkan di **repo
-ekstensi/turunan terpisah** di atas base ini (build-time module composition,
-lihat `src/modules/application-registry.ts` dan skill `awcms-module-management`),
-bukan di `src/modules/` repo ini. Repo ini sudah melewati fase skeleton Sprint 1-2:
+ekstensi/turunan terpisah** di atas base ini (build-time module composition per
+[ADR-0014](adr/0014-deterministic-build-time-module-composition.md): repo turunan
+menyusun `application-registry.ts`-nya sendiri — berkas ini **tidak ada** di
+`src/modules/` repo ini; lihat juga skill `awcms-module-management`), bukan di
+`src/modules/` repo ini. Repo ini sudah melewati fase skeleton Sprint 1-2:
 10 modul fondasi aktif, migration `sql/001`-`sql/023`, RLS `FORCE` di seluruh tabel
 tenant-scoped, pemisahan role database, dan admin UI read+write (Issue #166, #171).
 Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk daftar

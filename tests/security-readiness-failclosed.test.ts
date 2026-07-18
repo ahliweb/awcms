@@ -16,8 +16,12 @@
  *
  * Requires `awcms_app` (sql/019) and the narrowed grants (sql/021) to be
  * present. Gated on `DATABASE_URL`, same convention as
- * `security-readiness-rls.test.ts`: `ci.yml` has no database so it skips
- * cleanly; `release.yml` provides a throwaway `postgres:18.4` and sets it.
+ * `security-readiness-rls.test.ts`: `ci.yml`'s `quality` job has no database
+ * so it skips cleanly; this actually executes in `ci.yml`'s
+ * `integration-tests` job and `release.yml`'s `validate` job, each in a
+ * dedicated `bun test <legacy files>` step run separately from the
+ * harness-based `tests/integration/` suite (see `tests/integration/
+ * harness.ts` — the two collide if run together in one `bun test` process).
  *
  * The suite only creates/drops its own probe table. It NEVER drops or mutates
  * the cluster-wide `awcms_app` role — grants on the probe vanish when the probe

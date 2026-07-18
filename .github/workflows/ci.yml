@@ -257,6 +257,13 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Apply migrations against this job's Postgres
+        # Needed for both steps below: world-2 harness tests (module-tenant-
+        # lifecycle) resolve `getDatabaseClient()` to THIS same `DATABASE_URL`
+        # and soft-skip if it isn't migrated, and the legacy ad-hoc suite
+        # connects to it directly and expects `sql/` already applied.
+        run: bun run db:migrate
+
       - name: Run DB-gated integration tests
         # Scoped to `tests/integration/` (the harness-based suite, purpose-built
         # for concurrent execution against ITS OWN ephemeral per-run database —
@@ -266,10 +273,30 @@ jobs:
         # database and were never designed to run concurrently against a shared
         # DB in one `bun test` process — verified empirically: a bare `bun test`
         # here made 26 of them fail (data collisions/ordering), while all 4
-        # harness-based integration files passed cleanly. Fixing that cross-file
-        # DB-sharing gap is separate, larger work — this job stays scoped to the
-        # suite actually engineered for it.
+        # harness-based integration files passed cleanly. They run in their own
+        # step below instead, in a fresh `bun test` process of their own.
         run: bun test tests/integration/
+
+      - name: Run DB-gated integration tests (legacy ad-hoc suite)
+        # These 9 files each open their own ad-hoc `Bun.SQL(DATABASE_URL)`
+        # connection to the SAME database this job's harness step just used,
+        # and were designed to run together (that is release.yml's original,
+        # pre-`tests/integration/` DB-gated suite) — but NOT concurrently with
+        # the harness-based files above in one `bun test` process (see the
+        # step above's comment). Listed explicitly rather than relying on a
+        # bare `bun test` so this suite can't silently regrow the collision
+        # by pulling in `tests/integration/` again.
+        run: >-
+          bun test
+          tests/audit-log-purge.test.ts
+          tests/keyset-pagination-precision-postgres.test.ts
+          tests/office-directory-postgres.test.ts
+          tests/reporting-projection-rebuild-lock.test.ts
+          tests/security-readiness-failclosed.test.ts
+          tests/security-readiness-rls.test.ts
+          tests/security-readiness-worker-setup-grants.test.ts
+          tests/sync-hmac-versioned.test.ts
+          tests/workflow-approval-concurrency.test.ts
 
   hygiene:
     name: Repo hygiene (Bun-only + no secrets)

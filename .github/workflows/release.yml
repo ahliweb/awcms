@@ -90,7 +90,48 @@ jobs:
         run: bun run db:migrate
 
       - name: Full quality gate (bun run check)
+        # `check` includes a bare `bun test`. Several older, independent
+        # DB-gated test files (each opening their own ad-hoc connection to
+        # `DATABASE_URL`) were never designed to run concurrently against one
+        # shared, already-migrated database in a single `bun test` process —
+        # `.github/workflows/ci.yml`'s `integration-tests` job comment
+        # documents the empirically-reproduced 26-failure collision from this
+        # exact trigger (DATABASE_URL set + migrated schema + bare `bun
+        # test`). Unset DATABASE_URL for just this step so its `bun test`
+        # skips DB-gated suites cleanly, matching `ci.yml`'s `quality` job.
+        # Real DB/RLS integration coverage runs in the next, scoped step.
         run: bun run check
+        env:
+          DATABASE_URL: ""
+
+      - name: Run DB-gated integration tests (RLS + DB role separation)
+        # Scoped to `tests/integration/` (the harness-based suite — see
+        # `tests/integration/harness.ts`), not a bare `bun test`. The legacy
+        # ad-hoc DB-gated suite runs in its own step below, in a fresh
+        # `bun test` process, to avoid the collision documented in
+        # `.github/workflows/ci.yml`'s `integration-tests` job.
+        run: bun test tests/integration/
+
+      - name: Run DB-gated integration tests (legacy ad-hoc suite)
+        # These 9 files each open their own ad-hoc `Bun.SQL(DATABASE_URL)`
+        # connection to the SAME database `db:migrate` just applied above,
+        # and were designed to run together — this is what "release.yml is
+        # where these actually execute" meant before `tests/integration/`
+        # existed — but NOT concurrently with the harness-based files in one
+        # `bun test` process. Listed explicitly rather than relying on the
+        # bare `bun test` inside `bun run check` (which now runs with
+        # DATABASE_URL unset, see the step above).
+        run: >-
+          bun test
+          tests/audit-log-purge.test.ts
+          tests/keyset-pagination-precision-postgres.test.ts
+          tests/office-directory-postgres.test.ts
+          tests/reporting-projection-rebuild-lock.test.ts
+          tests/security-readiness-failclosed.test.ts
+          tests/security-readiness-rls.test.ts
+          tests/security-readiness-worker-setup-grants.test.ts
+          tests/sync-hmac-versioned.test.ts
+          tests/workflow-approval-concurrency.test.ts
 
   build:
     name: Build image + SBOM

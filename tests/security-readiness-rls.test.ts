@@ -11,11 +11,14 @@
  *
  * Requires a throwaway database whose schema has had `sql/` applied
  * (`bun run db:migrate`). Gated on `DATABASE_URL` — the same convention
- * `workflow-approval-concurrency.test.ts` uses, and the reason this suite
- * actually executes somewhere: `ci.yml` has no database so it skips cleanly,
- * while `release.yml` provides a throwaway `postgres:18.4` service and sets
- * `DATABASE_URL`. Gating on a bespoke variable instead would mean the suite
- * never runs in any pipeline.
+ * `workflow-approval-concurrency.test.ts` uses. `ci.yml`'s `quality` job has
+ * no database so it skips cleanly; this actually executes in `ci.yml`'s
+ * `integration-tests` job and `release.yml`'s `validate` job, each in a
+ * dedicated `bun test <legacy files>` step run separately from the
+ * harness-based `tests/integration/` suite (see `tests/integration/
+ * harness.ts` — the two collide if run together in one `bun test` process).
+ * Gating on a bespoke variable instead would mean the suite never runs in any
+ * pipeline.
  *
  * The suite only creates its own probe table and drops it again afterwards.
  */

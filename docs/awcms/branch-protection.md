@@ -1,17 +1,22 @@
 # Branch Protection — Required Status Checks
 
-> **Document status.** Repo `awcms` is at the foundation-rebuild stage
-> ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) —
-> Sprint 1–2 modul fondasi sudah ada (lihat `../ARCHITECTURE.md`), belum
-> ada modul domain ERP. `.github/workflows/ci.yml`, `codeql.yml`, dan
-> `changesets.yml` **sudah ada** di repo ini (diadaptasi dari awcms-mini).
-> Sejak Issue #166, `ci.yml` juga punya job `e2e-smoke` (Playwright + Bun)
-> yang berjalan pada **setiap push/PR** — lihat tabel di bawah untuk detail
-> dan untuk statusnya (belum di-required). `ci.yml` juga sudah punya job
-> `integration-tests` (`Integration tests (RLS + DB role separation)`,
-> `bun test` terhadap Postgres ephemeral live per-job) yang menjalankan
-> suite integrasi DB-gated (`tests/integration/*.integration.test.ts`) —
-> lihat catatan statusnya di bawah (juga belum di-required). Belum ada
+> **Document status.** Repo `awcms` adalah base modular monolith reusable
+> ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md), amended
+> by [ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)) — 10
+> modul fondasi sudah ada (lihat `../ARCHITECTURE.md`), modul domain ERP
+> hidup di repo ekstensi/turunan terpisah, tidak pernah di repo ini.
+> `.github/workflows/ci.yml`, `codeql.yml`, dan `changesets.yml` **sudah
+> ada** di repo ini (diadaptasi dari awcms-mini). Sejak Issue #166, `ci.yml`
+> juga punya job `e2e-smoke` (Playwright + Bun) yang berjalan pada **setiap
+> push/PR** — lihat tabel di bawah untuk detail dan untuk statusnya (belum
+> di-required). `ci.yml` juga sudah punya job `integration-tests`
+> (`Integration tests (RLS + DB role separation)`) yang menyalakan Postgres
+> ephemeral live per-job dan menjalankan, dalam step terpisah, `bun test tests/integration/`
+> (suite harness-based) lalu `bun test` atas 9 berkas ad-hoc legacy — dua
+> `bun test` process terpisah, bukan satu bare `bun test`, karena kedua
+> suite itu bentrok bila dijalankan bersamaan dalam satu proses (lihat
+> komentar step-nya) — lihat catatan statusnya di bawah (juga belum
+> di-required). Belum ada
 > `docker-compose*.yml` untuk divalidasi, jadi validasi compose file
 > **tidak** ada di sini (beda dari base awcms-mini) — akan ditambah begitu
 > infrastrukturnya dibangun.
@@ -98,11 +103,17 @@ menetapkan.
 
 `ci.yml` juga punya job `integration-tests` (nama check:
 `Integration tests (RLS + DB role separation)`) yang menyalakan Postgres
-ephemeral sendiri (terpisah dari punya `e2e-smoke`) dan menjalankan `bun
-test` sehingga suite integrasi DB-gated di
-`tests/integration/*.integration.test.ts` (yang skip bersih di job
-`quality`, karena job itu sengaja jalan tanpa `DATABASE_URL`) benar-benar
-dieksekusi — RLS dan pemisahan role database diverifikasi nyata, bukan
+ephemeral sendiri (terpisah dari punya `e2e-smoke`), migrasi terhadapnya,
+lalu menjalankan DUA step `bun test` terpisah: `bun test tests/integration/`
+(suite harness-based, `tests/integration/*.integration.test.ts` — yang skip
+bersih di job `quality`, karena job itu sengaja jalan tanpa `DATABASE_URL`)
+dan `bun test <9 berkas ad-hoc legacy>` (`office-directory-postgres`,
+`workflow-approval-concurrency`, dst.). Keduanya dipisah ke proses `bun
+test` sendiri-sendiri, bukan satu bare `bun test`, karena kedua suite
+terbukti bentrok (data collision/ordering) bila dijalankan bersamaan dalam
+satu proses — lihat komentar step-nya di `ci.yml` dan
+`tests/integration/harness.ts`. `release.yml`'s `validate` job memakai pola
+step yang sama. RLS dan pemisahan role database diverifikasi nyata, bukan
 cuma unit test dengan mock. Sama seperti `E2E smoke (Playwright)`, per
 penulisan dokumen ini check ini **tidak** ada di daftar
 `required_status_checks` ruleset `11653326` di atas — menambahkannya

@@ -5,10 +5,13 @@
  * permission denied at runtime; over-grant -> isolation breach).
  *
  * Gated on `DATABASE_URL`, same convention as
- * `security-readiness-failclosed.test.ts`: `ci.yml` has no database so it skips
- * cleanly; `release.yml` provides a throwaway `postgres:18.4`, runs
- * `bun run db:migrate` (which applies `sql/022`, creating both roles), and sets
- * the var — that is where these actually execute.
+ * `security-readiness-failclosed.test.ts`: `ci.yml`'s `quality` job has no
+ * database so it skips cleanly; this actually executes in `ci.yml`'s
+ * `integration-tests` job and `release.yml`'s `validate` job (both apply
+ * `sql/022`, creating both roles, before this suite's dedicated
+ * `bun test <legacy files>` step — run separately from the harness-based
+ * `tests/integration/` suite; see `tests/integration/harness.ts` for why the
+ * two collide if run together).
  *
  * The divergence cases INJECT a policy (not `mock.module`, which leaks across
  * files — PR #157) rather than mutating any grant: the real roles' grants are
