@@ -75,7 +75,7 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
     );
     if (!auth.allowed) return auth.denied;
 
-    const record = await setTenantUserStatus(
+    const result = await setTenantUserStatus(
       tx,
       tenantId,
       auth.context.tenantUserId,
@@ -83,8 +83,25 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       validation.value.status,
       correlationId
     );
-    if (!record) return fail(404, "RESOURCE_NOT_FOUND", "User not found.");
 
-    return ok(record);
+    if (result.outcome === "not_found") {
+      return fail(404, "RESOURCE_NOT_FOUND", "User not found.");
+    }
+    if (result.outcome === "self_blocked") {
+      return fail(
+        409,
+        "CANNOT_DEACTIVATE_SELF",
+        "You cannot deactivate your own account."
+      );
+    }
+    if (result.outcome === "last_admin_blocked") {
+      return fail(
+        409,
+        "USER_LAST_ADMIN_PROTECTED",
+        "Cannot deactivate the last active administrator."
+      );
+    }
+
+    return ok(result.record);
   });
 };

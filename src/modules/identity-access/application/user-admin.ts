@@ -56,6 +56,21 @@ export class DuplicateAssignmentError extends Error {
   }
 }
 
+/**
+ * Assigning or unassigning an `is_system` role (e.g. the seeded `owner`) is
+ * refused. The `assign` permission reads as "attach ordinary roles"; letting it
+ * grant `owner` would be a self-escalation to full tenant admin, and letting it
+ * strip `owner` from the sole owner would lock the tenant out. Root-role
+ * membership is an invariant set at bootstrap, not an admin-surface mutation.
+ * The caller maps it to 409.
+ */
+export class SystemRoleAssignmentError extends Error {
+  constructor() {
+    super("System roles cannot be assigned or unassigned through this API.");
+    this.name = "SystemRoleAssignmentError";
+  }
+}
+
 export type SetStatusInput = { status: TenantUserStatus };
 
 export function validateSetStatusInput(
@@ -125,9 +140,28 @@ type TenantUserStatusRow = {
 };
 
 /**
- * Sets a tenant user's status. Returns `null` when no live user matches in this
- * tenant (→ 404 at the caller) — the UPDATE is itself the existence check, so
- * there is no oracle-leaking pre-read. Audits the change (high-risk).
+ * Outcome of {@link setTenantUserStatus}. `updated` carries the new record;
+ * `not_found` → 404; `self_blocked`/`last_admin_blocked` → 409 lockout guards.
+ */
+export type SetStatusResult =
+  | { outcome: "updated"; record: TenantUserStatusRecord }
+  | { outcome: "not_found" }
+  | { outcome: "self_blocked" }
+  | { outcome: "last_admin_blocked" };
+
+/**
+ * Sets a tenant user's status.
+ *
+ * Deactivation (`status = 'inactive'`) revokes all of a user's access (login
+ * reads this status), so two lockout foot-guns are blocked BEFORE the write —
+ * mirroring `softDeleteRole`'s `is_system` guard:
+ *  - `self_blocked` — an actor cannot deactivate themselves.
+ *  - `last_admin_blocked` — the last active member of an `is_system` (owner)
+ *    role cannot be deactivated, or no active administrator would remain and
+ *    the tenant would be locked out with no in-app recovery.
+ *
+ * Activation carries no such guard. `not_found` (no live user in this tenant) is
+ * detected by the UPDATE itself (no oracle-leaking pre-read). Audits on success.
  */
 export async function setTenantUserStatus(
   tx: Bun.SQL,
@@ -136,7 +170,46 @@ export async function setTenantUserStatus(
   tenantUserId: string,
   status: TenantUserStatus,
   correlationId?: string
-): Promise<TenantUserStatusRecord | null> {
+): Promise<SetStatusResult> {
+  if (status === "inactive") {
+    if (actorTenantUserId === tenantUserId) {
+      return { outcome: "self_blocked" };
+    }
+
+    const adminState = (await tx`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM awcms_access_assignments aa
+          JOIN awcms_roles r
+            ON r.id = aa.role_id AND r.tenant_id = aa.tenant_id
+          WHERE aa.tenant_id = ${tenantId}
+            AND aa.tenant_user_id = ${tenantUserId}
+            AND r.is_system = true AND r.deleted_at IS NULL
+        ) AS target_is_admin,
+        EXISTS (
+          SELECT 1 FROM awcms_access_assignments aa
+          JOIN awcms_roles r
+            ON r.id = aa.role_id AND r.tenant_id = aa.tenant_id
+          JOIN awcms_tenant_users tu
+            ON tu.id = aa.tenant_user_id AND tu.tenant_id = aa.tenant_id
+          WHERE aa.tenant_id = ${tenantId}
+            AND aa.tenant_user_id <> ${tenantUserId}
+            AND r.is_system = true AND r.deleted_at IS NULL
+            AND tu.status = 'active'
+        ) AS other_active_admin_exists
+    `) as Array<{
+      target_is_admin: boolean;
+      other_active_admin_exists: boolean;
+    }>;
+
+    if (
+      adminState[0]!.target_is_admin &&
+      !adminState[0]!.other_active_admin_exists
+    ) {
+      return { outcome: "last_admin_blocked" };
+    }
+  }
+
   const rows = (await tx`
     UPDATE awcms_tenant_users
     SET status = ${status}, updated_at = now()
@@ -144,7 +217,7 @@ export async function setTenantUserStatus(
     RETURNING id, status, updated_at
   `) as TenantUserStatusRow[];
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return { outcome: "not_found" };
 
   const record: TenantUserStatusRecord = {
     id: rows[0]!.id,
@@ -167,7 +240,7 @@ export async function setTenantUserStatus(
     correlationId
   });
 
-  return record;
+  return { outcome: "updated", record };
 }
 
 export type AssignmentRecord = {
@@ -205,11 +278,25 @@ export async function assignRole(
       EXISTS (
         SELECT 1 FROM awcms_roles
         WHERE tenant_id = ${tenantId} AND id = ${roleId} AND deleted_at IS NULL
-      ) AS role_exists
-  `) as Array<{ user_exists: boolean; role_exists: boolean }>;
+      ) AS role_exists,
+      EXISTS (
+        SELECT 1 FROM awcms_roles
+        WHERE tenant_id = ${tenantId} AND id = ${roleId}
+          AND deleted_at IS NULL AND is_system = true
+      ) AS role_is_system
+  `) as Array<{
+    user_exists: boolean;
+    role_exists: boolean;
+    role_is_system: boolean;
+  }>;
 
   if (!targets[0]!.user_exists || !targets[0]!.role_exists) {
     throw new AssignmentTargetNotFoundError();
+  }
+  // Refuse before any write: `withTenant` COMMITs on a normal return, so the
+  // guard must precede the INSERT.
+  if (targets[0]!.role_is_system) {
+    throw new SystemRoleAssignmentError();
   }
 
   let rows: Array<{ id: string }>;
@@ -257,6 +344,19 @@ export async function unassignRole(
   roleId: string,
   correlationId?: string
 ): Promise<boolean> {
+  // Refuse to unassign a system role (e.g. `owner`) — stripping it from the
+  // sole owner locks the tenant out. Scoped to this tenant, so a foreign
+  // `roleId` finds nothing and falls through to the DELETE (→ 404), leaking no
+  // cross-tenant existence.
+  const systemRole = (await tx`
+    SELECT 1 FROM awcms_roles
+    WHERE tenant_id = ${tenantId} AND id = ${roleId}
+      AND deleted_at IS NULL AND is_system = true
+  `) as Array<{ "?column?": number }>;
+  if (systemRole.length > 0) {
+    throw new SystemRoleAssignmentError();
+  }
+
   const rows = (await tx`
     DELETE FROM awcms_access_assignments
     WHERE tenant_id = ${tenantId}

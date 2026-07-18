@@ -396,10 +396,17 @@ export async function restoreRole(
 }
 
 export type GrantResult =
-  { outcome: "granted" } | { outcome: "role_not_found" };
+  | { outcome: "granted" }
+  | { outcome: "role_not_found" }
+  | { outcome: "system_blocked" };
 
 /**
  * Grants a catalogued permission to a live role.
+ *
+ * `is_system` roles (e.g. the seeded `owner`) are BLOCKED: their permission set
+ * is an immutable invariant seeded at bootstrap. Allowing mutation via the API
+ * would let a delegated `configure` holder alter the tenant's root role — the
+ * same foot-gun `softDeleteRole` already blocks. The caller maps it to 409.
  *
  * @throws {DuplicateRolePermissionError} the grant already exists (23505).
  * @throws {PermissionNotFoundError} `permissionId` is not in the catalog (the
@@ -415,6 +422,7 @@ export async function grantPermissionToRole(
 ): Promise<GrantResult> {
   const role = await fetchLiveRoleById(tx, tenantId, roleId);
   if (!role) return { outcome: "role_not_found" };
+  if (role.isSystem) return { outcome: "system_blocked" };
 
   try {
     await tx`
@@ -452,9 +460,15 @@ export async function grantPermissionToRole(
 export type RevokeResult =
   | { outcome: "revoked" }
   | { outcome: "role_not_found" }
+  | { outcome: "system_blocked" }
   | { outcome: "grant_not_found" };
 
-/** Revokes a permission from a live role. */
+/**
+ * Revokes a permission from a live role. `is_system` roles are BLOCKED — see
+ * {@link grantPermissionToRole}: stripping `access_control.*` from the seeded
+ * `owner` role would lock the tenant out of its own administration. The caller
+ * maps it to 409.
+ */
 export async function revokePermissionFromRole(
   tx: Bun.SQL,
   tenantId: string,
@@ -465,6 +479,7 @@ export async function revokePermissionFromRole(
 ): Promise<RevokeResult> {
   const role = await fetchLiveRoleById(tx, tenantId, roleId);
   if (!role) return { outcome: "role_not_found" };
+  if (role.isSystem) return { outcome: "system_blocked" };
 
   const rows = (await tx`
     DELETE FROM awcms_role_permissions

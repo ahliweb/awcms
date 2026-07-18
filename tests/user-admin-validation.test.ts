@@ -7,11 +7,13 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  setTenantUserStatus,
   validateAssignmentInput,
   validateSetStatusInput
 } from "../src/modules/identity-access/application/user-admin";
 
 const UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const OTHER_UUID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 describe("validateSetStatusInput", () => {
   test("accepts active / inactive", () => {
@@ -50,5 +52,31 @@ describe("validateAssignmentInput", () => {
     if (!badUser.valid) {
       expect(badUser.errors.map((e) => e.field)).toContain("tenantUserId");
     }
+  });
+});
+
+describe("setTenantUserStatus self-deactivation guard", () => {
+  // A `tx` that throws if touched — proves the self-block short-circuits BEFORE
+  // any database access (no oracle, no write).
+  const explodingTx = new Proxy(
+    () => {
+      throw new Error("tx must not be called on the self-block path");
+    },
+    {
+      get() {
+        throw new Error("tx must not be accessed on the self-block path");
+      }
+    }
+  ) as unknown as Bun.SQL;
+
+  test("refuses to deactivate the actor's own account without hitting the DB", async () => {
+    const result = await setTenantUserStatus(
+      explodingTx,
+      UUID,
+      OTHER_UUID, // actor
+      OTHER_UUID, // target === actor
+      "inactive"
+    );
+    expect(result).toEqual({ outcome: "self_blocked" });
   });
 });

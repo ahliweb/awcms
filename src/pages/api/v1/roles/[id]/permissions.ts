@@ -85,6 +85,13 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       if (result.outcome === "role_not_found") {
         return fail(404, "RESOURCE_NOT_FOUND", "Role not found.");
       }
+      if (result.outcome === "system_blocked") {
+        return fail(
+          409,
+          "ROLE_SYSTEM_PROTECTED",
+          "System roles have an immutable permission set."
+        );
+      }
       return ok({ roleId, permissionId: validation.value.permissionId });
     } catch (error) {
       // Caught INSIDE `withTenant`. `DuplicateRolePermissionError` follows the
@@ -164,6 +171,13 @@ export const DELETE: APIRoute = async ({
 
     if (result.outcome === "role_not_found") {
       return fail(404, "RESOURCE_NOT_FOUND", "Role not found.");
+    }
+    if (result.outcome === "system_blocked") {
+      return fail(
+        409,
+        "ROLE_SYSTEM_PROTECTED",
+        "System roles have an immutable permission set."
+      );
     }
     if (result.outcome === "grant_not_found") {
       return fail(404, "RESOURCE_NOT_FOUND", "Permission grant not found.");

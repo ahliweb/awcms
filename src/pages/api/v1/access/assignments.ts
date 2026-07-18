@@ -16,6 +16,7 @@ import {
   assignRole,
   AssignmentTargetNotFoundError,
   DuplicateAssignmentError,
+  SystemRoleAssignmentError,
   unassignRole,
   validateAssignmentInput
 } from "../../../../modules/identity-access/application/user-admin";
@@ -94,6 +95,9 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       if (error instanceof AssignmentTargetNotFoundError) {
         return fail(404, "RESOURCE_NOT_FOUND", error.message);
       }
+      if (error instanceof SystemRoleAssignmentError) {
+        return fail(409, "ROLE_SYSTEM_PROTECTED", error.message);
+      }
       if (error instanceof DuplicateAssignmentError) {
         return fail(409, "ASSIGNMENT_ALREADY_EXISTS", error.message);
       }
@@ -143,17 +147,26 @@ export const DELETE: APIRoute = async ({ request, cookies, locals }) => {
     );
     if (!auth.allowed) return auth.denied;
 
-    const removed = await unassignRole(
-      tx,
-      tenantId,
-      auth.context.tenantUserId,
-      validation.value.tenantUserId,
-      validation.value.roleId,
-      correlationId
-    );
-    if (!removed)
-      return fail(404, "RESOURCE_NOT_FOUND", "Assignment not found.");
+    try {
+      const removed = await unassignRole(
+        tx,
+        tenantId,
+        auth.context.tenantUserId,
+        validation.value.tenantUserId,
+        validation.value.roleId,
+        correlationId
+      );
+      if (!removed)
+        return fail(404, "RESOURCE_NOT_FOUND", "Assignment not found.");
 
-    return ok({ removed: true });
+      return ok({ removed: true });
+    } catch (error) {
+      // `SystemRoleAssignmentError` is raised before any write (the is_system
+      // pre-check), so mapping it to 409 inside `withTenant` persists nothing.
+      if (error instanceof SystemRoleAssignmentError) {
+        return fail(409, "ROLE_SYSTEM_PROTECTED", error.message);
+      }
+      throw error;
+    }
   });
 };
