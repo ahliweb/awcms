@@ -1,10 +1,17 @@
 ---
 /**
- * Module management screen (Issue #166) — the module catalog: every module
- * registered in code merged with its DB-tracked lifecycle row. Same
- * SSR-read-then-render pattern as `offices.astro`: calls the same
- * `fetchModuleCatalog` the `GET /api/v1/modules` endpoint uses, gated on the
- * same `module_management.modules.read` permission. Read-only.
+ * Module management screen (Issue #166; write toggle added #171) — the module
+ * catalog: every module registered in code merged with its DB-tracked
+ * lifecycle row. Same SSR-read-then-render pattern as `offices.astro`: calls
+ * the same `fetchModuleCatalog` the `GET /api/v1/modules` endpoint uses, gated
+ * on the same `module_management.modules.read` permission.
+ *
+ * A per-row enable/disable toggle is shown to users holding the matching
+ * `module_management.tenant_modules.{enable,disable}` permission and posts to
+ * the existing `POST /api/v1/tenant/modules/{key}/{enable,disable}` (cookie
+ * auth) — the endpoints' ABAC guards + dependency/core validation are the real
+ * authority; the button gate is UX-only. Core modules are never offered a
+ * disable button (the endpoint rejects it with a 409); their toggle is omitted.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { getDatabaseClient } from "../../lib/database/client";
@@ -24,6 +31,13 @@ const ssr = Astro.locals.ssrContext!;
 const canRead = ssr.permissions.has(
   permissionKey("module_management", "modules", "read")
 );
+const canEnable = ssr.permissions.has(
+  permissionKey("module_management", "tenant_modules", "enable")
+);
+const canDisable = ssr.permissions.has(
+  permissionKey("module_management", "tenant_modules", "disable")
+);
+const canToggle = canEnable || canDisable;
 
 let modules: ModuleRow[] = [];
 let loadError = false;
@@ -62,6 +76,17 @@ if (canRead) {
   }
 
   {
+    canToggle && (
+      <p
+        id="modules-toggle-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
     canRead && !loadError && (
       <div class="data-table-scroll">
         <table class="data-table" id="modules-table">
@@ -73,30 +98,115 @@ if (canRead) {
               <th scope="col">Version</th>
               <th scope="col">Status</th>
               <th scope="col">Core</th>
+              {canToggle && <th scope="col">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {modules.map((module) => (
-              <tr>
-                <td>{module.moduleKey}</td>
-                <td>{module.name}</td>
-                <td>{module.version}</td>
-                <td>
-                  <span
-                    class="status-badge"
-                    data-variant={
-                      module.status === "active" ? "success" : "neutral"
-                    }
-                  >
-                    {module.status}
-                  </span>
-                </td>
-                <td>{module.isCore ? "yes" : "no"}</td>
-              </tr>
-            ))}
+            {modules.map((module) => {
+              const isActive = module.status === "active";
+              // Only offer the action the current state + permission allows:
+              // an active non-core module can be disabled; an inactive module
+              // can be enabled. Core modules are never disable-able (endpoint
+              // 409s), so they get no toggle.
+              const showDisable = isActive && !module.isCore && canDisable;
+              const showEnable = !isActive && canEnable;
+              return (
+                <tr>
+                  <td>{module.moduleKey}</td>
+                  <td>{module.name}</td>
+                  <td>{module.version}</td>
+                  <td>
+                    <span
+                      class="status-badge"
+                      data-variant={isActive ? "success" : "neutral"}
+                    >
+                      {module.status}
+                    </span>
+                  </td>
+                  <td>{module.isCore ? "yes" : "no"}</td>
+                  {canToggle && (
+                    <td>
+                      {showDisable && (
+                        <button
+                          type="button"
+                          class="module-toggle"
+                          data-module-key={module.moduleKey}
+                          data-action="disable"
+                        >
+                          Disable
+                        </button>
+                      )}
+                      {showEnable && (
+                        <button
+                          type="button"
+                          class="module-toggle"
+                          data-module-key={module.moduleKey}
+                          data-action="enable"
+                        >
+                          Enable
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
     )
   }
 </AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time, so it
+  // can't be runtime-conditional). Harmless for users without a toggle
+  // permission: the buttons only render when `canToggle`, so
+  // `querySelectorAll` finds none and no listener binds. The import forces
+  // Astro to bundle this script EXTERNAL — an import-free script would be
+  // inlined, and inline scripts are blocked by this app's CSP. See
+  // admin-form-client.ts.
+  import { lockElement, postJson } from "../../lib/ui/admin-form-client";
+
+  const errorBox = document.getElementById("modules-toggle-error");
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  const buttons = document.querySelectorAll<HTMLButtonElement>(
+    "button.module-toggle"
+  );
+
+  for (const button of buttons) {
+    button.addEventListener("click", async () => {
+      if (button.disabled) return;
+
+      const moduleKey = button.dataset.moduleKey;
+      const action = button.dataset.action;
+      if (!moduleKey || (action !== "enable" && action !== "disable")) return;
+
+      const unlock = lockElement(button, "Please wait…");
+      if (errorBox) errorBox.hidden = true;
+
+      const result = await postJson(
+        `/api/v1/tenant/modules/${encodeURIComponent(moduleKey)}/${action}`,
+        {}
+      );
+
+      if (result.ok) {
+        // Reload so the SSR table re-renders with the new status + toggle.
+        window.location.reload();
+        return;
+      }
+
+      // Generic message only — never surface internal detail (Issue #540).
+      showError(
+        `Could not ${action} the module. It may have dependencies that block this change.`
+      );
+      unlock();
+    });
+  }
+</script>
