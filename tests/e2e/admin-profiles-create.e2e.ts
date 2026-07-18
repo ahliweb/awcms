@@ -42,13 +42,19 @@ test.describe("admin profiles create (authenticated)", () => {
     // The owner holds the create permission, so the form renders.
     await expect(page.locator("#profile-create-form")).toBeVisible();
 
+    // Per-run unique name — a fixed name would let a leftover row from a prior
+    // run (or a retry) pass the `toContainText` check even if THIS run's create
+    // silently failed (a false green). Same discipline as the offices spec.
+    const displayName = `E2E Person ${Date.now()}`;
     await page.locator("#profile-type").selectOption("person");
-    await page.locator("#profile-display-name").fill("E2E Person Alpha");
+    await page.locator("#profile-display-name").fill(displayName);
     await page.locator("#profile-create-submit").click();
 
-    // On success the client reloads; the reloaded SSR table now lists the row.
+    // On success the client reloads; the reloaded SSR table now lists the row,
+    // and the error box stays hidden (proves the create actually succeeded).
     const table = page.locator("#profiles-table");
     await expect(table).toBeVisible();
-    await expect(table).toContainText("E2E Person Alpha");
+    await expect(table).toContainText(displayName);
+    await expect(page.locator("#profile-create-error")).toBeHidden();
   });
 });
