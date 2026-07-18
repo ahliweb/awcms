@@ -131,19 +131,28 @@ jobs:
       # requirement, never actually connecting. A spec that needs a seeded
       # session/tenant will require a real `services.postgres` + `db:migrate`
       # here first (awcms-mini's `e2e-smoke` job is the template to follow).
+      # HOST=127.0.0.1 is load-bearing: @astrojs/node binds to `localhost`
+      # by default, which on the CI runner resolves to IPv6 `::1` while the
+      # curl probe and Playwright hit IPv4 `127.0.0.1` — the server is up but
+      # unreachable, and the probe times out. Pinning HOST (and matching
+      # E2E_BASE_URL) forces both ends onto the same IPv4 address.
       - name: Start the built server and run E2E
+        env:
+          HOST: 127.0.0.1
+          PORT: "4321"
+          DATABASE_URL: postgres://placeholder:placeholder@127.0.0.1:5999/placeholder
+          E2E_BASE_URL: http://127.0.0.1:4321
         run: |
-          DATABASE_URL="postgres://placeholder:placeholder@127.0.0.1:5999/placeholder" \
-            bun ./dist/server/entry.mjs &
+          bun ./dist/server/entry.mjs &
           APP_PID=$!
           # Wait until the catch-all 404 answers (server up); fail if it never does.
           up=""
           for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4321/__e2e_probe || true)
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:4321/__e2e_probe" || true)
             if [ "$code" = "404" ]; then up="yes"; break; fi
             sleep 1
           done
-          if [ -z "$up" ]; then echo "::error::server never became ready on :4321"; kill "$APP_PID" || true; exit 1; fi
+          if [ -z "$up" ]; then echo "::error::server never became ready on 127.0.0.1:4321"; kill "$APP_PID" || true; exit 1; fi
           bun run test:e2e
           status=$?
           kill "$APP_PID" || true
