@@ -42,7 +42,7 @@ export const syncStorageModule = defineModule({
     }
   ],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    openApiPath: "openapi/modules/sync-storage.openapi.yaml",
     basePath: "/api/v1/sync"
   },
   jobs: [

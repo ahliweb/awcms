@@ -1,0 +1,19 @@
+# Conflict fixture (Issue #182): re-declares a shared BASE schema (`ApiError`,
+# owned by the root fragment) to prove the bundler rejects a derived fragment
+# that tries to override a base/shared schema. Used only by
+# tests/openapi-bundle.test.ts.
+paths:
+  /api/v1/example-crm/override:
+    get:
+      tags:
+        - Example CRM
+      summary: Fixture path carrying a conflicting schema.
+      operationId: getExampleCrmOverride
+      responses:
+        "200":
+          description: ok
+components:
+  schemas:
+    ApiError:
+      type: object
+      description: Malicious override attempt (fixture).

@@ -37,9 +37,13 @@ export const <camelCase>Module = defineModule({
   description: "...",
   dependencies: ["tenant_admin", "identity_access", "observability_logging"],
   type: "domain", // base | system | domain | integration | derived — modul domain baru (bukan infrastruktur generik) pakai "domain"
+  // Kontrak OpenAPI dipecah per modul (Issue #182, ADR-0026): modul ini MEMILIKI
+  // fragmentnya sendiri; `openApiPath` menunjuk fragment, bukan bundle GENERATED.
+  // Setelah edit fragment: `bun run openapi:bundle` + `bun run api:docs:generate`.
   api: { openApiPath: "openapi/modules/<module>.openapi.yaml", basePath: "/api/v1" },
   events: {
-    asyncApiPath: "asyncapi/modules/<module>-events.asyncapi.yaml",
+    // awcms memakai SATU berkas AsyncAPI (belum dipecah per modul seperti OpenAPI).
+    asyncApiPath: "asyncapi/awcms-domain-events.asyncapi.yaml",
     publishes: [],
     subscribes: []
   }
@@ -81,29 +85,34 @@ terkait. Modul spesifik satu domain bisnis (POS, gudang, pajak, CRM, dll.)
 **tidak masuk repo ini** — lihat pohon keputusan di doc 21 §3.
 
 **Modul di REPO BASE ini** (langkah 1 di atas) vs **modul di REPO TURUNAN**
-(Issue #740, ADR-0014) adalah dua alur berbeda: bila modulmu memang
-spesifik satu domain bisnis dan pohon keputusan doc 21 §3 mengarahkan ke
-"bukan untuk repo base ini", **jangan** daftarkan di `src/modules/index.ts`
-repo ini — buat repo turunan sendiri lalu daftarkan modulnya di
-`src/modules/application-registry.ts` MILIK REPO TURUNAN itu (satu-satunya
-file yang perlu diedit; struktur `module.ts` + `domain/application/
-infrastructure/api` di atas tetap sama persis). `composeModuleRegistry()`
-(`module-management/domain/module-composition.ts`) yang menggabungkan
-registry base + registry turunan saat build. Detail: skill
-`awcms-module-management` §Komposisi modul build-time,
-`docs/awcms/derived-application-guide.md`, dan
-`docs/adr/0014-deterministic-build-time-module-composition.md`.
+(Issue #178, ADR-0025 — mengimplementasikan ADR-0014) adalah dua alur
+berbeda: bila modulmu memang spesifik satu domain bisnis dan pohon keputusan
+doc 21 §3 mengarahkan ke "bukan untuk repo base ini", **jangan** daftarkan di
+`src/modules/index.ts` repo ini — buat repo turunan sendiri lalu daftarkan
+modulnya di `src/modules/application-registry.ts` MILIK REPO TURUNAN itu
+(satu-satunya file yang perlu diedit; ganti nilai `undefined` dengan
+`ApplicationModuleRegistry` = `{ id, modules, migrationNamespace? }`; struktur
+`module.ts` + `domain/application/infrastructure/api` di atas tetap sama
+persis). `composeModuleRegistry()`
+(`module-management/domain/module-composition.ts`) menggabungkan registry base
+dengan registry turunan saat build dan memvalidasi key ganda, override key
+base, DAG dependency, capability binding, overlap namespace migration (base
+`1-899`, turunan mulai `900`), deployment profile, navigation path, dan job
+descriptor. Detail: skill `awcms-module-management` §Komposisi modul
+build-time, `docs/awcms/derived-application-guide.md`, dan
+`docs/adr/0025-implement-deterministic-build-time-module-composition.md`.
 
-Setelah modul terdaftar dan `bun run modules:compose:check` hijau,
-publikasikan/perbarui `extension.manifest.json` repo turunan Anda
-(`compatibleAwcmsRange`, `moduleContractVersion`,
-`contributedModules` termasuk modul baru ini, dst.) dan jalankan `bun run
-extension:check` (Issue #741/ADR-0015) — memverifikasi aplikasi turunan
-Anda TETAP kompatibel dengan rilis base saat ini, pertanyaan yang berbeda
-dari "registry saya valid hari ini" yang sudah dijawab
-`modules:compose:check`. Detail: skill `awcms-module-management`
-§Manifest kompatibilitas aplikasi turunan,
-`docs/adr/0015-derived-application-compatibility-manifest.md`.
+Verifikasi seam: `bun run modules:compose:check`, `bun run extension:check`,
+dan `bun run modules:composition:inventory:check` (regenerate inventory lewat
+`bun run modules:composition:inventory:generate`) — ketiganya bagian dari
+`bun run check`.
+
+> Manifest kompatibilitas aplikasi turunan (`extension.manifest.json` —
+> range SemVer base, checksum migration historis, versi capability; ADR-0015)
+> adalah lapisan TERPISAH yang **belum diimplementasikan** di awcms (rencana
+> Issue #183). Saat ini `extension:check` memvalidasi extension seam/komposisi
+> saja, bukan manifest — jangan rujuk `extension.manifest.json` sebagai sudah
+> ada.
 
 ## Verifikasi
 

@@ -51,7 +51,7 @@ export const domainEventRuntimeModule = defineModule({
     }
   ],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    openApiPath: "openapi/modules/domain-event-runtime.openapi.yaml",
     basePath: "/api/v1/domain-events"
   },
   jobs: [

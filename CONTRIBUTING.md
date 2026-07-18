@@ -26,7 +26,7 @@ flowchart LR
 ```
 
 1. **Mulai dari issue.** Bila belum ada issue, buat lebih dulu memakai template (sebutkan modul ERP terkait, mis. `finance`, `inventory`, `hr-payroll`, `integration`).
-2. **Buat branch** dari `main`: `feature/<issue>-<nama>`, `fix/<issue>-<nama>`, atau `docs/<topik>`.
+2. **Buat branch baru dari `main` SEBELUM mulai mengubah kode** — jangan pernah commit langsung ke `main` (push langsung ditolak branch protection, lihat [`docs/awcms/branch-protection.md`](docs/awcms/branch-protection.md)). Penamaan: `feature/<issue>-<nama>`, `fix/<issue>-<nama>`, `security/<issue>-<nama>`, atau `docs/<topik>`. Contoh: `git switch -c feature/178-module-composition`. Satu branch = satu issue.
 3. **Kerjakan atomic.** Ikuti aturan wajib di `AGENTS.md`: migration bila schema berubah, OpenAPI bila API berubah, AsyncAPI bila event berubah, idempotency untuk mutation high-risk (posting transaksi, payroll, adjustment finansial, sync integrasi), ABAC + RLS untuk data tenant/entitas-scoped, audit untuk aksi high-risk, masking untuk data sensitif.
 4. **Validasi lokal** (lihat di bawah) — jangan buka PR bila validasi gagal.
 5. **Tambahkan changeset** bila perubahan mempengaruhi perilaku: `bun run changeset`. Perubahan docs-only/chore boleh tanpa changeset.

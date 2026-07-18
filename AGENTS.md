@@ -13,11 +13,13 @@ AWCMS adalah rebuild fondasi (bukan ERP) di atas basis teknis **awcms-mini** (re
 ## Alur kerja wajib setiap task
 
 1. Mulai dari issue/ADR yang jelas scope-nya. Bila mengubah standar dasar, buat ADR dulu (lihat [`GOVERNANCE.md`](GOVERNANCE.md)).
-2. Identifikasi dampak: schema (migration), API (OpenAPI), event (AsyncAPI), akses (RBAC/ABAC/RLS), mutation high-risk (idempotency), aksi sensitif (audit), data sensitif (masking).
-3. Kerjakan atomic — satu PR = satu perubahan yang jelas dan terisolasi.
-4. Tulis test yang gagal sebelum fix, lulus sesudahnya.
-5. Perbarui dokumentasi (OpenAPI/AsyncAPI/docs/awcms) dan changeset bila perilaku berubah.
-6. Validasi lokal **`bun run check` PENUH** sebelum membuka PR — bukan subset. `check` mencakup `lint` (prettier `--check`) dan `build`; melewati keduanya adalah penyebab tersering "hijau lokal, merah di CI" (`.github/workflows/ci.yml` menjalankan keduanya). Jalankan `bun run format` dulu bila perlu, lalu `bun run check`.
+2. **Buat branch baru dari `main` SEBELUM menyentuh kode.** Setiap implementasi issue GitHub wajib dikerjakan di branch tersendiri — **jangan pernah commit langsung ke `main`** (branch protection menolak push langsung; lihat [`docs/awcms/branch-protection.md`](docs/awcms/branch-protection.md)). Penamaan: `feature/<issue>-<slug>`, `fix/<issue>-<slug>`, `docs/<topik>`, atau `security/<issue>-<slug>` — mis. `git switch -c feature/178-module-composition`. Satu branch = satu issue/PR; jangan menumpuk beberapa issue tak-berkaitan di satu branch. Detail alur di [`CONTRIBUTING.md`](CONTRIBUTING.md) §Alur kontribusi.
+3. Identifikasi dampak: schema (migration), API (OpenAPI), event (AsyncAPI), akses (RBAC/ABAC/RLS), mutation high-risk (idempotency), aksi sensitif (audit), data sensitif (masking).
+4. Kerjakan atomic — satu PR = satu perubahan yang jelas dan terisolasi.
+5. Tulis test yang gagal sebelum fix, lulus sesudahnya.
+6. Perbarui dokumentasi (OpenAPI/AsyncAPI/docs/awcms) dan changeset bila perilaku berubah.
+7. Validasi lokal **`bun run check` PENUH** sebelum membuka PR — bukan subset. `check` mencakup `lint` (prettier `--check`) dan `build`; melewati keduanya adalah penyebab tersering "hijau lokal, merah di CI" (`.github/workflows/ci.yml` menjalankan keduanya). Jalankan `bun run format` dulu bila perlu, lalu `bun run check`.
+8. Buka Pull Request dengan `Closes #<issue>`; merge hanya setelah review + CI hijau, lalu bersihkan branch.
 
 ## Aturan wajib (non-negotiable)
 

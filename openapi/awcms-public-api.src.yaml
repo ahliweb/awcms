@@ -1,0 +1,152 @@
+# Root OpenAPI source fragment (Issue #182, epic #177).
+#
+# Contains everything shared across every module: openapi/info/servers/tags/
+# security, and components.securitySchemes/parameters/responses/schemas (only
+# the schemas genuinely shared by 2+ modules, plus schemas not referenced by
+# any path). This file is NOT the published contract by itself and is NOT
+# independently valid OpenAPI (it has no `paths`). It is merged with every
+# openapi/modules/*.openapi.yaml fragment by `bun run openapi:bundle`
+# (scripts/openapi-bundle.ts) into the single published artifact,
+# openapi/awcms-public-api.openapi.yaml -- edit sources here and in
+# openapi/modules/*.openapi.yaml, never the generated bundle directly.
+openapi: 3.1.0
+info:
+  title: AWCMS Public API
+  version: 0.1.0
+  description: |-
+    REST contract for the AWCMS foundation modules (tenant-admin, profile-identity,
+    identity-access, logging). Every endpoint that accepts a body enforces an
+    application-level size cap (default 128 KiB) independent of any reverse-proxy
+    limit; a body over the limit is rejected with `413 Payload Too Large` /
+    `PAYLOAD_TOO_LARGE`, using the same envelope as every other error response.
+servers:
+  - url: http://localhost:4321
+    description: Local development
+tags:
+  - name: Foundation
+    description: Foundation and platform endpoints.
+  - name: Tenant Admin
+    description: Tenant, office, tenant settings, and the one-time setup wizard.
+  - name: Identity & Access
+    description: Login identity, session authentication, and tenant user membership.
+  - name: Profile Identity
+    description: Canonical person/organization profile lifecycle, identifiers, and entity links.
+  - name: Logging & Audit
+    description: Cross-module audit trail (awcms_audit_events) and its read API.
+  - name: Module Management
+    description: Database-backed module registry, tenant module lifecycle, settings, permission sync, jobs, and health.
+  - name: Sync Storage
+    description: Offline-first sync node registration, HMAC-signed push/pull, conflict tracking, and the object sync upload queue.
+  - name: Workflow Approval
+    description: Managed, versioned graph-based approval workflows — definition lifecycle, approval inbox/decisions, delegation, escalation, and administrative recovery.
+  - name: Email
+    description: Provider-neutral transactional email — template management, bulk announcement/notification enqueue, delivery-queue diagnostics/cancel, and suppression list.
+  - name: Management Reporting
+    description: Generic management reporting views (tenant activity, access/audit summary, sync health, module usage, email queue health) built as live read-aggregations over the foundation modules' tables.
+  - name: Reporting Projections
+    description: Module-contributed read-model projection extension to Management Reporting — list registered projection descriptors with live snapshot/freshness status, trigger/resume/cancel an idempotent full rebuild, trigger an on-demand reconciliation against a source control total, and manage/trigger/download scheduled exports (manifest/checksum/expiry, secure tenant-scoped download). A projection is a DERIVED read model, never an authorization source of truth — every operation independently re-checks RBAC/ABAC.
+  - name: Domain Event Runtime
+    description: Transactional, versioned domain-event outbox and dispatcher admin API — read-only inspection of outbox events and per-consumer deliveries (redacted payload projections only), permission-gated/reason-required/idempotent/audited replay of a dead-lettered delivery, and per-tenant pause/resume of a registered consumer.
+security:
+  - bearerAuth: []
+    tenantHeader: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque session token issued by POST /auth/login.
+    tenantHeader:
+      type: apiKey
+      in: header
+      name: X-AWCMS-Tenant-ID
+      description: Active tenant context for tenant-scoped API.
+    syncHmac:
+      type: apiKey
+      in: header
+      name: X-AWCMS-Signature
+      description: HMAC-SHA256 signature over "<timestamp>.<body>" for machine-to-machine sync endpoints (with X-AWCMS-Node-ID and X-AWCMS-Timestamp).
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      schema:
+        type: string
+    SyncNodeId:
+      name: X-AWCMS-Node-ID
+      in: header
+      required: true
+      description: Node code identifying the calling sync node (auto-registers on first contact).
+      schema:
+        type: string
+    SyncTimestamp:
+      name: X-AWCMS-Timestamp
+      in: header
+      required: true
+      description: ISO-8601 timestamp of the request, validated against the allowed skew (anti-replay).
+      schema:
+        type: string
+    SyncSignature:
+      name: X-AWCMS-Signature
+      in: header
+      required: true
+      description: HMAC-SHA256 signature over "<timestamp>.<body>".
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Validation error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Unauthorized:
+      description: Missing or invalid session.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Forbidden:
+      description: Access denied by RBAC/ABAC.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+  schemas:
+    ApiError:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum:
+            - false
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details: {}
+        meta:
+          $ref: "#/components/schemas/ApiMeta"
+    ApiMeta:
+      type: object
+      properties:
+        correlationId:
+          type: string
+        requestId:
+          type: string

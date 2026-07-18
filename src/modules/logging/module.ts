@@ -9,7 +9,7 @@ export const loggingModule = defineModule({
     "Cross-module audit trail (awcms_audit_events) and correlation ID propagation. Complements, not replaces, domain events and structured logs.",
   dependencies: ["tenant_admin"],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    openApiPath: "openapi/modules/logging.openapi.yaml",
     basePath: "/api/v1/logs"
   },
   permissions: [

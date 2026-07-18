@@ -52,6 +52,38 @@ Modul lain di ekosistem `awcms-mini` (mis. `blog-content`, `data-lifecycle`,
 di-port** ke repo ini — lihat skill masing-masing (ditandai "BACAAN SAJA") untuk
 spesifikasi target saat porting.
 
+### Komposisi modul build-time (Issue #178, ADR-0025)
+
+Registry efektif = **base + registry aplikasi turunan opsional**, disusun 100%
+saat build/compile (tanpa runtime discovery/`eval`/file scanning):
+
+- `src/modules/index.ts` mengekspor `listBaseModules()` (10 modul base, urutan
+  tetap) dan `modules`/`listModules()` = `mergeModuleRegistries(baseModules,
+applicationModuleRegistry)`. `index.ts` tetap **data murni** — hanya
+  merge, tidak pernah memvalidasi/melempar saat load.
+- `src/modules/application-registry.ts` adalah **satu-satunya titik ekstensi**
+  yang boleh diedit repo turunan; di repo base ini nilainya `undefined`, jadi
+  registry efektif **identik byte-per-byte** (urutan + identitas objek) dengan
+  sebelum Issue #178.
+- `src/modules/module-management/domain/module-composition.ts` adalah mesin
+  validasi (`composeModuleRegistry`) — dipakai ulang oleh gate, bukan oleh
+  jalur load modul. Menolak: key ganda, override key base, `type` base/system
+  dari registry aplikasi, dependency hilang/siklik (memakai ulang validator DAG
+  `_shared/module-dependency-graph.ts`), capability provider conflict/missing,
+  overlap namespace migration (base mereservasi `1-899`, turunan mulai `900`),
+  deployment-profile incompatible, navigation path conflict, dan job descriptor
+  invalid (memakai ulang `job-registry.ts`).
+- Empat gate menegakkannya di `bun run check` dan CI:
+  `modules:compose:check`, `modules:composition:inventory:generate`/`:check`
+  (inventory deterministik `docs/awcms/module-composition-inventory.json`), dan
+  `extension:check` (kesehatan extension seam). Lihat
+  [`derived-application-guide.md`](awcms/derived-application-guide.md) dan
+  [ADR-0025](adr/0025-implement-deterministic-build-time-module-composition.md).
+
+Build-time composition (siapa modul yang ada di kode) dan tenant lifecycle
+enable/disable (`module_management`, state DB per tenant) adalah **dua lapis
+berbeda** — komposisi tidak pernah bergantung pada input tenant.
+
 ## Tenant context & RLS
 
 Setiap request tenant-scoped berjalan lewat `withTenant()`
@@ -159,16 +191,33 @@ terstruktur (`src/lib/logging/logger.ts`) maupun domain event: `domain_event_run
 kini benar-benar mempublikasikan event nyata (lihat §Kontrak API di bawah),
 dan salah satu consumer referensinya adalah projector audit lintas modul.
 
-## Kontrak API
+## Kontrak API (modular, Issue #182 / ADR-0026)
 
-`openapi/awcms-public-api.openapi.yaml` — masih satu file (belum dipecah per
-modul seperti target `docs/awcms/05_openapi_asyncapi_detail.md`; tidak ada
-script `openapi:bundle` — pemecahan fragment + bundler tetap pekerjaan
-lanjutan). `bun run api:spec:check` memvalidasi: setiap operasi punya
-`operationId` unik, setiap operasi menyatakan security requirement (atau
-`security: []` plus entri di allow-list publik), parameter path cocok dengan
-template path, dan setiap route file di `src/pages/api/v1/**` punya
-pasangan path OpenAPI (dan sebaliknya).
+Kontrak OpenAPI **dipecah per modul**. Sumbernya adalah fragment —
+`openapi/awcms-public-api.src.yaml` (root: info/servers/tags/security +
+`components.securitySchemes`/`parameters`/`responses` + schema shared seperti
+`ApiError`/`ApiMeta`) dan `openapi/modules/<module>.openapi.yaml` (satu berkas
+per modul base, plus `foundation.openapi.yaml` untuk operasi tak-bermodul).
+Tiap modul menunjuk fragmentnya lewat `ModuleDescriptor.api.openApiPath`.
+
+`openapi/awcms-public-api.openapi.yaml` kini **GENERATED** oleh
+`bun run openapi:bundle` (deterministik/idempoten — kunci ter-sort, tanpa
+timestamp) di path lama yang sama, jadi setiap consumer tak berubah. `bun run
+api:docs:generate` menghasilkan referensi Markdown `docs/awcms/api-reference.md`
+dari bundle + AsyncAPI (contoh sintetik).
+
+`bun run api:spec:check` memvalidasi: **bundle freshness** (bundle commit ==
+hasil generate dari fragment), setiap operasi punya `operationId` unik, setiap
+operasi menyatakan security requirement (atau `security: []` plus entri
+allow-list publik yang benar-benar dipakai), **standard error schema** (semua
+response 4xx/5xx resolve ke `ApiError`), parameter path cocok dengan template,
+dan setiap route file di `src/pages/api/v1/**` punya pasangan path OpenAPI (dan
+sebaliknya). `bun run api:docs:check` menggagalkan build bila referensi Markdown
+basi. Fragment dari **aplikasi turunan** tergabung lewat seam
+`buildBundledDocument({ extraFragmentFiles })` tanpa mengedit fragment base;
+fragment yang menimpa path/schema base ditolak (`BundleConflictError`). Detail:
+[`openapi/README.md`](../openapi/README.md),
+[`docs/awcms/api-contribution-guide.md`](awcms/api-contribution-guide.md).
 
 `asyncapi/awcms-domain-events.asyncapi.yaml` — **bukan lagi baseline kosong.**
 Berisi channel nyata untuk `domain_event_runtime` (`sample.recorded`,

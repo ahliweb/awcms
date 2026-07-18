@@ -112,7 +112,7 @@ export const workflowApprovalModule = defineModule({
     }
   ],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    openApiPath: "openapi/modules/workflow-approval.openapi.yaml",
     basePath: "/api/v1/workflows"
   }
 });

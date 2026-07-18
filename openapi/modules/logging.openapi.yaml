@@ -1,0 +1,92 @@
+# Source fragment for the "logging" module (Issue #182, epic #177).
+#
+# Owns every path whose operations carry this module's OpenAPI tag(s), plus
+# every components.schemas entry referenced ONLY by this module's operations.
+# Schemas shared by 2+ modules (or referenced by none) live in the root
+# fragment (openapi/awcms-public-api.src.yaml) instead.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses and cross-module schemas) only resolve
+# after `bun run openapi:bundle` merges this file with the root fragment and
+# every sibling module fragment into openapi/awcms-public-api.openapi.yaml.
+# Edit this file (or the root fragment for shared components), never the
+# generated bundle.
+paths:
+  /api/v1/logs/audit:
+    get:
+      operationId: listAuditEvents
+      tags:
+        - Logging & Audit
+      summary: List audit trail events for the current tenant.
+      parameters:
+        - name: resourceType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Audit event list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AuditEvent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+components:
+  schemas:
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        moduleKey:
+          type: string
+        action:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+          nullable: true
+        severity:
+          type: string
+        message:
+          type: string
+        attributes:
+          type: object
+          nullable: true
+        correlationId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time

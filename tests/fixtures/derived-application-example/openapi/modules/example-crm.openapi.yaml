@@ -1,0 +1,64 @@
+# Derived-application OpenAPI fragment fixture (Issue #182, epic #177).
+#
+# Simulates a fragment a REAL derived repository (e.g. AWPOS) contributes for
+# its own domain module via `ModuleDescriptor.api.openApiPath`. It is NOT part
+# of the base `openapi/modules/` set and is never merged into the base bundle;
+# `tests/openapi-derived-fragment.test.ts` merges it via
+# `buildBundledDocument(rootDir, { extraFragmentFiles: [...] })` to prove a
+# derived module can extend the published contract WITHOUT editing any base
+# fragment, and that a fragment redefining a base path/schema is rejected.
+#
+# Like the base fragments, it is NOT independently valid OpenAPI: it $refs
+# shared components (parameters/responses/schemas) that only resolve after the
+# merge.
+paths:
+  /api/v1/example-crm/contacts:
+    get:
+      tags:
+        - Example CRM
+      summary: List example CRM contact directory entries (fixture).
+      operationId: listExampleCrmContacts
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of contact directory entries.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    required:
+                      - success
+                      - data
+                    properties:
+                      success:
+                        type: boolean
+                        enum:
+                          - true
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ExampleCrmContact"
+                      meta:
+                        $ref: "#/components/schemas/ApiMeta"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+components:
+  schemas:
+    ExampleCrmContact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - displayName
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        email:
+          type: string
