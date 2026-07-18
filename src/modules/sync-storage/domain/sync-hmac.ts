@@ -22,14 +22,46 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * skill; nodes MUST send `X-AWCMS-Signature-Version: 2`.
  *
  * Field constraints that keep the v2 material unambiguous: `tenantId` is a
- * UUID and `nodeCode` / `timestamp` come from HTTP headers, which cannot
- * contain the `:` delimiter's problematic neighbours (raw CR/LF) — and `body`
- * is the trailing field, so any `:` it contains cannot shift an earlier field
- * boundary.
+ * UUID (enforced below) and `nodeCode` / `timestamp` come from HTTP headers,
+ * which cannot contain the `:` delimiter's problematic neighbours (raw CR/LF) —
+ * and `body` is the trailing field, so any `:` it contains cannot shift an
+ * earlier field boundary.
+ *
+ * L1 delimiter hardening (audit PR #161, GHSA-c972-3q5p-g3h4): the schema
+ * (`sql/010`, `node_code text`) puts no format constraint on `nodeCode`, so
+ * `nodeCode` MAY contain `:`. Without a constrained `tenantId` that makes the
+ * tenant/node boundary in `v2:<tenantId>:<nodeCode>:...` ambiguous —
+ * `(tenantId="A", nodeCode="x:y")` and `(tenantId="A:x", nodeCode="y")` both
+ * render `v2:A:x:y:...`, so their signatures are byte-identical and mutually
+ * accepted. The auditor confirmed this is NOT cross-tenant exploitable (a
+ * request's `tenantId` must be a valid UUID — no `:` — to reach any tenant data
+ * via `withTenant`), but it is a latent ambiguity in security-signature code.
+ *
+ * Fix = Option A (zero regression): require `tenantId` to be a UUID at the v2
+ * compute/verify boundary, BEFORE the material is built. A UUID is a fixed 36
+ * chars and contains no `:`, so the tenant field boundary becomes unambiguous
+ * and no two distinct (tenantId, nodeCode) pairs can collide on the tenant/node
+ * split. This constrains ONLY `tenantId` — `nodeCode` is untouched, so every
+ * already-deployed v1/v2 node (whose tenant id is a UUID) is unaffected. v1
+ * material has no tenant field and is therefore not touched by this change.
  */
 
 export const SYNC_SIGNATURE_VERSION_HEADER = "X-AWCMS-Signature-Version";
 export const SYNC_SIGNATURE_VERSION_V2 = "2";
+
+/**
+ * Canonical tenant-id shape accepted in v2 material. Mirrors `UUID_PATTERN` in
+ * `src/lib/database/tenant-context.ts` — the exact shape `withTenant` requires
+ * before any tenant-scoped SQL runs. Kept as a local copy on purpose so this
+ * domain module stays free of database/runtime imports (it only needs
+ * `node:crypto`).
+ */
+const TENANT_ID_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isTenantIdUuid(tenantId: string): boolean {
+  return TENANT_ID_UUID_PATTERN.test(tenantId);
+}
 
 /** v1 legacy material — tenant/node NOT bound (see file header). */
 export function computeSyncSignature(
@@ -50,6 +82,16 @@ export function computeSyncSignatureV2(
   timestamp: string,
   body: string
 ): string {
+  // A non-UUID tenantId is the only input that makes the v2 material
+  // delimiter-ambiguous (see file header). Fail loudly rather than sign
+  // ambiguous material — every legitimate caller already holds a UUID tenant
+  // id, so this never fires on a real node.
+  if (!isTenantIdUuid(tenantId)) {
+    throw new Error(
+      "computeSyncSignatureV2: tenantId must be a UUID (v2 material integrity)."
+    );
+  }
+
   return createHmac("sha256", secret)
     .update(`v2:${tenantId}:${nodeCode}:${timestamp}:${body}`)
     .digest("hex");
@@ -87,6 +129,15 @@ export function verifySyncSignatureV2(
   body: string,
   providedSignature: string
 ): boolean {
+  // Fail-closed on a non-UUID tenant id: it is the only input that makes the v2
+  // material delimiter-ambiguous, and a real request's tenantId must be a UUID
+  // to reach any tenant-scoped data (`withTenant`). Rejecting here — before the
+  // material is built — means an ambiguous material is never even a candidate
+  // match, and keeps `computeSyncSignatureV2`'s throw from escaping `verify`.
+  if (!isTenantIdUuid(tenantId)) {
+    return false;
+  }
+
   return timingSafeHexEqual(
     computeSyncSignatureV2(secret, tenantId, nodeCode, timestamp, body),
     providedSignature

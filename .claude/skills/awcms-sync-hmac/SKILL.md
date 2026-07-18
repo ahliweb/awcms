@@ -25,6 +25,16 @@ signature = HMAC-SHA256(secret, "v2:<tenantId>:<nodeCode>:<timestamp>:<body>")
 - Field constraint agar material tidak ambigu: `tenantId` = UUID; `nodeCode` &
   `timestamp` dari HTTP header (tak boleh mengandung CR/LF); `body` adalah field
   terakhir sehingga `:` di dalamnya tak menggeser batas field sebelumnya.
+- **Enforcement L1 (delimiter hardening, GHSA-c972):** `tenantId` = UUID
+  **ditegakkan** di boundary v2, bukan sekadar diasumsikan. `nodeCode` boleh
+  mengandung `:` (schema `node_code text`), jadi tanpa syarat UUID, batas
+  tenant/node ambigu — `(tenantId="A", nodeCode="x:y")` dan
+  `(tenantId="A:x", nodeCode="y")` menghasilkan material identik. UUID = 36 char
+  tetap tanpa `:` → batas tak ambigu. `computeSyncSignatureV2` **throw** bila
+  `tenantId` bukan UUID; `verifySyncSignatureV2` **fail-closed** (return
+  `false`). Hanya `tenantId` yang dibatasi; `nodeCode` tak disentuh dan **format
+  material v2 TIDAK berubah** → node v1/v2 lama (tenant id-nya UUID) tak
+  terpengaruh; mini/spec tak perlu ubah format material.
 - Implementasi kanonik ada di repo **awcms** (`domain/sync-hmac.ts`
   `computeSyncSignatureV2` / `verifySyncSignatureV2`).
 

@@ -92,7 +92,14 @@ against a max skew (`AWCMS_SYNC_MAX_SKEW_SEC`, default 300s) for anti-replay.
   for one tenant no longer verifies when `X-AWCMS-Tenant-ID` is swapped to
   another tenant. Nodes send `X-AWCMS-Signature-Version: 2`. This is the
   canonical scheme, mirrored across awcms, awcms-mini, and the `awcms-sync-hmac`
-  skill.
+  skill. `tenantId` **must be a UUID** and this is enforced at the v2 boundary
+  (audit finding L1): because `nodeCode` may contain `:` (schema `node_code
+text`), a non-UUID `tenantId` would make the tenant/node boundary ambiguous
+  (`v2:A:x:y:…` matches both `tenantId="A", nodeCode="x:y"` and `tenantId="A:x",
+nodeCode="y"`). A UUID is a fixed 36 chars with no `:`, so the boundary is
+  unambiguous; `computeSyncSignatureV2` throws and `verifySyncSignatureV2` fails
+  closed on a non-UUID tenant. The material format is unchanged (`nodeCode` is
+  not constrained), so this is transparent to existing nodes.
 - **v1 (legacy, VULNERABLE)** — `HMAC-SHA256("<timestamp>.<body>")`, used when no
   `X-AWCMS-Signature-Version` header is sent. Neither tenant nor node is bound,
   so it is **cross-tenant forgeable** and is kept only so already-deployed nodes
