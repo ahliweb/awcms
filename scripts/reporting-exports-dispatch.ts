@@ -6,8 +6,9 @@
  * artifact for every enabled scheduled export config whose interval has
  * elapsed, for every active tenant. Local filesystem write under
  * `REPORTING_EXPORT_ROOT_PATH` — no external network egress, safe in
- * offline/LAN deployments. Runs as `awcms_worker` (migration 069's
- * own grants).
+ * offline/LAN deployments. Runs as the least-privilege `awcms_worker` role
+ * (`sql/022`) when `WORKER_DATABASE_URL` is configured, else via the
+ * `DATABASE_URL` fallback (opt-in — see `src/lib/database/client.ts`).
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import {

@@ -50,10 +50,13 @@ nol baris, bukan error dan bukan data tenant lain. Baru dengan role inilah RLS
 `FORCE` (migration 017) benar-benar menjadi batas keamanan, karena
 SUPERUSER/BYPASSRLS melewati RLS apa pun FORCE-nya.
 
-`WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` **tidak** memetakan ke role
-`awcms_worker`/`awcms_setup` — role itu milik awcms-mini (migration 045-nya) dan
-belum diport. Kosong → fallback ke `DATABASE_URL`. Kind terpisah tetap berguna
-untuk **isolasi pool**. Detail operator: doc 18 §Model role database.
+`WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` **opt-in** memetakan ke role
+least-privilege `awcms_worker`/`awcms_setup`, dibuat
+[`sql/022_awcms_db_worker_setup_roles.sql`](../../sql/022_awcms_db_worker_setup_roles.sql)
+(Issue #163) — masing-masing hanya GRANT per-jalur-tulis yang dipakai kodenya,
+nol akses ke katalog global lain. Kosong → keduanya fallback ke `DATABASE_URL`
+(`awcms_app`), jadi tak breaking; kind terpisah tetap memberi **isolasi pool**
+walau belum opt-in. Detail operator: doc 18 §Model role database.
 
 `jobs`/`observability` tersedia sebagai **library** (dengan unit test) namun
 belum ada runner terjadwal maupun endpoint `/metrics`: adapter Prometheus

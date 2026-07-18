@@ -98,21 +98,22 @@ var karena nilai efektifnya selalu berasal dari DB per tenant.
 
 ### Database & pool
 
-| Var                             | Wajib | Default                         | Sensitif | Fungsi                                                                                                |
-| ------------------------------- | ----- | ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                  | Ya    | –                               | Ya       | Koneksi PostgreSQL runtime; arahkan ke role `awcms_app` (lihat §Model role database)                  |
-| `AWCMS_APP_DB_PASSWORD`         | –     | –                               | Ya       | Password role `awcms_app` dipakai script init container; harus sama dengan password di `DATABASE_URL` |
-| `DATABASE_POOL_MAX`             | –     | `20`                            | –        | Maks koneksi pool (kind `app`; default untuk `worker`/`setup` juga, kecuali di-override)              |
-| `DATABASE_POOL_MAX_WORKER`      | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus kind `worker`                                                       |
-| `DATABASE_POOL_MAX_SETUP`       | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus kind `setup`                                                        |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | –     | `15000`                         | –        | Timeout statement                                                                                     |
-| `DATABASE_PGBOUNCER`            | –     | `false`                         | –        | Mode PgBouncer (transaction)                                                                          |
-| `WORKER_DATABASE_URL`           | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi + pool terpisah background job/cron. **Bukan role terpisah** — lihat §Model role database     |
-| `SETUP_DATABASE_URL`            | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi + pool terpisah `POST /api/v1/setup/initialize`. **Bukan role terpisah**                      |
+| Var                             | Wajib | Default                         | Sensitif | Fungsi                                                                                                            |
+| ------------------------------- | ----- | ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                  | Ya    | –                               | Ya       | Koneksi PostgreSQL runtime; arahkan ke role `awcms_app` (lihat §Model role database)                              |
+| `AWCMS_APP_DB_PASSWORD`         | –     | –                               | Ya       | Password role `awcms_app` dipakai script init container; harus sama dengan password di `DATABASE_URL`             |
+| `DATABASE_POOL_MAX`             | –     | `20`                            | –        | Maks koneksi pool (kind `app`; default untuk `worker`/`setup` juga, kecuali di-override)                          |
+| `DATABASE_POOL_MAX_WORKER`      | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus kind `worker`                                                                   |
+| `DATABASE_POOL_MAX_SETUP`       | –     | fallback ke `DATABASE_POOL_MAX` | –        | Override maks koneksi pool khusus kind `setup`                                                                    |
+| `DATABASE_STATEMENT_TIMEOUT_MS` | –     | `15000`                         | –        | Timeout statement                                                                                                 |
+| `DATABASE_PGBOUNCER`            | –     | `false`                         | –        | Mode PgBouncer (transaction)                                                                                      |
+| `WORKER_DATABASE_URL`           | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi + pool terpisah background job/cron. Opt-in ke role `awcms_worker` (sql/022) — lihat §Model role database |
+| `SETUP_DATABASE_URL`            | –     | fallback ke `DATABASE_URL`      | Ya       | Koneksi + pool terpisah `POST /api/v1/setup/initialize`. Opt-in ke role `awcms_setup` (sql/022)                   |
 
 #### Model role database
 
-Yang **benar-benar ada** di repo ini (Issue #141) adalah **dua** role:
+Yang **benar-benar ada** di repo ini (Issue #141, #160, #163) adalah **empat**
+role: migration owner, `awcms_app`, dan — opt-in — `awcms_worker`/`awcms_setup`.
 
 1. **Migration owner** (superuser/owner) — dipakai `bun run db:migrate` saja.
    Satu-satunya role yang bisa `ALTER`/`DROP`/`CREATE`/`GRANT`. Runner
@@ -150,23 +151,41 @@ blanket DML dari default privileges, atau tabel tenant-scoped baru RLS-forced
 tapi **ungranted** → `permission denied`) ditangkap cek `security:readiness`
 "Runtime role table grants match least-privilege matrix".
 
-Batas yang masih terbuka (defense-in-depth, bukan residual #159): pemecahan
-runtime jadi role `awcms_worker`/`awcms_setup` sungguhan (migration `045`
-awcms-mini) **belum diport** — butuh audit per-jalur-tulis atas tujuh script
-worker + bootstrap setup, dan perubahan fallback `client.ts` yang breaking untuk
-setiap deployment yang belum opt-in ke `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL`.
-Karena `awcms_app` sudah dipersempit di atas, residual konkret #159 sudah
-tertutup tanpa pemecahan itu. Dibanding kondisi sebelum 019 (semuanya lewat
-superuser), ini perbaikan tegas berlapis, bukan kemunduran.
+3. **`awcms_worker`** ("background worker", `WORKER_DATABASE_URL`) dan
+4. **`awcms_setup`** ("bootstrap/setup", `SETUP_DATABASE_URL`) — dibuat
+   `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163, paruh kedua pemecahan
+   role mini-045; paruh pertama = penyempitan `awcms_app` di sql/021).
+   `awcms_worker` melayani tujuh cron worker (purge audit, dispatch object/
+   email/domain-event/workflow/reporting), `awcms_setup` melayani bootstrap
+   `POST /api/v1/setup/initialize`. Masing-masing hanya memegang GRANT
+   per-jalur-tulis yang benar-benar dipakai kodenya (ditelusuri per-script di
+   repo INI, bukan disalin dari mini — set worker mini
+   visitor-analytics/blog/form-drafts tidak ada di sini), dengan **nol** akses
+   ke katalog global yang tidak disentuhnya (`awcms_permissions`,
+   `awcms_schema_migrations`, `awcms_setup_state`, module registry). Keduanya
+   bukan superuser/BYPASSRLS/owner, punya default GUC fail-closed sama seperti
+   `awcms_app`, dan NOLOGIN tanpa password sampai deployment mengaktifkannya.
 
-Karena itu `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` **bukan** pemetaan role:
-tidak ada role `awcms_worker`/`awcms_setup` di `sql/`. Keduanya adalah seam
-koneksi/pool (`getWorkerDatabaseClient`/`getSetupDatabaseClient`), dan kosong →
-fallback ke `DATABASE_URL` — itulah default yang didukung dan diuji. Mengisinya
-tanpa menyiapkan role tujuan + GRANT-nya sendiri akan menghasilkan
-`permission denied` di setiap job. Nilainya tanpa role baru: **isolasi pool**
-(job lambat tidak menghabiskan koneksi yang melayani HTTP), disetel lewat
-`DATABASE_POOL_MAX_WORKER`/`DATABASE_POOL_MAX_SETUP`.
+**OPT-IN, bukan breaking.** `getWorkerDatabaseClient`/`getSetupDatabaseClient`
+(`src/lib/database/client.ts`) tetap fallback ke `DATABASE_URL` (koneksi
+`awcms_app`) saat `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` kosong — deployment
+yang mengelola satu connection string tetap jalan tanpa perubahan, dan role
+sekadar ada tak terpakai sampai sebuah URL diarahkan padanya. Manfaat opt-in:
+**isolasi pool** (job lambat tidak menghabiskan koneksi yang melayani HTTP,
+`DATABASE_POOL_MAX_WORKER`/`DATABASE_POOL_MAX_SETUP`) **plus isolasi role
+least-privilege nyata**. Konsekuensi jujur dari desain opsional ini: isolasi
+`awcms_app` dari `awcms_tenants`/`awcms_setup_state` baru **penuh** setelah
+`SETUP_DATABASE_URL` diarahkan ke `awcms_setup` — sampai itu, wizard setup masih
+menjalankan INSERT/UPDATE-nya sebagai `awcms_app` lewat jalur fallback (persis
+alasan sql/021 mempertahankan INSERT/UPDATE `awcms_app` di kedua tabel itu).
+
+Regresi grant untuk KEDUA lapis role ditangkap cek `security:readiness`: tabel
+global baru ikut blanket-DML atau tabel tenant-scoped baru ungranted pada
+`awcms_app` oleh "Runtime role table grants match least-privilege matrix"; dan
+`awcms_worker`/`awcms_setup` yang — bila diprovisikan — under/over-granted
+dibanding matriksnya oleh "Worker/setup least-privilege role grants match
+matrix" (non-blocking bila role belum diprovisikan: default fallback). Dibanding
+kondisi sebelum 019 (semuanya lewat superuser), ini perbaikan tegas berlapis.
 
 #### Kapasitas deployment-aware (target)
 

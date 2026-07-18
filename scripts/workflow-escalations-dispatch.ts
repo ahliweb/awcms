@@ -9,11 +9,10 @@
  * JSON telemetry all come from `runJob`, matching
  * `domain-events-dispatch.ts`'s template exactly.
  *
- * Runs through `getWorkerDatabaseClient()` — this base defines no separate
- * least-privilege `awcms_worker` role, so that client falls back to
- * `DATABASE_URL` when `WORKER_DATABASE_URL` is unset. Reintroduce
- * per-table least-privilege grants (see migration 013's provenance note) in
- * a deployment that adds role separation.
+ * Runs through `getWorkerDatabaseClient()` — the least-privilege
+ * `awcms_worker` role (`sql/022`, Issue #163) when `WORKER_DATABASE_URL`
+ * points at it, else the `DATABASE_URL` fallback (opt-in — see
+ * `src/lib/database/client.ts`).
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import {

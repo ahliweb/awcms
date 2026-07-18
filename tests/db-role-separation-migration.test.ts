@@ -164,27 +164,30 @@ describe("Issue #155 — role documentation must not assert what does not exist"
     }
   });
 
-  test("no source comment claims an awcms_worker/awcms_setup role exists", () => {
-    // These roles are awcms-mini's migration 045, not ported here. The env vars
-    // remain as pool seams, but must never be advertised as role mappings —
-    // an operator who believed that got `permission denied` on every job.
-    for (const file of [
-      "src/lib/database/client.ts",
-      ".env.example",
-      MIGRATION_PATH
-    ]) {
-      const contents = readRepoFile(file);
-      const claimsRoleExists = /\bCREATE ROLE (awcms_worker|awcms_setup)\b/;
-      expect(contents).not.toMatch(claimsRoleExists);
-    }
+  test("the awcms_worker/awcms_setup split lives in sql/022, NOT in this awcms_app migration (atomic migrations)", () => {
+    // The worker/setup roles are real now (Issue #163) — but they belong in
+    // their OWN migration (sql/022), not retrofitted into sql/019. sql/019 must
+    // stay exactly the awcms_app role it always was, so its contract tests above
+    // keep meaning what they say.
+    const splitRoles = /\bCREATE ROLE (awcms_worker|awcms_setup)\b/;
+    expect(migrationStatements).not.toMatch(splitRoles);
+
+    const splitMigration = readRepoFile(
+      "sql/022_awcms_db_worker_setup_roles.sql"
+    );
+    expect(splitMigration).toMatch(/CREATE ROLE awcms_worker\b/);
+    expect(splitMigration).toMatch(/CREATE ROLE awcms_setup\b/);
   });
 
-  test(".env.example documents the fallback rather than a nonexistent role", () => {
+  test(".env.example documents the opt-in role mapping AND the fallback", () => {
     const envExample = readRepoFile(".env.example");
 
     expect(envExample).toMatch(/^WORKER_DATABASE_URL=$/m);
     expect(envExample).toMatch(/^SETUP_DATABASE_URL=$/m);
-    // Must tell the operator the supported default is the fallback.
+    // Opt-in mapping to the real roles is now advertised…
+    expect(envExample).toMatch(/awcms_worker/);
+    expect(envExample).toMatch(/awcms_setup/);
+    // …but the supported default is still the DATABASE_URL fallback (non-breaking).
     expect(envExample).toMatch(/fallback ke `?DATABASE_URL`?/i);
   });
 
