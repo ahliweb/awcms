@@ -49,6 +49,36 @@ test.describe("admin offices (authenticated)", () => {
     await expect(page.locator("#offices-denied")).toHaveCount(0);
   });
 
+  test("the other management screens render their tables for the owner", async ({
+    page
+  }) => {
+    // Log in first (fresh page/context per test).
+    await page.goto("/login");
+    await page.locator("#tenant-id").fill(tenantId!);
+    await page.locator("#login-identifier").fill(loginIdentifier!);
+    await page.locator("#password").fill(password!);
+    await page.locator("#login-submit").click();
+    await page.waitForURL("**/admin");
+
+    // Modules: the catalog always lists the code-registered core modules, so
+    // this is data-seed-free — assert a known core module appears.
+    await page.goto("/admin/modules");
+    await expect(page.locator("#modules-table")).toBeVisible();
+    await expect(page.locator("#modules-table")).toContainText(
+      "module_management"
+    );
+
+    // Email templates + profiles: the owner has the permission, so the table
+    // (possibly empty) renders rather than the "no access" notice.
+    await page.goto("/admin/email-templates");
+    await expect(page.locator("#email-templates-table")).toBeVisible();
+    await expect(page.locator("#email-templates-denied")).toHaveCount(0);
+
+    await page.goto("/admin/profiles");
+    await expect(page.locator("#profiles-table")).toBeVisible();
+    await expect(page.locator("#profiles-denied")).toHaveCount(0);
+  });
+
   test("rejects a wrong password with a generic error, not a stack trace", async ({
     page
   }) => {

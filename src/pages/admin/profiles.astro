@@ -1,0 +1,110 @@
+---
+/**
+ * Profile (party) management screen (Issue #166) — the tenant's central
+ * profiles/parties. Same pattern as `offices.astro`: calls the same
+ * `listParties` the `GET /api/v1/profiles` endpoint uses, gated on
+ * `profile_identity.profile_management.read`. Read-only. Identifiers (email/
+ * phone/NIK) are deliberately NOT shown here — they are masked PII surfaced
+ * only through the dedicated identifiers endpoint, never a bulk list.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { listParties } from "../../modules/profile-identity/application/party-directory";
+
+type PartyRow = {
+  id: string;
+  displayName: string;
+  profileType: string;
+  status: string;
+  verificationStatus: string;
+};
+
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(
+  permissionKey("profile_identity", "profile_management", "read")
+);
+
+let profiles: PartyRow[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+      const page = await listParties(tx, ssr.tenantId, {});
+      return page.items as PartyRow[];
+    });
+    if (result instanceof Response) loadError = true;
+    else profiles = result;
+  } catch {
+    loadError = true;
+  }
+}
+---
+
+<AdminLayout title="Profiles" active="profiles">
+  <h1 id="profiles-heading">Profiles</h1>
+
+  {
+    !canRead && (
+      <p class="state-notice" id="profiles-denied">
+        You do not have permission to view profiles.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice" id="profiles-error">
+        Profiles could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <div class="data-table-scroll">
+        <table class="data-table" id="profiles-table">
+          <caption>{profiles.length} profile(s)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Display name</th>
+              <th scope="col">Type</th>
+              <th scope="col">Status</th>
+              <th scope="col">Verification</th>
+            </tr>
+          </thead>
+          <tbody>
+            {profiles.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan="4">
+                  No profiles yet.
+                </td>
+              </tr>
+            ) : (
+              profiles.map((profile) => (
+                <tr>
+                  <td>{profile.displayName}</td>
+                  <td>{profile.profileType}</td>
+                  <td>
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        profile.status === "active" ? "success" : "neutral"
+                      }
+                    >
+                      {profile.status}
+                    </span>
+                  </td>
+                  <td>{profile.verificationStatus}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>

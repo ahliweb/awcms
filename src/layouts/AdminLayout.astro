@@ -24,7 +24,7 @@ import "../styles/admin.css";
 interface Props {
   title: string;
   /** Sidebar key to mark `aria-current="page"`. */
-  active?: "dashboard" | "offices";
+  active?: "dashboard" | "offices" | "profiles" | "modules" | "email-templates";
 }
 
 const { title, active } = Astro.props;
@@ -71,6 +71,24 @@ const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
             aria-current={active === "offices" ? "page" : undefined}
           >
             Offices
+          </a>
+          <a
+            href="/admin/profiles"
+            aria-current={active === "profiles" ? "page" : undefined}
+          >
+            Profiles
+          </a>
+          <a
+            href="/admin/modules"
+            aria-current={active === "modules" ? "page" : undefined}
+          >
+            Modules
+          </a>
+          <a
+            href="/admin/email-templates"
+            aria-current={active === "email-templates" ? "page" : undefined}
+          >
+            Email templates
           </a>
         </nav>
       </aside>

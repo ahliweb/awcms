@@ -1,0 +1,104 @@
+---
+/**
+ * Email template management screen (Issue #166). Same pattern as
+ * `offices.astro`: calls the same `listEmailTemplates` the
+ * `GET /api/v1/email/templates` endpoint uses, gated on `email.template.read`.
+ * Read-only; includes inactive templates so the list is the full config
+ * surface.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { listEmailTemplates } from "../../modules/email/application/email-template-directory";
+
+type TemplateRow = {
+  id: string;
+  templateKey: string;
+  name: string;
+  isActive: boolean;
+  updatedAt: string;
+};
+
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(permissionKey("email", "template", "read"));
+
+let templates: TemplateRow[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+      return (await listEmailTemplates(tx, ssr.tenantId, {
+        includeInactive: true
+      })) as TemplateRow[];
+    });
+    if (result instanceof Response) loadError = true;
+    else templates = result;
+  } catch {
+    loadError = true;
+  }
+}
+---
+
+<AdminLayout title="Email templates" active="email-templates">
+  <h1 id="email-templates-heading">Email templates</h1>
+
+  {
+    !canRead && (
+      <p class="state-notice" id="email-templates-denied">
+        You do not have permission to view email templates.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice" id="email-templates-error">
+        Templates could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <div class="data-table-scroll">
+        <table class="data-table" id="email-templates-table">
+          <caption>{templates.length} template(s)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Key</th>
+              <th scope="col">Name</th>
+              <th scope="col">Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            {templates.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan="3">
+                  No templates yet.
+                </td>
+              </tr>
+            ) : (
+              templates.map((template) => (
+                <tr>
+                  <td>{template.templateKey}</td>
+                  <td>{template.name}</td>
+                  <td>
+                    <span
+                      class="status-badge"
+                      data-variant={template.isActive ? "success" : "neutral"}
+                    >
+                      {template.isActive ? "active" : "inactive"}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>
