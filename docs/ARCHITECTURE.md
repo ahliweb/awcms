@@ -75,6 +75,15 @@ token mentah sekali saja. Klien mengirim token lewat header
 (`awcms_session`/`awcms_tenant_id`, untuk SSR admin shell). Tenant aktif wajib
 dikirim lewat header `X-AWCMS-Tenant-ID` untuk endpoint non-cookie.
 
+**Admin shell (Issue #166).** `src/pages/login.astro` + `src/pages/admin/*.astro`
+(dashboard + layar manajemen read-only: offices, profiles, users, roles,
+abac-policies, modules, email-templates) memakai `AdminLayout` + design token
+doc 14. `src/middleware.ts` menjaga `/admin/*` (resolve sesi via
+`resolveSsrContext`, redirect `/login` bila tak ada). CSP `default-src 'self'`
+dijaga satu sumber di middleware; halaman tak punya inline script/style
+(`build.inlineStylesheets: "never"` + script di-bundle eksternal). E2E Playwright
+(`tests/e2e/`, job CI `e2e-smoke`) memverifikasi alur browser sungguhan.
+
 ## RBAC/ABAC dasar
 
 `identity-access/domain/access-control.ts` — `evaluateAccess()`: default deny,

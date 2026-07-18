@@ -1,0 +1,99 @@
+---
+/**
+ * Role (RBAC) management screen (Issue #166, Stage 3b). SSR-reads via the same
+ * `listRoles` the `GET /api/v1/roles` endpoint uses, gated on
+ * `identity_access.access_control.read`. Read-only.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listRoles,
+  type RoleView
+} from "../../modules/identity-access/application/access-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(
+  permissionKey("identity_access", "access_control", "read")
+);
+
+let roles: RoleView[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, (tx) =>
+      listRoles(tx, ssr.tenantId)
+    );
+    if (result instanceof Response) loadError = true;
+    else roles = result;
+  } catch {
+    loadError = true;
+  }
+}
+---
+
+<AdminLayout title="Roles" active="roles">
+  <h1 id="roles-heading">Roles</h1>
+
+  {
+    !canRead && (
+      <p class="state-notice" id="roles-denied">
+        You do not have permission to view roles.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice" id="roles-error">
+        Roles could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <div class="data-table-scroll">
+        <table class="data-table" id="roles-table">
+          <caption>{roles.length} role(s)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Name</th>
+              <th scope="col">System</th>
+              <th scope="col">Permissions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {roles.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan="4">
+                  No roles yet.
+                </td>
+              </tr>
+            ) : (
+              roles.map((role) => (
+                <tr>
+                  <td>{role.roleCode}</td>
+                  <td>{role.roleName}</td>
+                  <td>
+                    <span
+                      class="status-badge"
+                      data-variant={role.isSystem ? "warning" : "neutral"}
+                    >
+                      {role.isSystem ? "system" : "custom"}
+                    </span>
+                  </td>
+                  <td>{role.permissionCount}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>

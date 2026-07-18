@@ -1,0 +1,100 @@
+---
+/**
+ * User (tenant users) management screen (Issue #166, Stage 3b). SSR-reads via
+ * the same `listTenantUsers` the `GET /api/v1/users` endpoint uses, gated on
+ * `identity_access.access_control.read`. Login identifiers are masked (PII).
+ * Read-only.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listTenantUsers,
+  type TenantUserView
+} from "../../modules/identity-access/application/access-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(
+  permissionKey("identity_access", "access_control", "read")
+);
+
+let users: TenantUserView[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, (tx) =>
+      listTenantUsers(tx, ssr.tenantId)
+    );
+    if (result instanceof Response) loadError = true;
+    else users = result;
+  } catch {
+    loadError = true;
+  }
+}
+---
+
+<AdminLayout title="Users" active="users">
+  <h1 id="users-heading">Users</h1>
+
+  {
+    !canRead && (
+      <p class="state-notice" id="users-denied">
+        You do not have permission to view users.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice" id="users-error">
+        Users could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <div class="data-table-scroll">
+        <table class="data-table" id="users-table">
+          <caption>{users.length} user(s)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Login identifier</th>
+              <th scope="col">Status</th>
+              <th scope="col">Roles</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan="3">
+                  No users yet.
+                </td>
+              </tr>
+            ) : (
+              users.map((user) => (
+                <tr>
+                  <td>{user.loginIdentifierMasked}</td>
+                  <td>
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        user.status === "active" ? "success" : "neutral"
+                      }
+                    >
+                      {user.status}
+                    </span>
+                  </td>
+                  <td>{user.roles.length > 0 ? user.roles.join(", ") : "—"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>

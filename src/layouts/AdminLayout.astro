@@ -24,7 +24,15 @@ import "../styles/admin.css";
 interface Props {
   title: string;
   /** Sidebar key to mark `aria-current="page"`. */
-  active?: "dashboard" | "offices" | "profiles" | "modules" | "email-templates";
+  active?:
+    | "dashboard"
+    | "offices"
+    | "profiles"
+    | "users"
+    | "roles"
+    | "abac-policies"
+    | "modules"
+    | "email-templates";
 }
 
 const { title, active } = Astro.props;
@@ -77,6 +85,24 @@ const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
             aria-current={active === "profiles" ? "page" : undefined}
           >
             Profiles
+          </a>
+          <a
+            href="/admin/users"
+            aria-current={active === "users" ? "page" : undefined}
+          >
+            Users
+          </a>
+          <a
+            href="/admin/roles"
+            aria-current={active === "roles" ? "page" : undefined}
+          >
+            Roles
+          </a>
+          <a
+            href="/admin/abac-policies"
+            aria-current={active === "abac-policies" ? "page" : undefined}
+          >
+            ABAC policies
           </a>
           <a
             href="/admin/modules"
