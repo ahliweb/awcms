@@ -35,3 +35,37 @@ export function lockElement(
     element.textContent = originalLabel;
   };
 }
+
+/**
+ * POSTs a JSON body to a same-origin admin API endpoint using COOKIE auth: the
+ * session + tenant cookies ride along automatically (`credentials:
+ * "same-origin"`), and `resolveAuthInputs` reads the tenant from the
+ * `awcms_tenant_id` cookie — so an admin-page form needs no manual
+ * `X-AWCMS-Tenant-ID` header. Returns a narrow `{ ok, errorCode }` so callers
+ * show a generic message keyed off `errorCode` and never surface internal
+ * detail (Issue #540). Never throws.
+ */
+export async function postJson(
+  url: string,
+  body: unknown
+): Promise<{ ok: boolean; errorCode: string | null }> {
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body)
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      error?: { code?: string };
+    } | null;
+
+    if (response.ok && payload?.success === true) {
+      return { ok: true, errorCode: null };
+    }
+    return { ok: false, errorCode: payload?.error?.code ?? null };
+  } catch {
+    return { ok: false, errorCode: "NETWORK_ERROR" };
+  }
+}

@@ -143,6 +143,21 @@ test:e2e` (atau `bunx playwright test`) diam-diam menjalankan proses
    spec menguji jalur error, assert isi pesan TIDAK mengandung kata kunci
    seperti "stack"/"postgres"/nama fungsi internal, bukan cuma assert
    "ada pesan error" (lihat contoh di `login.e2e.ts`'s kedua test).
+6. **CSP halaman `.astro`: script HARUS eksternal, jangan pernah inline
+   atau conditional** (Issue #166, memory `awcms-admin-ui-notes`). CSP
+   `default-src 'self'` (middleware) memblokir semua inline script/style.
+   Karena itu setiap `<script>` halaman **wajib meng-import** dari
+   `src/lib/ui/admin-form-client.ts` — import itu yang memaksa Astro
+   mem-bundle-nya jadi file eksternal; script tanpa import di-inline-kan
+   Astro dan **diblokir CSP** (perilaku mati diam-diam, tetap lolos build).
+   DAN: Astro meng-hoist `<script>` saat **build**, jadi JANGAN membungkusnya
+   di conditional runtime `{cond && (<script>…)}` — itu percuma (bundle tetap
+   ter-ship) DAN membuat `prettier`/parser Astro gagal (`SyntaxError`).
+   Taruh `<script>` sebagai elemen top-level tanpa conditional; guard di JS
+   (`const el = getElementById(...); el?.addEventListener(...)`). CSS: pakai
+   stylesheet eksternal (`build.inlineStylesheets: "never"`), bukan `<style>`
+   inline. Jalankan E2E terhadap build produksi (`build && start`), bukan
+   `dev` (dev server menyuntik HMR inline yang diblokir CSP ini).
 
 ## File referensi
 

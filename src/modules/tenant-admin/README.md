@@ -26,6 +26,8 @@ Skema: `sql/002_awcms_tenant_office_schema.sql`, `sql/006_awcms_setup_wizard_sch
 
 `GET /api/v1/offices` **keyset-paginated**: maksimal 100 baris per halaman, urut **terbaru dulu**, plus `nextCursor` opaque (`null` di halaman terakhir). Cursor rusak → `400`, bukan diam-diam menyajikan halaman 1.
 
+Layar admin `admin/offices.astro` kini punya form **create office** yang di-gate permission `tenant_admin.office_management.create` (hanya render bila user punya izin), POST ke `POST /api/v1/offices` via cookie auth (CSP-safe: script bundled eksternal).
+
 ### Kenapa FK-nya komposit (GHSA-r7cx-c4jh-cvvw)
 
 `parent_office_id` dulu `REFERENCES awcms_offices (id)` — FK ke primary key saja, yang tidak berkata apa pun soal tenancy. Admin tenant A bisa mengirim `parentOfficeId` milik tenant B dan dapat `200 OK`; hierarkinya menyeberang tenant, dan field itu sekaligus jadi existence oracle (id nyata milik tenant lain → 200, uuid acak → FK violation → 500).

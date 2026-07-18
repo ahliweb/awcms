@@ -21,6 +21,8 @@ Skema: `sql/003_awcms_central_profile_schema.sql`.
 - `POST /api/v1/profiles/{id}/identifiers` — tempel identifier baru ke profile, guard `create`. `409 IDENTIFIER_ALREADY_EXISTS` bila identifier (tipe + nilai) sudah ada di tenant ini — unique index-nya (`23505`) diterjemahkan jadi `DuplicateIdentifierError` di `application/identifier-directory.ts`, lalu dipetakan ke 409 **di dalam** `withTenant` (kalau lolos ke luar, error itu bukan `PostgresError` sehingga ikut menghitung circuit breaker database).
 - `GET /api/v1/profiles/{id}/links` — baca entity link (kosong sampai modul lain menulis lewat kode).
 
+Layar admin `admin/profiles.astro` kini punya form create profile ter-gate permission `profile_identity.profile_management.create` yang mem-POST ke `POST /api/v1/profiles` (cookie auth, script eksternal aman-CSP).
+
 ## Belum tersedia
 
 Merge workflow (`awcms_profile_merge_requests` — tabel belum dibuat), channel komunikasi & alamat efektif-tanggal, restore/purge endpoint (permission `restore` sudah di-seed tapi belum ada konsumen), duplicate-candidate detection.
