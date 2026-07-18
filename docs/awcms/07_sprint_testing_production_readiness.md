@@ -197,9 +197,11 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > browser membuka path asing → dapat halaman 404 HTML bersih tanpa bocor
 > detail internal (Issue #540). Halaman `.astro` admin kini **sudah ada**
 > (Issue #166): `login.astro`, `admin/index.astro` (dashboard), dan tujuh layar
-> manajemen read-only — `offices`, `profiles`, `users`, `roles`,
-> `abac-policies`, `modules`, `email-templates` — masing-masing SSR-read via
-> fungsi aplikasi yang sama dengan endpoint JSON-nya, di-gate ABAC, memakai
+> manajemen — `offices`, `profiles`, `users`, `roles`, `abac-policies`,
+> `modules`, `email-templates` — masing-masing SSR-read via fungsi aplikasi
+> yang sama dengan endpoint JSON-nya, di-gate ABAC; `offices` & `profiles` juga
+> punya **create-form** ter-gate permission (POST via cookie auth, script
+> eksternal CSP-safe). Semua memakai
 > `AdminLayout` + design token doc 14 (`src/styles/tokens.css`). Spec
 > `login.e2e.ts` menguji render + properti CSP (script eksternal bukan inline —
 > `default-src 'self'`), dan `admin-offices.e2e.ts` menguji alur

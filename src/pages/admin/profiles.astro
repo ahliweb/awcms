@@ -25,6 +25,9 @@ const ssr = Astro.locals.ssrContext!;
 const canRead = ssr.permissions.has(
   permissionKey("profile_identity", "profile_management", "read")
 );
+const canCreate = ssr.permissions.has(
+  permissionKey("profile_identity", "profile_management", "create")
+);
 
 let profiles: PartyRow[] = [];
 let loadError = false;
@@ -52,6 +55,40 @@ if (canRead) {
       <p class="state-notice" id="profiles-denied">
         You do not have permission to view profiles.
       </p>
+    )
+  }
+
+  {
+    canCreate && (
+      <form id="profile-create-form" class="admin-create-form" novalidate>
+        <label for="profile-type">
+          Type
+          <select id="profile-type" name="profileType">
+            <option value="person" selected>
+              person
+            </option>
+            <option value="organization">organization</option>
+          </select>
+        </label>
+        <label for="profile-display-name">
+          Display name
+          <input
+            id="profile-display-name"
+            name="displayName"
+            type="text"
+            required
+          />
+        </label>
+        <button type="submit" id="profile-create-submit">
+          Create profile
+        </button>
+        <p
+          id="profile-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+      </form>
     )
   }
 
@@ -107,4 +144,56 @@ if (canRead) {
       </div>
     )
   }
+
+  <script>
+    // The import is deliberate — it forces Astro to bundle this script to an
+    // external file. An import-free hoisted script would be inlined, and inline
+    // scripts are blocked by this app's CSP (`default-src 'self'`, no
+    // 'unsafe-inline'). See admin-form-client.ts / login.astro.
+    import { lockElement, postJson } from "../../lib/ui/admin-form-client";
+
+    const form = document.getElementById(
+      "profile-create-form"
+    ) as HTMLFormElement | null;
+    const errorBox = document.getElementById("profile-create-error");
+    const submitButton = document.getElementById(
+      "profile-create-submit"
+    ) as HTMLButtonElement | null;
+
+    form?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      // Guard + disable the submit button for the request duration so a fast
+      // double-click can't fire two create POSTs before the reload lands.
+      if (!submitButton || submitButton.disabled) return;
+      const unlock = lockElement(submitButton, "Creating…");
+
+      if (errorBox) errorBox.hidden = true;
+
+      const formData = new FormData(form);
+      const profileType = String(formData.get("profileType") ?? "person");
+      const displayName = String(formData.get("displayName") ?? "").trim();
+
+      const result = await postJson("/api/v1/profiles", {
+        profileType,
+        displayName
+      });
+
+      if (result.ok) {
+        // Navigating away — leave the button disabled so it can't be
+        // re-clicked during the reload.
+        window.location.reload();
+        return;
+      }
+
+      // Generic message only — never reconstruct a specific deny/validation
+      // reason or surface internal detail (Issue #540).
+      if (errorBox) {
+        errorBox.textContent =
+          "Could not create the profile. Check your details and try again.";
+        errorBox.hidden = false;
+      }
+      unlock();
+    });
+  </script>
 </AdminLayout>

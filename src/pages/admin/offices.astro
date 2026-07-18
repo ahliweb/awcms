@@ -9,9 +9,10 @@
  * ABAC is enforced server-side by the endpoints; this page additionally gates
  * its own render on the same `tenant_admin.office_management.read` permission
  * (from `Astro.locals.ssrContext.permissions`) so a user without it gets a
- * clean "no access" notice instead of an empty table. Read-only for this first
- * slice — creating/editing offices stays on `POST /api/v1/offices` and lands
- * as a later increment.
+ * clean "no access" notice instead of an empty table. A create-office form is
+ * shown to users holding `office_management.create` and posts to the existing
+ * `POST /api/v1/offices` (cookie auth) — the endpoint's ABAC guard is the real
+ * authority; the form gate is UX-only. Edit/delete remain a later increment.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { getDatabaseClient } from "../../lib/database/client";
@@ -30,6 +31,9 @@ type OfficeRow = {
 const ssr = Astro.locals.ssrContext!;
 const canRead = ssr.permissions.has(
   permissionKey("tenant_admin", "office_management", "read")
+);
+const canCreate = ssr.permissions.has(
+  permissionKey("tenant_admin", "office_management", "create")
 );
 
 let offices: OfficeRow[] = [];
@@ -72,6 +76,45 @@ if (canRead) {
       <p class="state-notice" id="offices-error">
         Offices could not be loaded right now. Please try again later.
       </p>
+    )
+  }
+
+  {
+    canCreate && (
+      <form id="office-create-form" class="login-form admin-create-form">
+        <p id="office-create-error" class="login-error" role="alert" hidden />
+
+        <label for="office-code">Office code</label>
+        <input
+          id="office-code"
+          name="officeCode"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <label for="office-name">Office name</label>
+        <input
+          id="office-name"
+          name="officeName"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <label for="office-type">Office type</label>
+        <select id="office-type" name="officeType">
+          <option value="head_office">head_office</option>
+          <option value="branch">branch</option>
+          <option value="store">store</option>
+          <option value="warehouse">warehouse</option>
+          <option value="other">other</option>
+        </select>
+
+        <button type="submit" id="office-create-submit">
+          Create office
+        </button>
+      </form>
     )
   }
 
@@ -120,3 +163,62 @@ if (canRead) {
     )
   }
 </AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time, so it
+  // can't be runtime-conditional) — harmless for users without the create
+  // permission: the form only renders when `canCreate`, so `form` is null and
+  // the listener never binds. The import is deliberate — it forces Astro to
+  // bundle this script EXTERNAL (an import-free script would be inlined, and
+  // inline
+  // scripts are blocked by this app's CSP). See admin-form-client.ts.
+  import { lockElement, postJson } from "../../lib/ui/admin-form-client";
+
+  const form = document.getElementById(
+    "office-create-form"
+  ) as HTMLFormElement | null;
+  const errorBox = document.getElementById("office-create-error");
+  const submitButton = document.getElementById(
+    "office-create-submit"
+  ) as HTMLButtonElement | null;
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    // Guard + disable the submit button for the request duration so a fast
+    // double-click can't fire two create POSTs.
+    if (!submitButton || submitButton.disabled) return;
+    const unlock = lockElement(submitButton, "Please wait…");
+
+    if (errorBox) errorBox.hidden = true;
+
+    const formData = new FormData(form);
+    const officeCode = String(formData.get("officeCode") ?? "").trim();
+    const officeName = String(formData.get("officeName") ?? "").trim();
+    const officeType = String(formData.get("officeType") ?? "").trim();
+
+    const result = await postJson("/api/v1/offices", {
+      officeCode,
+      officeName,
+      officeType
+    });
+
+    if (result.ok) {
+      // Reload so the SSR table re-renders with the new row.
+      window.location.reload();
+      return;
+    }
+
+    // Generic message only — never surface internal detail (Issue #540).
+    showError(
+      "Could not create the office. Check the code is unique and try again."
+    );
+    unlock();
+  });
+</script>
