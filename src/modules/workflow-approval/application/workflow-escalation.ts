@@ -2,7 +2,9 @@
  * Escalation/timeout processing (Issue #747), built on the shared worker
  * runner (`src/lib/jobs/job-runner.ts`, `batching.ts`) — see
  * `scripts/workflow-escalations-dispatch.ts`. Runs against the
- * least-privilege `awcms_worker` role (migration 060's grants).
+ * least-privilege `awcms_worker` role (`sql/022`'s grants) when
+ * `WORKER_DATABASE_URL` is configured, else via the `DATABASE_URL` fallback
+ * (opt-in — see `src/lib/database/client.ts`).
  *
  * IDEMPOTENCY GUARD (Issue #747 security requirement: "a task must never
  * be escalated/timed-out twice for the same due event"): the `UPDATE`

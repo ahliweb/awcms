@@ -937,6 +937,258 @@ export async function checkRuntimeRoleGrants(
 }
 
 // ---------------------------------------------------------------------------
+// 7c. Worker/setup least-privilege role grants match matrix (critical) —
+//     Issue #163
+// ---------------------------------------------------------------------------
+
+/**
+ * The purpose-specific runtime roles the worker/setup split (`sql/022`,
+ * Issue #163) adds alongside `awcms_app`. Both are OPT-IN: `client.ts` falls
+ * back to `DATABASE_URL` (`awcms_app`) when `WORKER_DATABASE_URL`/
+ * `SETUP_DATABASE_URL` are unset, so a deployment can migrate onto `sql/022`
+ * (creating the roles) without configuring them yet.
+ */
+const WORKER_ROLE = "awcms_worker";
+const SETUP_ROLE = "awcms_setup";
+
+/**
+ * `awcms_worker`'s least-privilege grant matrix — table -> the exact verbs the
+ * seven unattended cron scripts use, traced per-write-path (see `sql/022`'s
+ * header and project memory `awcms-db-role-separation-notes`). This is the
+ * SINGLE SOURCE OF TRUTH that `sql/022`'s GRANTs must match exactly:
+ * `tests/db-role-separation-worker-setup-migration.test.ts` asserts the
+ * migration text and this map agree, so neither can drift from the other.
+ *
+ * Any awcms_% table NOT keyed here MUST be ungranted for this role (fail-closed
+ * least-privilege): the crown-jewel global catalogs (`awcms_permissions`,
+ * `awcms_schema_migrations`, `awcms_setup_state`, the module registry) are
+ * absent on purpose — the worker never touches them, and holding any privilege
+ * on them would be the exact isolation breach this split exists to prevent.
+ */
+export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
+  awcms_tenants: ["SELECT"],
+  awcms_audit_events: ["SELECT", "INSERT", "DELETE"],
+  awcms_object_sync_queue: ["SELECT", "UPDATE"],
+  awcms_email_messages: ["SELECT", "UPDATE"],
+  awcms_email_delivery_attempts: ["INSERT"],
+  awcms_email_templates: ["SELECT"],
+  awcms_email_suppression_list: ["SELECT"],
+  awcms_workflow_tasks: ["SELECT", "UPDATE"],
+  awcms_workflow_instances: ["SELECT"],
+  awcms_workflow_definitions: ["SELECT"],
+  awcms_workflow_task_assignments: ["INSERT"],
+  awcms_domain_events: ["SELECT", "INSERT"],
+  awcms_domain_event_deliveries: ["SELECT", "INSERT", "UPDATE"],
+  awcms_domain_event_consumer_state: ["SELECT"],
+  awcms_domain_event_consumer_effects: ["SELECT", "INSERT"],
+  awcms_domain_event_activity_daily: ["INSERT", "UPDATE"],
+  awcms_reporting_projection_cursors: ["SELECT", "INSERT", "UPDATE"],
+  awcms_reporting_projection_metrics: ["SELECT", "INSERT", "UPDATE"],
+  awcms_reporting_projection_state: ["INSERT", "UPDATE"],
+  awcms_reporting_rebuild_runs: ["SELECT", "UPDATE"],
+  awcms_reporting_scheduled_exports: ["SELECT"],
+  awcms_reporting_export_runs: ["SELECT", "INSERT"],
+  awcms_abac_decision_logs: ["SELECT"],
+  awcms_identities: ["SELECT"],
+  awcms_sync_nodes: ["SELECT"]
+};
+
+/**
+ * `awcms_setup`'s least-privilege grant matrix — exactly what
+ * `bootstrapPlatformTenant` writes on the one-time
+ * `POST /api/v1/setup/initialize`. SELECT accompanies INSERT on every table it
+ * inserts into WITH a `RETURNING id` (Postgres requires SELECT for a column to
+ * appear in RETURNING). `awcms_permissions` is READ-only (source of the
+ * role-permission seed's `INSERT ... SELECT`); no DELETE anywhere; the module
+ * registry and migration ledger are absent (never touched by the bootstrap).
+ */
+export const SETUP_ROLE_GRANTS: Record<string, string[]> = {
+  awcms_setup_state: ["SELECT", "INSERT", "UPDATE"],
+  awcms_tenants: ["SELECT", "INSERT"],
+  awcms_permissions: ["SELECT"],
+  awcms_tenant_settings: ["INSERT"],
+  awcms_offices: ["SELECT", "INSERT"],
+  awcms_profiles: ["SELECT", "INSERT"],
+  awcms_identities: ["SELECT", "INSERT"],
+  awcms_tenant_users: ["SELECT", "INSERT"],
+  awcms_roles: ["SELECT", "INSERT"],
+  awcms_role_permissions: ["INSERT"],
+  awcms_access_assignments: ["INSERT"]
+};
+
+export type WorkerSetupRoleGrantsPolicy = {
+  worker: Record<string, string[]>;
+  setup: Record<string, string[]>;
+};
+
+/**
+ * The real matrices `checkWorkerSetupRoleGrants` uses by default. Exposed so
+ * tests can inject a DIVERGENT matrix (e.g. drop a table to simulate an
+ * under-grant, or add one to simulate a forgotten REVOKE) to exercise both
+ * failure directions, without mutating shared module state (the `mock.module`
+ * cross-file-leak trap the L2 test already documents).
+ */
+export function defaultWorkerSetupRoleGrantsPolicy(): WorkerSetupRoleGrantsPolicy {
+  return { worker: WORKER_ROLE_GRANTS, setup: SETUP_ROLE_GRANTS };
+}
+
+const ALL_FOUR_PRIVILEGES = ["SELECT", "INSERT", "UPDATE", "DELETE"];
+
+type NamedGrantRow = {
+  relname: string;
+  sel: boolean;
+  ins: boolean;
+  upd: boolean;
+  del: boolean;
+};
+
+/**
+ * Verifies each opt-in split role holds EXACTLY its least-privilege matrix —
+ * no less (under-grant -> `permission denied` for that job in production) and
+ * no more (over-grant -> the isolation the split exists for is a lie). For
+ * every awcms_% table it checks `has_table_privilege` in both directions:
+ * matrix tables must match their declared verbs exactly; every other table
+ * must be fully ungranted (fail-closed — the crown-jewel catalogs are absent
+ * from the matrices ON PURPOSE, so an accidental grant on one is a critical
+ * finding, not a silent "by design").
+ *
+ * Mirrors `checkLeastPrivilegeRoleProvisioned`'s non-blocking stance for the
+ * opt-in default: a role that does NOT exist is reported (info) and does not
+ * fail, because a deployment on the `DATABASE_URL` fallback legitimately has
+ * neither role — same reasoning that keeps the `awcms_app` provisioning check a
+ * warning until deployments migrate. But a role that DOES exist with wrong
+ * grants, or with SUPERUSER/BYPASSRLS, is `critical`: once you opt in, the
+ * least-privilege promise must actually hold.
+ *
+ * `policy` is injectable purely for tests (see
+ * `defaultWorkerSetupRoleGrantsPolicy`); it defaults to the single source of
+ * truth the migration is pinned against.
+ */
+export async function checkWorkerSetupRoleGrants(
+  policy?: Partial<WorkerSetupRoleGrantsPolicy>
+): Promise<SecurityCheckResult> {
+  const name = "Worker/setup least-privilege role grants match matrix";
+  const severity: CheckSeverity = "critical";
+  const matrices: { role: string; grants: Record<string, string[]> }[] = [
+    { role: WORKER_ROLE, grants: policy?.worker ?? WORKER_ROLE_GRANTS },
+    { role: SETUP_ROLE, grants: policy?.setup ?? SETUP_ROLE_GRANTS }
+  ];
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const findings: string[] = [];
+    const absent: string[] = [];
+    const present: string[] = [];
+
+    for (const { role, grants } of matrices) {
+      const roleRows = (await sql`
+        SELECT rolsuper, rolbypassrls
+        FROM pg_roles WHERE rolname = ${role}
+      `) as { rolsuper: boolean; rolbypassrls: boolean }[];
+
+      if (roleRows.length === 0) {
+        // Opt-in default: this deployment uses the DATABASE_URL fallback and
+        // has never provisioned the role. Not a misconfiguration.
+        absent.push(role);
+        continue;
+      }
+
+      present.push(role);
+      const role0 = roleRows[0]!;
+
+      if (role0.rolsuper || role0.rolbypassrls) {
+        findings.push(
+          `${role} is ${role0.rolsuper ? "a SUPERUSER" : "BYPASSRLS"} — it would bypass every RLS policy, defeating the split`
+        );
+      }
+
+      const rows = (await sql`
+        SELECT
+          c.relname,
+          has_table_privilege(${role}, c.oid, 'SELECT') AS sel,
+          has_table_privilege(${role}, c.oid, 'INSERT') AS ins,
+          has_table_privilege(${role}, c.oid, 'UPDATE') AS upd,
+          has_table_privilege(${role}, c.oid, 'DELETE') AS del
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname LIKE 'awcms\\_%' AND c.relkind IN ('r', 'p')
+          AND n.nspname = current_schema()
+        ORDER BY c.relname
+      `) as NamedGrantRow[];
+
+      for (const row of rows) {
+        const held = new Set(
+          ALL_FOUR_PRIVILEGES.filter(
+            (privilege) =>
+              ({
+                SELECT: row.sel,
+                INSERT: row.ins,
+                UPDATE: row.upd,
+                DELETE: row.del
+              })[privilege]
+          )
+        );
+        const expected = new Set(grants[row.relname] ?? []);
+
+        const missing = [...expected].filter((p) => !held.has(p));
+        const extra = ALL_FOUR_PRIVILEGES.filter(
+          (p) => held.has(p) && !expected.has(p)
+        );
+
+        if (missing.length > 0) {
+          findings.push(
+            `${role} under-granted on ${row.relname} (missing ${missing.join(", ")} -> permission denied at runtime)`
+          );
+        }
+        if (extra.length > 0) {
+          findings.push(
+            expected.size === 0
+              ? `${role} over-granted on ${row.relname} (holds ${extra.join(", ")} but this table is NOT in its least-privilege matrix — isolation breach)`
+              : `${role} over-granted on ${row.relname} (holds ${extra.join(", ")} beyond its matrix)`
+          );
+        }
+      }
+    }
+
+    if (findings.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `Opt-in split role grants do not match the least-privilege matrix (sql/022): ${findings.join("; ")}.`
+      };
+    }
+
+    if (present.length === 0) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence: `Neither "${WORKER_ROLE}" nor "${SETUP_ROLE}" is provisioned — this deployment uses the DATABASE_URL fallback (opt-in, sql/022). Nothing to verify; not blocking. Provision + point WORKER_DATABASE_URL/SETUP_DATABASE_URL at them to gain per-job isolation.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `Provisioned split role(s) ${present.join(", ")} hold exactly their least-privilege matrix and nothing more (non-super, non-BYPASSRLS, zero grant on every out-of-matrix awcms_% table)${absent.length > 0 ? `; ${absent.join(", ")} not provisioned (DATABASE_URL fallback, fine)` : ""}.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify worker/setup role grants: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 8. ABAC default-deny works (critical)
 // ---------------------------------------------------------------------------
 
@@ -1239,6 +1491,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkAppDbUserNotSuperuser(),
     await checkLeastPrivilegeRoleProvisioned(),
     await checkRuntimeRoleGrants(),
+    await checkWorkerSetupRoleGrants(),
     checkAbacDefaultDeny(),
     await checkAuditLogTableReachable(),
     checkEnvConfigValid(),

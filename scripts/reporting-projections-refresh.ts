@@ -7,9 +7,10 @@
  * (`continueAllRunningRebuilds`) — same shape as `scripts/data-lifecycle-
  * archive-purge.ts`: built on the shared worker runner (advisory lock,
  * timeout, SIGTERM/SIGINT-aware cancellation, JSON telemetry), pure
- * PostgreSQL operation, safe in offline/LAN deployments. Runs as
- * `awcms_worker` (migration 069's own grants — see that file's
- * header comment).
+ * PostgreSQL operation, safe in offline/LAN deployments. Runs as the
+ * least-privilege `awcms_worker` role (`sql/022`) when `WORKER_DATABASE_URL`
+ * is configured, else via the `DATABASE_URL` fallback (opt-in — see
+ * `src/lib/database/client.ts`).
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import {

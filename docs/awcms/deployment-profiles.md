@@ -164,7 +164,7 @@ Membuat peran aplikasi:
 - **Container:** otomatis — `deploy/postgres/10-create-app-role.sh` (hook `/docker-entrypoint-initdb.d`) membuatnya dari `AWCMS_APP_DB_PASSWORD` saat init cluster pertama, lalu migrasi terkait memberi grant + FORCE RLS.
 - **Bare-metal/systemd:** sekali di awal, sebagai superuser — `CREATE ROLE awcms_app LOGIN PASSWORD '…';` — lalu `bun run db:migrate` (URL superuser). Setelah itu app konek sebagai `awcms_app` (`DATABASE_URL` di `.env`).
 
-Peran tambahan opsional (defense-in-depth) yang direncanakan mengikuti pola yang sama: `awcms_worker` (script background: dispatcher sync integrasi eksternal, job payroll terjadwal, dst., `WORKER_DATABASE_URL`) dan `awcms_setup` (hanya `POST /api/v1/setup/initialize`, `SETUP_DATABASE_URL`) — keduanya fallback ke `DATABASE_URL`/`awcms_app` bila tidak di-set, jadi model dua-peran di atas tetap fondasi minimum yang wajib.
+Peran tambahan opsional (defense-in-depth), kini **nyata** dan mengikuti pola yang sama — dibuat `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163): `awcms_worker` (tujuh cron worker: purge audit, dispatch object/email/domain-event/workflow/reporting, `WORKER_DATABASE_URL`) dan `awcms_setup` (hanya `POST /api/v1/setup/initialize`, `SETUP_DATABASE_URL`), masing-masing hanya GRANT per-jalur-tulis yang dipakai kodenya. Aktifkan opt-in sekali (`ALTER ROLE awcms_worker LOGIN PASSWORD '…';` lalu arahkan var-nya); keduanya fallback ke `DATABASE_URL`/`awcms_app` bila tidak di-set, jadi model dua-peran di atas tetap fondasi minimum yang wajib.
 
 ## Validasi konfigurasi sebelum boot (`bun run config:validate`)
 
