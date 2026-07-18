@@ -252,13 +252,20 @@
 }
 
 .admin-create-form input,
-.admin-create-form select {
+.admin-create-form select,
+.admin-create-form textarea {
   min-height: 40px;
   padding: var(--sp-1) var(--sp-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
+}
+
+.admin-create-form textarea {
+  min-width: 260px;
+  font-family: inherit;
+  resize: vertical;
 }
 
 .admin-create-form button {
@@ -284,6 +291,24 @@
   border-radius: var(--radius-sm);
   padding: var(--sp-2) var(--sp-3);
   font-size: var(--fs-sm);
+}
+
+/* ---- Row action button (module toggle, etc.) ------------------------ */
+.module-toggle {
+  min-height: 32px;
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.module-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
 }
 
 /* ---- State notice --------------------------------------------------- */

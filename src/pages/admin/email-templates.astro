@@ -1,16 +1,25 @@
 ---
 /**
- * Email template management screen (Issue #166). Same pattern as
- * `offices.astro`: calls the same `listEmailTemplates` the
+ * Email template management screen (Issue #166; create form added #171). Same
+ * pattern as `offices.astro`: calls the same `listEmailTemplates` the
  * `GET /api/v1/email/templates` endpoint uses, gated on `email.template.read`.
- * Read-only; includes inactive templates so the list is the full config
- * surface.
+ * Includes inactive templates so the list is the full config surface.
+ *
+ * A create form is shown to users holding `email.template.create` and posts to
+ * the existing `POST /api/v1/email/templates` (cookie auth). The endpoint's
+ * ABAC guard + `validateCreateEmailTemplateInput` (restricted `templateKey`
+ * category, localized-text shape, unsafe-HTML rejection) are the real
+ * authority; the form gate is UX-only. `templateKey` is a fixed select of the
+ * base categories (a derived app registers its own `derived.*` in code, not
+ * from this form); subject/body are captured for the `en` locale — the endpoint
+ * accepts the full `{ locale: text }` map, this UI seeds one locale.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { listEmailTemplates } from "../../modules/email/application/email-template-directory";
+import { BASE_EMAIL_TEMPLATE_CATEGORIES } from "../../modules/email/domain/email-template-categories";
 
 type TemplateRow = {
   id: string;
@@ -22,6 +31,9 @@ type TemplateRow = {
 
 const ssr = Astro.locals.ssrContext!;
 const canRead = ssr.permissions.has(permissionKey("email", "template", "read"));
+const canCreate = ssr.permissions.has(
+  permissionKey("email", "template", "create")
+);
 
 let templates: TemplateRow[] = [];
 let loadError = false;
@@ -58,6 +70,51 @@ if (canRead) {
       <p class="state-notice" id="email-templates-error">
         Templates could not be loaded right now. Please try again later.
       </p>
+    )
+  }
+
+  {
+    canCreate && (
+      <form id="email-template-create-form" class="admin-create-form">
+        <p
+          id="email-template-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="email-template-key">Template key</label>
+        <select id="email-template-key" name="templateKey">
+          {BASE_EMAIL_TEMPLATE_CATEGORIES.map((category) => (
+            <option value={category}>{category}</option>
+          ))}
+        </select>
+
+        <label for="email-template-name">Name</label>
+        <input
+          id="email-template-name"
+          name="name"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <label for="email-template-subject">Subject (en)</label>
+        <input
+          id="email-template-subject"
+          name="subject"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <label for="email-template-body">Text body (en)</label>
+        <textarea id="email-template-body" name="body" rows="3" required />
+
+        <button type="submit" id="email-template-create-submit">
+          Create template
+        </button>
+      </form>
     )
   }
 
@@ -102,3 +159,62 @@ if (canRead) {
     )
   }
 </AdminLayout>
+
+<script>
+  // Bundled EXTERNAL via the import (an import-free script would be inlined and
+  // blocked by this app's CSP — see admin-form-client.ts). Harmless without the
+  // create permission: the form only renders when `canCreate`, so `form` is
+  // null and the listener never binds.
+  import { lockElement, postJson } from "../../lib/ui/admin-form-client";
+
+  const form = document.getElementById(
+    "email-template-create-form"
+  ) as HTMLFormElement | null;
+  const errorBox = document.getElementById("email-template-create-error");
+  const submitButton = document.getElementById(
+    "email-template-create-submit"
+  ) as HTMLButtonElement | null;
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (!submitButton || submitButton.disabled) return;
+    const unlock = lockElement(submitButton, "Please wait…");
+
+    if (errorBox) errorBox.hidden = true;
+
+    const formData = new FormData(form);
+    const templateKey = String(formData.get("templateKey") ?? "").trim();
+    const name = String(formData.get("name") ?? "").trim();
+    const subject = String(formData.get("subject") ?? "").trim();
+    const body = String(formData.get("body") ?? "").trim();
+
+    // The endpoint takes a `{ locale: text }` map; this form seeds the `en`
+    // locale. Sending `textBodyTemplate` (not html) keeps the create input on
+    // the safe path — the endpoint HTML-escapes/validates either way.
+    const result = await postJson("/api/v1/email/templates", {
+      templateKey,
+      name,
+      subjectTemplate: { en: subject },
+      textBodyTemplate: { en: body }
+    });
+
+    if (result.ok) {
+      // Reload so the SSR table lists the new template.
+      window.location.reload();
+      return;
+    }
+
+    // Generic message only — never surface internal detail (Issue #540).
+    showError(
+      "Could not create the template. Check the key is not already in use and try again."
+    );
+    unlock();
+  });
+</script>
