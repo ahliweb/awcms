@@ -42,6 +42,11 @@ test.describe("admin modules toggle (authenticated)", () => {
 
     await page.waitForURL("**/admin");
 
+    // Disabling a module prompts for a `reason` (the endpoint requires a
+    // non-empty one, recorded in the audit event) — accept every prompt with a
+    // fixed reason so the disable branch of the round-trip goes through.
+    page.on("dialog", (dialog) => dialog.accept("E2E toggle round-trip"));
+
     await page.goto("/admin/modules");
     await expect(page.locator("#modules-table")).toBeVisible();
 

@@ -188,12 +188,22 @@ if (canRead) {
       const action = button.dataset.action;
       if (!moduleKey || (action !== "enable" && action !== "disable")) return;
 
+      // The disable endpoint requires a non-empty `reason` (it is recorded in
+      // the audit event) — collect it before locking. Enable takes no body.
+      let body: Record<string, unknown> = {};
+      if (action === "disable") {
+        const reason = window.prompt(`Reason for disabling "${moduleKey}"?`);
+        // Cancelled or blank → abort without a request (endpoint would 400).
+        if (reason === null || reason.trim().length === 0) return;
+        body = { reason: reason.trim() };
+      }
+
       const unlock = lockElement(button, "Please wait…");
       if (errorBox) errorBox.hidden = true;
 
       const result = await postJson(
         `/api/v1/tenant/modules/${encodeURIComponent(moduleKey)}/${action}`,
-        {}
+        body
       );
 
       if (result.ok) {
