@@ -1,0 +1,140 @@
+---
+/**
+ * Login page (Issue #166 — ported from awcms-mini's `login.astro`, simplified
+ * to awcms scope). POSTs to `POST /api/v1/auth/login`, which sets the two
+ * httpOnly SSR session cookies (`src/lib/auth/ssr-session.ts`) the `/admin`
+ * guard in `src/middleware.ts` then consumes.
+ *
+ * Simplified vs mini: NO i18n (strings hardcoded English — awcms has no
+ * gettext catalog yet), NO Cloudflare Turnstile, NO Google OIDC button, and
+ * NO `<script type="application/json">` strings blob. What is kept 1:1 is the
+ * stable element ids the E2E specs and the client script rely on
+ * (`#login-form`, `#tenant-id`, `#login-identifier`, `#password`,
+ * `#login-submit`, `#login-error`).
+ *
+ * The manual Tenant ID field is a demo simplification for this fondasi repo,
+ * exactly as in mini — a derived app resolves the tenant by domain instead of
+ * asking the user to paste a UUID (out of scope here).
+ *
+ * CSP: `tokens.css`/`admin.css` are external <link>s (`inlineStylesheets:
+ * "never"`) and the client below is an Astro-bundled module script — no inline
+ * script/style, so the middleware `default-src 'self'` policy holds.
+ */
+import "../styles/tokens.css";
+import "../styles/admin.css";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in · AWCMS</title>
+  </head>
+  <body>
+    <main class="login-page">
+      <form id="login-form" class="login-form" novalidate>
+        <h1>AWCMS</h1>
+        <p id="login-error" class="login-error" role="alert" hidden></p>
+
+        <label for="tenant-id">Tenant ID</label>
+        <input
+          id="tenant-id"
+          name="tenantId"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <label for="login-identifier">Login identifier</label>
+        <input
+          id="login-identifier"
+          name="loginIdentifier"
+          type="text"
+          required
+          autocomplete="username"
+        />
+
+        <label for="password">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          required
+          autocomplete="current-password"
+        />
+
+        <button type="submit" id="login-submit">Sign in</button>
+      </form>
+    </main>
+
+    <script>
+      // The import is deliberate — it forces Astro to bundle this script to an
+      // external file (an import-free script would be inlined, and inline
+      // scripts are blocked by this app's CSP). See admin-form-client.ts.
+      import { lockElement } from "../lib/ui/admin-form-client";
+
+      const form = document.getElementById(
+        "login-form"
+      ) as HTMLFormElement | null;
+      const errorBox = document.getElementById("login-error");
+      const submitButton = document.getElementById(
+        "login-submit"
+      ) as HTMLButtonElement | null;
+
+      function showError(message: string): void {
+        if (!errorBox) return;
+        errorBox.textContent = message;
+        errorBox.hidden = false;
+      }
+
+      form?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        // Guard + disable the submit button for the request duration so a fast
+        // double-click can't fire two login POSTs before the redirect lands.
+        if (!submitButton || submitButton.disabled) return;
+        const unlock = lockElement(submitButton, "Please wait…");
+
+        if (errorBox) errorBox.hidden = true;
+
+        const formData = new FormData(form);
+        const tenantId = String(formData.get("tenantId") ?? "").trim();
+        const loginIdentifier = String(
+          formData.get("loginIdentifier") ?? ""
+        ).trim();
+        const password = String(formData.get("password") ?? "");
+
+        try {
+          const response = await fetch("/api/v1/auth/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-AWCMS-Tenant-ID": tenantId
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({ loginIdentifier, password })
+          });
+
+          const payload = await response.json().catch(() => null);
+
+          if (!response.ok || !payload || payload.success !== true) {
+            // Generic message only — the server deliberately collapses every
+            // deny reason so the UI must not reconstruct a specific one, and it
+            // must never surface internal detail (Issue #540).
+            showError("Sign in failed. Check your details and try again.");
+            unlock();
+            return;
+          }
+
+          // Navigating away — leave the button disabled so it can't be
+          // re-clicked during the redirect.
+          window.location.href = "/admin";
+        } catch {
+          showError("Network error. Please try again.");
+          unlock();
+        }
+      });
+    </script>
+  </body>
+</html>

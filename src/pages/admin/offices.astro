@@ -1,0 +1,122 @@
+---
+/**
+ * Offices management screen (Issue #166) — the first real admin management
+ * page, mirroring awcms-mini's SSR-read-then-render pattern: read the tenant's
+ * offices server-side by calling the SAME application function the JSON
+ * endpoint uses (`listOffices`, `src/pages/api/v1/offices/index.ts`) inside
+ * `withTenant`, then render a plain accessible table + status badges.
+ *
+ * ABAC is enforced server-side by the endpoints; this page additionally gates
+ * its own render on the same `tenant_admin.office_management.read` permission
+ * (from `Astro.locals.ssrContext.permissions`) so a user without it gets a
+ * clean "no access" notice instead of an empty table. Read-only for this first
+ * slice — creating/editing offices stays on `POST /api/v1/offices` and lands
+ * as a later increment.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { listOffices } from "../../modules/tenant-admin/application/office-directory";
+
+type OfficeRow = {
+  id: string;
+  officeCode: string;
+  officeName: string;
+  officeType: string;
+  status: string;
+};
+
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(
+  permissionKey("tenant_admin", "office_management", "read")
+);
+
+let offices: OfficeRow[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+      const page = await listOffices(tx, ssr.tenantId, null);
+      return page.items as OfficeRow[];
+    });
+    // `withTenant` returns a 503 `Response` when the DB circuit breaker is
+    // open / a work-class queue is saturated — degrade to an error notice
+    // rather than letting a Response leak where rows are expected.
+    if (result instanceof Response) {
+      loadError = true;
+    } else {
+      offices = result;
+    }
+  } catch {
+    loadError = true;
+  }
+}
+---
+
+<AdminLayout title="Offices" active="offices">
+  <h1 id="offices-heading">Offices</h1>
+
+  {
+    !canRead && (
+      <p class="state-notice" id="offices-denied">
+        You do not have permission to view offices.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice" id="offices-error">
+        Offices could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <div class="data-table-scroll">
+        <table class="data-table" id="offices-table">
+          <caption>{offices.length} office(s)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Name</th>
+              <th scope="col">Type</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {offices.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan="4">
+                  No offices yet.
+                </td>
+              </tr>
+            ) : (
+              offices.map((office) => (
+                <tr>
+                  <td>{office.officeCode}</td>
+                  <td>{office.officeName}</td>
+                  <td>{office.officeType}</td>
+                  <td>
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        office.status === "active" ? "success" : "neutral"
+                      }
+                    >
+                      {office.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>
