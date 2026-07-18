@@ -6,8 +6,11 @@
 # bukan daftar independen yang bisa drift darinya. Diadaptasi dari
 # awcms-mini (`.github/workflows/ci.yml`), dipangkas ke apa yang benar-benar
 # ada di repo ini: belum ada test integrasi yang butuh Postgres hidup (semua
-# 174+ test adalah unit murni), belum ada Playwright/E2E, dan belum ada
-# docker-compose*.yml untuk divalidasi.
+# 174+ test adalah unit murni), dan belum ada docker-compose*.yml untuk
+# divalidasi. Sejak Issue #166 ada job `e2e-smoke` (Playwright + Bun) —
+# untuk sekarang hanya spec `not-found.e2e.ts` yang tidak butuh Postgres,
+# jadi job-nya belum menyalakan service DB (akan ditambah begitu ada spec E2E
+# yang butuh sesi/tenant ter-seed, mengikuti pola dua-fase awcms-mini).
 name: CI
 
 on:
@@ -91,6 +94,60 @@ jobs:
             !dist/**/*.map
           retention-days: 5
           if-no-files-found: ignore
+
+  e2e-smoke:
+    name: E2E smoke (Playwright)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Astro foundation
+        run: bun run build
+
+      - name: Install Playwright Chromium (with OS deps)
+        run: bun run test:e2e:install
+
+      # The only E2E spec today (`not-found.e2e.ts`) exercises the catch-all
+      # 404 route, which touches NO database — so the app boots against a
+      # placeholder `DATABASE_URL` purely to satisfy the connection-string
+      # requirement, never actually connecting. A spec that needs a seeded
+      # session/tenant will require a real `services.postgres` + `db:migrate`
+      # here first (awcms-mini's `e2e-smoke` job is the template to follow).
+      - name: Start the built server and run E2E
+        run: |
+          DATABASE_URL="postgres://placeholder:placeholder@127.0.0.1:5999/placeholder" \
+            bun ./dist/server/entry.mjs &
+          APP_PID=$!
+          # Wait until the catch-all 404 answers (server up); fail if it never does.
+          up=""
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4321/__e2e_probe || true)
+            if [ "$code" = "404" ]; then up="yes"; break; fi
+            sleep 1
+          done
+          if [ -z "$up" ]; then echo "::error::server never became ready on :4321"; kill "$APP_PID" || true; exit 1; fi
+          bun run test:e2e
+          status=$?
+          kill "$APP_PID" || true
+          exit $status
 
   hygiene:
     name: Repo hygiene (Bun-only + no secrets)
