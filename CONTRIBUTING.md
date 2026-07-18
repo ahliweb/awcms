@@ -1,6 +1,6 @@
 # Berkontribusi ke AWCMS
 
-Terima kasih sudah tertarik berkontribusi. Dokumen ini menjelaskan cara berkontribusi ke AWCMS (platform ERP & integrasi solusi bisnis) secara aman, konsisten, dan sesuai standar.
+Terima kasih sudah tertarik berkontribusi. Dokumen ini menjelaskan cara berkontribusi ke AWCMS (basis/fondasi modular monolith untuk ERP & solusi bisnis yang dibangun di atasnya di repo terpisah — bukan ERP itu sendiri, lihat [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md)) secara aman, konsisten, dan sesuai standar.
 
 > **Wajib dibaca lebih dulu:** [`AGENTS.md`](AGENTS.md) adalah kontrak kerja teknis (aturan wajib, guardrail keamanan, alur task). Dokumen ini melengkapinya dengan sisi proses kontribusi. Standar dasar (runtime, RLS, ABAC, kontrak API/event) tercatat di [`docs/adr/`](docs/adr/README.md); baca ADR terkait bila mengubah lapisan fondasi.
 
@@ -48,7 +48,7 @@ Prasyarat: **Bun** (versi terkunci di `package.json` `packageManager`/`engines`)
 Jalankan yang relevan dengan perubahan Anda:
 
 ```bash
-bun run check         # gate CI utama: lint + typecheck + test + build (lihat package.json untuk daftar lengkap)
+bun run check         # gate CI utama — rantai lengkap & urutannya ada di package.json's "check" script, jangan diduplikasi di sini
 bun run lint          # prettier check
 bun run typecheck     # tsc --noEmit
 bun test              # unit + integration test (bun:test) di tests/
@@ -56,6 +56,10 @@ bun run api:spec:check   # bila mengubah OpenAPI/AsyncAPI
 bun run db:migrate       # bila menambah migration
 bun run build            # Astro build
 ```
+
+Sebuah changeset juga ditegakkan sebagai CI check **terpisah dan wajib**
+(bukan sekadar saran) — lihat `.github/workflows/changesets.yml`, job
+"Changeset required for behavior changes" (`scripts/changeset-policy-check.ts`).
 
 ## Menulis test
 
@@ -93,7 +97,7 @@ Sebuah PR dianggap selesai jika:
 ## Review
 
 - Modul sensitif (auth, access, sync, dan modul ERP finansial/payroll) memerlukan review keamanan tambahan.
-- Maintainer yang tercantum di `.github/CODEOWNERS` (bila ada) otomatis diminta review.
+- Maintainer yang tercantum di `.github/CODEOWNERS` otomatis diminta review — saat ini semua pattern memetakan ke org `@ahliweb` sebagai placeholder, menunggu handle maintainer sungguhan.
 
 ## Lisensi kontribusi
 

@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 
-import { fail, ok } from "../../../../modules/_shared/api-response";
+import { created, fail, ok } from "../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../lib/database/client";
 import { withTenant } from "../../../../lib/database/tenant-context";
 import { hashSessionToken } from "../../../../lib/auth/session-token";
@@ -113,7 +113,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         validation.value,
         correlationId
       );
-      return ok(role);
+      return created(role);
     } catch (error) {
       // Caught INSIDE `withTenant`: `DuplicateRoleCodeError` follows the unique
       // violation that already aborted the transaction, so returning 409 here

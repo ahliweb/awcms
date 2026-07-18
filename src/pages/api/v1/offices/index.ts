@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 
-import { fail, ok } from "../../../../modules/_shared/api-response";
+import { created, fail, ok } from "../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../lib/database/client";
 import { withTenant } from "../../../../lib/database/tenant-context";
 import { hashSessionToken } from "../../../../lib/auth/session-token";
@@ -111,7 +111,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         validation.value,
         correlationId
       );
-      return ok(office);
+      return created(office);
     } catch (error) {
       // Both branches are caught INSIDE `withTenant` on purpose: neither error
       // is a `Bun.SQL.PostgresError` by the time it gets here, so

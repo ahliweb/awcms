@@ -1,6 +1,6 @@
 ---
 name: awcms-form-drafts
-description: BACAAN SAJA — modul form_drafts BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `form-drafts`, tidak ada migration-nya di `sql/`). Rujukan `src/modules/form-drafts`/tabel/API di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Untuk wizard multi-step yang benar-benar ada di repo ini, pakai skill `awcms-wizard-form` (client-only state).
+description: BACAAN SAJA — modul form_drafts BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `form-drafts`, tidak ada migration-nya di `sql/`). Rujukan `src/modules/form-drafts`/tabel/API di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Untuk wizard multi-step, lihat skill `awcms-wizard-form` — CATATAN: seperti modul ini, komponennya BELUM di-port ke repo ini juga; verifikasi dulu sebelum memakainya sebagai panduan implementasi.
 ---
 
 # AWCMS — Server-Side Form Draft Persistence

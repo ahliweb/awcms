@@ -2,18 +2,23 @@
 
 > **Status dokumen (AWCMS, tahap foundation-rebuild).** Dokumen ini
 > mengadaptasi standar `security:readiness`/`production:preflight` yang
-> pada base `awcms-mini` sudah diimplementasikan penuh dan diverifikasi
-> live (skrip nyata, test otomatis, laporan pass/fail sungguhan). Di
-> AWCMS, **belum ada satu pun skrip ini yang diimplementasikan** — repo
-> baru berisi ADR/governance docs (lihat
-> [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)).
-> Seluruh tabel "Status implementasi" di bawah menjelaskan **target
-> mekanisme yang akan dibangun ulang** saat fondasi teknis
-> (`src/lib/security`, `scripts/security-readiness.ts`,
-> `scripts/production-preflight.ts`, dst.) diporting dari `awcms-mini` ke
-> AWCMS — bukan klaim bahwa AWCMS hari ini sudah lulus check apa pun.
-> Baca "Otomatis"/"Manual" di bawah sebagai target desain, bukan status
-> berjalan.
+> diwarisi dari base `awcms-mini`. Di AWCMS, tiga dari empat skrip inti
+> **SUDAH diimplementasikan dan nyata**: `config:validate`
+> (`scripts/validate-env.ts`, 255 baris — validasi env var terhadap
+> registry konfigurasi, `tests/validate-env.test.ts`), `db:pool:health`
+> (`scripts/db-pool-health.ts`, 104 baris — cek agregat pool/work-class/
+> circuit-breaker) dan `security:readiness` (`scripts/security-readiness.ts`,
+> 1560 baris — pemeriksaan RLS/RBAC-ABAC/secret/fail-closed sungguhan,
+> diverifikasi `tests/security-readiness-*.test.ts`). Yang **belum
+> diimplementasikan** adalah `production:preflight` — orkestrator yang
+> akan menjalankan ketiganya sebagai satu urutan gated go/no-go plus
+> tahap `database:capacity`/`db:connectivity`/`migration:plan` (lihat
+> [`production-preflight-runbook.md`](production-preflight-runbook.md)
+> untuk detail status). Seluruh tabel "Status implementasi" di bawah
+> tetap perlu dibaca hati-hati: baris yang merujuk `production:preflight`
+> atau tahap-tahap yang khusus dimilikinya menjelaskan **target mekanisme
+> yang belum dibangun**, sedangkan baris yang merujuk ketiga skrip di
+> atas menjelaskan mekanisme yang sudah berjalan hari ini.
 
 Dokumen ini mencatat standar readiness keamanan produksi untuk AWCMS
 (diwarisi dari base `awcms-mini`, selaras governance docs, ADR RLS/RBAC-
@@ -38,22 +43,25 @@ flowchart LR
   Gate -->|tidak| Ready[GO-LIVE DIIZINKAN]
 ```
 
-`config:validate` dijalankan **paling pertama** — config harus valid
-sebelum tahap manapun mencoba konek database atau menjalankan migration
-(`scripts/production-preflight.ts`'s `STAGES` array, begitu skrip ini
-diporting).
+`config:validate` dijalankan **paling pertama** dalam alur target di
+bawah — config harus valid sebelum tahap manapun mencoba konek database
+atau menjalankan migration. Urutan ini adalah kontrak yang
+`scripts/production-preflight.ts` (belum ada) akan tegakkan begitu
+orkestrator itu dibangun; hari ini `config:validate` sudah bisa
+dijalankan sendiri kapan saja.
 
-Tiga skrip inti (target implementasi, diwarisi dari base):
+Empat skrip inti — tiga SUDAH nyata, satu (orkestrator) masih target:
 
-| Perintah                       | Skrip                             | Fungsi                                                                        |
-| ------------------------------ | --------------------------------- | ----------------------------------------------------------------------------- |
-| `bun run db:pool:health`       | `scripts/db-pool-health.ts`       | CLI wrapper `GET /api/v1/database/pool/health`                                |
-| `bun run security:readiness`   | `scripts/security-readiness.ts`   | Menjalankan checklist keamanan otomatis, exit non-zero bila ada critical fail |
-| `bun run production:preflight` | `scripts/production-preflight.ts` | Orkestrasi seluruh tahap preflight + verdict go/no-go akhir                   |
+| Perintah                       | Skrip                             | Status                 | Fungsi                                                                        |
+| ------------------------------ | --------------------------------- | ---------------------- | ----------------------------------------------------------------------------- |
+| `bun run config:validate`      | `scripts/validate-env.ts`         | **Implementasi nyata** | Validasi env var terhadap registry konfigurasi                                |
+| `bun run db:pool:health`       | `scripts/db-pool-health.ts`       | **Implementasi nyata** | CLI wrapper `GET /api/v1/database/pool/health`                                |
+| `bun run security:readiness`   | `scripts/security-readiness.ts`   | **Implementasi nyata** | Menjalankan checklist keamanan otomatis, exit non-zero bila ada critical fail |
+| `bun run production:preflight` | `scripts/production-preflight.ts` | **Belum ada**          | Orkestrasi seluruh tahap preflight + verdict go/no-go akhir                   |
 
-Ketiganya murni CLI/script — perubahan pada standar ini tidak dengan
-sendirinya membutuhkan perubahan OpenAPI/AsyncAPI (tidak ada endpoint atau
-event baru).
+Ketiga skrip nyata di atas murni CLI/script — perubahan pada standar ini
+tidak dengan sendirinya membutuhkan perubahan OpenAPI/AsyncAPI (tidak ada
+endpoint atau event baru).
 
 ## 1. `db:pool:health`
 

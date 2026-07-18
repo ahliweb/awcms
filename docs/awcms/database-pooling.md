@@ -267,8 +267,9 @@ check-nya sendiri crash.
 proses ini sendiri (bukan agregat lintas-instance — satu proses tidak
 mengetahui instance lain) — untuk validasi lintas-instance sebelum
 scale-out, lihat
-[`database-capacity-runbook.md`](database-capacity-runbook.md) dan
-`bun run database:capacity:check`.
+[`database-capacity-runbook.md`](database-capacity-runbook.md) (library
+`capacity-config.ts` sudah nyata; CLI `bun run database:capacity:check`
+masih target — lihat status dokumen runbook tersebut).
 
 ## 6. Domain event `database.pool.saturated`
 
@@ -316,12 +317,20 @@ Implikasi saat `DATABASE_PGBOUNCER=true`:
 
 Bagian 1-7 di atas melindungi SATU proses. Kapasitas PostgreSQL/PgBouncer
 yang disetujui berlaku untuk SELURUH armada instance — `src/lib/database/
-capacity-config.ts` memodelkan itu (instance count per process class, pool
-budget, kapasitas PgBouncer, budget koneksi disetujui, headroom admin) dan
-divalidasi read-only lewat `bun run database:capacity:check` /
-`production:preflight`'s stage `database:capacity`. Detail lengkap:
+capacity-config.ts` **sudah ada dan aktif di runtime** (instance count per
+process class, pool budget, kapasitas PgBouncer, budget koneksi disetujui,
+headroom admin dipakai oleh `GET /api/v1/database/pool/health`'s field
+`capacity`, dan `recordGauge` mencatat `db_pool_capacity_*` lewat
+`src/lib/observability/metrics-port.ts`). Yang **belum ada** adalah CLI
+wrapper-nya: `bun run database:capacity:check` dan
+`production:preflight`'s stage `database:capacity` bukan script nyata —
+tidak ada key ini di `package.json` (lihat `scripts/README.md` §Ditunda).
+Validasi kapasitas hari ini hanya bisa dilakukan dengan memanggil
+fungsi `capacity-config.ts` langsung (mis. dari test atau REPL), bukan
+lewat perintah `bun run` berdiri sendiri. Detail lengkap:
 [`database-capacity-runbook.md`](database-capacity-runbook.md) (rumus,
-contoh perhitungan, SOP incident saturasi/connection-storm).
+contoh perhitungan, SOP incident saturasi/connection-storm, dan status
+implementasi CLI yang lebih rinci).
 
 ## Gap yang belum ditutup
 

@@ -190,27 +190,27 @@ Item menu difilter oleh permission efektif user (RBAC/ABAC). Menu tanpa akses di
 
 > **Rencana**, bukan implementasi. Route, komponen, dan endpoint di bawah adalah target arsitektur untuk modul ERP yang belum dibangun — akan diperbarui/diperinci saat modul terkait masuk sprint implementasi (lihat doc `06_github_issues_detail.md`, saat ditulis).
 
-| Route                       | Persona         | Tujuan                                       | Komponen utama                  | API utama (rencana)                                           |
-| --------------------------- | --------------- | -------------------------------------------- | ------------------------------- | ------------------------------------------------------------- |
-| `/login`                    | Semua           | Autentikasi                                  | FormField, Button               | `POST /auth/login`                                            |
-| `/setup`                    | Owner awal      | Setup wizard                                 | Stepper, FormField              | `GET/POST /setup/*`                                           |
-| `/admin`                    | Admin/Owner     | Dashboard                                    | Card, Chart, Table              | `GET /reports/*`                                              |
-| `/admin/finance/ledger`     | Finance staff   | Data table entri jurnal (buku besar)         | DataGrid, SearchBar, Dialog     | `/finance/journal-entries`                                    |
-| `/admin/finance/coa`        | Finance staff   | Chart of accounts                            | Tabs, DataGrid                  | `/finance/accounts`                                           |
-| `/admin/inventory/products` | Admin/Inventory | List/CRUD produk & bahan baku                | DataGrid, SearchBar, Dialog     | `/inventory/products`                                         |
-| `/admin/inventory/stock`    | Admin/Inventory | Stock adjustment & opening balance           | DataGrid, NumberInput           | `/inventory/stock-adjustment-requests`                        |
-| `/admin/warehouse`          | Gudang          | Transfer, bin, cycle count                   | Tabs, StatusPill                | `/warehouses`, `/warehouse-transfers`                         |
-| `/admin/procurement/po`     | Purchasing      | Purchase order form (multi-baris) & approval | FormField, DataGrid, StatusPill | `/procurement/purchase-orders`                                |
-| `/admin/manufacturing`      | Produksi        | Work order, BOM, konsumsi bahan              | Tabs, DataGrid                  | `/manufacturing/work-orders`                                  |
-| `/admin/hr/payroll`         | HR/Payroll      | Payroll run wizard                           | Stepper, DataGrid, StatusPill   | `/hr/payroll-runs`                                            |
-| `/admin/tax`                | Tax Officer     | Faktur pajak, Coretax                        | DataGrid, MaskedText            | `/tax/*`                                                      |
-| `/admin/reports`            | Analyst/Owner   | Laporan keuangan & operasional               | Chart, Table                    | `/reports/*`                                                  |
-| `/admin/access-users`       | Admin/Owner     | User & akses                                 | Table, FormField                | `/users/*`, `/roles/*`, `/permissions`, `/access/assignments` |
-| `/admin/sync`               | Admin/Owner     | Node, konflik, antrean sync                  | Table, StatusPill, FormField    | `/sync/nodes`, `/sync/conflicts/*`, `/sync/object-queue/*`    |
-| `/admin/logs`               | Auditor/Admin   | Logs & security                              | DataGrid, Badge                 | `/logs/*`, `/security/*`                                      |
-| `/admin/modules`            | Admin/Owner     | List, filter modul + health                  | DataGrid, StatusPill            | `/modules`, `/modules/{moduleKey}/health`                     |
-| `/portal/vendor/{token}`    | Vendor          | Status PO & pembayaran                       | Card, Table                     | `/procurement/vendor-portal/*`                                |
-| `/portal/employee/{token}`  | Karyawan        | Slip gaji & consent                          | Card, Switch                    | `/hr/payslips/*`                                              |
+| Route                           | Persona         | Tujuan                                            | Komponen utama                  | API utama (rencana)                                           |
+| ------------------------------- | --------------- | ------------------------------------------------- | ------------------------------- | ------------------------------------------------------------- |
+| `/login`                        | Semua           | Autentikasi                                       | FormField, Button               | `POST /auth/login`                                            |
+| `/setup`                        | Owner awal      | Setup wizard                                      | Stepper, FormField              | `GET/POST /setup/*`                                           |
+| `/admin`                        | Admin/Owner     | Dashboard                                         | Card, Chart, Table              | `GET /reports/*`                                              |
+| `/admin/finance/ledger`         | Finance staff   | Data table entri jurnal (buku besar)              | DataGrid, SearchBar, Dialog     | `/finance/journal-entries`                                    |
+| `/admin/finance/coa`            | Finance staff   | Chart of accounts                                 | Tabs, DataGrid                  | `/finance/accounts`                                           |
+| `/admin/inventory/products`     | Admin/Inventory | List/CRUD produk & bahan baku                     | DataGrid, SearchBar, Dialog     | `/inventory/products`                                         |
+| `/admin/inventory/stock`        | Admin/Inventory | Stock adjustment & opening balance                | DataGrid, NumberInput           | `/inventory/stock-adjustment-requests`                        |
+| `/admin/warehouse`              | Gudang          | Transfer, bin, cycle count                        | Tabs, StatusPill                | `/warehouses`, `/warehouse-transfers`                         |
+| `/admin/procurement/po`         | Purchasing      | Purchase order form (multi-baris) & approval      | FormField, DataGrid, StatusPill | `/procurement/purchase-orders`                                |
+| `/admin/manufacturing`          | Produksi        | Work order, BOM, konsumsi bahan                   | Tabs, DataGrid                  | `/manufacturing/work-orders`                                  |
+| `/admin/hr/payroll`             | HR/Payroll      | Payroll run wizard                                | Stepper, DataGrid, StatusPill   | `/hr/payroll-runs`                                            |
+| `/admin/tax`                    | Tax Officer     | Faktur pajak, Coretax                             | DataGrid, MaskedText            | `/tax/*`                                                      |
+| `/admin/reports`                | Analyst/Owner   | Laporan keuangan & operasional                    | Chart, Table                    | `/reports/*`                                                  |
+| `/admin/users` + `/admin/roles` | Admin/Owner     | User & akses (dua layar terpisah, bukan digabung) | Table, FormField                | `/users/*`, `/roles/*`, `/permissions`, `/access/assignments` |
+| `/admin/sync`                   | Admin/Owner     | Node, konflik, antrean sync                       | Table, StatusPill, FormField    | `/sync/nodes`, `/sync/conflicts/*`, `/sync/object-queue/*`    |
+| `/admin/logs`                   | Auditor/Admin   | Logs & security                                   | DataGrid, Badge                 | `/logs/*`, `/security/*`                                      |
+| `/admin/modules`                | Admin/Owner     | List, filter modul + health                       | DataGrid, StatusPill            | `/modules`, `/modules/{moduleKey}/health`                     |
+| `/portal/vendor/{token}`        | Vendor          | Status PO & pembayaran                            | Card, Table                     | `/procurement/vendor-portal/*`                                |
+| `/portal/employee/{token}`      | Karyawan        | Slip gaji & consent                               | Card, Switch                    | `/hr/payslips/*`                                              |
 
 ## State pattern wajib
 
@@ -261,6 +261,14 @@ i18n memakai **dua lapisan terpisah** sesuai sumber teksnya:
 - **Format lokal**: angka/mata uang (IDR + pemisah ribuan sesuai locale) dan tanggal (`Asia/Jakarta`, `Intl.DateTimeFormat`/`NumberFormat`) sadar-locale — `src/lib/i18n/format.ts`.
 
 ### Extraction, parity, dan obsolete key (rencana pipeline)
+
+> **Belum diimplementasikan.** Seluruh subbagian ini adalah rencana
+> pipeline, bukan tooling yang bisa dipanggil hari ini: tidak ada
+> direktori `i18n/` di repo ini, dan tidak ada key `i18n:extract`,
+> `i18n:pot:check`, atau `i18n:parity:check` di `package.json` — juga
+> tidak ada `scripts/i18n-extract.ts`. Baca setiap `bun run i18n:*` di
+> bawah sebagai spesifikasi target, bukan panduan langkah-demi-langkah
+> yang sudah bisa dijalankan.
 
 `i18n/messages.pot` **tidak ditulis tangan** — pipeline `scripts/i18n-extract.ts` (`bun run i18n:extract`) akan men-scan seluruh `.astro`/`.ts`/`.tsx` di `src/` untuk setiap pemanggilan `t("key")`, lalu menulis ulang `messages.pot` (terurut alfabetis, satu komentar `#: file:line` per key, deterministik).
 

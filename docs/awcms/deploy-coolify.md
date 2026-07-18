@@ -1,6 +1,6 @@
 # Deploy Coolify
 
-> **Status dokumen:** panduan target, bukan status implementasi. Repo `awcms` belum punya `Dockerfile.production`/`docker-compose.yml` yang nyata — dokumen ini mengadaptasi panduan operasional Coolify yang sudah terbukti di basis `awcms-mini` menjadi standar yang akan berlaku begitu berkas-berkas deployment tersebut diimplementasikan.
+> **Status dokumen:** panduan target sebagian. Repo `awcms` belum punya `docker-compose.yml` yang nyata, tapi `Dockerfile.production` SUDAH ada — nyata di root repo (multi-stage, non-root user `bun`, healthcheck) dan sudah dipakai aktif oleh `build` job `.github/workflows/release.yml` untuk build+push image ke `ghcr.io/ahliweb/awcms` setiap rilis (lihat [`release-process.md`](release-process.md) untuk deskripsi status yang akurat). Karena itu, **Pola 1 dan Pola 2 di bawah (build dari `Dockerfile.production`) sudah bisa dipakai hari ini** — dokumen ini mengadaptasi panduan operasional Coolify yang sudah terbukti di basis `awcms-mini` untuk detail khusus Coolify (topologi VPS, opsi PostgreSQL, checklist keamanan) yang masih standar target sampai dipraktikkan sungguhan terhadap deployment nyata.
 
 Panduan operasional untuk deploy AWCMS ke [Coolify](https://coolify.io) memakai `Dockerfile.production` sebagai jalur registry/CI-push, berdampingan dengan `docker-compose.yml` yang tetap menjadi jalur LAN-first/offline yang direkomendasikan (lihat [`deployment-profiles.md`](deployment-profiles.md) §production (online) — image registry). Dokumen ini **tidak menggantikan** dokumen itu — dokumen ini menambahkan detail khusus Coolify: topologi satu VPS, topologi multi aplikasi dalam satu VPS, opsi PostgreSQL, kapasitas praktis, dan checklist keamanan.
 
@@ -30,7 +30,7 @@ CI (GitHub Actions atau lainnya) yang men-build `docker build -f Dockerfile.prod
 
 Cocok untuk: image immutable per rilis, build sekali dipakai di banyak environment, atau saat build server Coolify ingin dijaga ringan.
 
-Repo ini belum menambahkan workflow CI/CD registry otomatis — Pola 2 mengasumsikan operator sudah/akan menyiapkan pipeline build-push sendiri di luar dokumen ini.
+Repo ini SUDAH punya workflow CI/CD registry otomatis untuk ini: `.github/workflows/release.yml`'s `build` job men-build `Dockerfile.production` dan push ke `ghcr.io/ahliweb/awcms` pada setiap tag rilis (lihat [`release-process.md`](release-process.md)) — operator memakai image itu langsung di Coolify tanpa perlu menyiapkan pipeline build-push sendiri, kecuali ingin registry/tagging berbeda.
 
 ## Topologi single VPS / same Docker host
 

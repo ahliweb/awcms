@@ -1,6 +1,8 @@
 # Deployment Profiles
 
 > **Status dokumen:** target/rencana operasional, bukan status implementasi. Repo `awcms` saat ini belum punya kode modul ERP maupun `deploy/*`/`docker-compose.yml` yang nyata — dokumen ini mengadaptasi standar deployment yang sudah terbukti di basis `awcms-mini` (fully implemented di sana) menjadi **prosedur target** untuk platform ERP `awcms`. Struktur/mekanisme (profil environment, topologi TLS, model dua-peran database, job registry) dipertahankan sebagai standar wajib; nomor issue/PR dan riwayat implementasi spesifik `awcms-mini` dihapus karena tidak relevan untuk repo ini.
+>
+> **Koreksi: `Dockerfile.production` SUDAH ada.** Berbeda dari `deploy/*`/`docker-compose.yml` (memang belum ada), `Dockerfile.production` nyata ada di root repo (multi-stage, non-root user `bun`, healthcheck) dan sudah dipakai aktif oleh `build` job `.github/workflows/release.yml` untuk build+push image ke `ghcr.io/ahliweb/awcms` setiap rilis — lihat [`release-process.md`](release-process.md) untuk deskripsi status yang akurat. Jalur image-registry (Coolify pull-image, `docker run` langsung) di dokumen ini karena itu sudah bisa dipakai hari ini; hanya jalur `docker-compose.yml`/systemd/nginx/pgbouncer LAN-first di bawah yang masih rencana.
 
 Dokumen ini adalah standar profil deployment untuk AWCMS (lihat ADR-0001, [`01_canvas_induk.md`](01_canvas_induk.md) §Stack final) — melengkapi referensi environment variable (`docs/awcms/18_configuration_env_reference.md`, menyusul) dengan pemetaan konkret: berkas mana di `deploy/` dan `docker-compose.yml` dipakai pada profil environment yang mana, begitu keduanya diimplementasikan.
 
@@ -233,7 +235,13 @@ Semua bersifat operasi database murni kecuali yang secara eksplisit menyentuh pr
 
 ## Shared worker runner
 
-Standar yang dipertahankan dari basis: setiap job/dispatcher dibangun di atas satu implementasi shared runner (`src/lib/jobs/`, direncanakan) yang menyediakan:
+`src/lib/jobs/` SUDAH ada dan dipakai nyata — `job-runner.ts`, `batching.ts`,
+`retry-classification.ts`, dan `advisory-lock.ts` adalah implementasi
+berjalan, bukan rencana. Ketujuh dispatcher script yang sudah ada di
+`package.json` (`domain-events:dispatch`, `sync:objects:dispatch`,
+`workflow:escalations:dispatch`, `logs:audit:purge`, `email:dispatch`,
+`reporting:projections:refresh`, `reporting:exports:dispatch`) semuanya
+dibangun di atas shared runner ini. Ia menyediakan:
 
 - **Advisory lock per nama job** (`pg_try_advisory_lock`, non-blocking, session-level, reserved connection terpisah dari handler) — mencegah dua instance job yang sama berjalan tumpang tindih.
 - **Bounded batching per tenant/entitas** (`iterateTenantsInBatches`/`runBoundedBatches`) dengan safety bound (`maxPasses`).

@@ -134,10 +134,16 @@ flowchart LR
 
 ## Matrix Modul vs Migration
 
-Sumber: `docs/awcms/repo-inventory.md` §Migrations (GENERATED via
-`bun run repo:inventory:generate`) dan `src/modules/index.ts`, keduanya
-dibaca ulang saat menulis tabel ini. **76 file migration nyata** di
-`sql/` (`001`..`076`), dipetakan ke **23 modul terdaftar**. Tabel ini
+Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
+`src/modules/index.ts`, keduanya dibaca ulang saat menulis tabel ini.
+`repo-inventory.md` saat ini **hand-maintained** (bukan hasil generate
+nyata) — `bun run repo:inventory:generate` dan
+`scripts/repo-inventory-generate.ts` belum ada di repo ini; lihat
+disclaimer di puncak `repo-inventory.md` sendiri untuk statusnya. **23 file migration nyata** di
+`sql/` (`001`..`023`), dipetakan ke **10 modul terdaftar** (urutan
+`src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
+`identity-access`, `module-management`, `domain-event-runtime`,
+`sync-storage`, `workflow-approval`, `email`, `reporting`). Tabel ini
 menggantikan versi sebelumnya yang mengutip nama file fiktif (mis.
 `003_awcms_catalog_inventory_schema.sql`,
 `004_awcms_sales_pos_schema.sql`) dari sebuah sistem POS/retail yang
@@ -181,7 +187,7 @@ modul sekaligus, bukan schema satu modul — lihat
 > dicocokkan dengan `sql/` nyata. **Baris modul lain di tabel ini belum**:
 > sebagian besar masih memakai penomoran/penamaan awcms-mini (mis.
 > `045_awcms_db_role_separation.sql` yang dulu tercantum di baris Foundation
-> tidak pernah ada di repo ini — `sql/` berhenti di `019`), sehingga nomor
+> tidak pernah ada di repo ini — `sql/` sekarang berhenti di `023`), sehingga nomor
 > yang tercantum di baris lain bisa menunjuk file yang tidak ada. Sumber
 > kebenaran migration adalah isi direktori `sql/` dan
 > `docs/awcms/repo-inventory.md`, bukan tabel ini, sampai rekonsiliasi

@@ -116,6 +116,13 @@ CONFLICT DO NOTHING`; migrasi terapan immutable — jangan edit `sql/005`).
 - Query resource soft-deletable default `deleted_at IS NULL`; `includeDeleted`, `restore`, dan `purge` wajib ABAC eksplisit.
 - Contoh batas peran: operator ditolak akses pajak/export/assign role; cross-tenant selalu blocked.
 - `tenantUserId`/`identityId` berasal dari auth middleware, **bukan** header public mentah.
+- **Layar admin write-form** memakai `sendJson`/`postJson`/`lockElement`
+  (`src/lib/ui/admin-form-client.ts`, skill `awcms-ui-screen`) untuk
+  memanggil endpoint mutation — pastikan gate/permission yang dicek untuk
+  menampilkan tombol/form itu adalah `action` yang SAMA dan SUDAH ter-seed
+  di `awcms_permissions` (aturan di atas), bukan action yang "kelihatan
+  benar" tapi belum ter-seed — kalau salah, tombolnya tampil tapi request-nya
+  403 bahkan untuk owner.
 
 ## Verifikasi (test)
 

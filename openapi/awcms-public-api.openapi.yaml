@@ -1259,7 +1259,7 @@ paths:
                   description: "Slug: 2–64 chars, lowercase letters, digits, '_' or '-'. Unique per tenant among live roles."
                 roleName: { type: string }
       responses:
-        "200":
+        "201":
           description: Role created.
           content:
             application/json:
@@ -1747,7 +1747,7 @@ paths:
                   nullable: true
                   description: Must reference a live office in the SAME tenant. An id that is unknown, soft-deleted, or belongs to another tenant is rejected identically with 400 — the responses are deliberately indistinguishable so the field cannot be used to probe for office ids elsewhere on the platform.
       responses:
-        "200":
+        "201":
           description: Office created.
           content:
             application/json:
