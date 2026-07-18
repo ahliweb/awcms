@@ -67,15 +67,28 @@
  * ------------------------------------------------------------------------
  * GATING — `DATABASE_URL`, deliberately, and nothing else
  * ------------------------------------------------------------------------
- * `ci.yml` runs `bun test` with NO Postgres service and no `DATABASE_URL`, so
- * `integrationEnabled` is false there and every suite skips cleanly.
- * `release.yml`'s `validate` job DOES provide a `postgres:18.4` service, sets
- * `DATABASE_URL`, and runs `bun run db:migrate` before `bun run check` (which
- * includes `bun test`) — that is where these actually execute. Gating on a
- * bespoke variable of our own would mean these tests run in NO pipeline while
- * looking like coverage; that exact mistake has already been made once in this
- * repo (424 lines of inert concurrency tests, PR #157). Do not "improve" this
- * gate.
+ * `ci.yml`'s `quality` job runs `bun test` with NO Postgres service and no
+ * `DATABASE_URL`, so `integrationEnabled` is false there and every suite
+ * skips cleanly. Two pipelines DO provide a `postgres:18.4` service, set
+ * `DATABASE_URL`, and migrate before executing this suite for real:
+ * `ci.yml`'s dedicated `integration-tests` job (`bun test tests/integration/`
+ * — scoped to exactly these 4 harness-based files, added alongside this
+ * harness) and `release.yml`'s `validate` job (a separate, identically-scoped
+ * step after `bun run check`). Gating on a bespoke variable of our own would
+ * mean these tests run in NO pipeline while looking like coverage; that exact
+ * mistake has already been made once in this repo (424 lines of inert
+ * concurrency tests, PR #157). Do not "improve" this gate.
+ *
+ * The older, independent `*-postgres.test.ts`/concurrency files elsewhere
+ * under `tests/` (each opening their own ad-hoc `DATABASE_URL` connection —
+ * `office-directory-postgres`, `workflow-approval-concurrency`,
+ * `keyset-pagination-precision-postgres`, `security-readiness-rls`,
+ * `audit-log-purge`, `reporting-projection-rebuild-lock`) gate on the SAME
+ * `DATABASE_URL` variable but were never designed to run concurrently against
+ * one shared, already-migrated database in a single `bun test` process —
+ * verified empirically (a bare `bun test` against a migrated DB collides, 26
+ * failures). Neither pipeline runs a bare `bun test` against a migrated
+ * database for that reason; both scope to `tests/integration/` explicitly.
  *
  * ------------------------------------------------------------------------
  * LIFECYCLE — single-use database, cleaned up after

@@ -4,15 +4,15 @@ Dokumen ini menjelaskan bagaimana keputusan diambil dan bagaimana AWCMS dikelola
 
 ## Ringkasan
 
-AWCMS adalah **platform ERP dan integrasi solusi bisnis** milik AhliWeb, dibangun ulang di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Dikelola sebagai proyek open-source (lisensi [MIT](LICENSE)). Tata kelola bersifat ringan namun eksplisit agar standar tetap konsisten sepanjang pertumbuhan modul ERP.
+AWCMS adalah **basis/fondasi modular monolith untuk pengembangan ERP & solusi bisnis** milik AhliWeb (bukan ERP itu sendiri — modul domain ERP dibangun di atasnya di repo ekstensi/turunan terpisah, lihat [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md)), dibangun ulang di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Dikelola sebagai proyek open-source (lisensi [MIT](LICENSE)). Tata kelola bersifat ringan namun eksplisit agar standar tetap konsisten sepanjang pertumbuhan modul fondasi & ekosistem ekstensinya.
 
 ## Peran
 
-| Peran                  | Tanggung jawab                                                                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Maintainer**         | Menetapkan arah produk ERP, meninjau & merge PR, menjaga standar dokumen, merilis versi. Tercantum di [`.github/CODEOWNERS`](.github/CODEOWNERS) (bila ada). |
-| **Kontributor**        | Siapa pun yang mengirim issue/PR sesuai [`CONTRIBUTING.md`](CONTRIBUTING.md).                                                                                |
-| **Security responder** | Maintainer yang menangani laporan kerentanan privat (lihat [`SECURITY.md`](SECURITY.md)).                                                                    |
+| Peran                  | Tanggung jawab                                                                                                                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Maintainer**         | Menetapkan arah produk, meninjau & merge PR, menjaga standar dokumen, merilis versi. Tercantum di [`.github/CODEOWNERS`](.github/CODEOWNERS) — saat ini semua pattern memetakan ke org `@ahliweb` sebagai placeholder, menunggu handle maintainer sungguhan. |
+| **Kontributor**        | Siapa pun yang mengirim issue/PR sesuai [`CONTRIBUTING.md`](CONTRIBUTING.md).                                                                                                                                                                                |
+| **Security responder** | Maintainer yang menangani laporan kerentanan privat (lihat [`SECURITY.md`](SECURITY.md)).                                                                                                                                                                    |
 
 ## Pengambilan keputusan
 

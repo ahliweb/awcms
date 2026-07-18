@@ -1,14 +1,28 @@
 # Database Capacity Runbook — Deployment-Aware Pool/Work-Class Budgets
 
-> **Status dokumen (AWCMS).** Mekanisme di bawah (`capacity-config.ts`,
-> `database:capacity:check`, formula kapasitas) diwarisi dari base teknis
+> **Status dokumen (AWCMS).** Mekanisme di bawah diwarisi dari base teknis
 > `awcms-mini` (Issue #743 di repo asal, epic `platform-evolution`) dan
-> berlaku generik terlepas dari modul ERP mana yang aktif. Ini sudah
-> merupakan mekanisme fondasi yang tersedia di AWCMS sejak awal; yang
-> **belum ada** adalah beban nyata dari modul ERP (finance/inventory/
-> payroll dsb.) untuk memvalidasi angka kapasitas terhadap trafik
-> produksi — angka contoh di dokumen ini tetap ilustratif sampai ada
-> deployment nyata untuk diukur.
+> berlaku generik terlepas dari modul ERP mana yang aktif — tapi statusnya
+> TERBELAH DUA. **`src/lib/database/capacity-config.ts` (library) sudah
+> ada dan aktif di runtime**: dipakai nyata oleh
+> `GET /api/v1/database/pool/health`'s field `capacity`, dan
+> `recordGauge` mencatat metrik `db_pool_capacity_*` lewat
+> `src/lib/observability/metrics-port.ts`. **`bun run
+database:capacity:check` (CLI wrapper berdiri sendiri) BELUM ada** —
+> tidak ada key ini di `package.json`, dan `production:preflight`'s stage
+> `database:capacity` yang dirujuk berulang di dokumen ini juga belum ada
+> (lihat [`production-preflight-runbook.md`](production-preflight-runbook.md)
+> dan `scripts/README.md` §Ditunda, yang sudah mendaftar
+> `database:capacity:check` sebagai butuh "validasi kapasitas
+> lintas-instance (preflight)" yang belum dibangun). Baca setiap contoh
+> `bun run database:capacity:check`/`production:preflight` di bawah
+> sebagai **prosedur target** begitu CLI wrapper-nya ditulis — hari ini,
+> validasi kapasitas hanya bisa dilakukan dengan memanggil fungsi
+> `capacity-config.ts` langsung. Terpisah dari itu, yang juga **belum
+> ada** adalah beban nyata dari modul ERP (finance/inventory/payroll dsb.)
+> untuk memvalidasi angka kapasitas terhadap trafik produksi — angka
+> contoh di dokumen ini tetap ilustratif sampai ada deployment nyata
+> untuk diukur.
 
 Companion to [`database-pooling.md`](database-pooling.md) (per-process
 pool config, work-class concurrency gate, circuit breaker) and
@@ -33,9 +47,14 @@ result = connection storm during scale-out or restart
 `src/lib/database/capacity-config.ts` closes this gap: a typed,
 env-configurable model of every database-using process class's expected/
 min/max instance count and pool budget, a pure calculator, and a validator
-that fails on unsafe or internally inconsistent combinations — enforced by
-a READ-ONLY `database:capacity` stage in `bun run production:preflight`
-and the standalone `bun run database:capacity:check`.
+that fails on unsafe or internally inconsistent combinations. This library
+is real and already runs read-only every time `GET
+/api/v1/database/pool/health` is called (its `capacity` field). What's
+**not yet built** is a standalone CLI to run the same validator on demand
+— the standalone `bun run database:capacity:check` and the READ-ONLY
+`database:capacity` stage in `bun run production:preflight` described
+throughout the rest of this runbook are both target commands, not scripts
+that exist in `package.json` today.
 
 ## Process class inventory
 
@@ -113,7 +132,9 @@ application does not introspect).
 Full env var table: configuration reference doc (mengikuti pola doc 18
 base `awcms-mini`) §Kapasitas deployment-aware. Every variable is OPTIONAL
 with a conservative default that reproduces a single-instance offline/LAN
-topology — `bun run database:capacity:check` passes with zero of them set.
+topology — the underlying `capacity-config.ts` validator passes with zero
+of them set (verified today by calling the validator directly; via `bun
+run database:capacity:check` once that CLI wrapper exists).
 
 ## Worked example — sizing for a 4-instance scale-out
 
@@ -133,16 +154,21 @@ DATABASE_CAPACITY_RESERVED_ADMIN_CONNECTIONS=5
 Worst case: `app` 6 x 15 = 90, `worker` 1 x 15 = 15 (worker falls back to
 `DATABASE_POOL_MAX` unless `DATABASE_POOL_MAX_WORKER` is set separately),
 `setup` 1 x 15 = 15 (same fallback) = 120, plus 5 reserved = 125 > 100 —
-**this configuration FAILS** `database:capacity:check` as-is. Fix by also
+**this configuration would FAIL** the validator's check as-is (the
+underlying `capacity-config.ts` calculation is real; only the
+`database:capacity:check` CLI framing below is target). Fix by also
 setting `DATABASE_POOL_MAX_WORKER=5`/`DATABASE_POOL_MAX_SETUP=5` (worker/
 setup rarely need as many connections as the request-serving `app` class):
 `90 + 1x5 + 1x5 + 5 = 105` — still over. Lower `DATABASE_POOL_MAX` to 12:
 `6x12 + 5 + 5 + 5 = 87 <= 100` — passes. This iterative "run the check,
-read the finding, adjust one number" loop IS the intended workflow; the
-check exists specifically so this arithmetic happens before a scale-out,
-not during one.
+read the finding, adjust one number" loop IS the intended workflow once
+the CLI exists; the check exists specifically so this arithmetic happens
+before a scale-out, not during one.
 
-## Running the check
+## Running the check (target — CLI wrapper not yet built)
+
+Neither command below exists in `package.json` today (see this doc's
+status banner). Once the CLI wrapper is written, the intended usage is:
 
 ```bash
 bun run database:capacity:check
@@ -156,8 +182,9 @@ scale-out or restart plan, same rehearsal-first discipline as
 APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight
 ```
 
-Both are 100% read-only — pure config arithmetic, no database connection,
-no network call, and neither can change pool/database configuration. A
+Both are designed to be 100% read-only — pure config arithmetic, no
+database connection, no network call, and neither can change
+pool/database configuration. A
 `[FAIL]` finding blocks preflight's overall `GO-LIVE DIIZINKAN` verdict
 exactly like any other stage; a `[WARNING]` finding (currently only the
 work-class-vs-pool oversubscription check, see `database-pooling.md`'s
@@ -216,9 +243,12 @@ labels only, no tenant ids, no DSNs:
      designed; it should self-resolve within `queueTimeoutMs` (2s default)
      once the burst passes. Clients that honor `Retry-After` recover
      automatically.
-   - If saturation persists beyond a few queue-timeout windows, re-run
-     `bun run database:capacity:check` against the CURRENT real instance
-     count (not just the configured `expected`/`max`) — an unplanned extra
+   - If saturation persists beyond a few queue-timeout windows, re-check
+     capacity against the CURRENT real instance count (not just the
+     configured `expected`/`max`) — until the `database:capacity:check`
+     CLI exists (see this doc's status banner), do this by calling
+     `capacity-config.ts`'s validator directly with the current instance
+     counts, not via `bun run`. An unplanned extra
      instance (a stuck old deployment not yet drained, a runaway worker
      re-run — e.g. a duplicate payroll batch) pushes actual usage above
      what was budgeted.
@@ -235,8 +265,9 @@ labels only, no tenant ids, no DSNs:
 Background jobs (the `worker` process class) are NOT runtime-gated through
 `work-class.ts`'s concurrency gate — they are classified in
 `src/lib/database/work-class-registry.ts` for the capacity CONNECTION
-BUDGET (counted in the formula above) and for the CI drift gate
-(`bun run db:work-class:check`), but a job's actual DB calls do not
+BUDGET (counted in the formula above) and for the CI drift gate described
+below (`bun run db:work-class:check`, target — not yet in `package.json`,
+see §CI drift gate), but a job's actual DB calls do not
 currently call `acquireWorkClassSlot`. Job-level concurrency is instead
 bounded by a different, already-existing mechanism —
 `src/lib/jobs/job-runner.ts`'s Postgres advisory lock ensures at most ONE
@@ -245,21 +276,30 @@ dominant connection-storm risk for scheduled jobs (an overlapping re-run of
 the SAME job, e.g. a payroll run or purge job). Retrofitting all worker
 scripts onto the work-class gate itself is a reasonable follow-up.
 
-## CI drift gate — work-class registry
+## CI drift gate — work-class registry (target — generator/check not yet built)
 
-`docs/awcms/work-class-registry.generated.json` (generated,
-`bun run db:work-class:generate`) snapshots which work class every API
-route (`src/pages/api/v1/**` that calls `withTenant(...)`) and every
-worker/setup job (`scripts/*.ts` that calls
-`getWorkerDatabaseClient()`/`getSetupDatabaseClient()`) is classified as.
-`bun run db:work-class:check` (part of `bun run check`) regenerates in
-memory and diffs against the committed file — a new or reclassified route/
-job changes the snapshot, so it cannot merge without a reviewable diff to
-this file. A new worker script with no entry in
-`work-class-registry.ts`'s `JOB_WORK_CLASS_REGISTRY` makes the GENERATOR
-itself refuse to run (not just the check) — see that file's header comment.
+Target design: `docs/awcms/work-class-registry.generated.json` (generated
+by `bun run db:work-class:generate`, not yet in `package.json`) would
+snapshot which work class every API route (`src/pages/api/v1/**` that
+calls `withTenant(...)`) and every worker/setup job (`scripts/*.ts` that
+calls `getWorkerDatabaseClient()`/`getSetupDatabaseClient()`) is
+classified as. `bun run db:work-class:check` (also not yet built; would
+be part of `bun run check` once it exists) would regenerate in memory and
+diff against the committed file — a new or reclassified route/job changes
+the snapshot, so it couldn't merge without a reviewable diff to this file.
+A new worker script with no entry in `work-class-registry.ts`'s
+`JOB_WORK_CLASS_REGISTRY` is meant to make the GENERATOR itself refuse to
+run (not just the check) once written — see that file's header comment
+for the intended behavior.
 
-This registry is currently empty of ERP-domain entries in AWCMS — it will
-grow as finance/inventory/procurement/manufacturing/HR-payroll endpoints
-and jobs are implemented.
+**Current reality**: neither script exists yet (see `scripts/README.md`
+§Ditunda). `docs/awcms/work-class-registry.generated.json` today is a
+warisan artifact carried over from `awcms-mini` — its own
+`_disclaimer` field says so explicitly (it lists ~284 awcms-mini routes,
+not the ~16 real routes in this repo's `src/pages/api/v1/`) and must not
+be treated as a source of truth until the generator is actually built and
+re-run against this repo's real routes/jobs. This registry will only
+start reflecting AWCMS reality once the generator ports and finance/
+inventory/procurement/manufacturing/HR-payroll endpoints and jobs exist
+to populate it.
 </content>

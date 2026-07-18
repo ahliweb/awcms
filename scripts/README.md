@@ -23,7 +23,8 @@ worker per-modul menyusul begitu modul ERP-nya ada.
 | `changesets:policy:check` | `changeset-policy-check.ts`  | Wajibkan changeset baru untuk PR yang mengubah file non-docs/non-agent-tooling         | — (PR-diff-shaped, lihat `.github/workflows/changesets.yml`) |
 | `release:verify`          | `release-verify.ts`          | Tag rilis == versi package.json, CHANGELOG.md punya section, tak ada changeset pending | — (tag-shaped, lihat `.github/workflows/release.yml`)        |
 
-`bun run check` = `lint → check:docs → api:spec:check → modules:dag:check → logging:lint:check → typecheck → test → build`.
+`bun run check` — untuk rantai lengkap & urutan yang otoritatif, lihat script
+`check` di `package.json` langsung; tidak diduplikasi di sini agar tidak drift.
 
 `config:validate` tidak masuk `check` karena membutuhkan environment nyata;
 jalankan manual sebelum deploy, mis. `bun run config:validate` (membaca

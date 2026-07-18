@@ -290,13 +290,16 @@ playwright test`, Bun-only), terpisah dari `bun test`
 | Pool acquire critical           |           < 500 ms normal |
 | Sync push small batch           |                     < 2 s |
 
-> **Suite performa berbasis generik (diwarisi dari `awcms-mini`).** Base
-> teknis sudah menyediakan suite performa nyata dan berjalan:
-> `bun run performance:suite`/`bun run performance:query-plan:check` —
-> lihat dokumentasi base untuk detail mekanisme (fixture multi-tenant,
-> skenario load/soak/saturasi, budget regresi query-plan). Tabel di atas
-> adalah target ilustratif domain ERP AWCMS; suite performa itu sendiri
-> perlu di-retarget dengan fixture/skenario ERP begitu modul terkait ada.
+> **Suite performa berbasis generik (diwarisi dari `awcms-mini`) — belum
+> diimplementasikan di repo ini.** `bun run performance:suite` dan
+> `bun run performance:query-plan:check` **belum ada** di `awcms`: tidak
+> ada key itu di `package.json`, dan repo belum punya
+> `src/lib/performance/`/`scripts/performance-suite.ts`. Lihat
+> [`performance-suite.md`](performance-suite.md) untuk arsitektur target
+> (fixture multi-tenant, skenario load/soak/saturasi, budget regresi
+> query-plan) yang akan diporting dari base begitu modul ERP terkait ada.
+> Tabel di atas adalah target ilustratif domain ERP AWCMS, bukan angka
+> yang sudah divalidasi suite nyata.
 
 ## Migration checklist
 
@@ -333,8 +336,11 @@ Mekanisme `bun run production:preflight` (diwarisi dari base) bersifat
 migration-plan — tidak ada stage yang menulis). Menerapkan migrasi adalah
 langkah terpisah dan eksplisit (`--apply-migrations --backup-verified
 --acknowledge-target=<APP_ENV>`), hanya berjalan bila verdict preflight
-`GO-LIVE DIIZINKAN`. Prosedur rehearsal staging → bukti backup → apply →
-rollback lengkap: [`production-preflight-runbook.md`](production-preflight-runbook.md).
+`GO-LIVE DIIZINKAN`. **Belum ada implementasi kode untuk `production:preflight`
+di repo ini** (tidak ada key itu di `package.json`, `scripts/production-preflight.ts`
+belum ada) — deskripsi di atas adalah target arsitektur. Prosedur rehearsal
+staging → bukti backup → apply → rollback lengkap serta status implementasi
+sesungguhnya: [`production-preflight-runbook.md`](production-preflight-runbook.md).
 
 ## Legacy migration checklist
 
@@ -357,7 +363,9 @@ rollback lengkap: [`production-preflight-runbook.md`](production-preflight-runbo
   terpisah, lihat §Migration checklist di atas — berhasil).
 - API spec valid.
 - Production preflight pass (`bun run production:preflight`, read-only;
-  `APP_ENV=production` memblokir go-live bila `db:pool:health` skip).
+  `APP_ENV=production` memblokir go-live bila `db:pool:health` skip) —
+  **belum diimplementasikan di repo ini**, lihat
+  [`production-preflight-runbook.md`](production-preflight-runbook.md).
 - Setup wizard locked.
 - Role default tersedia.
 - ABAC default deny tested.
@@ -439,13 +447,15 @@ backup → restore ke database disposable → verifikasi migrasi schema,
 tenant isolation (RLS), dan sample record → laporan RTO/RPO.
 
 `bun run resilience:dr-drill` (lihat
-[`resilience-dr-verification.md`](resilience-dr-verification.md))
-memperluas ini menjadi failure-injection terkontrol: disconnect
-PostgreSQL (level klien), pool saturation, worker interruption (SIGTERM
-nyata), dan partial provider outage (SSO/email — R2 cross-verified),
-plus tier `--full` yang menjalankan `restore-drill.sh` di atas. Interlock
-keamanannya menolak eksekusi secara default terhadap target mirip-produksi
-tanpa kemungkinan override untuk `APP_ENV=production`.
+[`resilience-dr-verification.md`](resilience-dr-verification.md)) — **belum
+ada implementasi kode untuk tool ini di repo ini**, ini adalah target
+arsitektur yang diwarisi dari base — memperluas ini menjadi
+failure-injection terkontrol: disconnect PostgreSQL (level klien), pool
+saturation, worker interruption (SIGTERM nyata), dan partial provider
+outage (SSO/email — R2 cross-verified), plus tier `--full` yang
+menjalankan `restore-drill.sh` di atas. Interlock keamanannya menolak
+eksekusi secara default terhadap target mirip-produksi tanpa kemungkinan
+override untuk `APP_ENV=production`.
 
 ## Go-live plan
 

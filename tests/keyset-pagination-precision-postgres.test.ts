@@ -18,9 +18,12 @@
  * rebuilt the OLD (millisecond-floored) way returns NOTHING — proving both the
  * bug and its fix against the same seeded data.
  *
- * Gated on `DATABASE_URL` (the convention this repo's CI uses:
- * `ci.yml` has no database and skips cleanly; `release.yml` provides a
- * `postgres:18.4` service and sets `DATABASE_URL`, so it runs there). No
+ * Gated on `DATABASE_URL` (the convention this repo's CI uses: `ci.yml`'s
+ * `quality` job has no database and skips cleanly; it actually runs in
+ * `ci.yml`'s `integration-tests` job and `release.yml`'s `validate` job, each
+ * in a dedicated `bun test <legacy files>` step run separately from the
+ * harness-based `tests/integration/` suite — see `tests/integration/
+ * harness.ts` for why the two collide if run together). No
  * `mock.module` anywhere — it mutates the live module namespace and leaks into
  * every later test file in the process. The suite only touches tenants it
  * creates and deletes.

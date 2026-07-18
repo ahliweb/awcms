@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:eff502bf089aa19e67a05036e2858dedcfd9e781c701906cb383d1ea4e70bf73 -->
+<!-- i18n-source-hash: sha256:46e1a40f0c63f76cecea111f00674e40f5f2ab7503482f34c1f8569a9d0ae3ee -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
@@ -8,7 +8,23 @@
 
 > **AWCMS is not an ERP.** It is a **modular-monolith foundation/base** that ERP applications & business solutions are built on top of (in separate extension/derived repos). There is no chart of accounts, general ledger, journal, AR/AP, inventory valuation, payroll, or tax computation in this repo — and there never will be; the base only provides reusable foundation modules + **neutral contracts** for ERP readiness. See [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md), [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md), [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md), and [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
-> **Status: foundation rebuild.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`). This repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS), as a **foundation** for ERP and business-solution development (not just a generic CMS/base, and not a finished ERP either).
+> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Eleven foundation modules are already live (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state), as a **foundation** for ERP and business-solution development — not just a generic CMS/base, and not a finished ERP either.
+
+## Table of contents
+
+- [Why this repo was rebuilt](#why-this-repo-was-rebuilt)
+- [Direction: awcms-mini technology base, ERP-foundation scope](#direction-awcms-mini-technology-base-erp-foundation-scope)
+- [High-level architecture](#high-level-architecture)
+- [Offline-first principle](#offline-first-principle)
+- [Stack](#stack)
+- [Core principles](#core-principles)
+- [Document package](#document-package)
+- [For contributors](#for-contributors)
+- [Implementation status](#implementation-status)
+- [Security](#security)
+- [Governance & community](#governance--community)
+- [Versioning](#versioning)
+- [License](#license)
 
 ## Why this repo was rebuilt
 
@@ -47,12 +63,152 @@ Technology base adopted from awcms-mini:
 
 Reusable base modules (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) from awcms-mini are used as-is as the foundation; ERP domain modules and business integrations are developed **on top of that foundation, in a separate extension/derived repo** — not inside this base ([ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md)).
 
-## References & starting points
+## High-level architecture
 
-- Read `AGENTS.md` for mandatory conventions (module structure, RLS, ABAC, idempotency, audit, etc.) before adding a foundation module.
-- Building an ERP/vertical application on top of this base: [`docs/awcms/derived-application-guide.md`](docs/awcms/derived-application-guide.md) + contracts in [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
-- This repo's architectural decisions: [`docs/adr/`](docs/adr/README.md) — start at [ADR-0001](docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md) (rebuild), updated by [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md) (extension layers) and [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md) (ERP in a separate repo).
-- Full baseline standard reference (Bun-only, RLS, offline-first) lives in [awcms-mini](https://github.com/ahliweb/awcms-mini/blob/main/docs/adr/README.md)'s ADRs (ADR-0001 modular monolith, ADR-0002 Bun-only runtime, ADR-0003 PostgreSQL + RLS, ADR-0006 offline-first sync).
-- Old-platform migration history: git history ADR-013..023 (Bun migration, off-Supabase).
+```mermaid
+flowchart TB
+  subgraph Client["Client / LAN"]
+    ADM[Admin SSR]
+    APP[Derived application<br/>ERP domain modules]
+  end
 
-The `awcms` repo is under **active development** — not archived — as the **foundation** that ERP and business solutions are built on top of, not a finished ERP.
+  subgraph App["AWCMS — Bun + Astro 7 (Modular Monolith)"]
+    API[REST API /api/v1<br/>OpenAPI]
+    MW[Middleware:<br/>Auth · Tenant · ABAC · Module-enabled · Audit]
+    MOD[Foundation modules:<br/>Tenant · Identity/Access · Profile ·<br/>Sync · Workflow · Reporting · Email ·<br/>Module Mgmt · Domain Events · Logging]
+    EVT[Domain events<br/>AsyncAPI]
+  end
+
+  subgraph Data["Data & Storage"]
+    PG[(PostgreSQL<br/>RLS FORCE + Audit)]
+  end
+
+  subgraph Ext["ERP-readiness contracts (passive, ADR-0020)"]
+    ERP[ERP extension<br/>separate repo, ADR-0022]
+    PROV[External business provider<br/>tax/Coretax, payment, etc.]
+  end
+
+  ADM --> API
+  APP --> API
+  API --> MW --> MOD
+  MOD --> PG
+  MOD --> EVT
+  MOD -. outbox/queue .-> PROV
+  EVT -. consumes contract .-> ERP
+```
+
+These foundation modules do not implement ERP logic — they only provide neutral contracts (events, posting request/result, period-lock, etc.) that are **consumed** by ERP applications in a separate repo. External business providers connect via **outbox/queue**, not a direct transaction path, so critical flows keep running when an external connection has issues (ADR-0006).
+
+## Offline-first principle
+
+```mermaid
+flowchart LR
+  Tx[Operational action] --> Local[(Local / LAN DB)]
+  Local --> Outbox[Outbox event + object queue]
+  Outbox -->|when online| Sync[Sync push/pull<br/>HMAC signed]
+  Sync --> Server[(Central server)]
+  Outbox -->|when online| Deliver[Send to external provider]
+  Server -->|conflict| Manual[Manual resolution + audit]
+```
+
+## Stack
+
+- Runtime: **Bun** ([ADR-0002](docs/adr/0002-bun-only-runtime.md) — Bun-only; Node.js only via a written, maintainer-approved exception)
+- Web framework: **Astro 7** (SSR on Bun, `@astrojs/node` as adapter)
+- Database: **PostgreSQL** with **RLS FORCE** ([ADR-0003](docs/adr/0003-postgresql-rls-multi-tenant.md))
+- Architecture: **Modular monolith, microservice-ready** ([ADR-0001](docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md))
+- Operating mode: **Offline-first / LAN-first**, optional sync outbox ([ADR-0006](docs/adr/0006-offline-first-sync-outbox.md))
+- Security baseline: **RBAC + ABAC default-deny + PostgreSQL RLS + Audit Log** ([ADR-0004](docs/adr/0004-rbac-abac-default-deny.md))
+- Contracts: **OpenAPI** + **AsyncAPI**, versioned independently from the package release ([ADR-0007](docs/adr/0007-openapi-asyncapi-contracts.md), [ADR-0008](docs/adr/0008-independent-contract-and-module-versioning.md))
+- Extension boundary: **extension layers & boundary model** ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)), **ERP lives in a separate derived repo** ([ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md))
+
+## Core principles
+
+1. Foundation modules are **reusable as-is** by every derived application — not rewritten per derived app.
+2. ERP-readiness contracts are **passive and neutral** (data shapes, capability ports, event schemas) — actual ERP business logic does **not** live in this base ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)).
+3. Multi-tenancy requires `tenant_id`, **RLS FORCE**, tenant context, and default-deny ABAC on every tenant-scoped table/endpoint.
+4. External business providers (tax, payment, logistics, etc.) must not become a critical-path dependency and must never be called inside a DB transaction — always via outbox/queue.
+5. Sensitive data (passwords, session tokens, personal/business identifiers) must be hashed/masked/redacted — never stored/logged raw.
+6. Deletable master/config data uses **soft delete**; default lists hide `deleted_at`, restore requires permission and is audited ([ADR-0005](docs/adr/0005-soft-delete-and-immutability.md)).
+7. Documentation, migrations, API/event contracts, tests, and agent skills follow the real implementation — not the other way around.
+8. Backend is **Bun-only**; Node.js exceptions only with maintainer approval + documented note.
+
+## Document package
+
+The master document package lives in [`docs/awcms/`](docs/awcms/README.md) — adapted from the `docs/awcms-mini/` package in the [awcms-mini](https://github.com/ahliweb/awcms-mini) repo, tailored to a broader ERP-foundation scope:
+
+```mermaid
+flowchart LR
+  A[01 Canvas Induk] --> B[02 PRD]
+  B --> C[03 SRS]
+  C --> D[04 ERD]
+  D --> E[05 OpenAPI/AsyncAPI]
+  E --> F[06 Issues]
+  F --> G[07 Sprint/Test]
+  G --> H[08 SOP]
+  H --> I[09 Roadmap Repo]
+  I --> J[10 Coding Standard]
+  J --> K[11 Blueprint]
+  K --> L[12 Generator Prompt]
+  L --> M[13 Traceability]
+  M --> N([Ready for Coding])
+  D --> TD[16 Backend & DB]
+  E --> TD
+  E --> UX[14 UI/UX] --> FE[15 Frontend]
+  TD --> N
+  FE --> N
+  T17[17 Seed/RBAC/ABAC] --> N
+  T18[18 Config/Env] --> N
+  T21[21 Module Admission] --> N
+  SEC[20 Threat Model] -. gates .-> N
+```
+
+- **01–13** planning → contract → execution; **14–18** technical design; **19** glossary; **20** threat model & security architecture; **21** module admission governance.
+- **Important note:** many documents in this package use ERP/retail domain examples as **illustration** — the pattern is reusable, the entities/endpoints/screens are examples a derived application swaps for its own domain needs. See [`docs/awcms/README.md`](docs/awcms/README.md) for translation status and other important notes.
+- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (24 ADRs currently).
+- **Current code state** (not a plan): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## For contributors
+
+1. Read `AGENTS.md` — technical work contract, mandatory rules, security guardrails.
+2. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution flow, setup, commit conventions, Definition of Done.
+3. Use the **project skills** in [`.claude/skills/`](.claude/skills/) so standards are applied consistently (one skill per topic: migration, endpoint, ABAC guard, audit log, testing, etc.).
+4. Work **atomically** per issue; add a migration when the schema changes, OpenAPI when the API changes, AsyncAPI when an event changes.
+5. Validate (`bun run check` — the main CI gate; the full sub-check chain and its order are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md#validasi-sebelum-pr) and `package.json`'s `check` script — not duplicated here to avoid drift) before opening a PR. For non-trivial UI changes, add/run a real browser E2E separately — `bun run test:e2e` (Playwright + Bun), needs a live app + `DATABASE_URL`.
+
+## Implementation status
+
+Eleven foundation modules are already live in code (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for per-module detail, and each module's own README at `src/modules/*/README.md`): `tenant-admin`, `identity-access` (login, sessions, RBAC/ABAC, admin write CRUD — Issue #166/#171), `profile-identity`, `logging` (audit trail), `module-management` (per-tenant enable/disable, enforced on every request), `sync-storage` (HMAC-signed outbox/inbox, conflict resolution, R2 object queue), `workflow-approval`, `reporting` (projections + export), `email` (dispatch + templates), `domain-event-runtime` (cross-module event publisher). The admin SSR shell (`/admin/*`) provides read + write (create/edit/soft-delete/restore) screens across all of the above.
+
+Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR status is on [GitHub Issues](https://github.com/ahliweb/awcms/issues) (work is tracked directly as GitHub issues, not a static backlog).
+
+## Security
+
+- Vulnerability reporting policy: [`SECURITY.md`](SECURITY.md) (use private vulnerability reporting — **not** a public issue).
+- Threat model & security architecture: [`docs/awcms/20_threat_model_security_architecture.md`](docs/awcms/20_threat_model_security_architecture.md).
+- Automation: Dependabot, CodeQL, GitHub secret scanning + push protection, GitGuardian, CI hygiene (Bun-only + no-secret).
+
+## Governance & community
+
+| Document                                                                                                         | Contents                                             |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                             | How to contribute                                    |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                       | Community behavior standards                         |
+| [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                 | Roles, decision-making, releases                     |
+| [`SUPPORT.md`](SUPPORT.md)                                                                                       | Help channels                                        |
+| [`SECURITY.md`](SECURITY.md)                                                                                     | Security policy                                      |
+| [`docs/adr/`](docs/adr/README.md)                                                                                | Architecture Decision Records                        |
+| [`docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf`](docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf) | Cross-product AWCMS-family AI agent usage guidelines |
+
+## Versioning
+
+**Semantic Versioning** + **[Changesets](.changeset/README.md)**; full history in [`CHANGELOG.md`](CHANGELOG.md). Every PR that changes behavior must include a changeset (enforced by `bun run changesets:policy:check` in CI). Current release version is `5.1.1`.
+
+**Version numbering policy (important, read before comparing versions):**
+
+- The package release version (`package.json`, this README) uses a deliberate legacy major-number line — jumping directly from `0.2.0` to `5.0.0` per maintainer decision, NOT a tool-computed SemVer increment, so version comparisons across the rebuild never look like a downgrade from the last legacy tag (`v4.6.0`). **`5.0.0` and above are NOT backward-compatible with any legacy `v2.x`–`v4.x` release** — the entire codebase was rewritten from scratch on a new foundation. See [ADR-0024](docs/adr/0024-semver-numbering-continues-legacy-major-line.md).
+- **Contract** version (`info.version` in OpenAPI/AsyncAPI) and **module descriptor** version/status (`src/modules/*/module.ts`) follow their own independent SemVer policy, not mechanically tied to the package release version. See [ADR-0008](docs/adr/0008-independent-contract-and-module-versioning.md).
+
+## License
+
+Licensed under the **MIT** license — see [`LICENSE`](LICENSE). Latest development-standard audit: [`docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`](docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md).

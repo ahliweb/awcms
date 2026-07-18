@@ -1,6 +1,6 @@
 # Security Policy
 
-AWCMS is a Bun + Astro 7 + PostgreSQL ERP and business-integration platform built on a modular monolith foundation standard. Security reports should be handled privately and must not include production secrets, customer data, database dumps, access tokens, or screenshots that expose restricted information — this applies with extra weight here given the ERP scope (financial, HR/payroll, and tenant business data).
+AWCMS is a Bun + Astro 7 + PostgreSQL modular-monolith foundation for building ERP applications and business-integration solutions on top of it — it is not an ERP itself (ERP domain modules such as finance, inventory, and payroll live in separate extension/derived repos; see [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md)). Security reports should be handled privately and must not include production secrets, customer data, database dumps, access tokens, or screenshots that expose restricted information — this applies with extra weight given tenant business data handled here and, for derived ERP applications built on this foundation, financial/HR-payroll data.
 
 ## Supported Versions
 
@@ -21,7 +21,7 @@ Include:
 
 - affected file, workflow, dependency, or documented control
 - reproduction steps or proof of concept using synthetic data only
-- impact and affected security property (especially for ERP modules: financial ledgers, payroll, tax/integration data)
+- impact and affected security property — including, for derived ERP applications built on this foundation, financial ledgers, payroll, tax/integration data
 - suggested fix, if known
 
 Do not open public issues for exploitable vulnerabilities. Public issues are acceptable only for non-sensitive hardening work that does not reveal an exploit path.
@@ -30,9 +30,9 @@ Do not open public issues for exploitable vulnerabilities. Public issues are acc
 
 - Runtime and package manager: Bun.
 - Backend platform: Bun-only; Node.js is not allowed unless a maintainer-approved, documented exception exists.
-- Database target: PostgreSQL with RLS, enforced on every tenant-scoped and business-entity-scoped table (ERP modules included).
+- Database target: PostgreSQL with RLS, enforced on every tenant-scoped and business-entity-scoped table (including, for derived ERP applications built on this foundation, their own ERP domain tables).
 - RBAC/ABAC default-deny access control on all non-public endpoints.
-- Idempotency required on high-risk ERP mutations (posting transactions, payroll runs, financial adjustments, integration syncs).
+- Idempotency required on high-risk mutations (posting transactions, payroll runs, financial adjustments, integration syncs — the last two being concerns of derived ERP applications built on this foundation).
 - Audit trail with redaction on sensitive business/financial actions.
 - Security automation: GitHub secret scanning, push protection, Dependabot alerts/security updates, and CodeQL code scanning.
 - Repository policy: no real secrets, credentials, customer data, database dumps, or raw production logs in Git, issues, pull requests, or documentation.

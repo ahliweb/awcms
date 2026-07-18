@@ -1,5 +1,20 @@
 # Visitor Analytics — panduan operasional dan kepatuhan
 
+> **Status dokumen (AWCMS, tahap foundation-rebuild).** Modul
+> `visitor_analytics` yang dijelaskan di bawah adalah mekanisme yang pada
+> base `awcms-mini` sudah diimplementasikan penuh dan diverifikasi (Issue
+> #617-#624: schema session/event/rollup, collector, API, dashboard, geo
+> enrichment, job rollup/retention purge, 17 env var, test integrasi
+> lengkap). Di AWCMS, **belum ada implementasi kode untuk modul ini** —
+> `ls src/modules` tidak memuat `visitor-analytics`, dan `sql/` tidak
+> memuat tabel `awcms_visitor_*` mana pun. Dokumen ini menjelaskan
+> **target arsitektur dan kontrak** yang akan diporting dari base
+> (lihat `.claude/skills/awcms-visitor-analytics/SKILL.md`, yang sudah
+> menandai modul ini "BACAAN SAJA... BELUM di-port") begitu modul ini
+> dibangun ulang di AWCMS — baca klaim "sudah diimplementasikan"/"yang
+> sudah ada" di bawah sebagai spesifikasi yang harus dipenuhi ulang saat
+> porting, bukan status berjalan saat ini.
+
 Dokumen ini melengkapi epic visitor analytics (Issue #617-#624) dengan
 panduan operasional level-praktis: mode deployment, privacy-first
 default, retensi data per kolom/tabel, dan pemetaan kontrol yang sudah

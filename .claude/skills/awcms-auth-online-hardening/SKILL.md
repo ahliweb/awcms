@@ -1,15 +1,45 @@
 ---
 name: awcms-auth-online-hardening
-description: Kerjakan bagian mana pun dari epic full-online auth security hardening AWCMS (Issue #587-#593). Gunakan saat menambah/mengubah AUTH_ONLINE_SECURITY_* gate, Cloudflare Turnstile, MFA/TOTP, Google OIDC login, generic tenant OIDC SSO, atau admin auth policy UI. Merangkum keputusan yang sudah dibuat supaya issue lanjutan tidak mengulang/kontradiksi.
+description: BACAAN SAJA (SPEKULATIF) — seluruh epic "full-online auth security hardening" (Issue #587-#593) yang dirujuk di skill ini TIDAK ADA. Diverifikasi 2026-07-18 lewat `gh issue view 587` (GraphQL "could not resolve to an issue or pull request") dan pencarian kode menyeluruh (`online-security-config.ts`, `AUTH_ONLINE_SECURITY_*`, TOTP, OIDC — nol hasil di `src/`; hanya penyebutan Turnstile *insidental* di `login.astro`/`security-headers.ts` yang tak berkaitan dengan epic ini). Isi skill ini menandai semua 7 item sebagai "Selesai" — klaim itu SEPENUHNYA KELIRU: tak ada issue-nya di GitHub, tak ada baris kode. Jangan gunakan tabel status atau klaim "sudah ada" di bawah sebagai fakta. Bila epic ini benar-benar ingin dikerjakan, ajukan issue GitHub baru dan bangun dari nol — isi di bawah HANYA layak dibaca sebagai draft spesifikasi/ide desain yang belum diverifikasi, bukan rujukan implementasi.
 ---
 
 # AWCMS — Full-Online Auth Security Hardening
 
-Epic menambahkan enam fitur hardening auth **online-only** (Cloudflare
-Turnstile, MFA/TOTP, Google OIDC login, generic tenant OIDC SSO, admin
-policy UI, plus penutup docs/kontrak) di atas login lokal/password +
-session opaque yang sudah ada, tanpa mengubah perilaku default
-offline/LAN/local sama sekali. Target model:
+> **PERINGATAN ISI DOKUMEN INI FIKTIF (diverifikasi 2026-07-18).** Setiap
+> "Issue #587"–"#593" yang disebut di bawah TIDAK ADA di GitHub repo ini
+> (`gh issue view 587` → `GraphQL: Could not resolve to an issue or pull
+request`). Setiap file/fungsi/endpoint yang disebut "sudah ada" di bawah
+> (`online-security-config.ts`, `auth-security-status.ts`,
+> `src/pages/admin/security.astro`, endpoint `/api/v1/identity/sso/*`,
+> `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE`, TOTP, Google OIDC, generic
+> tenant OIDC SSO) **TIDAK DITEMUKAN** di manapun dalam `src/`, `sql/`,
+> `scripts/`, atau `.env.example` saat diverifikasi ulang secara menyeluruh.
+> Satu-satunya kecocokan nyata adalah penyebutan "Turnstile" di
+> `src/pages/login.astro`/`src/lib/security/security-headers.ts` — namun itu
+> pun tidak berkaitan dengan epic bertanda "Selesai" di bawah. **Jangan
+> pernah bangun di atas asumsi apa pun dari isi skill ini seolah-olah sudah
+> ada** — cek kode secara langsung dulu (`find src -iname "*online-security*"`,
+> `gh issue list --search "..."`) sebelum mempercayai satu klaim pun di sini.
+> Konten teknis di bawah dipertahankan HANYA sebagai draft ide desain yang
+> belum diverifikasi/belum diajukan sebagai issue nyata, bukan sebagai
+> catatan pekerjaan yang sudah selesai. Sebelum mengerjakan fitur ini,
+> ajukan issue GitHub yang sebenarnya dan verifikasi ulang setiap bagian di
+> bawah dari nol.
+>
+> **Satu-satunya rujukan yang JUJUR soal status ini** adalah
+> [`docs/awcms/18_configuration_env_reference.md`](../../../docs/awcms/18_configuration_env_reference.md)
+> §"Full-online auth security hardening (opsional, target)" — ditulis
+> konsisten dalam bentuk "direncanakan"/"target", TIDAK mengklaim sudah
+> dibangun. Rujukan skill ini ke bagian senama di `deployment-profiles.md`
+> dan `identity-access/README.md` JUGA fiktif — kedua file itu tidak
+> punya section tersebut sama sekali (diverifikasi `grep`).
+
+Epic (BELUM DIAJUKAN, BELUM DIKERJAKAN) yang MENARGETKAN enam fitur hardening
+auth **online-only** (Cloudflare Turnstile, MFA/TOTP, Google OIDC login,
+generic tenant OIDC SSO, admin policy UI, plus penutup docs/kontrak) di atas
+login lokal/password + session opaque yang sudah ada, tanpa mengubah perilaku
+default offline/LAN/local sama sekali. Model yang DITARGETKAN (belum
+diimplementasikan):
 
 ```txt
 AUTH_ONLINE_SECURITY_ENABLED + AUTH_ONLINE_SECURITY_PROFILE=full_online
@@ -29,15 +59,15 @@ keputusan desain yang mengikat semua issue di epic ini sekaligus.
 
 ## Status per issue (jangan bangun ulang yang sudah ada)
 
-| Issue | Scope                                                  | Status                                                         |
-| ----- | ------------------------------------------------------ | -------------------------------------------------------------- |
-| #587  | Gate bersama `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE` | **Selesai** — lihat §Gate bersama di bawah                     |
-| #588  | Cloudflare Turnstile untuk form auth publik            | **Selesai** — lihat §Cloudflare Turnstile di bawah             |
-| #589  | MFA/TOTP login challenge                               | **Selesai** — lihat §MFA/TOTP di bawah                         |
-| #590  | Google OIDC login                                      | **Selesai** — lihat §Google OIDC login di bawah                |
-| #591  | Generic tenant OIDC SSO provider                       | **Selesai** — lihat §Generic tenant OIDC SSO provider di bawah |
-| #592  | Admin UI kebijakan auth security online                | **Selesai** — lihat §Admin policy UI di bawah                  |
-| #593  | Docs/kontrak/readiness penutup epic                    | **Selesai** — lihat §Epic #587-#593 selesai di bawah           |
+| Issue | Scope                                                  | Status                                                                                                                                 |
+| ----- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| #587  | Gate bersama `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE` | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Gate bersama sebagai spesifikasi belum dikerjakan                     |
+| #588  | Cloudflare Turnstile untuk form auth publik            | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Cloudflare Turnstile sebagai spesifikasi belum dikerjakan             |
+| #589  | MFA/TOTP login challenge                               | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §MFA/TOTP sebagai spesifikasi belum dikerjakan                         |
+| #590  | Google OIDC login                                      | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Google OIDC login sebagai spesifikasi belum dikerjakan                |
+| #591  | Generic tenant OIDC SSO provider                       | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Generic tenant OIDC SSO provider sebagai spesifikasi belum dikerjakan |
+| #592  | Admin UI kebijakan auth security online                | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Admin policy UI sebagai spesifikasi belum dikerjakan                  |
+| #593  | Docs/kontrak/readiness penutup epic                    | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, bukan penutup epic nyata                                                     |
 
 ## Yang sudah ada — pakai ulang, jangan re-derive
 
@@ -457,20 +487,21 @@ issue**, and none was needed:
   Mutations (policy save, provider create/update/delete) go through the
   REAL `PATCH /api/v1/identity/sso/policy` /
   `POST|PATCH|DELETE /api/v1/identity/sso/providers[/{id}]` endpoints via
-  `submitJson` (`admin-form-client.ts`) — every mutation still runs
+  `sendJson`/`postJson` (`src/lib/ui/admin-form-client.ts`) — every mutation still runs
   through those endpoints' own ABAC + break-glass + audit logic; this
   page never writes to the database directly.
 - **Two independent gates control what renders** (issue's own acceptance
   criteria): (1) the deployment gate `isFullOnlineSecurityActive(env)`
   (#587) — inactive on every local/offline/LAN deployment (the default),
-  the page renders ONLY an informational `StateNotice` (`kind="info"`,
-  new third variant alongside `"denied"`/`"error"`, `role="status"`) and
-  nothing else, checked server-side in the page's own frontmatter BEFORE
-  any of the status/policy/provider markup is generated — never just
-  hidden with CSS; (2) ABAC (`identity_access.sso_policy.*`/
-  `sso_providers.*`, migration 037, already seeded by #591) — gate active
-  but neither permission held renders an access-denied `StateNotice`
-  instead. Each section (policy form, provider table) additionally checks
+  the page renders ONLY an informational hand-rolled `<p class="state-notice"
+role="status">` notice (same inline pattern `offices.astro`/`roles.astro`
+  use for their denied/error states) and nothing else, checked server-side
+  in the page's own frontmatter BEFORE any of the status/policy/provider
+  markup is generated — never just hidden with CSS; (2) ABAC
+  (`identity_access.sso_policy.*`/`sso_providers.*`, migration 037, already
+  seeded by #591) — gate active but neither permission held renders an
+  access-denied `<p class="state-notice">` instead. Each section (policy
+  form, provider table) additionally checks
   its OWN specific permission independently, same per-fieldset-permission
   convention `admin/access-users.astro` established.
 - **Status summary never re-derives each feature's own gate** —

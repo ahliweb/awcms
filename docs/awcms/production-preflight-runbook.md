@@ -1,13 +1,26 @@
 # Production Preflight — Rehearsal, Apply, and Rollback Runbook
 
-> **Status dokumen (AWCMS).** `bun run production:preflight` dan seluruh
-> prosedur di bawah adalah mekanisme generik yang diwarisi dari base teknis
-> `awcms-mini` (Issue #684 di repo asal, epic `platform-hardening`) — sudah
-> tersedia sejak fondasi AWCMS, terlepas dari modul ERP mana yang aktif.
-> Yang **belum pernah dijalankan** di AWCMS adalah rehearsal/apply
-> sungguhan terhadap migrasi domain ERP nyata (belum ada modul finance/
-> inventory/procurement/manufacturing/HR-payroll) — prosedur di bawah
-> berlaku sebagai standar wajib begitu migrasi modul pertama siap di-apply.
+> **Status dokumen (AWCMS, tahap foundation-rebuild).** `bun run
+production:preflight` dan seluruh prosedur di bawah (`scripts/
+production-preflight.ts`, `authorizeApply`, `deploy/backup/{backup,
+restore,offsite-copy}-postgres.sh` dengan enkripsi/HMAC/manifest) adalah
+> mekanisme yang pada base `awcms-mini` sudah diimplementasikan penuh dan
+> diverifikasi (Issue #684 di repo asal, epic `platform-hardening`). Di
+> AWCMS, **belum ada implementasi kode untuk tool ini**: `scripts/
+production-preflight.ts` tidak ada, tidak ada key `production:preflight`
+> di `package.json`, dan `deploy/` hanya berisi
+> `deploy/pgbouncer/pgbouncer.ini.example` (belum ada `deploy/backup/`
+> sama sekali). Tiga dari sembilan tahap yang dijelaskan di bawah SUDAH
+> nyata sebagai script berdiri sendiri — `config:validate`,
+> `security:readiness`, `db:pool:health` (lihat
+> [`production-readiness.md`](production-readiness.md)) — tetapi
+> orkestrator yang menjalankannya sebagai satu urutan gated go/no-go,
+> plus tahap `database:capacity`, `db:connectivity`, `migration:plan`,
+> belum ada. Dokumen ini menjelaskan **target arsitektur dan kontrak**
+> yang akan diporting dari base sebagai bagian pembangunan fondasi teknis
+> AWCMS; baca klaim "tersedia"/"sudah berjalan" di bawah sebagai
+> spesifikasi yang harus dipenuhi ulang saat porting, bukan status
+> berjalan saat ini.
 
 Companion to `docs/awcms/07_sprint_testing_production_readiness.md` — this
 doc covers the operational procedure around `bun run production:preflight`,

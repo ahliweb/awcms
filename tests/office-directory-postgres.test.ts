@@ -8,11 +8,14 @@
  *
  * Requires a throwaway database with `sql/` applied (`bun run db:migrate`).
  * Gated on `DATABASE_URL`, the same convention as
- * `workflow-approval-concurrency.test.ts`: `ci.yml` has no database and skips
- * cleanly, `release.yml` provides a `postgres:18.4` service and sets
- * `DATABASE_URL`, so this actually executes there. A bespoke variable would
- * mean it never runs in any pipeline. `OFFICE_TEST_DATABASE_URL` overrides for
- * a local scratch run.
+ * `workflow-approval-concurrency.test.ts`. `ci.yml`'s `quality` job has no
+ * database and skips cleanly; it actually executes in `ci.yml`'s
+ * `integration-tests` job and `release.yml`'s `validate` job, each in a
+ * dedicated `bun test <legacy files>` step run separately from the
+ * harness-based `tests/integration/` suite (see `tests/integration/
+ * harness.ts` — the two collide if run together in one `bun test` process).
+ * A bespoke variable would mean it never runs in any pipeline.
+ * `OFFICE_TEST_DATABASE_URL` overrides for a local scratch run.
  *
  * No `mock.module` anywhere here, deliberately: it mutates the live module
  * namespace in place and leaks into every test file that runs afterwards in

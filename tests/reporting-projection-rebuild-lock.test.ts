@@ -12,10 +12,12 @@
  * against an implementation that still double-counts.
  *
  * Gated on `DATABASE_URL`, the same convention this repo's CI already uses:
- * `.github/workflows/ci.yml`'s `bun test` job has no Postgres service and
- * no `DATABASE_URL`, so these skip cleanly there; `release.yml` runs
- * `bun run check` (which includes `bun test`) after `bun run db:migrate`
- * against a real `postgres:18.4` service, where they execute for real.
+ * `.github/workflows/ci.yml`'s `quality` job has no Postgres service and no
+ * `DATABASE_URL`, so these skip cleanly there; they actually execute in
+ * `ci.yml`'s `integration-tests` job and `release.yml`'s `validate` job, each
+ * in a dedicated `bun test <legacy files>` step run separately from the
+ * harness-based `tests/integration/` suite (see `tests/integration/
+ * harness.ts` — the two collide if run together in one `bun test` process).
  *
  * DETERMINISM (no sleep-and-hope on the ASSERTED behavior): every test
  * below forces the interleaving with a real lock held by a dedicated

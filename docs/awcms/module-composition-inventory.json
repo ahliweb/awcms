@@ -1,5 +1,5 @@
 {
-  "_disclaimer": "ARTEFAK WARISAN awcms-mini — BUKAN state repo awcms ini. Nilai di bawah (23 modul active, dst.) menggambarkan modul awcms-mini, bukan awcms yang saat ini hanya punya 4 modul (logging, tenant-admin, profile-identity, identity-access) + _shared. Generator (bun run modules:composition:inventory:*) belum ada di repo ini; berkas ini akan diregenerasi dari registry nyata begitu tooling dan modulnya di-port. Jangan jadikan sumber kebenaran. Lihat docs/awcms/README.md §Status & docs/ARCHITECTURE.md.",
+  "_disclaimer": "ARTEFAK WARISAN awcms-mini — BUKAN state repo awcms ini. Nilai di bawah (23 modul active, dst.) menggambarkan modul awcms-mini, bukan awcms yang saat ini punya 10 modul (urutan src/modules/index.ts: logging, tenant-admin, profile-identity, identity-access, module-management, domain-event-runtime, sync-storage, workflow-approval, email, reporting) + _shared. Generator (bun run modules:composition:inventory:*) belum ada di repo ini; berkas ini akan diregenerasi dari registry nyata begitu tooling dan modulnya di-port. Jangan jadikan sumber kebenaran. Lihat docs/awcms/README.md §Status & docs/ARCHITECTURE.md.",
   "baseModuleCount": 23,
   "applicationModuleCount": 0,
   "applicationRegistryId": null,

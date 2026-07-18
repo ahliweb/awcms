@@ -6,12 +6,15 @@
  *
  * Requires a throwaway database whose schema has had `sql/` applied
  * (`bun run db:migrate`). Gated on `DATABASE_URL` — the same convention
- * `reporting-projection-rebuild-lock.test.ts` uses, and the reason this suite
- * actually executes somewhere: `ci.yml` has no database so it skips cleanly
- * there, while `release.yml` provides a throwaway `postgres:18.4` service and
- * sets `DATABASE_URL`. Gating on a bespoke variable instead would mean these
- * tests never run in any pipeline. `WORKFLOW_TEST_DATABASE_URL` still
- * overrides it for a local run against a scratch database.
+ * `reporting-projection-rebuild-lock.test.ts` uses. `ci.yml`'s `quality` job
+ * has no database and skips cleanly; this actually executes in `ci.yml`'s
+ * `integration-tests` job and `release.yml`'s `validate` job, each in a
+ * dedicated `bun test <legacy files>` step run separately from the
+ * harness-based `tests/integration/` suite (see `tests/integration/
+ * harness.ts` — the two collide if run together in one `bun test` process).
+ * Gating on a bespoke variable instead would mean these tests never run in
+ * any pipeline. `WORKFLOW_TEST_DATABASE_URL` still overrides it for a local
+ * run against a scratch database.
  *
  * The suite only ever touches tenants it creates itself, and deletes them
  * again afterwards.

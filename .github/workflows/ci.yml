@@ -1,17 +1,24 @@
-# CI AWCMS — kualitas dokumentasi, kontrak, unit test, & hygiene (Bun-only).
+# CI AWCMS — kualitas dokumentasi, kontrak, unit/integration test, & hygiene
+# (Bun-only).
 #
 # Setiap step di job `quality` dinamai sesuai, dan dijaga urutannya sama
 # dengan, script `check` di package.json — script itu tetap satu-satunya
 # sumber kebenaran; step di sini adalah cerminannya yang di-orkestrasi CI,
 # bukan daftar independen yang bisa drift darinya. Diadaptasi dari
 # awcms-mini (`.github/workflows/ci.yml`), dipangkas ke apa yang benar-benar
-# ada di repo ini: belum ada test integrasi yang butuh Postgres hidup (semua
-# 174+ test adalah unit murni), dan belum ada docker-compose*.yml untuk
-# divalidasi. Sejak Issue #166 ada job `e2e-smoke` (Playwright + Bun): 404 +
-# login render tidak butuh DB, tapi alur admin ter-autentikasi butuh, jadi
-# job-nya menyalakan service `postgres:18.4`, `db:migrate`, lalu men-seed satu
-# tenant+owner lewat `POST /api/v1/setup/initialize` (bootstrap sungguhan,
-# bukan seed SQL ad-hoc) dan mengoperkan kredensialnya ke spec via env.
+# ada di repo ini: belum ada docker-compose*.yml untuk divalidasi. Job
+# `quality` sengaja menjalankan `bun test` TANPA service Postgres — jadi
+# `DATABASE_URL` kosong dan keempat berkas
+# `tests/integration/*.integration.test.ts` (lihat gerbang `integrationEnabled`
+# di `tests/integration/harness.ts`) skip bersih di sini; test itu baru
+# benar-benar jalan saat seorang developer menyalakan `DATABASE_URL` lokal,
+# atau di job `integration-tests` di bawah yang menyalakan Postgres-nya
+# sendiri untuk itu. Sejak Issue #166 ada job `e2e-smoke` (Playwright + Bun):
+# 404 + login render tidak butuh DB, tapi alur admin ter-autentikasi butuh,
+# jadi job-nya menyalakan service `postgres:18.4`, `db:migrate`, lalu men-seed
+# satu tenant+owner lewat `POST /api/v1/setup/initialize` (bootstrap
+# sungguhan, bukan seed SQL ad-hoc) dan mengoperkan kredensialnya ke spec via
+# env.
 name: CI
 
 on:
@@ -68,6 +75,9 @@ jobs:
       - name: Module dependency graph check
         run: bun run modules:dag:check
 
+      - name: Reporting projection registry check
+        run: bun run reporting:projections:registry:check
+
       - name: Logging redaction lint check
         run: bun run logging:lint:check
 
@@ -108,8 +118,8 @@ jobs:
     # Ephemeral per-job Postgres, created + torn down by the runner for THIS
     # job only. Migrations run as this superuser and the app connects as it
     # too — E2E smoke proves the UI flow (login → session → SSR render), not
-    # RLS enforcement (that is the DB-gated `bun:test` integration suite's
-    # job, run under a non-superuser role there).
+    # RLS enforcement (that is what the `integration-tests` job below proves,
+    # run under a non-superuser role there).
     services:
       postgres:
         image: postgres:18.4
@@ -195,6 +205,98 @@ jobs:
           export E2E_TENANT_ID="$tenant_id"
 
           bun run test:e2e
+
+  integration-tests:
+    name: Integration tests (RLS + DB role separation)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      POSTGRES_USER: awcms
+      POSTGRES_PASSWORD: awcms_ci_password
+      POSTGRES_DB: awcms
+    # Own ephemeral per-job Postgres — a fresh throwaway instance, never
+    # shared with `e2e-smoke`'s. `tests/integration/harness.ts` treats this
+    # superuser DATABASE_URL purely as an admin channel: it builds its OWN
+    # ephemeral database/roles on top of it and runs real migrations via
+    # `bun scripts/db-migrate.ts` as a subprocess — nothing else needs to be
+    # pre-migrated here for the DB-gated suites this job exists to run.
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_USER: awcms
+          POSTGRES_PASSWORD: awcms_ci_password
+          POSTGRES_DB: awcms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U awcms -d awcms"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Assemble DATABASE_URL for this job's Postgres
+        run: echo "DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Apply migrations against this job's Postgres
+        # Needed for both steps below: world-2 harness tests (module-tenant-
+        # lifecycle) resolve `getDatabaseClient()` to THIS same `DATABASE_URL`
+        # and soft-skip if it isn't migrated, and the legacy ad-hoc suite
+        # connects to it directly and expects `sql/` already applied.
+        run: bun run db:migrate
+
+      - name: Run DB-gated integration tests
+        # Scoped to `tests/integration/` (the harness-based suite, purpose-built
+        # for concurrent execution against ITS OWN ephemeral per-run database —
+        # see `tests/integration/harness.ts`), not a bare `bun test`. The older,
+        # independent `*-postgres.test.ts`/concurrency test files elsewhere under
+        # `tests/` each open their own ad-hoc connection to the SAME `DATABASE_URL`
+        # database and were never designed to run concurrently against a shared
+        # DB in one `bun test` process — verified empirically: a bare `bun test`
+        # here made 26 of them fail (data collisions/ordering), while all 4
+        # harness-based integration files passed cleanly. They run in their own
+        # step below instead, in a fresh `bun test` process of their own.
+        run: bun test tests/integration/
+
+      - name: Run DB-gated integration tests (legacy ad-hoc suite)
+        # These 9 files each open their own ad-hoc `Bun.SQL(DATABASE_URL)`
+        # connection to the SAME database this job's harness step just used,
+        # and were designed to run together (that is release.yml's original,
+        # pre-`tests/integration/` DB-gated suite) — but NOT concurrently with
+        # the harness-based files above in one `bun test` process (see the
+        # step above's comment). Listed explicitly rather than relying on a
+        # bare `bun test` so this suite can't silently regrow the collision
+        # by pulling in `tests/integration/` again.
+        run: >-
+          bun test
+          tests/audit-log-purge.test.ts
+          tests/keyset-pagination-precision-postgres.test.ts
+          tests/office-directory-postgres.test.ts
+          tests/reporting-projection-rebuild-lock.test.ts
+          tests/security-readiness-failclosed.test.ts
+          tests/security-readiness-rls.test.ts
+          tests/security-readiness-worker-setup-grants.test.ts
+          tests/sync-hmac-versioned.test.ts
+          tests/workflow-approval-concurrency.test.ts
 
   hygiene:
     name: Repo hygiene (Bun-only + no secrets)
