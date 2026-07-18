@@ -91,8 +91,28 @@ flowchart LR
 
 ## Aturan implementasi
 
+- **Guard HANYA pada `action` yang DI-SEED di `awcms_permissions`.** Katalog
+  permission disemai lewat migrasi `sql/*` (mis. `sql/005` untuk `access_control`
+  = `read`/`assign`/`configure`, `office_management` = `read`/`create`/`update`).
+  Owner role di-grant SELURUH baris `awcms_permissions` saat bootstrap
+  (`platform-bootstrap.ts` `SELECT id FROM awcms_permissions`), dan jalur e2e =
+  migrasi → `POST /setup/initialize` TANPA module permission-sync di antaranya.
+  Jadi guard pada `action` yang tidak ter-seed **men-DENY bahkan owner (403)** —
+  dan ini LATENT: e2e admin env-gated sering ter-skip di CI kosong → hijau
+  padahal rusak. Sebelum menulis guard baru: pakai action yang sudah ter-seed
+  untuk aktivitas itu (mis. administrasi role/policy → `configure`, assign role →
+  `assign`), ATAU tambah action lewat **migrasi seed baru** (`INSERT ... ON
+CONFLICT DO NOTHING`; migrasi terapan immutable — jangan edit `sql/005`).
+  Deklarasi di `module.ts` `permissions[]` **tidak cukup** — itu bukan baris
+  katalog DB saat bootstrap (Issue #171). Cocokkan gate UI SSR dengan action
+  guard endpoint yang sama.
 - Set tenant context di **awal** transaction: `SET app.current_tenant_id = ...`.
 - Query tenant-scoped **wajib** filter `tenant_id` (jangan hanya andalkan RLS).
+- **Role sistem (`is_system`) itu invarian:** tolak soft-delete, grant/revoke
+  permission, dan assign/unassign role sistem via API (mirror `softDeleteRole`),
+  dan jangan biarkan admin dinonaktifkan sampai tak ada admin aktif tersisa —
+  jika tidak, holder permission terdelegasi bisa eskalasi/mengunci tenant
+  (Issue #171 review).
 - Query resource soft-deletable default `deleted_at IS NULL`; `includeDeleted`, `restore`, dan `purge` wajib ABAC eksplisit.
 - Contoh batas peran: operator ditolak akses pajak/export/assign role; cross-tenant selalu blocked.
 - `tenantUserId`/`identityId` berasal dari auth middleware, **bukan** header public mentah.
