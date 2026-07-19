@@ -107,6 +107,34 @@ const RULES: readonly Rule[] = [
     min: 1
   },
 
+  { name: "AUTH_SSO_ENABLED", required: false, type: "bool" },
+  {
+    name: "AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  {
+    name: "AUTH_SSO_DISCOVERY_TIMEOUT_MS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  { name: "AUTH_SSO_MAX_RESPONSE_BYTES", required: false, type: "int", min: 1 },
+  {
+    name: "AUTH_SSO_MAX_PROVIDERS_PER_TENANT",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "AUTH_SSO_OAUTH_REQUEST_TTL_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  { name: "AUTH_SSO_ALLOW_INSECURE_HOSTS", required: false, type: "string" },
+
   { name: "AWCMS_SYNC_ENABLED", required: false, type: "bool" },
   {
     name: "AWCMS_SYNC_HMAC_SECRET",
@@ -269,6 +297,34 @@ export function validateEnv(env: EnvBag): string[] {
         "AUTH_MFA_SECRET_ENCRYPTION_KEY harus 32 byte base64 (mis. `openssl rand -base64 32`)."
       );
     }
+  }
+
+  // OIDC/SSO (Issue #185): enabling SSO REQUIRES a real 32-byte AES-256 key to
+  // encrypt tenant client secrets at rest (no default key by design). Enforced
+  // regardless of APP_ENV — a missing/placeholder key makes every provider
+  // create/token-exchange fail closed (SSO_MISCONFIGURED).
+  if (env.AUTH_SSO_ENABLED === "true") {
+    const key = env.AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY?.trim() ?? "";
+
+    if (key === "" || PLACEHOLDER_SECRETS.has(key)) {
+      problems.push(
+        "AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY wajib berisi key nyata saat AUTH_SSO_ENABLED=true (tidak ada default key)."
+      );
+    } else if (!isBase32ByteKey(key)) {
+      problems.push(
+        "AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY harus 32 byte base64 (mis. `openssl rand -base64 32`)."
+      );
+    }
+  }
+
+  // The SSRF-guard escape hatch that allows non-HTTPS/loopback OIDC endpoints
+  // (`AUTH_SSO_ALLOW_INSECURE_HOSTS`) exists ONLY for a local fake IdP in tests.
+  // It must never be set in production — doing so would re-open the exact SSRF
+  // surface Issue #185 makes its top requirement to close.
+  if (isProduction && (env.AUTH_SSO_ALLOW_INSECURE_HOSTS ?? "").trim() !== "") {
+    problems.push(
+      "AUTH_SSO_ALLOW_INSECURE_HOSTS harus kosong di produksi — hanya untuk fake IdP lokal saat test."
+    );
   }
 
   // Tidak ada default yang aman untuk dua-duanya, jadi produksi wajib memilih

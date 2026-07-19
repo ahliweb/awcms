@@ -101,6 +101,22 @@ Diport dari awcms-mini, diadaptasi: mini menggerbangi MFA di balik gate "full-on
 
 Detail lengkap (auth flow, referensi env, SOP recovery admin, threat model, mapping OWASP ASVS/ISO): [`docs/awcms/mfa-totp-step-up.md`](../../../docs/awcms/mfa-totp-step-up.md) dan [ADR-0027](../../../docs/adr/0027-mfa-totp-session-assurance-step-up.md).
 
+## OIDC/SSO tenant-aware, account linking, dan break-glass (Issue #185)
+
+Diport dari awcms-mini (Issue #590/#591), diadaptasi + dikeraskan. Feature switch `AUTH_SSO_ENABLED` menggerbangi flow login/callback/link/unlink (admin provider/policy CRUD selalu bisa). Konfigurasi provider adalah DATA per tenant, bukan env. Sukses OIDC mencetak **opaque session AWCMS** (bukan ID token sebagai session); authorization tetap lewat RBAC/ABAC/RLS.
+
+- **Skema (`sql/025`)** — empat tabel tenant-scoped RLS `FORCE`: `awcms_auth_providers` (config provider; client secret ciphertext AES-256-GCM ATAU referensi env, tak pernah plaintext), `awcms_tenant_auth_policies` (password/SSO/JIT/break-glass, satu baris per tenant), `awcms_external_identities` (linking di-key `(tenant_id, provider_id, issuer, subject)` — immutable `sub`, tak pernah email; FK komposit terikat-tenant), `awcms_oidc_auth_requests` (jembatan efemeral: `state_hash` bearer, `nonce` + PKCE `code_verifier` plaintext single-use, `redirect_after` tervalidasi). Seed permission `sql/026`.
+- **SSRF guard (`lib/auth/ssrf-guard.ts`)** — risiko #1: semua fetch discovery/JWKS/token HTTPS-only, blok private/loopback/link-local/ULA/CGNAT/metadata IPv4+IPv6 (termasuk IPv4-mapped/NAT64), validasi semua hasil DNS sebelum connect, redirect manual + re-validasi tiap hop, timeout + response-size cap. Escape hatch loopback hanya via `AUTH_SSO_ALLOW_INSECURE_HOSTS` (ditolak di produksi). Kebalikan keputusan risk-acceptance mini.
+- **Auth Code + PKCE + state + nonce** — `state` bearer di-hash, single-use (`FOR UPDATE` + CAS), TTL pendek, terikat tenant sejak `start`. `code_challenge` S256; `code_verifier` server-side.
+- **Validasi ID token fail-closed** (`domain/oidc-policy.ts` + `lib/auth/jwt-verify.ts`) — algorithm allow-list `{RS256, ES256}` yang cocok dengan tipe key (tolak `none` + alg-confusion), signature WebCrypto native (tanpa dependency `jose`), issuer + audience + `azp` + expiry + `iat` + nonce.
+- **JWKS/discovery cache** — TTL terbatas + negative-TTL + circuit-breaker keyed `${tenantId}:${providerKey}`, **di luar** transaksi DB. Breaker hanya trip pada kegagalan transport/SSRF.
+- **Account linking eksplisit + step-up** — `POST /sso/{providerKey}/link` & `unlink` butuh sesi valid **dan** `requireStepUp` (#184). Identity diambil server-side dari sesi ter-step-up. Tak auto-link hanya karena email sama.
+- **Auto-link & JIT default OFF** — auto-link butuh master switch tenant + email verified + domain provider (dan domain policy bila diset). JIT membuat identity baru pada **privilege minimum** (tanpa role).
+- **Break-glass** — di-enforce saat SAVE policy (`saveTenantAuthPolicy`): `sso_required`/`password_login_disabled` butuh ≥1 owner break-glass aktif, else `409 BREAK_GLASS_REQUIRED`. Login-time `isPasswordLoginDisabledForIdentity` (digerbangi `isSsoEnabled`, dijalankan **sebelum** cabang MFA) menolak password-login non-break-glass. Outage IdP tak memblok break-glass.
+- **Admin & audit** — provider CRUD (`sso_providers.{read,create,update,delete}`) & policy (`sso_policy.{read,update}`), soft delete, audit high severity (link/unlink/provider/policy/JIT/login outcome) tanpa token/claim/secret mentah.
+
+Detail lengkap (auth flow, setup provider, break-glass SOP, privacy mapping, threat model): [`docs/awcms/oidc-sso.md`](../../../docs/awcms/oidc-sso.md) dan [ADR-0028](../../../docs/adr/0028-oidc-sso-tenant-aware-account-linking-break-glass.md).
+
 ## Belum tersedia (Sprint 3+)
 
-Endpoint manajemen user/role lanjutan, OIDC/SSO (#185), dan Turnstile (#186).
+Endpoint manajemen user/role lanjutan dan Turnstile (#186).

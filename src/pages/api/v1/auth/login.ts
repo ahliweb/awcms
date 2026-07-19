@@ -46,6 +46,8 @@ import {
   resolveMfaRequirement
 } from "../../../../modules/identity-access/domain/mfa-policy";
 import { fetchGrantedPermissionKeys } from "../../../../modules/identity-access/application/auth-context";
+import { isSsoEnabled } from "../../../../lib/auth/sso-config";
+import { isPasswordLoginDisabledForIdentity } from "../../../../modules/identity-access/application/tenant-auth-policy";
 import { log } from "../../../../lib/logging/logger";
 
 type LoginBody = { loginIdentifier?: unknown; password?: unknown };
@@ -343,6 +345,43 @@ export const POST: APIRoute = async ({
       const denyResponse = resolveLoginDenyResponse(result.reason);
 
       return fail(denyResponse.status, denyResponse.code, denyResponse.message);
+    }
+
+    // Issue #185 — tenant SSO break-glass gate. Reached ONLY after a valid
+    // password (the deny block above `return`ed otherwise), so it is never an
+    // account-enumeration oracle. When the tenant policy has
+    // `password_login_enabled=false`, only a configured break-glass identity may
+    // still complete a local password login; every other identity is refused
+    // here — BEFORE the MFA branches below, so a non-break-glass identity with
+    // an MFA factor cannot complete a challenge into a session and bypass the
+    // policy. Gated behind `isSsoEnabled()` so a deployment that never enables
+    // SSO runs no extra query and behaves exactly as before (and turning the
+    // feature flag off can never leave everyone locked out — password login is
+    // re-enabled in that case, availability-first). Break-glass identities fall
+    // through to the MFA branches, so any tenant MFA-enforcement policy still
+    // applies to them (that is how "break-glass wajib MFA" is satisfied).
+    if (
+      isSsoEnabled() &&
+      (await isPasswordLoginDisabledForIdentity(tx, tenantId, identityRow!.id))
+    ) {
+      await recordAuditEvent(tx, {
+        tenantId,
+        moduleKey: "identity_access",
+        action: "login_blocked_password_disabled",
+        resourceType: "identity",
+        resourceId: identityRow!.id,
+        severity: "warning",
+        message:
+          "Password sign-in blocked: tenant policy disables password login for this identity (not a break-glass owner).",
+        attributes: { method: "password", ...auditContext },
+        correlationId: locals.correlationId
+      });
+
+      return fail(
+        403,
+        "PASSWORD_LOGIN_DISABLED",
+        "Password sign-in is disabled for this account by tenant policy. Use single sign-on."
+      );
     }
 
     // Issue #184 — MFA challenge gate. Reached only AFTER a valid password (the

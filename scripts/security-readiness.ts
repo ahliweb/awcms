@@ -1422,6 +1422,89 @@ export function checkMfaEncryptionKeyConfigured(
 }
 
 // ---------------------------------------------------------------------------
+// OIDC/SSO client-secret encryption key is configured when SSO is enabled
+// (critical), and the SSRF escape hatch is not set in production (critical)
+// ---------------------------------------------------------------------------
+
+const SSO_KEY_PLACEHOLDERS = new Set(["change-me", "changeme", "secret", ""]);
+
+/**
+ * Issue #185 — when `AUTH_SSO_ENABLED=true`, the client-secret encryption key
+ * MUST be a real 32-byte AES-256 key (no default by design), otherwise every
+ * provider create/token-exchange fails closed (SSO_MISCONFIGURED) and an
+ * operator who believes SSO is configured has a non-functional login path. Also
+ * asserts the SSRF escape hatch `AUTH_SSO_ALLOW_INSECURE_HOSTS` (loopback/http
+ * for a local fake IdP in tests) is NOT set in production — leaving it set
+ * re-opens the SSRF surface this issue closes. `critical` because both silently
+ * defeat a security control the deployment declared it wanted.
+ */
+export function checkSsoCredentialEncryptionKeyConfigured(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name =
+    "OIDC/SSO client-secret encryption key is configured and SSRF escape hatch is off in production";
+  const severity: CheckSeverity = "critical";
+
+  if (
+    env.APP_ENV === "production" &&
+    (env.AUTH_SSO_ALLOW_INSECURE_HOSTS ?? "").trim() !== ""
+  ) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence:
+        "AUTH_SSO_ALLOW_INSECURE_HOSTS is set in production — this disables the OIDC SSRF guard's HTTPS/private-IP checks and must be empty outside tests."
+    };
+  }
+
+  if (env.AUTH_SSO_ENABLED !== "true") {
+    return {
+      name,
+      severity: "info",
+      status: "pass",
+      evidence: `AUTH_SSO_ENABLED is not "true" — tenant SSO is disabled by design, so its encryption key is not a live risk (not checked).`
+    };
+  }
+
+  const raw = env.AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY?.trim() ?? "";
+
+  if (SSO_KEY_PLACEHOLDERS.has(raw)) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence:
+        "AUTH_SSO_ENABLED=true but AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY is unset or a placeholder — there is no default key, so SSO provider secrets cannot be stored/used (fails closed)."
+    };
+  }
+
+  let byteLength = 0;
+  try {
+    byteLength = Buffer.from(raw, "base64").length;
+  } catch {
+    byteLength = 0;
+  }
+
+  if (byteLength !== 32) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY base64-decodes to ${byteLength} bytes, not 32 — AES-256-GCM requires exactly a 32-byte key (\`openssl rand -base64 32\`).`
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence:
+      "AUTH_SSO_ENABLED=true and AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY is a valid 32-byte AES-256 key; SSRF escape hatch is not set in production."
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 12. Login rate limiting is implemented (warning)
 // ---------------------------------------------------------------------------
 
@@ -1565,6 +1648,7 @@ export async function runSecurityReadinessChecks(): Promise<
     checkEnvConfigValid(),
     checkSyncHmacSecretNotDefault(),
     checkMfaEncryptionKeyConfigured(),
+    checkSsoCredentialEncryptionKeyConfigured(),
     checkLoginRateLimitImplemented(),
     checkSecurityHeadersBuilt()
   ];

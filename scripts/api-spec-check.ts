@@ -17,7 +17,14 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   "getSetupStatus",
   "postSetupInitialize",
   "postAuthLogin",
-  "postAuthMfaVerify"
+  "postAuthMfaVerify",
+  // Issue #185 — the OIDC SSO entry points are unauthenticated by design: a
+  // fresh browser navigation carries no session yet, and the callback is the
+  // IdP's own redirect target. Both are still tenant-bound (via `state`) and
+  // rate-limited; the callback trusts nothing until state/nonce/PKCE/ID-token
+  // all validate.
+  "getAuthSsoStart",
+  "getAuthSsoCallback"
 ]);
 
 /**
