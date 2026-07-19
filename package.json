@@ -40,6 +40,7 @@
     "domain-events:dispatch": "bun scripts/domain-events-dispatch.ts",
     "sync:objects:dispatch": "bun scripts/object-sync-dispatch.ts",
     "workflow:escalations:dispatch": "bun scripts/workflow-escalations-dispatch.ts",
+    "identity-access:business-scope:expiry": "bun scripts/identity-access-business-scope-expiry.ts",
     "logs:audit:purge": "bun scripts/audit-log-purge.ts",
     "email:dispatch": "bun scripts/email-dispatch.ts",
     "email:provider:health": "bun scripts/email-provider-health.ts",

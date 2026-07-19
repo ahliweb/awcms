@@ -2490,6 +2490,199 @@ paths:
                       generatedAt:
                         type: string
                         format: date-time
+  /api/v1/identity/business-scope/assignments:
+    get:
+      operationId: listBusinessScopeAssignments
+      tags:
+        - Identity & Access
+      summary: List this tenant's business-scope assignments (Issue
+      description: Lists business-scope assignments for the caller's tenant, optionally filtered by status/tenantUserId/scopeType. Gated on `identity_access.business_scope_assignments.read`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - active
+              - expired
+              - revoked
+        - name: tenantUserId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: scopeType
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The tenant's business-scope assignments (newest first, bounded).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      assignments:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BusinessScopeAssignment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createBusinessScopeAssignment
+      tags:
+        - Identity & Access
+      summary: Create a business-scope assignment (high-risk, audited, idempotent).
+      description: Grants a subject a role/permission context restricted to one business scope. The `(scopeType, scopeId)` reference is validated server-side through the `BusinessScopeHierarchyPort` capability (never trusted from the request alone); an unresolved scope is denied `SCOPE_UNRESOLVED`. Self-grant is denied. Gated on `identity_access.business_scope_assignments.create`. Requires `Idempotency-Key`.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenantUserId
+                - scopeType
+                - scopeId
+              properties:
+                tenantUserId:
+                  type: string
+                  format: uuid
+                roleId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                scopeType:
+                  type: string
+                  description: Lowercase snake_case scope type (e.g. "office").
+                scopeId:
+                  type: string
+                  format: uuid
+                effectiveFrom:
+                  type: string
+                  format: date-time
+                effectiveTo:
+                  type: string
+                  format: date-time
+                  nullable: true
+                isTemporary:
+                  type: boolean
+                reason:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: The created business-scope assignment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      assignment:
+                        $ref: "#/components/schemas/BusinessScopeAssignment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/identity/business-scope/assignments/{id}/revoke:
+    post:
+      operationId: revokeBusinessScopeAssignment
+      tags:
+        - Identity & Access
+      summary: Revoke a business-scope assignment (high-risk, audited, idempotent).
+      description: Revokes an active business-scope assignment (transitions it to `revoked`; append-only lifecycle history is recorded). Revocation takes effect on the next authorization decision immediately. Gated on `identity_access.business_scope_assignments.revoke`. Requires `Idempotency-Key`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - revokeReason
+              properties:
+                revokeReason:
+                  type: string
+      responses:
+        "200":
+          description: The revoked business-scope assignment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      assignment:
+                        $ref: "#/components/schemas/BusinessScopeAssignment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The assignment is not active, or the Idempotency-Key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/logs/audit:
     get:
       operationId: listAuditEvents
@@ -6500,6 +6693,70 @@ components:
           type: string
           nullable: true
         createdAt:
+          type: string
+          format: date-time
+    BusinessScopeAssignment:
+      type: object
+      description: One business-scope assignment (Issue
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        tenantUserId:
+          type: string
+          format: uuid
+        roleId:
+          type: string
+          format: uuid
+          nullable: true
+        scopeType:
+          type: string
+        scopeId:
+          type: string
+          format: uuid
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveTo:
+          type: string
+          format: date-time
+          nullable: true
+        isTemporary:
+          type: boolean
+        reason:
+          type: string
+          nullable: true
+        grantedByTenantUserId:
+          type: string
+          format: uuid
+        approvedByTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - expired
+            - revoked
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedByTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        revokeReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
           type: string
           format: date-time
     ModuleCatalogEntry:

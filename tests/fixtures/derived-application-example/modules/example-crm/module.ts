@@ -48,7 +48,13 @@ export const exampleCrmModule = defineModule({
     deploymentProfiles: ["development", "offline-lan"]
   },
   capabilities: {
-    provides: ["example_crm_directory"],
+    // Issue #180 — a derived module PROVIDES the `business_scope_hierarchy`
+    // capability that base `identity_access` optionally consumes. The
+    // concrete adapter is `business-scope-hierarchy-adapter.ts` in this same
+    // fixture directory (a dummy in-memory resolver); a real derived module
+    // would walk its own effective-dated organization tables. Proves the
+    // capability seam end-to-end without a real domain module in the base.
+    provides: ["example_crm_directory", "business_scope_hierarchy"],
     consumes: [
       {
         capability: "reporting_projection",
