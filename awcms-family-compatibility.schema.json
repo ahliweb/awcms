@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/ahliweb/awcms/awcms-family-compatibility.schema.json",
+  "title": "AWCMS family compatibility manifest",
+  "description": "Schema for awcms-family-compatibility.yaml (Issue #183, epic #177). The authoritative validator is validateFamilyManifestShape() in src/modules/_shared/family-contract.ts; this document mirrors it for external/human tooling and its top-level `required` list is kept in parity with REQUIRED_TOP_LEVEL_KEYS by scripts/family-conformance-check.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestSchemaVersion",
+    "familyContractVersion",
+    "family",
+    "contracts",
+    "stack",
+    "intentionalDivergences"
+  ],
+  "properties": {
+    "manifestSchemaVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Version of this manifest document's schema. Must equal MANIFEST_SCHEMA_VERSION in family-contract.ts."
+    },
+    "familyContractVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "The overall family-contract version every pinned fixture/snapshot is anchored to. Must equal FAMILY_CONTRACT_VERSION."
+    },
+    "family": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["standard", "standardRepository", "role"],
+      "properties": {
+        "standard": { "type": "string", "minLength": 1 },
+        "standardRepository": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 }
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "moduleDescriptorContractVersion",
+        "capabilityContractVersions",
+        "apiResponseEnvelopeVersion",
+        "restApiInfoVersion",
+        "eventApiInfoVersion",
+        "tenantContextRlsContractVersion",
+        "auditRedactionContractVersion",
+        "idempotencyContractVersion",
+        "migrationChecksum"
+      ],
+      "properties": {
+        "moduleDescriptorContractVersion": { "type": "string", "minLength": 1 },
+        "capabilityContractVersions": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "apiResponseEnvelopeVersion": { "type": "string", "minLength": 1 },
+        "restApiInfoVersion": { "type": "string", "minLength": 1 },
+        "eventApiInfoVersion": { "type": "string", "minLength": 1 },
+        "tenantContextRlsContractVersion": { "type": "string", "minLength": 1 },
+        "auditRedactionContractVersion": { "type": "string", "minLength": 1 },
+        "idempotencyContractVersion": { "type": "string", "minLength": 1 },
+        "migrationChecksum": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "version"],
+          "properties": {
+            "algorithm": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bun", "astro", "astroNode", "typescript", "postgres"],
+      "properties": {
+        "bun": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["packageManager", "engines", "ci", "ciMinimum"],
+          "properties": {
+            "packageManager": { "$ref": "#/definitions/stackEntry" },
+            "engines": { "$ref": "#/definitions/stackEntry" },
+            "ci": { "$ref": "#/definitions/stackEntry" },
+            "ciMinimum": { "$ref": "#/definitions/stackEntry" }
+          }
+        },
+        "astro": { "$ref": "#/definitions/stackEntry" },
+        "astroNode": { "$ref": "#/definitions/stackEntry" },
+        "typescript": { "$ref": "#/definitions/stackEntry" },
+        "postgres": { "$ref": "#/definitions/stackEntry" }
+      }
+    },
+    "intentionalDivergences": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/divergence" }
+    }
+  },
+  "definitions": {
+    "stackEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "source"],
+      "properties": {
+        "declared": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    },
+    "divergence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "summary", "reason", "owner", "reviewDate", "adr"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "summary": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "owner": { "type": "string", "minLength": 1 },
+        "reviewDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "adr": { "type": "string", "pattern": "^\\d{4}-.*\\.md$" },
+        "since": { "type": "string" }
+      }
+    }
+  }
+}

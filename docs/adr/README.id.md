@@ -58,5 +58,11 @@ flowchart LR
 | [0024](0024-semver-numbering-continues-legacy-major-line.md)          | Penomoran SemVer melanjutkan lini major legacy (lompat ke 5.0.0), bukan reset ke 1.0.0            | Accepted |
 | [0025](0025-implement-deterministic-build-time-module-composition.md) | Implementasi nyata komposisi modul deterministik build-time di awcms (adendum ADR-0014)           | Accepted |
 | [0026](0026-modular-openapi-ownership-and-composition.md)             | Kontrak OpenAPI modular: kepemilikan per modul, bundle deterministik, kontribusi fragment turunan | Accepted |
+| [0027](0027-mfa-totp-session-assurance-step-up.md)                    | MFA TOTP, recovery codes, session assurance (aal1/aal2), dan step-up                              | Accepted |
+| [0028](0028-oidc-sso-tenant-aware-account-linking-break-glass.md)     | OIDC/SSO tenant-aware, account linking fail-closed, SSRF guard, dan break-glass                   | Accepted |
+| [0029](0029-deployment-profile-aware-turnstile-bot-protection.md)     | Cloudflare Turnstile bot protection sadar profil deployment (LAN/offline exempt)                  | Accepted |
+| [0030](0030-business-scope-hierarchy-generic-authorization-layer.md)  | Lapisan authorization generik business-scope hierarchy (multi-entity/unit)                        | Accepted |
+| [0031](0031-segregation-of-duties-conflict-enforcement.md)            | Segregation of duties (SoD) generik, exception/override, conflict enforcement                     | Accepted |
+| [0032](0032-family-compatibility-manifest-and-ci-conformance.md)      | Compatibility manifest keluarga + CI conformance terhadap standar AWCMS-Mini                      | Accepted |
 
 ADR spesifik skop fondasi ERP & integrasi bisnis ditambahkan mulai nomor berikutnya seiring keputusan diambil.

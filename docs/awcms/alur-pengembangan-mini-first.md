@@ -63,7 +63,8 @@ standar dasar (lihat [`GOVERNANCE.md`](../../GOVERNANCE.md)).
    terkait agar cocok dengan kode yang di-port.
 5. **Tulis/port test** — pastikan test ikut dibawa dan lulus di repo ini.
 6. **Validasi lokal** — `bun run check` hijau sebelum membuka PR.
-7. **Changeset** — tambahkan bila perilaku berubah (kebijakan SemVer
+7. **Family conformance** — bila port menaikkan versi kontrak (module/capability/OpenAPI/AsyncAPI), mengubah versi stack, mengubah semantik kontrol reusable, atau menambah perbedaan sengaja dari mini, perbarui [`awcms-family-compatibility.yaml`](../../awcms-family-compatibility.yaml) dan pastikan `bun run family:conformance:check` hijau (bagian dari `bun run check`) — lihat [`family-compatibility.md`](family-compatibility.md).
+8. **Changeset** — tambahkan bila perilaku berubah (kebijakan SemVer
    [doc 09](09_roadmap_repository_commit.md)).
 
 ## 4. Implikasi untuk agent

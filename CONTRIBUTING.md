@@ -92,6 +92,7 @@ Sebuah PR dianggap selesai jika:
 - Soft delete diterapkan untuk resource yang deletable; data yang sudah posted/final tetap immutable.
 - Test relevan lulus; build lulus; CI hijau.
 - Dokumentasi diperbarui; changeset ditambahkan bila perilaku berubah.
+- Bila perubahan menyentuh kontrak keluarga (versi module/capability/OpenAPI/AsyncAPI, versi stack, atau semantik kontrol reusable): `awcms-family-compatibility.yaml` diperbarui dan `bun run family:conformance:check` hijau — lihat [`docs/awcms/family-compatibility.md`](docs/awcms/family-compatibility.md).
 - Tidak ada secret/data sensitif dalam diff.
 
 ## Review
