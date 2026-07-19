@@ -903,6 +903,530 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sso-policy:
+    get:
+      operationId: getSsoPolicy
+      tags:
+        - Identity & Access
+      summary: Read the tenant authentication policy (password/SSO/JIT/break-glass).
+      responses:
+        "200":
+          description: The tenant authentication policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TenantAuthPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      operationId: updateSsoPolicy
+      tags:
+        - Identity & Access
+      summary: Update the tenant authentication policy (partial upsert; high-risk; audit-logged; break-glass enforced server-side).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                passwordLoginEnabled:
+                  type: boolean
+                ssoEnabled:
+                  type: boolean
+                ssoRequired:
+                  type: boolean
+                autoLinkVerifiedEmail:
+                  type: boolean
+                jitProvisioningEnabled:
+                  type: boolean
+                allowedEmailDomains:
+                  type: array
+                  items:
+                    type: string
+                breakGlassIdentityIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: The updated policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TenantAuthPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: sso_required/password_login_disabled without an eligible break-glass owner (BREAK_GLASS_REQUIRED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sso-providers:
+    get:
+      operationId: listSsoProviders
+      tags:
+        - Identity & Access
+      summary: List the tenant's configured OIDC SSO providers (client secrets are never returned).
+      responses:
+        "200":
+          description: The tenant's SSO providers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      providers:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SsoProvider"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createSsoProvider
+      tags:
+        - Identity & Access
+      summary: Add a tenant OIDC SSO provider (high-risk; audit-logged). Exactly one of clientSecret / clientSecretEnvVar.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - providerKey
+                - displayName
+                - issuerUrl
+                - clientId
+              properties:
+                providerKey:
+                  type: string
+                  description: Stable slug (^[a-z0-9][a-z0-9_-]*$), used in the /sso/{providerKey}/... path.
+                displayName:
+                  type: string
+                issuerUrl:
+                  type: string
+                  description: HTTPS issuer/discovery base URL.
+                clientId:
+                  type: string
+                clientSecret:
+                  type: string
+                  nullable: true
+                  description: Plaintext client secret (encrypted at rest; never returned). Provide this OR clientSecretEnvVar.
+                clientSecretEnvVar:
+                  type: string
+                  nullable: true
+                  description: Name of an env var holding the secret (resolved at token-exchange time; never persisted).
+                scopes:
+                  type: string
+                allowedEmailDomains:
+                  type: array
+                  items:
+                    type: string
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: The created provider.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SsoProvider"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: providerKey conflict or per-tenant provider limit reached (SSO_PROVIDER_KEY_CONFLICT / SSO_PROVIDER_LIMIT_EXCEEDED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: The credential encryption key is not configured (SSO_MISCONFIGURED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sso-providers/{id}:
+    get:
+      operationId: getSsoProvider
+      tags:
+        - Identity & Access
+      summary: Read one tenant OIDC SSO provider (client secret never returned).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The provider.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SsoProvider"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateSsoProvider
+      tags:
+        - Identity & Access
+      summary: Update a tenant OIDC SSO provider (partial; high-risk; audit-logged).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                issuerUrl:
+                  type: string
+                clientId:
+                  type: string
+                clientSecret:
+                  type: string
+                  nullable: true
+                clientSecretEnvVar:
+                  type: string
+                  nullable: true
+                scopes:
+                  type: string
+                allowedEmailDomains:
+                  type: array
+                  items:
+                    type: string
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: The updated provider.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SsoProvider"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          description: The credential encryption key is not configured (SSO_MISCONFIGURED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteSsoProvider
+      tags:
+        - Identity & Access
+      summary: Soft delete a tenant OIDC SSO provider (reason required; high-risk; audit-logged).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: The provider was soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/auth/sso/{providerKey}/callback:
+    get:
+      operationId: getAuthSsoCallback
+      tags:
+        - Identity & Access
+      summary: OIDC provider redirect target — validates state/nonce/PKCE/ID-token, then mints an opaque awcms session (or a 401 MFA_REQUIRED).
+      security: []
+      parameters:
+        - name: providerKey
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Login (or link) succeeded — redirect to the return path.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The provider account is already linked (SSO_ALREADY_LINKED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: The provider could not be reached (SSO_PROVIDER_UNAVAILABLE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sso/{providerKey}/link:
+    post:
+      operationId: postAuthSsoLink
+      tags:
+        - Identity & Access
+      summary: Explicitly link an OIDC provider account to the caller's identity (authenticated + step-up required; never auto-links by email).
+      parameters:
+        - name: providerKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The provider authorization URL to complete the link.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      authorizationUrl:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          description: The provider could not be reached (SSO_PROVIDER_UNAVAILABLE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sso/{providerKey}/start:
+    get:
+      operationId: getAuthSsoStart
+      tags:
+        - Identity & Access
+      summary: Begin an OIDC SSO login — 302-redirects to the tenant provider's authorization endpoint (Auth Code + PKCE + state + nonce).
+      security: []
+      parameters:
+        - name: providerKey
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tenantId
+          in: query
+          required: false
+          description: Tenant id fallback when no tenant header/cookie is present (a fresh browser navigation).
+          schema:
+            type: string
+            format: uuid
+        - name: returnTo
+          in: query
+          required: false
+          description: Same-origin relative path to return to after login (sanitized server-side; open-redirect targets are ignored).
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the provider's authorization endpoint.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          description: Too many requests from this source (RATE_LIMITED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: The provider could not be reached (SSO_PROVIDER_UNAVAILABLE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sso/{providerKey}/unlink:
+    post:
+      operationId: postAuthSsoUnlink
+      tags:
+        - Identity & Access
+      summary: Unlink the caller's OIDC provider account (authenticated + step-up required; audit-logged).
+      parameters:
+        - name: providerKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The provider account was unlinked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      unlinked:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: No provider account is currently linked (SSO_NOT_LINKED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/database/pool/health:
     get:
       operationId: getDatabasePoolHealth
@@ -6235,6 +6759,74 @@ components:
           type: boolean
         permissionCount:
           type: integer
+    SsoProvider:
+      type: object
+      description: A tenant OIDC SSO provider. The client secret is never included — only whether one is configured and, for the env-referenced case, the variable name.
+      properties:
+        id:
+          type: string
+          format: uuid
+        providerKey:
+          type: string
+        providerType:
+          type: string
+        displayName:
+          type: string
+        issuerUrl:
+          type: string
+        clientId:
+          type: string
+        secretSource:
+          type: string
+          enum:
+            - encrypted
+            - env
+        clientSecretEnvVar:
+          type: string
+          nullable: true
+        scopes:
+          type: string
+        allowedEmailDomains:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TenantAuthPolicy:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        passwordLoginEnabled:
+          type: boolean
+        ssoEnabled:
+          type: boolean
+        ssoRequired:
+          type: boolean
+        autoLinkVerifiedEmail:
+          type: boolean
+        jitProvisioningEnabled:
+          type: boolean
+        allowedEmailDomains:
+          type: array
+          items:
+            type: string
+        breakGlassIdentityIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
     TenantMfaPolicy:
       type: object
       properties:

@@ -682,6 +682,230 @@ Authenticated by possession of the mfaChallengeToken from POST /auth/login, not 
 | 429    | Too many verification attempts from this source. | [`ApiError`](#standard-error-envelope) |
 | 500    | MFA misconfigured.                               | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/auth/sso-policy` — Read the tenant authentication policy (password/SSO/JIT/break-glass).
+
+- **operationId**: `getSsoPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+**Responses**
+
+| Status | Description                       | Schema                                 |
+| ------ | --------------------------------- | -------------------------------------- |
+| 200    | The tenant authentication policy. | object                                 |
+| 400    | Validation error.                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.       | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/auth/sso-policy` — Update the tenant authentication policy (partial upsert; high-risk; audit-logged; break-glass enforced server-side).
+
+- **operationId**: `updateSsoPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                        | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The updated policy.                                                                                | object                                 |
+| 400    | Validation error.                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | sso_required/password_login_disabled without an eligible break-glass owner (BREAK_GLASS_REQUIRED). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/auth/sso-providers` — List the tenant's configured OIDC SSO providers (client secrets are never returned).
+
+- **operationId**: `listSsoProviders`
+- **Security**: bearerAuth + tenantHeader
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The tenant's SSO providers. | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/sso-providers` — Add a tenant OIDC SSO provider (high-risk; audit-logged). Exactly one of clientSecret / clientSecretEnvVar.
+
+- **operationId**: `createSsoProvider`
+- **Security**: bearerAuth + tenantHeader
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                          | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The created provider.                                                                                                | object                                 |
+| 400    | Validation error.                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | providerKey conflict or per-tenant provider limit reached (SSO_PROVIDER_KEY_CONFLICT / SSO_PROVIDER_LIMIT_EXCEEDED). | [`ApiError`](#standard-error-envelope) |
+| 500    | The credential encryption key is not configured (SSO_MISCONFIGURED).                                                 | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/auth/sso-providers/{id}` — Read one tenant OIDC SSO provider (client secret never returned).
+
+- **operationId**: `getSsoProvider`
+- **Security**: bearerAuth + tenantHeader
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The provider.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/auth/sso-providers/{id}` — Update a tenant OIDC SSO provider (partial; high-risk; audit-logged).
+
+- **operationId**: `updateSsoProvider`
+- **Security**: bearerAuth + tenantHeader
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                          | Schema                                 |
+| ------ | -------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The updated provider.                                                | object                                 |
+| 400    | Validation error.                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                  | [`ApiError`](#standard-error-envelope) |
+| 500    | The credential encryption key is not configured (SSO_MISCONFIGURED). | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/auth/sso-providers/{id}` — Soft delete a tenant OIDC SSO provider (reason required; high-risk; audit-logged).
+
+- **operationId**: `deleteSsoProvider`
+- **Security**: bearerAuth + tenantHeader
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                    | Schema                                 |
+| ------ | ------------------------------ | -------------------------------------- |
+| 200    | The provider was soft-deleted. | object                                 |
+| 400    | Validation error.              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.            | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/auth/sso/{providerKey}/callback` — OIDC provider redirect target — validates state/nonce/PKCE/ID-token, then mints an opaque awcms session (or a 401 MFA_REQUIRED).
+
+- **operationId**: `getAuthSsoCallback`
+- **Security**: none (public endpoint)
+
+**Parameters**
+
+| Name          | In    | Required | Type   | Description |
+| ------------- | ----- | -------- | ------ | ----------- |
+| `providerKey` | path  | yes      | string |             |
+| `state`       | query | no       | string |             |
+| `code`        | query | no       | string |             |
+| `error`       | query | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                   | Schema                                 |
+| ------ | ------------------------------------------------------------- | -------------------------------------- |
+| 302    | Login (or link) succeeded — redirect to the return path.      |                                        |
+| 400    | Validation error.                                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | The provider account is already linked (SSO_ALREADY_LINKED).  | [`ApiError`](#standard-error-envelope) |
+| 502    | The provider could not be reached (SSO_PROVIDER_UNAVAILABLE). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/sso/{providerKey}/link` — Explicitly link an OIDC provider account to the caller's identity (authenticated + step-up required; never auto-links by email).
+
+- **operationId**: `postAuthSsoLink`
+- **Security**: bearerAuth + tenantHeader
+
+**Parameters**
+
+| Name          | In   | Required | Type   | Description |
+| ------------- | ---- | -------- | ------ | ----------- |
+| `providerKey` | path | yes      | string |             |
+
+**Responses**
+
+| Status | Description                                                   | Schema                                 |
+| ------ | ------------------------------------------------------------- | -------------------------------------- |
+| 200    | The provider authorization URL to complete the link.          | object                                 |
+| 400    | Validation error.                                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                           | [`ApiError`](#standard-error-envelope) |
+| 502    | The provider could not be reached (SSO_PROVIDER_UNAVAILABLE). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/auth/sso/{providerKey}/start` — Begin an OIDC SSO login — 302-redirects to the tenant provider's authorization endpoint (Auth Code + PKCE + state + nonce).
+
+- **operationId**: `getAuthSsoStart`
+- **Security**: none (public endpoint)
+
+**Parameters**
+
+| Name          | In    | Required | Type          | Description                                                                                                    |
+| ------------- | ----- | -------- | ------------- | -------------------------------------------------------------------------------------------------------------- |
+| `providerKey` | path  | yes      | string        |                                                                                                                |
+| `tenantId`    | query | no       | string (uuid) | Tenant id fallback when no tenant header/cookie is present (a fresh browser navigation).                       |
+| `returnTo`    | query | no       | string        | Same-origin relative path to return to after login (sanitized server-side; open-redirect targets are ignored). |
+
+**Responses**
+
+| Status | Description                                                   | Schema                                 |
+| ------ | ------------------------------------------------------------- | -------------------------------------- |
+| 302    | Redirect to the provider's authorization endpoint.            |                                        |
+| 400    | Validation error.                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                           | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many requests from this source (RATE_LIMITED).            | [`ApiError`](#standard-error-envelope) |
+| 502    | The provider could not be reached (SSO_PROVIDER_UNAVAILABLE). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/sso/{providerKey}/unlink` — Unlink the caller's OIDC provider account (authenticated + step-up required; audit-logged).
+
+- **operationId**: `postAuthSsoUnlink`
+- **Security**: bearerAuth + tenantHeader
+
+**Parameters**
+
+| Name          | In   | Required | Type   | Description |
+| ------------- | ---- | -------- | ------ | ----------- |
+| `providerKey` | path | yes      | string |             |
+
+**Responses**
+
+| Status | Description                                               | Schema                                 |
+| ------ | --------------------------------------------------------- | -------------------------------------- |
+| 200    | The provider account was unlinked.                        | object                                 |
+| 400    | Validation error.                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | No provider account is currently linked (SSO_NOT_LINKED). | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/roles` — List the current tenant's (non-deleted) roles with a permission count.
 
 - **operationId**: `listRoles`

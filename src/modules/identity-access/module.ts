@@ -37,6 +37,38 @@ export const identityAccessModule = defineModule({
       activityCode: "mfa_admin",
       action: "configure",
       description: "Configure the tenant MFA enforcement policy"
+    },
+    {
+      activityCode: "sso_providers",
+      action: "read",
+      description: "Read tenant OIDC SSO provider configuration"
+    },
+    {
+      activityCode: "sso_providers",
+      action: "create",
+      description: "Add a tenant OIDC SSO provider"
+    },
+    {
+      activityCode: "sso_providers",
+      action: "update",
+      description: "Update a tenant OIDC SSO provider"
+    },
+    {
+      activityCode: "sso_providers",
+      action: "delete",
+      description: "Soft delete a tenant OIDC SSO provider"
+    },
+    {
+      activityCode: "sso_policy",
+      action: "read",
+      description:
+        "Read tenant authentication policy (password/SSO/break-glass)"
+    },
+    {
+      activityCode: "sso_policy",
+      action: "update",
+      description:
+        "Update tenant authentication policy (password/SSO/break-glass)"
     }
   ]
 });
