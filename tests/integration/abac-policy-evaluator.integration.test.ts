@@ -54,6 +54,7 @@ import { POST as createPolicyRoute } from "../../src/pages/api/v1/access/policie
 import { POST as enablePolicy } from "../../src/pages/api/v1/access/policies/[id]/enable";
 import { POST as disablePolicy } from "../../src/pages/api/v1/access/policies/[id]/disable";
 import { POST as simulatePolicy } from "../../src/pages/api/v1/access/policies/simulate";
+import { POST as createFlatPolicy } from "../../src/pages/api/v1/abac/policies/index";
 
 const OWNER_PASSWORD = "integration-test-owner-password";
 const TENANT_B_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -326,6 +327,77 @@ suite("dynamic ABAC policy evaluator (Issue #179)", () => {
         WHERE tenant_id = ${owner.tenantId}
       `) as { count: number }[];
       expect(rows[0]!.count).toBe(0);
+    });
+  });
+
+  describe("flat #171 surface is NOT consumed by the evaluator (deny-all lockout closed)", () => {
+    test("a flat #171 deny policy is INERT — it does not lock the tenant out", async () => {
+      if (skipUnlessHandlerReady()) return;
+      const owner = await bootstrap();
+
+      // Baseline: the owner holds access_control.read via RBAC.
+      const baseline = await evaluate(owner);
+      expect(baseline.allowed).toBe(true);
+      expect(baseline.matchedPolicy).toBe("role_permission");
+
+      // Author a policy through the FLAT #171 surface (`/api/v1/abac/policies`).
+      // It writes ONLY policy_code/effect/description — it CANNOT scope or
+      // condition the policy. Pre-fix, sql/031's defaults (wildcard applicability
+      // + vacuously-true `{"allOf":[]}` + is_active default true) turned this
+      // into a wildcard, always-true DENY that the evaluator matched on EVERY
+      // request — bricking the whole tenant (and the operator's own recovery).
+      const flat = await invoke<{ data: { id: string } }>(createFlatPolicy, {
+        method: "POST",
+        path: "/api/v1/abac/policies",
+        headers: headers(owner),
+        body: { policyCode: "flat.deny-all", effect: "deny" }
+      });
+      expect(flat.status).toBe(201);
+
+      // Prove the row IS the dangerous shape: active, wildcard, vacuously-true —
+      // and, crucially, is_dsl_managed = false (the discriminator that keeps it
+      // out of the evaluator).
+      const rows = (await getHandlerAdminSql()`
+        SELECT effect, is_active, is_dsl_managed, module_key, activity_code,
+               action, resource_type, conditions
+        FROM awcms_abac_policies
+        WHERE tenant_id = ${owner.tenantId} AND policy_code = 'flat.deny-all'
+      `) as {
+        effect: string;
+        is_active: boolean;
+        is_dsl_managed: boolean;
+        module_key: string | null;
+        activity_code: string | null;
+        action: string | null;
+        resource_type: string | null;
+        conditions: unknown;
+      }[];
+      expect(rows.length).toBe(1);
+      const row = rows[0]!;
+      expect(row.effect).toBe("deny");
+      expect(row.is_active).toBe(true);
+      expect(row.is_dsl_managed).toBe(false); // the fix: flat rows are inert
+      expect(row.module_key).toBeNull();
+      expect(row.activity_code).toBeNull();
+      expect(row.action).toBeNull();
+      expect(row.resource_type).toBeNull();
+      expect(row.conditions).toEqual({ allOf: [] });
+
+      // THE REGRESSION PROOF: the flat deny is NOT consumed. The tenant is not
+      // locked out — the very same guarded request is STILL allowed by RBAC.
+      // (Without the `is_dsl_managed = true` filter in policy-cache.ts this
+      // evaluate would return allowed:false, matchedPolicy 'flat.deny-all'.)
+      const afterFlat = await evaluate(owner);
+      expect(afterFlat.allowed).toBe(true);
+      expect(afterFlat.matchedPolicy).toBe("role_permission");
+
+      // And the compiler/cache loads ZERO policies for the tenant — the flat row
+      // is never even loaded.
+      const client = getHandlerDatabaseClient();
+      const active = await withTenant(client, owner.tenantId, (tx) =>
+        loadActivePolicies(tx, owner.tenantId)
+      );
+      expect(active.length).toBe(0);
     });
   });
 

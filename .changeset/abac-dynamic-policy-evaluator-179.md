@@ -34,6 +34,19 @@ guards alone. Ported from awcms-mini (ADR-0033).
   new DSL surface AND the pre-existing flat `/api/v1/abac/policies` CRUD (#171),
   which now also invalidates so it can never bypass the evaluator. Per-process
   invalidation is a documented limitation.
+- **Two surfaces, one table — but the evaluator consumes ONLY DSL-managed
+  policies.** A new `is_dsl_managed` discriminator (`sql/031`, default `false`)
+  separates the two authoring surfaces: the flat #171 CRUD (which can set neither
+  applicability nor a condition) leaves rows `is_dsl_managed = false`, and the
+  cache loads ONLY `is_active AND is_dsl_managed` rows — so a flat row is NEVER
+  evaluated and stays inert (its exact pre-#179 behavior). This closes a
+  full-tenant lockout: a flat `deny` used to present as a wildcard, always-true
+  DENY that bricked every request (including the operator's own
+  `access_control.configure` — no in-band recovery); the migration is now
+  deploy-safe (a pre-existing inert flat `deny` is not activated on migrate).
+  Only the DSL surface sets `is_dsl_managed = true` (INSERT + UPDATE).
+  Defense-in-depth: the DSL validator additionally REJECTS an unscoped +
+  unconditional (`{allOf:[]}`) deny. See ADR-0033 §3.
 - **Admin API.** New `GET/POST /api/v1/access/policies`,
   `GET/PUT /api/v1/access/policies/{id}`,
   `POST /api/v1/access/policies/{id}/{enable,disable}` (guarded

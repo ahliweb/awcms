@@ -8,19 +8,22 @@
 -- CRUD) and was never read by the evaluator.
 --
 -- Pure additive ALTER: every new column has a DEFAULT so applying this to an
--- already-populated table backfills existing rows with a no-op condition
--- (`{"allOf":[]}` — vacuously true, but effect-neutral because an allow-policy
--- with a satisfied condition merely CONSTRAINS an already-RBAC-granted
--- permission, while a deny-policy needs the operator's own matching semantics;
--- see ADR-0033 for the precedence model). No existing tenant's authorization
--- behavior changes until it authors a policy: the evaluator is a no-op for any
--- tenant with an empty active-policy set.
+-- already-populated table backfills existing rows harmlessly. The backfill is a
+-- NO-OP for authorization: pre-existing rows (all authored by #171's flat CRUD,
+-- which writes only effect/description/is_active) default to
+-- `is_dsl_managed = false` and are therefore NEVER read by the evaluator (see
+-- the discriminator column below + ADR-0033 §3). Their `conditions` default
+-- (`{"allOf":[]}`) and NULL applicability are inert because the evaluator never
+-- loads them. No existing tenant's authorization behavior changes on migrate:
+-- the evaluator is a no-op for any tenant with no DSL-managed active policy.
 --
--- NOTE (footgun, documented in ADR-0033 + the identity-access README): a policy
--- authored via #171's flat `/api/v1/abac/policies` CRUD gets these defaults —
--- wildcard applicability (all four cols NULL) + vacuously-true condition. A
--- flat `deny` policy so authored + enabled therefore denies EVERY request for
--- that tenant; scoping requires the DSL surface (`/api/v1/access/policies`).
+-- Discriminator (`is_dsl_managed`, added below): flat #171 rows stay
+-- `is_dsl_managed = false` and are NEVER consumed by the evaluator; ONLY the DSL
+-- surface (`/api/v1/access/policies`) sets `is_dsl_managed = true`. So a flat
+-- policy (which cannot be scoped or conditioned) stays inert regardless of
+-- effect/is_active, and this migration is deploy-safe: a pre-existing inert flat
+-- `deny` is NOT activated by adding the DSL columns. See ADR-0033 + the
+-- identity-access README.
 --
 -- RLS: `awcms_abac_policies` and `awcms_abac_decision_logs` already `ENABLE`
 -- (sql/005) + `FORCE ROW LEVEL SECURITY` (sql/017) with a
@@ -53,6 +56,19 @@ ALTER TABLE awcms_abac_policies
   ADD COLUMN IF NOT EXISTS conditions jsonb NOT NULL DEFAULT '{"allOf":[]}'::jsonb,
   ADD COLUMN IF NOT EXISTS priority integer NOT NULL DEFAULT 100;
 
+-- 2b. Discriminator: is a row a DSL-authored policy the evaluator should CONSUME?
+--     The flat #171 CRUD (`/api/v1/abac/policies`) writes only
+--     effect/description/is_active — it CANNOT scope or condition a policy, so a
+--     flat row would otherwise present to the evaluator as a wildcard,
+--     vacuously-true policy (a flat `deny` = deny EVERY request = full-tenant
+--     lockout with no in-band recovery). Guard against that structurally: only
+--     the DSL surface (`/api/v1/access/policies`) sets `is_dsl_managed = true`,
+--     and the evaluator's cache loads ONLY `is_dsl_managed = true` rows. Default
+--     `false` keeps every pre-existing and future flat row INERT (its exact
+--     pre-#179 behavior — never consumed). See ADR-0033 §3.
+ALTER TABLE awcms_abac_policies
+  ADD COLUMN IF NOT EXISTS is_dsl_managed boolean NOT NULL DEFAULT false;
+
 -- 3. `conditions` must be a JSON object (an AST node), never a scalar/array/
 --    null. Defense-in-depth against a raw INSERT that bypasses the
 --    application-layer validator; the validator is still the authority on the
@@ -71,12 +87,14 @@ ALTER TABLE awcms_abac_policies
     CHECK (dsl_version >= 1);
 
 -- 5. Hot-path index for the per-tenant active-policy load the evaluator's cache
---    issues on a cache miss (`WHERE tenant_id = $1 AND is_active`). Partial on
---    `is_active` because the evaluator only ever loads active policies; ordered
+--    issues on a cache miss
+--    (`WHERE tenant_id = $1 AND is_active AND is_dsl_managed`). Partial on BOTH
+--    `is_active` AND `is_dsl_managed` because the evaluator only ever loads
+--    active, DSL-managed policies (flat #171 rows are never consumed); ordered
 --    by priority/policy_code for a deterministic scan.
 CREATE INDEX IF NOT EXISTS awcms_abac_policies_active_idx
   ON awcms_abac_policies (tenant_id, priority, policy_code)
-  WHERE is_active;
+  WHERE is_active AND is_dsl_managed;
 
 -- 6. Record which policy VERSION produced a logged decision, alongside the
 --    already-present `matched_policy` (code). Nullable: built-in guards

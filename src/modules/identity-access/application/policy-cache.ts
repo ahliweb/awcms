@@ -11,6 +11,16 @@
  * `invalidatePolicyCache(tenantId)` AFTER its transaction commits, bumping a
  * per-tenant version so the next load re-queries. No restart, no TTL races.
  *
+ * WHAT IS EVALUATED: ONLY DSL-managed policies. `queryAndCompile` filters
+ * `is_dsl_managed = true` (sql/031), so a row authored by the flat #171 CRUD
+ * (which can set neither applicability nor a condition, and would otherwise
+ * present as a wildcard, always-true policy — a flat `deny` bricking the whole
+ * tenant) is NEVER loaded, compiled, or evaluated. That makes the flat surface's
+ * own `invalidatePolicyCache` call a HARMLESS defensive no-op: flat rows are not
+ * consumed, so there is no stale snapshot for them to correct. It is kept only
+ * so the wiring stays uniform if a flat row is ever promoted to DSL-managed via
+ * the DSL surface. See ADR-0033 §3.
+ *
  * Tenant isolation: entries are keyed by tenant id and every DB read runs
  * inside `withTenant` (RLS-enforced, non-superuser `awcms_app` role in
  * production), so one tenant's cache entry can never contain another tenant's
@@ -119,7 +129,7 @@ async function queryAndCompile(
     SELECT policy_code, effect, module_key, activity_code, action, resource_type,
            dsl_version, priority, conditions
     FROM awcms_abac_policies
-    WHERE tenant_id = ${tenantId} AND is_active = true
+    WHERE tenant_id = ${tenantId} AND is_active = true AND is_dsl_managed = true
     ORDER BY priority ASC, policy_code ASC
   `) as PolicyRow[];
 

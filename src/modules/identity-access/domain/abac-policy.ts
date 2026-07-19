@@ -528,6 +528,22 @@ function normalizeNullableString(value: unknown): string | null {
 }
 
 /**
+ * Whether a condition is TRIVIALLY, structurally true — an empty `allOf`
+ * (`{"allOf":[]}`, the migration default, vacuously true). This is a DELIBERATELY
+ * narrow, syntactic check, NOT a general tautology detector: a hand-crafted
+ * always-true condition (e.g. `{anyOf:[{allOf:[]}]}` or `not: anyOf:[]`) is not
+ * matched here on purpose. Authoring such a policy is a self-inflicted admin
+ * action of the same class as deleting every role — the base rejects only the
+ * obvious empty-`allOf` footgun that the flat-CRUD default would otherwise
+ * mint (see the Part-B guard in `validateAbacPolicyInput` + ADR-0033 §3).
+ */
+function isTriviallyTrueCondition(node: AbacConditionNode): boolean {
+  return (
+    "allOf" in node && Array.isArray(node.allOf) && node.allOf.length === 0
+  );
+}
+
+/**
  * Validate a full policy authoring payload. Enforces: a sane policy_code, a
  * known effect, a supported dsl_version, a bounded priority, and — the crux —
  * a valid condition AST. Only a payload that passes here may be stored/enabled
@@ -600,6 +616,29 @@ export function validateAbacPolicyInput(raw: unknown): AbacPolicyValidation {
   const parsed = parseAbacCondition(raw.conditions);
   if (!parsed.valid) {
     errors.push(...parsed.errors);
+  }
+
+  // Defense-in-depth (ADR-0033 §3, Part B): reject a policy that is
+  // SIMULTANEOUSLY effect=deny, UNSCOPED (all four applicability fields
+  // wildcard/absent), and UNCONDITIONAL (a trivially-true empty allOf). Such a
+  // policy matches EVERY request and denies it — bricking the whole tenant AND
+  // the operator's own access_control.configure / the disable endpoint (same
+  // chokepoint), leaving no in-band recovery. A SCOPED deny, a wildcard deny
+  // WITH a real condition, and any allow are all unaffected. This is a targeted
+  // guard against the trivial empty-allOf case only, not general tautology
+  // detection (see isTriviallyTrueCondition + the ADR residual note).
+  if (
+    effect === "deny" &&
+    parsed.valid &&
+    normalizeNullableString(raw.moduleKey) === null &&
+    normalizeNullableString(raw.activityCode) === null &&
+    normalizeNullableString(raw.action) === null &&
+    normalizeNullableString(raw.resourceType) === null &&
+    isTriviallyTrueCondition(parsed.node)
+  ) {
+    errors.push(
+      "An unscoped, unconditional deny policy would deny every request for the tenant — scope it (set at least one of moduleKey/activityCode/action/resourceType) or add a condition."
+    );
   }
 
   if (errors.length > 0 || !parsed.valid) {

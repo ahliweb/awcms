@@ -324,6 +324,67 @@ describe("validateAbacPolicyInput", () => {
       expect(result.value.moduleKey).toBeNull();
     }
   });
+
+  // ── Part B (ADR-0033 §3): an UNSCOPED + UNCONDITIONAL deny would deny EVERY
+  // request for the tenant (full-tenant lockout with no in-band recovery). It is
+  // rejected at authoring. The check is narrow (trivial empty-allOf only) — it
+  // must NOT snag a scoped deny, a wildcard deny with a real condition, or any
+  // allow. ─────────────────────────────────────────────────────────────────
+  test("rejects an unscoped, unconditional deny (wildcard + {allOf:[]})", () => {
+    const result = validateAbacPolicyInput({
+      policyCode: "deny-everything",
+      effect: "deny",
+      conditions: { allOf: [] }
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.join(" ")).toContain(
+        "would deny every request for the tenant"
+      );
+    }
+  });
+
+  test("rejects an unscoped, unconditional deny even with applicability set to empty strings (normalize to wildcard)", () => {
+    const result = validateAbacPolicyInput({
+      policyCode: "deny-everything-blank",
+      effect: "deny",
+      moduleKey: "",
+      activityCode: "  ",
+      action: null,
+      conditions: { allOf: [] }
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  test("ACCEPTS a SCOPED deny with a trivial condition (only ONE applicability field is enough)", () => {
+    const result = validateAbacPolicyInput({
+      policyCode: "deny-scoped",
+      effect: "deny",
+      moduleKey: "sales",
+      conditions: { allOf: [] }
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  test("ACCEPTS a wildcard deny WITH a real (non-empty) condition", () => {
+    const result = validateAbacPolicyInput({
+      policyCode: "deny-when-posted",
+      effect: "deny",
+      conditions: {
+        allOf: [{ attr: "resource.status", op: "eq", value: "posted" }]
+      }
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  test("ACCEPTS an unscoped ALLOW with {allOf:[]} (only deny is guarded)", () => {
+    const result = validateAbacPolicyInput({
+      policyCode: "allow-everything",
+      effect: "allow",
+      conditions: { allOf: [] }
+    });
+    expect(result.valid).toBe(true);
+  });
 });
 
 describe("fixtures/abac-example-policies.json — the 5 illustrative ERP policies", () => {

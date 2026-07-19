@@ -103,15 +103,19 @@ export async function insertAbacPolicy(
   input: AbacPolicyValidated,
   isActive: boolean
 ): Promise<AbacPolicyRecord> {
+  // `is_dsl_managed = true`: this is the DSL surface, the ONLY path that produces
+  // a policy the evaluator will CONSUME (loaded by policy-cache.ts, which filters
+  // `is_dsl_managed = true`). Flat #171 rows default to false and stay inert.
   const rows = (await tx`
     INSERT INTO awcms_abac_policies
       (tenant_id, policy_code, effect, description, module_key, activity_code,
-       action, resource_type, dsl_version, priority, conditions, is_active)
+       action, resource_type, dsl_version, priority, conditions, is_active,
+       is_dsl_managed)
     VALUES (
       ${tenantId}, ${input.policyCode}, ${input.effect}, ${input.description},
       ${input.moduleKey}, ${input.activityCode}, ${input.action},
       ${input.resourceType}, ${input.dslVersion}, ${input.priority},
-      ${input.conditions}, ${isActive}
+      ${input.conditions}, ${isActive}, true
     )
     RETURNING id, policy_code, effect, description, module_key, activity_code,
               action, resource_type, dsl_version, priority, conditions, is_active,
@@ -138,6 +142,11 @@ export async function updateAbacPolicy(
         dsl_version = ${input.dslVersion},
         priority = ${input.priority},
         conditions = ${input.conditions},
+        -- Authoring through the DSL surface makes the row DSL-managed
+        -- (evaluator-consumed). Never cleared here; a flat row edited via the
+        -- DSL PUT is intentionally promoted (its full applicability/condition
+        -- just passed the DSL validator, including the Part-B unscoped-deny gate).
+        is_dsl_managed = true,
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id}
     RETURNING id, policy_code, effect, description, module_key, activity_code,
