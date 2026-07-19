@@ -5,8 +5,14 @@ import {
   SESSION_COOKIE_NAME,
   TENANT_COOKIE_NAME
 } from "../../../lib/auth/ssr-session";
-import type { AccessRequest, TenantContext } from "../domain/access-control";
+import type {
+  AccessRequest,
+  BusinessScopeFact,
+  TenantContext
+} from "../domain/access-control";
 import { evaluateAccess } from "../domain/access-control";
+import type { BusinessScopeHierarchyPort } from "../../_shared/ports/business-scope-hierarchy-port";
+import { resolveBusinessScopeFacts } from "./business-scope-facts";
 import {
   fetchGrantedPermissionKeys,
   resolveModuleEnabled,
@@ -52,13 +58,25 @@ export type AuthorizeResult =
  * context on allow, or a ready-to-return `fail()` Response (401/403) on
  * deny. Every guarded endpoint should call this instead of inlining the
  * chain itself.
+ *
+ * `options.hierarchyPort` (Issue #180) is OPTIONAL and forwarded to the
+ * business-scope layer: when the `guard` opts into a required-scope check
+ * (`resourceAttributes.requiredScopeType`/`.requiredScopeId`) AND a hierarchy
+ * port is supplied, this resolves the subject's `businessScopeFacts` and
+ * passes them to `evaluateAccess` for exact/descendant/ancestor/tenant-wide
+ * coverage. If the guard opts in but NO port is supplied, `evaluateAccess`
+ * default-denies (empty fact set) — fail-closed. Every existing 5-argument
+ * call site (none of which sets a required scope) is completely unaffected.
+ * The base ships only a no-op hierarchy adapter; a derived application passes
+ * its own real resolver here.
  */
 export async function authorizeInTransaction(
   tx: Bun.SQL,
   tenantId: string,
   tokenHash: string,
   now: Date,
-  guard: AccessRequest
+  guard: AccessRequest,
+  options?: { hierarchyPort?: BusinessScopeHierarchyPort }
 ): Promise<AuthorizeResult> {
   const context = await resolveTenantContext(tx, tenantId, tokenHash, now);
 
@@ -106,7 +124,33 @@ export async function authorizeInTransaction(
     tenantId,
     context.tenantUserId
   );
-  const decision = evaluateAccess(context, guard, grantedPermissionKeys);
+
+  // Issue #180 — resolve the subject's business-scope facts only when the
+  // guard opts into a required-scope check AND a hierarchy port is available.
+  // A guard that opts in without a port available resolves to `undefined`
+  // here, which `evaluateAccess` treats as an empty fact set -> default-deny
+  // (fail-closed).
+  let businessScopeFacts: readonly BusinessScopeFact[] | undefined;
+  if (
+    options?.hierarchyPort &&
+    typeof guard.resourceAttributes?.requiredScopeType === "string" &&
+    typeof guard.resourceAttributes?.requiredScopeId === "string"
+  ) {
+    businessScopeFacts = await resolveBusinessScopeFacts(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      now,
+      options.hierarchyPort
+    );
+  }
+
+  const decision = evaluateAccess(
+    context,
+    guard,
+    grantedPermissionKeys,
+    businessScopeFacts
+  );
 
   await recordDecisionLog(tx, tenantId, context.tenantUserId, guard, decision);
 

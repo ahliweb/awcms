@@ -244,6 +244,15 @@ Registry modul database-backed sekaligus tenant-aware (perluasan `awcms_modules`
 
 Aksi lifecycle/config modul tercatat lewat `awcms_audit_events` generik (`module_key = 'module_management'`), bukan tabel event terpisah.
 
+### Business scope (Issue #180, base, generik)
+
+Lapis authorization organisasi **generik** milik `identity_access` — membatasi akses berdasarkan hierarki organisasi tanpa memasukkan entitas domain ERP nyata ke base. `scope_type`/`scope_id` adalah **referensi generik** (text + uuid), **bukan** FK ke tabel modul organisasi mana pun: validitas/ancestry di-resolve di application layer lewat capability port `BusinessScopeHierarchyPort` yang disediakan aplikasi turunan (base mengirim resolver no-op → `resolved: false`). Kedua tabel RLS `ENABLE`+`FORCE`. Lihat ADR-0030.
+
+- **`awcms_business_scope_assignments`** — satu baris = satu `tenant_user` diberi role/permission context yang dibatasi pada satu business scope. Kolom: `tenant_user_id`, `role_id` (nullable), `scope_type` (snake_case, CHECK `^[a-z][a-z0-9_]*$`), `scope_id`, `effective_from`/`effective_to` (effective dating; `effective_to > effective_from`; assignment temporer WAJIB `effective_to`), `is_temporary`, `status` (`active`/`expired`/`revoked`), `revoked_at`/`revoked_by_tenant_user_id`/`revoke_reason` (konsisten via CHECK), `granted_by_tenant_user_id`, `approved_by_tenant_user_id`. **FK komposit `(tenant_id, …)`** untuk subject/role/grantor/approver/revoker (target `UNIQUE (tenant_id, id)` di `awcms_tenant_users`/`awcms_roles`/tabel ini sendiri) — RI check PostgreSQL melewati RLS, jadi FK single-column bisa lintas-tenant (GHSA-r7cx-c4jh-cvvw); komposit memaksa baris tereferensi sated tenant yang sama. Gerbang otoritatif "sedang berlaku" adalah `now` vs effective dating, bukan `status` (revocation/expiry berdampak segera). Tidak dihapus fisik — hanya transisi status.
+- **`awcms_business_scope_assignment_events`** — riwayat lifecycle **append-only** (`granted`/`revoked`/`expired`/`renewed`), FK komposit `(tenant_id, assignment_id)` + `(tenant_id, actor_tenant_user_id)`. Tidak pernah UPDATE/DELETE.
+
+Job `identity-access:business-scope:expiry` (worker, sql/027 grants `SELECT,UPDATE` assignments + `INSERT` events) membalik assignment `active` yang `effective_to`-nya lewat menjadi `expired` + tulis event + audit agregat per tenant. Segregation-of-duties (tabel exception/evaluation) adalah **Issue #181**, tidak di sini.
+
 ## Konten multi-bahasa (translatable content)
 
 Berbeda dari **string UI statis** (label/tombol/pesan error) yang memakai katalog `.po` gettext di sisi aplikasi, **data input pengguna** yang perlu tampil multi-bahasa (mis. deskripsi item, term & condition vendor) disimpan **di database, satu nilai per bahasa aktif**.

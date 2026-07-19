@@ -1,0 +1,50 @@
+# ADR-0030 — Business-scope hierarchy sebagai lapis authorization generik untuk ERP multi-entity
+
+- **Status:** Accepted
+- **Tanggal:** 2026-07-19
+- **Pengambil keputusan:** maintainer
+- **Terkait:** Issue #180, epic #177 (kesiapan fondasi ERP turunan, Wave 2 authorization); ADR-0011 (capability port); ADR-0025 (module composition seam #178); ADR-0026 (modular OpenAPI); doc `docs/awcms/derived-application-guide.md`; port dari awcms-mini Issue #746 (diadaptasi, bukan disalin). #179 (dynamic ABAC evaluator) dan #181 (segregation of duties) adalah issue terpisah — lihat "Batas scope".
+
+## Konteks
+
+Authorization ERP tidak cukup dengan tenant + role. Aktor biasanya dibatasi oleh legal entity, company, branch, office, department, cost center, warehouse, atau project. AWCMS punya tenant/offices + baseline ABAC, tetapi belum punya model business-scope generik yang dapat dikonsumsi policy evaluator dan aplikasi ERP turunan — **tanpa** memasukkan entitas domain ERP nyata (chart of accounts, warehouse, dsb.) ke base.
+
+Fondasi ini sudah matang di awcms-mini (Issue #746), tetapi di mini business-scope dan segregation-of-duties (SoD) dibangun **bersama** dan saling terkait, dan mini juga membawa modul `organization_structure` (legal-entity/organization-unit) sebagai konsumen konkret. Untuk base ini keduanya harus dipisah.
+
+## Keputusan
+
+Mem-port **hanya fondasi business-scope generik** dari mini dan meninggalkan seam bersih untuk SoD, dengan keputusan berikut:
+
+1. **Tidak ada tabel definisi-scope di base.** `scope_type text` + `scope_id uuid` adalah **referensi generik**, bukan FK ke tabel modul organisasi apa pun. Validitas dan ancestry sebuah `(scope_type, scope_id)` di-resolve di application layer lewat capability port `BusinessScopeHierarchyPort` (`src/modules/_shared/ports/business-scope-hierarchy-port.ts`, ADR-0011), yang disediakan **aplikasi turunan**. Base tak pernah bergantung pada modul domain organisasi.
+2. **Base mengirim resolver default no-op** (`business-scope-hierarchy-port-adapter.ts`) yang mengembalikan `resolved: false` untuk **setiap** scope type (base tidak memiliki hierarki nyata). Konsekuensi fail-closed yang disengaja: di deployment base-murni tanpa provider turunan, `createBusinessScopeAssignment` selalu menolak `scope_unresolved`, dan aksi high-risk yang bergerbang scope selalu ditolak. Fixture `tests/fixtures/derived-application-example/` mengirim resolver dummy in-memory yang membuktikan resolusi exact/descendant/ancestor tanpa modul domain nyata.
+3. **Assignment subject→scope tenant-scoped, RLS `ENABLE`+`FORCE`** (`awcms_business_scope_assignments` + `awcms_business_scope_assignment_events` append-only). Setiap FK subject/role/actor adalah **FK komposit `(tenant_id, …)`** ke `UNIQUE (tenant_id, id)` — karena pemeriksaan integritas referensial PostgreSQL berjalan sebagai pemilik tabel dan **melewati RLS** (GHSA-r7cx-c4jh-cvvw / sql/020), FK single-column bisa menunjuk baris tenant lain walau FORCE aktif. Referensi lintas-tenant ditolak **DUA lapis**: constraint DB (subject/role) + validasi aplikasi/port (scope_id, yang tak punya tabel FK).
+4. **Relasi scope: exact, descendant, ancestor, tenant-wide.** Diintegrasikan sebagai parameter opsional `businessScopeFacts` di `evaluateAccess` (`domain/access-control.ts`). Sebuah request opt-in lewat `resourceAttributes.requiredScopeType`/`.requiredScopeId` (+ `requiredScopeRelations`, default `["exact"]`). Fakta scope subjek di-resolve terlebih dahulu oleh caller (`business-scope-facts.ts`) — fungsi evaluator tetap murni/tanpa I/O. `tenant` adalah `scopeType` reserved untuk grant tenant-wide.
+5. **Unknown scope type / unresolved scope / stale hierarchy → default-DENY untuk aksi high-risk.** `resolved: false` **berbeda** dari "resolved dengan ancestor kosong": ia tak pernah diperlakukan "tanpa batasan". Coverage descendant/ancestor hanya berasal dari fakta `resolved` (list ancestor/descendant dipaksa kosong saat `resolved: false`), dan exact-match untuk aksi high-risk pun butuh `resolved: true`. Predikat `resolved:false → deny` dibuktikan mutation-test (RED saat dihapus).
+6. **Effective dating ditegakkan; revocation/expiry berdampak SEGERA.** `isBusinessScopeAssignmentCurrentlyActive(row, now)` adalah gerbang otoritatif (status hanya cache); baris `active` yang `effective_to`-nya sudah lewat atau `effective_from`-nya belum tiba **tidak** menjadi fakta — tanpa menunggu job expiry. Job terjadwal (`identity-access:business-scope:expiry`, sql/027 worker grants) hanya membalik `status` dan menulis event/audit sebagai housekeeping.
+7. **Semua create/assign/revoke/expire diaudit** (`awcms_audit_events`, tanpa data sensitif). Self-grant (grantor == subject) ditolak di application layer.
+8. **Wiring capability #178.** `identity_access` mendeklarasikan `capabilities.consumes` untuk `business_scope_hierarchy` (`optional: true`, `providedBy: "organization_structure"` — provider kanonik di aplikasi ERP turunan, **tidak** di base). Fixture derived module (`example_crm`) mendeklarasikan `provides: ["business_scope_hierarchy"]` dan mengirim adapter dummy — membuktikan seam end-to-end tanpa modul domain di base.
+9. **Guard fail-closed base-side atas adapter turunan (review F1).** Adapter hierarki disediakan aplikasi turunan dan **tidak dipercaya** dari sisi base. `resolveBusinessScopeFacts` membungkus tiap panggilan `resolveScope()` dengan (a) **timeout wall-clock** (`AUTH_BUSINESS_SCOPE_HIERARCHY_TIMEOUT_MS`, default 500ms) → timeout diperlakukan `resolved: false` (deny, bukan coverage), dan (b) **cap panjang gabungan** ancestor+descendant (`AUTH_BUSINESS_SCOPE_HIERARCHY_MAX_RELATED_SCOPES`, default 5000) → melampaui cap diperlakukan `resolved: false`. Keduanya defense-in-depth di atas kewajiban bound/cycle di kontrak port.
+10. **Tolak scope_type reserved `tenant` di jalur create (review F2).** `business-scope-facts.ts` men-short-circuit `scope_type === "tenant"` menjadi coverage tenant-wide **tanpa** memanggil port. Agar adapter turunan permisif tak pernah bisa mencetak grant `tenant` tersimpan yang melewati validasi scope, create menolak scope_type reserved sebagai error validasi (structural, di `domain/business-scope-assignment.ts`, independen resolver apa pun).
+11. **Self-grant dicek SEBELUM I/O (review F3).** Deny self-grant (grantor == subject) berjalan lebih dulu dari read DB / panggilan port mana pun — identity guard mendahului I/O eksternal, dan `SELF_GRANT_DENIED` tetap terjangkau di deployment base-murni (di mana resolver no-op jika tidak akan men-short request ke `SCOPE_UNRESOLVED` lebih dulu).
+
+## Batas scope (yang SENGAJA tidak diport)
+
+- **Segregation of Duties (#181).** Di mini, `business-scope-assignment-service.ts` mengevaluasi konflik SoD, dan expiry job juga meng-expire `sod_conflict_exceptions`. Semua itu **dilucuti** di sini: grant di-persist + diaudit **tanpa** deteksi konflik. Seam ditinggalkan dengan komentar jelas di service (`// SoD SEAM (#181)`) dan di facts (`resolveSoDAssignmentFacts` tidak diport). Tabel `sod_conflict_exceptions`/`sod_conflict_evaluations` dan route `exceptions/*`/`conflicts/*` **tidak** dibuat.
+- **Modul `organization-structure`.** Modul ERP konkret (legal-entity/organization-unit + schema/route-nya) hidup di aplikasi turunan, bukan base. Ia hanya dirujuk sebagai `providedBy` kanonik (string metadata), tidak diimpor.
+- **Integrasi evaluator penuh (#179).** `businessScopeFacts` di-thread lewat `authorizeInTransaction` sebagai seam opsional backward-compatible; integrasi ke dynamic ABAC policy penuh adalah #179.
+
+## Konsekuensi
+
+- Dua tabel baru RLS `ENABLE`+`FORCE`; `awcms_tenant_users`/`awcms_roles` mendapat `UNIQUE (tenant_id, id)` (gratis di atas PK) sebagai target FK komposit. Cross-tenant denial dibuktikan di bawah role non-superuser `awcms_app` (`tests/integration/business-scope.integration.test.ts`).
+- `evaluateAccess` mendapat parameter ke-4 opsional (`businessScopeFacts`) — 100% backward-compatible; setiap call site lama (yang tak set `requiredScope*`) tak berubah perilaku. Guard tenant-isolation dan self-approval tak diregresi (keduanya mutation-tested RED).
+- Job baru `identity-access:business-scope:expiry` terdaftar di `identity_access` module.ts + package.json; policy grant worker di `scripts/security-readiness.ts` diperluas dua tabel.
+- Dua endpoint baru (`GET`/`POST /api/v1/identity/business-scope/assignments`, `POST …/{id}/revoke`) di fragment OpenAPI `identity-access`, bundle+docs di-regenerate.
+- **Residual (jujur):** deteksi cycle/depth ada di **kontrak port** (setiap adapter wajib bounded + cycle-safe) — base tak bisa menegakkannya untuk adapter turunan; hanya resolver dummy fixture yang membuktikan bound di base. Ancestry heterogen (`{scopeType, scopeId}`, bukan `string[]`) sudah didukung agar rantai lintas-tipe (unit → legal_entity) valid.
+- **Batas jujur guard F1:** timeout wall-clock hanya membatasi adapter yang **AWAIT** I/O (mis. query SQL — juga dibatasi `statement_timeout` Postgres). **Loop CPU sinkron tak-berujung** di dalam adapter turunan **tidak bisa** di-interupsi dari JavaScript: event loop tak pernah kembali sehingga timer tak pernah menyala, dan panggilan `resolveScope()` itu sendiri memblok sebelum `Promise.race` terpasang. Kasus itu tetap tanggung jawab aplikasi turunan (dinyatakan di kode + guide). Cap panjang tetap berlaku setelah resolusi kembali.
+
+## Alternatif yang ditolak
+
+- **Membawa tabel `organization_structure` ke base** — melanggar prinsip "tak ada domain ERP di base" (epic #177); hierarki nyata milik aplikasi turunan.
+- **Mem-port SoD sekaligus** — mengunci base pada satu model SoD sebelum #181 memutuskannya; scope #180 hanya fondasi.
+- **Resolver default membaca `awcms_offices`** (seperti mini) — membuat base "office" sebagai satu-satunya scope hidup, mencampur konsumen konkret ke lapis generik; base memilih no-op murni + seam turunan.
+- **Menaruh resolusi hierarki di dalam `evaluateAccess`** — akan menjadikan fungsi keputusan ABAC melakukan I/O; fakta di-resolve di luar, evaluator tetap murni.

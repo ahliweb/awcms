@@ -27,7 +27,7 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -55,11 +55,25 @@ function statementsOnly(sql: string): string {
 const migrationStatements = statementsOnly(migrationSql);
 
 /**
+ * Statements (comment-stripped) of EVERY `sql/NNN_*.sql` migration. sql/022
+ * establishes the base worker/setup grants, but a later module migration may
+ * grant its OWN worker-touched table (e.g. sql/027's business-scope expiry
+ * job, Issue #180) — the least-privilege matrix (`WORKER_ROLE_GRANTS`) is the
+ * CUMULATIVE source of truth across all migrations, so the drift check must
+ * parse them all, not just sql/022. Every OTHER test in this file stays scoped
+ * to sql/022 (role creation/ordering/attributes live only there).
+ */
+const allMigrationStatements = readdirSync(path.join(repoRoot, "sql"))
+  .filter((name) => /^\d+_.*\.sql$/.test(name))
+  .sort()
+  .map((name) => statementsOnly(readRepoFile(path.join("sql", name))))
+  .join("\n");
+
+/**
  * Parses every `GRANT <verbs> ON <table> TO <role>;` for the two split roles
- * out of the migration text (ignoring `GRANT USAGE ON SCHEMA ...`), into the
+ * out of ALL migrations' text (ignoring `GRANT USAGE ON SCHEMA ...`), into the
  * same `{ role: { table: verbs[] } }` shape as the exported matrices. Table
- * grants in this migration are one-per-line, so a line regex is exact and
- * needs no SQL parser.
+ * grants are one-per-line, so a line regex is exact and needs no SQL parser.
  */
 type ParsedGrants = {
   awcms_worker: Record<string, string[]>;
@@ -74,7 +88,7 @@ function parseTableGrants(): ParsedGrants {
   const grantLine =
     /GRANT\s+([A-Z,\s]+?)\s+ON\s+(awcms_[a-z0-9_]+)\s+TO\s+(awcms_worker|awcms_setup)\s*;/g;
 
-  for (const match of migrationStatements.matchAll(grantLine)) {
+  for (const match of allMigrationStatements.matchAll(grantLine)) {
     const verbs = match[1]!
       .split(",")
       .map((v) => v.trim())
@@ -172,14 +186,14 @@ describe("sql/022 — worker/setup role creation", () => {
   });
 });
 
-describe("sql/022 — GRANTs match the least-privilege matrix exactly (no drift)", () => {
+describe("migration GRANTs match the least-privilege matrix exactly (no drift)", () => {
   const granted = parseTableGrants();
 
-  test("awcms_worker's migration GRANTs equal WORKER_ROLE_GRANTS", () => {
+  test("awcms_worker's cumulative migration GRANTs equal WORKER_ROLE_GRANTS", () => {
     expect(granted.awcms_worker).toEqual(normalize(WORKER_ROLE_GRANTS));
   });
 
-  test("awcms_setup's migration GRANTs equal SETUP_ROLE_GRANTS", () => {
+  test("awcms_setup's cumulative migration GRANTs equal SETUP_ROLE_GRANTS", () => {
     expect(granted.awcms_setup).toEqual(normalize(SETUP_ROLE_GRANTS));
   });
 

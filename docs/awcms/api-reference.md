@@ -906,6 +906,83 @@ Authenticated by possession of the mfaChallengeToken from POST /auth/login, not 
 | 404    | Resource not found.                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | No provider account is currently linked (SSO_NOT_LINKED). | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/identity/business-scope/assignments` — List this tenant's business-scope assignments (Issue
+
+- **operationId**: `listBusinessScopeAssignments`
+- **Security**: bearerAuth + tenantHeader
+
+Lists business-scope assignments for the caller's tenant, optionally filtered by status/tenantUserId/scopeType. Gated on `identity_access.business_scope_assignments.read`.
+
+**Parameters**
+
+| Name           | In    | Required | Type                                 | Description |
+| -------------- | ----- | -------- | ------------------------------------ | ----------- |
+| `status`       | query | no       | enum(`active`, `expired`, `revoked`) |             |
+| `tenantUserId` | query | no       | string (uuid)                        |             |
+| `scopeType`    | query | no       | string                               |             |
+
+**Responses**
+
+| Status | Description                                                      | Schema                                 |
+| ------ | ---------------------------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's business-scope assignments (newest first, bounded). | object                                 |
+| 400    | Validation error.                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                      | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/identity/business-scope/assignments` — Create a business-scope assignment (high-risk, audited, idempotent).
+
+- **operationId**: `createBusinessScopeAssignment`
+- **Security**: bearerAuth + tenantHeader
+
+Grants a subject a role/permission context restricted to one business scope. The `(scopeType, scopeId)` reference is validated server-side through the `BusinessScopeHierarchyPort` capability (never trusted from the request alone); an unresolved scope is denied `SCOPE_UNRESOLVED`. Self-grant is denied. Gated on `identity_access.business_scope_assignments.create`. Requires `Idempotency-Key`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description |
+| ----------------- | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key` | header | yes      | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | The created business-scope assignment.                         | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/identity/business-scope/assignments/{id}/revoke` — Revoke a business-scope assignment (high-risk, audited, idempotent).
+
+- **operationId**: `revokeBusinessScopeAssignment`
+- **Security**: bearerAuth + tenantHeader
+
+Revokes an active business-scope assignment (transitions it to `revoked`; append-only lifecycle history is recorded). Revocation takes effect on the next authorization decision immediately. Gated on `identity_access.business_scope_assignments.revoke`. Requires `Idempotency-Key`.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                               | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The revoked business-scope assignment.                                                    | object                                 |
+| 400    | Validation error.                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | The assignment is not active, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/roles` — List the current tenant's (non-deleted) roles with a permission count.
 
 - **operationId**: `listRoles`

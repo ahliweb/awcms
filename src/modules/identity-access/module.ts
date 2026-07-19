@@ -12,7 +12,55 @@ export const identityAccessModule = defineModule({
     openApiPath: "openapi/modules/identity-access.openapi.yaml",
     basePath: "/api/v1/auth"
   },
+  // Issue #180 — the generic business-scope layer CONSUMES a hierarchy
+  // resolver from a DERIVED application (ADR-0011 capability port,
+  // `_shared/ports/business-scope-hierarchy-port.ts`). `optional: true`: the
+  // base ships a default no-op adapter, so identity_access degrades safely
+  // (scope resolution returns `resolved: false`, high-risk scope-gated
+  // actions default-deny) when no provider is composed in — the base
+  // registry therefore has no provider for this capability and
+  // `modules:compose:check` skips the missing-provider check for an optional
+  // consume. `providedBy` names the canonical derived provider
+  // (`organization_structure`, a legal-entity/organization-unit module that
+  // lives in a derived ERP app, NOT in this base); the fixture
+  // `tests/fixtures/derived-application-example/` provides a working dummy
+  // resolver for the same capability to exercise the binding end-to-end.
+  capabilities: {
+    consumes: [
+      {
+        capability: "business_scope_hierarchy",
+        providedBy: "organization_structure",
+        optional: true
+      }
+    ]
+  },
+  jobs: [
+    {
+      command: "bun run identity-access:business-scope:expiry",
+      purpose:
+        "Transitions business-scope assignments past their effective_to to expired, recording append-only lifecycle events and an aggregate audit entry per tenant.",
+      recommendedSchedule: "Hourly via cron/systemd timer.",
+      environmentNotes:
+        "Database-only operation, no external network dependency. Safe to run alongside request traffic (bounded per-tenant passes, maintenance work class).",
+      safeInOfflineLan: true
+    }
+  ],
   permissions: [
+    {
+      activityCode: "business_scope_assignments",
+      action: "read",
+      description: "Read business-scope assignments for the caller's tenant"
+    },
+    {
+      activityCode: "business_scope_assignments",
+      action: "create",
+      description: "Create a business-scope assignment"
+    },
+    {
+      activityCode: "business_scope_assignments",
+      action: "revoke",
+      description: "Revoke an active business-scope assignment"
+    },
     {
       activityCode: "access_control",
       action: "read",

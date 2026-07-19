@@ -90,6 +90,22 @@ descriptor yang mengonsumsi capability `party_directory`/
 idempotent+fail-closed-period-lock, dan satu kontribusi `reporting`
 projection — semua tanpa satu baris pun logika akuntansi nyata.
 
+## Menyediakan resolver business-scope hierarchy (Issue #180, ADR-0030)
+
+Base menyediakan lapis authorization **business-scope generik** (`identity_access`) tetapi **tidak** memiliki hierarki organisasi nyata. `scope_type`/`scope_id` adalah referensi generik; validitas dan ancestry-nya di-resolve lewat capability port `BusinessScopeHierarchyPort` (`src/modules/_shared/ports/business-scope-hierarchy-port.ts`). Base mengirim resolver **no-op** yang mengembalikan `resolved: false` untuk setiap scope type — jadi **selama aplikasi turunan Anda belum menyediakan resolver, business-scope assignment selalu ditolak `scope_unresolved` dan aksi high-risk bergerbang-scope selalu ditolak** (fail-closed by design).
+
+Aplikasi turunan yang punya hierarki organisasi nyata (legal entity, branch, cost center, project, dsb.) menyediakannya begini:
+
+1. **Deklarasikan capability** di module descriptor modul organisasi Anda: `capabilities: { provides: ["business_scope_hierarchy"] }`. `identity_access` sudah mengonsumsinya (`optional: true`) — komposisi build-time (`bun run modules:compose:check`) memvalidasinya tanpa Anda mengedit registry base.
+2. **Implementasikan `BusinessScopeHierarchyPort`** — sebuah adapter yang, di dalam `tx` yang sudah tenant-scoped (`withTenant`), membaca tabel hierarki milik modul Anda dan mengembalikan `{ resolved, ancestorScopes, descendantScopes }`. Kewajiban keras kontrak:
+   - **Tenant isolation** — scope milik tenant lain WAJIB `resolved: false` (jangan pernah membocorkan ancestry lintas-tenant).
+   - **Batas node/depth + deteksi cycle** — resolver WAJIB bounded; graph siklik/sangat dalam mengembalikan hasil bounded, tidak menggantung. Lihat resolver dummy `tests/fixtures/derived-application-example/modules/example-crm/business-scope-hierarchy-adapter.ts` untuk pola `visited`-set + `DUMMY_HIERARCHY_MAX_DEPTH`.
+   - **`resolved: false` ≠ "tanpa ancestor"** — kembalikan `resolved: false` untuk scope type tak dikenal / id tak ada / lintas-tenant; jangan menyamakannya dengan scope valid yang kebetulan tak punya ancestor.
+   - **Ancestry heterogen** — entri ancestor/descendant adalah `{ scopeType, scopeId }`, boleh lintas-tipe (mis. `unit(branch) → unit(region) → legal_entity`).
+3. **Inject di composition root** — hanya route handler / job script (composition root, ADR-0011) yang mengimpor adapter Anda; jangan pernah mengimpornya dari `application`/`domain` `identity_access`. Route base membangun port default no-op; aplikasi turunan menyuntikkan adapternya sendiri (mis. mem-fork route business-scope, atau memanggil `createBusinessScopeAssignment(tx, …, { hierarchyPort })` dari route domainnya sendiri).
+
+Relasi coverage yang di-enforce `evaluateAccess`: **exact** (subjek meng-hold persis scope itu), **descendant** (subjek meng-hold ancestor-nya), **ancestor** (subjek meng-hold descendant-nya), **tenant-wide** (`scopeType === "tenant"`). Aksi high-risk pada scope `resolved: false` selalu ditolak. Lihat `tests/fixtures/derived-application-example/` untuk contoh yang bisa dijalankan.
+
 ## Checklist keamanan & kepatuhan praktis
 
 Wajib dipenuhi modul domain baru sebelum dianggap siap produksi (turunan dari doc 10/12/13, skill `awcms-security-review`):

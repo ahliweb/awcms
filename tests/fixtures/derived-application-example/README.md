@@ -19,9 +19,18 @@ dengan sebelum Issue #178).
   dari `src/modules/application-registry.ts` miliknya.
 - `modules/example-crm/module.ts` — satu modul domain dummy (`example_crm`)
   yang bergantung pada dua modul base (`tenant_admin`, `identity_access`),
-  menyediakan capability `example_crm_directory`, dan mendeklarasikan
-  permission/navigation/job — cukup untuk membuktikan setiap check komposisi
-  berjalan pada modul turunan. **Bukan** modul ERP nyata.
+  menyediakan capability `example_crm_directory` + `business_scope_hierarchy`
+  (Issue #180), dan mendeklarasikan permission/navigation/job — cukup untuk
+  membuktikan setiap check komposisi berjalan pada modul turunan. **Bukan**
+  modul ERP nyata.
+- `modules/example-crm/business-scope-hierarchy-adapter.ts` — resolver
+  `BusinessScopeHierarchyPort` **dummy** in-memory (Issue #180, ADR-0030):
+  contoh apa yang disediakan aplikasi turunan lewat capability
+  `business_scope_hierarchy`. Menyelesaikan resolusi exact/descendant/ancestor
+  atas graph in-memory, dengan tenant-isolation + batas depth + deteksi cycle —
+  tanpa modul domain atau tabel DB nyata. Dipakai unit test
+  (`tests/business-scope-hierarchy-resolver.test.ts`) dan integration test
+  (`tests/integration/business-scope.integration.test.ts`).
 
 ## Cara pakai (bagi repo turunan nyata)
 

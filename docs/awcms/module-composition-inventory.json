@@ -57,10 +57,16 @@
       "source": "base",
       "dependencies": ["tenant_admin", "profile_identity"],
       "capabilitiesProvided": [],
-      "capabilitiesConsumed": [],
-      "permissionCount": 11,
+      "capabilitiesConsumed": [
+        {
+          "capability": "business_scope_hierarchy",
+          "providedBy": "organization_structure",
+          "optional": true
+        }
+      ],
+      "permissionCount": 14,
       "navigationCount": 0,
-      "jobCount": 0,
+      "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

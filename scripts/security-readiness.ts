@@ -999,7 +999,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_reporting_export_runs: ["SELECT", "INSERT"],
   awcms_abac_decision_logs: ["SELECT"],
   awcms_identities: ["SELECT"],
-  awcms_sync_nodes: ["SELECT"]
+  awcms_sync_nodes: ["SELECT"],
+  // Issue #180 — identity-access:business-scope:expiry (sql/027): SELECT the
+  // expiry backlog + refresh gauges, UPDATE elapsed assignments to expired,
+  // INSERT the append-only lifecycle event rows. No DELETE (status transition
+  // only). The aggregate audit INSERT reuses awcms_audit_events above.
+  awcms_business_scope_assignments: ["SELECT", "UPDATE"],
+  awcms_business_scope_assignment_events: ["INSERT"]
 };
 
 /**
