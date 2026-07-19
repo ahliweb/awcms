@@ -74,6 +74,39 @@ const RULES: readonly Rule[] = [
     secret: true
   },
 
+  { name: "AUTH_MFA_ENABLED", required: false, type: "bool" },
+  {
+    name: "AUTH_MFA_SECRET_ENCRYPTION_KEY",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  { name: "AUTH_MFA_TOTP_ISSUER", required: false, type: "string" },
+  { name: "AUTH_MFA_TOTP_PERIOD_SEC", required: false, type: "int", min: 1 },
+  {
+    name: "AUTH_MFA_TOTP_DIGITS",
+    required: false,
+    type: "enum",
+    values: ["6", "8"]
+  },
+  { name: "AUTH_MFA_TOTP_WINDOW_STEPS", required: false, type: "int", min: 0 },
+  { name: "AUTH_MFA_CHALLENGE_TTL_SEC", required: false, type: "int", min: 1 },
+  { name: "AUTH_MFA_STEPUP_TTL_SEC", required: false, type: "int", min: 1 },
+  {
+    name: "AUTH_MFA_MAX_VERIFY_ATTEMPTS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  { name: "AUTH_MFA_LOCKOUT_MINUTES", required: false, type: "int", min: 1 },
+  { name: "AUTH_MFA_RATE_LIMIT_MAX", required: false, type: "int", min: 1 },
+  {
+    name: "AUTH_MFA_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
+
   { name: "AWCMS_SYNC_ENABLED", required: false, type: "bool" },
   {
     name: "AWCMS_SYNC_HMAC_SECRET",
@@ -120,6 +153,15 @@ function parseEnvFile(source: string): EnvBag {
     bag[key] = value;
   }
   return bag;
+}
+
+/** True when `value` base64-decodes to exactly 32 bytes (an AES-256 key). */
+function isBase32ByteKey(value: string): boolean {
+  try {
+    return Buffer.from(value, "base64").length === 32;
+  } catch {
+    return false;
+  }
 }
 
 function isValidUrl(value: string, protocols: readonly string[]): boolean {
@@ -208,6 +250,25 @@ export function validateEnv(env: EnvBag): string[] {
 
   if (isProduction && env.AUTH_COOKIE_SECURE === "false") {
     problems.push("AUTH_COOKIE_SECURE harus true di produksi.");
+  }
+
+  // MFA: enabling TOTP enrollment REQUIRES a real 32-byte AES-256 key (no
+  // default key exists by design — a DB backup alone must not yield secrets).
+  // Enforced regardless of APP_ENV: a missing/placeholder key would make every
+  // enrollment fail closed at runtime, so surfacing it at config time is
+  // strictly better than a confusing MFA_MISCONFIGURED in production.
+  if (env.AUTH_MFA_ENABLED === "true") {
+    const key = env.AUTH_MFA_SECRET_ENCRYPTION_KEY?.trim() ?? "";
+
+    if (key === "" || PLACEHOLDER_SECRETS.has(key)) {
+      problems.push(
+        "AUTH_MFA_SECRET_ENCRYPTION_KEY wajib berisi key nyata saat AUTH_MFA_ENABLED=true (tidak ada default key)."
+      );
+    } else if (!isBase32ByteKey(key)) {
+      problems.push(
+        "AUTH_MFA_SECRET_ENCRYPTION_KEY harus 32 byte base64 (mis. `openssl rand -base64 32`)."
+      );
+    }
   }
 
   // Tidak ada default yang aman untuk dua-duanya, jadi produksi wajib memilih

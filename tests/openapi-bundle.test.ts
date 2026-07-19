@@ -143,7 +143,14 @@ describe("openapi bundle — merge conflict detection", () => {
 });
 
 describe("openapi bundle — contract equivalence to pre-migration monolith", () => {
-  test("bundle is semantically equal to the frozen pre-migration snapshot (paths/schemas/components/security)", async () => {
+  test("every pre-migration path/schema is preserved byte-identically in the current bundle (modularization changed no existing contract; additive endpoints allowed)", async () => {
+    // The snapshot is the FROZEN pre-#182 monolith. Its purpose is to prove the
+    // fragmentation (and every later additive PR) never mutated a contract that
+    // existed before the split — NOT to mirror the current bundle. So this is a
+    // SUBSET assertion: each pre-migration path/schema must still be present and
+    // byte-identical; new endpoints (e.g. MFA #184) may be added on top. Never
+    // edit the frozen snapshot to add new endpoints — that would make this test
+    // compare the bundle against a copy of itself and silently defeat it.
     const [snapshotRaw, bundleRaw] = await Promise.all([
       readFile(
         path.join(
@@ -157,20 +164,33 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     const before = parseYaml(snapshotRaw) as AnyRecord;
     const after = parseYaml(bundleRaw) as AnyRecord;
 
-    // Order-independent deep equality on every contract-bearing surface.
-    for (const key of ["paths", "security", "info", "servers"] as const) {
+    // Global, root-owned surfaces must NOT change with an endpoint addition.
+    for (const key of ["security", "info", "servers"] as const) {
       expect(sortDeep(after[key])).toEqual(sortDeep(before[key]));
     }
-    const beforeComponents = before.components as AnyRecord;
-    const afterComponents = after.components as AnyRecord;
-    for (const key of [
-      "schemas",
-      "securitySchemes",
-      "parameters",
-      "responses"
-    ] as const) {
-      expect(sortDeep(afterComponents[key])).toEqual(
-        sortDeep(beforeComponents[key])
+    for (const key of ["securitySchemes", "parameters", "responses"] as const) {
+      expect(sortDeep((after.components as AnyRecord)[key])).toEqual(
+        sortDeep((before.components as AnyRecord)[key])
+      );
+    }
+
+    // Per-operation contract: every pre-migration path is byte-identical now.
+    const beforePaths = before.paths as AnyRecord;
+    const afterPaths = after.paths as AnyRecord;
+    for (const pathKey of Object.keys(beforePaths)) {
+      expect(afterPaths[pathKey]).toBeDefined();
+      expect(sortDeep(afterPaths[pathKey])).toEqual(
+        sortDeep(beforePaths[pathKey])
+      );
+    }
+
+    // Every pre-migration schema is byte-identical now (new schemas allowed).
+    const beforeSchemas = (before.components as AnyRecord).schemas as AnyRecord;
+    const afterSchemas = (after.components as AnyRecord).schemas as AnyRecord;
+    for (const schemaName of Object.keys(beforeSchemas)) {
+      expect(afterSchemas[schemaName]).toBeDefined();
+      expect(sortDeep(afterSchemas[schemaName])).toEqual(
+        sortDeep(beforeSchemas[schemaName])
       );
     }
   });

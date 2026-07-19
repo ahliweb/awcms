@@ -16,7 +16,8 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   "getDatabasePoolHealth",
   "getSetupStatus",
   "postSetupInitialize",
-  "postAuthLogin"
+  "postAuthLogin",
+  "postAuthMfaVerify"
 ]);
 
 /**

@@ -58,7 +58,7 @@
       "dependencies": ["tenant_admin", "profile_identity"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
-      "permissionCount": 3,
+      "permissionCount": 5,
       "navigationCount": 0,
       "jobCount": 0,
       "hasHealthCheck": false,
