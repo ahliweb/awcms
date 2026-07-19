@@ -32,6 +32,10 @@ import {
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
 import {
+  enforceTurnstileIfRequired,
+  LOGIN_TURNSTILE_ACTION
+} from "../../../../lib/security/turnstile";
+import {
   isMfaFeatureEnabled,
   resolveChallengeTtlSec
 } from "../../../../lib/auth/mfa-config";
@@ -50,7 +54,11 @@ import { isSsoEnabled } from "../../../../lib/auth/sso-config";
 import { isPasswordLoginDisabledForIdentity } from "../../../../modules/identity-access/application/tenant-auth-policy";
 import { log } from "../../../../lib/logging/logger";
 
-type LoginBody = { loginIdentifier?: unknown; password?: unknown };
+type LoginBody = {
+  loginIdentifier?: unknown;
+  password?: unknown;
+  turnstileToken?: unknown;
+};
 
 /**
  * Issue #145 — source attribution shared by the `login_succeeded` and
@@ -249,6 +257,32 @@ export const POST: APIRoute = async ({
       400,
       "VALIDATION_ERROR",
       "loginIdentifier and password are required."
+    );
+  }
+
+  // Issue #186 — Cloudflare Turnstile bot challenge. A no-op on every
+  // local/offline/LAN deployment (isTurnstileRequired() is false there, so no
+  // outbound call is made), and run here — AFTER the request-shape and
+  // rate-limit checks above, BEFORE the expensive argon2id/password work and
+  // any DB transaction below, and ahead of the SSO/MFA branches inside
+  // `withTenant` — exactly as the issue requires. Fails closed on the
+  // full-online profile: a missing/invalid/mismatched/timed-out token is denied
+  // with ONE generic response (no account-enumeration oracle: this runs before
+  // any identity lookup, so it cannot distinguish accounts). Rate limit and
+  // lockout above/below keep working independently of this.
+  const turnstileResult = await enforceTurnstileIfRequired(
+    body.turnstileToken,
+    clientIp,
+    { action: LOGIN_TURNSTILE_ACTION }
+  );
+
+  if (!turnstileResult.ok) {
+    return fail(
+      400,
+      turnstileResult.code,
+      turnstileResult.code === "TURNSTILE_REQUIRED"
+        ? "Turnstile verification token is required."
+        : "Turnstile verification failed."
     );
   }
 

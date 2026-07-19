@@ -20,6 +20,18 @@ type Bucket = { count: number; windowStart: number };
 
 const buckets = new Map<string, Bucket>();
 
+/**
+ * Clear all in-process rate-limit buckets. Test-only: the integration harness
+ * calls this per test (alongside the DB circuit-breaker reset) so that a suite
+ * which drives a rate-limited endpoint many times from the same client IP —
+ * e.g. the harness bootstrapping a fresh tenant via `POST /setup/initialize`
+ * for every test — does not carry a tripped counter across tests and start
+ * returning 429. Never call this from production code.
+ */
+export function resetRateLimitForTests(): void {
+  buckets.clear();
+}
+
 export function checkRateLimit(
   key: string,
   config: RateLimitConfig,

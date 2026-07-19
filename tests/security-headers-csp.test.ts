@@ -16,8 +16,8 @@ import { describe, expect, test } from "bun:test";
 
 import { buildSecurityHeaders } from "../src/lib/security/security-headers";
 
-function cspFor(isProduction: boolean): string {
-  const header = buildSecurityHeaders({ isProduction }).find(
+function cspFor(isProduction: boolean, turnstileEnabled = false): string {
+  const header = buildSecurityHeaders({ isProduction, turnstileEnabled }).find(
     ([name]) => name === "Content-Security-Policy"
   );
 
@@ -28,8 +28,8 @@ function cspFor(isProduction: boolean): string {
   return header[1];
 }
 
-function directives(isProduction = false): string[] {
-  return cspFor(isProduction)
+function directives(isProduction = false, turnstileEnabled = false): string[] {
+  return cspFor(isProduction, turnstileEnabled)
     .split(";")
     .map((directive) => directive.trim());
 }
@@ -62,12 +62,15 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
     expect(policy).not.toContain("unsafe-eval");
   });
 
-  test("drops mini's Turnstile/YouTube origins — no third-party origin is allowlisted anywhere", () => {
-    const policy = cspFor(true);
+  test("with Turnstile disabled (the default / every LAN-offline deployment) no third-party origin is allowlisted", () => {
+    const policy = cspFor(true, false);
 
     expect(policy).not.toContain("challenges.cloudflare.com");
     expect(policy).not.toContain("youtube-nocookie.com");
     expect(policy).not.toMatch(/https?:\/\//);
+    // No script-src / frame-src at all — both fall through to default-src 'self'.
+    expect(policy).not.toContain("script-src");
+    expect(policy).not.toContain("frame-src");
   });
 
   test("keeps X-Frame-Options: DENY alongside frame-ancestors 'none' as an independent older-browser layer", () => {
@@ -95,5 +98,47 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
 
     expect(names).not.toContain("Strict-Transport-Security");
     expect(names).toContain("Content-Security-Policy");
+  });
+});
+
+describe("buildSecurityHeaders — Turnstile CSP origin (Issue #186)", () => {
+  const CF = "https://challenges.cloudflare.com";
+
+  test("opens EXACTLY the one Cloudflare origin in script-src and frame-src when enabled", () => {
+    const list = directives(true, true);
+
+    expect(list).toContain(`script-src 'self' ${CF}`);
+    expect(list).toContain(`frame-src ${CF}`);
+    // The Turnstile origin is the ONLY third-party origin — narrow, as required.
+    const policy = cspFor(true, true);
+    const origins = policy.match(/https?:\/\/[^\s;]+/g) ?? [];
+    expect(new Set(origins)).toEqual(new Set([CF]));
+  });
+
+  test("re-states 'self' in script-src so the bundled login client still loads once script-src is present", () => {
+    expect(cspFor(true, true)).toContain(`script-src 'self' ${CF}`);
+  });
+
+  test("keeps every base directive unchanged when enabled (origin is purely additive)", () => {
+    const list = directives(false, true);
+
+    for (const base of [
+      "default-src 'self'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "form-action 'self'",
+      "frame-ancestors 'none'"
+    ]) {
+      expect(list).toContain(base);
+    }
+  });
+
+  test("enabled vs disabled differ ONLY by the two Turnstile directives — proof the origin never leaks into the LAN/offline policy", () => {
+    const disabled = directives(true, false);
+    const enabled = directives(true, true);
+    const added = enabled.filter((d) => !disabled.includes(d));
+
+    expect(added).toEqual([`script-src 'self' ${CF}`, `frame-src ${CF}`]);
+    expect(disabled.every((d) => enabled.includes(d))).toBe(true);
   });
 });

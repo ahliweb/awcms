@@ -44,6 +44,34 @@ function sortDeep(value: unknown): unknown {
   return value;
 }
 
+/**
+ * True iff `subset` is fully contained in `superset`: every leaf value in the
+ * pre-migration contract is present and equal in the current one, with NEW keys
+ * allowed only in `superset`. Removing or changing a pre-existing field returns
+ * false. Arrays must match length + element-wise (adding an optional property
+ * to a schema touches `properties` — an object — not `required`/`parameters`
+ * arrays, so a genuinely additive change stays a subset here).
+ */
+function isAdditiveSuperset(subset: unknown, superset: unknown): boolean {
+  if (Array.isArray(subset)) {
+    return (
+      Array.isArray(superset) &&
+      subset.length === superset.length &&
+      subset.every((v, i) => isAdditiveSuperset(v, superset[i]))
+    );
+  }
+  if (subset && typeof subset === "object") {
+    if (!superset || typeof superset !== "object" || Array.isArray(superset)) {
+      return false;
+    }
+    const sup = superset as AnyRecord;
+    return Object.entries(subset as AnyRecord).every(
+      ([k, v]) => k in sup && isAdditiveSuperset(v, sup[k])
+    );
+  }
+  return subset === superset;
+}
+
 async function loadFragment(fileName: string): Promise<AnyRecord> {
   const raw = await readFile(
     path.join(ROOT, "openapi/modules", fileName),
@@ -149,8 +177,11 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     // existed before the split — NOT to mirror the current bundle. So this is a
     // SUBSET assertion: each pre-migration path/schema must still be present and
     // byte-identical; new endpoints (e.g. MFA #184) may be added on top. Never
-    // edit the frozen snapshot to add new endpoints — that would make this test
-    // compare the bundle against a copy of itself and silently defeat it.
+    // edit the frozen snapshot — that would make this test compare the bundle
+    // against a copy of itself and silently defeat it. A backward-compatible
+    // change to an EXISTING pre-migration endpoint (e.g. Turnstile #186 adding
+    // an optional field) is acknowledged in INTENTIONALLY_EVOLVED_PATHS below,
+    // NOT by mutating the snapshot.
     const [snapshotRaw, bundleRaw] = await Promise.all([
       readFile(
         path.join(
@@ -174,14 +205,38 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       );
     }
 
-    // Per-operation contract: every pre-migration path is byte-identical now.
+    // Documented, reviewed BACKWARD-COMPATIBLE evolutions of a pre-migration
+    // endpoint (like the tags test's single allowed `Domain Event Runtime`
+    // addition). A path listed here is NOT required to stay byte-identical, but
+    // its pre-migration contract must remain a strict subset of the current one
+    // (every pre-existing field preserved; only additive changes allowed) — a
+    // removal or a type change still fails. The FROZEN snapshot is never edited;
+    // intentional divergences are acknowledged HERE instead. Each entry needs a
+    // reason so an accidental drift can't hide behind the allow-list.
+    const INTENTIONALLY_EVOLVED_PATHS: Record<string, string> = {
+      // Turnstile #186 adds an OPTIONAL `turnstileToken` to the request body.
+      "/api/v1/auth/login":
+        "#186 optional turnstileToken (backward-compatible)",
+      "/api/v1/setup/initialize":
+        "#186 optional turnstileToken (backward-compatible)"
+    };
+
+    // Per-operation contract: every pre-migration path is byte-identical now,
+    // except the explicitly-acknowledged additive evolutions above.
     const beforePaths = before.paths as AnyRecord;
     const afterPaths = after.paths as AnyRecord;
     for (const pathKey of Object.keys(beforePaths)) {
       expect(afterPaths[pathKey]).toBeDefined();
-      expect(sortDeep(afterPaths[pathKey])).toEqual(
-        sortDeep(beforePaths[pathKey])
-      );
+      if (pathKey in INTENTIONALLY_EVOLVED_PATHS) {
+        // Additive-only: the frozen contract must still be fully contained.
+        expect(
+          isAdditiveSuperset(beforePaths[pathKey], afterPaths[pathKey])
+        ).toBe(true);
+      } else {
+        expect(sortDeep(afterPaths[pathKey])).toEqual(
+          sortDeep(beforePaths[pathKey])
+        );
+      }
     }
 
     // Every pre-migration schema is byte-identical now (new schemas allowed).

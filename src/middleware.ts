@@ -2,6 +2,7 @@ import { defineMiddleware } from "astro:middleware";
 
 import { resolveSsrContext } from "./lib/auth/ssr-session";
 import { buildSecurityHeaders } from "./lib/security/security-headers";
+import { isTurnstileRequired } from "./lib/security/turnstile";
 import {
   BODY_SIZE_HARD_CEILING_BYTES,
   bodyTooLargeResponse,
@@ -27,7 +28,11 @@ function applyResponseHeaders(
   response.headers.set(CORRELATION_ID_HEADER, correlationId);
 
   for (const [name, value] of buildSecurityHeaders({
-    isProduction: process.env.APP_ENV === "production"
+    isProduction: process.env.APP_ENV === "production",
+    // Issue #186 — opens the one Cloudflare Turnstile origin in the CSP ONLY on
+    // a full-online deployment that requires Turnstile; false (no extra origin)
+    // on every LAN/offline deployment.
+    turnstileEnabled: isTurnstileRequired()
   })) {
     response.headers.set(name, value);
   }

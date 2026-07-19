@@ -66,6 +66,8 @@ const RULES: readonly Rule[] = [
     type: "int",
     min: 1
   },
+  { name: "SETUP_RATE_LIMIT_MAX", required: false, type: "int", min: 1 },
+  { name: "SETUP_RATE_LIMIT_WINDOW_SEC", required: false, type: "int", min: 1 },
   { name: "TRUSTED_PROXY_ENABLED", required: false, type: "bool" },
   {
     name: "AUTH_IP_HASH_SECRET",
@@ -134,6 +136,40 @@ const RULES: readonly Rule[] = [
     min: 1
   },
   { name: "AUTH_SSO_ALLOW_INSECURE_HOSTS", required: false, type: "string" },
+
+  // Full-online deployment-profile gate + Cloudflare Turnstile (Issue #186).
+  // All optional/off by default so every LAN/offline deployment passes with
+  // none of them set. `TURNSTILE_SITE_KEY` is public (embedded in the widget),
+  // so it is NOT marked `secret`; only `TURNSTILE_SECRET_KEY` is.
+  { name: "AUTH_ONLINE_SECURITY_ENABLED", required: false, type: "bool" },
+  {
+    name: "AUTH_ONLINE_SECURITY_PROFILE",
+    required: false,
+    type: "enum",
+    values: ["disabled", "full_online"]
+  },
+  { name: "TURNSTILE_ENABLED", required: false, type: "bool" },
+  { name: "TURNSTILE_SITE_KEY", required: false, type: "string" },
+  {
+    name: "TURNSTILE_SECRET_KEY",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  { name: "TURNSTILE_EXPECTED_HOSTNAME", required: false, type: "string" },
+  {
+    name: "TURNSTILE_VERIFY_TIMEOUT_MS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  { name: "TURNSTILE_MAX_TOKEN_AGE_SEC", required: false, type: "int", min: 1 },
+  {
+    name: "TURNSTILE_MAX_RESPONSE_BYTES",
+    required: false,
+    type: "int",
+    min: 1
+  },
 
   { name: "AWCMS_SYNC_ENABLED", required: false, type: "bool" },
   {
@@ -325,6 +361,42 @@ export function validateEnv(env: EnvBag): string[] {
     problems.push(
       "AUTH_SSO_ALLOW_INSECURE_HOSTS harus kosong di produksi — hanya untuk fake IdP lokal saat test."
     );
+  }
+
+  // Full-online deployment-profile gate (Issue #186). This is what lets a
+  // production preflight distinguish "disabled intentionally" (flag unset —
+  // nothing required, LAN/offline is fine) from "misconfigured" (flag on but
+  // the profile is anything other than full_online, including the explicitly
+  // contradictory "disabled"). Enforced regardless of APP_ENV.
+  if (env.AUTH_ONLINE_SECURITY_ENABLED === "true") {
+    const profile = (env.AUTH_ONLINE_SECURITY_PROFILE ?? "").trim();
+
+    if (profile !== "full_online") {
+      problems.push(
+        `AUTH_ONLINE_SECURITY_ENABLED=true membutuhkan AUTH_ONLINE_SECURITY_PROFILE=full_online; dapat ${
+          profile ? `"${profile}"` : "kosong"
+        }.`
+      );
+    }
+  }
+
+  // Cloudflare Turnstile (Issue #186): when enabled, the public site key, the
+  // secret key, AND the expected hostname must all be present — the hostname is
+  // required so the runtime hostname-confusion check fails closed rather than
+  // being silently skipped. Independent of the deployment-profile gate above,
+  // so an operator can stage the credentials before flipping the profile on.
+  if (env.TURNSTILE_ENABLED === "true") {
+    for (const name of [
+      "TURNSTILE_SITE_KEY",
+      "TURNSTILE_SECRET_KEY",
+      "TURNSTILE_EXPECTED_HOSTNAME"
+    ] as const) {
+      if ((env[name] ?? "").trim() === "") {
+        problems.push(
+          `${name} wajib diisi saat TURNSTILE_ENABLED=true (Turnstile fail-closed).`
+        );
+      }
+    }
   }
 
   // Tidak ada default yang aman untuk dua-duanya, jadi produksi wajib memilih
