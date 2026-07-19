@@ -1,0 +1,89 @@
+{
+  "$comment": [
+    "Five ILLUSTRATIVE ERP ABAC policies for the dynamic evaluator (Issue #179).",
+    "These are EXAMPLES ONLY — AWCMS ships NO domain policies in the base.",
+    "Each object is a valid request body for POST /api/v1/access/policies. A",
+    "derived ERP application authors the ones it needs; the base stays generic.",
+    "Every attribute used here is in the server-side allow-list",
+    "(src/modules/identity-access/domain/abac-policy.ts) and every condition",
+    "parses under dsl_version 1. See ADR-0033 for the precedence model:",
+    "explicit deny wins; the RBAC permission is still required; an allow-policy",
+    "only CONSTRAINS an already-granted permission, it never creates one."
+  ],
+  "policies": [
+    {
+      "$why": "Ownership — a seller may edit only their OWN sales invoice. The endpoint must populate resource.ownerTenantUserId from the persisted invoice row (never a client-claimed owner). As an allow-policy it constrains the sales.invoice.update permission the subject already holds via RBAC.",
+      "policyCode": "erp.sales.invoice.owner-only-update",
+      "effect": "allow",
+      "description": "Editing a sales invoice is limited to its owner.",
+      "moduleKey": "sales",
+      "activityCode": "invoice",
+      "action": "update",
+      "priority": 50,
+      "conditions": {
+        "attr": "resource.ownerTenantUserId",
+        "op": "eq",
+        "valueAttr": "subject.tenantUserId"
+      }
+    },
+    {
+      "$why": "Value limit with a role carve-out — deny approving a purchase order above 50,000,000 UNLESS the subject is a finance_manager. Explicit deny overrides the RBAC approve permission for everyone else.",
+      "policyCode": "erp.purchasing.po.high-value-approval-limit",
+      "effect": "deny",
+      "description": "Only a finance_manager may approve a purchase order over 50,000,000.",
+      "moduleKey": "purchasing",
+      "activityCode": "purchase_order",
+      "action": "approve",
+      "priority": 40,
+      "conditions": {
+        "allOf": [
+          { "attr": "resource.amount", "op": "gt", "value": 50000000 },
+          {
+            "not": {
+              "attr": "subject.roles",
+              "op": "in",
+              "value": ["finance_manager"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$why": "Posted immutability — a posted document is append-only (ADR-0005). Deny any update of a resource whose status is 'posted', tenant-wide (module/activity wildcards). This is a safety net layered over the domain's own immutability checks.",
+      "policyCode": "erp.common.no-edit-posted",
+      "effect": "deny",
+      "description": "No resource may be updated once its status is posted.",
+      "action": "update",
+      "priority": 10,
+      "conditions": { "attr": "resource.status", "op": "eq", "value": "posted" }
+    },
+    {
+      "$why": "Environment gate — accounting exports may leave only from a trusted network. env.ipTrusted is strictly server-derived (defaults to false / fail-closed until a deployment wires a trusted-network resolver), never client-supplied.",
+      "policyCode": "erp.accounting.ledger.export-trusted-network-only",
+      "effect": "deny",
+      "description": "Ledger export is blocked from untrusted networks.",
+      "moduleKey": "accounting",
+      "activityCode": "ledger",
+      "action": "export",
+      "priority": 30,
+      "conditions": {
+        "not": { "attr": "env.ipTrusted", "op": "eq", "value": true }
+      }
+    },
+    {
+      "$why": "Lifecycle constraint — a document may be edited only while draft or pending. As an allow-policy it constrains the document.document.update permission: if the document is in any other status the allow-constraint is unsatisfied and the request is denied.",
+      "policyCode": "erp.document.draft-or-pending-edit-only",
+      "effect": "allow",
+      "description": "Documents are editable only in draft or pending status.",
+      "moduleKey": "document",
+      "activityCode": "document",
+      "action": "update",
+      "priority": 60,
+      "conditions": {
+        "attr": "resource.status",
+        "op": "in",
+        "value": ["draft", "pending"]
+      }
+    }
+  ]
+}

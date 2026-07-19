@@ -64,5 +64,6 @@ flowchart LR
 | [0030](0030-business-scope-hierarchy-generic-authorization-layer.md)  | Lapisan authorization generik business-scope hierarchy (multi-entity/unit)                        | Accepted |
 | [0031](0031-segregation-of-duties-conflict-enforcement.md)            | Segregation of duties (SoD) generik, exception/override, conflict enforcement                     | Accepted |
 | [0032](0032-family-compatibility-manifest-and-ci-conformance.md)      | Compatibility manifest keluarga + CI conformance terhadap standar AWCMS-Mini                      | Accepted |
+| [0033](0033-abac-dynamic-policy-evaluator.md)                         | Evaluator ABAC dinamis: DSL kondisi terbatas, precedence deny-overrides, cache tenant-keyed       | Accepted |
 
 ADR spesifik skop fondasi ERP & integrasi bisnis ditambahkan mulai nomor berikutnya seiring keputusan diambil.

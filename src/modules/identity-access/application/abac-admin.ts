@@ -82,6 +82,11 @@ export async function createPolicy(
   let rows: AbacPolicyRow[];
 
   try {
+    // Flat #171 rows leave `is_dsl_managed` at its default (false), so the
+    // evaluator NEVER consumes them (policy-cache.ts filters is_dsl_managed) —
+    // a flat policy is inert (its pre-#179 behavior), and cannot brick a tenant.
+    // Only the DSL surface (`/api/v1/access/policies`) produces consumed
+    // policies. See ADR-0033 §3.
     rows = (await tx`
       INSERT INTO awcms_abac_policies (tenant_id, policy_code, effect, description)
       VALUES (${tenantId}, ${input.policyCode}, ${input.effect}, ${input.description})

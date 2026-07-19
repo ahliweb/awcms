@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:6e1b20b3b4f59509d21969cd84ed2b35d3d0b129b9bfb465bd0adac80343630f -->
+<!-- i18n-source-hash: sha256:6af849352cc010957057084a6141a42f312a2d2126ac9bb05b2e9df785d8057d -->
 
 # Architecture Decision Records (ADR)
 
@@ -66,5 +66,6 @@ flowchart LR
 | [0030](0030-business-scope-hierarchy-generic-authorization-layer.md)  | Generic business-scope hierarchy authorization layer (multi-entity/unit)                                | Accepted |
 | [0031](0031-segregation-of-duties-conflict-enforcement.md)            | Generic segregation of duties (SoD), exception/override, conflict enforcement                           | Accepted |
 | [0032](0032-family-compatibility-manifest-and-ci-conformance.md)      | Family compatibility manifest + CI conformance to the AWCMS-Mini standard                               | Accepted |
+| [0033](0033-abac-dynamic-policy-evaluator.md)                         | Dynamic ABAC policy evaluator: bounded condition DSL, deny-overrides precedence, tenant-keyed cache     | Accepted |
 
 ADRs specific to the ERP-foundation & business-integration scope are added starting at the next number as decisions are made.

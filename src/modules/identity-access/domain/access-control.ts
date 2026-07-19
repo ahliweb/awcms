@@ -1,8 +1,21 @@
+import {
+  AbacEvaluationError,
+  evaluateAbacPolicies,
+  type AbacEnvironment,
+  type CompiledPolicy
+} from "./abac-evaluator";
+
 export type TenantContext = {
   tenantId: string;
   tenantUserId: string;
   identityId: string;
   roles: string[];
+  /** Issue #179 — acting subject's default office id, exposed to the ABAC DSL
+   * as `subject.defaultOfficeId` (may be absent; no base resolver populates it
+   * yet, so it resolves as absent until a deployment wires one). Optional and
+   * additive: no existing call site sets it and every leaf referencing it is
+   * simply false while unset. */
+  defaultOfficeId?: string;
   correlationId?: string;
 };
 
@@ -81,6 +94,10 @@ export type AccessDecision = {
   allowed: boolean;
   reason: string;
   matchedPolicy?: string;
+  /** Issue #179 — the `dsl_version` of the stored ABAC policy that produced
+   * this decision, when one did. Built-in guards (tenant_isolation, etc.)
+   * leave this undefined. Recorded on the decision log. */
+  matchedPolicyVersion?: number;
 };
 
 /** A `(scopeType, scopeId)` reference — the generic scope address used everywhere in the business-scope layer (Issue #180). */
@@ -203,12 +220,42 @@ function normalizeScopeRelations(
   return relations;
 }
 
-/** Default deny, deny overrides allow. */
+/**
+ * Issue #179 — optional stored-policy input passed by the application guard.
+ * When omitted (or `policies` empty) the dynamic ABAC layer is a NO-OP and
+ * `evaluateAccess` behaves exactly as before: every pre-existing call site that
+ * supplies ≤4 arguments is completely unaffected. `env` is injected so the
+ * evaluator stays pure and deterministic (no clock read inside the domain).
+ */
+export type AbacEvaluationInput = {
+  policies: readonly CompiledPolicy[];
+  env: AbacEnvironment;
+};
+
+/**
+ * Default deny, deny overrides allow. Built-in hard guards (tenant isolation,
+ * self-approval, force-decision, business-scope #180) run first and
+ * short-circuit. Then the dynamic ABAC layer (Issue #179):
+ *
+ *   1. An explicit DENY policy whose condition matches → DENY (overrides RBAC
+ *      allow and any allow-policy — "explicit deny wins"). An applicable but
+ *      INVALID stored policy, or any evaluation error, also → DENY (fail-closed).
+ *   2. The RBAC permission is STILL REQUIRED; an allow-policy never creates a
+ *      permission the subject lacks.
+ *   3. Applicable ALLOW policies act as an additional CONSTRAINT on the
+ *      already-granted permission: if any allow-policy is applicable, at least
+ *      one must be satisfied, else DENY. No applicable policy → ABAC is a no-op
+ *      and RBAC decides.
+ *
+ * The #181 segregation-of-duties high-risk guard remains in the application
+ * chokepoint (`authorizeInTransaction`), additive AFTER this decision.
+ */
 export function evaluateAccess(
   context: TenantContext,
   request: AccessRequest,
   grantedPermissionKeys: ReadonlySet<string>,
-  businessScopeFacts?: readonly BusinessScopeFact[]
+  businessScopeFacts?: readonly BusinessScopeFact[],
+  abac?: AbacEvaluationInput
 ): AccessDecision {
   const resourceTenantId = request.resourceAttributes?.tenantId;
 
@@ -330,6 +377,52 @@ export function evaluateAccess(
     }
   }
 
+  // Issue #179 — dynamic ABAC policy pass. Runs only when the application guard
+  // supplied active policies. Evaluated ONCE here; the deny/invalid parts take
+  // effect BEFORE the RBAC check (deny overrides RBAC), the allow-constraint
+  // part AFTER (an allow-policy only constrains a permission the subject already
+  // holds). Any evaluation error → fail-closed DENY.
+  let abacPass: ReturnType<typeof evaluateAbacPolicies> | undefined;
+
+  if (abac && abac.policies.length > 0) {
+    try {
+      abacPass = evaluateAbacPolicies(
+        abac.policies,
+        context,
+        request,
+        abac.env
+      );
+    } catch (error) {
+      if (error instanceof AbacEvaluationError) {
+        return {
+          allowed: false,
+          reason: "ABAC policy evaluation failed; access denied (fail-closed).",
+          matchedPolicy: "abac_evaluation_error"
+        };
+      }
+      throw error;
+    }
+
+    if (abacPass.invalidMatch) {
+      return {
+        allowed: false,
+        reason:
+          "An active ABAC policy is invalid; access denied (fail-closed).",
+        matchedPolicy: abacPass.invalidMatch.policyCode,
+        matchedPolicyVersion: abacPass.invalidMatch.dslVersion
+      };
+    }
+
+    if (abacPass.denyMatch) {
+      return {
+        allowed: false,
+        reason: "Denied by ABAC policy.",
+        matchedPolicy: abacPass.denyMatch.policyCode,
+        matchedPolicyVersion: abacPass.denyMatch.dslVersion
+      };
+    }
+  }
+
   const key = permissionKey(
     request.moduleKey,
     request.activityCode,
@@ -341,6 +434,25 @@ export function evaluateAccess(
       allowed: false,
       reason: "No role permission grants this action.",
       matchedPolicy: "default_deny"
+    };
+  }
+
+  // Allow-constraint: an allow-policy never grants a permission (the RBAC gate
+  // above already passed), but when any allow-policy is applicable it narrows
+  // the grant — at least one must be satisfied, else deny.
+  if (abacPass && abacPass.allowApplicable) {
+    if (abacPass.allowSatisfied) {
+      return {
+        allowed: true,
+        reason: "Granted via role permission and allowed by ABAC policy.",
+        matchedPolicy: abacPass.allowSatisfied.policyCode,
+        matchedPolicyVersion: abacPass.allowSatisfied.dslVersion
+      };
+    }
+    return {
+      allowed: false,
+      reason: "No ABAC allow-policy condition is satisfied for this request.",
+      matchedPolicy: "abac_allow_unsatisfied"
     };
   }
 

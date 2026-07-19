@@ -18,6 +18,7 @@ import {
   DuplicatePolicyCodeError
 } from "../../../../../modules/identity-access/application/abac-admin";
 import { validateCreateAbacPolicyInput } from "../../../../../modules/identity-access/domain/abac-admin-validation";
+import { invalidatePolicyCache } from "../../../../../modules/identity-access/application/policy-cache";
 
 const READ_GUARD = {
   moduleKey: "identity_access",
@@ -94,7 +95,15 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   const now = new Date();
   const correlationId = locals.correlationId;
 
-  return withTenant(sql, tenantId, async (tx) => {
+  // This flat #171 surface writes the SAME `awcms_abac_policies` table the
+  // Issue #179 evaluator now reads through a tenant-keyed cache. A policy
+  // authored here must invalidate that cache too, or the evaluator would keep
+  // serving a stale snapshot — i.e. this endpoint would be a way to change
+  // access rules WITHOUT them taking effect (the "API must not bypass the
+  // evaluator" acceptance criterion). Invalidate AFTER commit, like the DSL
+  // surface does.
+  let mutated = false;
+  const response = await withTenant(sql, tenantId, async (tx) => {
     const auth = await authorizeInTransaction(
       tx,
       tenantId,
@@ -112,6 +121,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         validation.value,
         correlationId
       );
+      mutated = true;
       return created(policy);
     } catch (error) {
       // Caught INSIDE `withTenant` on purpose: `DuplicatePolicyCodeError` is not
@@ -127,4 +137,9 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       throw error;
     }
   });
+
+  if (mutated) {
+    invalidatePolicyCache(tenantId);
+  }
+  return response;
 };

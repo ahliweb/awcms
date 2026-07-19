@@ -461,6 +461,148 @@ Removes a role assignment. 404 when no such assignment exists. Gated on `identit
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/access/evaluate` — Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue
+
+- **operationId**: `accessEvaluate`
+- **Security**: bearerAuth + tenantHeader
+
+Returns what `evaluateAccess` would decide for the CALLER'S OWN access against the tenant's current active ABAC policies. Requires a valid session but no specific permission. The decision is recorded to the ABAC decision log.
+
+**Request body** (required): [`AccessEvaluateRequest`](#schema-accessevaluaterequest)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The evaluated decision.     | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/access/policies` — List the tenant's dynamic ABAC (DSL) policies (Issue
+
+- **operationId**: `accessListAbacPolicies`
+- **Security**: bearerAuth + tenantHeader
+
+Reads every stored DSL policy for the tenant (active and inactive). Gated on `identity_access.abac_policies.read`.
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | The tenant's DSL ABAC policies. | object                                 |
+| 400    | Validation error.               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/access/policies` — Author a new dynamic ABAC (DSL) policy (high-risk; audit-logged; only valid DSL is stored).
+
+- **operationId**: `accessCreateAbacPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Validates the condition DSL fail-closed before any write, so an invalid policy can never be stored or enabled. Created disabled by default unless `isActive:true`. Gated on `identity_access.abac_policies.configure`.
+
+**Request body** (required): [`AbacDslPolicyWriteRequest`](#schema-abacdslpolicywriterequest)
+
+**Responses**
+
+| Status | Description                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------- | -------------------------------------- |
+| 200    | The created policy.                                               | object                                 |
+| 400    | Validation error.                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | A policy with that policyCode already exists (RESOURCE_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/access/policies/{id}` — Read one dynamic ABAC (DSL) policy (Issue
+
+- **operationId**: `accessGetAbacPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Gated on `identity_access.abac_policies.read`. 404 when the policy does not exist in this tenant.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The policy.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/access/policies/{id}` — Replace a dynamic ABAC (DSL) policy (high-risk; audit-logged; only valid DSL is stored).
+
+- **operationId**: `accessUpdateAbacPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Validates the condition DSL fail-closed before any write. Gated on `identity_access.abac_policies.configure`. 404 when the policy does not exist; 409 on a policyCode collision.
+
+**Request body** (required): [`AbacDslPolicyWriteRequest`](#schema-abacdslpolicywriterequest)
+
+**Responses**
+
+| Status | Description                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------- | -------------------------------------- |
+| 200    | The updated policy.                                               | object                                 |
+| 400    | Validation error.                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | A policy with that policyCode already exists (RESOURCE_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/access/policies/{id}/disable` — Disable a dynamic ABAC (DSL) policy (high-risk; audit-logged).
+
+- **operationId**: `accessDisableAbacPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Marks the policy inactive so the evaluator stops applying it (deactivate-not-delete). Gated on `identity_access.abac_policies.configure`. 404 when the policy does not exist.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The disabled policy.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/access/policies/{id}/enable` — Enable a dynamic ABAC (DSL) policy (high-risk; audit-logged).
+
+- **operationId**: `accessEnableAbacPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Marks the policy active so the evaluator applies it. Gated on `identity_access.abac_policies.configure`. 404 when the policy does not exist.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The enabled policy.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/access/policies/simulate` — Read-only ABAC decision simulation/preview (Issue
+
+- **operationId**: `accessSimulateAbacPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Returns what `evaluateAccess` would decide for a hypothetical subject/request/environment against the tenant's active policies, plus a per-policy structural trace (no attribute VALUES, no PII). Writes no decision log. Gated on `identity_access.abac_policies.analyze`; simulating a DIFFERENT existing tenant user additionally requires `identity_access.access_control.read`.
+
+**Request body** (required): [`AbacSimulationRequest`](#schema-abacsimulationrequest)
+
+**Responses**
+
+| Status | Description                                  | Schema                                 |
+| ------ | -------------------------------------------- | -------------------------------------- |
+| 200    | The simulated decision and per-policy trace. | object                                 |
+| 400    | Validation error.                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                  | [`ApiError`](#standard-error-envelope) |
+
 ### `POST /api/v1/auth/login` — Authenticate with a login identifier and password; issues a session token.
 
 - **operationId**: `postAuthLogin`
@@ -3330,6 +3472,106 @@ Transactional, versioned domain-event outbox and dispatcher admin API — read-o
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
+
+### Schema: AbacDslPolicyConditions
+
+A bounded, deterministic condition AST (Issue #179). A node is either a composition — exactly one of `allOf` (array; empty = true), `anyOf` (array; empty = false), or `not` (a single node) — or a leaf `{ attr, op, value | valueAttr }` over the server-side attribute allow-list (`subject.*`, `resource.*`, `action`, `env.*`) with the bounded operator set (eq, ne, in, nin, lt, lte, gt, gte, exists). No regex, functions, or arbitrary expressions. Depth ≤ 32, ≤ 512 nodes.
+
+A bounded, deterministic condition AST (Issue #179). A node is either a composition — exactly one of `allOf` (array; empty = true), `anyOf` (array; empty = false), or `not` (a single node) — or a leaf `{ attr, op, value | valueAttr }` over the server-side attribute allow-list (`subject.*`, `resource.*`, `action`, `env.*`) with the bounded operator set (eq, ne, in, nin, lt, lte, gt, gte, exists). No regex, functions, or arbitrary expressions. Depth ≤ 32, ≤ 512 nodes.
+
+**Example**
+
+```json
+{}
+```
+
+### Schema: AbacDslPolicyWriteRequest
+
+| Field          | Type                                                         | Required | Nullable | Description                                                                           |
+| -------------- | ------------------------------------------------------------ | -------- | -------- | ------------------------------------------------------------------------------------- |
+| `policyCode`   | string                                                       | yes      | no       | 3-100 chars, alphanumerics plus . _ - (not at the edges).                             |
+| `effect`       | enum(`allow`, `deny`)                                        | yes      | no       |                                                                                       |
+| `description`  | string                                                       | no       | yes      |                                                                                       |
+| `moduleKey`    | string                                                       | no       | yes      | Applicability filter — null is a wildcard.                                            |
+| `activityCode` | string                                                       | no       | yes      |                                                                                       |
+| `action`       | string                                                       | no       | yes      |                                                                                       |
+| `resourceType` | string                                                       | no       | yes      |                                                                                       |
+| `dslVersion`   | integer                                                      | no       | no       | Defaults to the current DSL version (1). A value newer than supported is rejected.    |
+| `priority`     | integer                                                      | no       | no       | Lower evaluates first (deterministic). Defaults to 100.                               |
+| `conditions`   | [`AbacDslPolicyConditions`](#schema-abacdslpolicyconditions) | yes      | no       |                                                                                       |
+| `isActive`     | boolean                                                      | no       | no       | On create only — author enabled immediately. Defaults to false (author, then enable). |
+
+**Example**
+
+```json
+{
+  "policyCode": "string",
+  "effect": "allow",
+  "description": "string",
+  "moduleKey": "string",
+  "activityCode": "string",
+  "action": "string",
+  "resourceType": "string",
+  "dslVersion": 0,
+  "priority": 0,
+  "conditions": "(operation-specific payload)",
+  "isActive": false
+}
+```
+
+### Schema: AbacSimulationRequest
+
+| Field         | Type   | Required | Nullable | Description |
+| ------------- | ------ | -------- | -------- | ----------- |
+| `subject`     | object | no       | no       |             |
+| `request`     | object | yes      | no       |             |
+| `environment` | object | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "subject": {
+    "tenantUserId": "00000000-0000-0000-0000-000000000000",
+    "roles": ["string"]
+  },
+  "request": {
+    "moduleKey": "string",
+    "activityCode": "string",
+    "action": "string",
+    "resourceType": "string",
+    "resourceAttributes": "(operation-specific payload)"
+  },
+  "environment": {
+    "ipTrusted": false,
+    "now": "2026-01-01T00:00:00.000Z"
+  }
+}
+```
+
+### Schema: AccessEvaluateRequest
+
+| Field                | Type          | Required | Nullable | Description |
+| -------------------- | ------------- | -------- | -------- | ----------- |
+| `moduleKey`          | string        | yes      | no       |             |
+| `activityCode`       | string        | yes      | no       |             |
+| `action`             | string        | yes      | no       |             |
+| `resourceType`       | string        | no       | no       |             |
+| `resourceId`         | string (uuid) | no       | no       |             |
+| `resourceAttributes` | object        | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "moduleKey": "string",
+  "activityCode": "string",
+  "action": "string",
+  "resourceType": "string",
+  "resourceId": "00000000-0000-0000-0000-000000000000",
+  "resourceAttributes": "(operation-specific payload)"
+}
+```
 
 ## Domain events
 

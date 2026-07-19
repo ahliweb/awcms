@@ -21,6 +21,7 @@ import {
   resolveTenantContext
 } from "./auth-context";
 import { recordDecisionLog } from "./decision-log";
+import { loadActivePolicies } from "./policy-cache";
 import { extractBearerToken } from "./session-lookup";
 
 /**
@@ -157,11 +158,20 @@ export async function authorizeInTransaction(
     );
   }
 
+  // Issue #179 — load the tenant's active, compiled ABAC policies (tenant-keyed
+  // cache, deterministically invalidated on any policy mutation) and evaluate
+  // them at this single chokepoint, AFTER session/tenant/module-enabled/RBAC
+  // resolution. An empty policy set (the default for every tenant that has
+  // authored none) makes ABAC a no-op — behavior is unchanged. `ipTrusted`
+  // defaults to false (fail-closed) until a deployment wires a trusted-network
+  // resolver; `env.now` is the request timestamp already threaded through here.
+  const policies = await loadActivePolicies(tx, tenantId);
   const decision = evaluateAccess(
     context,
     guard,
     grantedPermissionKeys,
-    businessScopeFacts
+    businessScopeFacts,
+    { policies, env: { now, ipTrusted: false } }
   );
 
   await recordDecisionLog(tx, tenantId, context.tenantUserId, guard, decision);

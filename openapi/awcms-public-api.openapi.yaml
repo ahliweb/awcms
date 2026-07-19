@@ -290,6 +290,39 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/access/evaluate:
+    post:
+      operationId: accessEvaluate
+      tags:
+        - Identity & Access
+      summary: Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue
+      description: Returns what `evaluateAccess` would decide for the CALLER'S OWN access against the tenant's current active ABAC policies. Requires a valid session but no specific permission. The decision is recorded to the ABAC decision log.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessEvaluateRequest"
+      responses:
+        "200":
+          description: The evaluated decision.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/AccessEvaluateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/access/modules:
     get:
       operationId: listAccessModules
@@ -324,6 +357,272 @@ paths:
                               type: string
                             description:
                               type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/access/policies:
+    get:
+      operationId: accessListAbacPolicies
+      tags:
+        - Identity & Access
+      summary: List the tenant's dynamic ABAC (DSL) policies (Issue
+      description: Reads every stored DSL policy for the tenant (active and inactive). Gated on `identity_access.abac_policies.read`.
+      responses:
+        "200":
+          description: The tenant's DSL ABAC policies.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      policies:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AbacDslPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: accessCreateAbacPolicy
+      tags:
+        - Identity & Access
+      summary: Author a new dynamic ABAC (DSL) policy (high-risk; audit-logged; only valid DSL is stored).
+      description: Validates the condition DSL fail-closed before any write, so an invalid policy can never be stored or enabled. Created disabled by default unless `isActive:true`. Gated on `identity_access.abac_policies.configure`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AbacDslPolicyWriteRequest"
+      responses:
+        "200":
+          description: The created policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      policy:
+                        $ref: "#/components/schemas/AbacDslPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A policy with that policyCode already exists (RESOURCE_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/access/policies/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: accessGetAbacPolicy
+      tags:
+        - Identity & Access
+      summary: Read one dynamic ABAC (DSL) policy (Issue
+      description: Gated on `identity_access.abac_policies.read`. 404 when the policy does not exist in this tenant.
+      responses:
+        "200":
+          description: The policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      policy:
+                        $ref: "#/components/schemas/AbacDslPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: accessUpdateAbacPolicy
+      tags:
+        - Identity & Access
+      summary: Replace a dynamic ABAC (DSL) policy (high-risk; audit-logged; only valid DSL is stored).
+      description: Validates the condition DSL fail-closed before any write. Gated on `identity_access.abac_policies.configure`. 404 when the policy does not exist; 409 on a policyCode collision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AbacDslPolicyWriteRequest"
+      responses:
+        "200":
+          description: The updated policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      policy:
+                        $ref: "#/components/schemas/AbacDslPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: A policy with that policyCode already exists (RESOURCE_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/access/policies/{id}/disable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: accessDisableAbacPolicy
+      tags:
+        - Identity & Access
+      summary: Disable a dynamic ABAC (DSL) policy (high-risk; audit-logged).
+      description: Marks the policy inactive so the evaluator stops applying it (deactivate-not-delete). Gated on `identity_access.abac_policies.configure`. 404 when the policy does not exist.
+      responses:
+        "200":
+          description: The disabled policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      policy:
+                        $ref: "#/components/schemas/AbacDslPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/access/policies/{id}/enable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: accessEnableAbacPolicy
+      tags:
+        - Identity & Access
+      summary: Enable a dynamic ABAC (DSL) policy (high-risk; audit-logged).
+      description: Marks the policy active so the evaluator applies it. Gated on `identity_access.abac_policies.configure`. 404 when the policy does not exist.
+      responses:
+        "200":
+          description: The enabled policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      policy:
+                        $ref: "#/components/schemas/AbacDslPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/access/policies/simulate:
+    post:
+      operationId: accessSimulateAbacPolicy
+      tags:
+        - Identity & Access
+      summary: Read-only ABAC decision simulation/preview (Issue
+      description: Returns what `evaluateAccess` would decide for a hypothetical subject/request/environment against the tenant's active policies, plus a per-policy structural trace (no attribute VALUES, no PII). Writes no decision log. Gated on `identity_access.abac_policies.analyze`; simulating a DIFFERENT existing tenant user additionally requires `identity_access.access_control.read`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AbacSimulationRequest"
+      responses:
+        "200":
+          description: The simulated decision and per-policy trace.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/AbacSimulationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -6982,6 +7281,95 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
   schemas:
+    AbacDslPolicy:
+      type: object
+      description: One stored dynamic ABAC (DSL) policy (Issue
+      properties:
+        id:
+          type: string
+          format: uuid
+        policyCode:
+          type: string
+        effect:
+          type: string
+          enum:
+            - allow
+            - deny
+        description:
+          type: string
+          nullable: true
+        moduleKey:
+          type: string
+          nullable: true
+        activityCode:
+          type: string
+          nullable: true
+        action:
+          type: string
+          nullable: true
+        resourceType:
+          type: string
+          nullable: true
+        dslVersion:
+          type: integer
+        priority:
+          type: integer
+        conditions:
+          $ref: "#/components/schemas/AbacDslPolicyConditions"
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AbacDslPolicyConditions:
+      type: object
+      description: "A bounded, deterministic condition AST (Issue #179). A node is either a composition — exactly one of `allOf` (array; empty = true), `anyOf` (array; empty = false), or `not` (a single node) — or a leaf `{ attr, op, value | valueAttr }` over the server-side attribute allow-list (`subject.*`, `resource.*`, `action`, `env.*`) with the bounded operator set (eq, ne, in, nin, lt, lte, gt, gte, exists). No regex, functions, or arbitrary expressions. Depth ≤ 32, ≤ 512 nodes."
+      additionalProperties: true
+    AbacDslPolicyWriteRequest:
+      type: object
+      required:
+        - policyCode
+        - effect
+        - conditions
+      properties:
+        policyCode:
+          type: string
+          description: 3-100 chars, alphanumerics plus . _ - (not at the edges).
+        effect:
+          type: string
+          enum:
+            - allow
+            - deny
+        description:
+          type: string
+          nullable: true
+        moduleKey:
+          type: string
+          nullable: true
+          description: Applicability filter — null is a wildcard.
+        activityCode:
+          type: string
+          nullable: true
+        action:
+          type: string
+          nullable: true
+        resourceType:
+          type: string
+          nullable: true
+        dslVersion:
+          type: integer
+          description: Defaults to the current DSL version (1). A value newer than supported is rejected.
+        priority:
+          type: integer
+          description: Lower evaluates first (deterministic). Defaults to 100.
+        conditions:
+          $ref: "#/components/schemas/AbacDslPolicyConditions"
+        isActive:
+          type: boolean
+          description: On create only — author enabled immediately. Defaults to false (author, then enable).
     AbacPolicy:
       type: object
       properties:
@@ -7000,6 +7388,136 @@ components:
           nullable: true
         isActive:
           type: boolean
+    AbacSimulationRequest:
+      type: object
+      required:
+        - request
+      properties:
+        subject:
+          type: object
+          properties:
+            tenantUserId:
+              type: string
+              format: uuid
+              nullable: true
+              description: Simulate an EXISTING tenant user (resolves their real roles). Different from the caller requires identity_access.access_control.read.
+            roles:
+              type: array
+              items:
+                type: string
+              description: Simulate a hypothetical role-code set instead of an existing user.
+        request:
+          type: object
+          required:
+            - moduleKey
+            - activityCode
+            - action
+          properties:
+            moduleKey:
+              type: string
+            activityCode:
+              type: string
+            action:
+              type: string
+            resourceType:
+              type: string
+              nullable: true
+            resourceAttributes:
+              type: object
+              additionalProperties: true
+              description: Hypothetical resource attributes (treated as server-verified).
+        environment:
+          type: object
+          properties:
+            ipTrusted:
+              type: boolean
+            now:
+              type: string
+              format: date-time
+              nullable: true
+    AbacSimulationResponse:
+      type: object
+      properties:
+        decision:
+          type: object
+          properties:
+            allowed:
+              type: boolean
+            reason:
+              type: string
+            matchedPolicy:
+              type: string
+              nullable: true
+            matchedPolicyVersion:
+              type: integer
+              nullable: true
+        evaluatedPolicies:
+          type: array
+          description: Per-policy structural trace — booleans only, never attribute VALUES (no PII).
+          items:
+            type: object
+            properties:
+              policyCode:
+                type: string
+              effect:
+                type: string
+                enum:
+                  - allow
+                  - deny
+              dslVersion:
+                type: integer
+              priority:
+                type: integer
+              applicable:
+                type: boolean
+              conditionSatisfied:
+                type: boolean
+                nullable: true
+              invalid:
+                type: boolean
+        subject:
+          type: object
+          properties:
+            tenantUserId:
+              type: string
+            roles:
+              type: array
+              items:
+                type: string
+    AccessEvaluateRequest:
+      type: object
+      required:
+        - moduleKey
+        - activityCode
+        - action
+      properties:
+        moduleKey:
+          type: string
+        activityCode:
+          type: string
+        action:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+          format: uuid
+        resourceAttributes:
+          type: object
+          additionalProperties: true
+    AccessEvaluateResponse:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+        reason:
+          type: string
+        matchedPolicy:
+          type: string
+          nullable: true
+        matchedPolicyVersion:
+          type: integer
+          nullable: true
     ApiError:
       type: object
       required:
