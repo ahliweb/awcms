@@ -50,6 +50,15 @@ import { evaluateAccess } from "../src/modules/identity-access/domain/access-con
 import { evaluateLoginAttempt } from "../src/modules/identity-access/domain/login-policy";
 import { checkRateLimit } from "../src/lib/security/rate-limit";
 import { buildSecurityHeaders } from "../src/lib/security/security-headers";
+import {
+  isTurnstileEnabled,
+  TURNSTILE_REQUIRED_WHEN_ENABLED
+} from "../src/lib/security/turnstile";
+import {
+  isFullOnlineSecurityActive,
+  isOnlineSecurityEnabled,
+  resolveOnlineSecurityProfile
+} from "../src/lib/auth/online-security-config";
 import { validateEnv } from "./validate-env";
 
 export type CheckSeverity = "critical" | "warning" | "info";
@@ -1505,6 +1514,131 @@ export function checkSsoCredentialEncryptionKeyConfigured(
 }
 
 // ---------------------------------------------------------------------------
+// Full-online deployment-profile gate is correctly configured (Issue #186) —
+// critical when misconfigured, informational when disabled intentionally
+// ---------------------------------------------------------------------------
+
+/**
+ * Issue #186 — the deployment-profile gate every full-online-only control
+ * (today: Turnstile) checks. This is what lets a production preflight tell
+ * "disabled intentionally" (the flag is unset — LAN/offline is fine, nothing
+ * required) apart from "misconfigured" (the flag is on but the profile is
+ * anything other than `full_online`). `critical` because a misconfigured gate
+ * silently changes whether an online-only control activates at all.
+ */
+export function checkOnlineAuthSecurityReady(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name = "Full-online deployment-profile gate is correctly configured";
+  const severity: CheckSeverity = "critical";
+
+  if (!isOnlineSecurityEnabled(env)) {
+    return {
+      name,
+      severity: "info",
+      status: "pass",
+      evidence:
+        'AUTH_ONLINE_SECURITY_ENABLED is not "true" — full-online auth hardening (Turnstile) is disabled intentionally; LAN/offline deployments are unaffected.'
+    };
+  }
+
+  const profile = resolveOnlineSecurityProfile(env);
+
+  if (profile !== "full_online") {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `AUTH_ONLINE_SECURITY_ENABLED=true but AUTH_ONLINE_SECURITY_PROFILE is "${
+        env.AUTH_ONLINE_SECURITY_PROFILE ?? "unset"
+      }", not "full_online" — this is a MISCONFIGURED gate, not "disabled intentionally".`
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence:
+      "AUTH_ONLINE_SECURITY_ENABLED=true and AUTH_ONLINE_SECURITY_PROFILE=full_online — the full-online gate is active."
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Cloudflare Turnstile configuration is complete when enabled (Issue #186) —
+// critical when misconfigured, informational when disabled intentionally
+// ---------------------------------------------------------------------------
+
+/**
+ * Issue #186 — when `TURNSTILE_ENABLED=true`, the public site key, the secret
+ * key, AND the expected hostname must all be present or Turnstile fails closed
+ * for every gated request (login/setup) on the full-online profile. `critical`
+ * because it silently defeats a bot-mitigation control the deployment declared
+ * it wanted. Deliberately independent of the outer profile gate (an operator
+ * may stage credentials before flipping the profile on).
+ *
+ * NEVER prints a secret value — only which required var NAME is missing, from
+ * the feature's own `TURNSTILE_REQUIRED_WHEN_ENABLED` list, so this check can
+ * never drift from `validate-env.ts` and never leaks the key.
+ */
+export function checkTurnstileReady(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name = "Turnstile configuration is complete when enabled";
+  const severity: CheckSeverity = "critical";
+
+  if (!isTurnstileEnabled(env)) {
+    return {
+      name,
+      severity: "info",
+      status: "pass",
+      evidence:
+        'TURNSTILE_ENABLED is not "true" — Cloudflare Turnstile is disabled intentionally; no widget, CSP origin, or outbound verification call is active.'
+    };
+  }
+
+  const missing = TURNSTILE_REQUIRED_WHEN_ENABLED.filter(
+    (varName) => (env[varName] ?? "").trim() === ""
+  );
+
+  if (missing.length > 0) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `TURNSTILE_ENABLED=true but missing/empty: ${missing.join(
+        ", "
+      )} — Turnstile would fail closed for every gated request (secret values are never printed).`
+    };
+  }
+
+  // Issue #186 (F3) — fully configured but INERT. `TURNSTILE_ENABLED=true` with
+  // every key present, yet the full-online deployment-profile gate is off, means
+  // `isTurnstileRequired()` is false: login/setup run with NO Turnstile at all.
+  // This is a LEGITIMATE staging state (keys provisioned ahead of the profile
+  // flip), so it is a `warning`, not blocking — but it must be surfaced loudly,
+  // because otherwise an operator who staged the keys and forgot to flip the
+  // profile sees every preflight check pass green while the control does nothing.
+  if (!isFullOnlineSecurityActive(env)) {
+    return {
+      name,
+      severity: "warning",
+      status: "fail",
+      evidence:
+        "TURNSTILE_ENABLED=true and all keys present, but Turnstile is INERT: the full-online profile gate is off (needs AUTH_ONLINE_SECURITY_ENABLED=true AND AUTH_ONLINE_SECURITY_PROFILE=full_online). Login/setup run WITHOUT Turnstile until the profile is flipped on — legitimate only if you are staging credentials ahead of go-live."
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence:
+      "TURNSTILE_ENABLED=true, all keys present, AND the full-online profile gate is active — Turnstile is enforced (secret values never printed)."
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 12. Login rate limiting is implemented (warning)
 // ---------------------------------------------------------------------------
 
@@ -1649,6 +1783,8 @@ export async function runSecurityReadinessChecks(): Promise<
     checkSyncHmacSecretNotDefault(),
     checkMfaEncryptionKeyConfigured(),
     checkSsoCredentialEncryptionKeyConfigured(),
+    checkOnlineAuthSecurityReady(),
+    checkTurnstileReady(),
     checkLoginRateLimitImplemented(),
     checkSecurityHeadersBuilt()
   ];

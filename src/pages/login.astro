@@ -6,8 +6,8 @@
  * guard in `src/middleware.ts` then consumes.
  *
  * Simplified vs mini: NO i18n (strings hardcoded English — awcms has no
- * gettext catalog yet), NO Cloudflare Turnstile, NO Google OIDC button, and
- * NO `<script type="application/json">` strings blob. What is kept 1:1 is the
+ * gettext catalog yet), NO Google OIDC button, and NO
+ * `<script type="application/json">` strings blob. What is kept 1:1 is the
  * stable element ids the E2E specs and the client script rely on
  * (`#login-form`, `#tenant-id`, `#login-identifier`, `#password`,
  * `#login-submit`, `#login-error`).
@@ -16,12 +16,32 @@
  * exactly as in mini — a derived app resolves the tenant by domain instead of
  * asking the user to paste a UUID (out of scope here).
  *
+ * Cloudflare Turnstile (Issue #186) — the widget and its loader script render
+ * ONLY when `isTurnstileRequired()` (the full-online deployment-profile gate
+ * AND `TURNSTILE_ENABLED=true`) is true. Every local/offline/LAN deployment
+ * (the default) renders this page byte-identically to before this issue: no
+ * `cf-turnstile` div, no `challenges.cloudflare.com` script, no iframe. When
+ * required, the middleware CSP opens `script-src`/`frame-src` for that one
+ * Cloudflare origin (see `src/lib/security/security-headers.ts`), and the
+ * external loader is an explicit `is:inline` `<script src>` (NOT an
+ * Astro-bundled module — those only load from `'self'`). `TURNSTILE_SITE_KEY`
+ * is public (Cloudflare embeds it in every widget); `TURNSTILE_SECRET_KEY` is
+ * server-side only and never reaches this page.
+ *
  * CSP: `tokens.css`/`admin.css` are external <link>s (`inlineStylesheets:
- * "never"`) and the client below is an Astro-bundled module script — no inline
- * script/style, so the middleware `default-src 'self'` policy holds.
+ * "never"`) and the login client below is an Astro-bundled module script — no
+ * inline script/style, so the middleware `default-src 'self'` policy holds.
  */
 import "../styles/tokens.css";
 import "../styles/admin.css";
+import {
+  isTurnstileRequired,
+  resolveTurnstileSiteKey,
+  LOGIN_TURNSTILE_ACTION
+} from "../lib/security/turnstile";
+
+const turnstileActive = isTurnstileRequired();
+const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
 ---
 
 <!doctype html>
@@ -64,9 +84,30 @@ import "../styles/admin.css";
           autocomplete="current-password"
         />
 
+        {
+          turnstileActive && turnstileSiteKey && (
+            <div
+              class="cf-turnstile"
+              data-sitekey={turnstileSiteKey}
+              data-action={LOGIN_TURNSTILE_ACTION}
+            />
+          )
+        }
+
         <button type="submit" id="login-submit">Sign in</button>
       </form>
     </main>
+
+    {
+      turnstileActive && turnstileSiteKey && (
+        <script
+          is:inline
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+          async
+          defer
+        />
+      )
+    }
 
     <script>
       // The import is deliberate — it forces Astro to bundle this script to an
@@ -104,6 +145,11 @@ import "../styles/admin.css";
           formData.get("loginIdentifier") ?? ""
         ).trim();
         const password = String(formData.get("password") ?? "");
+        // Cloudflare Turnstile (Issue #186) auto-injects a hidden
+        // `cf-turnstile-response` field into this form once solved — absent
+        // entirely when the widget is not rendered (Turnstile not required for
+        // this deployment), matching the server's own optional field.
+        const turnstileToken = formData.get("cf-turnstile-response");
 
         try {
           const response = await fetch("/api/v1/auth/login", {
@@ -113,7 +159,11 @@ import "../styles/admin.css";
               "X-AWCMS-Tenant-ID": tenantId
             },
             credentials: "same-origin",
-            body: JSON.stringify({ loginIdentifier, password })
+            body: JSON.stringify({
+              loginIdentifier,
+              password,
+              ...(turnstileToken ? { turnstileToken } : {})
+            })
           });
 
           const payload = await response.json().catch(() => null);

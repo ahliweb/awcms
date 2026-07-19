@@ -113,6 +113,7 @@ import {
 } from "../../src/lib/database/client";
 import { resetDatabaseCircuitBreakerForTests } from "../../src/lib/database/circuit-breaker";
 import { resetWorkClassGatesForTests } from "../../src/lib/database/work-class";
+import { resetRateLimitForTests } from "../../src/lib/security/rate-limit";
 
 /**
  * Captured at module load. The privileged/admin connection string the CI
@@ -445,6 +446,7 @@ export async function teardownIntegrationDatabase(): Promise<void> {
 export async function resetDatabase(): Promise<void> {
   resetDatabaseCircuitBreakerForTests();
   resetWorkClassGatesForTests();
+  resetRateLimitForTests();
 
   await truncateAwcmsTables(getAdminSql());
 }
@@ -576,6 +578,7 @@ export async function teardownHandlerDatabase(): Promise<void> {
 export async function resetHandlerDatabase(): Promise<void> {
   resetDatabaseCircuitBreakerForTests();
   resetWorkClassGatesForTests();
+  resetRateLimitForTests();
 
   await truncateAwcmsTables(getHandlerAdminSql());
 }

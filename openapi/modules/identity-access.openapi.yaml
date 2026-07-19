@@ -286,6 +286,13 @@ paths:
                   type: string
                 password:
                   type: string
+                turnstileToken:
+                  type: string
+                  description: >-
+                    Cloudflare Turnstile response token (Issue #186). Required
+                    only on a full-online deployment where Turnstile is enabled;
+                    absent and ignored on every LAN/offline deployment. Verified
+                    server-side before password verification.
       responses:
         "200":
           description: Session issued.
