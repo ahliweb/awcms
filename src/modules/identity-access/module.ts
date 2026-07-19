@@ -38,7 +38,7 @@ export const identityAccessModule = defineModule({
     {
       command: "bun run identity-access:business-scope:expiry",
       purpose:
-        "Transitions business-scope assignments past their effective_to to expired, recording append-only lifecycle events and an aggregate audit entry per tenant.",
+        "Transitions business-scope assignments and SoD conflict exceptions past their effective_to to expired, recording append-only lifecycle events and an aggregate audit entry per tenant (per-exception audit for exceptions).",
       recommendedSchedule: "Hourly via cron/systemd timer.",
       environmentNotes:
         "Database-only operation, no external network dependency. Safe to run alongside request traffic (bounded per-tenant passes, maintenance work class).",
@@ -60,6 +60,40 @@ export const identityAccessModule = defineModule({
       activityCode: "business_scope_assignments",
       action: "revoke",
       description: "Revoke an active business-scope assignment"
+    },
+    // Segregation of duties (Issue #181) — conflict evaluation log + the
+    // exception lifecycle. `create`/`approve` are deliberately separate (maker/
+    // checker over the override mechanism).
+    {
+      activityCode: "business_scope_conflicts",
+      action: "read",
+      description: "Read segregation-of-duties conflict evaluation history"
+    },
+    {
+      activityCode: "business_scope_exceptions",
+      action: "read",
+      description: "Read segregation-of-duties conflict exceptions"
+    },
+    {
+      activityCode: "business_scope_exceptions",
+      action: "create",
+      description: "Request a segregation-of-duties conflict exception"
+    },
+    {
+      activityCode: "business_scope_exceptions",
+      action: "approve",
+      description: "Approve a segregation-of-duties conflict exception"
+    },
+    {
+      activityCode: "business_scope_exceptions",
+      action: "reject",
+      description: "Reject a segregation-of-duties conflict exception"
+    },
+    {
+      activityCode: "business_scope_exceptions",
+      action: "revoke",
+      description:
+        "Revoke a previously approved segregation-of-duties conflict exception"
     },
     {
       activityCode: "access_control",

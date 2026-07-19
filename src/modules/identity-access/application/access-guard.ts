@@ -10,9 +10,11 @@ import type {
   BusinessScopeFact,
   TenantContext
 } from "../domain/access-control";
-import { evaluateAccess } from "../domain/access-control";
+import { evaluateAccess, isHighRiskAction } from "../domain/access-control";
 import type { BusinessScopeHierarchyPort } from "../../_shared/ports/business-scope-hierarchy-port";
+import type { SoDRuleDescriptor } from "../../_shared/module-contract";
 import { resolveBusinessScopeFacts } from "./business-scope-facts";
+import { checkHighRiskSoDConflicts } from "./high-risk-sod-guard";
 import {
   fetchGrantedPermissionKeys,
   resolveModuleEnabled,
@@ -69,6 +71,13 @@ export type AuthorizeResult =
  * call site (none of which sets a required scope) is completely unaffected.
  * The base ships only a no-op hierarchy adapter; a derived application passes
  * its own real resolver here.
+ *
+ * `options.sodRules` (Issue #181) is OPTIONAL — segregation-of-duties conflict
+ * enforcement for HIGH-RISK actions runs at this chokepoint (deny-overrides-
+ * allow, ACTION-TIME) using the composed registry's rules by default. Every
+ * pre-existing call site is unaffected: the base registry declares no SoD
+ * rules, so the guard short-circuits at zero cost. A test/composition root may
+ * inject a rule set here to exercise enforcement.
  */
 export async function authorizeInTransaction(
   tx: Bun.SQL,
@@ -76,7 +85,10 @@ export async function authorizeInTransaction(
   tokenHash: string,
   now: Date,
   guard: AccessRequest,
-  options?: { hierarchyPort?: BusinessScopeHierarchyPort }
+  options?: {
+    hierarchyPort?: BusinessScopeHierarchyPort;
+    sodRules?: readonly SoDRuleDescriptor[];
+  }
 ): Promise<AuthorizeResult> {
   const context = await resolveTenantContext(tx, tenantId, tokenHash, now);
 
@@ -159,6 +171,32 @@ export async function authorizeInTransaction(
       allowed: false,
       denied: fail(403, "ACCESS_DENIED", decision.reason)
     };
+  }
+
+  // Issue #181 — segregation-of-duties conflict enforcement, additive to the
+  // ordinary ABAC decision above (deny-overrides-allow: this can only turn an
+  // already-`allowed` HIGH-RISK decision into a deny, never the reverse). This
+  // is ACTION-TIME enforcement — a subject holding both halves of a registered
+  // conflict is denied at execution, not only at assignment. See
+  // `high-risk-sod-guard.ts`'s header (it reasons about permissions held via
+  // BOTH the business-scope-assignment path AND ordinary RBAC role grants, and
+  // short-circuits at zero cost when no rule references the requested key).
+  if (isHighRiskAction(guard.action)) {
+    const sodCheck = await checkHighRiskSoDConflicts(
+      tx,
+      tenantId,
+      context,
+      guard,
+      now,
+      { hierarchyPort: options?.hierarchyPort, rules: options?.sodRules }
+    );
+
+    if (sodCheck.blocked) {
+      return {
+        allowed: false,
+        denied: fail(403, "SOD_CONFLICT", sodCheck.reason)
+      };
+    }
   }
 
   return { allowed: true, context, grantedPermissionKeys };

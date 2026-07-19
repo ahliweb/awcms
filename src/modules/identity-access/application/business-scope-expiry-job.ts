@@ -1,10 +1,9 @@
 /**
- * Scheduled expiry job for business-scope assignments (Issue #180, epic #177
- * Wave 2 authorization). Ported from awcms-mini
- * (`identity-access/application/business-scope-expiry-job.ts`, Issue #746)
- * but with the SoD-conflict-exception expiry pass STRIPPED — that table
- * (`awcms_mini_sod_conflict_exceptions`) belongs to #181, not #180, so this
- * job only sweeps `awcms_business_scope_assignments`.
+ * Scheduled expiry job for business-scope assignments AND SoD conflict
+ * exceptions (Issue #180 + #181, epic #177 Wave 2 authorization). Ported from
+ * awcms-mini (`identity-access/application/business-scope-expiry-job.ts`,
+ * Issue #746). #180 shipped the assignment sweep; #181 re-adds the
+ * SoD-conflict-exception expiry pass (`awcms_sod_conflict_exceptions`).
  *
  * Built on the shared worker runner (`src/lib/jobs/job-runner.ts`'s `runJob`)
  * and `iterateTenantsInBatches` (`src/lib/jobs/batching.ts`), same shape as
@@ -19,7 +18,13 @@
  * `actor_tenant_user_id: null` — a system/scheduled transition, not a human
  * action) PLUS one aggregate `recordAuditEvent` per tenant per pass
  * (count-only, avoiding one `awcms_audit_events` row per expired assignment
- * when a backlog is large).
+ * when a backlog is large); every transitioned SoD exception gets one
+ * `recordAuditEvent` per row (`critical` severity — exceptions are
+ * low-volume, and a compliance-sensitive override losing its cover is worth
+ * an individually addressable audit entry). Flipping `status` here is a
+ * BACKGROUND CLEANUP, not the gate: `isSoDConflictExceptionCurrentlyValid`
+ * already treats an `approved` row past its `effective_to` as ineffective at
+ * decision time, so expiry takes effect IMMEDIATELY (issue #181).
  *
  * Flipping `status` to `expired` here is a BACKGROUND CLEANUP, not the
  * authorization gate: `isBusinessScopeAssignmentCurrentlyActive` already
@@ -42,6 +47,7 @@ import type { JobContext } from "../../../lib/jobs/job-runner";
 
 const IDENTITY_ACCESS_MODULE_KEY = "identity_access";
 const ASSIGNMENT_EXPIRY_BATCH_LIMIT = 500;
+const EXCEPTION_EXPIRY_BATCH_LIMIT = 500;
 
 type ExpiryPassResult = BatchPassResult;
 
@@ -99,9 +105,58 @@ async function expireAssignmentsPass(
   );
 }
 
+async function expireSoDConflictExceptionsPass(
+  sql: Bun.SQL,
+  tenantId: string,
+  now: Date
+): Promise<ExpiryPassResult> {
+  return withTenant(
+    sql,
+    tenantId,
+    async (tx) => {
+      const expiredRows = (await tx`
+        UPDATE awcms_sod_conflict_exceptions
+        SET status = 'expired', updated_at = now()
+        WHERE id IN (
+          SELECT id FROM awcms_sod_conflict_exceptions
+          WHERE tenant_id = ${tenantId} AND status = 'approved' AND effective_to <= ${now}
+          ORDER BY effective_to
+          LIMIT ${EXCEPTION_EXPIRY_BATCH_LIMIT}
+        )
+        RETURNING id, rule_key
+      `) as { id: string; rule_key: string }[];
+
+      for (const row of expiredRows) {
+        await recordAuditEvent(tx, {
+          tenantId,
+          moduleKey: IDENTITY_ACCESS_MODULE_KEY,
+          action: "expire",
+          resourceType: "sod_conflict_exception",
+          resourceId: row.id,
+          severity: "critical",
+          message: `SoD conflict exception for rule "${row.rule_key}" expired automatically.`,
+          attributes: { ruleKey: row.rule_key }
+        });
+      }
+
+      if (expiredRows.length > 0) {
+        recordCounter(
+          "business_scope_expirations_total",
+          { itemType: "exception" },
+          expiredRows.length
+        );
+      }
+
+      return { count: expiredRows.length };
+    },
+    { workClass: "maintenance" }
+  );
+}
+
 export type BusinessScopeExpiryResult = {
   tenantsChecked: number;
   assignmentsExpired: number;
+  exceptionsExpired: number;
   tenantsHitPassLimit: string[];
 };
 
@@ -159,19 +214,24 @@ async function countExpiredBacklogForTenant(
   sql: Bun.SQL,
   tenantId: string,
   now: Date
-): Promise<number> {
+): Promise<{ assignments: number; exceptions: number }> {
   return withTenant(
     sql,
     tenantId,
     async (tx) => {
       const rows = (await tx`
-        SELECT count(*) AS assignments
-        FROM awcms_business_scope_assignments
-        WHERE tenant_id = ${tenantId} AND status = 'active'
-          AND effective_to IS NOT NULL AND effective_to <= ${now}
-      `) as { assignments: string }[];
+        SELECT
+          (SELECT count(*) FROM awcms_business_scope_assignments
+            WHERE tenant_id = ${tenantId} AND status = 'active'
+              AND effective_to IS NOT NULL AND effective_to <= ${now}) AS assignments,
+          (SELECT count(*) FROM awcms_sod_conflict_exceptions
+            WHERE tenant_id = ${tenantId} AND status = 'approved' AND effective_to <= ${now}) AS exceptions
+      `) as { assignments: string; exceptions: string }[];
 
-      return Number(rows[0]?.assignments ?? 0);
+      return {
+        assignments: Number(rows[0]?.assignments ?? 0),
+        exceptions: Number(rows[0]?.exceptions ?? 0)
+      };
     },
     { workClass: "maintenance" }
   );
@@ -186,19 +246,19 @@ export async function runBusinessScopeExpiry(
   if (ctx.dryRun) {
     const tenants = await fetchActiveTenants(sql);
     let assignmentsExpired = 0;
+    let exceptionsExpired = 0;
 
     for (const tenant of tenants) {
       if (ctx.signal.aborted) break;
-      assignmentsExpired += await countExpiredBacklogForTenant(
-        sql,
-        tenant.id,
-        now
-      );
+      const counts = await countExpiredBacklogForTenant(sql, tenant.id, now);
+      assignmentsExpired += counts.assignments;
+      exceptionsExpired += counts.exceptions;
     }
 
     return {
       tenantsChecked: tenants.length,
       assignmentsExpired,
+      exceptionsExpired,
       tenantsHitPassLimit: []
     };
   }
@@ -207,6 +267,12 @@ export async function runBusinessScopeExpiry(
     sql,
     (tenantId) => expireAssignmentsPass(sql, tenantId, now),
     { signal: ctx.signal }
+  );
+
+  const exceptionOutcome = await iterateTenantsInBatches(
+    sql,
+    (tenantId) => expireSoDConflictExceptionsPass(sql, tenantId, now),
+    { signal: ctx.signal, tenants: assignmentOutcome.tenants }
   );
 
   for (const tenant of assignmentOutcome.tenants) {
@@ -218,10 +284,14 @@ export async function runBusinessScopeExpiry(
   for (const [tenantId, outcome] of assignmentOutcome.perTenant) {
     if (outcome.hitPassLimit) tenantsHitPassLimit.add(tenantId);
   }
+  for (const [tenantId, outcome] of exceptionOutcome.perTenant) {
+    if (outcome.hitPassLimit) tenantsHitPassLimit.add(tenantId);
+  }
 
   return {
     tenantsChecked: assignmentOutcome.tenants.length,
     assignmentsExpired: assignmentOutcome.totalCount,
+    exceptionsExpired: exceptionOutcome.totalCount,
     tenantsHitPassLimit: [...tenantsHitPassLimit]
   };
 }

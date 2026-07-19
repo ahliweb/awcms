@@ -151,6 +151,21 @@ export type ModuleDescriptor = {
    * `awcms_reporting_projection_*` tables.
    */
   reportingProjections?: ProjectionDescriptor[];
+  /**
+   * Segregation-of-duties conflict rules this module owns (Issue #181,
+   * epic #177 Wave 2 authorization) — see `SoDRuleDescriptor`'s own doc
+   * comment below. A module contributes ONE of these per GENERIC
+   * conflicting-permission declaration it wants enforced;
+   * `identity_access/domain/sod-rule-registry.ts` is the aggregator/validator
+   * (`collectSoDRuleDescriptors`/`validateSoDRuleRegistry` over
+   * `listModules()`). The BASE ships NO domain SoD rules (issue #181
+   * out-of-scope: "Hardcode rule finance/procurement/payroll/inventory ke
+   * base" — the base never invents a business rule); a derived application
+   * contributes its own through `application-registry.ts`, and the in-repo
+   * fixture `tests/fixtures/derived-application-example/` carries the
+   * illustrative examples.
+   */
+  sodRules?: SoDRuleDescriptor[];
 };
 
 /**
@@ -244,6 +259,61 @@ export type ProjectionDescriptor = {
 };
 
 /**
+ * Segregation-of-duties conflict rule descriptor (Issue #181, epic #177
+ * Wave 2 authorization). Ported from awcms-mini (`_shared/module-contract.ts`,
+ * Issue #746). Same "module declares its own descriptor, a central engine
+ * reads `listModules()`" shape `permissions`/`reportingProjections` above
+ * already use — `identity_access`'s `domain/sod-rule-registry.ts` is the
+ * aggregator/validator, mirroring `reporting/domain/projection-registry.ts`.
+ *
+ * A module contributes ONE of these per real SoD policy it wants enforced
+ * (maker/checker, requester/approver, posting/period-control, ...) — the
+ * base never hardcodes a domain-specific rule itself (issue #181 out-of-scope:
+ * "Hardcode rule finance, procurement, payroll, atau inventory ke base");
+ * every entry is a GENERIC conflicting-permission-pair declaration, never a
+ * business rule about what those permissions actually do.
+ *
+ * TRUSTED CODE-ONLY METADATA (same rule as every descriptor type above) —
+ * declared by the owning module's source, never tenant/request-controlled,
+ * never a secret/executable expression (issue #181 out-of-scope: no
+ * tenant-supplied arbitrary expression/SQL).
+ */
+export type SoDRuleScopeApplicability =
+  "any" | "same_scope_only" | "global_within_tenant";
+
+export type SoDRuleSeverity = "low" | "medium" | "high" | "critical";
+
+export type SoDRuleExceptionPolicy = {
+  allowed: boolean;
+  /** Required when `allowed` is `true` — the permission key a DIFFERENT tenant user must hold to approve an exception to THIS rule (never the same permission the rule itself conflicts over). */
+  requiresApprovalPermission?: string;
+  /** Required only when `allowed` is `true` — an exception must always have a bounded lifetime (issue #181: "Exception harus ... time-bound"; no indefinite override); moot (must be absent) when `allowed` is `false`. */
+  maxDurationDays?: number;
+};
+
+export type SoDRuleDescriptor = {
+  /** Stable, unique across the whole registry, e.g. `"sales.invoice_maker_checker"`, matching `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$` (`<module_key>.<rule_shortname>`). */
+  ruleKey: string;
+  /** Must equal the declaring module's own `key` — validated by the registry gate, not the type system (see `identity-access/domain/sod-rule-registry.ts`). */
+  ownerModuleKey: string;
+  description: string;
+  /** At least 2 `module.activity.action` permission keys (the `permissionKey()` format, `identity-access/domain/access-control.ts`) that must never all be held/exercised by the same subject for the same scope (or anywhere in the tenant, per `scopeApplicability`) without an approved exception. */
+  conflictingPermissionKeys: string[];
+  /**
+   * `"global_within_tenant"` — the conflict applies even without any shared
+   * business scope (holding both permissions anywhere in the tenant is itself
+   * the conflict). `"same_scope_only"` — the conflict only applies when both
+   * permissions would apply to the SAME `scopeType`+`scopeId`. `"any"` is
+   * reserved for a future scope-agnostic rule kind (neither global nor
+   * scope-matched) — treated the same as `"global_within_tenant"` by the
+   * evaluator so it never silently fails open; no rule in this base uses it.
+   */
+  scopeApplicability: SoDRuleScopeApplicability;
+  severity: SoDRuleSeverity;
+  exceptionPolicy: SoDRuleExceptionPolicy;
+};
+
+/**
  * SemVer of this file's own exported type shape — independent of
  * `package.json` (release version) and OpenAPI/AsyncAPI `info.version`.
  * MAJOR: a field removed/renamed or an optional field becomes required.
@@ -259,8 +329,14 @@ export type ProjectionDescriptor = {
  * `ApplicationModuleRegistry`/`ModuleMigrationNamespace` composition types
  * (MINOR: purely additive, no existing field removed/retyped — every base
  * `module.ts` that only set the original fields stays valid unchanged).
+ *
+ * `1.3.0` (Issue #181, epic #177 Wave 2 authorization) — added the optional
+ * `ModuleDescriptor.sodRules` field plus the `SoDRuleDescriptor` family of
+ * exported types (`SoDRuleScopeApplicability`/`SoDRuleSeverity`/
+ * `SoDRuleExceptionPolicy`), ported from awcms-mini Issue #746 (MINOR: purely
+ * additive — every base `module.ts` that omits `sodRules` stays valid).
  */
-export const MODULE_CONTRACT_VERSION = "1.2.0";
+export const MODULE_CONTRACT_VERSION = "1.3.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

@@ -2683,6 +2683,373 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/identity/business-scope/conflicts:
+    get:
+      operationId: listSoDConflictEvaluations
+      tags:
+        - Identity & Access
+      summary: List the SoD conflict evaluation log (Issue
+      description: "Keyset-paginated, permission-gated segregation-of-duties conflict evaluation history (the conflict preview / audit view). Recorded for every assignment-create and high-risk-action conflict check, regardless of outcome. Safe projection: rule key, subject id, trigger context, outcome, reason, and timestamp only. Gated on `identity_access.business_scope_conflicts.read`."
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque keyset cursor from a previous page's `nextCursor`.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - name: ruleKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: conflictDetected
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "true"
+              - "false"
+      responses:
+        "200":
+          description: A page of SoD conflict evaluations (newest first) plus the next cursor.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      conflicts:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SoDConflictEvaluation"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/identity/business-scope/exceptions:
+    get:
+      operationId: listSoDConflictExceptions
+      tags:
+        - Identity & Access
+      summary: List this tenant's SoD conflict exceptions (Issue
+      description: Lists the tenant's segregation-of-duties conflict exceptions, optionally filtered by `status`/`ruleKey`. Gated on `identity_access.business_scope_exceptions.read`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - approved
+              - rejected
+              - expired
+              - revoked
+        - name: ruleKey
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The tenant's SoD conflict exceptions (newest first, bounded).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      exceptions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SoDConflictException"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createSoDConflictException
+      tags:
+        - Identity & Access
+      summary: Request a SoD conflict exception (high-risk, audited, idempotent).
+      description: 'Requests a bounded-lifetime, scope-bound exception to a registered SoD rule (`status: "pending"`, requires separate approval by a different user holding the rule''s approval permission). The rule must exist in the code registry and permit exceptions; the exception must have an end date (no indefinite override). Gated on `identity_access.business_scope_exceptions.create`. Requires `Idempotency-Key`.'
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ruleKey
+                - subjectTenantUserId
+                - justification
+                - effectiveTo
+              properties:
+                ruleKey:
+                  type: string
+                subjectTenantUserId:
+                  type: string
+                  format: uuid
+                scopeType:
+                  type: string
+                  nullable: true
+                  description: Set together with scopeId for a scope-specific exception; both null for a blanket exception.
+                scopeId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                justification:
+                  type: string
+                  minLength: 10
+                effectiveFrom:
+                  type: string
+                  format: date-time
+                effectiveTo:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: The created (pending) SoD conflict exception.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      exception:
+                        $ref: "#/components/schemas/SoDConflictException"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/identity/business-scope/exceptions/{id}/approve:
+    post:
+      operationId: approveSoDConflictException
+      tags:
+        - Identity & Access
+      summary: Approve a pending SoD conflict exception (high-risk, audited, idempotent).
+      description: Approves a pending exception (the sanctioned administrative override). Self-approval is denied (re-checked from the DB row). Gated on the dedicated `identity_access.business_scope_exceptions.approve` permission. Requires `Idempotency-Key`; audited at `critical` severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decisionReason:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: The approved SoD conflict exception.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      exception:
+                        $ref: "#/components/schemas/SoDConflictException"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The exception is not pending, or the Idempotency-Key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/identity/business-scope/exceptions/{id}/reject:
+    post:
+      operationId: rejectSoDConflictException
+      tags:
+        - Identity & Access
+      summary: Reject a pending SoD conflict exception (audited, idempotent).
+      description: Rejects a pending exception — the safe outcome (the conflict stays denied). Gated on `identity_access.business_scope_exceptions.reject`. Requires `Idempotency-Key`; audited at `warning` severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decisionReason:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: The rejected SoD conflict exception.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      exception:
+                        $ref: "#/components/schemas/SoDConflictException"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The exception is not pending, or the Idempotency-Key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/identity/business-scope/exceptions/{id}/revoke:
+    post:
+      operationId: revokeSoDConflictException
+      tags:
+        - Identity & Access
+      summary: Revoke an approved SoD conflict exception (high-risk, audited, idempotent).
+      description: Revokes a previously approved exception, ending the override early (immediately ineffective at the next decision). Reason required. Gated on `identity_access.business_scope_exceptions.revoke`. Requires `Idempotency-Key`; audited at `critical` severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - revokeReason
+              properties:
+                revokeReason:
+                  type: string
+      responses:
+        "200":
+          description: The revoked SoD conflict exception.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      exception:
+                        $ref: "#/components/schemas/SoDConflictException"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The exception is not approved, or the Idempotency-Key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/logs/audit:
     get:
       operationId: listAuditEvents
@@ -7022,6 +7389,88 @@ components:
           type: boolean
         permissionCount:
           type: integer
+    SoDConflictEvaluation:
+      type: object
+      description: One append-only segregation-of-duties conflict-check decision log entry (Issue
+      properties:
+        id:
+          type: string
+          format: uuid
+        ruleKey:
+          type: string
+        subjectTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        triggerContext:
+          type: string
+          enum:
+            - assignment_create
+            - high_risk_decision
+        conflictDetected:
+          type: boolean
+        resolvedVia:
+          type: string
+          enum:
+            - none
+            - exception
+            - denied
+        decisionReason:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    SoDConflictException:
+      type: object
+      description: One segregation-of-duties conflict exception (Issue
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        ruleKey:
+          type: string
+        subjectTenantUserId:
+          type: string
+          format: uuid
+        scopeType:
+          type: string
+          nullable: true
+        scopeId:
+          type: string
+          format: uuid
+          nullable: true
+        justification:
+          type: string
+        requestedByTenantUserId:
+          type: string
+          format: uuid
+        approvedByTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - expired
+            - revoked
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveTo:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     SsoProvider:
       type: object
       description: A tenant OIDC SSO provider. The client secret is never included — only whether one is configured and, for the env-referenced case, the variable name.
