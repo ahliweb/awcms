@@ -27,6 +27,16 @@ export const identityAccessModule = defineModule({
       activityCode: "access_control",
       action: "configure",
       description: "Manage roles and role permissions"
+    },
+    {
+      activityCode: "mfa_admin",
+      action: "reset",
+      description: "Administratively reset (disable) another user's MFA factor"
+    },
+    {
+      activityCode: "mfa_admin",
+      action: "configure",
+      description: "Configure the tenant MFA enforcement policy"
     }
   ]
 });

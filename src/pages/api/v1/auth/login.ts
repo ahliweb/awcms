@@ -31,6 +31,21 @@ import {
   bodyTooLargeResponse,
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
+import {
+  isMfaFeatureEnabled,
+  resolveChallengeTtlSec
+} from "../../../../lib/auth/mfa-config";
+import {
+  createEnrollmentGrant,
+  createMfaChallenge,
+  findActiveMfaFactor
+} from "../../../../modules/identity-access/application/mfa";
+import { getTenantMfaPolicy } from "../../../../modules/identity-access/application/tenant-mfa-policy";
+import {
+  isPrivilegedFromPermissionKeys,
+  resolveMfaRequirement
+} from "../../../../modules/identity-access/domain/mfa-policy";
+import { fetchGrantedPermissionKeys } from "../../../../modules/identity-access/application/auth-context";
 import { log } from "../../../../lib/logging/logger";
 
 type LoginBody = { loginIdentifier?: unknown; password?: unknown };
@@ -270,15 +285,17 @@ export const POST: APIRoute = async ({
     );
 
     let tenantUserStatus: "active" | "inactive" | null = null;
+    let tenantUserId: string | null = null;
 
     if (identityRow) {
       const tenantUserRows = await tx`
-        SELECT status FROM awcms_tenant_users
+        SELECT id, status FROM awcms_tenant_users
         WHERE tenant_id = ${tenantId} AND identity_id = ${identityRow.id}
       `;
-      tenantUserStatus =
-        (tenantUserRows[0]?.status as "active" | "inactive" | undefined) ??
-        null;
+      const tenantUserRow = tenantUserRows[0] as
+        { id: string; status: "active" | "inactive" } | undefined;
+      tenantUserStatus = tenantUserRow?.status ?? null;
+      tenantUserId = tenantUserRow?.id ?? null;
     }
 
     const result = evaluateLoginAttempt({
@@ -326,6 +343,125 @@ export const POST: APIRoute = async ({
       const denyResponse = resolveLoginDenyResponse(result.reason);
 
       return fail(denyResponse.status, denyResponse.code, denyResponse.message);
+    }
+
+    // Issue #184 — MFA challenge gate. Reached only AFTER a valid password (the
+    // deny block above `return`ed otherwise), so it adds no account-enumeration
+    // oracle: an attacker without the password never reaches here, and a
+    // valid-password identity WITHOUT an active factor falls through to the
+    // ordinary aal1 session below exactly as before. Driven by DB state (an
+    // active factor row), NOT by `AUTH_MFA_ENABLED` — fail-closed, so turning
+    // the enrollment feature off can never let an already-enrolled identity
+    // skip its second factor. A password-valid login with an active factor
+    // receives a challenge, never a session.
+    const activeFactor = await findActiveMfaFactor(
+      tx,
+      tenantId,
+      identityRow!.id
+    );
+
+    if (activeFactor) {
+      await tx`UPDATE awcms_identities SET failed_login_count = 0 WHERE id = ${identityRow!.id}`;
+
+      const challenge = await createMfaChallenge(
+        tx,
+        tenantId,
+        identityRow!.id,
+        resolveChallengeTtlSec(),
+        now
+      );
+
+      await recordAuditEvent(tx, {
+        tenantId,
+        moduleKey: "identity_access",
+        action: "mfa_challenge_issued",
+        resourceType: "identity",
+        resourceId: identityRow!.id,
+        severity: "info",
+        message: "Password verified; MFA challenge issued.",
+        attributes: { method: "password", ...auditContext },
+        correlationId: locals.correlationId
+      });
+
+      return fail(
+        401,
+        "MFA_REQUIRED",
+        "Multi-factor authentication is required to complete sign-in.",
+        {},
+        {
+          mfaChallengeToken: challenge.token,
+          expiresAt: challenge.expiresAt.toISOString()
+        }
+      );
+    }
+
+    // Issue #184 (F1) — tenant MFA-required enforcement for an identity that
+    // passed the password check but has NO active factor. Reached only after a
+    // valid password (same enumeration-safe position as the challenge branch
+    // above — unknown/locked/wrong-password already collapsed to one response),
+    // so it is not an enumeration oracle. Fail-closed but NOT lockout-prone:
+    // instead of a full aal1 session, issue an enrollment-scoped grant that
+    // authorizes ONLY the enroll endpoints; a required user can always still
+    // self-enroll (no admin lockout). Gated on `isMfaFeatureEnabled()` — if the
+    // enrollment surface is disabled, MFA cannot be created, so requiring it
+    // would be an unrecoverable lockout; the policy is inert until enrollment
+    // is enabled.
+    if (isMfaFeatureEnabled() && tenantUserId) {
+      const mfaPolicy = await getTenantMfaPolicy(tx, tenantId);
+
+      if (mfaPolicy.enforcementLevel !== "optional") {
+        const isPrivileged =
+          mfaPolicy.enforcementLevel === "required_for_all"
+            ? true
+            : isPrivilegedFromPermissionKeys(
+                await fetchGrantedPermissionKeys(tx, tenantId, tenantUserId)
+              );
+
+        if (
+          resolveMfaRequirement({
+            level: mfaPolicy.enforcementLevel,
+            isPrivileged
+          })
+        ) {
+          await tx`UPDATE awcms_identities SET failed_login_count = 0 WHERE id = ${identityRow!.id}`;
+
+          const grant = await createEnrollmentGrant(
+            tx,
+            tenantId,
+            identityRow!.id,
+            resolveChallengeTtlSec(),
+            now
+          );
+
+          await recordAuditEvent(tx, {
+            tenantId,
+            moduleKey: "identity_access",
+            action: "mfa_enrollment_required",
+            resourceType: "identity",
+            resourceId: identityRow!.id,
+            severity: "warning",
+            message:
+              "Password verified; tenant policy requires MFA enrollment before a session is issued.",
+            attributes: {
+              method: "password",
+              enforcementLevel: mfaPolicy.enforcementLevel,
+              ...auditContext
+            },
+            correlationId: locals.correlationId
+          });
+
+          return fail(
+            401,
+            "MFA_ENROLLMENT_REQUIRED",
+            "Multi-factor authentication enrollment is required before sign-in can complete.",
+            {},
+            {
+              mfaEnrollmentToken: grant.token,
+              expiresAt: grant.expiresAt.toISOString()
+            }
+          );
+        }
+      }
     }
 
     const token = generateSessionToken();

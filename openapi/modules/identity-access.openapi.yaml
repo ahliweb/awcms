@@ -378,6 +378,461 @@ paths:
                         nullable: true
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/mfa/status:
+    get:
+      operationId: getAuthMfaStatus
+      tags:
+        - Identity & Access
+      summary: Current identity's MFA enrollment state.
+      responses:
+        "200":
+          description: MFA status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                      factorType:
+                        type: string
+                        enum:
+                          - totp
+                      activatedAt:
+                        type: string
+                        format: date-time
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/mfa/totp/enroll/start:
+    post:
+      operationId: postAuthMfaEnrollStart
+      tags:
+        - Identity & Access
+      summary: Begin TOTP enrollment; returns a one-time secret and otpauth URI.
+      description: Authorized by EITHER a live session OR an enrollment grant (X-AWCMS-MFA-Enrollment-Token) issued by POST /auth/login when a tenant policy requires MFA for an identity without a factor.
+      parameters:
+        - name: X-AWCMS-MFA-Enrollment-Token
+          in: header
+          required: false
+          description: Enrollment grant token from a login that returned MFA_ENROLLMENT_REQUIRED; used in place of a session.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pending factor created; secret shown once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      secret:
+                        type: string
+                      otpauthUri:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: MFA already active for this account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: MFA encryption key is missing/invalid (misconfigured).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/mfa/totp/enroll/verify:
+    post:
+      operationId: postAuthMfaEnrollVerify
+      tags:
+        - Identity & Access
+      summary: Confirm a pending TOTP enrollment; activates the factor and returns recovery codes.
+      description: Authorized by EITHER a live session OR an enrollment grant. When authorized via an enrollment grant (a login that returned MFA_ENROLLMENT_REQUIRED), the grant is consumed and a fresh aal2 session token is returned.
+      parameters:
+        - name: X-AWCMS-MFA-Enrollment-Token
+          in: header
+          required: false
+          description: Enrollment grant token; used in place of a session to complete the "must enroll" login.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+              properties:
+                code:
+                  type: string
+      responses:
+        "200":
+          description: Factor activated; recovery codes shown once. token/expiresAt/assuranceLevel are present only when enrolled via an enrollment grant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      activated:
+                        type: boolean
+                      recoveryCodes:
+                        type: array
+                        items:
+                          type: string
+                      token:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      assuranceLevel:
+                        type: string
+                        enum:
+                          - aal2
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          description: MFA misconfigured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/mfa/totp/verify:
+    post:
+      operationId: postAuthMfaVerify
+      tags:
+        - Identity & Access
+      summary: Complete a login paused with MFA_REQUIRED by submitting a TOTP or recovery code.
+      description: Authenticated by possession of the mfaChallengeToken from POST /auth/login, not by a session. On success issues an aal2 session.
+      security: []
+      parameters:
+        - name: X-AWCMS-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mfaChallengeToken
+              properties:
+                mfaChallengeToken:
+                  type: string
+                code:
+                  type: string
+                recoveryCode:
+                  type: string
+      responses:
+        "200":
+          description: MFA verified; aal2 session issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      assuranceLevel:
+                        type: string
+                        enum:
+                          - aal2
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Too many verification attempts from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: MFA misconfigured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/mfa/totp/disable:
+    post:
+      operationId: postAuthMfaDisable
+      tags:
+        - Identity & Access
+      summary: Self-service disable of the current identity's MFA factor.
+      responses:
+        "200":
+          description: MFA disabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      disabled:
+                        type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: No active MFA to disable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/mfa/recovery-codes/regenerate:
+    post:
+      operationId: postAuthMfaRecoveryRegenerate
+      tags:
+        - Identity & Access
+      summary: Invalidate existing recovery codes and issue a fresh single-use set.
+      responses:
+        "200":
+          description: New recovery codes shown once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      recoveryCodes:
+                        type: array
+                        items:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: No active MFA.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/mfa/step-up:
+    post:
+      operationId: postAuthMfaStepUp
+      tags:
+        - Identity & Access
+      summary: Raise the current session to aal2 for high-risk actions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                recoveryCode:
+                  type: string
+      responses:
+        "200":
+          description: Session stepped up to aal2 (rotated when rising from aal1).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      assuranceLevel:
+                        type: string
+                        enum:
+                          - aal2
+                      rotated:
+                        type: boolean
+                      token:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Too many verification attempts from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: MFA misconfigured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/mfa/admin/reset:
+    post:
+      operationId: postAuthMfaAdminReset
+      tags:
+        - Identity & Access
+      summary: Administratively reset another user's MFA factor (requires reason).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - identityId
+                - reason
+              properties:
+                identityId:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Target MFA reset.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      reset:
+                        type: boolean
+                      hadFactor:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/auth/mfa/policy:
+    get:
+      operationId: getAuthMfaPolicy
+      tags:
+        - Identity & Access
+      summary: Read the tenant MFA enforcement policy.
+      responses:
+        "200":
+          description: Tenant MFA policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TenantMfaPolicy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: putAuthMfaPolicy
+      tags:
+        - Identity & Access
+      summary: Set the tenant MFA enforcement level.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - enforcementLevel
+              properties:
+                enforcementLevel:
+                  type: string
+                  enum:
+                    - optional
+                    - required_for_privileged
+                    - required_for_all
+      responses:
+        "200":
+          description: Policy updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TenantMfaPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/roles:
     get:
       operationId: listRoles
@@ -806,6 +1261,22 @@ paths:
           $ref: "#/components/responses/NotFound"
 components:
   schemas:
+    TenantMfaPolicy:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        enforcementLevel:
+          type: string
+          enum:
+            - optional
+            - required_for_privileged
+            - required_for_all
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
     AbacPolicy:
       type: object
       properties:

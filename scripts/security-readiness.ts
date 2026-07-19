@@ -1354,6 +1354,74 @@ export function checkSyncHmacSecretNotDefault(
 }
 
 // ---------------------------------------------------------------------------
+// MFA TOTP secret encryption key is configured when MFA is enabled (critical)
+// ---------------------------------------------------------------------------
+
+const MFA_KEY_PLACEHOLDERS = new Set(["change-me", "changeme", "secret", ""]);
+
+/**
+ * Issue #184 — when `AUTH_MFA_ENABLED=true`, the TOTP secret encryption key
+ * MUST be a real 32-byte AES-256 key. There is no default key by design, so a
+ * missing/placeholder/wrong-length key means every enrollment and every login
+ * challenge fails closed (`MFA_MISCONFIGURED`) AND — worse — an operator who
+ * believes MFA is protecting privileged accounts has no working second factor.
+ * `critical` because it silently disables a security control the deployment
+ * declared it wanted.
+ */
+export function checkMfaEncryptionKeyConfigured(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name =
+    "MFA TOTP secret encryption key is configured when MFA is enabled";
+  const severity: CheckSeverity = "critical";
+
+  if (env.AUTH_MFA_ENABLED !== "true") {
+    return {
+      name,
+      severity: "info",
+      status: "pass",
+      evidence: `AUTH_MFA_ENABLED is not "true" — MFA enrollment is disabled by design, so its encryption key is not a live risk (not checked).`
+    };
+  }
+
+  const raw = env.AUTH_MFA_SECRET_ENCRYPTION_KEY?.trim() ?? "";
+
+  if (MFA_KEY_PLACEHOLDERS.has(raw)) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence:
+        "AUTH_MFA_ENABLED=true but AUTH_MFA_SECRET_ENCRYPTION_KEY is unset or a placeholder — there is no default key, so MFA is entirely non-functional (fails closed)."
+    };
+  }
+
+  let byteLength = 0;
+  try {
+    byteLength = Buffer.from(raw, "base64").length;
+  } catch {
+    byteLength = 0;
+  }
+
+  if (byteLength !== 32) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `AUTH_MFA_SECRET_ENCRYPTION_KEY base64-decodes to ${byteLength} bytes, not 32 — AES-256-GCM requires exactly a 32-byte key (\`openssl rand -base64 32\`).`
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence:
+      "AUTH_MFA_ENABLED=true and AUTH_MFA_SECRET_ENCRYPTION_KEY is a valid 32-byte AES-256 key."
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 12. Login rate limiting is implemented (warning)
 // ---------------------------------------------------------------------------
 
@@ -1496,6 +1564,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkAuditLogTableReachable(),
     checkEnvConfigValid(),
     checkSyncHmacSecretNotDefault(),
+    checkMfaEncryptionKeyConfigured(),
     checkLoginRateLimitImplemented(),
     checkSecurityHeadersBuilt()
   ];

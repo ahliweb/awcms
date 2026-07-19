@@ -507,6 +507,181 @@ Removes a role assignment. 404 when no such assignment exists. Gated on `identit
 | 200    | Current identity.           | object                                 |
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/auth/mfa/admin/reset` — Administratively reset another user's MFA factor (requires reason).
+
+- **operationId**: `postAuthMfaAdminReset`
+- **Security**: bearerAuth + tenantHeader
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Target MFA reset.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/auth/mfa/policy` — Read the tenant MFA enforcement policy.
+
+- **operationId**: `getAuthMfaPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Tenant MFA policy.          | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/auth/mfa/policy` — Set the tenant MFA enforcement level.
+
+- **operationId**: `putAuthMfaPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Policy updated.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/mfa/recovery-codes/regenerate` — Invalidate existing recovery codes and issue a fresh single-use set.
+
+- **operationId**: `postAuthMfaRecoveryRegenerate`
+- **Security**: bearerAuth + tenantHeader
+
+**Responses**
+
+| Status | Description                    | Schema                                 |
+| ------ | ------------------------------ | -------------------------------------- |
+| 200    | New recovery codes shown once. | object                                 |
+| 401    | Missing or invalid session.    | [`ApiError`](#standard-error-envelope) |
+| 409    | No active MFA.                 | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/auth/mfa/status` — Current identity's MFA enrollment state.
+
+- **operationId**: `getAuthMfaStatus`
+- **Security**: bearerAuth + tenantHeader
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | MFA status.                 | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/mfa/step-up` — Raise the current session to aal2 for high-risk actions.
+
+- **operationId**: `postAuthMfaStepUp`
+- **Security**: bearerAuth + tenantHeader
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                 | Schema                                 |
+| ------ | ----------------------------------------------------------- | -------------------------------------- |
+| 200    | Session stepped up to aal2 (rotated when rising from aal1). | object                                 |
+| 400    | Validation error.                                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                 | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many verification attempts from this source.            | [`ApiError`](#standard-error-envelope) |
+| 500    | MFA misconfigured.                                          | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/mfa/totp/disable` — Self-service disable of the current identity's MFA factor.
+
+- **operationId**: `postAuthMfaDisable`
+- **Security**: bearerAuth + tenantHeader
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | MFA disabled.               | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 409    | No active MFA to disable.   | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/mfa/totp/enroll/start` — Begin TOTP enrollment; returns a one-time secret and otpauth URI.
+
+- **operationId**: `postAuthMfaEnrollStart`
+- **Security**: bearerAuth + tenantHeader
+
+Authorized by EITHER a live session OR an enrollment grant (X-AWCMS-MFA-Enrollment-Token) issued by POST /auth/login when a tenant policy requires MFA for an identity without a factor.
+
+**Parameters**
+
+| Name                           | In     | Required | Type   | Description                                                                                            |
+| ------------------------------ | ------ | -------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| `X-AWCMS-MFA-Enrollment-Token` | header | no       | string | Enrollment grant token from a login that returned MFA_ENROLLMENT_REQUIRED; used in place of a session. |
+
+**Responses**
+
+| Status | Description                                            | Schema                                 |
+| ------ | ------------------------------------------------------ | -------------------------------------- |
+| 200    | Pending factor created; secret shown once.             | object                                 |
+| 401    | Missing or invalid session.                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                            | [`ApiError`](#standard-error-envelope) |
+| 409    | MFA already active for this account.                   | [`ApiError`](#standard-error-envelope) |
+| 500    | MFA encryption key is missing/invalid (misconfigured). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/mfa/totp/enroll/verify` — Confirm a pending TOTP enrollment; activates the factor and returns recovery codes.
+
+- **operationId**: `postAuthMfaEnrollVerify`
+- **Security**: bearerAuth + tenantHeader
+
+Authorized by EITHER a live session OR an enrollment grant. When authorized via an enrollment grant (a login that returned MFA_ENROLLMENT_REQUIRED), the grant is consumed and a fresh aal2 session token is returned.
+
+**Parameters**
+
+| Name                           | In     | Required | Type   | Description                                                                             |
+| ------------------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------- |
+| `X-AWCMS-MFA-Enrollment-Token` | header | no       | string | Enrollment grant token; used in place of a session to complete the "must enroll" login. |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                                         | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Factor activated; recovery codes shown once. token/expiresAt/assuranceLevel are present only when enrolled via an enrollment grant. | object                                 |
+| 400    | Validation error.                                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 500    | MFA misconfigured.                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/mfa/totp/verify` — Complete a login paused with MFA_REQUIRED by submitting a TOTP or recovery code.
+
+- **operationId**: `postAuthMfaVerify`
+- **Security**: none (public endpoint)
+
+Authenticated by possession of the mfaChallengeToken from POST /auth/login, not by a session. On success issues an aal2 session.
+
+**Parameters**
+
+| Name                | In     | Required | Type          | Description |
+| ------------------- | ------ | -------- | ------------- | ----------- |
+| `X-AWCMS-Tenant-ID` | header | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                      | Schema                                 |
+| ------ | ------------------------------------------------ | -------------------------------------- |
+| 200    | MFA verified; aal2 session issued.               | object                                 |
+| 400    | Validation error.                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                      | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many verification attempts from this source. | [`ApiError`](#standard-error-envelope) |
+| 500    | MFA misconfigured.                               | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/roles` — List the current tenant's (non-deleted) roles with a permission count.
 
 - **operationId**: `listRoles`

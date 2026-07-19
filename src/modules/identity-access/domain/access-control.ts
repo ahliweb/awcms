@@ -41,7 +41,10 @@ export type AccessAction =
   // dry-run).
   | "rebuild"
   | "analyze"
-  | "export";
+  | "export"
+  // MFA administration (Issue #184): `reset` disables another user's factor
+  // (high-risk); `configure` sets the tenant MFA enforcement policy.
+  | "reset";
 
 export type AccessRequest = {
   moduleKey: string;
