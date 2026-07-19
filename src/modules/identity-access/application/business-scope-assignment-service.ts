@@ -1,21 +1,29 @@
 /**
  * Business-scope assignment service (Issue #180, epic #177 Wave 2
- * authorization). Persistence + audit around
- * `domain/business-scope-assignment.ts`'s pure rules. Ported from awcms-mini
+ * authorization). Persistence + audit + segregation-of-duties (SoD) conflict
+ * evaluation around `domain/business-scope-assignment.ts`'s pure rules. Ported
+ * from awcms-mini
  * (`identity-access/application/business-scope-assignment-service.ts`, Issue
- * #746) but with the segregation-of-duties (SoD) conflict evaluation STRIPPED
- * — see the SoD SEAM comment in `createBusinessScopeAssignment` below; that
- * enforcement lands with #181. "not-found/invalid-state is a discriminated
- * union, never a thrown error" — the convention the rest of this repo's
- * application services use.
+ * #746). "not-found/invalid-state is a discriminated union, never a thrown
+ * error" — the convention the rest of this repo's application services use.
  *
  * CREATE validates the scope through `BusinessScopeHierarchyPort` (never
  * trusts `scopeType`/`scopeId` from the request alone — issue #180 security
- * model) and denies self-grant (grantor === subject). The grant is persisted
- * and audited WITHOUT any conflict detection (that is #181's job).
+ * model), denies self-grant (grantor === subject), and — since #181 — runs
+ * ASSIGNMENT-TIME SoD conflict evaluation: it checks whether the requested
+ * role's permission keys, at the requested scope (and its resolved
+ * ancestors/descendants), conflict with the subject's OTHER active
+ * assignments/RBAC grants, records an append-only decision to
+ * `awcms_sod_conflict_evaluations` regardless of outcome, and denies
+ * (`sod_conflict`) an un-excepted conflict. The base registry declares no SoD
+ * rules, so `deps.sodRules` is empty in a pure base and this is a no-op there;
+ * a derived application (or the fixture) contributes the rules. This is the
+ * assignment-time complement to `high-risk-sod-guard.ts`'s action-time
+ * enforcement.
  */
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { recordCounter } from "../../../lib/observability/metrics-port";
+import type { SoDRuleDescriptor } from "../../_shared/module-contract";
 import type { BusinessScopeHierarchyPort } from "../../_shared/ports/business-scope-hierarchy-port";
 import {
   validateCreateBusinessScopeAssignmentInput,
@@ -24,6 +32,16 @@ import {
   type BusinessScopeAssignmentValidationError,
   type RevokeBusinessScopeAssignmentInput
 } from "../domain/business-scope-assignment";
+import {
+  createSoDConflictEvaluator,
+  type SoDConflictMatch
+} from "../domain/sod-conflict-evaluation";
+import {
+  resolveRolePermissionKeys,
+  resolveSoDAssignmentFacts
+} from "./business-scope-facts";
+import { recordSoDConflictEvaluation } from "./sod-conflict-evaluation-log";
+import { findValidSoDConflictExceptionsByRuleKeys } from "./sod-exception-service";
 
 const IDENTITY_ACCESS_MODULE_KEY = "identity_access";
 
@@ -92,6 +110,13 @@ function toRow(row: BusinessScopeAssignmentDbRow): BusinessScopeAssignmentRow {
   };
 }
 
+export type SoDConflictSummary = {
+  ruleKey: string;
+  severity: string;
+  conflictingPermissionKey: string;
+  indeterminate: boolean;
+};
+
 export type CreateBusinessScopeAssignmentResult =
   | { ok: true; assignment: BusinessScopeAssignmentRow }
   | {
@@ -102,7 +127,8 @@ export type CreateBusinessScopeAssignmentResult =
   | { ok: false; reason: "tenant_user_not_found" }
   | { ok: false; reason: "role_not_found" }
   | { ok: false; reason: "scope_unresolved" }
-  | { ok: false; reason: "self_grant_denied" };
+  | { ok: false; reason: "self_grant_denied" }
+  | { ok: false; reason: "sod_conflict"; conflicts: SoDConflictSummary[] };
 
 export async function createBusinessScopeAssignment(
   tx: Bun.SQL,
@@ -111,6 +137,13 @@ export async function createBusinessScopeAssignment(
   input: CreateBusinessScopeAssignmentInput,
   deps: {
     hierarchyPort: BusinessScopeHierarchyPort;
+    /**
+     * The SoD rule set to evaluate on grant (Issue #181). The composition root
+     * (the route) passes the composed registry's rules; a pure base passes an
+     * empty array (no domain SoD rules in the base), making conflict detection
+     * a no-op there.
+     */
+    sodRules: readonly SoDRuleDescriptor[];
   },
   now: Date,
   correlationId?: string
@@ -178,17 +211,115 @@ export async function createBusinessScopeAssignment(
     return { ok: false, reason: "scope_unresolved" };
   }
 
-  // SoD SEAM (#181): mini evaluated segregation-of-duties conflicts HERE —
-  // detecting whether the requested role's permission keys, at the requested
-  // scope (and its resolved ancestors/descendants), conflict with the
-  // subject's other active assignments, recording an append-only decision to
-  // `awcms_mini_sod_conflict_evaluations`, and returning a `sod_conflict`
-  // result. That whole block is DELIBERATELY omitted for #180 (the generic
-  // scope foundation): the grant below persists and audits WITHOUT conflict
-  // detection. #181 (segregation of duties) re-inserts the conflict check at
-  // exactly this point, adding its own `sod_conflict` result variant and the
-  // `resolution.ancestorScopes`/`.descendantScopes` are already available
-  // above for its hierarchy-aware `same_scope_only` matching.
+  // SoD conflict evaluation (#181), re-inserted at exactly the seam #180 left.
+  // Hierarchy-aware `same_scope_only` matching reuses the resolution already
+  // fetched above (no second hierarchy-port call), so a held fact at an
+  // ancestor/descendant of the requested scope is treated as the SAME business
+  // hierarchy, not silently exempted just because its `scopeId` differs. A
+  // flat/no-op adapter resolves empty ancestor/descendant lists, so this is a
+  // no-op for that scope type — exact-match-only there.
+  const requestedScope = {
+    scopeType: input.scopeType,
+    scopeId: input.scopeId,
+    relatedScopes: [
+      ...resolution.ancestorScopes,
+      ...resolution.descendantScopes
+    ]
+  };
+  const conflicts: SoDConflictSummary[] = [];
+
+  if (input.roleId) {
+    // Sequential, NOT `Promise.all` over the same `tx`: one Postgres connection
+    // serves one query at a time, so concurrent queries on a single
+    // transaction handle HANG. Two awaits cost one extra round trip.
+    const requestedPermissionKeys = await resolveRolePermissionKeys(
+      tx,
+      tenantId,
+      input.roleId
+    );
+    const subjectFacts = await resolveSoDAssignmentFacts(
+      tx,
+      tenantId,
+      input.tenantUserId,
+      now,
+      null
+    );
+
+    // Phase 1 — detect. The evaluator's indexes are built ONCE here and reused
+    // for every one of the role's permission keys (bounded, non-N+1); building
+    // it per key would reintroduce the O(P×R×K×F×S) rescan.
+    const evaluator = createSoDConflictEvaluator(
+      deps.sodRules,
+      requestedScope,
+      subjectFacts
+    );
+    const detected: { permissionKey: string; match: SoDConflictMatch }[] = [];
+    for (const permissionKey of requestedPermissionKeys) {
+      for (const match of evaluator.detect(permissionKey)) {
+        detected.push({ permissionKey, match });
+      }
+    }
+
+    // Phase 2 — resolve every exception in ONE query instead of one per match.
+    // Indeterminate matches never consult an exception: their rule keys are
+    // excluded from the batch, not looked up and ignored.
+    const exceptionsByRuleKey = await findValidSoDConflictExceptionsByRuleKeys(
+      tx,
+      tenantId,
+      detected
+        .filter((entry) => !entry.match.indeterminate)
+        .map((entry) => entry.match.rule.ruleKey),
+      input.tenantUserId,
+      now,
+      requestedScope
+    );
+
+    // Phase 3 — record. Iterates `detected` in detection order, so the
+    // append-only evaluation rows and counters are emitted in the same order.
+    for (const { permissionKey, match } of detected) {
+      const exception = match.indeterminate
+        ? null
+        : (exceptionsByRuleKey.get(match.rule.ruleKey) ?? null);
+
+      const resolvedVia = match.indeterminate
+        ? "denied"
+        : exception
+          ? "exception"
+          : "denied";
+
+      await recordSoDConflictEvaluation(tx, tenantId, {
+        ruleKey: match.rule.ruleKey,
+        subjectTenantUserId: input.tenantUserId,
+        triggerContext: "assignment_create",
+        conflictDetected: true,
+        resolvedVia,
+        decisionReason: match.indeterminate
+          ? `Conflict with "${match.conflictingPermissionKey}" could not be scope-resolved for a same-scope-only rule.`
+          : exception
+            ? `Conflict with "${match.conflictingPermissionKey}" covered by an approved exception.`
+            : `Conflict with "${match.conflictingPermissionKey}" — no approved exception on file.`,
+        metadata: { requestedPermissionKey: permissionKey }
+      });
+
+      recordCounter("sod_conflicts_detected_total", {
+        ruleKey: match.rule.ruleKey,
+        resolvedVia
+      });
+
+      if (resolvedVia === "denied") {
+        conflicts.push({
+          ruleKey: match.rule.ruleKey,
+          severity: match.rule.severity,
+          conflictingPermissionKey: match.conflictingPermissionKey,
+          indeterminate: match.indeterminate
+        });
+      }
+    }
+  }
+
+  if (conflicts.length > 0) {
+    return { ok: false, reason: "sod_conflict", conflicts };
+  }
 
   const rows = (await tx`
     INSERT INTO awcms_business_scope_assignments

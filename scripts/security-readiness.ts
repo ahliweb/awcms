@@ -1005,7 +1005,12 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // INSERT the append-only lifecycle event rows. No DELETE (status transition
   // only). The aggregate audit INSERT reuses awcms_audit_events above.
   awcms_business_scope_assignments: ["SELECT", "UPDATE"],
-  awcms_business_scope_assignment_events: ["INSERT"]
+  awcms_business_scope_assignment_events: ["INSERT"],
+  // Issue #181 — the same expiry job's SoD-exception pass (sql/029): SELECT the
+  // approved-but-elapsed backlog, UPDATE those rows to expired. No DELETE, and
+  // NO access to awcms_sod_conflict_evaluations (request-path chokepoint only,
+  // on awcms_app). The per-exception audit INSERT reuses awcms_audit_events.
+  awcms_sod_conflict_exceptions: ["SELECT", "UPDATE"]
 };
 
 /**

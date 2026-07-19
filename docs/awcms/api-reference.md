@@ -983,6 +983,160 @@ Revokes an active business-scope assignment (transitions it to `revoked`; append
 | 404    | Resource not found.                                                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | The assignment is not active, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/identity/business-scope/conflicts` — List the SoD conflict evaluation log (Issue
+
+- **operationId**: `listSoDConflictEvaluations`
+- **Security**: bearerAuth + tenantHeader
+
+Keyset-paginated, permission-gated segregation-of-duties conflict evaluation history (the conflict preview / audit view). Recorded for every assignment-create and high-risk-action conflict check, regardless of outcome. Safe projection: rule key, subject id, trigger context, outcome, reason, and timestamp only. Gated on `identity_access.business_scope_conflicts.read`.
+
+**Parameters**
+
+| Name               | In    | Required | Type                  | Description                                               |
+| ------------------ | ----- | -------- | --------------------- | --------------------------------------------------------- |
+| `cursor`           | query | no       | string                | Opaque keyset cursor from a previous page's `nextCursor`. |
+| `limit`            | query | no       | integer               |                                                           |
+| `ruleKey`          | query | no       | string                |                                                           |
+| `conflictDetected` | query | no       | enum(`true`, `false`) |                                                           |
+
+**Responses**
+
+| Status | Description                                                             | Schema                                 |
+| ------ | ----------------------------------------------------------------------- | -------------------------------------- |
+| 200    | A page of SoD conflict evaluations (newest first) plus the next cursor. | object                                 |
+| 400    | Validation error.                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                             | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/identity/business-scope/exceptions` — List this tenant's SoD conflict exceptions (Issue
+
+- **operationId**: `listSoDConflictExceptions`
+- **Security**: bearerAuth + tenantHeader
+
+Lists the tenant's segregation-of-duties conflict exceptions, optionally filtered by `status`/`ruleKey`. Gated on `identity_access.business_scope_exceptions.read`.
+
+**Parameters**
+
+| Name      | In    | Required | Type                                                          | Description |
+| --------- | ----- | -------- | ------------------------------------------------------------- | ----------- |
+| `status`  | query | no       | enum(`pending`, `approved`, `rejected`, `expired`, `revoked`) |             |
+| `ruleKey` | query | no       | string                                                        |             |
+
+**Responses**
+
+| Status | Description                                                   | Schema                                 |
+| ------ | ------------------------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's SoD conflict exceptions (newest first, bounded). | object                                 |
+| 400    | Validation error.                                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                   | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/identity/business-scope/exceptions` — Request a SoD conflict exception (high-risk, audited, idempotent).
+
+- **operationId**: `createSoDConflictException`
+- **Security**: bearerAuth + tenantHeader
+
+Requests a bounded-lifetime, scope-bound exception to a registered SoD rule (`status: "pending"`, requires separate approval by a different user holding the rule's approval permission). The rule must exist in the code registry and permit exceptions; the exception must have an end date (no indefinite override). Gated on `identity_access.business_scope_exceptions.create`. Requires `Idempotency-Key`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description |
+| ----------------- | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key` | header | yes      | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | The created (pending) SoD conflict exception.                  | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/identity/business-scope/exceptions/{id}/approve` — Approve a pending SoD conflict exception (high-risk, audited, idempotent).
+
+- **operationId**: `approveSoDConflictException`
+- **Security**: bearerAuth + tenantHeader
+
+Approves a pending exception (the sanctioned administrative override). Self-approval is denied (re-checked from the DB row). Gated on the dedicated `identity_access.business_scope_exceptions.approve` permission. Requires `Idempotency-Key`; audited at `critical` severity.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                                               | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The approved SoD conflict exception.                                                      | object                                 |
+| 400    | Validation error.                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | The exception is not pending, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/identity/business-scope/exceptions/{id}/reject` — Reject a pending SoD conflict exception (audited, idempotent).
+
+- **operationId**: `rejectSoDConflictException`
+- **Security**: bearerAuth + tenantHeader
+
+Rejects a pending exception — the safe outcome (the conflict stays denied). Gated on `identity_access.business_scope_exceptions.reject`. Requires `Idempotency-Key`; audited at `warning` severity.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                                               | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The rejected SoD conflict exception.                                                      | object                                 |
+| 400    | Validation error.                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | The exception is not pending, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/identity/business-scope/exceptions/{id}/revoke` — Revoke an approved SoD conflict exception (high-risk, audited, idempotent).
+
+- **operationId**: `revokeSoDConflictException`
+- **Security**: bearerAuth + tenantHeader
+
+Revokes a previously approved exception, ending the override early (immediately ineffective at the next decision). Reason required. Gated on `identity_access.business_scope_exceptions.revoke`. Requires `Idempotency-Key`; audited at `critical` severity.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The revoked SoD conflict exception.                                                        | object                                 |
+| 400    | Validation error.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | The exception is not approved, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/roles` — List the current tenant's (non-deleted) roles with a permission count.
 
 - **operationId**: `listRoles`

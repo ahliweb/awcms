@@ -44,7 +44,8 @@ async function main() {
 
           console.log(
             `identity-access:business-scope:expiry complete — correlationId=${ctx.correlationId} ` +
-              `tenants=${expiryResult.tenantsChecked} assignmentsExpired=${expiryResult.assignmentsExpired}` +
+              `tenants=${expiryResult.tenantsChecked} assignmentsExpired=${expiryResult.assignmentsExpired} ` +
+              `exceptionsExpired=${expiryResult.exceptionsExpired}` +
               (ctx.dryRun ? " (dry-run: nothing was transitioned)" : "") +
               (hitPassLimit
                 ? ` (WARNING: ${expiryResult.tenantsHitPassLimit.length} tenant(s) still had backlog remaining after the pass-count safety bound)`
@@ -56,6 +57,7 @@ async function main() {
             itemCounts: {
               tenantsChecked: expiryResult.tenantsChecked,
               assignmentsExpired: expiryResult.assignmentsExpired,
+              exceptionsExpired: expiryResult.exceptionsExpired,
               tenantsHitPassLimit: expiryResult.tenantsHitPassLimit.length
             },
             detail: hitPassLimit

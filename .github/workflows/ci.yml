@@ -90,6 +90,9 @@ jobs:
       - name: Reporting projection registry check
         run: bun run reporting:projections:registry:check
 
+      - name: SoD rule registry check (Issue #181)
+        run: bun run identity-access:sod-registry:check
+
       - name: Logging redaction lint check
         run: bun run logging:lint:check
 

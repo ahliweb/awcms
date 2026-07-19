@@ -44,7 +44,13 @@ export type AccessAction =
   | "export"
   // MFA administration (Issue #184): `reset` disables another user's factor
   // (high-risk); `configure` sets the tenant MFA enforcement policy.
-  | "reset";
+  | "reset"
+  // SoD exception decision (Issue #181): `reject` denies a pending
+  // segregation-of-duties conflict exception request. Deliberately NOT
+  // high-risk — rejecting an exception is the SAFE outcome (the conflict stays
+  // denied), unlike `approve`/`revoke` which change an override's standing.
+  // (`approve`/`revoke` for exceptions reuse the existing high-risk actions.)
+  | "reject";
 
 export type AccessRequest = {
   moduleKey: string;

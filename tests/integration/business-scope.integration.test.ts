@@ -159,7 +159,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           isTemporary: false,
           reason: "onboarding"
         },
-        { hierarchyPort },
+        { hierarchyPort, sodRules: [] },
         now
       )
     );
@@ -206,7 +206,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           isTemporary: false,
           reason: null
         },
-        { hierarchyPort },
+        { hierarchyPort, sodRules: [] },
         now
       )
     );
@@ -234,7 +234,10 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           isTemporary: false,
           reason: null
         },
-        { hierarchyPort: defaultBusinessScopeHierarchyPortAdapter },
+        {
+          hierarchyPort: defaultBusinessScopeHierarchyPortAdapter,
+          sodRules: []
+        },
         now
       )
     );
@@ -259,7 +262,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           isTemporary: false,
           reason: null
         },
-        { hierarchyPort },
+        { hierarchyPort, sodRules: [] },
         now
       )
     );
@@ -292,7 +295,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           isTemporary: false,
           reason: null
         },
-        { hierarchyPort },
+        { hierarchyPort, sodRules: [] },
         now
       )
     );
@@ -356,7 +359,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           isTemporary: false,
           reason: null
         },
-        { hierarchyPort },
+        { hierarchyPort, sodRules: [] },
         now
       )
     );
@@ -398,7 +401,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           isTemporary: false,
           reason: null
         },
-        { hierarchyPort },
+        { hierarchyPort, sodRules: [] },
         now
       )
     );
@@ -481,7 +484,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           isTemporary: false,
           reason: null
         },
-        { hierarchyPort },
+        { hierarchyPort, sodRules: [] },
         now
       )
     );

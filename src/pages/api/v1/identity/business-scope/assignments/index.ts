@@ -22,8 +22,16 @@ import {
   listBusinessScopeAssignments
 } from "../../../../../../modules/identity-access/application/business-scope-assignment-service";
 import { defaultBusinessScopeHierarchyPortAdapter } from "../../../../../../modules/identity-access/application/business-scope-hierarchy-port-adapter";
+import { collectSoDRuleDescriptors } from "../../../../../../modules/identity-access/domain/sod-rule-registry";
+import { listModules } from "../../../../../../modules";
 
 const IDEMPOTENCY_SCOPE = "identity_access_business_scope_assignment_create";
+
+// SoD rule set for assignment-time conflict evaluation (Issue #181). Composed
+// from the registry (base + any derived application registry); the base
+// declares no SoD rules, so this is empty in a pure base and conflict
+// detection is a no-op there.
+const SOD_RULES = collectSoDRuleDescriptors(listModules());
 
 // Composition root (Issue #180): the base wires only its own default no-op
 // hierarchy adapter, which resolves every scope to `resolved: false` (so in a
@@ -194,7 +202,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         isTemporary,
         reason
       },
-      { hierarchyPort: HIERARCHY_PORT },
+      { hierarchyPort: HIERARCHY_PORT, sodRules: SOD_RULES },
       now,
       correlationId
     );
@@ -220,6 +228,19 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
           400,
           "SCOPE_UNRESOLVED",
           "The requested scopeType/scopeId could not be resolved for this tenant."
+        );
+      }
+      if (result.reason === "sod_conflict") {
+        // Fail-CLOSED on a detected, un-excepted segregation-of-duties
+        // conflict (issue #181). The append-only evaluation rows were already
+        // written inside the same transaction; the response carries only the
+        // rule keys + severity (no PII).
+        return fail(
+          409,
+          "SOD_CONFLICT",
+          `Segregation-of-duties conflict: ${result.conflicts
+            .map((conflict) => conflict.ruleKey)
+            .join(", ")}. An approved exception is required to proceed.`
         );
       }
       // result.reason === "self_grant_denied"

@@ -14,20 +14,23 @@
  * parameter (a route opts a request in via
  * `resourceAttributes.requiredScopeType`/`.requiredScopeId`).
  *
- * SoD SEAM (#181): mini's version of this file ALSO exported
- * `resolveSoDAssignmentFacts`/`resolveOrdinaryRbacFacts`/
- * `resolveRolePermissionKeys` — the permission-keyed facts that
- * segregation-of-duties conflict detection consumes. Those are DELIBERATELY
- * NOT ported here: #180 is only the generic scope foundation, and those
- * resolvers depend on the SoD domain types (`SoDAssignmentFact`) that land
- * with #181. When #181 is implemented it adds its permission-fact resolvers
- * here (or in a sibling file) without changing anything below.
+ * SoD facts (#181, filled from mini): this file ALSO exports the
+ * permission-keyed facts that segregation-of-duties conflict detection
+ * consumes — `resolveSoDAssignmentFacts` (merging BOTH the
+ * business-scope-assignment path AND the ordinary RBAC role-grant path, see
+ * `resolveOrdinaryRbacFacts`'s own header) and `resolveRolePermissionKeys`
+ * (the keys a role would newly confer at assignment-create time). These feed
+ * `domain/sod-conflict-evaluation.ts` (the pure matcher) via the
+ * assignment-service SEAM and the `high-risk-sod-guard` chokepoint. #180
+ * shipped only the generic scope resolver above; #181 adds these below without
+ * changing anything above.
  */
 import { isBusinessScopeAssignmentCurrentlyActive } from "../domain/business-scope-assignment";
 import {
   TENANT_WIDE_SCOPE_TYPE,
   type BusinessScopeFact
 } from "../domain/access-control";
+import type { SoDAssignmentFact } from "../domain/sod-conflict-evaluation";
 import type {
   BusinessScopeHierarchyPort,
   BusinessScopeResolution
@@ -232,4 +235,151 @@ export async function resolveBusinessScopeFacts(
   }
 
   return facts;
+}
+
+// ===========================================================================
+// SoD facts (#181) — permission-keyed facts for `sod-conflict-evaluation.ts`.
+// ===========================================================================
+
+type AssignmentPermissionRow = {
+  scope_type: string;
+  scope_id: string;
+  effective_from: Date;
+  effective_to: Date | null;
+  status: "active" | "expired" | "revoked";
+  module_key: string;
+  activity_code: string;
+  action: string;
+};
+
+type OrdinaryRbacPermissionRow = {
+  module_key: string;
+  activity_code: string;
+  action: string;
+};
+
+/**
+ * Permissions the subject holds via an ORDINARY RBAC role grant
+ * (`awcms_access_assignments` -> `awcms_role_permissions` ->
+ * `awcms_permissions`) — the exact same path `auth-context.ts`'s
+ * `fetchGrantedPermissionKeys` already reads for every ordinary ABAC decision.
+ * SoD conflict detection MUST reason about this path (not only the
+ * business-scope-assignment path), or it is blind to the realistic, common
+ * case where a subject holds BOTH halves of a registered conflict through an
+ * ordinary role (e.g. the setup wizard's "owner" role, which grants every
+ * permission in the tenant). Returned facts have `scopeType`/`scopeId: null` —
+ * an ordinary role grant is not confined to any business scope, so
+ * `detectSoDConflicts` treats it as conflicting at EVERY requested scope for a
+ * `"same_scope_only"` rule (see `sod-conflict-evaluation.ts`'s
+ * `SoDAssignmentFact` doc comment).
+ */
+async function resolveOrdinaryRbacFacts(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string
+): Promise<SoDAssignmentFact[]> {
+  const rows = (await tx`
+    SELECT DISTINCT p.module_key, p.activity_code, p.action
+    FROM awcms_access_assignments aa
+    JOIN awcms_role_permissions rp ON rp.role_id = aa.role_id AND rp.tenant_id = aa.tenant_id
+    JOIN awcms_permissions p ON p.id = rp.permission_id
+    JOIN awcms_roles r ON r.id = aa.role_id
+    WHERE aa.tenant_id = ${tenantId} AND aa.tenant_user_id = ${tenantUserId}
+      AND r.deleted_at IS NULL
+  `) as OrdinaryRbacPermissionRow[];
+
+  return rows.map((row) => ({
+    permissionKey: `${row.module_key}.${row.activity_code}.${row.action}`,
+    scopeType: null,
+    scopeId: null
+  }));
+}
+
+/**
+ * The subject's currently-in-force SoD facts (`(permissionKey, scopeType,
+ * scopeId)` triples) that conflict detection reasons about. Merges TWO sources
+ * (see `resolveOrdinaryRbacFacts`'s header for why the second is required):
+ * the business-scope-assignment-granted permissions (each carrying that
+ * assignment's real scope) PLUS the subject's ordinary RBAC-granted
+ * permissions (`scopeType`/`scopeId: null`).
+ *
+ * `excludeAssignmentId` lets `assignment_create` conflict evaluation check the
+ * subject's OTHER existing active assignments without a not-yet-committed row
+ * interfering. Effective-dated rows whose window has not started / already
+ * elapsed are excluded via `isBusinessScopeAssignmentCurrentlyActive` — an
+ * assignment expired/revoked a millisecond ago stops contributing IMMEDIATELY
+ * (no cache; issue #181 "Exception expired/revoked langsung tidak berlaku"
+ * mirrors #180's assignment revocation immediacy). Sequential awaits over the
+ * single `tx` (never `Promise.all`): one Postgres connection serves one query
+ * at a time — the bounded, non-N+1 query count issue #181 requires (exactly
+ * two SELECTs regardless of how many permissions/assignments the subject has).
+ */
+export async function resolveSoDAssignmentFacts(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string,
+  now: Date,
+  excludeAssignmentId: string | null = null
+): Promise<SoDAssignmentFact[]> {
+  const rows = (await tx`
+    SELECT bsa.scope_type, bsa.scope_id, bsa.effective_from, bsa.effective_to, bsa.status,
+      p.module_key, p.activity_code, p.action
+    FROM awcms_business_scope_assignments bsa
+    JOIN awcms_role_permissions rp
+      ON rp.role_id = bsa.role_id AND rp.tenant_id = bsa.tenant_id
+    JOIN awcms_permissions p ON p.id = rp.permission_id
+    WHERE bsa.tenant_id = ${tenantId} AND bsa.tenant_user_id = ${tenantUserId}
+      AND bsa.status = 'active' AND bsa.role_id IS NOT NULL
+      AND (${excludeAssignmentId}::uuid IS NULL OR bsa.id <> ${excludeAssignmentId})
+  `) as AssignmentPermissionRow[];
+
+  const facts: SoDAssignmentFact[] = [];
+
+  for (const row of rows) {
+    if (
+      !isBusinessScopeAssignmentCurrentlyActive(
+        {
+          status: row.status,
+          effectiveFrom: row.effective_from,
+          effectiveTo: row.effective_to
+        },
+        now
+      )
+    ) {
+      continue;
+    }
+
+    facts.push({
+      permissionKey: `${row.module_key}.${row.activity_code}.${row.action}`,
+      scopeType: row.scope_type,
+      scopeId: row.scope_id
+    });
+  }
+
+  facts.push(...(await resolveOrdinaryRbacFacts(tx, tenantId, tenantUserId)));
+
+  return facts;
+}
+
+/**
+ * The permission keys `roleId` grants — used at assignment-CREATE time to know
+ * which permission keys the NOT-YET-created assignment would newly confer at
+ * its scope, so SoD conflict detection can check each one against the
+ * subject's OTHER already-active assignment facts.
+ */
+export async function resolveRolePermissionKeys(
+  tx: Bun.SQL,
+  tenantId: string,
+  roleId: string
+): Promise<string[]> {
+  const rows = (await tx`
+    SELECT DISTINCT p.module_key, p.activity_code, p.action
+    FROM awcms_role_permissions rp
+    JOIN awcms_permissions p ON p.id = rp.permission_id
+    WHERE rp.tenant_id = ${tenantId} AND rp.role_id = ${roleId}
+  `) as { module_key: string; activity_code: string; action: string }[];
+
+  return rows.map(
+    (row) => `${row.module_key}.${row.activity_code}.${row.action}`
+  );
 }
