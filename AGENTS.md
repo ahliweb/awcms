@@ -10,6 +10,8 @@ Baca dokumen ini sebelum mengerjakan task apa pun di repo ini. Ini adalah kontra
 
 AWCMS adalah rebuild fondasi (bukan ERP) di atas basis teknis **awcms-mini** (repo standar). **Setiap penambahan/perubahan fitur diuji lebih dulu di awcms-mini, baru di-port ke repo ini** — repo ini bukan tempat merintis fitur dari nol. Alur port, langkah rename prefix `awcms_mini_…` → `awcms_…`, dan implikasinya untuk agent ada di [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md).
 
+Conformance terhadap standar keluarga ini bersifat machine-readable dan ditegakkan CI: manifest [`awcms-family-compatibility.yaml`](awcms-family-compatibility.yaml) + gate `bun run family:conformance:check` (bagian dari `bun run check`). Bila perubahanmu menyentuh versi kontrak (module/capability/OpenAPI/AsyncAPI), versi stack, semantik kontrol reusable (default-deny/RLS/redaction/audit/idempotency/envelope/migration-immutability), atau menambah divergence sengaja dari mini — perbarui manifest + jalankan gate; lihat [`docs/awcms/family-compatibility.md`](docs/awcms/family-compatibility.md).
+
 ## Alur kerja wajib setiap task
 
 1. Mulai dari issue/ADR yang jelas scope-nya. Bila mengubah standar dasar, buat ADR dulu (lihat [`GOVERNANCE.md`](GOVERNANCE.md)).

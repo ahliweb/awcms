@@ -66,6 +66,7 @@ bun test
 bun run api:spec:check
 bun run modules:dag:check
 bun run logging:lint:check
+bun run family:conformance:check # bila port menaikkan versi kontrak (module/capability/OpenAPI/AsyncAPI), versi stack, atau menambah divergence sengaja dari mini → perbarui awcms-family-compatibility.yaml dulu (Issue #183, docs/awcms/family-compatibility.md)
 bun run check:docs
 bun run build                    # WAJIB: CI menjalankan build; port bisa lolos typecheck tapi gagal build
 ```

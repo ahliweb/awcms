@@ -1,0 +1,198 @@
+# AWCMS ⇄ AWCMS-Mini family compatibility manifest (Issue #183, epic #177).
+#
+# Machine-readable, versioned, schema-validated statement of HOW this base
+# (awcms) declares its conformance to the awcms-mini modular-monolith STANDARD
+# (ADR-0001). Validated + enforced by `bun run family:conformance:check`
+# (scripts/family-conformance-check.ts) against the REAL source-of-truth
+# constants — every value below is cross-checked, none is decorative:
+#   - contracts.moduleDescriptorContractVersion  → src/modules/_shared/module-contract.ts (MODULE_CONTRACT_VERSION)
+#   - contracts.capabilityContractVersions       → src/modules/_shared/capability-contract-versions.ts
+#   - contracts.restApiInfoVersion               → openapi/awcms-public-api.openapi.yaml (info.version)
+#   - contracts.eventApiInfoVersion              → asyncapi/awcms-domain-events.asyncapi.yaml (info.version)
+#   - contracts.* family-owned versions          → src/modules/_shared/family-contract.ts + pinned semantic contract tests
+#   - stack.*                                     → package.json + .github/workflows/ci.yml
+#
+# Schema: awcms-family-compatibility.schema.json. Versioning/upgrade policy:
+# docs/awcms/family-compatibility.md.
+
+manifestSchemaVersion: "1.0.0"
+familyContractVersion: "1.0.0"
+
+family:
+  standard: awcms-mini
+  standardRepository: https://github.com/ahliweb/awcms-mini
+  role: foundation-base rebuild of the awcms-mini modular-monolith standard, ERP-readiness scope (ADR-0001, ADR-0022)
+
+# Pinned contract versions. Where a real source constant exists it is the
+# authority (the gate reads it and fails on mismatch). Where the contract is
+# "family-owned" (no standalone constant), the number is anchored to
+# FAMILY_OWNED_CONTRACT_VERSIONS in src/modules/_shared/family-contract.ts and
+# given teeth by a SEMANTIC contract test that goes RED if the control drifts.
+contracts:
+  moduleDescriptorContractVersion: "1.3.0"
+  # Per-capability port SemVer for capabilities OWNED BY A BASE MODULE (matches
+  # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
+  # ships in this base belong here. `party_directory` is owned by the base
+  # `profile_identity` module (forward-declared ahead of an in-repo consumer,
+  # ADR-0011). Content capabilities (news_media/public_content/social_publishing)
+  # are deliberately NOT listed — their owning CMS modules are excluded from the
+  # base (`no-content-website-modules` divergence, ADR-0022); a derived content
+  # app declares those in its OWN manifest.
+  capabilityContractVersions:
+    party_directory: "1.0.0"
+  apiResponseEnvelopeVersion: "1.0.0"
+  restApiInfoVersion: "0.1.0"
+  eventApiInfoVersion: "0.1.0"
+  tenantContextRlsContractVersion: "1.0.0"
+  auditRedactionContractVersion: "1.0.0"
+  idempotencyContractVersion: "1.0.0"
+  migrationChecksum:
+    algorithm: sha256
+    version: "1.0.0"
+
+# Validated stack versions — declared value MUST equal the real toolchain value
+# the `source` points at (the compatibility-matrix assertion). The gate asserts
+# CI's distinct Bun versions are EXACTLY {ci (current), ciMinimum (floor)} — so
+# the dedicated minimum-supported CI cell (Bun 1.3.0, == engines floor) can
+# never silently drop out. See docs/awcms/family-compatibility.md §4.
+stack:
+  bun:
+    packageManager:
+      declared: "1.3.14"
+      source: package.json packageManager
+    engines:
+      declared: ">=1.3.0"
+      source: package.json engines.bun
+    ci:
+      declared: "1.3.14"
+      source: .github/workflows/ci.yml setup-bun bun-version (current pin)
+    ciMinimum:
+      declared: "1.3.0"
+      source: .github/workflows/ci.yml minimum-supported job setup-bun (== engines floor)
+  astro:
+    declared: "^7.0.7"
+    source: package.json dependencies.astro
+  astroNode:
+    declared: "^11.0.2"
+    source: package.json dependencies["@astrojs/node"]
+  typescript:
+    declared: "^7.0.2"
+    source: package.json devDependencies.typescript
+  postgres:
+    declared: "18.4"
+    source: .github/workflows/ci.yml services.postgres image
+
+# Intentional divergences from the awcms-mini standard. NOT a backlog of
+# unfinished ports — each entry is a decision AWCMS deliberately made and must
+# keep justified: reason + accountable owner + review date + backing ADR. The
+# gate fails once a reviewDate is in the past (an unreviewed divergence cannot
+# live forever) or its ADR file is missing.
+intentionalDivergences:
+  - id: no-content-website-modules
+    summary: >-
+      The awcms-mini CMS/content modules (blog_content, news_portal,
+      social_publishing, visitor_analytics, public tenant_domain pages) are not
+      part of the awcms base.
+    reason: >-
+      awcms is an ERP-readiness FOUNDATION, not a website/CMS product. Content
+      and vertical modules live in derived/extension repositories composed on
+      top of this base, never in src/modules/ here.
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0022-erp-modules-live-in-extension-repos.md
+    since: "#177"
+  - id: module-type-without-derived
+    summary: >-
+      ModuleType omits the awcms-mini "derived" category; contributed modules
+      use "domain".
+    reason: >-
+      The DB CHECK constraint (sql/008 awcms_modules_module_type_check) only
+      allows base/system/domain/integration and applied migrations are
+      immutable; build-time composition classifies contributed modules as
+      "domain".
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0025-implement-deterministic-build-time-module-composition.md
+    since: "#178"
+  - id: openapi-one-file-per-module
+    summary: >-
+      OpenAPI fragments are one-file-per-MODULE, not one-file-per-tag as in
+      awcms-mini.
+    reason: >-
+      ModuleDescriptor.api.openApiPath is a single path per module, so a module
+      owns exactly one fragment (a fragment may carry more than one tag).
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0026-modular-openapi-ownership-and-composition.md
+    since: "#182"
+  - id: oidc-ssrf-blocks-private-ip
+    summary: >-
+      The OIDC/SSO SSRF guard BLOCKS private/loopback/link-local/metadata IPs on
+      issuer URLs — reversing awcms-mini's deliberate no-IP-block posture.
+    reason: >-
+      awcms is API-first with no assumed VPN-to-on-prem-IdP topology; SSRF
+      defense is a headline requirement. A documented escape hatch exists only
+      for loopback fake-IdP test hosts and is rejected in production.
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0028-oidc-sso-tenant-aware-account-linking-break-glass.md
+    since: "#185"
+  - id: mfa-session-assurance-built-new
+    summary: >-
+      Session assurance (aal1/aal2), step-up, and enrollment-state-driven MFA
+      enforcement are built new; awcms-mini has none, and the "full-online
+      security" epic that gates MFA in mini is not ported.
+    reason: >-
+      MFA enforcement is driven by DB factor/enrollment state (fail-closed),
+      not by a deployment-wide online-security flag, so disabling a flag can
+      never bypass an enrolled second factor.
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0027-mfa-totp-session-assurance-step-up.md
+    since: "#184"
+  - id: business-scope-base-resolver-noop
+    summary: >-
+      The base business-scope hierarchy resolver is a fail-closed NO-OP;
+      awcms-mini's default adapter reads its own offices table.
+    reason: >-
+      The base ships no organization hierarchy of its own. A real resolver is
+      supplied by a derived application through a capability port; with no
+      provider, scope-gated high-risk actions deny by default.
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0030-business-scope-hierarchy-generic-authorization-layer.md
+    since: "#180"
+  - id: sod-rules-illustrative-in-fixture
+    summary: >-
+      The base ships ZERO segregation-of-duties rules; awcms-mini hardcodes
+      example rules into identity_access.
+    reason: >-
+      A base must not invent business rules. Illustrative SoD rules live only in
+      the in-repo derived-application fixture; real rules come from derived
+      applications via application-registry.ts.
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0031-segregation-of-duties-conflict-enforcement.md
+    since: "#181"
+  - id: turnstile-keeps-deployment-profile-gate
+    summary: >-
+      Cloudflare Turnstile RETAINS the deployment-profile gate (LAN/offline
+      exempt) — the one full-online gate MFA/OIDC deliberately dropped.
+    reason: >-
+      Bot protection is only meaningful for full-online profiles; forcing it on
+      offline-LAN would break the base's offline-first guarantee.
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0029-deployment-profile-aware-turnstile-bot-protection.md
+    since: "#186"
+  - id: semver-continues-legacy-major-line
+    summary: >-
+      The awcms release version continues the pre-rebuild legacy major line
+      (5.x) rather than resetting to 1.0.0.
+    reason: >-
+      Continuity for existing deployments on the legacy line; the family
+      contract version is tracked independently of the package release version.
+    owner: "@ahliweb"
+    reviewDate: "2027-07-19"
+    adr: 0024-semver-numbering-continues-legacy-major-line.md
+    since: "#177"

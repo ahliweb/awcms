@@ -50,15 +50,18 @@
  */
 export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
   Object.freeze({
-    // news_portal provides — consumed by blog_content (ADR-0011).
-    news_media: "1.0.0",
-    // blog_content provides — consumed by news_portal (ADR-0011) and
-    // social_publishing.
-    public_content: "1.0.0",
-    // social_publishing provides — consumed by blog_content (optional).
-    social_publishing: "1.0.0",
     // profile_identity provides (Issue #748, epic #738 platform-evolution
     // Wave 2) — no in-repo consumer yet, same "port defined ahead of
-    // consumer wiring" precedent as `legal-hold-guard-port.ts`.
+    // consumer wiring" precedent as `legal-hold-guard-port.ts`. This is the
+    // only capability in this base whose OWNING module (`profile_identity`)
+    // actually ships here.
+    //
+    // The content capabilities `news_media`/`public_content`/`social_publishing`
+    // that awcms-mini carries were REMOVED (Issue #183 F4): their owning CMS
+    // modules (news_portal/blog_content/social_publishing) are excluded from the
+    // base by the `no-content-website-modules` divergence (ADR-0022), so listing
+    // their per-capability versions here made this base's "what I provide"
+    // contract dishonest (see the family compatibility manifest). A derived
+    // content application declares those in its OWN compatibility manifest.
     party_directory: "1.0.0"
   });

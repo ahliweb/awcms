@@ -124,6 +124,7 @@ jobs:
         run: >-
           bun test
           tests/audit-log-purge.test.ts
+          tests/family-conformance-db.test.ts
           tests/keyset-pagination-precision-postgres.test.ts
           tests/office-directory-postgres.test.ts
           tests/reporting-projection-rebuild-lock.test.ts

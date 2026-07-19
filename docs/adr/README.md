@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:c281daabbd6d0c2e89f6e6988319fa168b91a3c27c9b353110cfe7aa760f8334 -->
+<!-- i18n-source-hash: sha256:6e1b20b3b4f59509d21969cd84ed2b35d3d0b129b9bfb465bd0adac80343630f -->
 
 # Architecture Decision Records (ADR)
 
@@ -60,5 +60,11 @@ flowchart LR
 | [0024](0024-semver-numbering-continues-legacy-major-line.md)          | SemVer numbering continues the legacy major line (jump to 5.0.0), not a reset to 1.0.0                  | Accepted |
 | [0025](0025-implement-deterministic-build-time-module-composition.md) | Real implementation of deterministic build-time module composition in awcms (addendum to ADR-0014)      | Accepted |
 | [0026](0026-modular-openapi-ownership-and-composition.md)             | Modular OpenAPI contract: per-module ownership, deterministic bundle, derived-app fragment contribution | Accepted |
+| [0027](0027-mfa-totp-session-assurance-step-up.md)                    | MFA TOTP, recovery codes, session assurance (aal1/aal2), and step-up                                    | Accepted |
+| [0028](0028-oidc-sso-tenant-aware-account-linking-break-glass.md)     | OIDC/SSO tenant-aware, fail-closed account linking, SSRF guard, and break-glass                         | Accepted |
+| [0029](0029-deployment-profile-aware-turnstile-bot-protection.md)     | Deployment-profile-aware Cloudflare Turnstile bot protection (LAN/offline exempt)                       | Accepted |
+| [0030](0030-business-scope-hierarchy-generic-authorization-layer.md)  | Generic business-scope hierarchy authorization layer (multi-entity/unit)                                | Accepted |
+| [0031](0031-segregation-of-duties-conflict-enforcement.md)            | Generic segregation of duties (SoD), exception/override, conflict enforcement                           | Accepted |
+| [0032](0032-family-compatibility-manifest-and-ci-conformance.md)      | Family compatibility manifest + CI conformance to the AWCMS-Mini standard                               | Accepted |
 
 ADRs specific to the ERP-foundation & business-integration scope are added starting at the next number as decisions are made.

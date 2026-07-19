@@ -588,3 +588,37 @@ export function checkComposeServiceNames(file, content, serviceNames) {
 
   return problems;
 }
+
+/** Matches a real, numbered ADR filename `NNNN-slug.md` (not the `0000` template, not README). */
+export const ADR_FILE_PATTERN = /^(\d{4})-.+\.md$/;
+
+/**
+ * ADR index drift gate (Issue #183 F3) — every numbered ADR file
+ * `docs/adr/NNNN-*.md` (except the `0000` template) MUST be linked from the
+ * authoritative ADR index (`docs/adr/README.id.md`). Ported ADRs (0027-0031)
+ * had drifted out of the index; this makes that impossible to recur silently.
+ *
+ * @param {string[]} adrFileNames - basenames present in `docs/adr/`.
+ * @param {string} indexFile - repo-relative path of the index (for the message).
+ * @param {string} indexContent - the index markdown.
+ * @returns {Problem[]}
+ */
+export function checkAdrIndexCoverage(adrFileNames, indexFile, indexContent) {
+  /** @type {Problem[]} */
+  const problems = [];
+  for (const name of adrFileNames) {
+    const match = ADR_FILE_PATTERN.exec(name);
+    if (!match) continue; // README.md / README.id.md / 0000-template.md handled by caller's filter
+    if (match[1] === "0000") continue; // the template is intentionally not indexed
+    // The index links each ADR by filename, e.g. `[0027](0027-...md)` — a plain
+    // substring check on the filename is robust to column re-alignment.
+    if (!indexContent.includes(name)) {
+      problems.push({
+        file: indexFile,
+        line: 1,
+        message: `ADR ${name} tidak terdaftar di indeks ADR — tambahkan barisnya (dan regenerasi padanan Inggris + i18n-source-hash).`
+      });
+    }
+  }
+  return problems;
+}

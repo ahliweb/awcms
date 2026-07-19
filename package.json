@@ -48,6 +48,7 @@
     "reporting:projections:refresh": "bun scripts/reporting-projections-refresh.ts",
     "reporting:projections:registry:check": "bun scripts/reporting-projection-registry-check.ts",
     "identity-access:sod-registry:check": "bun scripts/identity-access-sod-registry-check.ts",
+    "family:conformance:check": "bun scripts/family-conformance-check.ts",
     "reporting:exports:dispatch": "bun scripts/reporting-exports-dispatch.ts",
     "check:docs": "bun scripts/check-docs.mjs",
     "check:docs:translation": "bun scripts/check-docs-translation.mjs",
@@ -73,7 +74,7 @@
     "test:coverage": "bun test --coverage",
     "test:e2e": "bun --bun playwright test",
     "test:e2e:install": "bun --bun playwright install --with-deps chromium",
-    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run api:docs:check && bun run modules:dag:check && bun run modules:compose:check && bun run modules:composition:inventory:check && bun run extension:check && bun run reporting:projections:registry:check && bun run identity-access:sod-registry:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
+    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run api:docs:check && bun run modules:dag:check && bun run modules:compose:check && bun run modules:composition:inventory:check && bun run extension:check && bun run reporting:projections:registry:check && bun run identity-access:sod-registry:check && bun run family:conformance:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:status": "changeset status"

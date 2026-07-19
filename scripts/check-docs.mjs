@@ -36,7 +36,8 @@ import {
   splitTarget,
   headingSlugs,
   parseComposeServiceNames,
-  checkComposeServiceNames
+  checkComposeServiceNames,
+  checkAdrIndexCoverage
 } from "./lib/docs-checks.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -161,6 +162,25 @@ export function runChecks() {
     : null;
   const knownScripts = loadPackageScripts();
   const sqlFileNames = loadSqlFileNames();
+
+  // ADR index drift gate (Issue #183 F3) — runs once, not per-markdown-file.
+  const adrDir = join(ROOT, "docs/adr");
+  if (existsSync(adrDir)) {
+    const adrFileNames = readdirSync(adrDir).filter((name) =>
+      name.endsWith(".md")
+    );
+    const indexRel = "docs/adr/README.id.md";
+    const indexAbs = join(ROOT, indexRel);
+    if (existsSync(indexAbs)) {
+      problems.push(
+        ...checkAdrIndexCoverage(
+          adrFileNames,
+          indexRel,
+          readFileSync(indexAbs, "utf8")
+        )
+      );
+    }
+  }
 
   for (const file of listMarkdown()) {
     const content = readFileSync(join(ROOT, file), "utf8");
