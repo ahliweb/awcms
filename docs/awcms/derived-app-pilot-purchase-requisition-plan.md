@@ -5,7 +5,10 @@
 > ditulis oleh dokumen ini. Melengkapi (bukan menggantikan)
 > [`derived-app-pilot-plan.md`](derived-app-pilot-plan.md) — yang memilih
 > kandidat pilot — dengan rencana teknis konkret untuk domain
-> purchase-requisition yang dipilih #187.
+> purchase-requisition yang dipilih #187. Untuk **runbook eksekusi
+> langkah-demi-langkah** (signature seam base terverifikasi + koreksi + DDL/
+> deskriptor konkret), lihat
+> [`derived-app-pilot-purchase-requisition-execution.md`](derived-app-pilot-purchase-requisition-execution.md).
 
 ## Konteks
 
