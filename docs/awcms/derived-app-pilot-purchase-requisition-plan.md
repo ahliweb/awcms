@@ -33,7 +33,7 @@ bila terbukti perlu. #187 di repo base adalah TRACKER acceptance/evidence.
    `application-registry.ts` = satu-satunya seam).
 3. **Scope Increment 1**: vertical slice inti **+ approval workflow penuh**:
    scaffold repo + modul `purchase-requisition` (header + lines, draft CRUD,
-   submit) + migrasi `sql/900+` (RLS FORCE, soft-delete draft, immutability
+   submit) + migrasi bernomor **900+** di repo turunan (RLS FORCE, soft-delete draft, immutability
    pasca-submit) + RBAC/ABAC domain + REST + OpenAPI fragment + integrasi
    workflow-approval (submit→task→approve/reject, self-approval + SoD +
    business-scope guard) + domain events created/submitted/approved/rejected +
@@ -48,7 +48,8 @@ bila terbukti perlu. #187 di repo base adalah TRACKER acceptance/evidence.
   file base yang diedit; `src/modules/index.ts` + tiap base `module.ts` TAK
   disentuh (guardrail ADR-0013 §5/§9).
 - Migration namespace turunan: **rangeStart 900, rangeEnd 999** (base reservasi
-  1–899, ADR-0014). Jadi migrasi purchase-requisition = `sql/900_*.sql` dst.
+  1–899, ADR-0014). Jadi migrasi purchase-requisition bernomor **900+** (file
+  `900_*.sql` dst di direktori `sql/` **repo turunan**, bukan repo base ini).
 - Modul domain: `src/modules/purchase-requisition/` struktur
   `domain/application/infrastructure/api` + `module.ts` + `README.md`.
 - OpenAPI per-modul (#182): fragment sendiri
@@ -103,7 +104,8 @@ plus `module.ts` dan `README.md`. **Route HTTP di
 `src/pages/api/v1/purchase-requisitions/*.ts`** (Astro, BUKAN di folder modul).
 `defineModule()` = identity fn untuk inferensi tipe.
 
-**Migrasi**: file `sql/900_awcms_purchase_requisition_schema.sql` dst — pola nama
+**Migrasi** (di `sql/` **repo turunan**): file
+`900_awcms_purchase_requisition_schema.sql` dst — pola nama
 `^\d{3}_awcms_[a-z0-9_]+\.sql$`, nomor ≥900. Runner `scripts/db-migrate.ts`
 enumerasi semua `sql/*.sql` (nomor konvensi saja); checksum immutable. Gate
 komposisi HANYA cek range `migrationNamespace` deklaratif vs 1–899 (bukan
@@ -220,7 +222,7 @@ created/submitted/approved/rejected + audit + idempotency + REST + OpenAPI
 fragment + AsyncAPI channel + test berlapis + 3 gate komposisi + `bun run check`
 
 - CI (`bun run check` + integration-tests + hygiene + codeql). `extension.manifest.json`
-  sebagai dokumen. Migrasi sql/900+.
+  sebagai dokumen. Migrasi bernomor 900+ di `sql/` repo turunan.
 
 **DITUNDA ke increment berikutnya:** SSR admin UI (list/search/create/submit/
 task-approval/timeline/reporting), reporting projector cursor_table + refresh
@@ -243,7 +245,7 @@ maturity promotion.
 
 ### Fase B — Modul purchase_requisition
 
-5. Migrasi `sql/900_awcms_purchase_requisition_schema.sql`:
+5. Migrasi (di `sql/` repo turunan) `900_awcms_purchase_requisition_schema.sql`:
    `awcms_pr_requisitions` (header: id, tenant_id, code, title,
    requester_tenant_user_id, business_scope ref, status enum
    draft/submitted/approved/rejected/cancelled, version int, workflow_instance
@@ -252,7 +254,7 @@ maturity promotion.
    `(tenant_id, requisition_id)`, item desc, qty, uom, est_unit_cost, line_no).
    RLS ENABLE+FORCE + policy `app.current_tenant_id`, index `(tenant_id, …)`,
    GRANT `awcms_app`. Immutability pasca-submit (trigger/CHECK + guard aplikasi:
-   hanya draft mutable). `sql/901_awcms_seed_purchase_requisition_permissions.sql`:
+   hanya draft mutable). `901_awcms_seed_purchase_requisition_permissions.sql`:
    seed `purchase_requisition.requisition.{read,create,update,submit,approve,reject}`
    ke `awcms_permissions`.
 6. `src/modules/purchase-requisition/{domain,application,infrastructure}/` +
