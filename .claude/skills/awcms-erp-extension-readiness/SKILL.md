@@ -1,9 +1,41 @@
 ---
 name: awcms-erp-extension-readiness
-description: Konsumsi atau evolusikan kontrak kesiapan ekstensi ERP AWCMS (business transaction, posting request/result, period-lock, item/currency/UoM, inventory movement, reconciliation, reporting projection). Gunakan saat membangun ekstensi ERP di repository turunan yang perlu berinteraksi dengan tenant/party/scope/dokumen/event/reporting base, atau saat menambah/mengubah kontrak `_shared/business-transaction-contract.ts`/`_shared/erp-reference-data-contract.ts`/`_shared/ports/period-lock-port.ts` di base ini sendiri. Sesuai Issue #755, epic #738 platform-evolution Wave 4, ADR-0020, `docs/awcms/erp-extension-contracts.md`.
+description: BACAAN SAJA / HISTORIS (ADR-0034) — kontrak kesiapan ekstensi ERP base (`_shared/business-transaction-contract.ts`/`_shared/erp-reference-data-contract.ts`/`_shared/ports/period-lock-port.ts`) DAN jalur aplikasi-turunan yang skill ini asumsikan SUDAH DIHAPUS. ERP kini dibangun sebagai modul `domain` LANGSUNG di `src/modules/` (pola sama modul base lain), bukan repo turunan; file kontrak & fixture `example-erp-extension` yang dirujuk tidak lagi ada. Rujukan historis dari Issue #755, epic #738 platform-evolution Wave 4, ADR-0020 — men-supersede oleh ADR-0034.
 ---
 
 # AWCMS — Kesiapan Ekstensi ERP
+
+> **BACAAN SAJA / HISTORIS — premis skill ini sudah dicabut oleh ADR-0034
+> (2026-07-21).** ADR-0034 (`docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md`)
+> **menghapus jalur aplikasi-turunan** dan, bersamanya, **kontrak kesiapan
+> ekstensi ERP base** yang skill ini mengajarkan cara memakai/mengevolusikan.
+> Yang sudah tidak ada lagi di repo ini (verifikasi: file-file di bawah tidak
+> ditemukan di `src/`):
+>
+> - `src/modules/_shared/business-transaction-contract.ts`
+> - `src/modules/_shared/erp-reference-data-contract.ts`
+> - `src/modules/_shared/ports/period-lock-port.ts`
+> - fixture `tests/fixtures/derived-application-example/modules/example-erp-extension/`
+>   (seluruh direktori `derived-application-example/` diganti
+>   `tests/fixtures/example-domain-modules/`, dan `example-erp-extension` dihapus)
+> - `src/modules/application-registry.ts` dan command `bun run extension:check`
+>   (dihapus bersama jalur turunan)
+>
+> **Arahan baru.** ERP tidak lagi dibangun di repo turunan. Keluarga AWCMS =
+> TIGA template SEJAJAR dipakai LANGSUNG ("template dipakai-langsung"). Sebuah
+> modul ERP kini dibangun sebagai modul `type: "domain"` LANGSUNG di
+> `src/modules/` repo ini — pola yang sama dengan modul base lain (contoh nyata
+> modul website pertama yang di-port langsung: `theming`, skill `awcms-theming`).
+> Untuk scaffold modul domain baru pakai skill `awcms-new-module`; untuk
+> governance komposisi pakai `awcms-module-management`. ADR-0034 men-supersede
+> ADR-0013/0020 pada titik ini (kontrak kesiapan ekstensi ERP base) dan
+> ADR-0014/0015/0025 (jalur turunan).
+>
+> Isi di bawah dipertahankan **hanya sebagai rujukan historis** atas invariant
+> ERP (posted immutable, fail-closed period-lock, tenant-sebagai-batas) yang
+> tetap relevan konseptual saat membangun modul ERP domain — tetapi nama file,
+> fixture, dan command yang dirujuk sudah TIDAK BERLAKU. Jangan pakai sebagai
+> panduan implementasi yang bisa dieksekusi hari ini.
 
 Sumber kebenaran: `docs/adr/0020-erp-extension-readiness-contracts.md`
 (keputusan arsitektural mengikat), `docs/awcms/erp-extension-

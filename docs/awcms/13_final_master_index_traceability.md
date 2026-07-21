@@ -139,11 +139,11 @@ Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
 `repo-inventory.md` saat ini **hand-maintained** (bukan hasil generate
 nyata) — `bun run repo:inventory:generate` dan
 `scripts/repo-inventory-generate.ts` belum ada di repo ini; lihat
-disclaimer di puncak `repo-inventory.md` sendiri untuk statusnya. **23 file migration nyata** di
-`sql/` (`001`..`023`), dipetakan ke **10 modul terdaftar** (urutan
+disclaimer di puncak `repo-inventory.md` sendiri untuk statusnya. **34 file migration nyata** di
+`sql/` (`001`..`034`), dipetakan ke **11 modul terdaftar** (urutan
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,
-`sync-storage`, `workflow-approval`, `email`, `reporting`). Tabel ini
+`sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`). Tabel ini
 menggantikan versi sebelumnya yang mengutip nama file fiktif (mis.
 `003_awcms_catalog_inventory_schema.sql`,
 `004_awcms_sales_pos_schema.sql`) dari sebuah sistem POS/retail yang

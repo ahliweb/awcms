@@ -1,6 +1,8 @@
 # Derived-Application Compatibility, Deprecation, and Support-Window Policy
 
-> **Status dokumen.** Repo `awcms` baru pada tahap fondasi ulang ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — belum ada modul ERP maupun tooling `extension:check` yang diimplementasikan. Mekanisme di bawah ini (enam skema versi independen, aturan bump MAJOR/MINOR/PATCH, kebijakan deprecation, gerbang enforcement) diwarisi langsung dari base awcms-mini yang sudah terverifikasi berjalan — reusable apa adanya untuk awcms. Referensi path file/skrip di bawah adalah **rencana lokasi** yang akan dibuat mengikuti pola yang sama, bukan file yang sudah ada di repo ini hari ini.
+> **⚠️ DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).** Mekanisme aplikasi-turunan yang dijelaskan dokumen ini — `extension:check` (`scripts/extension-check.ts`), `extension.manifest.json`, `ApplicationModuleRegistry` — **DIBATALKAN**, bukan sekadar ditunda. Keluarga AWCMS (`awcms-mini`/`awcms`/`awcms-micro`) kini template **dipakai-langsung**, tanpa membuat repo derivatif; modul domain/website ditambahkan langsung ke `src/modules/` template. Dokumen ini dipertahankan sebagai catatan historis.
+
+> **Status dokumen.** Kebijakan versi/deprecation di bawah menggambarkan tooling `extension:check` yang **tidak akan diimplementasikan** — dicabut oleh ADR-0034 (bukan "rencana lokasi yang akan dibuat"). Isi berikut adalah catatan historis dari desain jalur-turunan yang diwarisi base awcms-mini; tidak lagi mengikat repo `awcms` saat ini.
 
 This document is the authoritative policy reference for every SemVer scheme a
 derived application's `extension.manifest.json` declares itself against,

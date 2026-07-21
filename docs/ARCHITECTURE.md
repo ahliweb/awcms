@@ -1,20 +1,17 @@
 # Arsitektur AWCMS
 
-Status per [ADR-0001](adr/0001-rebuild-on-awcms-foundation-erp-scope.md) (amended by
-[ADR-0022](adr/0022-erp-modules-live-in-extension-repos.md)): repo ini adalah **fondasi
-modular monolith reusable** — bukan platform ERP itu sendiri. Modul domain ERP (finance,
-inventory, procurement, manufacturing, hr-payroll, dst.) dikembangkan di **repo
-ekstensi/turunan terpisah** di atas base ini (build-time module composition per
-[ADR-0014](adr/0014-deterministic-build-time-module-composition.md): repo turunan
-menyusun `application-registry.ts`-nya sendiri — berkas ini **tidak ada** di
-`src/modules/` repo ini; lihat juga skill `awcms-module-management`), bukan di
-`src/modules/` repo ini. Repo ini sudah melewati fase skeleton Sprint 1-2:
-10 modul fondasi aktif, migration `sql/001`-`sql/023`, RLS `FORCE` di seluruh tabel
-tenant-scoped, pemisahan role database, dan admin UI read+write (Issue #166, #171).
-Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk daftar
-modul/migration/tabel/route yang selalu ter-generate ulang, lihat
-`docs/awcms/repo-inventory.md`; untuk detail per modul, lihat `README.md`
-masing-masing di `src/modules/<module>/`.
+Status per [ADR-0001](adr/0001-rebuild-on-awcms-foundation-erp-scope.md), direposisi
+oleh [ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
+(men-supersede ADR-0013/0014/0015/0022/0025): AWCMS adalah salah satu dari **tiga template
+keluarga AWCMS yang dipakai LANGSUNG** (template lini ERP/back-office). Sebagai template
+yang di-ship, base menyediakan **modul fondasi reusable + kontrak netral kesiapan ERP** —
+modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll, dst.)
+**ditambahkan langsung di `src/modules/` template ini** saat dipakai, bukan di repo
+ekstensi/turunan terpisah (jalur aplikasi-turunan DIHAPUS — lihat §Komposisi modul di
+bawah). Repo ini punya **11 modul fondasi aktif**, migration `sql/001`-`sql/034`, RLS
+`FORCE` di seluruh tabel tenant-scoped, pemisahan role database, dan admin UI read+write
+(Issue #166, #171). Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk detail
+per modul, lihat `README.md` masing-masing di `src/modules/<module>/`.
 
 ## Stack
 
@@ -33,7 +30,7 @@ src/modules/<module>/
   api/                  # (opsional) skema/handler bersama; route file tetap di src/pages
 ```
 
-10 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
+11 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
 
 - **`logging`** — audit trail lintas modul (`awcms_audit_events`) + purge terjadwal.
 - **`tenant_admin`** — tenant root, hierarki office, tenant settings, setup wizard sekali jalan.
@@ -45,6 +42,7 @@ src/modules/<module>/
 - **`workflow_approval`** — engine workflow definisi ber-versi (draft/publish/retire), node graph (approval/condition/parallel/join/notify), quorum, delegasi, eskalasi.
 - **`email`** — layanan email provider-neutral (Mailketing + `log` adapter), template management, dispatcher outbox, pengumuman massal.
 - **`reporting`** — lima view manajemen (aktivitas tenant, akses/audit, sync health, module usage, email health) plus mekanisme projection read-model (incremental cursor/event-driven, rebuild, freshness, reconciliation, export terjadwal).
+- **`theming`** (`type: "domain"`) — modul **website** pertama yang hidup langsung di base (ADR-0034 Fase 3): konfigurasi tema per tenant (design token), lifecycle draft/preview/publish/retire/rollback ber-immutability, route `/api/v1/theming/*` + stylesheet publik `/theming/{tenantCode}/tokens.css` (eksternal, `style-src 'self'`). Validasi nilai CSS by-rejection, preview beku ber-SHA-256.
 
 Modul lain di ekosistem `awcms-mini` (mis. `blog-content`, `data-lifecycle`,
 `document-infrastructure`, `form-drafts`, `integration-hub`, `news-portal`,
@@ -52,35 +50,31 @@ Modul lain di ekosistem `awcms-mini` (mis. `blog-content`, `data-lifecycle`,
 di-port** ke repo ini — lihat skill masing-masing (ditandai "BACAAN SAJA") untuk
 spesifikasi target saat porting.
 
-### Komposisi modul build-time (Issue #178, ADR-0025)
+### Komposisi & validasi registry modul (ADR-0034)
 
-Registry efektif = **base + registry aplikasi turunan opsional**, disusun 100%
-saat build/compile (tanpa runtime discovery/`eval`/file scanning):
+Registry modul adalah **registry base tunggal** (`src/modules/index.ts`),
+disusun 100% saat build/compile (tanpa runtime discovery/`eval`/file scanning).
+ADR-0034 **menghapus** jalur aplikasi-turunan: tidak ada lagi
+`src/modules/application-registry.ts`, `mergeModuleRegistries`, namespace
+migration turunan `900+`, manifest kompatibilitas, maupun command
+`extension:check` (men-supersede ADR-0014/0015/0025). Yang **dipertahankan**
+adalah mekanisme validasi registry base — kini memvalidasi registry base itu
+sendiri, bukan hasil merge dengan registry aplikasi:
 
-- `src/modules/index.ts` mengekspor `listBaseModules()` (10 modul base, urutan
-  tetap) dan `modules`/`listModules()` = `mergeModuleRegistries(baseModules,
-applicationModuleRegistry)`. `index.ts` tetap **data murni** — hanya
-  merge, tidak pernah memvalidasi/melempar saat load.
-- `src/modules/application-registry.ts` adalah **satu-satunya titik ekstensi**
-  yang boleh diedit repo turunan; di repo base ini nilainya `undefined`, jadi
-  registry efektif **identik byte-per-byte** (urutan + identitas objek) dengan
-  sebelum Issue #178.
-- `src/modules/module-management/domain/module-composition.ts` adalah mesin
-  validasi (`composeModuleRegistry`) — dipakai ulang oleh gate, bukan oleh
-  jalur load modul. Menolak: key ganda, override key base, `type` base/system
-  dari registry aplikasi, dependency hilang/siklik (memakai ulang validator DAG
-  `_shared/module-dependency-graph.ts`), capability provider conflict/missing,
-  overlap namespace migration (base mereservasi `1-899`, turunan mulai `900`),
-  deployment-profile incompatible, navigation path conflict, dan job descriptor
-  invalid (memakai ulang `job-registry.ts`).
-- Empat gate menegakkannya di `bun run check` dan CI:
-  `modules:compose:check`, `modules:composition:inventory:generate`/`:check`
-  (inventory deterministik `docs/awcms/module-composition-inventory.json`), dan
-  `extension:check` (kesehatan extension seam). Lihat
-  [`derived-application-guide.md`](awcms/derived-application-guide.md) dan
-  [ADR-0025](adr/0025-implement-deterministic-build-time-module-composition.md).
+- `src/modules/index.ts` mengekspor `listBaseModules()`/`listModules()` (11
+  modul, urutan tetap = urutan registrasi). Tetap **data murni** — hanya daftar,
+  tidak pernah memvalidasi/melempar saat load.
+- `src/modules/module-management/domain/module-composition.ts`
+  (`composeModuleRegistry`) adalah mesin validasi yang dipakai gate, bukan jalur
+  load modul. Menolak: key ganda, dependency hilang/siklik (memakai ulang
+  validator DAG `_shared/module-dependency-graph.ts`), capability provider
+  conflict/missing, navigation path conflict, dan job descriptor invalid
+  (memakai ulang `job-registry.ts`).
+- Gate yang menegakkannya di `bun run check` dan CI: `modules:dag:check`,
+  `modules:compose:check`, dan `modules:composition:inventory:generate`/`:check`
+  (inventory deterministik `docs/awcms/module-composition-inventory.json`).
 
-Build-time composition (siapa modul yang ada di kode) dan tenant lifecycle
+Komposisi build-time (modul apa yang ada di kode) dan tenant lifecycle
 enable/disable (`module_management`, state DB per tenant) adalah **dua lapis
 berbeda** — komposisi tidak pernah bergantung pada input tenant.
 
@@ -134,7 +128,13 @@ token mentah sekali saja. Klien mengirim token lewat header
 dikirim lewat header `X-AWCMS-Tenant-ID` untuk endpoint non-cookie. Login
 punya pengerasan (rate limit, lockout, dummy-hash anti-enumerasi, redaksi IP)
 — lihat `src/modules/identity-access/README.md` §Audit & pengerasan login.
-MFA/OIDC/SSO/Turnstile masih genuinely belum ada.
+Di atas password, jalur auth kini punya: **MFA TOTP + recovery codes + session
+assurance (aal1/aal2) + step-up** (`sql/024`, route `/api/v1/auth/mfa/*`,
+enforcement digerakkan state enrollment DB — fail-closed), **OIDC/SSO
+tenant-aware dengan account linking fail-closed + SSRF guard + break-glass**
+(`sql/025`/`026`, route `/api/v1/auth/sso/*`), dan **Cloudflare Turnstile bot
+protection sadar profil deployment** (`src/lib/security/turnstile.ts`, LAN/offline
+exempt). JWT diverifikasi native (RS256+ES256) tanpa dependensi.
 
 **Admin shell (Issue #166, #171).** `src/pages/login.astro` + `src/pages/admin/*.astro`
 (dashboard, offices, profiles, users, roles, abac-policies, modules,
@@ -173,13 +173,25 @@ context atau `Response` gagal siap pakai. `module_management` sendiri
 `isCore` (tidak bisa dinonaktifkan), jadi tenant tak pernah terkunci dari
 mengaktifkannya kembali.
 
-**Yang belum ada:** tabel `awcms_abac_policies` sudah punya CRUD admin
-(Issue #171, `/api/v1/abac/policies`) tapi **belum dikonsumsi evaluator** —
-`evaluateAccess()` masih memakai aturan built-in generik di atas, bukan
-policy berbasis atribut/scope kantor dari tabel itu. Business-scope
-hierarchy dan segregation-of-duties (SoD) juga belum diimplementasikan.
-Endpoint manajemen role/user (`/api/v1/roles`, `/api/v1/users`) sendiri
-**sudah ada** (read Issue #166, write Issue #171) — bukan gap lagi.
+Di atas guard built-in, evaluator kini mengonsumsi tiga lapis authorization
+tambahan yang sudah diport:
+
+- **ABAC dinamis berbasis DSL** (`sql/031`/`032`, `domain/abac-evaluator.ts`,
+  route `/api/v1/access/policies/*` DSL + `/api/v1/abac/policies` CRUD flat
+  lawas): policy kondisi terbatas (AST jsonb, allow-list atribut server-side,
+  op eq/ne/in/nin/lt/lte/gt/gte/exists), precedence deny-overrides fail-closed,
+  cache tenant-keyed invalidasi post-commit. Evaluator memuat HANYA policy
+  `is_active AND is_dsl_managed` (flat CRUD lawas inert by design).
+- **Business-scope hierarchy** (`sql/027`/`028`, `domain/business-scope-assignment.ts`):
+  parameter fakta scope ke `evaluateAccess`; base resolver fail-closed NO-OP
+  sampai modul penyedia hierarki mengisinya.
+- **Segregation of Duties (SoD)** (`sql/029`/`030`, `domain/sod-conflict-evaluation.ts`,
+  `application/high-risk-sod-guard.ts`): enforcement dua titik (assignment
+  `sod_conflict` 409 + deny-overrides action-time pada aksi high-risk); base
+  ship 0 rule (guard inert base-murni; rule ilustratif di fixture).
+
+Endpoint manajemen role/user (`/api/v1/roles`, `/api/v1/users`) sudah ada
+(read Issue #166, write Issue #171).
 
 ## Audit trail
 
@@ -213,9 +225,9 @@ allow-list publik yang benar-benar dipakai), **standard error schema** (semua
 response 4xx/5xx resolve ke `ApiError`), parameter path cocok dengan template,
 dan setiap route file di `src/pages/api/v1/**` punya pasangan path OpenAPI (dan
 sebaliknya). `bun run api:docs:check` menggagalkan build bila referensi Markdown
-basi. Fragment dari **aplikasi turunan** tergabung lewat seam
-`buildBundledDocument({ extraFragmentFiles })` tanpa mengedit fragment base;
-fragment yang menimpa path/schema base ditolak (`BundleConflictError`). Detail:
+basi. Bundler menyediakan seam `buildBundledDocument({ extraFragmentFiles })`
+untuk menggabungkan fragment tambahan tanpa mengedit fragment base; fragment yang
+menimpa path/schema base ditolak (`BundleConflictError`). Detail:
 [`openapi/README.md`](../openapi/README.md),
 [`docs/awcms/api-contribution-guide.md`](awcms/api-contribution-guide.md).
 
@@ -231,7 +243,7 @@ per-order-key ordering, backoff, dead-letter + replay ter-audit.
 ## Migration
 
 `scripts/db-migrate.ts` membaca `sql/*.sql` terurut nama file
-(`NNN_awcms_<area>_<deskripsi>.sql`, saat ini `001`-`023`), menghitung
+(`NNN_awcms_<area>_<deskripsi>.sql`, saat ini `001`-`034`), menghitung
 checksum SHA-256 tiap file, menjalankan file yang belum tercatat di
 `awcms_schema_migrations` dalam satu transaksi per file (dengan advisory
 lock lintas proses), dan menolak start bila checksum file yang sudah ter-apply
@@ -256,14 +268,24 @@ Sudah live dan diverifikasi terhadap kode (bukan rencana):
   freshness/staleness, reconciliation) di atas lima view reporting dasar.
 - Admin UI read **dan tulis** untuk offices/profiles/users/roles/
   abac-policies/modules/email-templates (Issue #166, #171).
+- **Authorization lanjutan**: MFA TOTP + session assurance/step-up,
+  OIDC/SSO tenant-aware, Turnstile bot protection (`sql/024`–`026`), ABAC
+  dinamis berbasis DSL, business-scope hierarchy, dan SoD conflict
+  enforcement (`sql/027`–`032`) — lihat §Auth & §RBAC/ABAC.
+- **Kontrak OpenAPI modular** per modul + bundler deterministik
+  (`openapi:bundle`, ADR-0026) — bukan lagi gap.
+- Modul website **`theming`** hidup langsung di base (`sql/033`–`034`),
+  modul website pertama pasca-ADR-0034.
 
 Gap yang genuinely masih ada (jangan diklaim selesai):
 
-- Evaluator ABAC berbasis atribut/scope kantor (`awcms_abac_policies`),
-  business-scope hierarchy, dan segregation-of-duties (SoD) belum
-  dikonsumsi evaluator — lihat §RBAC/ABAC.
-- MFA/OIDC/SSO/Turnstile pada login.
-- Fragmentasi OpenAPI per modul + bundler (`openapi:bundle`).
-- Modul domain ERP dan modul lain milik `awcms-mini` yang belum di-port
-  (lihat §Modular monolith) — sesuai ADR-0022, modul ERP memang diarahkan
-  ke repo ekstensi terpisah, bukan gap yang perlu ditutup di repo ini.
+- Modul lain milik `awcms-mini` yang belum di-port (`blog-content`,
+  `news-portal`, `social-publishing`, `visitor-analytics`, `tenant-domain`
+  routing, `data-lifecycle`, `document-infrastructure`, `form-drafts`,
+  `integration-hub`, `idn-admin-regions`) — lihat skill masing-masing
+  (BACAAN SAJA) untuk spesifikasi target. Pasca-[ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
+  modul domain/website ini ditambahkan **langsung di `src/modules/`** template
+  ini saat dibutuhkan, bukan di repo turunan.
+- Business-scope hierarchy resolver base masih **NO-OP fail-closed** (menunggu
+  modul penyedia hierarki organisasi); SoD base ship **0 rule** (rule nyata
+  ilustratif di fixture) — keduanya seam siap-pakai, bukan bug.
