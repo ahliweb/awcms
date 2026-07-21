@@ -1,0 +1,88 @@
+---
+/**
+ * `GET /theming/preview/{token}` (Issue #269, ADR-0029 §6) — the authorized,
+ * short-lived, NON-INDEXABLE preview of a tenant's DRAFT theme, rendered through
+ * the trusted build-time `PublicThemeLayout` (no database template). The response
+ * is `noindex,nofollow` + `private, no-store` and links its token values from the
+ * distinct `/theming/preview-tokens/{token}.css` namespace, so it is invisible to
+ * search engines and cannot poison the public/CDN cache. It renders the DRAFT
+ * (never the published version), proving the theme + tokens across the default and
+ * any derived theme.
+ */
+import PublicThemeLayout from "../../../layouts/PublicThemeLayout.astro";
+import { resolvePreviewContext } from "../../../lib/theming/theme-preview";
+import { buildPreviewViewModel } from "../../../modules/theming/application/theme-preview-render";
+
+// Preview surfaces are ALWAYS non-indexable and never cached by a shared cache.
+Astro.response.headers.set("X-Robots-Tag", "noindex, nofollow");
+Astro.response.headers.set("Cache-Control", "private, no-store");
+
+const token = Astro.params.token ?? "";
+const context = await resolvePreviewContext(token);
+
+if (!context) {
+  Astro.response.status = 404;
+}
+
+const model = context
+  ? buildPreviewViewModel(context.descriptor, context.config, context.assetUrls)
+  : null;
+const tokenCssHref = `/theming/preview-tokens/${encodeURIComponent(token)}.css`;
+---
+
+{
+  model ? (
+    <PublicThemeLayout
+      title={`Preview — ${model.themeName}`}
+      tokenCssHref={tokenCssHref}
+      model={model}
+      noindex={true}
+    >
+      <h1 data-preview-heading>{model.themeName} preview</h1>
+      <p>This is a private, non-indexable preview of your draft theme.</p>
+      {model.sections.map((section) => (
+        <section
+          class="theme-section"
+          data-section={section.key}
+          aria-label={section.label}
+        >
+          <h2>{section.heading}</h2>
+          <p>{section.body}</p>
+          {section.key === "cta" && (
+            <a class="theme-cta" href="#">
+              Learn more
+            </a>
+          )}
+        </section>
+      ))}
+      <form class="theme-section" aria-label="Sample contact form">
+        <h2>Contact</h2>
+        <label>
+          Email
+          <input type="email" name="email" autocomplete="email" />
+        </label>
+        <button type="submit" class="theme-cta">
+          Send
+        </button>
+      </form>
+    </PublicThemeLayout>
+  ) : (
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex, nofollow" />
+        <title>Preview not found</title>
+      </head>
+      <body>
+        <main role="main">
+          <h1>Preview not found or expired</h1>
+          <p>
+            This preview link is invalid or has expired. Generate a new preview
+            from the theme admin.
+          </p>
+        </main>
+      </body>
+    </html>
+  )
+}

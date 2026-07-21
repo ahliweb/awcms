@@ -34,10 +34,11 @@ contracts:
   # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
   # ships in this base belong here. `party_directory` is owned by the base
   # `profile_identity` module (forward-declared ahead of an in-repo consumer,
-  # ADR-0011). Content capabilities (news_media/public_content/social_publishing)
-  # are deliberately NOT listed — their owning CMS modules are excluded from the
-  # base (`no-content-website-modules` divergence, ADR-0022); a derived content
-  # app declares those in its OWN manifest.
+  # ADR-0011). ADR-0034 Fase 3 admitted the first website module (`theming`)
+  # directly into the base, but `theming` provides no capability port, so it adds
+  # no entry here. Content capabilities whose owning CMS modules are not yet
+  # ported to this base (e.g. news_media/public_content/social_publishing) remain
+  # unlisted until those modules land here (ADR-0034 "template dipakai-langsung").
   capabilityContractVersions:
     party_directory: "1.0.0"
   apiResponseEnvelopeVersion: "1.0.0"
@@ -88,19 +89,12 @@ stack:
 # gate fails once a reviewDate is in the past (an unreviewed divergence cannot
 # live forever) or its ADR file is missing.
 intentionalDivergences:
-  - id: no-content-website-modules
-    summary: >-
-      The awcms-mini CMS/content modules (blog_content, news_portal,
-      social_publishing, visitor_analytics, public tenant_domain pages) are not
-      part of the awcms base.
-    reason: >-
-      awcms is an ERP-readiness FOUNDATION, not a website/CMS product. Content
-      and vertical modules live in derived/extension repositories composed on
-      top of this base, never in src/modules/ here.
-    owner: "@ahliweb"
-    reviewDate: "2027-07-19"
-    adr: 0022-erp-modules-live-in-extension-repos.md
-    since: "#177"
+  # The `no-content-website-modules` divergence (blog_content/news_portal/etc.
+  # are not part of the base) was REVOKED by ADR-0034 (§Konsekuensi): website
+  # modules may now live directly in `src/modules/` here ("template
+  # dipakai-langsung"), and the first one — `theming` — is implemented in the
+  # base (ADR-0034 Fase 3). Website/content modules that are not yet ported are
+  # simply not-yet-ported (drift is tracked per-module), not a standing divergence.
   - id: openapi-one-file-per-module
     summary: >-
       OpenAPI fragments are one-file-per-MODULE, not one-file-per-tag as in

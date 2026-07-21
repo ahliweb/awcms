@@ -272,9 +272,11 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       )
     );
     for (const name of beforeTags) expect(afterTags.has(name)).toBe(true);
-    // The only documented addition: the previously-undeclared operation tag.
-    const added = [...afterTags].filter((n) => !beforeTags.has(n));
-    expect(added).toEqual(["Domain Event Runtime"]);
+    // The documented additive tags beyond the pre-migration monolith:
+    // "Domain Event Runtime" (a previously-undeclared operation tag) and
+    // "Theming" (ADR-0034 Fase 3 — the first website module in the base).
+    const added = [...afterTags].filter((n) => !beforeTags.has(n)).sort();
+    expect(added).toEqual(["Domain Event Runtime", "Theming"]);
   });
 });
 

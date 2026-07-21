@@ -47,6 +47,8 @@ tags:
     description: Module-contributed read-model projection extension to Management Reporting — list registered projection descriptors with live snapshot/freshness status, trigger/resume/cancel an idempotent full rebuild, trigger an on-demand reconciliation against a source control total, and manage/trigger/download scheduled exports (manifest/checksum/expiry, secure tenant-scoped download). A projection is a DERIVED read model, never an authorization source of truth — every operation independently re-checks RBAC/ABAC.
   - name: Domain Event Runtime
     description: Transactional, versioned domain-event outbox and dispatcher admin API — read-only inspection of outbox events and per-consumer deliveries (redacted payload projections only), permission-gated/reason-required/idempotent/audited replay of a dead-lettered delivery, and per-tenant pause/resume of a registered consumer.
+  - name: Theming
+    description: Tenant-selectable presentation (ADR-0034 Fase 3 — the first website module in the base). Select a trusted, reviewed, build-time theme and configure it by DATA only (design tokens, slot variants, media asset ids, section order, nav placement) — no uploaded code, no arbitrary templates. Every token value is validated by rejection against strict CSS grammars; published versions are immutable; publish/rollback/retire are ABAC-gated, idempotency-keyed, and audited.
 security:
   - bearerAuth: []
     tenantHeader: []
