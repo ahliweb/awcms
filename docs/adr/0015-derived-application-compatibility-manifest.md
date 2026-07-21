@@ -1,6 +1,6 @@
 # ADR-0015 — Derived-application compatibility manifest, test kit, dan semantic-version gates
 
-- **Status:** Accepted
+- **Status:** Superseded oleh [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (manifest kompatibilitas turunan + `extension:check` dihapus)
 - **Tanggal:** 2026-07-13
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #741 (epic #738 `platform-evolution`, Wave 1), Issue #739/ADR-0013, Issue #740/ADR-0014, ADR-0008, ADR-0011, ADR-0012, `docs/awcms/derived-application-guide.md`, `src/modules/_shared/module-contract.ts`, `src/modules/_shared/extension-manifest-contract.ts`, `src/modules/module-management/domain/extension-compatibility.ts`, `scripts/extension-check.ts`

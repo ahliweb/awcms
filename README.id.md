@@ -4,7 +4,7 @@
 
 # AWCMS — Basis Platform untuk ERP & Solusi Bisnis
 
-> **AWCMS bukan sebuah ERP.** Ia adalah **basis/fondasi modular monolith** tempat aplikasi ERP & solusi bisnis dibangun di atasnya (di repo ekstensi/turunan terpisah). Tidak ada chart of accounts, general ledger, jurnal, AR/AP, valuasi inventori, payroll, atau perhitungan pajak di repo ini — dan tidak akan pernah ada; base hanya menyediakan modul fondasi reusable + **kontrak netral** kesiapan ERP. Lihat [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md), [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md), [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md), dan [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
+> **AWCMS adalah template lini ERP/back-office keluarga AWCMS — dipakai LANGSUNG.** Ia salah satu dari tiga template sejajar (`awcms-mini`/`awcms`/`awcms-micro`) yang dipakai langsung sebagai titik awal pengembangan, bukan basis-turunan-wajib yang di atasnya harus dibangun repo aplikasi terpisah ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede ADR-0013/0014/0015/0022/0025). Sebagai template yang di-ship, base menyediakan **modul fondasi reusable + kontrak netral kesiapan ERP** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) dan belum berisi logika domain ERP (chart of accounts, general ledger, jurnal, AR/AP, valuasi inventori, payroll, perhitungan pajak). Untuk membangun ERP/solusi bisnis: **pakai template ini langsung dan tambahkan modul domain di `src/modules/`** — bukan membuat repo turunan terpisah. Lihat juga [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
 > **Status: fondasi aktif dikembangkan.** File kode legacy di repo ini sudah dihapus (lihat commit `chore(foundation): remove legacy repository files`) dan repo ini **dikembangkan ulang dari nol** di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Sebelas modul fondasi sudah live (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk state kode saat ini), sebagai **basis** pengembangan ERP dan solusi bisnis — bukan sekadar CMS/base generik, dan bukan pula sebuah ERP jadi.
 
@@ -39,14 +39,14 @@ Setelah seluruh komponen (mcp, public, admin) selesai dipindah dan Supabase tida
 
 ## Arah pengembangan: basis teknologi awcms-mini, skop fondasi ERP
 
-Repo ini **mengadopsi stack dan standar teknis dari [awcms-mini](https://github.com/ahliweb/awcms-mini)** — _modular monolith standard_ AhliWeb — sebagai basis teknologi, namun **bukan sekadar turunan/derivatif base generik**. Fokus pengembangan di repo ini adalah **menyediakan fondasi**, bukan membangun ERP-nya sendiri:
+Repo ini **mengadopsi stack dan standar teknis dari [awcms-mini](https://github.com/ahliweb/awcms-mini)** — _modular monolith standard_ AhliWeb — sebagai basis teknologi. Ketiga repo keluarga (`awcms-mini`, `awcms`, `awcms-micro`) adalah **tiga template sejajar yang dipakai langsung** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)), bukan hierarki base-dan-turunan; `awcms` adalah template lini ERP/back-office. Sebagai template yang di-ship, fokus repo ini adalah menyediakan **fondasi + kontrak kesiapan ERP**, dan modul domain ERP ditambahkan **langsung di `src/modules/`** saat template dipakai:
 
-- **Modul fondasi reusable** — tenant, identity/access (RBAC/ABAC/RLS), central profile, sync/outbox, workflow, reporting, observability, dsb. — dipakai apa adanya oleh setiap aplikasi turunan.
-- **Kontrak netral kesiapan ERP** — bentuk data pasif, capability port, dan skema payload event (business transaction, posting, period-lock, item/currency/UoM, inventory movement, reporting projection — [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) yang **diimplementasikan/dikonsumsi oleh ekstensi ERP di repo terpisah**, bukan diisi logikanya di sini.
-- **Kerangka integrasi solusi bisnis** — pola outbox/queue offline-first-safe + provider adapter (mis. payment gateway, marketplace, pajak/Coretax, logistik) yang menjadi titik pasang bagi konektor domain di aplikasi turunan.
-- **Skala multi-tenant/multi-entitas** — RBAC/ABAC/RLS + batas tenant/legal-entity/organization-unit ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)) yang dipakai ulang oleh banyak aplikasi turunan.
+- **Modul fondasi reusable** — tenant, identity/access (RBAC/ABAC/RLS), central profile, sync/outbox, workflow, reporting, observability, dsb. — dipakai apa adanya oleh modul domain yang dibangun di atasnya.
+- **Kontrak netral kesiapan ERP** — bentuk data pasif, capability port, dan skema payload event (business transaction, posting, period-lock, item/currency/UoM, inventory movement, reporting projection — [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) yang **diimplementasikan/dikonsumsi oleh modul ERP yang ditambahkan langsung di `src/modules/`** (atau oleh template keluarga lain), bukan diisi logikanya oleh base itu sendiri.
+- **Kerangka integrasi solusi bisnis** — pola outbox/queue offline-first-safe + provider adapter (mis. payment gateway, marketplace, pajak/Coretax, logistik) yang menjadi titik pasang bagi konektor domain yang dibangun di atas template ini.
+- **Skala multi-tenant/multi-entitas** — RBAC/ABAC/RLS + batas tenant/legal-entity/organization-unit ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)) yang dipakai ulang lintas modul domain.
 
-Modul domain ERP sesungguhnya (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll) dan vertikal bisnis (POS, portal sekolah, dsb.) **dibangun di repo ekstensi/turunan terpisah di atas base ini** — lihat [`docs/awcms/derived-application-guide.md`](docs/awcms/derived-application-guide.md).
+Modul domain ERP sesungguhnya (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll) dan vertikal bisnis (POS, portal sekolah, dsb.) **ditambahkan langsung di `src/modules/` template ini** saat dipakai ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)) — bukan di repo turunan terpisah. (Panduan lama [`docs/awcms/derived-application-guide.md`](docs/awcms/derived-application-guide.md) kini **DEPRECATED**.)
 
 Basis teknologi yang diadopsi dari awcms-mini:
 
@@ -59,7 +59,7 @@ Basis teknologi yang diadopsi dari awcms-mini:
 | Mode operasi  | Online-dependent                       | **Offline-first / LAN-first** dengan sync outbox HMAC-signed (ADR-0006)                                                                           |
 | Kontrak API   | Ad-hoc                                 | OpenAPI/AsyncAPI tervalidasi, response helper standar                                                                                             |
 
-Modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) dari awcms-mini dipakai apa adanya sebagai fondasi; modul domain ERP dan integrasi bisnis dikembangkan **di atas fondasi tersebut, di repo ekstensi/turunan terpisah** — bukan di dalam base ini ([ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md)).
+Modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) dari awcms-mini dipakai apa adanya sebagai fondasi; modul domain ERP dan integrasi bisnis dikembangkan **langsung di atas fondasi tersebut, di `src/modules/` template ini** — bukan di repo turunan terpisah ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede ADR-0022).
 
 ## Arsitektur tingkat tinggi
 
@@ -67,7 +67,7 @@ Modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow
 flowchart TB
   subgraph Client["Client / LAN"]
     ADM[Admin SSR]
-    APP[Aplikasi turunan<br/>modul domain ERP]
+    APP[Modul domain ERP<br/>di src/modules/]
   end
 
   subgraph App["AWCMS — Bun + Astro 7 (Modular Monolith)"]
@@ -82,7 +82,7 @@ flowchart TB
   end
 
   subgraph Ext["Kontrak kesiapan ERP (pasif, ADR-0020)"]
-    ERP[Ekstensi ERP<br/>repo terpisah, ADR-0022]
+    ERP[Modul ERP<br/>di src/modules/, ADR-0034]
     PROV[Provider bisnis eksternal<br/>pajak/Coretax, payment, dsb.]
   end
 
@@ -95,7 +95,7 @@ flowchart TB
   EVT -. konsumsi kontrak .-> ERP
 ```
 
-Modul fondasi ini tidak mengimplementasikan logika ERP — ia hanya menyediakan kontrak netral (event, posting request/result, period-lock, dsb.) yang **dikonsumsi** oleh aplikasi ERP di repo terpisah. Provider bisnis eksternal terhubung lewat **outbox/queue**, bukan jalur langsung transaksi, sehingga alur kritikal tetap berjalan saat koneksi eksternal bermasalah (ADR-0006).
+Modul fondasi ini tidak mengimplementasikan logika ERP — ia hanya menyediakan kontrak netral (event, posting request/result, period-lock, dsb.) yang **dikonsumsi** oleh modul ERP yang ditambahkan langsung di `src/modules/`. Provider bisnis eksternal terhubung lewat **outbox/queue**, bukan jalur langsung transaksi, sehingga alur kritikal tetap berjalan saat koneksi eksternal bermasalah (ADR-0006).
 
 ## Prinsip offline-first
 
@@ -118,11 +118,11 @@ flowchart LR
 - Mode operasi: **Offline-first / LAN-first**, sync outbox opsional ([ADR-0006](docs/adr/0006-offline-first-sync-outbox.md))
 - Security baseline: **RBAC + ABAC default-deny + PostgreSQL RLS + Audit Log** ([ADR-0004](docs/adr/0004-rbac-abac-default-deny.md))
 - Kontrak: **OpenAPI** + **AsyncAPI**, versi independen dari rilis paket ([ADR-0007](docs/adr/0007-openapi-asyncapi-contracts.md), [ADR-0008](docs/adr/0008-independent-contract-and-module-versioning.md))
-- Batas ekstensi: **lapisan ekstensi & model boundary** ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)), **ERP di repo turunan terpisah** ([ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md))
+- Model keluarga: **template dipakai-langsung, modul domain di `src/modules/`** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede jalur turunan ADR-0013/0022); boundary tenant/entitas & kriteria ekstraksi layanan tetap dari [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)
 
 ## Prinsip utama
 
-1. Modul fondasi bersifat **reusable apa adanya** oleh setiap aplikasi turunan — bukan ditulis ulang per turunan.
+1. Modul fondasi bersifat **reusable apa adanya** oleh setiap modul domain yang dibangun di atasnya — bukan ditulis ulang per pemakaian.
 2. Kontrak kesiapan ERP bersifat **pasif dan netral** (bentuk data, capability port, skema event) — logika bisnis ERP sesungguhnya **tidak** hidup di base ini ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)).
 3. Multi-tenant wajib memakai `tenant_id`, **RLS FORCE**, tenant context, dan ABAC default-deny di setiap tabel/endpoint tenant-scoped.
 4. Provider bisnis eksternal (pajak, payment, logistik, dsb.) tidak boleh menjadi dependency alur kritikal dan tidak boleh dipanggil di dalam DB transaction — selalu lewat outbox/queue.
@@ -163,7 +163,7 @@ flowchart LR
 
 - **01–13** perencanaan → kontrak → eksekusi; **14–18** desain teknis; **19** glossary; **20** threat model & arsitektur keamanan; **21** tata kelola penerimaan modul (module admission governance).
 - **Catatan penting:** banyak dokumen di paket ini memakai contoh domain ERP/retail sebagai **ilustrasi** — polanya reusable, entitas/endpoint/layarnya adalah contoh yang diganti aplikasi turunan sesuai kebutuhan domainnya. Lihat [`docs/awcms/README.md`](docs/awcms/README.md) untuk status penerjemahan dan catatan penting lainnya.
-- **Keputusan arsitektural** dicatat di [`docs/adr/`](docs/adr/README.md) (24 ADR saat ini).
+- **Keputusan arsitektural** dicatat di [`docs/adr/`](docs/adr/README.md) (34 ADR saat ini).
 - **State kode saat ini** (bukan rencana): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Untuk kontributor

@@ -1,12 +1,12 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:46e1a40f0c63f76cecea111f00674e40f5f2ab7503482f34c1f8569a9d0ae3ee -->
+<!-- i18n-source-hash: sha256:5e5d4377111133a605936bf081bd7217b6df01876001c04a4c5f0e8837720dfe -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
 # AWCMS — Foundation Platform for ERP & Business Solutions
 
-> **AWCMS is not an ERP.** It is a **modular-monolith foundation/base** that ERP applications & business solutions are built on top of (in separate extension/derived repos). There is no chart of accounts, general ledger, journal, AR/AP, inventory valuation, payroll, or tax computation in this repo — and there never will be; the base only provides reusable foundation modules + **neutral contracts** for ERP readiness. See [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md), [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md), [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md), and [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
+> **AWCMS is the AWCMS-family ERP/back-office template — used DIRECTLY.** It is one of three sibling templates (`awcms-mini`/`awcms`/`awcms-micro`) used directly as a development starting point, not a mandatory base on top of which a separate application repo must be built ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), superseding ADR-0013/0014/0015/0022/0025). As the shipped template, the base provides **reusable foundation modules + neutral ERP-readiness contracts** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) and does not yet contain ERP domain logic (chart of accounts, general ledger, journal, AR/AP, inventory valuation, payroll, tax computation). To build an ERP/business solution: **use this template directly and add domain modules in `src/modules/`** — not by creating a separate derived repo. See also [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
 > **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Eleven foundation modules are already live (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state), as a **foundation** for ERP and business-solution development — not just a generic CMS/base, and not a finished ERP either.
 
@@ -41,14 +41,14 @@ Once every component (mcp, public, admin) had finished moving and Supabase was n
 
 ## Direction: awcms-mini technology base, ERP-foundation scope
 
-This repo **adopts the stack and technical standard from [awcms-mini](https://github.com/ahliweb/awcms-mini)** — AhliWeb's _modular monolith standard_ — as its technology base, but is **not just a derivative of the generic base**. This repo's development focus is **providing the foundation**, not building the ERP itself:
+This repo **adopts the stack and technical standard from [awcms-mini](https://github.com/ahliweb/awcms-mini)** — AhliWeb's _modular monolith standard_ — as its technology base. The three family repos (`awcms-mini`, `awcms`, `awcms-micro`) are **three sibling templates used directly** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)), not a base-and-derivative hierarchy; `awcms` is the ERP/back-office lineage template. As the shipped template, this repo's focus is providing the **foundation + ERP-readiness contracts**, and ERP domain modules are added **directly in `src/modules/`** when the template is used:
 
-- **Reusable foundation modules** — tenant, identity/access (RBAC/ABAC/RLS), central profile, sync/outbox, workflow, reporting, observability, etc. — used as-is by every derived application.
-- **Neutral ERP-readiness contracts** — passive data shapes, capability ports, and event payload schemas (business transaction, posting, period-lock, item/currency/UoM, inventory movement, reporting projection — [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) that are **implemented/consumed by ERP extensions in a separate repo**, not given their logic here.
-- **Business-integration framework** — the same offline-first-safe outbox/queue pattern + provider adapters (e.g. payment gateways, marketplaces, tax/Coretax, logistics) as the mounting point for domain connectors in derived applications.
-- **Multi-tenant/multi-entity scale** — RBAC/ABAC/RLS + tenant/legal-entity/organization-unit boundaries ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)) reused across many derived applications.
+- **Reusable foundation modules** — tenant, identity/access (RBAC/ABAC/RLS), central profile, sync/outbox, workflow, reporting, observability, etc. — used as-is by the domain modules built on top of them.
+- **Neutral ERP-readiness contracts** — passive data shapes, capability ports, and event payload schemas (business transaction, posting, period-lock, item/currency/UoM, inventory movement, reporting projection — [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) that are **implemented/consumed by ERP modules added directly in `src/modules/`** (or by other family templates), not given their logic by the base itself.
+- **Business-integration framework** — the same offline-first-safe outbox/queue pattern + provider adapters (e.g. payment gateways, marketplaces, tax/Coretax, logistics) as the mounting point for domain connectors built on top of this template.
+- **Multi-tenant/multi-entity scale** — RBAC/ABAC/RLS + tenant/legal-entity/organization-unit boundaries ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)) reused across domain modules.
 
-Actual ERP domain modules (finance/GL, inventory/warehouse, procurement, manufacturing, HR/payroll) and business verticals (POS, school portal, etc.) are **built in separate extension/derived repos on top of this base** — see [`docs/awcms/derived-application-guide.md`](docs/awcms/derived-application-guide.md).
+Actual ERP domain modules (finance/GL, inventory/warehouse, procurement, manufacturing, HR/payroll) and business verticals (POS, school portal, etc.) are **added directly in this template's `src/modules/`** when it is used ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)) — not in a separate derived repo. (The former [`docs/awcms/derived-application-guide.md`](docs/awcms/derived-application-guide.md) guide is now **DEPRECATED**.)
 
 Technology base adopted from awcms-mini:
 
@@ -61,7 +61,7 @@ Technology base adopted from awcms-mini:
 | Operating mode | Online-dependent                     | **Offline-first / LAN-first** with HMAC-signed sync outbox (ADR-0006)                                                                               |
 | API contract   | Ad-hoc                               | Validated OpenAPI/AsyncAPI, standard response helper                                                                                                |
 
-Reusable base modules (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) from awcms-mini are used as-is as the foundation; ERP domain modules and business integrations are developed **on top of that foundation, in a separate extension/derived repo** — not inside this base ([ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md)).
+Reusable base modules (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) from awcms-mini are used as-is as the foundation; ERP domain modules and business integrations are developed **directly on top of that foundation, in this template's `src/modules/`** — not in a separate derived repo ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), superseding ADR-0022).
 
 ## High-level architecture
 
@@ -69,7 +69,7 @@ Reusable base modules (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workfl
 flowchart TB
   subgraph Client["Client / LAN"]
     ADM[Admin SSR]
-    APP[Derived application<br/>ERP domain modules]
+    APP[ERP domain modules<br/>in src/modules/]
   end
 
   subgraph App["AWCMS — Bun + Astro 7 (Modular Monolith)"]
@@ -84,7 +84,7 @@ flowchart TB
   end
 
   subgraph Ext["ERP-readiness contracts (passive, ADR-0020)"]
-    ERP[ERP extension<br/>separate repo, ADR-0022]
+    ERP[ERP modules<br/>in src/modules/, ADR-0034]
     PROV[External business provider<br/>tax/Coretax, payment, etc.]
   end
 
@@ -97,7 +97,7 @@ flowchart TB
   EVT -. consumes contract .-> ERP
 ```
 
-These foundation modules do not implement ERP logic — they only provide neutral contracts (events, posting request/result, period-lock, etc.) that are **consumed** by ERP applications in a separate repo. External business providers connect via **outbox/queue**, not a direct transaction path, so critical flows keep running when an external connection has issues (ADR-0006).
+These foundation modules do not implement ERP logic — they only provide neutral contracts (events, posting request/result, period-lock, etc.) that are **consumed** by ERP modules added directly in `src/modules/`. External business providers connect via **outbox/queue**, not a direct transaction path, so critical flows keep running when an external connection has issues (ADR-0006).
 
 ## Offline-first principle
 
@@ -120,11 +120,11 @@ flowchart LR
 - Operating mode: **Offline-first / LAN-first**, optional sync outbox ([ADR-0006](docs/adr/0006-offline-first-sync-outbox.md))
 - Security baseline: **RBAC + ABAC default-deny + PostgreSQL RLS + Audit Log** ([ADR-0004](docs/adr/0004-rbac-abac-default-deny.md))
 - Contracts: **OpenAPI** + **AsyncAPI**, versioned independently from the package release ([ADR-0007](docs/adr/0007-openapi-asyncapi-contracts.md), [ADR-0008](docs/adr/0008-independent-contract-and-module-versioning.md))
-- Extension boundary: **extension layers & boundary model** ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)), **ERP lives in a separate derived repo** ([ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md))
+- Family model: **direct-use templates, domain modules in `src/modules/`** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), superseding the derived pathway of ADR-0013/0022); tenant/entity boundaries & service-extraction criteria remain from [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)
 
 ## Core principles
 
-1. Foundation modules are **reusable as-is** by every derived application — not rewritten per derived app.
+1. Foundation modules are **reusable as-is** by every domain module built on top — not rewritten per use.
 2. ERP-readiness contracts are **passive and neutral** (data shapes, capability ports, event schemas) — actual ERP business logic does **not** live in this base ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)).
 3. Multi-tenancy requires `tenant_id`, **RLS FORCE**, tenant context, and default-deny ABAC on every tenant-scoped table/endpoint.
 4. External business providers (tax, payment, logistics, etc.) must not become a critical-path dependency and must never be called inside a DB transaction — always via outbox/queue.
@@ -165,7 +165,7 @@ flowchart LR
 
 - **01–13** planning → contract → execution; **14–18** technical design; **19** glossary; **20** threat model & security architecture; **21** module admission governance.
 - **Important note:** many documents in this package use ERP/retail domain examples as **illustration** — the pattern is reusable, the entities/endpoints/screens are examples a derived application swaps for its own domain needs. See [`docs/awcms/README.md`](docs/awcms/README.md) for translation status and other important notes.
-- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (24 ADRs currently).
+- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (34 ADRs currently).
 - **Current code state** (not a plan): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## For contributors

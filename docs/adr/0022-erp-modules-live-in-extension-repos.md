@@ -1,6 +1,6 @@
 # ADR-0022 — Modul domain ERP hidup di repo ekstensi, bukan di dalam base (amandemen ADR-0001 poin 3)
 
-- **Status:** Accepted
+- **Status:** Superseded oleh [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (larangan modul domain/website di base dicabut — modul domain boleh & seharusnya hidup langsung di `src/modules/`)
 - **Tanggal:** 2026-07-16
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** ADR-0001 (di-amend oleh ADR ini pada poin 3 + satu alternatif), ADR-0013 (lapisan ekstensi & batas), ADR-0014 (komposisi modul build-time), ADR-0015 (manifest kompatibilitas), ADR-0020 (kontrak kesiapan ekstensi ERP), `docs/awcms/erp-extension-contracts.md`, `docs/awcms/derived-application-guide.md`, `docs/awcms/21_module_admission_governance.md`, epic #738 `platform-evolution`
