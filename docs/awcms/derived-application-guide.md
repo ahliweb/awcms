@@ -1,5 +1,7 @@
 # Panduan Implementasi Aplikasi Turunan
 
+> **⚠️ DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).** Model aplikasi-turunan di repo terpisah DICABUT — keluarga AWCMS (`awcms-mini`/`awcms`/`awcms-micro`) kini template **dipakai-langsung**, tanpa membuat repo derivatif (kembangkan modul langsung di template). Dokumen ini dipertahankan sebagai catatan historis.
+
 > **Dokumen base (bukan contoh domain).** Dokumen ini menjelaskan cara membangun aplikasi turunan **di atas** AWCMS setelah base generik selesai (v0.23.5, seluruh 18 issue backlog doc06 + peningkatan pasca-backlog M9 tuntas — lihat [`README.md`](README.md) §Langkah berikutnya dan [`AGENTS.md`](../../AGENTS.md) §Mulai dari sini). Lima contoh aplikasi di §Contoh aplikasi turunan adalah **ilustrasi**, bukan modul yang ditambahkan ke base ini.
 >
 > **Lapisan ekstensi (epic #738).** Semua aplikasi turunan di dokumen ini hidup di lapisan **Derived Application** — satu dari tiga lapisan "di luar base" (Derived Application generik, SaaS Control Plane, ERP Extension) yang didefinisikan `docs/adr/0013-extension-layers-and-boundary-model.md`. ADR itu juga mendefinisikan batas tenant vs legal entity vs organization unit, dan aturan "no shared-table write" untuk kolaborasi lintas-repo — baca sebelum aplikasi turunan Anda perlu berbagi data dengan repo turunan lain (mis. sebuah SaaS billing control-plane yang menagih tenant yang sama).
