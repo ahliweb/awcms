@@ -1,5 +1,5 @@
 {
-  "moduleCount": 10,
+  "moduleCount": 11,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -150,6 +150,22 @@
       "status": "active",
       "type": null,
       "dependencies": [],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 6,
+      "navigationCount": 0,
+      "jobCount": 0,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "theming",
+      "name": "Theming",
+      "version": "1.0.0",
+      "status": "active",
+      "type": "domain",
+      "dependencies": ["tenant_admin", "identity_access"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 6,

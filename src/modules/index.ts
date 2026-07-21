@@ -9,6 +9,7 @@ import { syncStorageModule } from "./sync-storage/module";
 import { workflowApprovalModule } from "./workflow-approval/module";
 import { emailModule } from "./email/module";
 import { reportingModule } from "./reporting/module";
+import { themingModule } from "./theming/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -23,7 +24,11 @@ const baseModules: ModuleDescriptor[] = [
   syncStorageModule,
   workflowApprovalModule,
   emailModule,
-  reportingModule
+  reportingModule,
+  // ADR-0034 Fase 3 — the first website module implemented directly in the base
+  // (depends only on the two Core modules; provides no capability, so the DAG is
+  // unchanged). See src/modules/theming/README.md.
+  themingModule
 ];
 
 /**

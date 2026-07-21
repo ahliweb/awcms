@@ -1,0 +1,246 @@
+---
+/**
+ * PublicThemeLayout — the trusted, reviewed, BUILD-TIME Astro layout that renders
+ * a tenant's selected `theming` theme (Issue #269, ADR-0029 §7). There is NO
+ * database-stored template: this component is the only thing that renders, and it
+ * only ever consumes a validated `PreviewViewModel` (section order, slot variants,
+ * a resolved logo URL) plus design-token custom properties supplied by an EXTERNAL
+ * same-origin stylesheet (`tokenCssHref`).
+ *
+ * ## CSP (never weakened — ADR-0029 §7)
+ *
+ * The structural CSS below is an Astro-scoped `<style>` block, hashed by Astro's
+ * own `security.csp` (astro.config.mjs) — no inline style attribute, no
+ * `is:inline` script, no external font/script. The per-tenant token VALUES arrive
+ * via `<link rel="stylesheet" href={tokenCssHref}>` (allowed by `style-src 'self'`),
+ * NOT an inline `<style>` (which Astro could not hash per-request → CSP block).
+ * Every `var(--awcms-theme-*)` here carries a safe literal fallback, so the layout
+ * is legible even if the token stylesheet fails to load.
+ *
+ * ## Accessibility (ADR-0029 threat model — a11y regression)
+ *
+ * Landmarks (`banner`/`navigation`/`main`/`contentinfo`), a skip link, a single
+ * `<h1>`, visible focus styles, and a `prefers-reduced-motion` guard. The default
+ * theme's token defaults meet WCAG AA contrast (asserted by the a11y test).
+ */
+import type { PreviewViewModel } from "../modules/theming/application/theme-preview-render";
+
+interface Props {
+  title: string;
+  tokenCssHref: string;
+  model: PreviewViewModel;
+  /** When true, emit `robots: noindex,nofollow` (preview surfaces). */
+  noindex?: boolean;
+  lang?: string;
+}
+
+const {
+  title,
+  tokenCssHref,
+  model,
+  noindex = false,
+  lang = "en"
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang={lang} data-theme-key={model.themeKey}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <link rel="stylesheet" href={tokenCssHref} />
+  </head>
+  <body
+    data-header={model.headerVariant}
+    data-footer={model.footerVariant}
+    data-nav={model.navVariant}
+    data-nav-placement={model.navPlacement}
+  >
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="theme-shell">
+      <header class="theme-header" role="banner">
+        <div class="theme-brand">
+          {
+            model.logo ? (
+              <img
+                class="theme-logo"
+                src={model.logo.url}
+                alt={model.logo.altText ?? model.themeName}
+              />
+            ) : (
+              <span class="theme-logo-fallback">{model.themeName}</span>
+            )
+          }
+        </div>
+        <nav class="theme-nav" role="navigation" aria-label="Primary">
+          <ul>
+            {
+              model.navItems.map((item) => (
+                <li>
+                  <a href={item.href}>{item.label}</a>
+                </li>
+              ))
+            }
+          </ul>
+        </nav>
+      </header>
+
+      <main id="main" class="theme-main" role="main">
+        <slot />
+      </main>
+
+      <footer class="theme-footer" role="contentinfo">
+        <p>Powered by AWCMS &middot; {model.themeName} theme</p>
+      </footer>
+    </div>
+
+    <style>
+      :root {
+        --_bg: var(--awcms-theme-color_background, #ffffff);
+        --_surface: var(--awcms-theme-color_surface, #f8fafc);
+        --_text: var(--awcms-theme-color_text, #0f172a);
+        --_muted: var(--awcms-theme-color_muted, #475569);
+        --_primary: var(--awcms-theme-color_primary, #2563eb);
+        --_on-primary: var(--awcms-theme-color_on_primary, #ffffff);
+        --_border: var(--awcms-theme-color_border, #e2e8f0);
+        --_accent: var(--awcms-theme-color_accent, #0ea5e9);
+        --_radius: var(--awcms-theme-radius_base, 0.5rem);
+        --_space: var(--awcms-theme-space_unit, 1rem);
+        --_container: var(--awcms-theme-container_max_width, 72rem);
+        --_font-body: var(--awcms-theme-font_body, system-ui, sans-serif);
+        --_font-heading: var(--awcms-theme-font_heading, system-ui, sans-serif);
+        --_font-size: var(--awcms-theme-font_size_base, 1rem);
+        --_line: var(--awcms-theme-line_height_base, 1.5);
+      }
+
+      body {
+        margin: 0;
+        background: var(--_bg);
+        color: var(--_text);
+        font-family: var(--_font-body);
+        font-size: var(--_font-size);
+        line-height: var(--_line);
+      }
+
+      .skip-link {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        background: var(--_primary);
+        color: var(--_on-primary);
+        padding: var(--_space);
+        z-index: 100;
+      }
+      .skip-link:focus {
+        left: 0;
+      }
+
+      a:focus-visible,
+      .theme-nav a:focus-visible {
+        outline: 3px solid var(--_accent);
+        outline-offset: 2px;
+      }
+
+      .theme-shell {
+        max-width: var(--_container);
+        margin: 0 auto;
+        padding: 0 var(--_space);
+      }
+
+      .theme-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--_space);
+        padding: var(--_space) 0;
+        border-bottom: 1px solid var(--_border);
+        flex-wrap: wrap;
+      }
+      body[data-header="centered"] .theme-header {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .theme-logo {
+        max-height: 3rem;
+        width: auto;
+      }
+      .theme-logo-fallback {
+        font-family: var(--_font-heading);
+        font-weight: 700;
+        font-size: 1.25rem;
+        color: var(--_primary);
+      }
+
+      .theme-nav ul {
+        display: flex;
+        gap: var(--_space);
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        flex-wrap: wrap;
+      }
+      .theme-nav a {
+        color: var(--_text);
+        text-decoration: none;
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--_radius);
+      }
+      .theme-nav a:hover {
+        color: var(--_primary);
+      }
+
+      .theme-main {
+        padding: calc(var(--_space) * 2) 0;
+      }
+
+      .theme-main h1,
+      .theme-main h2 {
+        font-family: var(--_font-heading);
+        color: var(--_text);
+      }
+
+      .theme-section {
+        background: var(--_surface);
+        border: 1px solid var(--_border);
+        border-radius: var(--_radius);
+        padding: calc(var(--_space) * 1.5);
+        margin-bottom: var(--_space);
+      }
+      .theme-section p {
+        color: var(--_muted);
+      }
+
+      .theme-cta {
+        display: inline-block;
+        background: var(--_primary);
+        color: var(--_on-primary);
+        padding: 0.5rem 1rem;
+        border-radius: var(--_radius);
+        text-decoration: none;
+      }
+
+      .theme-footer {
+        border-top: 1px solid var(--_border);
+        padding: var(--_space) 0;
+        color: var(--_muted);
+      }
+
+      @media (max-width: 640px) {
+        .theme-header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.001ms !important;
+          transition-duration: 0.001ms !important;
+        }
+      }
+    </style>
+  </body>
+</html>

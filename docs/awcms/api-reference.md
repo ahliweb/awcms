@@ -3469,6 +3469,181 @@ Transactional, versioned domain-event outbox and dispatcher admin API — read-o
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+## Theming
+
+Tenant-selectable presentation (ADR-0034 Fase 3 — the first website module in the base). Select a trusted, reviewed, build-time theme and configure it by DATA only (design tokens, slot variants, media asset ids, section order, nav placement) — no uploaded code, no arbitrary templates. Every token value is validated by rejection against strict CSS grammars; published versions are immutable; publish/rollback/retire are ABAC-gated, idempotency-keyed, and audited.
+
+### `GET /api/v1/theming` — Read this tenant's theme selection, available themes, draft, and version history
+
+- **operationId**: `themingRead`
+- **Security**: bearerAuth + tenantHeader
+
+Everything the theming admin surface needs: the available (reviewed, build-time) theme descriptors, this tenant's active theme pointer, its current draft config (if any), and its published version history. Gated by `theming.config.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                  | Schema                                 |
+| ------ | ---------------------------- | -------------------------------------- |
+| 200    | This tenant's theming state. | object                                 |
+| 400    | Validation error.            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.  | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/theming/draft` — Save/replace this tenant's draft theme config
+
+- **operationId**: `themingDraftUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Save the single draft config for a chosen theme (bounded, validated design tokens, slot variants, media asset ids, section order, nav placement). The body is validated against the theme descriptor (the CSS-injection spine + declared-surface bounding) before any DB work. High-risk (the draft is what publish promotes): requires an `Idempotency-Key`, audited. Gated by `theming.config.update`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`ThemeConfigRequest`](#schema-themeconfigrequest)
+
+**Responses**
+
+| Status | Description                                                              | Schema                                 |
+| ------ | ------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Draft saved (or an idempotent replay).                                   | object                                 |
+| 400    | Validation error.                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | The `Idempotency-Key` was already used with a different request payload. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/theming/preview` — Create a short-lived, non-indexable preview session for the draft
+
+- **operationId**: `themingPreviewCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Mint an authorized, short-lived, non-indexable preview of the current draft and return its URL (`/theming/preview/{token}`) + expiry. The raw token is returned once; only its hash is stored. Audited. Gated by `theming.preview.create`. Not idempotency-keyed (each preview is a distinct disposable token).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                       | Schema                                 |
+| ------ | --------------------------------- | -------------------------------------- |
+| 200    | The preview session URL + expiry. | object                                 |
+| 400    | Validation error.                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.       | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/theming/publish` — Publish the draft as an immutable version (and make it live)
+
+- **operationId**: `themingPublish`
+- **Security**: bearerAuth + tenantHeader
+
+Publish the current draft as a new IMMUTABLE version and make it the live look (INSERT-only; published versions are immutable). High-risk: requires an `Idempotency-Key`, audited. Gated by `theming.version.publish`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                              | Schema                                 |
+| ------ | ------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Published (or an idempotent replay).                                     | object                                 |
+| 400    | Validation error.                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | The `Idempotency-Key` was already used with a different request payload. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/theming/retire` — Retire the active theme (fall back to the default)
+
+- **operationId**: `themingRetire`
+- **Security**: bearerAuth + tenantHeader
+
+Clear the active theme pointer so the site falls back to the default theme; published versions stay intact (history/rollback). High-risk: requires an `Idempotency-Key`, audited. Gated by `theming.version.archive`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                              | Schema                                 |
+| ------ | ------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Retired (or an idempotent replay).                                       | object                                 |
+| 400    | Validation error.                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | The `Idempotency-Key` was already used with a different request payload. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/theming/rollback` — Roll the active theme back to an earlier published version
+
+- **operationId**: `themingRollback`
+- **Security**: bearerAuth + tenantHeader
+
+Move the active pointer to an earlier published version of this tenant (never mutates a version row). High-risk: requires an `Idempotency-Key`, audited. Gated by `theming.version.restore`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                              | Schema                                 |
+| ------ | ------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Rolled back (or an idempotent replay).                                   | object                                 |
+| 400    | Validation error.                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                      | [`ApiError`](#standard-error-envelope) |
+| 409    | The `Idempotency-Key` was already used with a different request payload. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/theming/validate` — Validate a theme config (dry run) + preview its token CSS
+
+- **operationId**: `themingValidate`
+- **Security**: bearerAuth + tenantHeader
+
+Read-only: validate a proposed theme config against its theme descriptor and, when valid, return the exact `text/css` custom-property block it would produce — writing nothing. Gated by `theming.config.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`ThemeConfigRequest`](#schema-themeconfigrequest)
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | The validation result (+ token CSS when valid). | object                                 |
+| 400    | Validation error.                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -3570,6 +3745,32 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
   "resourceType": "string",
   "resourceId": "00000000-0000-0000-0000-000000000000",
   "resourceAttributes": "(operation-specific payload)"
+}
+```
+
+### Schema: ThemeConfigRequest
+
+A tenant's DATA-only theme configuration. Every key/value is validated against the chosen theme descriptor; unknown tokens/slots/assets/sections are rejected, and token values are validated by rejection against strict CSS grammars (no url()/expression()/@import/javascript:/comment-breakout).
+
+| Field            | Type            | Required | Nullable | Description                                                                                                                   |
+| ---------------- | --------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `themeKey`       | string          | yes      | no       | A registered (build-time) theme key.                                                                                          |
+| `tokenOverrides` | object          | no       | no       | tokenKey -> validated token value (color/dimension/number, or a font-family allow-list key). Unknown token keys are rejected. |
+| `slotSelections` | object          | no       | no       | slotKey -> chosen variant key (from the slot's allow-list).                                                                   |
+| `assetRefs`      | object          | no       | no       | assetSlotKey -> media object UUID (never a URL); null clears the slot.                                                        |
+| `sectionOrder`   | array of string | no       | no       | An ordering of the theme's declared content-section keys.                                                                     |
+| `navPlacement`   | string          | no       | no       | One of the theme's declared nav placements.                                                                                   |
+
+**Example**
+
+```json
+{
+  "themeKey": "string",
+  "tokenOverrides": "(operation-specific payload)",
+  "slotSelections": "(operation-specific payload)",
+  "assetRefs": "(operation-specific payload)",
+  "sectionOrder": ["string"],
+  "navPlacement": "string"
 }
 ```
 

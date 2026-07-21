@@ -63,7 +63,11 @@ export type AccessAction =
   // high-risk — rejecting an exception is the SAFE outcome (the conflict stays
   // denied), unlike `approve`/`revoke` which change an override's standing.
   // (`approve`/`revoke` for exceptions reuse the existing high-risk actions.)
-  | "reject";
+  | "reject"
+  // Theming (ADR-0034 Fase 3): `archive` retires the active theme so the site
+  // falls back to the default. High-risk (it changes the live public
+  // presentation surface), same posture as `publish`/`restore`.
+  | "archive";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -171,7 +175,8 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   "force_decide",
   "revoke",
   "rebuild",
-  "export"
+  "export",
+  "archive"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {
