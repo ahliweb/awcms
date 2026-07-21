@@ -252,9 +252,10 @@ export function collectStandardErrorSchemaProblems(
       node = componentResponses[name];
     }
     const content = asRecord(asRecord(node).content);
-    const media =
-      asRecord(content["application/json"]) ?? Object.values(content)[0];
-    const schema = asRecord(media).schema;
+    const media = asRecord(
+      content["application/json"] ?? Object.values(content)[0]
+    );
+    const schema = media.schema;
     if (schema === undefined) return false;
     return schemaReachesApiError(schema, new Set());
   }
