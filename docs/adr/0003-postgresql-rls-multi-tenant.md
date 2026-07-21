@@ -27,13 +27,17 @@ Kami memutuskan memakai **PostgreSQL** dengan **Row Level Security (RLS)** pada 
 
 RLS + `FORCE` (di atas) menutup akses tenant-scoped biasa, tapi beberapa
 query harus dijalankan **sebelum** tenant context ada sama sekali (mis.
-resolusi publik `hostname`/`tenantCode` -> `tenant_id`). Contoh kanonik:
-`sql/033_awcms_tenant_domain_lookup_function.sql`'s
-`awcms_resolve_tenant_domain_lookup` (Issue #559, epic #555) — baca
-komentar lengkap di file itu untuk penjelasan penuh, termasuk verifikasi
-empiris terhadap DB yang berjalan (bukan diasumsikan dari dokumentasi
-PostgreSQL semata). Setiap fungsi `SECURITY DEFINER` baru di repo ini wajib
-memenuhi checklist berikut sebelum dianggap aman:
+resolusi publik `hostname`/`tenantCode` -> `tenant_id`). Contoh ilustratif
+(prospektif): saat modul `tenant_domain` di-port dari `awcms-mini`, resolver
+lookup-nya (mis. fungsi `awcms_resolve_tenant_domain_lookup`, Issue #559,
+epic #555) akan memakai pola `SECURITY DEFINER` ini. **Catatan status:** modul
+`tenant_domain` **belum di-port** ke repo ini — belum ada migrasi lookup-nya
+dan **tidak ada satu pun fungsi `SECURITY DEFINER` di `sql/` saat ini**; nomor
+migrasi lookup-nya nanti **TBD (bukan `033`, yang kini dipakai skema
+`theming`)**. Setiap fungsi `SECURITY DEFINER` baru di repo ini wajib
+memenuhi checklist berikut sebelum dianggap aman (termasuk verifikasi empiris
+terhadap DB yang berjalan, bukan diasumsikan dari dokumentasi PostgreSQL
+semata):
 
 1. **Konfirmasi role pemilik benar-benar superuser (atau owner tabel yang
    dituju)** — `SELECT rolsuper FROM pg_roles WHERE rolname = '<role>'`.
@@ -69,6 +73,6 @@ memenuhi checklist berikut sebelum dianggap aman:
 8. **Hindari timing side-channel** — kalau fungsi ini dipanggil lalu diikuti
    query kedua yang kondisional (mis. "kalau baris pertama ditemukan, query
    lagi ke tabel lain"), pertimbangkan apakah beda jumlah round-trip antar
-   outcome bisa dieksploitasi sebagai side-channel (lihat riwayat perbaikan
-   di komentar migration 033 — gabungkan jadi satu query via `JOIN` kalau
-   tabel kedua sudah RLS-free/publicly readable, seperti `awcms_tenants`).
+   outcome bisa dieksploitasi sebagai side-channel — gabungkan jadi satu query
+   via `JOIN` kalau tabel kedua sudah RLS-free/publicly readable, seperti
+   `awcms_tenants` (pola ini akan relevan saat resolver `tenant_domain` diport).

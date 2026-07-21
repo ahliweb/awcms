@@ -36,7 +36,7 @@ export const <camelCase>Module = defineModule({
   status: "active", // active | experimental | deprecated | maintenance | disabled
   description: "...",
   dependencies: ["tenant_admin", "identity_access", "observability_logging"],
-  type: "domain", // base | system | domain | integration | derived — modul domain baru (bukan infrastruktur generik) pakai "domain"
+  type: "domain", // base | system | domain | integration — modul domain baru (bukan infrastruktur generik) pakai "domain"
   // Kontrak OpenAPI dipecah per modul (Issue #182, ADR-0026): modul ini MEMILIKI
   // fragmentnya sendiri; `openApiPath` menunjuk fragment, bukan bundle GENERATED.
   // Setelah edit fragment: `bun run openapi:bundle` + `bun run api:docs:generate`.
@@ -82,42 +82,35 @@ External Integration, pohon keputusan admission, kriteria dependency &
 security review) dan isi
 `docs/awcms/templates/module-proposal-template.md` di issue GitHub
 terkait. Modul spesifik satu domain bisnis (POS, gudang, pajak, CRM, dll.)
-**tidak masuk repo ini** — lihat pohon keputusan di doc 21 §3.
+tetap harus lolos pohon keputusan admission doc 21 §3 sebelum ditambahkan.
 
-**Modul di REPO BASE ini** (langkah 1 di atas) vs **modul di REPO TURUNAN**
-(Issue #178, ADR-0025 — mengimplementasikan ADR-0014) adalah dua alur
-berbeda: bila modulmu memang spesifik satu domain bisnis dan pohon keputusan
-doc 21 §3 mengarahkan ke "bukan untuk repo base ini", **jangan** daftarkan di
-`src/modules/index.ts` repo ini — buat repo turunan sendiri lalu daftarkan
-modulnya di `src/modules/application-registry.ts` MILIK REPO TURUNAN itu
-(satu-satunya file yang perlu diedit; ganti nilai `undefined` dengan
-`ApplicationModuleRegistry` = `{ id, modules, migrationNamespace? }`; struktur
-`module.ts` + `domain/application/infrastructure/api` di atas tetap sama
-persis). `composeModuleRegistry()`
-(`module-management/domain/module-composition.ts`) menggabungkan registry base
-dengan registry turunan saat build dan memvalidasi key ganda, override key
-base, DAG dependency, capability binding, overlap namespace migration (base
-`1-899`, turunan mulai `900`), deployment profile, navigation path, dan job
-descriptor. Detail: skill `awcms-module-management` §Komposisi modul
-build-time, `docs/awcms/derived-application-guide.md`, dan
-`docs/adr/0025-implement-deterministic-build-time-module-composition.md`.
+**ADR-0034 menghapus jalur aplikasi-turunan.** Tidak ada lagi repo turunan,
+`src/modules/application-registry.ts`, command `extension:check`,
+`extension.manifest.json`, maupun namespace migrasi terpisah `900+` — semuanya
+sudah dihapus (ADR-0034 men-supersede ADR-0014/0015/0025). Keluarga AWCMS
+(awcms-mini / awcms / awcms-micro) kini adalah TIGA template SEJAJAR yang
+dipakai LANGSUNG ("template dipakai-langsung"), bukan basis untuk repo
+derivatif. Konsekuensinya untuk modul domain/website baru: modul itu hidup
+LANGSUNG di `src/modules/` repo ini dan didaftar di `src/modules/index.ts`
+(langkah 1 di atas), persis seperti modul base lain — `type: "domain"`,
+struktur `module.ts` + `domain/application/infrastructure` yang sama, dan
+migrasi memakai penomoran base berurutan (bukan namespace terpisah). Bukti
+nyata: modul `theming` (ADR-0034 Fase 3, skill `awcms-theming`) adalah modul
+website pertama yang di-port LANGSUNG ke base ini. Detail governance: skill
+`awcms-module-management` §Komposisi modul build-time dan
+`docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md`
+(men-supersede ADR-0014/0015/0025).
 
-Verifikasi seam: `bun run modules:compose:check`, `bun run extension:check`,
-dan `bun run modules:composition:inventory:check` (regenerate inventory lewat
-`bun run modules:composition:inventory:generate`) — ketiganya bagian dari
-`bun run check`.
-
-> Manifest kompatibilitas aplikasi turunan (`extension.manifest.json` —
-> range SemVer base, checksum migration historis, versi capability; ADR-0015)
-> adalah lapisan TERPISAH yang **belum diimplementasikan** di awcms (rencana
-> Issue #183). Saat ini `extension:check` memvalidasi extension seam/komposisi
-> saja, bukan manifest — jangan rujuk `extension.manifest.json` sebagai sudah
-> ada.
+Verifikasi seam komposisi (registry-base saja, tanpa jalur turunan):
+`bun run modules:compose:check` dan
+`bun run modules:composition:inventory:check` (regenerate inventory lewat
+`bun run modules:composition:inventory:generate`) — **dua** command, keduanya
+bagian dari `bun run check`. Tidak ada `bun run extension:check`: command itu
+dihapus bersama jalur aplikasi-turunan (ADR-0034), jangan rujuk lagi.
 
 ## Verifikasi
 
 - `bun run build` pass.
-- Modul terdaftar di registry (base: `src/modules/index.ts`; turunan:
-  `src/modules/application-registry.ts` milik repo turunan sendiri, lalu
-  `bun run modules:compose:check` hijau).
+- Modul terdaftar di registry base `src/modules/index.ts`, lalu
+  `bun run modules:compose:check` hijau (tidak ada registry turunan — ADR-0034).
 - README modul terisi.

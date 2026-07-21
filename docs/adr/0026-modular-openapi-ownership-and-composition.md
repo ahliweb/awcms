@@ -37,7 +37,7 @@ Bundler memuat fragment dalam urutan nama berkas ter-sort eksplisit (bukan uruta
 
 `ModuleDescriptor.api.openApiPath` (field yang SUDAH ADA sejak fondasi — tidak perlu ditambah, jadi `MODULE_CONTRACT_VERSION` tidak dinaikkan) kini menunjuk fragment sumber tiap modul, bukan bundle monolit. Sebuah modul turunan menyumbang kontraknya dengan (a) mendeklarasikan `openApiPath` ke fragmentnya sendiri dan (b) build turunan mem-feed setiap `openApiPath` modul teregistrasi ke seam `buildBundledDocument(rootDir, { extraFragmentFiles })`. Fragment turunan tergabung ke bundle **tanpa mengedit fragment base mana pun**.
 
-Guardrail override: fragment (base maupun turunan) yang mendeklarasikan ulang path atau schema yang sudah ada melempar `BundleConflictError` — modul turunan TIDAK PERNAH bisa diam-diam menimpa path/operation/schema base. Dibuktikan `tests/openapi-derived-fragment.test.ts` (merge sukses + dua kasus override ditolak) memakai fixture `tests/fixtures/derived-application-example/`.
+Guardrail override: fragment (root/base maupun modul) yang mendeklarasikan ulang path atau schema yang sudah ada melempar `BundleConflictError` — sebuah modul TIDAK PERNAH bisa diam-diam menimpa path/operation/schema root/base. Dibuktikan `tests/openapi-extra-fragment.test.ts` (merge sukses + dua kasus override ditolak) memakai fixture `tests/fixtures/example-domain-modules/`.
 
 ### 5. Gate baru dan generator dokumentasi
 

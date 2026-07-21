@@ -43,8 +43,11 @@ diputuskan ADR-0009:
   me-resolve tenant dari request `Host`/`X-Forwarded-Host` (hanya kalau
   `PUBLIC_TRUST_PROXY=true` eksplisit) lewat tabel
   `awcms_tenant_domains` (Issue #557), melalui fungsi lookup
-  `SECURITY DEFINER` yang sempit (`sql/033`, satu tabel, empat kolom
-  non-sensitif, `EXECUTE` di-revoke dari `PUBLIC`).
+  `SECURITY DEFINER` yang sempit (satu tabel, empat kolom
+  non-sensitif, `EXECUTE` di-revoke dari `PUBLIC`). **Status:** modul
+  `tenant_domain` belum di-port ke repo ini; migrasi lookup ini direncanakan
+  saat port dilakukan, dengan nomor migrasi **TBD (≠ `033`, yang kini dipakai
+  skema `theming`)**.
   Selain `host_default`, tersedia fallback berjenjang (`PUBLIC_DEFAULT_TENANT_ID`/
   `_CODE`, lalu `awcms_setup_state`) sebelum akhirnya `null` (404
   generik) — lihat `.claude/skills/awcms-tenant-domain-routing/SKILL.md`
@@ -101,8 +104,9 @@ mekanisme mana pun — **seluruh isolasi data tetap murni berbasis
 database/RLS** (ADR-0003): `FORCE ROW LEVEL SECURITY` pada tabel
 tenant-scoped, GUC `app.current_tenant_id` fail-closed, dan peran aplikasi
 `awcms_app` yang bukan superuser/table-owner. Fungsi `SECURITY DEFINER`
-yang dipakai resolver host-based (`awcms_resolve_tenant_domain_lookup`,
-`sql/033`) tidak melonggarkan RLS di jalur query manapun setelahnya — ia
+yang direncanakan dipakai resolver host-based (`awcms_resolve_tenant_domain_lookup`,
+migrasi TBD saat modul `tenant_domain` di-port — **bukan `sql/033`, yang kini
+skema `theming`**) tidak akan melonggarkan RLS di jalur query manapun setelahnya — ia
 hanya melakukan satu lookup sempit (`hostname → tenant_id`) yang secara
 desain terjadi _sebelum_ tenant context ada, persis simetris dengan
 lookup `tenant_code → tenant_id` (juga RLS-free, tabel akar) yang sudah

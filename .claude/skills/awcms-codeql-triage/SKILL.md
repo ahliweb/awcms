@@ -196,6 +196,16 @@ dismiss.
 
 ### 6. `js/trivial-conditional` — nilai build-time extension seam yang sengaja selalu satu cabang di base repo
 
+> **HISTORIS / TIDAK BERLAKU LAGI (ADR-0034, 2026-07-21).** Alert ini
+> bergantung pada `src/modules/application-registry.ts` (build-time extension
+> seam jalur aplikasi-turunan). ADR-0034 **menghapus jalur turunan** dan file
+> `application-registry.ts` beserta `scripts/validate-module-composition.ts:41`
+> yang men-`ternary`-nya — jadi alert `js/trivial-conditional` ini **tidak akan
+> muncul lagi** dan tidak perlu di-triase ulang. Dipertahankan hanya sebagai
+> catatan sejarah triase. Prinsip umum "extension point yang sengaja `undefined`
+> di base memicu trivial-conditional" tetap sahih untuk pola serupa lain, tetapi
+> tidak ada lagi seam turunan di repo ini.
+
 Ditemukan 2026-07-14 (alert #44), Issue #788:
 `scripts/validate-module-composition.ts:41`,
 `applicationModuleRegistry ? ... : ...` — CodeQL benar bahwa

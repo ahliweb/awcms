@@ -1,6 +1,6 @@
 # AWCMS Repository Inventory (generated)
 
-> **Status dokumen:** standar/template, BUKAN hasil generate nyata — dan **isi body di bawah kini USANG**. Body masih menyatakan "belum ada modul" dan "belum ada migrasi"; itu **tidak lagi benar** — repo `awcms` sekarang punya **10 modul** (urutan `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`, `identity-access`, `module-management`, `domain-event-runtime`, `sync-storage`, `workflow-approval`, `email`, `reporting`) dan **23 migrasi** (`sql/001`–`023`). Sumber kebenaran keadaan kode saat ini adalah [`../ARCHITECTURE.md`](../ARCHITECTURE.md), bukan berkas ini. Tabel di bawah adalah **struktur target** yang baru akan terisi akurat begitu `scripts/repo-inventory-generate.ts` (`bun run repo:inventory:generate`) diimplementasikan/di-port dari `awcms-mini`. Mekanisme (generated-file, freshness check, sumber data) diadaptasi dari basis `awcms-mini` yang sudah menjalankannya secara nyata.
+> **Status dokumen:** standar/template, BUKAN hasil generate nyata — dan **isi body di bawah kini USANG**. Body masih menyatakan "belum ada modul" dan "belum ada migrasi"; itu **tidak lagi benar** — repo `awcms` sekarang punya **11 modul** (urutan `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`, `identity-access`, `module-management`, `domain-event-runtime`, `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`) dan **34 migrasi** (`sql/001`–`034`). Sumber kebenaran keadaan kode saat ini adalah [`../ARCHITECTURE.md`](../ARCHITECTURE.md), bukan berkas ini. Tabel di bawah adalah **struktur target** yang baru akan terisi akurat begitu `scripts/repo-inventory-generate.ts` (`bun run repo:inventory:generate`) diimplementasikan/di-port dari `awcms-mini`. Mekanisme (generated-file, freshness check, sumber data) diadaptasi dari basis `awcms-mini` yang sudah menjalankannya secara nyata.
 
 > **GENERATED FILE — jangan diedit manual.** Setelah diimplementasikan, dokumen ini akan diproduksi oleh `bun run repo:inventory:generate` (`scripts/repo-inventory-generate.ts`) dari module registry repo sendiri, migrasi `sql/*.sql`, `tests/`, dan kontrak OpenAPI yang di-bundle — jangan pernah diedit langsung. `bun run repo:inventory:check` (bagian dari `bun run check`) wajib menggagalkan build bila berkas ini basi relatif terhadap regenerasi baru.
 
@@ -8,11 +8,11 @@
 
 ## Modul
 
-Belum ada modul terdaftar di `src/modules/index.ts`'s `listModules()` — repo ini baru berisi keputusan rebuild (ADR-0001), `AGENTS.md`, dan dokumen governance. Begitu implementasi dimulai, tabel ini akan diisi otomatis dengan bentuk yang sama seperti basis:
+Repo ini kini punya **11 modul aktif** yang terdaftar di `src/modules/index.ts`'s `listModules()`. Nilai akurat per-kolom (version/status/type/dependencies) dibaca dari registry nyata — sumber kebenaran keadaan kode saat ini adalah [`../ARCHITECTURE.md`](../ARCHITECTURE.md) dan registry itu sendiri, bukan tabel statis di bawah. Urutan `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`, `identity-access`, `module-management`, `domain-event-runtime`, `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`. Begitu `bun run repo:inventory:generate` diimplementasikan/di-port, tabel ini akan diisi otomatis dengan bentuk yang sama seperti basis:
 
-| Key           | Version | Status | Type | Dependencies |
-| ------------- | ------- | ------ | ---- | ------------ |
-| _(belum ada)_ | —       | —      | —    | —            |
+| Key                      | Version | Status | Type | Dependencies |
+| ------------------------ | ------- | ------ | ---- | ------------ |
+| _(lihat registry nyata)_ | —       | —      | —    | —            |
 
 Urutan modul yang direncanakan (lihat `AGENTS.md` §Peta modul, [`01_canvas_induk.md`](01_canvas_induk.md)):
 
@@ -28,11 +28,11 @@ Modul baru wajib mengikuti struktur modular monolith yang sama dengan basis (`mo
 
 ## Migrasi
 
-Belum ada berkas migrasi di `sql/`. Konvensi penomoran yang wajib diikuti (lihat ADR-0001 dan referensi ADR-0014 milik basis soal reserved namespace): base modular monolith standar (fondasi tenant/identity/access/sync/dsb., bila di-porting literal dari `awcms-mini`) memakai namespace `1-899`; migrasi modul ERP/integrasi milik `awcms` sendiri **dimulai dari `900` ke atas**, agar tidak pernah bentrok dengan nomor migrasi fondasi yang di-porting atau di-referensikan dari basis.
+Repo ini kini punya **34 berkas migrasi** di `sql/` (`001`–`034`). Konvensi penomoran: seluruh migrasi berurutan sekuensial mulai `001`. Reserved namespace `900+` untuk jalur aplikasi-turunan **sudah dicabut oleh ADR-0034** (keluarga AWCMS = template dipakai-langsung, tidak ada repo derivatif) — modul domain/website ditambahkan langsung ke `src/modules/` dan migrasinya melanjutkan penomoran sekuensial yang sama. Daftar file lengkap dibaca dari `sql/*.sql`; sumber kebenaran adalah filesystem `sql/`, bukan tabel statis di bawah.
 
 | #                     | File |
 | --------------------- | ---- |
-| _(belum ada migrasi)_ | —    |
+| _(lihat `sql/*.sql`)_ | —    |
 
 ## Tabel & Row-Level Security
 

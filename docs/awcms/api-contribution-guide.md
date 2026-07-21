@@ -1,25 +1,25 @@
-# Panduan Kontribusi API untuk Aplikasi Turunan (Issue #182, ADR-0026)
+# Panduan Kontribusi API untuk Modul Domain/Website (Issue #182, ADR-0026)
 
-Dokumen ini menjelaskan cara sebuah **repository aplikasi turunan** (mis. ERP di
-atas base AWCMS — ADR-0022) menyumbang kontrak REST untuk modul domainnya
-sendiri, **tanpa mengedit fragment OpenAPI base** maupun berkas bundle base.
+> **Reframing [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md).** Jalur "aplikasi turunan di repo terpisah" (ADR-0022) DICABUT — keluarga AWCMS kini template **dipakai-langsung**. Baca dokumen ini dengan pemetaan: "repo/modul turunan" = modul domain/website yang ditambahkan **langsung ke `src/modules/`** template ini. Pipeline OpenAPI modular (fragment per-modul + bundler + composition seam) tetap nyata dan berlaku; hanya framing repo terpisah yang usang.
+
+Dokumen ini menjelaskan cara sebuah **modul domain/website** (mis. ERP di
+atas base AWCMS) menyumbang kontrak REST untuk domainnya
+sendiri, **tanpa mengedit fragment OpenAPI root/base** maupun berkas bundle.
 
 Baca dulu: [`openapi/README.md`](../../openapi/README.md) (struktur fragment +
-bundler), [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md)
-(keputusan kepemilikan/komposisi), dan
-[`derived-application-guide.md`](derived-application-guide.md) (composition seam
-#178, langkah membangun aplikasi turunan).
+bundler) dan [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md)
+(keputusan kepemilikan/komposisi).
 
 ## Prinsip
 
 - **Kepemilikan per modul.** Satu modul = satu fragment
-  `openapi/modules/<module>.openapi.yaml`. Modul turunan memiliki fragmentnya
-  sendiri; ia tidak menambahkan path/operation/schema ke fragment modul base.
+  `openapi/modules/<module>.openapi.yaml`. Setiap modul memiliki fragmentnya
+  sendiri; ia tidak menambahkan path/operation/schema ke fragment modul lain.
 - **Bundle di-generate, deterministik.** Kontrak publik akhir selalu hasil
   `bun run openapi:bundle` — tidak pernah diedit tangan. Input sama → output
   byte-identik.
-- **Default-deny override.** Fragment turunan TIDAK bisa menimpa path,
-  operation, atau schema base/shared. Percobaan menimpa melempar
+- **Default-deny override.** Fragment modul TIDAK bisa menimpa path,
+  operation, atau schema root/base/shared. Percobaan menimpa melempar
   `BundleConflictError` dan menggagalkan gate.
 - **Envelope seragam.** Semua response error (4xx/5xx) wajib resolve ke schema
   `ApiError` shared (root fragment). Response sukses memakai pola
@@ -29,8 +29,10 @@ bundler), [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md)
 
 ## Langkah
 
-1. **Buat fragment modul turunan** di repo turunan, mis.
-   `openapi/modules/<module-turunan>.openapi.yaml`. Isi `paths` (path modul
+1. **Buat fragment modul** (termasuk modul domain/website) di `src/modules/`
+   template ini ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md):
+   template dipakai-langsung, tidak ada repo turunan terpisah), mis.
+   `openapi/modules/<module>.openapi.yaml`. Isi `paths` (path modul
    Anda, semua di bawah `basePath` modul, mis. `/api/v1/<domain>/...`) dan —
    bila perlu — `components.schemas` yang HANYA dipakai modul Anda. Rujuk
    komponen shared base lewat `$ref` seperti biasa
@@ -38,12 +40,12 @@ bundler), [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md)
    `#/components/parameters/CorrelationId`). Fragment TIDAK berdiri sendiri
    sebagai OpenAPI valid — itu wajar; `$ref` shared resolve setelah merge.
 
-2. **Deklarasikan `api.openApiPath`** di `module.ts` modul turunan Anda,
+2. **Deklarasikan `api.openApiPath`** di `module.ts` modul Anda,
    menunjuk fragment tersebut:
 
    ```ts
    api: {
-     openApiPath: "openapi/modules/<module-turunan>.openapi.yaml",
+     openApiPath: "openapi/modules/<module>.openapi.yaml",
      basePath: "/api/v1/<domain>"
    }
    ```
@@ -51,7 +53,7 @@ bundler), [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md)
    Field ini juga yang dibaca readiness-check `module_management`
    (`openapi_documented`) untuk memastikan modul mendokumentasikan API-nya.
 
-3. **Gabungkan lewat composition seam.** Build turunan mem-feed setiap
+3. **Gabungkan lewat composition seam.** Build mem-feed setiap
    `openApiPath` modul teregistrasi ke seam `extraFragmentFiles`:
 
    ```ts
@@ -63,9 +65,9 @@ bundler), [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md)
    });
    ```
 
-   Alternatif paling sederhana: repo turunan menaruh fragmentnya di
-   `openapi/modules/` sendiri sehingga ikut ter-glob oleh bundler default. Yang
-   penting: **berkas base tidak diedit.**
+   Alternatif paling sederhana: taruh fragmentnya di
+   `openapi/modules/` sehingga ikut ter-glob oleh bundler default. Yang
+   penting: **fragment root/base yang sudah ada tidak diedit langsung.**
 
 4. **Regenerate + validasi:**
 
