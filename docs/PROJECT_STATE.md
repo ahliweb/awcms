@@ -29,13 +29,13 @@ tiga template keluarga AWCMS yang dipakai LANGSUNG**, bukan hierarki base-dan-tu
 
 ## 2. Inventori ringkas
 
-| Aspek      | Nilai (per commit ini)                   | Sumber kebenaran                          |
-| ---------- | ---------------------------------------- | ----------------------------------------- |
-| Versi      | **6.0.0** (rilis nyata pertama 2026-07-21, tag `v6.0.0`) | `package.json`, `CHANGELOG.md`, tag `v*` |
-| Modul base | **11** (lihat daftar di ARCHITECTURE.md) | `src/modules/index.ts`                    |
-| Migrasi    | **34** (`sql/001`–`034`)                 | `ls sql/`                                 |
-| ADR        | **35**                                   | `docs/adr/README.id.md` (indeks ter-gate) |
-| Kontrak    | OpenAPI modular per-modul + AsyncAPI     | `openapi/`, `asyncapi/`                   |
+| Aspek      | Nilai (per commit ini)                                   | Sumber kebenaran                          |
+| ---------- | -------------------------------------------------------- | ----------------------------------------- |
+| Versi      | **6.0.0** (rilis nyata pertama 2026-07-21, tag `v6.0.0`) | `package.json`, `CHANGELOG.md`, tag `v*`  |
+| Modul base | **11** (lihat daftar di ARCHITECTURE.md)                 | `src/modules/index.ts`                    |
+| Migrasi    | **34** (`sql/001`–`034`)                                 | `ls sql/`                                 |
+| ADR        | **35**                                                   | `docs/adr/README.id.md` (indeks ter-gate) |
+| Kontrak    | OpenAPI modular per-modul + AsyncAPI                     | `openapi/`, `asyncapi/`                   |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,

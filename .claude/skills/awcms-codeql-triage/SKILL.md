@@ -240,11 +240,14 @@ coba "memperbaiki" trivialitasnya.
 ### 7. `js/trivial-conditional` — BISA jadi bug NYATA (dead-code cabang), bukan selalu false positive (alert #140)
 
 Ditemukan 2026-07-21 (alert #140, PR #210):
-`scripts/api-spec-check.ts` `responseResolvesToApiError`, pesan CodeQL *"This
-call to asRecord always evaluates to true."*
+`scripts/api-spec-check.ts` `responseResolvesToApiError`, pesan CodeQL _"This
+call to asRecord always evaluates to true."_
+
 ```ts
-const media = asRecord(content["application/json"]) ?? Object.values(content)[0];
+const media =
+  asRecord(content["application/json"]) ?? Object.values(content)[0];
 ```
+
 Ini **bug nyata**, BUKAN false positive. `asRecord` (`function asRecord(v):
 Record<string,unknown>`) selalu mengembalikan objek non-null (`{}` bila input
 bukan record), jadi operator `??` di kanan (`Object.values(content)[0]`) adalah
@@ -253,8 +256,11 @@ error yang hanya punya media type non-`application/json` (mis. `application/xml`
 salah dilaporkan tidak beresolusi ke envelope `ApiError`. **Fix (code change,
 behavior-fixing)** — pindahkan `??` ke DALAM `asRecord` agar bekerja pada nilai
 mentah yang memang bisa `undefined`:
+
 ```ts
-const media = asRecord(content["application/json"] ?? Object.values(content)[0]);
+const media = asRecord(
+  content["application/json"] ?? Object.values(content)[0]
+);
 const schema = media.schema; // media kini dijamin record
 ```
 
