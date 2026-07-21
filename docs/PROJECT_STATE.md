@@ -29,12 +29,23 @@ tiga template keluarga AWCMS yang dipakai LANGSUNG**, bukan hierarki base-dan-tu
 
 ## 2. Inventori ringkas
 
-| Aspek      | Nilai (per commit ini)                   | Sumber kebenaran                          |
-| ---------- | ---------------------------------------- | ----------------------------------------- |
-| Modul base | **11** (lihat daftar di ARCHITECTURE.md) | `src/modules/index.ts`                    |
-| Migrasi    | **34** (`sql/001`–`034`)                 | `ls sql/`                                 |
-| ADR        | **35**                                   | `docs/adr/README.id.md` (indeks ter-gate) |
-| Kontrak    | OpenAPI modular per-modul + AsyncAPI     | `openapi/`, `asyncapi/`                   |
+| Aspek      | Nilai (per commit ini)                                   | Sumber kebenaran                          |
+| ---------- | -------------------------------------------------------- | ----------------------------------------- |
+| Versi      | **6.0.0** (rilis nyata pertama 2026-07-21, tag `v6.0.0`) | `package.json`, `CHANGELOG.md`, tag `v*`  |
+| Modul base | **11** (lihat daftar di ARCHITECTURE.md)                 | `src/modules/index.ts`                    |
+| Migrasi    | **34** (`sql/001`–`034`)                                 | `ls sql/`                                 |
+| ADR        | **35**                                                   | `docs/adr/README.id.md` (indeks ter-gate) |
+| Kontrak    | OpenAPI modular per-modul + AsyncAPI                     | `openapi/`, `asyncapi/`                   |
+
+> **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
+> `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
+> image `ghcr.io/ahliweb/awcms:6.0.0` + GitHub Release). MAJOR karena breaking ADR-0034
+> (jalur turunan dihapus, `MODULE_CONTRACT_VERSION` 1.3.0→2.0.0). Prosedur tag di
+> [`docs/awcms/09_roadmap_repository_commit.md`](awcms/09_roadmap_repository_commit.md) /
+> skill `awcms-release` (tag `vX.Y.Z` dibuat **manual** via `git tag -a` — tidak ada script
+> `changeset:tag`). **Catatan hardening:** publish job berjalan **tanpa jeda approval** →
+> GitHub Environment `release` **belum** punya required reviewers (lihat
+> [`release-process.md`](awcms/release-process.md) §Environment approval).
 
 Modul: `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 `module-management`, `sync-storage`, `workflow-approval`, `reporting`, `email`,

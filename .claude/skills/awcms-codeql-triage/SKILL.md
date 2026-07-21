@@ -1,6 +1,6 @@
 ---
 name: awcms-codeql-triage
-description: Triase dan perbaiki temuan CodeQL code scanning AWCMS (github.com/ahliweb/awcms/security/code-scanning). Gunakan saat diminta "analisis code scanning"/"perbaiki CodeQL", saat sebuah PR gagal check CodeQL, atau saat menemukan alert baru. Mendokumentasikan enam false-positive nyata yang sudah ditemukan (name-heuristic password, incompatible-types typeof/null, URL substring-sanitization di test mock, dua kasus dismiss resmi tanpa reformulasi kode, Bun.SQL tagged-template null-cast, dan build-time extension seam trivial-conditional) plus pola "unused-local-variable di test kadang menandai coverage gap" — supaya tidak diinvestigasi ulang dari nol.
+description: Triase dan perbaiki temuan CodeQL code scanning AWCMS (github.com/ahliweb/awcms/security/code-scanning). Gunakan saat diminta "analisis code scanning"/"perbaiki CodeQL", saat sebuah PR gagal check CodeQL, atau saat menemukan alert baru. Mendokumentasikan enam false-positive nyata yang sudah ditemukan (name-heuristic password, incompatible-types typeof/null, URL substring-sanitization di test mock, dua kasus dismiss resmi tanpa reformulasi kode, Bun.SQL tagged-template null-cast, dan build-time extension seam trivial-conditional) plus pola "unused-local-variable di test kadang menandai coverage gap", DAN satu counter-example trivial-conditional yang ternyata bug NYATA (dead-code fallback karena helper non-nullish, alert #140) — supaya tidak diinvestigasi ulang dari nol dan tidak salah men-dismiss temuan yang valid.
 ---
 
 # AWCMS — Triase CodeQL Code Scanning
@@ -236,6 +236,42 @@ memicu `js/trivial-conditional` di base repo begitu nilainya dipakai dalam
 boolean context — ini SEHAT (bukan alasan untuk menghapus fitur
 ekstensibilitasnya), dismiss dengan menjelaskan desain seam-nya, jangan
 coba "memperbaiki" trivialitasnya.
+
+### 7. `js/trivial-conditional` — BISA jadi bug NYATA (dead-code cabang), bukan selalu false positive (alert #140)
+
+Ditemukan 2026-07-21 (alert #140, PR #210):
+`scripts/api-spec-check.ts` `responseResolvesToApiError`, pesan CodeQL _"This
+call to asRecord always evaluates to true."_
+
+```ts
+const media =
+  asRecord(content["application/json"]) ?? Object.values(content)[0];
+```
+
+Ini **bug nyata**, BUKAN false positive. `asRecord` (`function asRecord(v):
+Record<string,unknown>`) selalu mengembalikan objek non-null (`{}` bila input
+bukan record), jadi operator `??` di kanan (`Object.values(content)[0]`) adalah
+**dead code** — fallback ke media type pertama tak pernah jalan. Efek: response
+error yang hanya punya media type non-`application/json` (mis. `application/xml`)
+salah dilaporkan tidak beresolusi ke envelope `ApiError`. **Fix (code change,
+behavior-fixing)** — pindahkan `??` ke DALAM `asRecord` agar bekerja pada nilai
+mentah yang memang bisa `undefined`:
+
+```ts
+const media = asRecord(
+  content["application/json"] ?? Object.values(content)[0]
+);
+const schema = media.schema; // media kini dijamin record
+```
+
+**Kontras dengan §6**: §6 = `trivial-conditional` false-positive karena NILAI
+provably-constant by design (extension seam). §7 = `trivial-conditional` MENANDAI
+bug asli karena sebuah HELPER yang tipe-return-nya tak pernah nullish membuat
+cabang `??`/`||`/`if` di sekitarnya jadi dead. **Aturan triase**: saat CodeQL
+bilang "call to `<fn>` always evaluates to true", baca definisi `<fn>` — kalau
+return type-nya memang tak pernah `null`/`undefined`/falsy sedangkan call-site
+memakainya seolah bisa (`?? fallback`, `|| default`, `if (!x)`), itu **bug
+nyata** (fallback mati) → perbaiki dengan code change, JANGAN dismiss.
 
 ### Pola tambahan: `js/unused-local-variable` di test kadang menandai coverage gap, bukan sekadar dead code
 
