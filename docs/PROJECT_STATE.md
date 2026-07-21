@@ -43,8 +43,9 @@ tiga template keluarga AWCMS yang dipakai LANGSUNG**, bukan hierarki base-dan-tu
 > (jalur turunan dihapus, `MODULE_CONTRACT_VERSION` 1.3.0→2.0.0). Prosedur tag di
 > [`docs/awcms/09_roadmap_repository_commit.md`](awcms/09_roadmap_repository_commit.md) /
 > skill `awcms-release` (tag `vX.Y.Z` dibuat **manual** via `git tag -a` — tidak ada script
-> `changeset:tag`). **Catatan hardening:** publish job berjalan **tanpa jeda approval** →
-> GitHub Environment `release` **belum** punya required reviewers (lihat
+> `changeset:tag`). **Approval gate:** Environment `release` kini punya required
+> reviewer (`ahliweb`, dikonfigurasi & diverifikasi via rehearsal 2026-07-21) — publish
+> job pause di "Waiting for review" sebelum sign/attest/publish (lihat
 > [`release-process.md`](awcms/release-process.md) §Environment approval).
 
 Modul: `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
