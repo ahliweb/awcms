@@ -1,5 +1,7 @@
 # Rencana Pilot Aplikasi Turunan Pertama
 
+> **⚠️ DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).** Model aplikasi-turunan di repo terpisah DICABUT — keluarga AWCMS (`awcms-mini`/`awcms`/`awcms-micro`) kini template **dipakai-langsung**, tanpa membuat repo derivatif (kembangkan modul langsung di template). Dokumen ini dipertahankan sebagai catatan historis.
+
 Issue #465. Base AWCMS sudah stabil (v0.23.5, 18 issue backlog doc06 +
 epic M9 pasca-backlog tuntas) dan `derived-application-guide.md` sudah
 menjelaskan cara membangun aplikasi turunan di atasnya. Dokumen ini

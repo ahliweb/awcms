@@ -1,5 +1,7 @@
 # Runbook Eksekusi Increment-1 — Pilot Turunan #187 (`awcms-erp-pilot`, Purchase Requisition)
 
+> **⚠️ DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).** Model aplikasi-turunan di repo terpisah DICABUT — keluarga AWCMS (`awcms-mini`/`awcms`/`awcms-micro`) kini template **dipakai-langsung**, tanpa membuat repo derivatif (kembangkan modul langsung di template). Dokumen ini dipertahankan sebagai catatan historis.
+
 > **Status: rencana eksekusi terperinci (belum dieksekusi).** Dokumen ini TIDAK
 > menulis kode. Ia adalah runbook langkah-demi-langkah untuk pekerjaan yang
 > **sengaja TIDAK dikerjakan di repo base `ahliweb/awcms`** — implementasi domain
