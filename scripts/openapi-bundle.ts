@@ -96,12 +96,12 @@ export async function listModuleFragmentFiles(
 export type BundleOptions = {
   /**
    * Absolute (or `rootDir`-relative) paths to ADDITIONAL fragment files merged
-   * after the base `openapi/modules/*.openapi.yaml` set — the seam a DERIVED
-   * application uses to contribute its own module fragments (each module's
+   * after the base `openapi/modules/*.openapi.yaml` set — a general seam for
+   * contributing an extra module fragment (a module's
    * `ModuleDescriptor.api.openApiPath`) WITHOUT editing the base bundle or any
-   * base fragment (Issue #182, epic #177, composition seam #178). A derived
-   * fragment that redefines a base path or schema throws `BundleConflictError`
-   * — it can never silently override the base contract.
+   * base fragment (Issue #182). An extra fragment that redefines a base path
+   * or schema throws `BundleConflictError` — it can never silently override the
+   * base contract.
    */
   extraFragmentFiles?: string[];
 };
@@ -157,7 +157,7 @@ export async function buildBundledDocument(
     // declared by a fragment would be SILENTLY dropped — a `$ref` to it from a
     // 2xx response then dangles in the bundle and slips past
     // `collectStandardErrorSchemaProblems` (which only guards 4xx/5xx). Reject
-    // it explicitly so a (derived) contributor gets an actionable error instead
+    // it explicitly so a contributor gets an actionable error instead
     // of a broken bundle: those sections are root-owned (`awcms-public-api.src.yaml`),
     // or inline the shape into the fragment's own `components.schemas`.
     const unsupportedComponentSections = Object.keys(moduleComponents).filter(
@@ -175,7 +175,7 @@ export async function buildBundledDocument(
       const existing = pathOwner.get(pathKey);
       if (existing !== undefined) {
         throw new BundleConflictError(
-          `Duplicate path "${pathKey}" -- defined in ${fileName} and ${existing}. A derived fragment may not override a base path.`
+          `Duplicate path "${pathKey}" -- defined in ${fileName} and ${existing}. An extra fragment may not override a base path.`
         );
       }
       pathOwner.set(pathKey, fileName);
@@ -186,7 +186,7 @@ export async function buildBundledDocument(
       const existing = schemaOwner.get(schemaName);
       if (existing !== undefined) {
         throw new BundleConflictError(
-          `Duplicate schema "${schemaName}" -- defined in ${fileName} and ${existing}. A derived fragment may not override a base or shared schema.`
+          `Duplicate schema "${schemaName}" -- defined in ${fileName} and ${existing}. An extra fragment may not override a base or shared schema.`
         );
       }
       schemaOwner.set(schemaName, fileName);

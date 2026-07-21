@@ -372,12 +372,11 @@ describe("family conformance — migration immutability/checksum contract (no DB
 
 describe("family conformance — module composition semantic contract", () => {
   test("the base registry composes cleanly", () => {
-    const result = composeModuleRegistry({ base: listBaseModules() });
+    const result = composeModuleRegistry(listBaseModules());
     expect(result.valid).toBe(true);
   });
 
   test("MUTATION: a duplicate module key makes composition invalid (RED)", () => {
-    const base = listBaseModules();
     const dupe = (): ModuleDescriptor => ({
       key: "conformance_dupe",
       name: "Conformance Dupe",
@@ -387,13 +386,11 @@ describe("family conformance — module composition semantic contract", () => {
       dependencies: [],
       type: "domain"
     });
-    const result = composeModuleRegistry({
-      base,
-      application: {
-        id: "conformance-mutation-fixture",
-        modules: [dupe(), dupe()] // two contributed modules share a key
-      }
-    });
+    const result = composeModuleRegistry([
+      ...listBaseModules(),
+      dupe(),
+      dupe() // two modules share a key
+    ]);
     expect(result.valid).toBe(false);
     if (!result.valid) {
       expect(

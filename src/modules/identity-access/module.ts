@@ -21,10 +21,11 @@ export const identityAccessModule = defineModule({
   // registry therefore has no provider for this capability and
   // `modules:compose:check` skips the missing-provider check for an optional
   // consume. `providedBy` names the canonical derived provider
-  // (`organization_structure`, a legal-entity/organization-unit module that
-  // lives in a derived ERP app, NOT in this base); the fixture
-  // `tests/fixtures/derived-application-example/` provides a working dummy
-  // resolver for the same capability to exercise the binding end-to-end.
+  // (a legal-entity/organization-unit module that provides the
+  // `business_scope_hierarchy` capability, NOT part of this base); the
+  // test-support fixture `tests/fixtures/example-domain-modules/` provides a
+  // working dummy resolver for the same capability to exercise the binding
+  // end-to-end.
   capabilities: {
     consumes: [
       {

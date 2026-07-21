@@ -52,7 +52,7 @@ import {
   createDummyBusinessScopeHierarchyResolver,
   DUMMY_HIERARCHY_MAX_DEPTH,
   type DummyScopeNode
-} from "../fixtures/derived-application-example/modules/example-crm/business-scope-hierarchy-adapter";
+} from "../fixtures/example-domain-modules/modules/example-crm/business-scope-hierarchy-adapter";
 
 const TENANT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const TENANT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";

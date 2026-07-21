@@ -84,9 +84,6 @@ jobs:
       - name: Module composition inventory freshness check (Issue #178)
         run: bun run modules:composition:inventory:check
 
-      - name: Extension seam check (Issue #178)
-        run: bun run extension:check
-
       - name: Reporting projection registry check
         run: bun run reporting:projections:registry:check
 

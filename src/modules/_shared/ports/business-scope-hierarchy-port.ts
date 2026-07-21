@@ -31,11 +31,11 @@
  * owns no organization hierarchy, so it cannot resolve any real one). A
  * DERIVED application provides its own adapter (walking its real
  * effective-dated legal-entity/organization-unit/cost-center/etc. hierarchy
- * tables) and injects it at its composition roots — see
- * `docs/awcms/derived-application-guide.md`. `tests/fixtures/
- * derived-application-example/` ships a working dummy resolver that exercises
- * exact/descendant/ancestor resolution end-to-end without any real domain
- * module. The composition root (a route handler or the expiry job script) is
+ * tables) and injects it at its composition roots (ADR-0011).
+ * `tests/fixtures/example-domain-modules/` ships a working dummy resolver that
+ * exercises exact/descendant/ancestor resolution end-to-end without any real
+ * domain module. The composition root (a route handler or the expiry job
+ * script) is
  * what decides which adapter to inject, exactly the ports-and-adapters
  * pattern `workflow-notification-port.ts` documents for the same reason. A
  * derived organization module can NEVER be a lifecycle/capability dependency

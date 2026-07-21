@@ -4,7 +4,7 @@ import {
   createDummyBusinessScopeHierarchyResolver,
   DUMMY_HIERARCHY_MAX_DEPTH,
   type DummyScopeNode
-} from "./fixtures/derived-application-example/modules/example-crm/business-scope-hierarchy-adapter";
+} from "./fixtures/example-domain-modules/modules/example-crm/business-scope-hierarchy-adapter";
 import { defaultBusinessScopeHierarchyPortAdapter } from "../src/modules/identity-access/application/business-scope-hierarchy-port-adapter";
 
 // The dummy adapter never touches the DB — pass a stand-in for `tx`.

@@ -29,7 +29,7 @@ family:
 # FAMILY_OWNED_CONTRACT_VERSIONS in src/modules/_shared/family-contract.ts and
 # given teeth by a SEMANTIC contract test that goes RED if the control drifts.
 contracts:
-  moduleDescriptorContractVersion: "1.3.0"
+  moduleDescriptorContractVersion: "2.0.0"
   # Per-capability port SemVer for capabilities OWNED BY A BASE MODULE (matches
   # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
   # ships in this base belong here. `party_directory` is owned by the base
@@ -101,19 +101,6 @@ intentionalDivergences:
     reviewDate: "2027-07-19"
     adr: 0022-erp-modules-live-in-extension-repos.md
     since: "#177"
-  - id: module-type-without-derived
-    summary: >-
-      ModuleType omits the awcms-mini "derived" category; contributed modules
-      use "domain".
-    reason: >-
-      The DB CHECK constraint (sql/008 awcms_modules_module_type_check) only
-      allows base/system/domain/integration and applied migrations are
-      immutable; build-time composition classifies contributed modules as
-      "domain".
-    owner: "@ahliweb"
-    reviewDate: "2027-07-19"
-    adr: 0025-implement-deterministic-build-time-module-composition.md
-    since: "#178"
   - id: openapi-one-file-per-module
     summary: >-
       OpenAPI fragments are one-file-per-MODULE, not one-file-per-tag as in
@@ -156,8 +143,9 @@ intentionalDivergences:
       awcms-mini's default adapter reads its own offices table.
     reason: >-
       The base ships no organization hierarchy of its own. A real resolver is
-      supplied by a derived application through a capability port; with no
-      provider, scope-gated high-risk actions deny by default.
+      supplied by a module that provides the business_scope_hierarchy
+      capability port; with no provider, scope-gated high-risk actions deny by
+      default.
     owner: "@ahliweb"
     reviewDate: "2027-07-19"
     adr: 0030-business-scope-hierarchy-generic-authorization-layer.md
@@ -168,8 +156,8 @@ intentionalDivergences:
       example rules into identity_access.
     reason: >-
       A base must not invent business rules. Illustrative SoD rules live only in
-      the in-repo derived-application fixture; real rules come from derived
-      applications via application-registry.ts.
+      the in-repo test-support fixture (tests/fixtures/example-domain-modules/);
+      real rules are declared by domain modules added to the template.
     owner: "@ahliweb"
     reviewDate: "2027-07-19"
     adr: 0031-segregation-of-duties-conflict-enforcement.md

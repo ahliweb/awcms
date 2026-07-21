@@ -2,14 +2,9 @@
  * module-composition-inventory-generate.ts — `bun run
  * modules:composition:inventory:generate`.
  *
- * Issue #178 (epic #177 "Kesiapan fondasi ERP turunan", Wave 1, ADR-0025).
- * Generates a single, deterministic, machine-readable snapshot of the
- * COMPOSED module registry (base + this repository's own build-time
- * application registry, `src/modules/application-registry.ts`) for CI/release
- * evidence — `docs/awcms/module-composition-inventory.json`. A derived
- * repository that has replaced `application-registry.ts` with its own
- * `ApplicationModuleRegistry` regenerates this same file to get release
- * evidence for ITS OWN composed registry, using the exact same script.
+ * Generates a single, deterministic, machine-readable snapshot of the reviewed
+ * base module registry (`listBaseModules()`) for CI/release evidence —
+ * `docs/awcms/module-composition-inventory.json`.
  *
  * Pure function of committed source, no wall-clock timestamp — enforced by
  * the read-only twin, `scripts/module-composition-inventory-check.ts`
@@ -21,7 +16,6 @@
 import prettier from "prettier";
 
 import { listBaseModules } from "../src/modules";
-import { applicationModuleRegistry } from "../src/modules/application-registry";
 import { buildComposedModuleInventory } from "../src/modules/module-management/domain/module-composition";
 
 export const MODULE_COMPOSITION_INVENTORY_PATH =
@@ -38,10 +32,7 @@ export const MODULE_COMPOSITION_INVENTORY_PATH =
 export async function buildModuleCompositionInventoryJson(
   rootDir = process.cwd()
 ): Promise<string> {
-  const inventory = buildComposedModuleInventory({
-    base: listBaseModules(),
-    application: applicationModuleRegistry
-  });
+  const inventory = buildComposedModuleInventory(listBaseModules());
 
   const raw = JSON.stringify(inventory, null, 2);
   const filepath = `${rootDir}/${MODULE_COMPOSITION_INVENTORY_PATH}`;

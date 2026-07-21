@@ -1,9 +1,9 @@
 /**
- * Integration test: a real, in-repo fixture derived-application registry
- * (`tests/fixtures/derived-application-example/`) composed against the LIVE
- * base registry (`listBaseModules()`) — proves a derived application can add
- * its own domain module WITHOUT editing `src/modules/index.ts` or
- * `src/modules/application-registry.ts` (Issue #178 acceptance criterion).
+ * Composition test: the LIVE base registry (`listBaseModules()`) combined with
+ * an in-repo example DOMAIN module (`tests/fixtures/example-domain-modules/`)
+ * validates cleanly — proves the composition rule engine accepts a domain
+ * module added to the registry (the same shape as adding one directly to
+ * `src/modules/`), with its dependencies satisfied by real base modules.
  */
 import { describe, expect, test } from "bun:test";
 
@@ -12,66 +12,48 @@ import {
   buildComposedModuleInventory,
   composeModuleRegistry
 } from "../src/modules/module-management/domain/module-composition";
-import { exampleApplicationModuleRegistry } from "./fixtures/derived-application-example/application-registry";
+import { exampleDomainModules } from "./fixtures/example-domain-modules";
 
-describe("derived-application-example fixture composed against the live base", () => {
+const composed = () => [...listBaseModules(), ...exampleDomainModules];
+
+describe("base registry + example domain module", () => {
   test("composes cleanly with zero issues", () => {
-    const result = composeModuleRegistry({
-      base: listBaseModules(),
-      application: exampleApplicationModuleRegistry
-    });
+    const result = composeModuleRegistry(composed());
     if (!result.valid) {
       // Surface the actual diagnostics if this ever regresses.
       throw new Error(
-        `fixture composition unexpectedly invalid: ${JSON.stringify(
-          result.issues
-        )}`
+        `composition unexpectedly invalid: ${JSON.stringify(result.issues)}`
       );
     }
     expect(result.valid).toBe(true);
   });
 
-  test("effective registry = base + exactly one contributed module, appended last", () => {
-    const result = composeModuleRegistry({
-      base: listBaseModules(),
-      application: exampleApplicationModuleRegistry
-    });
+  test("effective registry = base + exactly one example module, appended last", () => {
+    const result = composeModuleRegistry(composed());
     expect(result.registry).toHaveLength(listBaseModules().length + 1);
     expect(result.registry.at(-1)?.key).toBe("example_crm");
   });
 
-  test("the contributed module depends on real base modules", () => {
-    const example = exampleApplicationModuleRegistry.modules[0]!;
+  test("the example module depends only on real base modules", () => {
+    const example = exampleDomainModules[0]!;
     const baseKeys = new Set(listBaseModules().map((m) => m.key));
     for (const dep of example.dependencies) {
       expect(baseKeys.has(dep)).toBe(true);
     }
   });
 
-  test("inventory attributes the fixture module as an application source", () => {
-    const inventory = buildComposedModuleInventory({
-      base: listBaseModules(),
-      application: exampleApplicationModuleRegistry
-    });
+  test("inventory includes the example module entry", () => {
+    const inventory = buildComposedModuleInventory(composed());
     const entry = inventory.modules.find((m) => m.key === "example_crm");
-    expect(entry?.source).toBe("application");
-    expect(inventory.applicationModuleCount).toBe(1);
-    expect(inventory.applicationRegistryId).toBe(
-      "derived-application-example-fixture"
-    );
-    expect(inventory.migrationNamespaces).toContainEqual({
-      label: "derived-application-example fixture",
-      rangeStart: 900,
-      rangeEnd: 999,
-      source: "application"
-    });
+    expect(entry).toBeDefined();
+    expect(entry?.type).toBe("domain");
+    expect(inventory.moduleCount).toBe(listBaseModules().length + 1);
+    expect(inventory.valid).toBe(true);
   });
 
-  test("importing the fixture does NOT change the base's own shipped seam", async () => {
-    // The base repo must keep shipping applicationModuleRegistry === undefined
-    // even though this fixture registry exists in the tree.
-    const { applicationModuleRegistry } =
-      await import("../src/modules/application-registry");
-    expect(applicationModuleRegistry).toBeUndefined();
+  test("the base registry alone never registers the example module", () => {
+    // The example domain module lives only in the test fixture — it must never
+    // leak into the reviewed base registry.
+    expect(listBaseModules().some((m) => m.key === "example_crm")).toBe(false);
   });
 });

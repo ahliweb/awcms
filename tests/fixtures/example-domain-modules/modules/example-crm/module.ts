@@ -1,22 +1,19 @@
 /**
- * Minimal fixture module (Issue #178, epic #177 "Kesiapan fondasi ERP
- * turunan", Wave 1) — illustrates what a real derived repository's own
- * `src/modules/<domain>/module.ts` looks like. NOT part of the base registry:
- * never imported by `src/modules/index.ts`, only by
- * `tests/fixtures/derived-application-example/application-registry.ts` and the
- * composition tests that exercise it
- * (`tests/module-composition-fixture.test.ts`).
+ * Minimal TEST-SUPPORT example domain module. Illustrates realistic domain
+ * module metadata (SoD rules, a business-scope capability, an OpenAPI
+ * fragment, permissions/navigation/jobs) the reviewed base itself
+ * deliberately never ships — used ONLY by tests to exercise base enforcement.
+ * NOT part of the base registry: never imported by `src/modules/index.ts`,
+ * only by `tests/fixtures/example-domain-modules/index.ts` and the tests that
+ * compose it with `listBaseModules()`.
  *
- * Depends on two base modules (`tenant_admin`, `identity_access`) — the same
- * baseline a real derived application module declares
- * (`docs/awcms/derived-application-guide.md`) — to prove composition
- * correctly validates a lifecycle dependency edge from an APPLICATION module
- * onto a BASE module. Provides the `example_crm_directory` capability and
- * consumes an OPTIONAL capability (`reporting_projection`) to exercise the
+ * Depends on two base modules (`tenant_admin`, `identity_access`) to prove the
+ * composition rule engine validates a lifecycle dependency edge from a domain
+ * module onto a base module. Provides the `example_crm_directory` capability
+ * and consumes an OPTIONAL capability (`reporting_projection`) to exercise the
  * capability-binding checks without introducing a hard failure. `type` is
- * `"domain"` (awcms's `ModuleType` union has no `"derived"`, and the DB
- * `awcms_modules_module_type_check` constraint only permits
- * base/system/domain/integration — a derived module uses `"domain"`).
+ * `"domain"` (awcms's `ModuleType` union is base/system/domain/integration,
+ * matching the DB `awcms_modules_module_type_check` constraint).
  */
 import { defineModule } from "../../../../../src/modules/_shared/module-contract";
 
@@ -26,18 +23,17 @@ export const exampleCrmModule = defineModule({
   version: "0.1.0",
   status: "experimental",
   description:
-    "Minimal in-repo fixture derived-application module (Issue #178) — illustrates a contact directory a real derived application (e.g. AWPOS's own crm module) might own. Never registered in the base repository.",
+    "Minimal in-repo test-support domain module — illustrates a contact directory used only to exercise base enforcement (SoD, business-scope, composition, OpenAPI fragment). Never registered in the base repository.",
   dependencies: ["tenant_admin", "identity_access"],
   type: "domain",
-  // A derived module owns its OWN OpenAPI fragment (Issue #182) and points at
-  // it here — the base bundle never lists it. A derived repository's build
-  // feeds every registered module's `openApiPath` to `buildBundledDocument`'s
-  // `extraFragmentFiles` seam, which merges the fragment into the published
-  // bundle WITHOUT editing any base fragment. Exercised by
-  // `tests/openapi-derived-fragment.test.ts`.
+  // An additional module OpenAPI fragment (Issue #182), pointed at here — the
+  // base bundle never lists it. A test feeds this `openApiPath` to
+  // `buildBundledDocument`'s `extraFragmentFiles` seam, which merges the
+  // fragment into the bundle WITHOUT editing any base fragment. Exercised by
+  // `tests/openapi-extra-fragment.test.ts`.
   api: {
     openApiPath:
-      "tests/fixtures/derived-application-example/openapi/modules/example-crm.openapi.yaml",
+      "tests/fixtures/example-domain-modules/openapi/modules/example-crm.openapi.yaml",
     basePath: "/api/v1/example-crm"
   },
   compatibility: {
@@ -48,10 +44,10 @@ export const exampleCrmModule = defineModule({
     deploymentProfiles: ["development", "offline-lan"]
   },
   capabilities: {
-    // Issue #180 — a derived module PROVIDES the `business_scope_hierarchy`
+    // Issue #180 — this example module PROVIDES the `business_scope_hierarchy`
     // capability that base `identity_access` optionally consumes. The
     // concrete adapter is `business-scope-hierarchy-adapter.ts` in this same
-    // fixture directory (a dummy in-memory resolver); a real derived module
+    // fixture directory (a dummy in-memory resolver); a real provider module
     // would walk its own effective-dated organization tables. Proves the
     // capability seam end-to-end without a real domain module in the base.
     provides: ["example_crm_directory", "business_scope_hierarchy"],
@@ -71,9 +67,8 @@ export const exampleCrmModule = defineModule({
       action: "read",
       description: "Read example CRM contact directory entries (fixture)."
     },
-    // Illustrative ERP-shaped permissions the SoD rules below pair off. A real
-    // derived application declares its own real permissions; these exist only
-    // so the fixture's `sodRules` reference coherent keys.
+    // Illustrative ERP-shaped permissions the SoD rules below pair off. These
+    // exist only so the fixture's `sodRules` reference coherent keys.
     {
       activityCode: "invoice",
       action: "create",
@@ -121,11 +116,12 @@ export const exampleCrmModule = defineModule({
     }
   ],
   // ILLUSTRATIVE segregation-of-duties rules (Issue #181). These are examples
-  // of what a DERIVED ERP application declares — NOT base rules (the base ships
-  // none). They live here in the derived-application fixture precisely because
-  // the issue requires "minimal lima contoh rule sebagai ilustrasi, bukan rule
-  // base bawaan". Every rule is a GENERIC conflicting-permission-pair
-  // declaration; none encodes what the permissions actually do. Validated by
+  // of the conflicting-permission pairs a real ERP domain module declares —
+  // NOT base rules (the base ships none, because a base must not invent
+  // business rules). They live here in this test-support fixture as the
+  // "minimal five example rules for illustration" the issue asks for. Every
+  // rule is a GENERIC conflicting-permission-pair declaration; none encodes
+  // what the permissions actually do. Validated by
   // `identity-access/domain/sod-rule-registry.ts` via
   // `tests/sod-rule-registry.test.ts` (base + this fixture composed).
   sodRules: [
@@ -216,8 +212,8 @@ export const exampleCrmModule = defineModule({
       }
     },
     {
-      // Cross-MODULE illustration: a derived app can declare a rule over BASE
-      // permission keys — here, maker/checker over the SoD exception mechanism
+      // Cross-MODULE illustration: a domain module can declare a rule over
+      // BASE permission keys — here, maker/checker over the SoD exception mechanism
       // itself (requesting vs approving an exception). No exception permitted
       // (allowing an override of the override control would be recursive).
       ruleKey: "example_crm.exception_override_maker_checker",
@@ -245,7 +241,7 @@ export const exampleCrmModule = defineModule({
     {
       command: "bun run example-crm:reconcile",
       purpose:
-        "Fixture-only job descriptor — proves composition validates contributed application modules' job shape (`validateJobDescriptor`); never actually registered as a real package.json script.",
+        "Fixture-only job descriptor — proves composition validates a domain module's job shape (`validateJobDescriptor`); never actually registered as a real package.json script.",
       recommendedSchedule: "N/A — fixture only.",
       safeInOfflineLan: true
     }

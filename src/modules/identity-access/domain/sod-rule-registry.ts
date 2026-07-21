@@ -14,9 +14,9 @@
  * only AGGREGATES (`collectSoDRuleDescriptors`) and VALIDATES what modules
  * already declared. It never invents a rule and never reaches into another
  * module's schema. The BASE ships no domain rules (issue #181 out-of-scope);
- * the illustrative rules live in the derived-application fixture and a real
- * derived application contributes its own — the gate validates whatever the
- * composed `listModules()` registry contains (base + application).
+ * the illustrative rules live in the test-support fixture
+ * `tests/fixtures/example-domain-modules/`. The gate validates whatever the
+ * `listModules()` registry contains.
  */
 import type {
   ModuleDescriptor,
