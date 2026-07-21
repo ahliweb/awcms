@@ -14,8 +14,8 @@ flowchart LR
   A[changeset:status<br/>cek pending] --> B[Validasi lokal:<br/>bun run check]
   B --> C[changeset:version<br/>bump + CHANGELOG]
   C --> D[Review diff CHANGELOG<br/>+ package.json]
-  D --> E[Commit chore release vX.Y.Z]
-  E --> F[changeset:tag → push --tags]
+  D --> E[Commit chore release vX.Y.Z<br/>+ push main]
+  E --> F[git tag -a vX.Y.Z →<br/>release:verify → push tag]
   F --> G[release.yml: validate job<br/>+ build job SBOM x2]
   G --> H[release environment<br/>approval gate]
   H --> I[sign-attest-publish job:<br/>cosign sign + attest + publish]
@@ -28,7 +28,13 @@ flowchart LR
 3. `bun run changeset:version` — konsumsi changeset → bump `package.json` + entri `CHANGELOG.md`.
 4. Review diff; pastikan versi cocok peta doc 09 (0.1.0 Foundation … 1.0.0 production MVP).
 5. Commit: `chore(release): vX.Y.Z` (sertakan CHANGELOG + package.json + penghapusan file changeset), push ke `main`.
-6. `bun run changeset:tag` lalu `git push --tags`. Ini **memicu** `.github/workflows/release.yml`: guard ancestor-of-`main`, `bun run release:verify` (versi/CHANGELOG/changeset tersisa harus konsisten), full quality gate, lalu — setelah disetujui lewat `release` environment (lihat doc `release-process.md` §Environment approval) — build image, dua SBOM CycloneDX (source + image), checksums, `cosign sign` keyless, `actions/attest-build-provenance`/`attest-sbom`, push `ghcr.io/ahliweb/awcms`, dan `gh release create` dengan asset terlampir.
+6. Buat tag rilis **manual** — repo ini TIDAK punya script `changeset:tag`, dan `changeset tag` (bawaan Changesets) tidak menghasilkan tag `vX.Y.Z` yang dipakai repo ini (untuk paket `access: restricted` bernama `awcms` ia diam/format `awcms@X.Y.Z`, bukan `vX.Y.Z`). Script npm yang ADA hanya `changeset`, `changeset:version`, `changeset:status` (lihat `package.json`). Prosedur benar:
+   ```bash
+   git tag -a vX.Y.Z -m "vX.Y.Z"                 # tag anotasi di commit rilis
+   RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify   # gate lokal: tag↔package.json↔CHANGELOG↔0 changeset pending
+   git push origin vX.Y.Z                        # push HANYA tag rilis (hindari `--tags` yang mendorong semua tag lokal)
+   ```
+   Push tag ini **memicu** `.github/workflows/release.yml`: guard ancestor-of-`main`, `bun run release:verify` (versi/CHANGELOG/changeset tersisa harus konsisten — `release.yml` mengambil tag dari `github.ref_name`, lokal dari `RELEASE_VERIFY_TAG` atau `git describe --exact-match`), full quality gate, lalu — setelah disetujui lewat `release` environment (lihat doc `release-process.md` §Environment approval) — build image, dua SBOM CycloneDX (source + image), checksums, `cosign sign` keyless, `actions/attest-build-provenance`/`attest-sbom`, push `ghcr.io/ahliweb/awcms`, dan `gh release create` dengan asset terlampir.
 7. **Jangan** lagi menjalankan `gh release create` manual — itu sekarang bagian dari `release.yml`; menjalankannya manual sebelum workflow selesai akan bentrok dengan asset yang coba di-attach otomatis.
 
 ## Aturan
