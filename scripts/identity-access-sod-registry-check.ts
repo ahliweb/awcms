@@ -8,22 +8,20 @@
  * (`listModules()`) validation, no I/O, no network, no database, safe to run
  * on every CI build.
  *
- * `listModules()` IS the composed registry (base + whatever
- * `src/modules/application-registry.ts` contributes) — so this gate validates
- * the MERGED registry: in a pure base it validates the base's rules (none —
- * the base ships no domain SoD rules), and in a derived application it
- * validates base + application rules together. SoD registry DRIFT (a duplicate
- * `ruleKey`, an `ownerModuleKey` that does not match the declaring module, a
- * rule with fewer than 2 conflicting keys, an invalid enum, ...) makes this
- * gate — and therefore CI — RED (issue #181: "SoD registry drift membuat CI
- * merah"; "Rule registry derived module wajib tervalidasi saat build/CI").
+ * `listModules()` IS the module registry — so this gate validates whatever
+ * SoD rules the registered modules declare. In a pure base it validates the
+ * base's rules (none — the base ships no domain SoD rules); once a domain
+ * module with `sodRules` is added directly to `src/modules/`, this gate
+ * validates its rules too. SoD registry DRIFT (a duplicate `ruleKey`, an
+ * `ownerModuleKey` that does not match the declaring module, a rule with fewer
+ * than 2 conflicting keys, an invalid enum, ...) makes this gate — and
+ * therefore CI — RED (issue #181: "SoD registry drift membuat CI merah").
  *
- * The illustrative rules the base repository ships live in the fixture
- * `tests/fixtures/derived-application-example/` (NOT in any base module), so
- * they are validated by `tests/sod-rule-registry.test.ts` (which composes the
- * fixture with the base and runs the same validator) rather than by this gate
- * on the base-only registry — this gate is what turns a REAL derived
- * application's registry drift red.
+ * The base ships ZERO domain SoD rules, so the illustrative rules live in the
+ * test-support fixture `tests/fixtures/example-domain-modules/` (NOT in any
+ * base module) and are validated by `tests/sod-rule-registry.test.ts` (which
+ * composes the fixture with the base and runs the same validator), rather than
+ * by this gate on the base-only registry.
  */
 import { listModules } from "../src/modules";
 import {

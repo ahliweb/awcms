@@ -1,10 +1,11 @@
 /**
- * Derived-fragment composition test (Issue #182, epic #177 — composition seam
- * #178). Proves a DERIVED application module can contribute its own OpenAPI
- * fragment (declared via `ModuleDescriptor.api.openApiPath`) into the published
- * bundle through `buildBundledDocument`'s `extraFragmentFiles` seam WITHOUT
- * editing any base fragment or the base bundle — and that such a fragment can
- * never silently override a base path/operation/schema.
+ * Extra-fragment composition test (Issue #182). Proves an additional module
+ * OpenAPI fragment (declared via `ModuleDescriptor.api.openApiPath`) merges
+ * into the published bundle through `buildBundledDocument`'s
+ * `extraFragmentFiles` seam WITHOUT editing any base fragment or the base
+ * bundle — and that such a fragment can never silently override a base
+ * path/operation/schema (`BundleConflictError`). The example domain module's
+ * fragment stands in for any additional module fragment.
  */
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
@@ -13,20 +14,20 @@ import {
   BundleConflictError,
   buildBundledDocument
 } from "../scripts/openapi-bundle";
-import { exampleCrmModule } from "./fixtures/derived-application-example/modules/example-crm/module";
+import { exampleCrmModule } from "./fixtures/example-domain-modules/modules/example-crm/module";
 
 const ROOT = process.cwd();
 
 type AnyRecord = Record<string, unknown>;
 
-describe("derived OpenAPI fragment contribution", () => {
-  test("the fixture derived module declares its own openApiPath", () => {
+describe("extra OpenAPI fragment contribution", () => {
+  test("the example module declares its own openApiPath", () => {
     expect(exampleCrmModule.api?.openApiPath).toBe(
-      "tests/fixtures/derived-application-example/openapi/modules/example-crm.openapi.yaml"
+      "tests/fixtures/example-domain-modules/openapi/modules/example-crm.openapi.yaml"
     );
   });
 
-  test("a base-only bundle does NOT contain the derived path or schema", async () => {
+  test("a base-only bundle does NOT contain the extra path or schema", async () => {
     const base = (await buildBundledDocument(ROOT)) as AnyRecord;
     expect(Object.keys(base.paths as AnyRecord)).not.toContain(
       "/api/v1/example-crm/contacts"
@@ -36,7 +37,7 @@ describe("derived OpenAPI fragment contribution", () => {
     ).not.toContain("ExampleCrmContact");
   });
 
-  test("passing the derived fragment via the seam merges its path + schema", async () => {
+  test("passing the extra fragment via the seam merges its path + schema", async () => {
     const composed = (await buildBundledDocument(ROOT, {
       extraFragmentFiles: [exampleCrmModule.api!.openApiPath]
     })) as AnyRecord;
@@ -48,7 +49,7 @@ describe("derived OpenAPI fragment contribution", () => {
       Object.keys((composed.components as AnyRecord).schemas as AnyRecord)
     ).toContain("ExampleCrmContact");
 
-    // Base paths/schemas remain intact alongside the derived contribution.
+    // Base paths/schemas remain intact alongside the extra contribution.
     expect(Object.keys(composed.paths as AnyRecord)).toContain(
       "/api/v1/health"
     );
@@ -57,7 +58,7 @@ describe("derived OpenAPI fragment contribution", () => {
     expect(pathKeys).toEqual([...pathKeys].sort((a, b) => a.localeCompare(b)));
   });
 
-  test("a derived fragment overriding a base path is rejected", async () => {
+  test("an extra fragment overriding a base path is rejected", async () => {
     await expect(
       buildBundledDocument(ROOT, {
         extraFragmentFiles: [
@@ -67,7 +68,7 @@ describe("derived OpenAPI fragment contribution", () => {
     ).rejects.toBeInstanceOf(BundleConflictError);
   });
 
-  test("a derived fragment overriding a base/shared schema is rejected", async () => {
+  test("an extra fragment overriding a base/shared schema is rejected", async () => {
     await expect(
       buildBundledDocument(ROOT, {
         extraFragmentFiles: [

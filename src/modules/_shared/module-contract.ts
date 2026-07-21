@@ -64,9 +64,9 @@ export type ModuleHealthContract = {
  * Same four operating profiles `docs/awcms/deployment-profiles.md` defines
  * (development / staging / production / offline-LAN). Declared inline here
  * as string literals rather than imported from a config module, to keep
- * this contract file dependency-free — every module's `module.ts`, and now
- * every derived repository's own `application-registry.ts`, transitively
- * depends on this file, so it must never import anything itself. Build-time
+ * this contract file dependency-free — every module's `module.ts`
+ * transitively depends on this file, so it must never import anything itself.
+ * Build-time
  * composition (`module-management/domain/module-composition.ts`) compares
  * these structurally (plain string equality), so keeping the list in sync
  * with the deployment-profiles doc is a documentation obligation, not a
@@ -78,8 +78,8 @@ export type ModuleDeploymentProfile =
 export type ModuleCompatibilityContract = {
   minAppVersion?: string;
   /**
-   * Deployment profiles (`docs/awcms/deployment-profiles.md`) this module —
-   * base or contributed application module — is declared compatible with
+   * Deployment profiles (`docs/awcms/deployment-profiles.md`) this module is
+   * declared compatible with
    * (Issue #178). Absence means "no constraint declared", the same
    * convention `minAppVersion`'s absence already uses (compatible with every
    * profile). Build-time composition reports a
@@ -160,10 +160,9 @@ export type ModuleDescriptor = {
    * (`collectSoDRuleDescriptors`/`validateSoDRuleRegistry` over
    * `listModules()`). The BASE ships NO domain SoD rules (issue #181
    * out-of-scope: "Hardcode rule finance/procurement/payroll/inventory ke
-   * base" — the base never invents a business rule); a derived application
-   * contributes its own through `application-registry.ts`, and the in-repo
-   * fixture `tests/fixtures/derived-application-example/` carries the
-   * illustrative examples.
+   * base" — the base never invents a business rule); a domain module declares
+   * its own, and the in-repo test-support fixture
+   * `tests/fixtures/example-domain-modules/` carries the illustrative examples.
    */
   sodRules?: SoDRuleDescriptor[];
 };
@@ -335,51 +334,16 @@ export type SoDRuleDescriptor = {
  * exported types (`SoDRuleScopeApplicability`/`SoDRuleSeverity`/
  * `SoDRuleExceptionPolicy`), ported from awcms-mini Issue #746 (MINOR: purely
  * additive — every base `module.ts` that omits `sodRules` stays valid).
+ *
+ * `2.0.0` (ADR-0034 §3 — derived application pathway removal) — REMOVED the
+ * `ApplicationModuleRegistry` and `ModuleMigrationNamespace` composition types
+ * (MAJOR: exported types removed). The derived-application seam
+ * (`src/modules/application-registry.ts`, migration namespace 900-999,
+ * `extension:check`) is deleted; the base is a template used directly. No
+ * `ModuleDescriptor` field changed — every `module.ts` stays valid unchanged.
  */
-export const MODULE_CONTRACT_VERSION = "1.3.0";
+export const MODULE_CONTRACT_VERSION = "2.0.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;
 }
-
-/**
- * One derived/downstream repository's declared reservation of the numeric
- * `NNN_` migration-filename prefix range its own `sql/` directory owns
- * (Issue #178). Purely declarative composition metadata — composition does
- * NOT read real `sql/*.sql` filenames (see
- * `module-management/domain/module-composition.ts`'s file header for why
- * that check stays a pure, filesystem-free, declared-data comparison).
- */
-export type ModuleMigrationNamespace = {
-  /** Human label for diagnostics, e.g. "awpos" or "smart-school-portal". */
-  label: string;
-  /** Inclusive lower bound of the numeric `NNN_` migration filename prefix this registry owns. */
-  rangeStart: number;
-  /** Inclusive upper bound. */
-  rangeEnd: number;
-};
-
-/**
- * One derived/downstream repository's contribution to the final composed
- * module registry (Issue #178, epic #177 ERP-readiness, ADR-0025). Supplied
- * ONLY through the designated build-time extension point
- * (`src/modules/application-registry.ts`) — never by editing
- * `src/modules/index.ts` itself. Still 100% static, compile-time TypeScript
- * — no runtime discovery/upload/package scanning/`eval`. See
- * `src/modules/module-management/domain/module-composition.ts` for the
- * validation engine that composes this against the base registry.
- */
-export type ApplicationModuleRegistry = {
-  /** Stable, human-readable identifier for the contributing repository/application — used in diagnostics and the composed inventory only, never persisted to a database or used for authorization. */
-  id: string;
-  modules: readonly ModuleDescriptor[];
-  /**
-   * This application registry's own reserved migration-number range,
-   * validated against the base's reserved range
-   * (`module-composition.ts`'s `BASE_MODULE_MIGRATION_NAMESPACE`) to catch a
-   * numbering collision before any migration file is even written. Optional:
-   * composition skips the overlap check when omitted (a documented caveat,
-   * not a silent pass).
-   */
-  migrationNamespace?: ModuleMigrationNamespace;
-};

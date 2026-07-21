@@ -50,32 +50,30 @@ that needs the registry row to exist (`enableTenantModule`,
 `syncModuleDescriptors(tx)` itself first — do not assume an operator ran
 `POST /api/v1/modules/sync` beforehand.
 
-## Build-time module composition (Issue #178, ADR-0025)
+## Module-registry composition (Issue #178, ADR-0025; ADR-0034 §3)
 
 Distinct from the tenant lifecycle above: **which modules exist in the code**
-is composed at build/compile time, not at runtime and never from tenant input.
+is determined at build/compile time, not at runtime and never from tenant
+input. ADR-0034 §3 removed the derived-application pathway — the composition
+engine now validates the reviewed **base** registry (the same shape a new
+domain module added directly to `src/modules/` produces).
 
 - **`domain/module-composition.ts`** — the pure validation engine.
-  `mergeModuleRegistries(base, application)` concatenates the base registry
-  (`listBaseModules()`) with an optional `ApplicationModuleRegistry`
-  (`src/modules/application-registry.ts` — `undefined` in this base repo, a
-  real registry in a derived repo). `composeModuleRegistry()` /
-  `validateComposedModuleRegistry()` reject: duplicate module key, prohibited
-  base override, `type: base/system` from an application module, missing/cyclic
-  dependency (reuses `_shared/module-dependency-graph.ts`), capability provider
-  conflict/missing (`ModuleCapabilityContract`), migration-namespace overlap
-  (base reserves `1-899`, derived starts at `900`), deployment-profile
-  incompatibility, navigation path conflict, and invalid job descriptor (reuses
-  `domain/job-registry.ts`). It lives here — not `_shared/` — so both reused
-  validators are imported cleanly (DAG down from `_shared/`, job-registry as a
-  sibling); see the file header and ADR-0025 for the placement rationale.
+  `composeModuleRegistry(registry)` / `validateComposedModuleRegistry(registry)`
+  reject: duplicate module key, missing/cyclic dependency (reuses
+  `_shared/module-dependency-graph.ts`), capability provider conflict/missing
+  (`ModuleCapabilityContract`), deployment-profile incompatibility, navigation
+  path conflict, and invalid job descriptor (reuses `domain/job-registry.ts`).
+  It lives here — not `_shared/` — so both reused validators are imported
+  cleanly (DAG down from `_shared/`, job-registry as a sibling); see the file
+  header and ADR-0025 for the placement rationale.
 - **`buildComposedModuleInventory()`** — a deterministic, sorted-by-key,
   timestamp-free snapshot for CI/release evidence
   (`docs/awcms/module-composition-inventory.json`).
 - **Gates** (all in `bun run check` + CI): `modules:compose:check`,
-  `modules:composition:inventory:generate`/`:check`, `extension:check`.
-- Fixture: `tests/fixtures/derived-application-example/` (one dummy domain
-  module), exercised by `tests/module-composition-fixture.test.ts`.
+  `modules:composition:inventory:generate`/`:check`.
+- Fixture: `tests/fixtures/example-domain-modules/` (a test-support example
+  domain module), exercised by `tests/module-composition-fixture.test.ts`.
 
 ## API surface
 
@@ -101,15 +99,14 @@ write an audit event to `awcms_audit_events` with
 
 ## Adapted for this base
 
-Relative to the awcms-mini source, build-time module composition IS now ported
-(Issue #178 — `modules:compose:check`, `modules:composition:inventory:*`, and
-the `extension:check` seam; see the section above). The following remain
-intentionally **not** ported (they depend on toolchain/UI that does not exist
-in this foundation repo, or are scheduled separately): the FULL derived
-application compatibility manifest — SemVer-range/migration-checksum/capability
-validation against a published `extension.manifest.json` (planned Issue #183,
-ADR-0015; `extension:check` currently validates the composition seam only),
+Relative to the awcms-mini source, module-registry composition IS present
+(Issue #178 — `modules:compose:check`, `modules:composition:inventory:*`; see
+the section above). ADR-0034 §3 removed the derived-application pathway (the
+`application-registry.ts` seam, migration namespace 900-999, and the
+`extension:check` gate) — awcms is a template used directly, so those no longer
+exist. The following remain intentionally **not** ported (they depend on
+toolchain/UI that does not exist in this repo, or are scheduled separately):
 tenant module presets, the tenant-module matrix, module audit summary (admin
 UI), and the live email provider health check. The core registry, lifecycle,
-settings, permission sync, navigation, jobs, health, and build-time composition
-services are all present.
+settings, permission sync, navigation, jobs, health, and composition services
+are all present.

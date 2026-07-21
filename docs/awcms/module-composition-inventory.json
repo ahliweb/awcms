@@ -1,18 +1,7 @@
 {
-  "baseModuleCount": 10,
-  "applicationModuleCount": 0,
-  "applicationRegistryId": null,
-  "totalModuleCount": 10,
+  "moduleCount": 10,
   "valid": true,
   "issueCount": 0,
-  "migrationNamespaces": [
-    {
-      "label": "awcms base",
-      "rangeStart": 1,
-      "rangeEnd": 899,
-      "source": "base"
-    }
-  ],
   "modules": [
     {
       "key": "domain_event_runtime",
@@ -20,7 +9,6 @@
       "version": "0.1.0",
       "status": "active",
       "type": "system",
-      "source": "base",
       "dependencies": ["tenant_admin", "identity_access", "logging"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
@@ -37,7 +25,6 @@
       "version": "0.5.0",
       "status": "active",
       "type": null,
-      "source": "base",
       "dependencies": ["tenant_admin", "profile_identity", "identity_access"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
@@ -54,7 +41,6 @@
       "version": "1.0.0",
       "status": "active",
       "type": null,
-      "source": "base",
       "dependencies": ["tenant_admin", "profile_identity"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [
@@ -77,7 +63,6 @@
       "version": "1.0.0",
       "status": "active",
       "type": null,
-      "source": "base",
       "dependencies": ["tenant_admin"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
@@ -94,7 +79,6 @@
       "version": "0.1.0",
       "status": "active",
       "type": "system",
-      "source": "base",
       "dependencies": ["tenant_admin", "identity_access"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
@@ -111,7 +95,6 @@
       "version": "1.0.0",
       "status": "active",
       "type": null,
-      "source": "base",
       "dependencies": ["tenant_admin"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
@@ -128,7 +111,6 @@
       "version": "1.2.0",
       "status": "active",
       "type": null,
-      "source": "base",
       "dependencies": [
         "tenant_admin",
         "identity_access",
@@ -151,7 +133,6 @@
       "version": "1.0.0",
       "status": "active",
       "type": "system",
-      "source": "base",
       "dependencies": ["tenant_admin"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
@@ -168,7 +149,6 @@
       "version": "1.0.0",
       "status": "active",
       "type": null,
-      "source": "base",
       "dependencies": [],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
@@ -185,7 +165,6 @@
       "version": "2.0.0",
       "status": "active",
       "type": "system",
-      "source": "base",
       "dependencies": [
         "tenant_admin",
         "identity_access",

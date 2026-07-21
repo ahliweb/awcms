@@ -5,9 +5,10 @@
  * runs (a) GREEN on the real composed registry, and (b) RED on drift
  * (duplicate ruleKey, mismatched owner, <2 keys, invalid enum, exception-policy
  * violations). Because the BASE ships no SoD rules (issue #181 out-of-scope),
- * the illustrative rules live in the derived-application fixture — so this test
- * validates the base + fixture COMPOSED registry, which is what makes fixture
- * drift turn CI red (this file runs in `bun test`, part of `bun run check`).
+ * the illustrative rules live in the test-support example domain modules — so
+ * this test validates the base + example COMPOSED registry, which is what makes
+ * fixture drift turn CI red (this file runs in `bun test`, part of
+ * `bun run check`).
  */
 import { describe, expect, test } from "bun:test";
 
@@ -20,13 +21,10 @@ import {
   collectSoDRuleDescriptors,
   validateSoDRuleRegistry
 } from "../src/modules/identity-access/domain/sod-rule-registry";
-import { exampleApplicationModuleRegistry } from "./fixtures/derived-application-example/application-registry";
+import { exampleDomainModules } from "./fixtures/example-domain-modules";
 
 const BASE = listBaseModules();
-const COMPOSED: ModuleDescriptor[] = [
-  ...BASE,
-  ...exampleApplicationModuleRegistry.modules
-];
+const COMPOSED: ModuleDescriptor[] = [...BASE, ...exampleDomainModules];
 
 function moduleOwning(rules: SoDRuleDescriptor[]): ModuleDescriptor {
   return {
@@ -47,12 +45,12 @@ describe("validateSoDRuleRegistry — the CI gate", () => {
     expect(validateSoDRuleRegistry(BASE).valid).toBe(true);
   });
 
-  test("the base + derived-fixture COMPOSED registry is valid and carries the illustrative rules", () => {
+  test("the base + example-domain COMPOSED registry is valid and carries the illustrative rules", () => {
     const result = validateSoDRuleRegistry(COMPOSED);
     expect(result.valid).toBe(true);
     // At least the five-plus illustrative example rules the issue requires.
     expect(result.rules.length).toBeGreaterThanOrEqual(5);
-    // Every rule is owned by a real derived module (never a base module).
+    // Every rule is owned by the example domain module (never a base module).
     for (const rule of result.rules) {
       expect(rule.ownerModuleKey).toBe("example_crm");
     }

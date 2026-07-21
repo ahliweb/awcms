@@ -44,7 +44,7 @@ import {
 } from "./harness";
 import { withTenant } from "../../src/lib/database/tenant-context";
 import { collectSoDRuleDescriptors } from "../../src/modules/identity-access/domain/sod-rule-registry";
-import { exampleApplicationModuleRegistry } from "../fixtures/derived-application-example/application-registry";
+import { exampleDomainModules } from "../fixtures/example-domain-modules";
 import { createBusinessScopeAssignment } from "../../src/modules/identity-access/application/business-scope-assignment-service";
 import { checkHighRiskSoDConflicts } from "../../src/modules/identity-access/application/high-risk-sod-guard";
 import {
@@ -59,11 +59,9 @@ import type { TenantContext } from "../../src/modules/identity-access/domain/acc
 import {
   createDummyBusinessScopeHierarchyResolver,
   type DummyScopeNode
-} from "../fixtures/derived-application-example/modules/example-crm/business-scope-hierarchy-adapter";
+} from "../fixtures/example-domain-modules/modules/example-crm/business-scope-hierarchy-adapter";
 
-const SOD_RULES = collectSoDRuleDescriptors(
-  exampleApplicationModuleRegistry.modules
-);
+const SOD_RULES = collectSoDRuleDescriptors(exampleDomainModules);
 
 const TENANT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const TENANT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";

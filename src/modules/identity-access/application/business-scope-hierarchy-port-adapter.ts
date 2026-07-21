@@ -17,8 +17,8 @@
  * DERIVED application — a derived app injects its own adapter (walking its real
  * effective-dated legal-entity/organization-unit/etc. tables) at the
  * composition roots (route handler / expiry job / its own `src/pages/api`),
- * exactly the ports-and-adapters seam `docs/awcms/derived-application-guide.md`
- * documents. `tests/fixtures/derived-application-example/` ships a working
+ * exactly the ports-and-adapters seam (ADR-0011).
+ * `tests/fixtures/example-domain-modules/` ships a working
  * dummy resolver that exercises exact/descendant/ancestor resolution without a
  * real domain module.
  *

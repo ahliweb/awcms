@@ -6,9 +6,8 @@
  * for a genuinely small amount of logic, so this is a small,
  * intentionally NARROW hand-written subset, not a full SemVer 2.0.0
  * implementation. Used by
- * `src/modules/module-management/domain/extension-compatibility.ts`
- * (pure, no I/O — reads only the plain strings this file exports/accepts)
- * and its CLI caller `scripts/extension-check.ts`.
+ * `src/modules/module-management/domain/tenant-module-lifecycle.ts`
+ * (pure, no I/O — reads only the plain strings this file exports/accepts).
  *
  * Deliberately NOT supported (documented here so a caller never assumes
  * silent support): pre-release/build-metadata tags (`-rc.1`/`+build`),

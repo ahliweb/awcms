@@ -13,13 +13,12 @@
  * the base registry declares no `sodRules` (issue #181 out-of-scope: the base
  * never hardcodes a domain rule) — so in a pure-base deployment this guard is
  * inert (the cheap `SOD_RELEVANT_PERMISSION_KEYS` set is empty, every request
- * short-circuits before any query). A derived application contributes its own
- * rules through `application-registry.ts`, at which point `listModules()` (and
- * therefore `SOD_RULES`) carries them and this guard begins enforcing. The
- * optional `rules` parameter lets a test/composition root inject a rule set
- * (e.g. the in-repo fixture's illustrative rules) to exercise enforcement
- * without editing any base module — production always uses the default
- * `SOD_RULES`.
+ * short-circuits before any query). Once a domain module with `sodRules` is
+ * added directly to `src/modules/`, `listModules()` (and therefore
+ * `SOD_RULES`) carries them and this guard begins enforcing. The optional
+ * `rules` parameter lets a test/composition root inject a rule set (e.g. the
+ * in-repo fixture's illustrative rules) to exercise enforcement without
+ * editing any base module — production always uses the default `SOD_RULES`.
  *
  * **Both fact sources.** The subject can hold a conflicting permission via an
  * active business-scope assignment's role OR an ordinary RBAC role grant;
@@ -54,7 +53,7 @@ import { resolveSoDAssignmentFacts } from "./business-scope-facts";
 import { recordSoDConflictEvaluation } from "./sod-conflict-evaluation-log";
 import { findValidSoDConflictException } from "./sod-exception-service";
 
-/** The composed registry's SoD rules (base + any application registry). Empty in a pure base. */
+/** The module registry's SoD rules. Empty in a pure base (base ships none). */
 const SOD_RULES = collectSoDRuleDescriptors(listModules());
 
 /** Every permission key appearing in ANY default-registry rule — the cheap short-circuit set. Precomputed once for the common (default `SOD_RULES`) path. */
