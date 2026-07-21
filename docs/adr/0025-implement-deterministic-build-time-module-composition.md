@@ -1,6 +1,6 @@
 # ADR-0025 — Implementasi nyata komposisi modul deterministik saat build-time di awcms (adendum ADR-0014)
 
-- **Status:** Accepted
+- **Status:** Accepted (jalur komposisi aplikasi-turunan di-supersede oleh [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md); implementasi komposisi registry base tetap berlaku)
 - **Tanggal:** 2026-07-19
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #178 (epic #177 "Kesiapan fondasi ERP turunan", Wave 1), ADR-0014 (desain, rujukan awcms-mini #740), ADR-0013 (extension boundary), ADR-0011 (capability ports), ADR-0023 (bilingual docs), `docs/awcms/derived-application-guide.md`, `src/modules/_shared/module-dependency-graph.ts`, `src/modules/module-management/domain/job-registry.ts`, `src/modules/module-management/domain/module-composition.ts`, `src/modules/application-registry.ts`, `src/modules/index.ts`
