@@ -1,0 +1,109 @@
+# Standalone optional Redis deployment for AWCMS.
+#
+# AWCMS does not currently expose a canonical root Compose application stack,
+# so this file provisions Redis independently. The AWCMS application must join
+# the same Docker network (AWCMS_REDIS_NETWORK) and use the internal hostname
+# `redis`; port 6379 is intentionally never published to the host.
+
+name: awcms-redis
+
+services:
+  redis-acl-init:
+    image: alpine:3.23.1
+    restart: "no"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in deployment secrets}
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-awcms}
+    command:
+      - sh
+      - -ec
+      - |
+        case "$${REDIS_PASSWORD}" in
+          *[!A-Za-z0-9_-]*|'')
+            echo "REDIS_PASSWORD must use only A-Z, a-z, 0-9, _ or -." >&2
+            exit 1
+            ;;
+        esac
+        case "$${REDIS_KEY_PREFIX}" in
+          *[!A-Za-z0-9._-]*|'')
+            echo "REDIS_KEY_PREFIX contains unsupported characters." >&2
+            exit 1
+            ;;
+        esac
+        password_hash="$$(printf '%s' "$${REDIS_PASSWORD}" | sha256sum | awk '{print $$1}')"
+        umask 022
+        {
+          printf 'user default off\n'
+          printf 'user awcms_app on #%s ~%s:* +ping +@read +@write -@dangerous\n' \
+            "$${password_hash}" "$${REDIS_KEY_PREFIX}"
+        } > /redis-config/users.acl
+        chmod 0644 /redis-config/users.acl
+    volumes:
+      - awcms-redis-config:/redis-config
+    networks:
+      - awcms-redis-internal
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+
+  redis:
+    image: redis:8.2.7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --aclfile
+      - /redis-config/users.acl
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --save
+      - "60"
+      - "1000"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - ${REDIS_MAXMEMORY_POLICY:-noeviction}
+      - --protected-mode
+      - "yes"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in deployment secrets}
+    volumes:
+      - awcms-redis-data:/data
+      - awcms-redis-config:/redis-config:ro
+    networks:
+      - awcms-redis-internal
+    depends_on:
+      redis-acl-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "REDISCLI_AUTH=$${REDIS_PASSWORD} redis-cli --user awcms_app ping | grep -q PONG"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 384M
+
+networks:
+  awcms-redis-internal:
+    name: ${AWCMS_REDIS_NETWORK:-awcms-redis-internal}
+
+volumes:
+  awcms-redis-data:
+  awcms-redis-config:
