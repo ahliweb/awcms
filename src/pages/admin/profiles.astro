@@ -8,6 +8,7 @@
  * only through the dedicated identifiers endpoint, never a bulk list.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
@@ -48,11 +49,18 @@ if (canRead) {
 ---
 
 <AdminLayout title="Profiles" active="profiles">
-  <h1 id="profiles-heading">Profiles</h1>
+  <header class="page-header fade-in-up">
+    <h1 id="profiles-heading">Profiles</h1>
+    <p class="page-description">
+      The tenant's central directory of people and organizations. Sensitive
+      identifiers (email, phone, NIK) are never listed here — they are surfaced
+      only through the dedicated, masked identifiers view.
+    </p>
+  </header>
 
   {
     !canRead && (
-      <p class="state-notice" id="profiles-denied">
+      <p class="state-notice fade-in-up" id="profiles-denied">
         You do not have permission to view profiles.
       </p>
     )
@@ -60,7 +68,12 @@ if (canRead) {
 
   {
     canCreate && (
-      <form id="profile-create-form" class="admin-create-form" novalidate>
+      <form
+        id="profile-create-form"
+        class="admin-create-form fade-in-up"
+        novalidate
+      >
+        <p class="form-legend">Create a profile</p>
         <label for="profile-type">
           Type
           <select id="profile-type" name="profileType">
@@ -94,7 +107,7 @@ if (canRead) {
 
   {
     canRead && loadError && (
-      <p class="state-notice" id="profiles-error">
+      <p class="state-notice fade-in-up" id="profiles-error">
         Profiles could not be loaded right now. Please try again later.
       </p>
     )
@@ -102,8 +115,8 @@ if (canRead) {
 
   {
     canRead && !loadError && (
-      <div class="data-table-scroll">
-        <table class="data-table" id="profiles-table">
+      <div class="data-table-scroll fade-in-up">
+        <table class="data-table data-table--stack" id="profiles-table">
           <caption>{profiles.length} profile(s)</caption>
           <thead>
             <tr>
@@ -117,25 +130,40 @@ if (canRead) {
             {profiles.length === 0 ? (
               <tr>
                 <td class="data-table-empty" colspan="4">
-                  No profiles yet.
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ○
+                    </span>
+                    <span class="empty-state-title">No profiles yet</span>
+                    <span class="empty-state-text">
+                      {canCreate
+                        ? "Create the first profile using the form above."
+                        : "Profiles created for this tenant will appear here."}
+                    </span>
+                  </div>
                 </td>
               </tr>
             ) : (
               profiles.map((profile) => (
                 <tr>
-                  <td>{profile.displayName}</td>
-                  <td>{profile.profileType}</td>
-                  <td>
+                  <td data-label="Display name">{profile.displayName}</td>
+                  <td data-label="Type">
+                    <span class="cell-muted">{profile.profileType}</span>
+                  </td>
+                  <td data-label="Status">
                     <span
                       class="status-badge"
                       data-variant={
                         profile.status === "active" ? "success" : "neutral"
                       }
                     >
+                      <span class="status-dot" aria-hidden="true" />
                       {profile.status}
                     </span>
                   </td>
-                  <td>{profile.verificationStatus}</td>
+                  <td data-label="Verification">
+                    <span class="cell-muted">{profile.verificationStatus}</span>
+                  </td>
                 </tr>
               ))
             )}

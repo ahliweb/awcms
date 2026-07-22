@@ -18,6 +18,7 @@
  * only loaded when `canConfigure`, so a read-only viewer pays no extra reads.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
@@ -102,11 +103,17 @@ const colCount = canConfigure ? 5 : 4;
 ---
 
 <AdminLayout title="Roles" active="roles">
-  <h1 id="roles-heading">Roles</h1>
+  <header class="page-header fade-in-up">
+    <h1 id="roles-heading">Roles</h1>
+    <p class="page-description">
+      RBAC roles for this tenant and the permissions granted to each. System
+      roles (such as <code>owner</code>) are protected and cannot be deleted.
+    </p>
+  </header>
 
   {
     !canRead && (
-      <p class="state-notice" id="roles-denied">
+      <p class="state-notice fade-in-up" id="roles-denied">
         You do not have permission to view roles.
       </p>
     )
@@ -114,7 +121,7 @@ const colCount = canConfigure ? 5 : 4;
 
   {
     canRead && loadError && (
-      <p class="state-notice" id="roles-error">
+      <p class="state-notice fade-in-up" id="roles-error">
         Roles could not be loaded right now. Please try again later.
       </p>
     )
@@ -133,7 +140,8 @@ const colCount = canConfigure ? 5 : 4;
 
   {
     canConfigure && !loadError && (
-      <form id="role-create-form" class="admin-create-form">
+      <form id="role-create-form" class="admin-create-form fade-in-up">
+        <p class="form-legend">Create a role</p>
         <p
           id="role-create-error"
           class="admin-create-error"
@@ -168,8 +176,8 @@ const colCount = canConfigure ? 5 : 4;
 
   {
     canRead && !loadError && (
-      <div class="data-table-scroll">
-        <table class="data-table" id="roles-table">
+      <div class="data-table-scroll fade-in-up">
+        <table class="data-table data-table--stack" id="roles-table">
           <caption>{roles.length} role(s)</caption>
           <thead>
             <tr>
@@ -184,15 +192,27 @@ const colCount = canConfigure ? 5 : 4;
             {rows.length === 0 ? (
               <tr>
                 <td class="data-table-empty" colspan={colCount}>
-                  No roles yet.
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ◆
+                    </span>
+                    <span class="empty-state-title">No roles yet</span>
+                    <span class="empty-state-text">
+                      {canConfigure
+                        ? "Create the first role using the form above."
+                        : "Roles defined for this tenant will appear here."}
+                    </span>
+                  </div>
                 </td>
               </tr>
             ) : (
               rows.map(({ role, granted, available }) => (
                 <tr>
-                  <td>{role.roleCode}</td>
-                  <td>{role.roleName}</td>
-                  <td>
+                  <td data-label="Code">
+                    <span class="cell-code">{role.roleCode}</span>
+                  </td>
+                  <td data-label="Name">{role.roleName}</td>
+                  <td data-label="System">
                     <span
                       class="status-badge"
                       data-variant={role.isSystem ? "warning" : "neutral"}
@@ -200,38 +220,49 @@ const colCount = canConfigure ? 5 : 4;
                       {role.isSystem ? "system" : "custom"}
                     </span>
                   </td>
-                  <td>{role.permissionCount}</td>
+                  <td data-label="Permissions">
+                    <span class="cell-muted">{role.permissionCount}</span>
+                  </td>
                   {canConfigure && (
-                    <td>
-                      <button
-                        type="button"
-                        data-role-action="rename"
-                        data-role-id={role.id}
-                        data-role-name={role.roleName}
-                      >
-                        Rename
-                      </button>
-                      {!role.isSystem && (
+                    <td data-label="Actions" class="stacked-block">
+                      <div class="row-actions">
                         <button
                           type="button"
-                          data-role-action="delete"
+                          class="module-toggle"
+                          data-role-action="rename"
                           data-role-id={role.id}
-                          data-role-code={role.roleCode}
+                          data-role-name={role.roleName}
                         >
-                          Delete
+                          Rename
                         </button>
-                      )}
+                        {!role.isSystem && (
+                          <button
+                            type="button"
+                            class="module-toggle"
+                            data-role-action="delete"
+                            data-role-id={role.id}
+                            data-role-code={role.roleCode}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                       <details class="role-permissions">
                         <summary>Permissions ({granted.length})</summary>
-                        <ul>
+                        <ul class="perm-list">
                           {granted.length === 0 ? (
-                            <li>No permissions granted.</li>
+                            <li>
+                              <span class="cell-muted">
+                                No permissions granted.
+                              </span>
+                            </li>
                           ) : (
                             granted.map((p) => (
                               <li>
-                                <code>{permLabel(p)}</code>{" "}
+                                <code>{permLabel(p)}</code>
                                 <button
                                   type="button"
+                                  class="btn-inline btn-inline--danger"
                                   data-role-action="revoke"
                                   data-role-id={role.id}
                                   data-permission-id={p.id}
@@ -273,10 +304,13 @@ const colCount = canConfigure ? 5 : 4;
 
   {
     canConfigure && !loadError && deletedRoles.length > 0 && (
-      <section id="deleted-roles">
-        <h2>Deleted roles</h2>
+      <section class="admin-section fade-in-up" id="deleted-roles">
+        <h2 class="admin-section-title">
+          Deleted roles
+          <span class="count-pill">{deletedRoles.length}</span>
+        </h2>
         <div class="data-table-scroll">
-          <table class="data-table" id="deleted-roles-table">
+          <table class="data-table data-table--stack" id="deleted-roles-table">
             <caption>{deletedRoles.length} deleted role(s)</caption>
             <thead>
               <tr>
@@ -288,17 +322,22 @@ const colCount = canConfigure ? 5 : 4;
             <tbody>
               {deletedRoles.map((role) => (
                 <tr>
-                  <td>{role.roleCode}</td>
-                  <td>{role.roleName}</td>
-                  <td>
-                    <button
-                      type="button"
-                      data-role-action="restore"
-                      data-role-id={role.id}
-                      data-role-code={role.roleCode}
-                    >
-                      Restore
-                    </button>
+                  <td data-label="Code">
+                    <span class="cell-code">{role.roleCode}</span>
+                  </td>
+                  <td data-label="Name">{role.roleName}</td>
+                  <td data-label="Actions" class="stacked-block">
+                    <div class="row-actions">
+                      <button
+                        type="button"
+                        class="module-toggle"
+                        data-role-action="restore"
+                        data-role-id={role.id}
+                        data-role-code={role.roleCode}
+                      >
+                        Restore
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

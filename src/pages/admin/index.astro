@@ -4,23 +4,80 @@
  * renders only from `Astro.locals.ssrContext` (already resolved + guarded by
  * `src/middleware.ts`), so it needs no additional DB read of its own. Proves
  * the login → session-cookie → `/admin` guard → SSR render loop end to end.
+ *
+ * UI/UX phase-2: presents the session facts as scannable stat cards + quick
+ * navigation tiles using only Phase-1 utilities (`.fade-in-up`,
+ * `.stagger-children`, `.hover-lift`) and admin-screens.css helpers. The
+ * `#admin-dashboard-heading`, `#dashboard-tenant-id` and
+ * `#dashboard-permission-count` hooks (asserted by tests/e2e) are preserved.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
 
 const ssr = Astro.locals.ssrContext!;
 const permissionCount = ssr.permissions.size;
+const roleCount = ssr.roles.length;
+const roleSummary = roleCount > 0 ? ssr.roles.join(", ") : "—";
+
+const quickLinks = [
+  { href: "/admin/offices", label: "Offices" },
+  { href: "/admin/profiles", label: "Profiles" },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/roles", label: "Roles" },
+  { href: "/admin/abac-policies", label: "ABAC policies" },
+  { href: "/admin/modules", label: "Modules" },
+  { href: "/admin/email-templates", label: "Email templates" }
+];
 ---
 
 <AdminLayout title="Dashboard" active="dashboard">
-  <h1 id="admin-dashboard-heading">Dashboard</h1>
-  <p>You are signed in.</p>
-  <dl>
-    <dt>Tenant</dt>
-    <dd id="dashboard-tenant-id">{ssr.tenantId}</dd>
-    <dt>Roles</dt>
-    <dd>{ssr.roles.length > 0 ? ssr.roles.join(", ") : "—"}</dd>
-    <dt>Granted permissions</dt>
-    <dd id="dashboard-permission-count">{permissionCount}</dd>
-  </dl>
-  <p><a href="/admin/offices">Manage offices →</a></p>
+  <header class="page-header fade-in-up">
+    <h1 id="admin-dashboard-heading">Dashboard</h1>
+    <p class="page-description">
+      You are signed in. Here is a snapshot of your current session and the
+      areas you can manage.
+    </p>
+  </header>
+
+  <section aria-label="Session overview">
+    <ul class="stat-grid stagger-children">
+      <li class="stat-card hover-lift fade-in-up">
+        <div class="stat-label">Tenant</div>
+        <div class="stat-value stat-value--mono" id="dashboard-tenant-id">
+          {ssr.tenantId}
+        </div>
+        <div class="stat-hint">Active tenant context</div>
+      </li>
+      <li class="stat-card hover-lift fade-in-up">
+        <div class="stat-label">Roles</div>
+        <div class="stat-value">{roleCount}</div>
+        <div class="stat-hint">{roleSummary}</div>
+      </li>
+      <li class="stat-card hover-lift fade-in-up">
+        <div class="stat-label">Granted permissions</div>
+        <div class="stat-value" id="dashboard-permission-count">
+          {permissionCount}
+        </div>
+        <div class="stat-hint">Across all assigned roles</div>
+      </li>
+    </ul>
+  </section>
+
+  <section class="admin-section" aria-label="Quick navigation">
+    <h2 class="admin-section-title">Manage</h2>
+    <ul class="quick-links stagger-children">
+      {
+        quickLinks.map((link) => (
+          <li class="fade-in-up">
+            <a class="quick-link transition-base" href={link.href}>
+              <span>{link.label}</span>
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
 </AdminLayout>

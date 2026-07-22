@@ -17,6 +17,7 @@
  * endpoint needs the role ID, so we resolve code → id here from `listRoles`.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
@@ -66,11 +67,18 @@ const showActions = canConfigure || canAssign;
 ---
 
 <AdminLayout title="Users" active="users">
-  <h1 id="users-heading">Users</h1>
+  <header class="page-header fade-in-up">
+    <h1 id="users-heading">Users</h1>
+    <p class="page-description">
+      Tenant users, their status, and their assigned roles. Login identifiers
+      are masked here — they are personal data and are never shown in full in a
+      list view.
+    </p>
+  </header>
 
   {
     !canRead && (
-      <p class="state-notice" id="users-denied">
+      <p class="state-notice fade-in-up" id="users-denied">
         You do not have permission to view users.
       </p>
     )
@@ -78,7 +86,7 @@ const showActions = canConfigure || canAssign;
 
   {
     canRead && loadError && (
-      <p class="state-notice" id="users-error">
+      <p class="state-notice fade-in-up" id="users-error">
         Users could not be loaded right now. Please try again later.
       </p>
     )
@@ -93,8 +101,8 @@ const showActions = canConfigure || canAssign;
           role="alert"
           hidden
         />
-        <div class="data-table-scroll">
-          <table class="data-table" id="users-table">
+        <div class="data-table-scroll fade-in-up">
+          <table class="data-table data-table--stack" id="users-table">
             <caption>{users.length} user(s)</caption>
             <thead>
               <tr>
@@ -108,26 +116,39 @@ const showActions = canConfigure || canAssign;
               {users.length === 0 ? (
                 <tr>
                   <td class="data-table-empty" colspan={showActions ? 4 : 3}>
-                    No users yet.
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ◑
+                      </span>
+                      <span class="empty-state-title">No users yet</span>
+                      <span class="empty-state-text">
+                        Users provisioned for this tenant will appear here.
+                      </span>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 users.map((user) => (
                   <tr>
-                    <td>{user.loginIdentifierMasked}</td>
-                    <td>
+                    <td data-label="Login identifier">
+                      <span class="cell-code">
+                        {user.loginIdentifierMasked}
+                      </span>
+                    </td>
+                    <td data-label="Status">
                       <span
                         class="status-badge"
                         data-variant={
                           user.status === "active" ? "success" : "neutral"
                         }
                       >
+                        <span class="status-dot" aria-hidden="true" />
                         {user.status}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="Roles" class="stacked-block">
                       {user.roles.length === 0 ? (
-                        "—"
+                        <span class="cell-muted">—</span>
                       ) : (
                         <ul class="role-chip-list">
                           {user.roles.map((code) => (
@@ -150,47 +171,51 @@ const showActions = canConfigure || canAssign;
                       )}
                     </td>
                     {showActions && (
-                      <td>
-                        {canConfigure && (
-                          <button
-                            type="button"
-                            class="module-toggle js-user-status"
-                            data-user-id={user.id}
-                            data-next-status={
-                              user.status === "active" ? "inactive" : "active"
-                            }
-                          >
-                            {user.status === "active"
-                              ? "Deactivate"
-                              : "Activate"}
-                          </button>
-                        )}
-                        {canAssign && roles.length > 0 && (
-                          <span class="assign-role-control">
-                            <label
-                              class="visually-hidden"
-                              for={`assign-role-${user.id}`}
-                            >
-                              Role to assign
-                            </label>
-                            <select
-                              id={`assign-role-${user.id}`}
-                              class="js-assign-role-select"
-                            >
-                              {roles.map((role) => (
-                                <option value={role.id}>{role.roleCode}</option>
-                              ))}
-                            </select>
+                      <td data-label="Actions" class="stacked-block">
+                        <div class="row-actions">
+                          {canConfigure && (
                             <button
                               type="button"
-                              class="module-toggle js-assign-role"
+                              class="module-toggle js-user-status"
                               data-user-id={user.id}
-                              data-select-id={`assign-role-${user.id}`}
+                              data-next-status={
+                                user.status === "active" ? "inactive" : "active"
+                              }
                             >
-                              Assign
+                              {user.status === "active"
+                                ? "Deactivate"
+                                : "Activate"}
                             </button>
-                          </span>
-                        )}
+                          )}
+                          {canAssign && roles.length > 0 && (
+                            <span class="assign-role-control">
+                              <label
+                                class="visually-hidden"
+                                for={`assign-role-${user.id}`}
+                              >
+                                Role to assign
+                              </label>
+                              <select
+                                id={`assign-role-${user.id}`}
+                                class="js-assign-role-select"
+                              >
+                                {roles.map((role) => (
+                                  <option value={role.id}>
+                                    {role.roleCode}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                class="module-toggle js-assign-role"
+                                data-user-id={user.id}
+                                data-select-id={`assign-role-${user.id}`}
+                              >
+                                Assign
+                              </button>
+                            </span>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -325,25 +350,38 @@ const showActions = canConfigure || canAssign;
   .role-chip {
     padding: var(--sp-1) var(--sp-2);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-    font-size: var(--fs-sm);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-2);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
   }
 
   .link-button {
-    padding: 0;
+    min-height: 32px;
+    padding: 0 var(--sp-1);
     border: 0;
     background: none;
     color: var(--color-text-muted);
-    font-size: var(--fs-sm);
+    font-size: var(--fs-xs);
     text-decoration: underline;
     cursor: pointer;
+    transition: color var(--motion-fast) var(--ease-standard);
+  }
+
+  .link-button:hover {
+    color: var(--color-danger);
   }
 
   .assign-role-control {
     display: inline-flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--sp-2);
-    margin-inline-start: var(--sp-2);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .link-button {
+      transition: none;
+    }
   }
 </style>
