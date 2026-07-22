@@ -74,7 +74,17 @@ export type AccessAction =
   // automatic internal tag linking transform for a post before publishing,
   // not itself a mutation).
   | "schedule"
-  | "preview";
+  | "preview"
+  // News portal (ported from awcms-mini): `verify` finalizes an uploaded news
+  // media object (flips its status based on server-side MIME/checksum
+  // verification). Deliberately NOT in `HIGH_RISK_ACTIONS` — it only advances
+  // a media object's own status, does not delete or irreversibly change data;
+  // the finalize endpoint still requires `Idempotency-Key` and is audited
+  // regardless of this classification (`isHighRiskAction` is metadata, not a
+  // gate on idempotency/audit). (`attach`/`detach`/`delete`/`restore`/`purge`/
+  // `cancel` are also seeded in the `news_portal.media` permission catalog but
+  // reuse existing union members / are not yet authorized by any ported route.)
+  | "verify";
 
 export type AccessRequest = {
   moduleKey: string;

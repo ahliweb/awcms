@@ -13,7 +13,7 @@ import { listPublicBlogPostsForFeed } from "../../../modules/blog-content/applic
 import { fetchBlogSettings } from "../../../modules/blog-content/application/blog-settings-directory";
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
 import { resolveNewsArticlePreviewImage } from "../../../modules/blog-content/application/news-article-seo-metadata";
-import { noopNewsMediaPortAdapter } from "../../../modules/blog-content/application/news-media-port-noop-adapter";
+import { newsMediaPortAdapter } from "../../../modules/news-portal/application/news-media-port-adapter";
 import { resolveMetaDescription } from "../../../modules/blog-content/domain/seo-rendering";
 
 /**
@@ -67,7 +67,7 @@ export const GET: APIRoute = async ({ params, url }) => {
         const previewImage = await resolveNewsArticlePreviewImage(
           tx,
           tenant.tenantId,
-          noopNewsMediaPortAdapter,
+          newsMediaPortAdapter,
           settings,
           post
         );

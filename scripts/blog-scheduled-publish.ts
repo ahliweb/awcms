@@ -37,7 +37,7 @@ import {
 } from "../src/lib/jobs/job-runner";
 import { fetchActiveTenants } from "../src/lib/jobs/batching";
 import { publishDueScheduledPosts } from "../src/modules/blog-content/application/blog-scheduled-publish";
-import { noopNewsMediaPortAdapter } from "../src/modules/blog-content/application/news-media-port-noop-adapter";
+import { newsMediaPortAdapter } from "../src/modules/news-portal/application/news-media-port-adapter";
 import { noopSocialPublishingPortAdapter } from "../src/modules/blog-content/application/social-publishing-port-noop-adapter";
 
 async function main() {
@@ -78,7 +78,7 @@ async function main() {
             const tenantResult = await publishDueScheduledPosts(
               sql,
               tenant.id,
-              noopNewsMediaPortAdapter,
+              newsMediaPortAdapter,
               { now: new Date(), correlationId: ctx.correlationId },
               noopSocialPublishingPortAdapter
             );

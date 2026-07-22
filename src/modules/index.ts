@@ -11,6 +11,7 @@ import { emailModule } from "./email/module";
 import { reportingModule } from "./reporting/module";
 import { themingModule } from "./theming/module";
 import { blogContentModule } from "./blog-content/module";
+import { newsPortalModule } from "./news-portal/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -35,7 +36,16 @@ const baseModules: ModuleDescriptor[] = [
   // above in this list, so the DAG stays acyclic. See
   // src/modules/blog-content/module.ts and module.ts's own `description`
   // field for what was ported vs. dropped.
-  blogContentModule
+  blogContentModule,
+  // Ported from awcms-mini (R2-only news media registry + presigned upload
+  // flow, editorial homepage sections, R2-only ad placements, and the
+  // news-media reconciliation job). Depends on
+  // tenant_admin/identity_access/module_management/logging (all above);
+  // PROVIDES `news_media` (consumed by blog_content) and CONSUMES
+  // blog_content's `public_content`, but capability edges are not DAG edges,
+  // so the graph stays acyclic. See src/modules/news-portal/module.ts's
+  // `description` for what was ported vs. dropped.
+  newsPortalModule
 ];
 
 /**

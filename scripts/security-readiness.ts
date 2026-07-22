@@ -1018,7 +1018,12 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // job's own audit INSERT reuses awcms_audit_events above.
   awcms_blog_posts: ["SELECT", "UPDATE"],
   awcms_blog_post_terms: ["SELECT"],
-  awcms_blog_settings: ["SELECT"]
+  awcms_blog_settings: ["SELECT"],
+  // news_portal — news-media:reconcile (sql/041): SELECT the reconciliation
+  // snapshot, UPDATE claiming pending_upload/uploaded rows to `failed` and
+  // soft-deleting stale `orphaned` rows, DELETE hard-deleting expired `failed`
+  // rows. The job's own audit INSERT reuses awcms_audit_events above.
+  awcms_news_media_objects: ["SELECT", "UPDATE", "DELETE"]
 };
 
 /**

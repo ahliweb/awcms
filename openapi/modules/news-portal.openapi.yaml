@@ -1,0 +1,950 @@
+# Source fragment for the "News Portal" module — ported from awcms-mini (epic
+# `news_portal` #631-#642/#649/#681/#690). One file per MODULE (Issue #182
+# convention): this file owns every path carrying one of this module's three
+# tags (News Media, News Portal Homepage Sections, News Portal Ad Placements)
+# and every schema referenced ONLY by those operations.
+#
+# Adapted to this base's shared-component vocabulary: success responses are
+# modelled inline (no `ApiSuccess` schema here), the Idempotency-Key header is
+# declared inline where a mutation requires it, and only the shared components
+# this base actually defines (CorrelationId; BadRequest/Unauthorized/Forbidden/
+# NotFound; ApiError) are referenced.
+#
+# PORT DROPS (see src/modules/news-portal/module.ts): the host-resolved
+# `/news/**` public route family and the `.astro` admin pages are not ported,
+# so no paths for them appear here — this fragment is the admin/media HTTP
+# surface only.
+#
+# NOT independently valid OpenAPI — $ref targets pointing at shared components
+# only resolve after `bun run openapi:bundle` merges this file with the root
+# and every sibling module fragment into openapi/awcms-public-api.openapi.yaml.
+# Edit this file (or the root for shared components), never the generated bundle.
+paths:
+  /api/v1/media/news-images/upload-sessions:
+    post:
+      tags:
+        - News Media
+      summary: Create a direct-to-R2 presigned upload session for a news image
+      description: Gated by news_portal.media.create. Returns a `pending_upload` metadata row plus a short-lived presigned PUT URL scoped to exactly one server-generated object key. Raw R2 credentials are never exposed to the browser.
+      operationId: newsMediaUploadSessionsCreate
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNewsMediaUploadSessionRequest"
+      responses:
+        "200":
+          description: Upload session created — a `pending_upload` metadata row plus a short-lived presigned PUT URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/NewsMediaUploadSessionCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502":
+          description: News media R2 storage is not configured/enabled for this deployment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/media/news-images/upload-sessions/{id}/cancel:
+    post:
+      tags:
+        - News Media
+      summary: Cancel a still-pending-upload session
+      description: Gated by news_portal.media.cancel. Transitions a `pending_upload` session to `failed`.
+      operationId: newsMediaUploadSessionsCancel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Upload session cancelled (status `failed`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/NewsMediaObjectItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Upload session is not `pending_upload` (already uploaded/verified/attached/failed).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/media/news-images/upload-sessions/{id}/finalize:
+    post:
+      tags:
+        - News Media
+      summary: Finalize an upload session — real R2 GET + magic-byte MIME sniffing + server-side SHA-256 checksum (never a bare HEAD)
+      description: "Gated by news_portal.media.verify. High-risk, requires Idempotency-Key. Verifies the object actually uploaded to R2 (HEAD for existence/real size, then a full GET), sniffs the MIME type from the object's real magic bytes, and computes a SHA-256 checksum server-side. A client-claimed `checksumSha256` is only a transport-corruption cross-check, never a substitute for the MIME sniff — HEAD alone can never promote a media object to `verified`."
+      operationId: newsMediaUploadSessionsFinalize
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinalizeNewsMediaUploadSessionRequest"
+      responses:
+        "200":
+          description: Object verified — media object status is now `verified` (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/NewsMediaObjectItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Upload session is not `pending_upload`, has expired (`UPLOAD_SESSION_EXPIRED`), or the Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "Uploaded object failed content verification (`UPLOAD_VERIFICATION_FAILED`). `error.details.reason` is one of `object_not_found`, `size_exceeded`, `mime_not_recognized`, `mime_not_allowed`, `mime_mismatch`, `checksum_mismatch`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Unable to verify the uploaded object right now (R2 provider error/circuit breaker open) — retry shortly.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/news-portal/homepage-sections:
+    get:
+      tags:
+        - News Portal Homepage Sections
+      summary: List this tenant's homepage sections (admin view)
+      description: Gated by news_portal.homepage_sections.read.
+      operationId: newsPortalHomepageSectionsList
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Homepage sections.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      sections:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HomepageSectionItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - News Portal Homepage Sections
+      summary: Create a homepage section
+      description: Gated by news_portal.homepage_sections.configure. `config` is validated per `sectionType`; every referenced post/category/media object must already exist for this tenant (and gallery_block media must be a verified R2 media object).
+      operationId: newsPortalHomepageSectionsCreate
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HomepageSectionCreateRequest"
+      responses:
+        "200":
+          description: Homepage section created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/HomepageSectionItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: sectionKey is already in use for this tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: config references content that does not exist, does not belong to this tenant, or (for gallery_block) is not a verified R2 media object.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/news-portal/homepage-sections/{id}:
+    patch:
+      tags:
+        - News Portal Homepage Sections
+      summary: Update a homepage section (title/config/sortOrder/isEnabled/schedule) — sectionType is immutable
+      description: Gated by news_portal.homepage_sections.configure.
+      operationId: newsPortalHomepageSectionsUpdate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HomepageSectionUpdateRequest"
+      responses:
+        "200":
+          description: Homepage section updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/HomepageSectionItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: config references content that does not exist, does not belong to this tenant, or (for gallery_block) is not a verified R2 media object.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags:
+        - News Portal Homepage Sections
+      summary: Soft-delete a homepage section
+      description: Gated by news_portal.homepage_sections.configure.
+      operationId: newsPortalHomepageSectionsDelete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Homepage section deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/news-portal/ad-placements:
+    get:
+      tags:
+        - News Portal Ad Placements
+      summary: List this tenant's ad placements (admin view)
+      description: Gated by news_portal.ad_placements.read.
+      operationId: newsPortalAdPlacementsList
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Ad placements.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      placements:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AdPlacementItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - News Portal Ad Placements
+      summary: Create an ad placement (R2-only image, verified media object required)
+      description: Gated by news_portal.ad_placements.configure. `mediaObjectId` must reference a verified (`verified`/`attached`) R2 media object for this tenant.
+      operationId: newsPortalAdPlacementsCreate
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdPlacementCreateRequest"
+      responses:
+        "200":
+          description: Ad placement created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/AdPlacementItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: mediaObjectId does not exist, does not belong to this tenant, is not a verified R2 media object, or is not an allowed mime type for the target placement.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/news-portal/ad-placements/{id}:
+    patch:
+      tags:
+        - News Portal Ad Placements
+      summary: Update an ad placement (media reference/link/rotation/schedule/active)
+      description: Gated by news_portal.ad_placements.configure.
+      operationId: newsPortalAdPlacementsUpdate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdPlacementUpdateRequest"
+      responses:
+        "200":
+          description: Ad placement updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/AdPlacementItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: mediaObjectId does not exist, does not belong to this tenant, is not a verified R2 media object, or is not an allowed mime type for the target placement.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags:
+        - News Portal Ad Placements
+      summary: Soft-delete an ad placement
+      description: Gated by news_portal.ad_placements.configure.
+      operationId: newsPortalAdPlacementsDelete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Ad placement deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  schemas:
+    CreateNewsMediaUploadSessionRequest:
+      type: object
+      required:
+        - mimeType
+        - byteSize
+      additionalProperties: false
+      properties:
+        mimeType:
+          type: string
+          description: "Must be one of the deployment's configured NEWS_MEDIA_R2_ALLOWED_MIME_TYPES (default: image/jpeg, image/png, image/webp, image/gif — image/svg+xml is never allowed by default)."
+          example: image/jpeg
+        byteSize:
+          type: integer
+          minimum: 1
+          description: Claimed size in bytes — shape-only check against NEWS_MEDIA_R2_MAX_UPLOAD_BYTES; the real size is re-checked from R2 itself at finalize time.
+        originalFilename:
+          type: string
+          nullable: true
+          description: Stored as display-only metadata — never part of the server-generated object key.
+        altText:
+          type: string
+          nullable: true
+        caption:
+          type: string
+          nullable: true
+    FinalizeNewsMediaUploadSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        checksumSha256:
+          type: string
+          nullable: true
+          description: Optional. When supplied, compared against the checksum computed server-side from the bytes actually read from R2 — a transport-corruption check only, never a substitute for the server-side MIME sniff.
+          pattern: ^[0-9a-fA-F]{64}$
+          example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    NewsMediaObjectItem:
+      type: object
+      required:
+        - id
+        - tenantId
+        - objectKey
+        - publicUrl
+        - mimeType
+        - status
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        moduleKey:
+          type: string
+        ownerResourceType:
+          type: string
+          nullable: true
+          enum:
+            - blog_post
+            - blog_page
+            - homepage_section
+            - gallery_item
+            - ad
+            - video_thumbnail
+            - seo_image
+            - null
+        ownerResourceId:
+          type: string
+          format: uuid
+          nullable: true
+        storageDriver:
+          type: string
+          enum:
+            - cloudflare_r2
+        objectKey:
+          type: string
+        originalFilename:
+          type: string
+          nullable: true
+        publicUrl:
+          type: string
+          format: uri
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+          nullable: true
+        checksumSha256:
+          type: string
+          nullable: true
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+        altText:
+          type: string
+          nullable: true
+        caption:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - pending_upload
+            - uploaded
+            - verified
+            - attached
+            - orphaned
+            - deleted
+            - failed
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    NewsMediaUploadSessionCreated:
+      type: object
+      required:
+        - objectId
+        - objectKey
+        - presignedUrl
+        - expiresAt
+      additionalProperties: false
+      properties:
+        objectId:
+          type: string
+          format: uuid
+        objectKey:
+          type: string
+          description: Server-generated — news-media/{tenantId}/{yyyy}/{mm}/{uuid}.{ext}. Never derived from client input.
+          example: news-media/3fa85f64-5717-4562-b3fc-2c963f66afa6/2026/07/1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed.jpg
+        presignedUrl:
+          type: string
+          format: uri
+          description: Short-lived presigned PUT URL scoped to exactly one object key. Never includes raw R2 credentials.
+        expiresAt:
+          type: string
+          format: date-time
+    HomepageSectionConfig:
+      description: "Shape depends on sectionType — headline: {postId}; latest_posts: {limit?, categorySlug?}; featured_posts/editor_picks: {postIds: []}; category_grid: {categorySlugs: [], postsPerCategory?}; gallery_block: {mediaObjectIds: [], caption?}. Validated server-side per sectionType; every id/slug must already exist for the same tenant, and gallery_block's mediaObjectIds must each be a verified R2 media object."
+      type: object
+      additionalProperties: true
+    HomepageSectionCreateRequest:
+      type: object
+      required:
+        - sectionKey
+        - sectionType
+        - config
+      properties:
+        sectionKey:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+        sectionType:
+          type: string
+          enum:
+            - headline
+            - latest_posts
+            - featured_posts
+            - editor_picks
+            - category_grid
+            - gallery_block
+        title:
+          type: string
+          nullable: true
+        config:
+          $ref: "#/components/schemas/HomepageSectionConfig"
+        sortOrder:
+          type: integer
+        isEnabled:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+    HomepageSectionItem:
+      type: object
+      required:
+        - id
+        - tenantId
+        - sectionKey
+        - sectionType
+        - config
+        - sortOrder
+        - isEnabled
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        sectionKey:
+          type: string
+        sectionType:
+          type: string
+          enum:
+            - headline
+            - latest_posts
+            - featured_posts
+            - editor_picks
+            - category_grid
+            - gallery_block
+        title:
+          type: string
+          nullable: true
+        config:
+          $ref: "#/components/schemas/HomepageSectionConfig"
+        sortOrder:
+          type: integer
+        isEnabled:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    HomepageSectionUpdateRequest:
+      description: sectionType cannot be changed after creation — omit it, do not send the old or a new value.
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+        config:
+          $ref: "#/components/schemas/HomepageSectionConfig"
+        sortOrder:
+          type: integer
+        isEnabled:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+    AdPlacementItem:
+      type: object
+      required:
+        - id
+        - tenantId
+        - placementKey
+        - name
+        - mediaObjectId
+        - rotationMode
+        - priority
+        - isActive
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        placementKey:
+          type: string
+          enum:
+            - header_banner
+            - below_headline
+            - homepage_middle
+            - homepage_bottom
+            - article_top
+            - article_middle
+            - article_bottom
+            - sidebar_top
+            - sidebar_middle
+            - sidebar_bottom
+            - category_archive_top
+            - search_result_top
+        name:
+          type: string
+        mediaObjectId:
+          description: Must reference a verified (`verified`/`attached`) R2 media object belonging to this tenant (`awcms_news_media_objects`) — never a local path or arbitrary external URL.
+          type: string
+          format: uuid
+        linkUrl:
+          description: Optional, possibly external, link — validated server-side as an absolute http(s) URL only.
+          type: string
+          nullable: true
+        rotationMode:
+          type: string
+          enum:
+            - latest
+            - priority
+            - random_safe
+            - weighted
+        priority:
+          type: integer
+          minimum: 0
+        isActive:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AdPlacementCreateRequest:
+      type: object
+      required:
+        - placementKey
+        - name
+        - mediaObjectId
+      properties:
+        placementKey:
+          type: string
+          enum:
+            - header_banner
+            - below_headline
+            - homepage_middle
+            - homepage_bottom
+            - article_top
+            - article_middle
+            - article_bottom
+            - sidebar_top
+            - sidebar_middle
+            - sidebar_bottom
+            - category_archive_top
+            - search_result_top
+        name:
+          type: string
+        mediaObjectId:
+          type: string
+          format: uuid
+        linkUrl:
+          type: string
+          nullable: true
+        rotationMode:
+          type: string
+          enum:
+            - latest
+            - priority
+            - random_safe
+            - weighted
+          default: latest
+        priority:
+          type: integer
+          minimum: 0
+          default: 0
+        isActive:
+          type: boolean
+          default: true
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+    AdPlacementUpdateRequest:
+      type: object
+      properties:
+        placementKey:
+          type: string
+          enum:
+            - header_banner
+            - below_headline
+            - homepage_middle
+            - homepage_bottom
+            - article_top
+            - article_middle
+            - article_bottom
+            - sidebar_top
+            - sidebar_middle
+            - sidebar_bottom
+            - category_archive_top
+            - search_result_top
+        name:
+          type: string
+        mediaObjectId:
+          type: string
+          format: uuid
+        linkUrl:
+          type: string
+          nullable: true
+        rotationMode:
+          type: string
+          enum:
+            - latest
+            - priority
+            - random_safe
+            - weighted
+        priority:
+          type: integer
+          minimum: 0
+        isActive:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true

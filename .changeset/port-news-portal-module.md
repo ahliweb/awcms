@@ -1,0 +1,5 @@
+---
+"awcms": minor
+---
+
+Port modul `news_portal` dari awcms-mini: registry media objek R2-only tenant-scoped (`awcms_news_media_objects`) dengan alur presigned upload langsung-ke-R2 (create/finalize/cancel), homepage section composer editorial (`awcms_news_portal_homepage_sections`), ad placement preset R2-only (`awcms_news_portal_ad_placements`), state tenant mode R2-only (`awcms_news_portal_tenant_state`), dan job rekonsiliasi `news-media:reconcile`. Migrasi `sql/041`..`sql/045` (empat tabel baru RLS ENABLE+FORCE). Modul MENYEDIAKAN capability `news_media` — adapter nyata kini menggantikan no-op blog_content di seluruh composition root (route + worker `blog:publish:scheduled`) — dan MENGONSUMSI `public_content` blog_content untuk validasi referensi homepage section. Rute publik `/news/**` (butuh `tenant_domain`), halaman admin `.astro`, dan aktivasi preset (butuh subsistem preset `module_management`) sengaja di-drop dan didokumentasikan. Menambah aksi `verify` ke union `AccessAction`, grant `awcms_worker` untuk job rekonsiliasi, dan skrip `news-media:reconcile`.

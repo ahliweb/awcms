@@ -1,5 +1,5 @@
 {
-  "moduleCount": 12,
+  "moduleCount": 13,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -116,6 +116,33 @@
       "capabilitiesConsumed": [],
       "permissionCount": 12,
       "navigationCount": 0,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "news_portal",
+      "name": "News Portal",
+      "version": "0.4.0",
+      "status": "active",
+      "type": "domain",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "module_management",
+        "logging"
+      ],
+      "capabilitiesProvided": ["news_media"],
+      "capabilitiesConsumed": [
+        {
+          "capability": "public_content",
+          "providedBy": "blog_content",
+          "optional": false
+        }
+      ],
+      "permissionCount": 13,
+      "navigationCount": 2,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
