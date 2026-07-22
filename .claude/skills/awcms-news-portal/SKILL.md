@@ -1,23 +1,44 @@
 ---
 name: awcms-news-portal
-description: BACAAN SAJA — modul news_portal BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuatnya, tidak ada migration-nya di `sql/`; bergantung pada blog_content/tenant_domain yang juga belum di-port). Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #631-#642, #649). Gunakan saat menambah/mengubah preset full-online R2-only, media object registry, presigned upload flow, R2 readiness checks, homepage composer, ad/video/quality-checklist berbasis media R2, tag linking, atau SEO/social preview `/news`. Merangkum keputusan arsitektur yang sudah dibuat (docs/awcms/news-portal/) supaya issue lanjutan tidak mengulang/kontradiksi.
+description: Modul news_portal SUDAH di-port ke repo ini (PR #214; `src/modules/news-portal`, migrasi `sql/041`–`sql/045`, 4 tabel `awcms_news_*` FORCE RLS). Menyediakan capability `news_media` (media object registry R2 + presigned upload) yang dikonsumsi `blog_content` via adapter NYATA. Panduan untuk mengubah/menambah ke `src/modules/news-portal` (registry media, upload flow, R2 readiness, homepage composer, ad placements, reconcile job). DROPPED saat port (WAJIB tahu): rute publik `/news/**` host-resolved DAN helper render-nya (butuh `tenant_domain`, belum di-port); aktivasi preset `news_portal_full_online_r2` (butuh preset subsystem `module_management`) — tabel `awcms_news_portal_tenant_state` ada tapi tanpa writer, mode R2-only selalu inactive/fail-closed. Nomor `sql/NNN` di badan skill penomoran awcms-mini — nyata di awcms `sql/041`–`sql/045`. `tenant_domain` & `social_publishing` masih belum di-port.
 ---
 
 # AWCMS — News Portal (full-online R2-only media)
 
-<!-- sql-refs: awcms-mini — modul belum di-port; setiap `sql/NNN` di file ini penomoran awcms-mini, bukan repo ini -->
+<!-- sql-refs: awcms-mini — nomor `sql/NNN` di badan skill ini memakai penomoran awcms-mini; modul SUDAH di-port ke awcms sebagai `sql/041`–`sql/045` (lihat README modul + `sql/` nyata untuk nomor sebenarnya) -->
 
-> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
-> `news_portal` ada di **awcms-mini**, bukan di sini: `ls src/modules` TIDAK
-> memuat modulnya, dan `sql/` tidak memuat migration-nya. Ia juga
-> **bergantung** pada `blog_content` dan `tenant_domain` yang sama-sama
-> belum di-port. Semua rujukan `src/modules/...`, tabel `awcms_news_*`, dan
-> `sql/NNN` di bawah adalah artefak awcms-mini — **jangan
-> `import`/`SELECT`/mengklaim ada** di repo ini. Nomor `sql/NNN` memakai
-> penomoran awcms-mini dan akan berubah saat di-port (melanjutkan dari
-> migration terakhir repo ini). Pakai skill ini sebagai spesifikasi target
-> port (via `awcms-port-from-mini`), bukan peta kode yang bisa dipanggil.
-> Verifikasi `ls src/modules` sebelum mengklaim apa pun ada.
+> **STATUS — SUDAH di-port ke repo ini (PR #214).**
+> `news_portal` kini nyata di sini: `src/modules/news-portal`, migrasi
+> `sql/041_awcms_news_media_object_registry_schema.sql`–`sql/045_awcms_news_portal_ad_placements_schema.sql`,
+> 4 tabel `awcms_news_*` (semua `FORCE ROW LEVEL SECURITY`). Skill ini kini
+> **panduan mengubah/menambah kode nyata**. Baca `src/modules/news-portal/README.md`
+>
+> - `sql/` untuk nomor/tabel akurat.
+>
+> **DELTA PORT AWCMS (WAJIB — sebagian besar badan skill di bawah men-spesifikasi bentuk mini; ini yang BEDA di sini):**
+>
+> - **DI-DROP**: keluarga rute publik **host-resolved `/news/**`** (index,
+>   detail, kategori, tag, search, feed, sitemap) beserta helper render-nya
+>   (`homepage-section-composer`, `homepage-section-rendering`, `news-share-config`).
+>   Butuh `lib/tenant/public-host-tenant-resolver.ts` + env `PUBLIC_TENANT_RESOLUTION_MODE`
+>   dari modul **`tenant_domain` yang belum di-port**. Jangan bangun/rujuk
+>   `/news/**` sebagai ada. (Rute publik yang ADA = `/blog/{tenantCode}` milik
+>   `blog_content`, path-based ADR-0009.)
+> - **DI-DROP**: aktivasi preset `news_portal_full_online_r2`
+>   (`apply-news-portal-preset.ts`) — butuh preset subsystem `module_management`
+>   yang belum di-port. Tabel `awcms_news_portal_tenant_state` + reader tetap
+>   ada (forward-compatible) tapi **tanpa writer**, jadi
+>   `isFullOnlineR2ModeActiveForTenant` selalu `false` (fail-closed) — media
+>   registry/upload/homepage/ads tetap jalan mandiri.
+> - **Yang NYATA di-port & aktif**: media object registry + presigned
+>   direct-to-R2 upload/finalize (magic-byte MIME sniff + SHA-256), homepage
+>   sections, ad placements, job reconcile media (`news-media:reconcile`).
+>   Capability `news_media` = **adapter nyata** yang dikonsumsi `blog_content`
+>   (bukan lagi no-op).
+> - Env pre-validasi `NEWS_MEDIA_R2_*` (validate-env + 3 security-readiness
+>   check) **ditunda** saat port — modul fail-safe tanpa itu di runtime.
+> - Nomor `sql/NNN` di badan skill = penomoran awcms-mini; nyata di awcms
+>   `sql/041`–`sql/045`.
 
 Epic `news_portal` (#631-#642, #649) menambah lapisan editorial +
 media di atas `blog_content` (base module, sudah `active`) dan online
