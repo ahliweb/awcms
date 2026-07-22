@@ -1,0 +1,431 @@
+/*
+ * admin-screens.css — additive presentation layer for the 8 admin management
+ * screens (`src/pages/admin/*.astro`). Phase-2 of the UI/UX overhaul.
+ *
+ * SCOPE: imported ONLY by the admin page frontmatter (never by the login or
+ * public/blog shells), so it is an admin-owned file — it does NOT modify the
+ * shared Phase-1 foundation (`tokens.css`, `motion.css`, `admin.css`,
+ * layouts). It COMPOSES those: every value here is a `tokens.css` custom
+ * property, and every animation reuses a `motion.css` utility applied in the
+ * markup (`.fade-in-up`, `.stagger-children`, `.hover-lift`, …). This file
+ * introduces NO new design token.
+ *
+ * CSP (unchanged): pure same-origin CSS, no @import / font / CDN / inline. With
+ * `build.inlineStylesheets: "never"` (astro.config.mjs) an `import "*.css"`
+ * from a page is emitted as an external <link> from our own origin, so the
+ * strict `default-src 'self'` policy (tests/security-headers-csp.test.ts)
+ * holds — nothing here weakens it.
+ *
+ * ACCESSIBILITY: the only local transitions are on `.admin-panel`/`.stat-card`
+ * hover and the details/summary marker; all are decorative and stripped under
+ * `@media (prefers-reduced-motion: reduce)` at the bottom. Entrance motion is
+ * delegated entirely to `motion.css` (already reduced-motion guarded). Touch
+ * targets in tables are bumped to >=44px on small screens.
+ */
+
+/* ==================================================================== */
+/* Page header — title + supporting description                         */
+/* ==================================================================== */
+.page-header {
+  margin-bottom: var(--sp-5);
+}
+
+.page-header .page-description {
+  margin: var(--sp-2) 0 0;
+  max-width: 68ch;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+}
+
+/* Action row that sits under a header (e.g. a count + a right-aligned CTA). */
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+/* ==================================================================== */
+/* Panel / section wrapper — a titled surface card                       */
+/* ==================================================================== */
+.admin-panel {
+  padding: var(--sp-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.admin-section {
+  margin-top: var(--sp-6);
+}
+
+.admin-section-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-tight);
+}
+
+.admin-section-title .count-pill {
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+/* A form title so the create-form card reads as a labelled section. */
+.form-legend {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  flex: 1 1 100%;
+}
+
+/* ==================================================================== */
+/* Stat cards (dashboard)                                                */
+/* ==================================================================== */
+.stat-grid {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+
+.stat-card {
+  padding: var(--sp-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.stat-card .stat-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+}
+
+.stat-card .stat-value {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.stat-card .stat-value.stat-value--mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+}
+
+.stat-card .stat-hint {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/* Quick-link tiles (dashboard shortcuts). */
+.quick-links {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: 1fr;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .quick-links {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}
+
+.quick-link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 48px;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  text-decoration: none;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-xs);
+}
+
+.quick-link .quick-link-arrow {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.quick-link:hover {
+  border-color: var(--color-primary);
+}
+
+.quick-link:hover .quick-link-arrow {
+  transform: translateX(3px);
+  color: var(--color-primary);
+}
+
+/* ==================================================================== */
+/* Friendly empty state (rendered inside a full-width table cell)        */
+/* ==================================================================== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.empty-state .empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--fs-lg);
+  line-height: 1;
+}
+
+.empty-state .empty-state-title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.empty-state .empty-state-text {
+  max-width: 44ch;
+  font-size: var(--fs-sm);
+}
+
+/* ==================================================================== */
+/* Status badge — additive variants (composes admin.css .status-badge)   */
+/* ==================================================================== */
+.status-badge[data-variant="info"] {
+  background: var(--color-info-strong);
+  color: var(--color-primary-contrast);
+}
+
+.status-badge[data-variant="danger"] {
+  background: var(--color-danger-strong);
+  color: var(--color-primary-contrast);
+}
+
+/* A subtle "dot" prefix so a badge reads as a live status pill. */
+.status-badge .status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--sp-1);
+  border-radius: var(--radius-full);
+  background: currentcolor;
+  vertical-align: baseline;
+}
+
+/* ==================================================================== */
+/* Small inline / row action buttons                                     */
+/* ==================================================================== */
+.btn-inline {
+  min-height: 32px;
+  padding: 2px var(--sp-2);
+  background: transparent;
+  color: var(--color-primary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.btn-inline:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-hover);
+}
+
+.btn-inline.btn-inline--danger {
+  color: var(--color-danger);
+}
+
+.btn-inline.btn-inline--danger:hover {
+  background: var(--color-surface-2);
+  color: var(--color-danger-strong);
+}
+
+.btn-inline:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* A tidy inline group so row actions wrap gracefully instead of butting up. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+/* ==================================================================== */
+/* Permission chips (roles screen) + granted list                        */
+/* ==================================================================== */
+.perm-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: var(--sp-2) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.perm-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+}
+
+.perm-list code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-text);
+  word-break: break-all;
+}
+
+/* details/summary as a compact disclosure "chip". */
+.role-permissions > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 32px;
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.role-permissions > summary::-webkit-details-marker {
+  display: none;
+}
+
+.role-permissions > summary::before {
+  content: "▸";
+  display: inline-block;
+  font-size: var(--fs-xs);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.role-permissions[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.role-permissions > summary:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+/* ==================================================================== */
+/* Table polish (composes admin.css .data-table / .data-table--stack)    */
+/* ==================================================================== */
+
+/* Numeric/id cells in a monospace so codes line up + scan cleanly. */
+.data-table td .cell-code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-text);
+}
+
+.data-table td .cell-muted {
+  color: var(--color-text-muted);
+}
+
+/* On small screens, when a table opts into the card/stack layout, drop the
+   scroll wrapper's frame so we don't nest a border around the cards. */
+@media (max-width: 767.98px) {
+  .data-table-scroll:has(.data-table--stack) {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  /* A stacked cell that holds a full-width control (input/select) or a row of
+     buttons reads better as label-on-top than as a squeezed right column. */
+  .data-table--stack td.stacked-block {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+  }
+
+  .data-table--stack td.stacked-block::before {
+    margin-bottom: var(--sp-1);
+  }
+
+  .data-table--stack td.stacked-block .row-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Comfortable touch targets for any control living inside a table on mobile
+     (admin.css bases some at 40px; 44px is the WCAG target). */
+  .data-table td button,
+  .data-table td .module-toggle,
+  .data-table td input,
+  .data-table td select {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .data-table td .btn-inline {
+    width: auto;
+  }
+}
+
+/* ==================================================================== */
+/* Reduced motion — strip this file's few local transitions              */
+/* ==================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .quick-link .quick-link-arrow,
+  .quick-link:hover .quick-link-arrow,
+  .btn-inline,
+  .role-permissions > summary,
+  .role-permissions > summary::before,
+  .role-permissions[open] > summary::before {
+    transition: none;
+    transform: none;
+  }
+}

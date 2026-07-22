@@ -13,6 +13,7 @@
  * `head_office` row is what the table must show.
  */
 import { test, expect } from "@playwright/test";
+import { provideTenant } from "./support/e2e-auth";
 
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
@@ -31,7 +32,7 @@ test.describe("admin offices (authenticated)", () => {
     page
   }) => {
     await page.goto("/login");
-    await page.locator("#tenant-id").fill(tenantId!);
+    await provideTenant(page, tenantId!);
     await page.locator("#login-identifier").fill(loginIdentifier!);
     await page.locator("#password").fill(password!);
     await page.locator("#login-submit").click();
@@ -54,7 +55,7 @@ test.describe("admin offices (authenticated)", () => {
   }) => {
     // Log in first (fresh page/context per test).
     await page.goto("/login");
-    await page.locator("#tenant-id").fill(tenantId!);
+    await provideTenant(page, tenantId!);
     await page.locator("#login-identifier").fill(loginIdentifier!);
     await page.locator("#password").fill(password!);
     await page.locator("#login-submit").click();
@@ -102,7 +103,7 @@ test.describe("admin offices (authenticated)", () => {
     page
   }) => {
     await page.goto("/login");
-    await page.locator("#tenant-id").fill(tenantId!);
+    await provideTenant(page, tenantId!);
     await page.locator("#login-identifier").fill(loginIdentifier!);
     await page.locator("#password").fill("definitely-the-wrong-password");
     await page.locator("#login-submit").click();

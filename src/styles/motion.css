@@ -1,0 +1,318 @@
+/*
+ * motion.css — shared, reusable animation/motion utility layer for AWCMS
+ * (UI/UX overhaul foundation). Consumed globally by the admin + public shells
+ * (imported by `AdminLayout.astro` and `PublicThemeLayout.astro`, emitted as an
+ * external <link> by `build.inlineStylesheets: "never"`), and meant to be the
+ * ONE place page-level UI opts into motion — phase-2 screens should reuse these
+ * class names instead of hand-rolling keyframes so the whole app moves with one
+ * rhythm.
+ *
+ * ## CSP (single-owner, never weakened)
+ * Pure CSS: keyframes + transitions only. NO third-party font/CDN/@import, NO
+ * external animation library, NO inline style — same-origin stylesheet under
+ * `default-src 'self'` (see astro.config.mjs / security-headers.ts). The
+ * "zero third-party CSP origin" guarantee (tests/security-headers-csp.test.ts)
+ * is unaffected by this file.
+ *
+ * ## Accessibility (WCAG 2.1 — 2.3.3 Animation from Interactions)
+ * Every effect here is NON-ESSENTIAL decoration. The whole file is wrapped so
+ * that under `@media (prefers-reduced-motion: reduce)` all motion is removed
+ * AND every entrance utility resets to its final, fully-visible state (opacity
+ * 1, no transform) — an entrance that started at `opacity: 0` must never be
+ * left invisible for a reduced-motion user.
+ *
+ * ## Tokens
+ * Durations/easings come from `tokens.css` (`--motion-*`, `--ease-*`). Every
+ * `var()` here carries a literal fallback so this file still degrades sensibly
+ * if loaded without tokens.css.
+ *
+ * ## Naming
+ * Keyframes are namespaced `awcms-*` to avoid collision with any theme CSS.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Keyframes                                                          */
+/* ------------------------------------------------------------------ */
+@keyframes awcms-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes awcms-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes awcms-fade-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes awcms-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes awcms-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Indeterminate loading shimmer (skeleton placeholders). */
+@keyframes awcms-shimmer {
+  from {
+    background-position: -160% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+
+/* Spinner for busy/loading affordances. */
+@keyframes awcms-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Gentle attention pulse (opacity only — safe, no scale flashing). */
+@keyframes awcms-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Entrance utilities (one-shot on mount)                             */
+/* ------------------------------------------------------------------ */
+.fade-in,
+.fade-in-up,
+.fade-in-down,
+.scale-in,
+.slide-in-left {
+  animation-duration: var(--motion-base, 240ms);
+  animation-timing-function: var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation-name: awcms-fade-in;
+}
+.fade-in-up {
+  animation-name: awcms-fade-in-up;
+}
+.fade-in-down {
+  animation-name: awcms-fade-in-down;
+}
+.scale-in {
+  animation-name: awcms-scale-in;
+}
+.slide-in-left {
+  animation-name: awcms-slide-in-left;
+}
+
+/* Speed modifiers (compose with any entrance utility). */
+.motion-fast {
+  animation-duration: var(--motion-fast, 140ms);
+}
+.motion-slow {
+  animation-duration: var(--motion-slow, 400ms);
+}
+
+/*
+ * Staggered entrance for lists/grids: put `.stagger-children` on the container
+ * and give each child `.fade-in-up` (or any entrance). Direct children animate
+ * in sequence. Depth is bounded (10) — beyond that everything shares the last
+ * delay, which is the desired "batch in" behaviour for long lists.
+ */
+.stagger-children > * {
+  animation-delay: 0ms;
+}
+.stagger-children > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.stagger-children > *:nth-child(2) {
+  animation-delay: 40ms;
+}
+.stagger-children > *:nth-child(3) {
+  animation-delay: 80ms;
+}
+.stagger-children > *:nth-child(4) {
+  animation-delay: 120ms;
+}
+.stagger-children > *:nth-child(5) {
+  animation-delay: 160ms;
+}
+.stagger-children > *:nth-child(6) {
+  animation-delay: 200ms;
+}
+.stagger-children > *:nth-child(7) {
+  animation-delay: 240ms;
+}
+.stagger-children > *:nth-child(8) {
+  animation-delay: 280ms;
+}
+.stagger-children > *:nth-child(9) {
+  animation-delay: 320ms;
+}
+.stagger-children > *:nth-child(n + 10) {
+  animation-delay: 360ms;
+}
+
+/* ------------------------------------------------------------------ */
+/* Interaction utilities (hover/press feedback)                       */
+/* ------------------------------------------------------------------ */
+
+/* Lift a card/tile on hover — subtle rise + deeper shadow. */
+.hover-lift {
+  transition:
+    transform var(--motion-fast, 140ms)
+      var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)),
+    box-shadow var(--motion-fast, 140ms)
+      var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(15, 23, 42, 0.18));
+}
+.hover-lift:active {
+  transform: translateY(0);
+}
+
+/* Grow a control slightly on hover (icon buttons, chips). */
+.hover-grow {
+  transition: transform var(--motion-fast, 140ms)
+    var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+.hover-grow:hover {
+  transform: scale(1.04);
+}
+.hover-grow:active {
+  transform: scale(0.98);
+}
+
+/* Generic "animate my declared properties" opt-in for interactive elements. */
+.transition-base {
+  transition-property: color, background-color, border-color, box-shadow,
+    transform, opacity;
+  transition-duration: var(--motion-fast, 140ms);
+  transition-timing-function: var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+
+/* ------------------------------------------------------------------ */
+/* Loading / status utilities                                         */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Skeleton placeholder. Give the element a width/height and (optionally) a
+ * radius; it renders as a shimmering block for the loading state.
+ */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-surface-2, #eef1f5);
+  border-radius: var(--radius-sm, 4px);
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    var(--color-surface-hover, rgba(255, 255, 255, 0.55)) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: awcms-shimmer 1.4s ease-in-out infinite;
+}
+.skeleton::after {
+  /* Keep intrinsic height when used on an empty block. */
+  content: "\00a0";
+}
+
+/* Inline spinner. Size via font-size / width+height on the element. */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--color-border, #d8dee6);
+  border-top-color: var(--color-primary, #2563eb);
+  border-radius: var(--radius-full, 9999px);
+  animation: awcms-spin 0.7s linear infinite;
+}
+
+.pulse {
+  animation: awcms-pulse 1.6s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reduced-motion: strip ALL of the above.                            */
+/* Entrance utilities reset to their final, fully-visible state so no  */
+/* content is ever left hidden for reduced-motion users.               */
+/* ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .fade-in-up,
+  .fade-in-down,
+  .scale-in,
+  .slide-in-left,
+  .stagger-children > *,
+  .pulse,
+  .spinner,
+  .skeleton {
+    animation: none !important;
+  }
+
+  .fade-in,
+  .fade-in-up,
+  .fade-in-down,
+  .scale-in,
+  .slide-in-left {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .hover-lift,
+  .hover-grow,
+  .transition-base {
+    transition: none !important;
+  }
+  .hover-lift:hover,
+  .hover-grow:hover {
+    transform: none !important;
+  }
+
+  /* Skeleton stays as a static muted block (still communicates "loading"). */
+  .skeleton {
+    background-image: none;
+  }
+}

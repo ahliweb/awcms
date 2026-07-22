@@ -69,7 +69,28 @@ export type PublicPageShellOptions = {
    * `</head>`. `null`/omitted renders nothing extra.
    */
   structuredDataJsonLd?: Record<string, unknown> | null;
+  /**
+   * UI redesign — selects the reading layout the body is wrapped in
+   * (`<main class="pc-page pc-page--{variant}">`), styled by the same-origin
+   * `/css/public-content.css` stylesheet this shell links. `"article"` is the
+   * narrow single-column reading measure used by the post detail route;
+   * `"list"` (the default when omitted) is the wider listing/grid layout used
+   * by the index/category/tag/search routes. Purely presentational — omitting
+   * it keeps the generic `pc-page` container with no modifier, and callers
+   * that predate this option (or the domain unit tests) are unaffected.
+   */
+  variant?: "list" | "article";
 };
+
+/**
+ * Same-origin stylesheet for the public blog reading experience. Served from
+ * `public/css/public-content.css` (i.e. `/css/public-content.css`), so it
+ * satisfies the middleware CSP `default-src 'self'` (no inline `<style>`,
+ * which that policy — `src/lib/security/security-headers.ts` — would block).
+ * No third-party origin, keeping the LAN/offline "zero third-party CSP
+ * origin" guarantee intact.
+ */
+const PUBLIC_CONTENT_STYLESHEET_HREF = "/css/public-content.css";
 
 /**
  * `og:title`/`og:description`/`og:url` + `twitter:title`/`twitter:description`/
@@ -167,6 +188,13 @@ export function renderPublicPageShell(options: PublicPageShellOptions): string {
     ? renderJsonLdScriptTag(options.structuredDataJsonLd)
     : "";
 
+  const pageClass =
+    options.variant === "article"
+      ? "pc-page pc-page--article"
+      : options.variant === "list"
+        ? "pc-page pc-page--list"
+        : "pc-page";
+
   return `<!doctype html>
 <html lang="${escapeHtml(options.locale)}">
 <head>
@@ -174,13 +202,17 @@ export function renderPublicPageShell(options: PublicPageShellOptions): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(options.title)}</title>
 <meta name="description" content="${escapeHtml(options.description)}" />
+<link rel="stylesheet" href="${PUBLIC_CONTENT_STYLESHEET_HREF}" />
 ${canonicalTag}
 ${robotsTag}
 ${ogTags}
 ${jsonLdTag}
 </head>
 <body>
+<a class="pc-skip" href="#pc-main">Skip to content</a>
+<main id="pc-main" class="${pageClass}">
 ${options.bodyHtml}
+</main>
 </body>
 </html>`;
 }

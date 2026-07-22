@@ -1,11 +1,19 @@
 ---
 /**
- * Admin shell (Issue #166 — ported from awcms-mini's `AdminLayout.astro`,
- * stripped to awcms's fondasi scope). Deliberately minimal vs mini: NO
- * TenantBadge / SyncIndicator / ThemeToggle / LanguageSwitcher / responsive
- * drawer / i18n — those drag in visitor-analytics, theme persistence, and the
- * gettext catalog awcms does not have yet. Kept: brand, the signed-in user's
- * roles, a permission-agnostic sidebar, logout, and the page slot.
+ * Admin shell (Issue #166; grown into a mobile-first responsive shell by the
+ * UI/UX overhaul foundation). Still deliberately minimal vs awcms-mini: NO
+ * TenantBadge / SyncIndicator / ThemeToggle / LanguageSwitcher / i18n — those
+ * drag in visitor-analytics, theme persistence, and the gettext catalog awcms
+ * does not have yet. Kept: brand, the signed-in user's roles, a
+ * permission-agnostic sidebar, logout, and the page slot. Added: a skip link
+ * and a CSS-only responsive sidebar drawer for small screens.
+ *
+ * Responsive sidebar (mobile-first): below `--bp-md` (768px) the sidebar is an
+ * off-canvas drawer toggled by a hidden, keyboard-focusable checkbox
+ * (`#admin-nav-toggle`) driven by a hamburger `<label>` and a scrim `<label>` —
+ * ALL CSS-only (see admin.css). No JS is used for the toggle, so there is
+ * nothing for the strict CSP to block; on desktop the sidebar is static and the
+ * toggle/scrim are `display: none`.
  *
  * Auth is NOT enforced here — `src/middleware.ts` already guards `/admin/*`
  * (resolves the session, redirects to `/login` when absent, and sets
@@ -14,11 +22,13 @@
  * throws rather than rendering a half-authenticated page.
  *
  * CSP (see astro.config.mjs / security-headers.ts): styles come from external
- * stylesheets (`tokens.css` + `admin.css`, emitted as <link> by
- * `inlineStylesheets: "never"`) and the only script is the Astro-bundled
- * logout module below — no inline script/style, so `default-src 'self'` holds.
+ * stylesheets (`tokens.css` + `admin.css` + `motion.css`, emitted as <link> by
+ * `inlineStylesheets: "never"`) and the only script is the Astro-bundled logout
+ * module below — no inline script/style, no third-party origin, so
+ * `default-src 'self'` holds and the CSP guarantee is unchanged.
  */
 import "../styles/tokens.css";
+import "../styles/motion.css";
 import "../styles/admin.css";
 
 interface Props {
@@ -55,7 +65,24 @@ const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
     <title>{title} · AWCMS</title>
   </head>
   <body class="admin-body">
+    <a class="skip-link" href="#admin-main">Skip to main content</a>
+
+    {
+      /* CSS-only responsive drawer toggle (see admin.css). Hidden + static
+        sidebar on desktop; off-canvas drawer + this hamburger on mobile. */
+    }
+    <input
+      type="checkbox"
+      id="admin-nav-toggle"
+      class="admin-nav-toggle-checkbox"
+      aria-label="Toggle navigation menu"
+    />
+
     <header class="admin-topbar">
+      <label class="admin-nav-toggle" for="admin-nav-toggle">
+        <span class="admin-nav-toggle-bars" aria-hidden="true"></span>
+        <span class="sr-only">Toggle navigation menu</span>
+      </label>
       <a href="/admin" class="admin-brand">AWCMS</a>
       <div class="admin-topbar-right">
         <span class="admin-roles" id="admin-roles">{roles}</span>
@@ -66,7 +93,9 @@ const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
     </header>
 
     <div class="admin-layout">
-      <aside class="admin-sidebar">
+      <label class="admin-scrim" for="admin-nav-toggle" aria-hidden="true"
+      ></label>
+      <aside class="admin-sidebar" id="admin-sidebar">
         <nav aria-label="Admin">
           <a
             href="/admin"
@@ -119,7 +148,7 @@ const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
         </nav>
       </aside>
 
-      <main class="admin-main">
+      <main class="admin-main" id="admin-main" tabindex="-1">
         <slot />
       </main>
     </div>

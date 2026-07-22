@@ -23,6 +23,7 @@
  * they are reachable for restore.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
@@ -93,11 +94,18 @@ if (canRead) {
 ---
 
 <AdminLayout title="Offices" active="offices">
-  <h1 id="offices-heading">Offices</h1>
+  <header class="page-header fade-in-up">
+    <h1 id="offices-heading">Offices</h1>
+    <p class="page-description">
+      The tenant's office hierarchy. Offices can be edited inline, soft-deleted,
+      and restored — deleted offices are listed separately so they remain
+      reachable.
+    </p>
+  </header>
 
   {
     !canRead && (
-      <p class="state-notice" id="offices-denied">
+      <p class="state-notice fade-in-up" id="offices-denied">
         You do not have permission to view offices.
       </p>
     )
@@ -105,7 +113,7 @@ if (canRead) {
 
   {
     canRead && loadError && (
-      <p class="state-notice" id="offices-error">
+      <p class="state-notice fade-in-up" id="offices-error">
         Offices could not be loaded right now. Please try again later.
       </p>
     )
@@ -113,7 +121,8 @@ if (canRead) {
 
   {
     canCreate && (
-      <form id="office-create-form" class="admin-create-form">
+      <form id="office-create-form" class="admin-create-form fade-in-up">
+        <p class="form-legend">Create an office</p>
         <p
           id="office-create-error"
           class="admin-create-error"
@@ -168,8 +177,8 @@ if (canRead) {
 
   {
     canRead && !loadError && (
-      <div class="data-table-scroll">
-        <table class="data-table" id="offices-table">
+      <div class="data-table-scroll fade-in-up">
+        <table class="data-table data-table--stack" id="offices-table">
           <caption>{offices.length} office(s)</caption>
           <thead>
             <tr>
@@ -184,14 +193,29 @@ if (canRead) {
             {offices.length === 0 ? (
               <tr>
                 <td class="data-table-empty" colspan={showActions ? 5 : 4}>
-                  No offices yet.
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⌂
+                    </span>
+                    <span class="empty-state-title">No offices yet</span>
+                    <span class="empty-state-text">
+                      {canCreate
+                        ? "Create your first office using the form above."
+                        : "Offices created for this tenant will appear here."}
+                    </span>
+                  </div>
                 </td>
               </tr>
             ) : (
               offices.map((office) => (
                 <tr data-office-row={office.id}>
-                  <td>{office.officeCode}</td>
-                  <td>
+                  <td data-label="Code">
+                    <span class="cell-code">{office.officeCode}</span>
+                  </td>
+                  <td
+                    data-label="Name"
+                    class={canUpdate ? "stacked-block" : ""}
+                  >
                     {canUpdate ? (
                       <input
                         class="office-name-input"
@@ -204,8 +228,13 @@ if (canRead) {
                       office.officeName
                     )}
                   </td>
-                  <td>{office.officeType}</td>
-                  <td>
+                  <td data-label="Type">
+                    <span class="cell-muted">{office.officeType}</span>
+                  </td>
+                  <td
+                    data-label="Status"
+                    class={canUpdate ? "stacked-block" : ""}
+                  >
                     {canUpdate ? (
                       <select
                         class="office-status-select"
@@ -228,31 +257,34 @@ if (canRead) {
                           office.status === "active" ? "success" : "neutral"
                         }
                       >
+                        <span class="status-dot" aria-hidden="true" />
                         {office.status}
                       </span>
                     )}
                   </td>
                   {showActions && (
-                    <td>
-                      {canUpdate && (
-                        <button
-                          type="button"
-                          class="office-save-btn"
-                          data-office-id={office.id}
-                        >
-                          Save
-                        </button>
-                      )}
-                      {canDelete && (
-                        <button
-                          type="button"
-                          class="office-delete-btn"
-                          data-office-id={office.id}
-                          data-office-code={office.officeCode}
-                        >
-                          Delete
-                        </button>
-                      )}
+                    <td data-label="Actions" class="stacked-block">
+                      <div class="row-actions">
+                        {canUpdate && (
+                          <button
+                            type="button"
+                            class="module-toggle office-save-btn"
+                            data-office-id={office.id}
+                          >
+                            Save
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            class="module-toggle office-delete-btn"
+                            data-office-id={office.id}
+                            data-office-code={office.officeCode}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -266,10 +298,16 @@ if (canRead) {
 
   {
     canRead && !loadError && canUpdate && deletedOffices.length > 0 && (
-      <section id="deleted-offices">
-        <h2>Deleted offices</h2>
+      <section class="admin-section fade-in-up" id="deleted-offices">
+        <h2 class="admin-section-title">
+          Deleted offices
+          <span class="count-pill">{deletedOffices.length}</span>
+        </h2>
         <div class="data-table-scroll">
-          <table class="data-table" id="deleted-offices-table">
+          <table
+            class="data-table data-table--stack"
+            id="deleted-offices-table"
+          >
             <caption>{deletedOffices.length} deleted office(s)</caption>
             <thead>
               <tr>
@@ -282,18 +320,24 @@ if (canRead) {
             <tbody>
               {deletedOffices.map((office) => (
                 <tr data-deleted-office-row={office.id}>
-                  <td>{office.officeCode}</td>
-                  <td>{office.officeName}</td>
-                  <td>{office.officeType}</td>
-                  <td>
-                    <button
-                      type="button"
-                      class="office-restore-btn"
-                      data-office-id={office.id}
-                      data-office-code={office.officeCode}
-                    >
-                      Restore
-                    </button>
+                  <td data-label="Code">
+                    <span class="cell-code">{office.officeCode}</span>
+                  </td>
+                  <td data-label="Name">{office.officeName}</td>
+                  <td data-label="Type">
+                    <span class="cell-muted">{office.officeType}</span>
+                  </td>
+                  <td data-label="Actions" class="stacked-block">
+                    <div class="row-actions">
+                      <button
+                        type="button"
+                        class="module-toggle office-restore-btn"
+                        data-office-id={office.id}
+                        data-office-code={office.officeCode}
+                      >
+                        Restore
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

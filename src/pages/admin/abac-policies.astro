@@ -20,6 +20,7 @@
  * expected default, not an error.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
@@ -58,11 +59,18 @@ if (canRead) {
 ---
 
 <AdminLayout title="ABAC policies" active="abac-policies">
-  <h1 id="abac-policies-heading">ABAC policies</h1>
+  <header class="page-header fade-in-up">
+    <h1 id="abac-policies-heading">ABAC policies</h1>
+    <p class="page-description">
+      Per-tenant custom access policies. This table is empty by default — the
+      evaluator applies the built-in role/permission rules, and custom policies
+      are an opt-in extension surface.
+    </p>
+  </header>
 
   {
     !canRead && (
-      <p class="state-notice" id="abac-policies-denied">
+      <p class="state-notice fade-in-up" id="abac-policies-denied">
         You do not have permission to view ABAC policies.
       </p>
     )
@@ -70,7 +78,7 @@ if (canRead) {
 
   {
     canRead && loadError && (
-      <p class="state-notice" id="abac-policies-error">
+      <p class="state-notice fade-in-up" id="abac-policies-error">
         Policies could not be loaded right now. Please try again later.
       </p>
     )
@@ -78,7 +86,8 @@ if (canRead) {
 
   {
     canCreate && (
-      <form id="policy-create-form" class="admin-create-form">
+      <form id="policy-create-form" class="admin-create-form fade-in-up">
+        <p class="form-legend">Create a policy</p>
         <p
           id="policy-create-error"
           class="admin-create-error"
@@ -129,8 +138,8 @@ if (canRead) {
 
   {
     canRead && !loadError && (
-      <div class="data-table-scroll">
-        <table class="data-table" id="abac-policies-table">
+      <div class="data-table-scroll fade-in-up">
+        <table class="data-table data-table--stack" id="abac-policies-table">
           <caption>{policies.length} policy(ies)</caption>
           <thead>
             <tr>
@@ -145,45 +154,68 @@ if (canRead) {
             {policies.length === 0 ? (
               <tr>
                 <td class="data-table-empty" colspan={canUpdate ? 5 : 4}>
-                  No custom policies — the built-in role/permission rules apply.
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⚖
+                    </span>
+                    <span class="empty-state-title">No custom policies</span>
+                    <span class="empty-state-text">
+                      The built-in role/permission rules apply. Add a custom
+                      policy to extend or override them for this tenant.
+                    </span>
+                  </div>
                 </td>
               </tr>
             ) : (
               policies.map((policy) => (
                 <tr>
-                  <td>{policy.policyCode}</td>
-                  <td>
+                  <td data-label="Code">
+                    <span class="cell-code">{policy.policyCode}</span>
+                  </td>
+                  <td data-label="Effect">
                     <span
                       class="status-badge"
                       data-variant={
-                        policy.effect === "allow" ? "success" : "warning"
+                        policy.effect === "allow" ? "success" : "danger"
                       }
                     >
+                      <span class="status-dot" aria-hidden="true" />
                       {policy.effect}
                     </span>
                   </td>
-                  <td>{policy.description ?? "—"}</td>
-                  <td>{policy.isActive ? "yes" : "no"}</td>
+                  <td data-label="Description">
+                    {policy.description ?? <span class="cell-muted">—</span>}
+                  </td>
+                  <td data-label="Active">
+                    <span
+                      class="status-badge"
+                      data-variant={policy.isActive ? "success" : "neutral"}
+                    >
+                      {policy.isActive ? "active" : "inactive"}
+                    </span>
+                  </td>
                   {canUpdate && (
-                    <td>
-                      <button
-                        type="button"
-                        class="policy-edit"
-                        data-policy-id={policy.id}
-                        data-policy-code={policy.policyCode}
-                        data-effect={policy.effect}
-                        data-description={policy.description ?? ""}
-                      >
-                        Edit
-                      </button>{" "}
-                      <button
-                        type="button"
-                        class="policy-toggle"
-                        data-policy-id={policy.id}
-                        data-active={policy.isActive ? "true" : "false"}
-                      >
-                        {policy.isActive ? "Disable" : "Enable"}
-                      </button>
+                    <td data-label="Actions" class="stacked-block">
+                      <div class="row-actions">
+                        <button
+                          type="button"
+                          class="module-toggle policy-edit"
+                          data-policy-id={policy.id}
+                          data-policy-code={policy.policyCode}
+                          data-effect={policy.effect}
+                          data-description={policy.description ?? ""}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          class="module-toggle policy-toggle"
+                          data-policy-id={policy.id}
+                          data-active={policy.isActive ? "true" : "false"}
+                        >
+                          {policy.isActive ? "Disable" : "Enable"}
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
