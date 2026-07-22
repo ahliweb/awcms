@@ -72,6 +72,16 @@ flowchart LR
 
 Aturan yang direncanakan: default `system`; pilihan personal per-browser disimpan di localStorage (selalu menang bila ada) dengan fallback ke preferensi tenant `awcms_tenants.default_theme` (dapat diubah admin di `/admin/settings`) untuk browser yang belum pernah memilih; `data-theme` di-set pada `<html>` sebelum paint untuk mencegah flash.
 
+### Motion & animasi
+
+Sistem motion ada di `src/styles/motion.css` (di-import global): token durasi `--motion-instant/fast/base/slow` (80/140/240/400ms) + easing `--ease-standard/out/in/spring`, keyframe berprefiks `awcms-` (`awcms-fade-in`, `awcms-fade-in-up`, `awcms-scale-in`, `awcms-slide-in-left`, dst.), dan utility class pasangannya (`.fade-in-up`, `.scale-in`, `.hover-lift`, `.transition-base`, `.skeleton`). Animasi = micro-interaction: halus, cepat, memperjelas perubahan state — bukan pertunjukan.
+
+Aturan:
+
+- **`prefers-reduced-motion: reduce` WAJIB dihormati** — `motion.css` sudah menetralkan utility motion-nya di blok reduced-motion. Blok itu menyasar utility class-nya (bukan `*`), jadi animasi baru yang **scoped** ke satu halaman/komponen harus menyertakan guard reduced-motion lokal sendiri.
+- **Tanpa layout shift** — animasikan hanya `opacity`/`transform`/warna/`box-shadow`, bukan `width`/`height`/`top`/`left`.
+- **Entrance konten utama yang sudah tampil saat SSR sebaiknya `transform`-saja (mis. `translateY`), bukan dari `opacity: 0`.** Scan axe-core dapat membaca teks setengah-transparan di tengah animasi sebagai pelanggaran kontras bila kebetulan men-scan sebelum animasi selesai. Kartu login (`login.astro`) memakai `@keyframes auth-card-rise` (translateY-only) sebagai contoh kanonis. Fade `opacity:0` (mis. utility `.fade-in-up`) tetap pas untuk elemen yang di-reveal **setelah** load (banner/dialog pasca-aksi) atau elemen sekunder — hindari hanya untuk konten teks utama layar auth/entry.
+
 ## Component library
 
 Komponen dasar direncanakan di `src/components/ui`, dipakai lintas persona dan lintas modul ERP.
@@ -133,6 +143,36 @@ flowchart TD
 Item menu difilter oleh permission efektif user (RBAC/ABAC). Menu tanpa akses disembunyikan, tetapi endpoint tetap dilindungi ABAC.
 
 ## Layout shell
+
+### Auth screen (login) — modern, mobile-first
+
+`src/pages/login.astro` adalah pola layar auth publik **kanonis** (UI/UX overhaul, Issue #166/#215): kartu `.auth-card` terpusat di atas background radial-gradient halus (`--color-primary-soft` + `--color-surface-2` + `--color-bg`), elevasi `--shadow-lg`, radius `--radius-xl`. Layar auth publik lain (forgot/reset password bila ditambah kelak) mengikuti pola ini.
+
+```text
+┌───────────────────────────┐
+│  [A]  AWCMS                │  ← brand: .auth-mark (badge gradient) + .auth-wordmark
+│  Sign in                   │  ← .auth-title (h1)
+│  Welcome back. Sign in…    │  ← .auth-subtitle
+│  ┌───────────────────────┐ │
+│  │ SIGNING IN TO         │ │  ← .auth-tenant-context (mode single-tenant)
+│  │ <Tenant name>         │ │
+│  └───────────────────────┘ │
+│  Login identifier  [_____] │
+│  Password     [____] [Show]│  ← .auth-password + toggle show/hide
+│  [      Sign in         ]  │  ← .auth-submit (primary)
+│  Secured workspace access  │  ← .auth-foot
+└───────────────────────────┘
+```
+
+Aturan pola (sudah diimplementasikan — ikuti, jangan regresi):
+
+- **Kontrak DOM stabil** (jangan rename — script client + spec E2E `tests/e2e/login.e2e.ts` bergantung padanya): `#login-form`, `#tenant-id`, `#login-identifier`, `#password`, `#login-submit`, `#login-error`. Field tenant SELALU `id="tenant-id"` + `name="tenantId"` di ketiga bentuknya sehingga submit (`FormData`) tetap jalan dan header `X-AWCMS-Tenant-ID` tetap terkirim.
+- **Field tenant adaptif** (`awcms_tenants` = tabel root RLS-free, dibaca SSR read-only tanpa konteks tenant, dibatasi `TENANT_PICKER_LIMIT`): 0 baris / error DB / > limit → input teks manual (kompatibel-mundur + hindari enumerasi tenant massal); tepat 1 → readout read-only "Signing in to <name>" (`.auth-tenant-context`) + `#tenant-id` hidden; 2..limit → `<select>` nama tenant (value = UUID). Merender nama tenant ke pengunjung tak terautentikasi saat count > 1 adalah keputusan produk yang diterima untuk base repo (query dibatasi + read-only).
+- **Toggle show/hide password** di-wire di script MODUL yang di-bundle (bukan `onclick` inline — CSP `default-src 'self'` tanpa `'unsafe-inline'`), `aria-pressed` + `aria-label` yang berubah saat state berubah.
+- **Select kustom**: caret digambar via CSS (`.auth-select::after`, trik border), bukan `data:` URI SVG — tetap CSP-safe; native `<select>` tetap dipakai.
+- **Entrance kartu** `@keyframes auth-card-rise` = `transform`-saja (translateY), BUKAN utility `.fade-in-up` yang dari `opacity:0` (lihat §Motion — hindari flag kontras axe pada teks utama). Sertakan guard reduced-motion lokal.
+- **CSP ketat (single-owner)**: `tokens.css`/`motion.css` + `<style>` scoped semua di-emit sebagai `<link>` eksternal same-origin (`build.inlineStylesheets: "never"`, `astro.config.mjs`); script login = modul yang di-bundle (bukan `is:inline`); satu-satunya `is:inline` `<script src>` adalah loader Cloudflare Turnstile, dan hanya saat `isTurnstileRequired()` (`src/lib/security/turnstile.ts`).
+- **i18n**: string layar ini masih hardcode EN — mengikuti pipeline ekstraksi `.po`/`.pot` (§Internationalization, "rencana pipeline"); saat pipeline itu diaktifkan, ganti ke `t("auth.login.*")` sekaligus (jangan sebagian).
 
 ### Admin shell (desktop-first, responsive drawer di bawah `--bp-md`)
 
@@ -242,6 +282,8 @@ stateDiagram-v2
 - Dialog memerangkap fokus; `Esc` menutup; fokus kembali ke pemicu.
 - Target sentuh ≥ 44px untuk portal mobile.
 - Jangan mengandalkan warna saja untuk status (tambah ikon/teks).
+- Toggle show/hide password: `aria-pressed` + `aria-label` yang mengikuti state, di-wire via `addEventListener` (bukan `onclick` inline — CSP `default-src 'self'`). Contoh: `login.astro` `#password-toggle`.
+- Kontrol kustom yang menyembunyikan native (mis. `<select>` bergaya): gambar afordansi (caret) via CSS `::after`, bukan `data:` URI; native `<select>` tetap dipakai agar keyboard + a11y bawaan tetap ada.
 
 ## Internationalization (i18n)
 

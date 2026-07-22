@@ -117,7 +117,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
   </head>
   <body class="auth-body">
     <main class="auth">
-      <div class="auth-card fade-in-up">
+      <div class="auth-card">
         <div class="auth-head">
           <div class="auth-brand">
             <span class="auth-mark" aria-hidden="true">A</span>
@@ -396,6 +396,20 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
         border: 1px solid var(--color-border);
         border-radius: var(--radius-xl);
         box-shadow: var(--shadow-lg);
+        /* Transform-only entrance (never opacity — keeps text fully opaque so an
+           axe-core contrast scan can't flag it mid-animation; doc 14 §Motion).
+           Replaces the shared `.fade-in-up` utility, which fades from
+           `opacity: 0`. Neutralised by the reduced-motion block below. */
+        animation: auth-card-rise var(--motion-base) var(--ease-out);
+      }
+
+      @keyframes auth-card-rise {
+        from {
+          transform: translateY(10px);
+        }
+        to {
+          transform: none;
+        }
       }
 
       .auth-head {
@@ -641,12 +655,16 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
       }
 
       /*
-       * Non-essential motion: the submit's active-nudge is decorative. The card
-       * entrance uses motion.css's `.fade-in-up`, which is itself reduced-motion
-       * guarded there. Kill the local transitions/transforms too so nothing
-       * moves for reduced-motion users.
+       * Non-essential motion: the submit's active-nudge is decorative and the
+       * card entrance (`auth-card-rise`) is transform-only. motion.css's global
+       * reduced-motion block only targets its own utility classes, so this
+       * scoped animation + the local transitions/transforms are neutralised
+       * here so nothing moves for reduced-motion users.
        */
       @media (prefers-reduced-motion: reduce) {
+        .auth-card {
+          animation: none;
+        }
         .auth-form input[type="text"],
         .auth-form input[type="password"],
         .auth-form select,
