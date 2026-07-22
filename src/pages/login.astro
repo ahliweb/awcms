@@ -1,47 +1,110 @@
 ---
 /**
- * Login page (Issue #166 — ported from awcms-mini's `login.astro`, simplified
- * to awcms scope). POSTs to `POST /api/v1/auth/login`, which sets the two
- * httpOnly SSR session cookies (`src/lib/auth/ssr-session.ts`) the `/admin`
- * guard in `src/middleware.ts` then consumes.
+ * Login page (Issue #166 — ported from awcms-mini's `login.astro`; redesigned
+ * into a modern, mobile-first auth screen by the UI/UX overhaul phase 2).
+ * POSTs to `POST /api/v1/auth/login`, which sets the two httpOnly SSR session
+ * cookies (`src/lib/auth/ssr-session.ts`) the `/admin` guard in
+ * `src/middleware.ts` then consumes.
  *
- * Simplified vs mini: NO i18n (strings hardcoded English — awcms has no
- * gettext catalog yet), NO Google OIDC button, and NO
- * `<script type="application/json">` strings blob. What is kept 1:1 is the
- * stable element ids the E2E specs and the client script rely on
- * (`#login-form`, `#tenant-id`, `#login-identifier`, `#password`,
- * `#login-submit`, `#login-error`).
+ * ## Stable DOM contract (do not rename — E2E specs + client script depend on
+ * these): `#login-form`, `#tenant-id`, `#login-identifier`, `#password`,
+ * `#login-submit`, `#login-error`. The tenant field ALWAYS carries
+ * `name="tenantId"` and id `#tenant-id` regardless of which of the three
+ * shapes below it takes, so `String(formData.get("tenantId"))` in the client
+ * script keeps working and the submit still sends the `X-AWCMS-Tenant-ID`
+ * header. `<select>` and `<input>` both expose `.value` via `FormData`.
  *
- * The manual Tenant ID field is a demo simplification for this fondasi repo,
- * exactly as in mini — a derived app resolves the tenant by domain instead of
- * asking the user to paste a UUID (out of scope here).
+ * ## Auto tenant picker (UI/UX phase 2)
+ * The manual "paste a UUID" field is a poor experience, so this page reads the
+ * active tenant registry SERVER-SIDE (SSR frontmatter) — `awcms_tenants` is the
+ * root table, deliberately WITHOUT RLS (see `sql/017`), so it is queried on the
+ * app connection with NO tenant context (there is none yet — the user has not
+ * picked one). Only `id` + `tenant_name` of `status = 'active'` rows are read,
+ * nothing sensitive. The shape adapts to the count:
+ *   - 0 rows (pre-setup) OR any DB error (placeholder `DATABASE_URL`, not
+ *     migrated, breaker open) → the original manual TEXT `#tenant-id` input,
+ *     preserving backward-compatibility and the zero-fixture E2E render path.
+ *   - exactly 1 → a HIDDEN `#tenant-id` prefilled with that tenant's id plus a
+ *     read-only "Signing in to <name>" readout; the user types nothing.
+ *   - 2..TENANT_PICKER_LIMIT → a `<select id="tenant-id">` of tenant NAMES
+ *     (value = UUID).
+ *   - more than TENANT_PICKER_LIMIT → fall back to the manual input rather than
+ *     render a huge public dropdown (bounds the query AND avoids mass tenant
+ *     enumeration; a deployment with that many tenants resolves the tenant by
+ *     domain, not by asking the user to scroll a list).
+ * Rendering tenant names to an unauthenticated visitor when count > 1 is an
+ * accepted product decision for this base repo's small multi-tenant dev
+ * setups; the query is capped and read-only.
  *
- * Cloudflare Turnstile (Issue #186) — the widget and its loader script render
- * ONLY when `isTurnstileRequired()` (the full-online deployment-profile gate
- * AND `TURNSTILE_ENABLED=true`) is true. Every local/offline/LAN deployment
- * (the default) renders this page byte-identically to before this issue: no
- * `cf-turnstile` div, no `challenges.cloudflare.com` script, no iframe. When
- * required, the middleware CSP opens `script-src`/`frame-src` for that one
- * Cloudflare origin (see `src/lib/security/security-headers.ts`), and the
- * external loader is an explicit `is:inline` `<script src>` (NOT an
- * Astro-bundled module — those only load from `'self'`). `TURNSTILE_SITE_KEY`
- * is public (Cloudflare embeds it in every widget); `TURNSTILE_SECRET_KEY` is
- * server-side only and never reaches this page.
+ * ## Cloudflare Turnstile (Issue #186)
+ * The widget and its loader render ONLY when `isTurnstileRequired()` (the
+ * full-online deployment-profile gate AND `TURNSTILE_ENABLED=true`). Every
+ * local/offline/LAN deployment (the default) renders no `cf-turnstile` div and
+ * no `challenges.cloudflare.com` script. When required, the middleware CSP
+ * opens `script-src`/`frame-src` for that one Cloudflare origin
+ * (`src/lib/security/security-headers.ts`) and the external loader is an
+ * explicit `is:inline` `<script src>`. `TURNSTILE_SITE_KEY` is public;
+ * `TURNSTILE_SECRET_KEY` is server-side only and never reaches this page.
  *
- * CSP: `tokens.css`/`admin.css` are external <link>s (`inlineStylesheets:
- * "never"`) and the login client below is an Astro-bundled module script — no
- * inline script/style, so the middleware `default-src 'self'` policy holds.
+ * ## CSP (strict, single-owner)
+ * `default-src 'self'` with NO `'unsafe-inline'`. Everything on this page obeys
+ * it: `tokens.css`/`motion.css` and the Astro-scoped `<style>` below are all
+ * emitted as external same-origin `<link>`s (`build.inlineStylesheets:
+ * "never"`, see astro.config.mjs), the login client is an Astro-BUNDLED module
+ * script (not `is:inline`), animations are pure CSS, and no third-party origin
+ * (font CDN / library) is referenced. Non-essential motion degrades under
+ * `@media (prefers-reduced-motion: reduce)`.
  */
 import "../styles/tokens.css";
-import "../styles/admin.css";
+import "../styles/motion.css";
 import {
   isTurnstileRequired,
   resolveTurnstileSiteKey,
   LOGIN_TURNSTILE_ACTION
 } from "../lib/security/turnstile";
+import { getDatabaseClient } from "../lib/database/client";
 
 const turnstileActive = isTurnstileRequired();
 const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
+
+// --- Auto tenant picker (read-only SSR read of the root tenant registry) ---
+type TenantOption = { id: string; name: string };
+type TenantPickerMode = "manual" | "single" | "select";
+
+/**
+ * Hard cap on the public dropdown. `LIMIT +1` lets us detect "more than this"
+ * without counting the whole table; past the cap we render the manual input
+ * instead of a giant enumerable list.
+ */
+const TENANT_PICKER_LIMIT = 50;
+
+let tenantOptions: TenantOption[] = [];
+let tenantPickerMode: TenantPickerMode = "manual";
+
+try {
+  const sql = getDatabaseClient();
+  // No `withTenant` — `awcms_tenants` is the RLS-free root table and there is
+  // no tenant context to set before the user has chosen one.
+  const rows = (await sql`
+    SELECT id, tenant_name
+    FROM awcms_tenants
+    WHERE status = 'active'
+    ORDER BY tenant_name ASC
+    LIMIT ${TENANT_PICKER_LIMIT + 1}
+  `) as Array<{ id: string; tenant_name: string }>;
+
+  if (rows.length >= 1 && rows.length <= TENANT_PICKER_LIMIT) {
+    tenantOptions = rows.map((row) => ({ id: row.id, name: row.tenant_name }));
+    tenantPickerMode = tenantOptions.length === 1 ? "single" : "select";
+  }
+  // rows.length === 0 (pre-setup) or > cap → keep the manual input.
+} catch {
+  // No DB / placeholder DATABASE_URL / not migrated / breaker open — degrade to
+  // the manual Tenant ID field so /login always renders.
+  tenantPickerMode = "manual";
+}
+
+const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
 ---
 
 <!doctype html>
@@ -49,53 +112,131 @@ const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
     <title>Sign in · AWCMS</title>
   </head>
-  <body>
-    <main class="login-page">
-      <form id="login-form" class="login-form" novalidate>
-        <h1>AWCMS</h1>
-        <p id="login-error" class="login-error" role="alert" hidden></p>
+  <body class="auth-body">
+    <main class="auth">
+      <div class="auth-card fade-in-up">
+        <div class="auth-head">
+          <div class="auth-brand">
+            <span class="auth-mark" aria-hidden="true">A</span>
+            <span class="auth-wordmark">AWCMS</span>
+          </div>
+          <h1 class="auth-title">Sign in</h1>
+          <p class="auth-subtitle">Welcome back. Sign in to your workspace.</p>
+        </div>
 
-        <label for="tenant-id">Tenant ID</label>
-        <input
-          id="tenant-id"
-          name="tenantId"
-          type="text"
-          required
-          autocomplete="off"
-        />
+        <form id="login-form" class="auth-form" novalidate>
+          <p id="login-error" class="auth-error" role="alert" hidden></p>
 
-        <label for="login-identifier">Login identifier</label>
-        <input
-          id="login-identifier"
-          name="loginIdentifier"
-          type="text"
-          required
-          autocomplete="username"
-        />
+          {
+            singleTenant && (
+              <div class="auth-tenant-context">
+                <span class="auth-tenant-context-label">Signing in to</span>
+                <span class="auth-tenant-context-name">
+                  {singleTenant.name}
+                </span>
+                <input
+                  id="tenant-id"
+                  name="tenantId"
+                  type="hidden"
+                  value={singleTenant.id}
+                />
+              </div>
+            )
+          }
 
-        <label for="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autocomplete="current-password"
-        />
+          {
+            tenantPickerMode === "select" && (
+              <div class="auth-field">
+                <label for="tenant-id">Organization</label>
+                <div class="auth-select">
+                  <select
+                    id="tenant-id"
+                    name="tenantId"
+                    required
+                    autocomplete="organization"
+                  >
+                    <option value="" disabled selected>
+                      Choose your organization
+                    </option>
+                    {tenantOptions.map((tenant) => (
+                      <option value={tenant.id}>{tenant.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )
+          }
 
-        {
-          turnstileActive && turnstileSiteKey && (
-            <div
-              class="cf-turnstile"
-              data-sitekey={turnstileSiteKey}
-              data-action={LOGIN_TURNSTILE_ACTION}
+          {
+            tenantPickerMode === "manual" && (
+              <div class="auth-field">
+                <label for="tenant-id">Tenant ID</label>
+                <input
+                  id="tenant-id"
+                  name="tenantId"
+                  type="text"
+                  required
+                  autocomplete="off"
+                  spellcheck={false}
+                />
+              </div>
+            )
+          }
+
+          <div class="auth-field">
+            <label for="login-identifier">Login identifier</label>
+            <input
+              id="login-identifier"
+              name="loginIdentifier"
+              type="text"
+              required
+              autocomplete="username"
+              spellcheck={false}
             />
-          )
-        }
+          </div>
 
-        <button type="submit" id="login-submit">Sign in</button>
-      </form>
+          <div class="auth-field">
+            <label for="password">Password</label>
+            <div class="auth-password">
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                autocomplete="current-password"
+              />
+              <button
+                type="button"
+                id="password-toggle"
+                class="auth-password-toggle"
+                aria-pressed="false"
+                aria-label="Show password"
+              >
+                <span class="auth-password-toggle-label">Show</span>
+              </button>
+            </div>
+          </div>
+
+          {
+            turnstileActive && turnstileSiteKey && (
+              <div
+                class="cf-turnstile auth-turnstile"
+                data-sitekey={turnstileSiteKey}
+                data-action={LOGIN_TURNSTILE_ACTION}
+              />
+            )
+          }
+
+          <button type="submit" id="login-submit" class="auth-submit">
+            Sign in
+          </button>
+        </form>
+
+        <p class="auth-foot">Secured workspace access · AWCMS</p>
+      </div>
     </main>
 
     {
@@ -122,6 +263,33 @@ const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
       const submitButton = document.getElementById(
         "login-submit"
       ) as HTMLButtonElement | null;
+
+      // Password visibility toggle — pure enhancement, wired here (no inline
+      // handler) so the strict CSP is respected. Absent-safe if the elements
+      // are ever removed.
+      const passwordInput = document.getElementById(
+        "password"
+      ) as HTMLInputElement | null;
+      const passwordToggle = document.getElementById(
+        "password-toggle"
+      ) as HTMLButtonElement | null;
+      const passwordToggleLabel = passwordToggle?.querySelector(
+        ".auth-password-toggle-label"
+      );
+
+      passwordToggle?.addEventListener("click", () => {
+        if (!passwordInput) return;
+        const reveal = passwordInput.type === "password";
+        passwordInput.type = reveal ? "text" : "password";
+        passwordToggle.setAttribute("aria-pressed", String(reveal));
+        passwordToggle.setAttribute(
+          "aria-label",
+          reveal ? "Hide password" : "Show password"
+        );
+        if (passwordToggleLabel) {
+          passwordToggleLabel.textContent = reveal ? "Hide" : "Show";
+        }
+      });
 
       function showError(message: string): void {
         if (!errorBox) return;
@@ -186,5 +354,309 @@ const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
         }
       });
     </script>
+
+    <style>
+      /*
+       * Login surface styles — Astro-scoped, so emitted as an EXTERNAL
+       * same-origin stylesheet (build.inlineStylesheets: "never"); never an
+       * inline <style> the middleware CSP would block. Tokens only (no literal
+       * colours/sizes) from tokens.css. Mobile-first: base rules target small
+       * screens, one min-width query enhances larger ones.
+       */
+      .auth-body {
+        margin: 0;
+      }
+
+      .auth {
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--sp-4);
+        background:
+          radial-gradient(
+            120% 90% at 15% 0%,
+            var(--color-primary-soft) 0%,
+            transparent 55%
+          ),
+          radial-gradient(
+            110% 80% at 100% 100%,
+            var(--color-surface-2) 0%,
+            transparent 60%
+          ),
+          var(--color-bg);
+      }
+
+      .auth-card {
+        width: 100%;
+        max-width: 400px;
+        padding: var(--sp-6) var(--sp-5);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .auth-head {
+        margin-bottom: var(--sp-5);
+      }
+
+      .auth-brand {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        margin-bottom: var(--sp-4);
+      }
+
+      .auth-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: var(--radius-md);
+        background: linear-gradient(
+          135deg,
+          var(--color-primary) 0%,
+          var(--color-primary-hover) 100%
+        );
+        color: var(--color-primary-contrast);
+        font-weight: var(--fw-bold);
+        font-size: var(--fs-lg);
+        line-height: 1;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .auth-wordmark {
+        font-weight: var(--fw-bold);
+        font-size: var(--fs-md);
+        letter-spacing: var(--tracking-wide);
+        color: var(--color-text);
+      }
+
+      .auth-title {
+        margin: 0;
+        font-size: var(--fs-2xl);
+        font-weight: var(--fw-bold);
+        line-height: var(--lh-tight);
+        letter-spacing: var(--tracking-tight);
+        color: var(--color-text);
+      }
+
+      .auth-subtitle {
+        margin: var(--sp-2) 0 0;
+        font-size: var(--fs-sm);
+        color: var(--color-text-muted);
+        line-height: var(--lh-snug);
+      }
+
+      .auth-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-4);
+      }
+
+      .auth-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-1);
+      }
+
+      .auth-field label {
+        font-size: var(--fs-sm);
+        font-weight: var(--fw-medium);
+        color: var(--color-text);
+      }
+
+      .auth-form input[type="text"],
+      .auth-form input[type="password"],
+      .auth-form select {
+        width: 100%;
+        min-height: 44px;
+        padding: 0 var(--sp-3);
+        background: var(--color-surface);
+        color: var(--color-text);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        font-size: var(--fs-base);
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+
+      .auth-form input::placeholder {
+        color: var(--color-text-muted);
+      }
+
+      .auth-form input[type="text"]:hover,
+      .auth-form input[type="password"]:hover,
+      .auth-form select:hover {
+        border-color: var(--color-text-muted);
+      }
+
+      .auth-form input[type="text"]:focus-visible,
+      .auth-form input[type="password"]:focus-visible,
+      .auth-form select:focus-visible {
+        outline: none;
+        border-color: var(--color-focus);
+        box-shadow: 0 0 0 3px var(--color-primary-soft);
+      }
+
+      /* Tenant readout (single-tenant deployment). */
+      .auth-tenant-context {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: var(--sp-3);
+        background: var(--color-primary-soft);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+      }
+
+      .auth-tenant-context-label {
+        font-size: var(--fs-xs);
+        text-transform: uppercase;
+        letter-spacing: var(--tracking-wide);
+        color: var(--color-text-muted);
+      }
+
+      .auth-tenant-context-name {
+        font-size: var(--fs-base);
+        font-weight: var(--fw-semibold);
+        color: var(--color-text);
+      }
+
+      /* Select wrapper — CSS-drawn caret (no data: URI, CSP-safe). */
+      .auth-select {
+        position: relative;
+      }
+
+      .auth-select select {
+        appearance: none;
+        -webkit-appearance: none;
+        padding-right: var(--sp-6);
+        cursor: pointer;
+      }
+
+      .auth-select::after {
+        content: "";
+        position: absolute;
+        right: var(--sp-3);
+        top: 50%;
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid var(--color-text-muted);
+        border-bottom: 2px solid var(--color-text-muted);
+        transform: translateY(-70%) rotate(45deg);
+        pointer-events: none;
+      }
+
+      /* Password field with inline show/hide toggle. */
+      .auth-password {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+
+      .auth-password input {
+        padding-right: 72px;
+      }
+
+      .auth-password-toggle {
+        position: absolute;
+        right: var(--sp-1);
+        top: 50%;
+        transform: translateY(-50%);
+        min-height: 36px;
+        min-width: 56px;
+        padding: 0 var(--sp-2);
+        background: transparent;
+        border: none;
+        border-radius: var(--radius-sm);
+        color: var(--color-primary);
+        font-size: var(--fs-sm);
+        font-weight: var(--fw-medium);
+        cursor: pointer;
+      }
+
+      .auth-password-toggle:hover {
+        background: var(--color-surface-hover);
+      }
+
+      .auth-error {
+        margin: 0;
+        padding: var(--sp-3);
+        background: var(--color-danger-strong);
+        color: var(--color-primary-contrast);
+        border-radius: var(--radius-md);
+        font-size: var(--fs-sm);
+        line-height: var(--lh-snug);
+      }
+
+      .auth-turnstile {
+        min-height: 65px;
+      }
+
+      .auth-submit {
+        margin-top: var(--sp-1);
+        min-height: 48px;
+        padding: 0 var(--sp-4);
+        background: var(--color-primary-strong);
+        color: var(--color-primary-contrast);
+        border: none;
+        border-radius: var(--radius-md);
+        font-size: var(--fs-base);
+        font-weight: var(--fw-semibold);
+        cursor: pointer;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          transform var(--motion-fast) var(--ease-standard);
+      }
+
+      .auth-submit:hover {
+        background: var(--color-primary-hover);
+      }
+
+      .auth-submit:active {
+        transform: translateY(1px);
+      }
+
+      .auth-submit:disabled {
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+
+      .auth-foot {
+        margin: var(--sp-5) 0 0;
+        text-align: center;
+        font-size: var(--fs-xs);
+        color: var(--color-text-muted);
+      }
+
+      @media (min-width: 640px) {
+        .auth-card {
+          padding: var(--sp-7) var(--sp-6);
+        }
+      }
+
+      /*
+       * Non-essential motion: the submit's active-nudge is decorative. The card
+       * entrance uses motion.css's `.fade-in-up`, which is itself reduced-motion
+       * guarded there. Kill the local transitions/transforms too so nothing
+       * moves for reduced-motion users.
+       */
+      @media (prefers-reduced-motion: reduce) {
+        .auth-form input[type="text"],
+        .auth-form input[type="password"],
+        .auth-form select,
+        .auth-submit {
+          transition: none;
+        }
+        .auth-submit:active {
+          transform: none;
+        }
+      }
+    </style>
   </body>
 </html>
