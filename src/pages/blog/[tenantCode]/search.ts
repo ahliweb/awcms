@@ -87,7 +87,8 @@ export const GET: APIRoute = async ({ params, url }) => {
         description: `Search results for "${query}" on the ${tenant.tenantName} blog.`,
         canonicalUrl: null,
         bodyHtml,
-        locale: tenant.defaultLocale
+        locale: tenant.defaultLocale,
+        variant: "list"
       });
 
       return new Response(html, {

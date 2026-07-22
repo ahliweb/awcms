@@ -80,7 +80,8 @@ ${renderPaginationNavHtml(page, result.hasNextPage, `/blog/${tenantCode}`)}`;
           `Latest posts from ${tenant.tenantName}.`,
         canonicalUrl: `${url.origin}/blog/${tenantCode}`,
         bodyHtml,
-        locale: tenant.defaultLocale
+        locale: tenant.defaultLocale,
+        variant: "list"
       });
 
       return new Response(html, {

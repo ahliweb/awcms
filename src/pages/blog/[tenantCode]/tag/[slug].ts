@@ -74,7 +74,8 @@ ${renderPaginationNavHtml(page, result.hasNextPage, `/blog/${tenantCode}/tag/${t
         description: term.description ?? `Posts tagged ${term.name}.`,
         canonicalUrl: `${url.origin}/blog/${tenantCode}/tag/${term.slug}`,
         bodyHtml,
-        locale: tenant.defaultLocale
+        locale: tenant.defaultLocale,
+        variant: "list"
       });
 
       return new Response(html, {

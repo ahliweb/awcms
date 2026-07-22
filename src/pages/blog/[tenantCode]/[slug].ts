@@ -139,7 +139,8 @@ ${shareButtonsHtml}
         articleSection: seoMetadata.articleSection,
         articleTags: seoMetadata.articleTags,
         robotsContent: seoMetadata.robotsContent,
-        structuredDataJsonLd: seoMetadata.structuredDataJsonLd
+        structuredDataJsonLd: seoMetadata.structuredDataJsonLd,
+        variant: "article"
       });
 
       return new Response(html, {
