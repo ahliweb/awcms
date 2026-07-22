@@ -49,11 +49,23 @@
      already promises. Measured: 5.36:1 against white in both themes. */
   --color-info-strong: #0e7490;
 
+  /*
+   * Additive interaction / surface tints (UI/UX overhaul foundation). Purely
+   * NEW tokens — the doc-14 values above are untouched. `-hover` = the darker
+   * pressed/hovered fill of a solid control; `-soft` = a low-chroma tinted
+   * background for emphasis blocks (selected rows, info panels) that keeps
+   * `--color-text` legible on top; `--color-overlay` = the modal/drawer scrim.
+   */
+  --color-primary-hover: #1d4ed8;
+  --color-primary-soft: #e8effc;
+  --color-surface-hover: #f0f3f8;
+  --color-overlay: rgba(15, 23, 42, 0.5);
+
   /* Font */
   --font-sans: system-ui, -apple-system, "Inter", "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
 
-  /* Font size (xs .. 2xl) */
+  /* Font size (xs .. 3xl) */
   --fs-xs: 12px;
   --fs-sm: 14px;
   --fs-base: 16px;
@@ -61,6 +73,24 @@
   --fs-lg: 20px;
   --fs-xl: 24px;
   --fs-2xl: 32px;
+  --fs-3xl: 40px;
+
+  /* Font weight */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Line height */
+  --lh-tight: 1.2;
+  --lh-snug: 1.35;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.7;
+
+  /* Letter spacing */
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
 
   /* Spacing (1 .. 8) */
   --sp-1: 4px;
@@ -76,12 +106,37 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Shadow */
+  /* Shadow / elevation */
+  --shadow-xs: 0 1px 1px rgba(15, 23, 42, 0.05);
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
   --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.12);
   --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.18);
+
+  /*
+   * Motion tokens (UI/UX overhaul foundation). Standard durations + easing
+   * curves so every transition/animation in the app moves with the same
+   * rhythm. Consumed by `motion.css` utilities and component transitions.
+   *
+   * IMPORTANT: motion is always OPT-IN and every consumer MUST degrade under
+   * `@media (prefers-reduced-motion: reduce)` — `motion.css` and the layouts
+   * do this centrally, but any new consumer of these tokens must too.
+   */
+  --motion-instant: 80ms;
+  --motion-fast: 140ms;
+  --motion-base: 240ms;
+  --motion-slow: 400ms;
+  /* General-purpose UI easing (emphasized decelerate). */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* Decelerate — for entrances (elements arriving on screen). */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Accelerate — for exits (elements leaving screen). */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  /* Gentle overshoot — for playful affordances (toggles, chips). Tasteful,
+     never bouncy. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Z-index */
   --z-nav: 100;
@@ -130,6 +185,15 @@
      against the constant white fill-text, not the page background. */
   --color-info-strong: #0e7490;
 
+  /* Dark-theme values for the additive interaction/surface tints — see the
+     :root block for what each is for. Overlay is darker so the scrim reads
+     over an already-dark page. */
+  --color-primary-hover: #2f6fd6;
+  --color-primary-soft: #16233b;
+  --color-surface-hover: #1c2430;
+  --color-overlay: rgba(0, 0, 0, 0.6);
+
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);

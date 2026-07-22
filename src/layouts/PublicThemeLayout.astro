@@ -113,6 +113,38 @@ const {
         --_font-heading: var(--awcms-theme-font_heading, system-ui, sans-serif);
         --_font-size: var(--awcms-theme-font_size_base, 1rem);
         --_line: var(--awcms-theme-line_height_base, 1.5);
+        /* Motion — self-contained (this layout deliberately does NOT import the
+           admin tokens.css/motion.css; it only ever consumes --awcms-theme-*).
+           Every value has a literal fallback so entrances work even without a
+           theme override. All entrance motion is neutralised by the
+           prefers-reduced-motion block below. */
+        --_motion-base: var(--awcms-theme-motion_base, 420ms);
+        --_ease-out: var(
+          --awcms-theme-motion_ease,
+          cubic-bezier(0.16, 1, 0.3, 1)
+        );
+      }
+
+      /* Subtle, tasteful entrance for the public shell (guarded below). */
+      @keyframes theme-enter-down {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes theme-enter-up {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       body {
@@ -149,17 +181,27 @@ const {
         padding: 0 var(--_space);
       }
 
+      /* Mobile-first: stacked header; becomes a row once there's width. */
       .theme-header {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
+        flex-direction: column;
+        align-items: flex-start;
         gap: var(--_space);
         padding: var(--_space) 0;
         border-bottom: 1px solid var(--_border);
-        flex-wrap: wrap;
+        animation: theme-enter-down var(--_motion-base) var(--_ease-out) both;
+      }
+      @media (min-width: 640px) {
+        .theme-header {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+        }
       }
       body[data-header="centered"] .theme-header {
         flex-direction: column;
+        align-items: center;
         text-align: center;
       }
 
@@ -194,6 +236,8 @@ const {
 
       .theme-main {
         padding: calc(var(--_space) * 2) 0;
+        animation: theme-enter-up var(--_motion-base) var(--_ease-out) both;
+        animation-delay: 80ms;
       }
 
       .theme-main h1,
@@ -228,13 +272,10 @@ const {
         color: var(--_muted);
       }
 
-      @media (max-width: 640px) {
-        .theme-header {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-      }
-
+      /* Reduced motion: neutralise every entrance/transition. With
+         `animation-fill-mode: both` on the entrances above, collapsing the
+         duration lands each element on its final, fully-visible keyframe — no
+         content is left hidden. */
       @media (prefers-reduced-motion: reduce) {
         * {
           animation-duration: 0.001ms !important;
