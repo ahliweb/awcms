@@ -140,6 +140,7 @@ lebih dulu.
 - `GET /auth/me` untuk hidrasi konteks (roles, default entitas/gudang, permission untuk filter navigasi).
 - Logout `POST /auth/logout` → invalidasi sesi + hapus cookie.
 - Token/secret **tidak pernah** disimpan di localStorage yang dapat diakses skrip pihak ketiga.
+- Halaman `/login` (`src/pages/login.astro`) = kartu auth mobile-first (doc 14 §Auth screen): brand + judul/subjudul, field tenant adaptif (readout single-tenant / `<select>` / manual, dibaca SSR dari tabel root `awcms_tenants`), toggle show/hide password CSP-safe, dan submit anti-double-submit (`lockElement` + `sendJson`/`postJson`). Script-nya modul yang di-bundle (bukan inline — patuh CSP `default-src 'self'`); `tokens.css`/`motion.css`/`<style>` scoped semua di-emit `<link>` eksternal (`build.inlineStylesheets: "never"`).
 
 ```mermaid
 sequenceDiagram
