@@ -1,22 +1,37 @@
 ---
 name: awcms-blog-content
-description: BACAAN SAJA — modul blog_content BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `blog-content`, tidak ada schema blog di `sql/`). Rujukan `src/modules/blog-content`/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (epic #536, Issue #537-#543) — posts, pages, taxonomi, search, rute publik, revisi/scheduled publishing, template/menu/widget/ads/theme/multilingual/gallery, admin UI blog, atau blog settings API. Gunakan saat menambah endpoint/logic ke src/modules/blog-content, src/pages/blog, atau src/pages/admin/blog, mengubah schema blog, atau mengerjakan issue susulan di luar epic ini. Merangkum keputusan yang sudah dibuat di Issue #537-#543 supaya tidak diulang/dikontradiksi.
+description: Modul blog_content SUDAH di-port ke repo ini (PR #214; `src/modules/blog-content`, migrasi `sql/035`–`sql/040`, 15 tabel `awcms_blog_*` FORCE RLS). Panduan untuk MENGUBAH/menambah ke `src/modules/blog-content`, `src/pages/blog`, mengubah schema blog, atau mengerjakan issue susulan. CATATAN adaptasi awcms (beda dari spesifikasi mini di bawah): rute publik PATH-based `/blog/{tenantCode}` (ADR-0009), BUKAN `/news/**` host-resolved (itu butuh `tenant_domain`, belum di-port dan DI-DROP saat port); capability `news_media` kini adapter NYATA (news_portal sudah di-port); hook `social_publishing` masih no-op (modul itu belum di-port); admin UI blog (`src/pages/admin/blog`) TIDAK di-port. Nomor `sql/NNN` di badan skill memakai penomoran awcms-mini — migrasi nyata di awcms adalah `sql/035`–`sql/040` (lihat README modul + `sql/` nyata). Gunakan saat menambah endpoint/logic blog, mengubah schema, atau issue lanjutan.
 ---
 
 # AWCMS — Blog Content Module
 
-<!-- sql-refs: awcms-mini — modul belum di-port; setiap `sql/NNN` di file ini penomoran awcms-mini, bukan repo ini -->
+<!-- sql-refs: awcms-mini — nomor `sql/NNN` di badan skill ini memakai penomoran awcms-mini; modul SUDAH di-port ke awcms sebagai `sql/035`–`sql/040` (lihat README modul + `sql/` nyata untuk nomor sebenarnya) -->
 
-> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
-> `blog_content` ada di **awcms-mini**, bukan di sini: `ls src/modules`
-> TIDAK memuat `blog-content`, dan `sql/` tidak memuat migration-nya. Semua
-> rujukan `src/modules/blog-content/...`, `src/pages/blog`, tabel
-> `awcms_blog_*`, dan `sql/NNN` di bawah adalah artefak awcms-mini —
-> **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Nomor `sql/NNN`
-> memakai penomoran awcms-mini dan akan berubah saat di-port (melanjutkan
-> dari migration terakhir repo ini). Pakai skill ini sebagai spesifikasi
-> target port (via `awcms-port-from-mini`), bukan peta kode yang bisa
-> dipanggil. Verifikasi `ls src/modules` sebelum mengklaim apa pun ada.
+> **STATUS — SUDAH di-port ke repo ini (PR #214).**
+> `blog_content` kini nyata di sini: `src/modules/blog-content`, migrasi
+> `sql/035_awcms_blog_content_schema.sql`–`sql/040_awcms_blog_content_internal_tag_links_permissions.sql`,
+> 15 tabel `awcms_blog_*` (semua `FORCE ROW LEVEL SECURITY`). Skill ini kini
+> **panduan mengubah/menambah kode nyata**, bukan spesifikasi target port.
+> Baca `src/modules/blog-content/README.md` + `sql/` untuk detail nomor/tabel
+> yang akurat.
+>
+> **DELTA PORT AWCMS (beda dari spesifikasi mini di badan skill — WAJIB diperhatikan):**
+>
+> - Rute publik **path-based `/blog/{tenantCode}`** (ADR-0009): index, detail,
+>   arsip kategori/tag, search, RSS `feed.xml`, `sitemap-blog.xml`. Keluarga
+>   rute **host-resolved `/news/**` TIDAK di-port** (butuh modul `tenant_domain`
+>   yang belum ada) — jangan bangun/rujuk `/news/**` sebagai ada di sini.
+> - Capability `news_media` kini **adapter NYATA** (`news_portal` sudah di-port,
+>   PR #214) — bukan lagi no-op. Hook `social_publishing` **masih no-op**
+>   (`social_publishing` belum di-port).
+> - **Admin UI blog (`src/pages/admin/blog`) TIDAK di-port** — base ini hanya
+>   punya layar admin yang sudah ada di `src/pages/admin/*`. Modul blog di sini
+>   API-first + rute publik.
+> - Blok konten `video_news` (YouTube iframe) ter-render tapi diblokir CSP
+>   sampai deployment menambah `frame-src` sendiri (jaminan "zero third-party
+>   CSP origin" tidak dilonggarkan) — lihat header `_shared/rendering/video-news-block-renderer.ts`.
+> - Nomor `sql/NNN` di badan skill = penomoran awcms-mini; nyata di awcms
+>   `sql/035`–`sql/040`.
 
 `blog_content` (`src/modules/blog-content`) adalah **modul domain pertama
 yang didaftarkan langsung di repo base ini** (epic #536, bukan di aplikasi
@@ -48,12 +63,14 @@ membaca satu file migration.
 | #542  | Template/menu/widget/media/multilingual/ads               | **Selesai** (`/templates`, `/menus`, `/widgets`, `/ads`, `/theme`, lihat README) |
 | #543  | Admin UI, blog settings API, dokumentasi akhir, hardening | **Selesai** (14 layar `/admin/blog/...`, `/api/v1/blog/settings`, lihat README)  |
 
-**Di luar epic #536**: `blog_content` sekarang juga punya rute publik kedua,
-`/news/...` (Issue #560, epic #555 "online public tenant routing") — lihat
-§Rute publik di bawah dan skill `awcms-tenant-domain-routing`'s §Rute
-publik `/news` untuk detail resolusi tenant lintas-mode. `/blog/{tenantCode}`
-(ADR-0009, epic #536) **tetap ada, tidak berubah** — `/news` adalah rute
-tambahan, bukan pengganti.
+**Di luar epic #536 — TAPI DI-DROP saat port ke awcms (lihat DELTA PORT di
+atas):** di awcms-mini `blog_content` juga punya rute publik kedua `/news/...`
+(Issue #560, epic #555 "online public tenant routing"). Rute `/news/**` itu
+**TIDAK di-port ke awcms** karena butuh modul `tenant_domain` (resolusi tenant
+via custom-domain) yang belum ada di sini — jangan bangun/rujuk `/news/**`
+sebagai ada. Rute publik yang NYATA ada di awcms hanya `/blog/{tenantCode}`
+(ADR-0009, epic #536). Bagian bawah skill ini yang membahas `/news`/resolusi
+lintas-mode adalah spesifikasi awcms-mini, bukan kode awcms.
 
 **Juga di luar epic #536**: Issue #636 (epic `news_portal` #631-#642/#649)
 menambah validasi KONDISIONAL — hanya aktif ketika full-online R2-only

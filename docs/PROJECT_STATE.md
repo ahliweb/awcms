@@ -32,8 +32,8 @@ tiga template keluarga AWCMS yang dipakai LANGSUNG**, bukan hierarki base-dan-tu
 | Aspek      | Nilai (per commit ini)                                   | Sumber kebenaran                          |
 | ---------- | -------------------------------------------------------- | ----------------------------------------- |
 | Versi      | **6.0.0** (rilis nyata pertama 2026-07-21, tag `v6.0.0`) | `package.json`, `CHANGELOG.md`, tag `v*`  |
-| Modul base | **11** (lihat daftar di ARCHITECTURE.md)                 | `src/modules/index.ts`                    |
-| Migrasi    | **34** (`sql/001`–`034`)                                 | `ls sql/`                                 |
+| Modul base | **13** (lihat daftar di ARCHITECTURE.md)                 | `src/modules/index.ts`                    |
+| Migrasi    | **45** (`sql/001`–`045`)                                 | `ls sql/`                                 |
 | ADR        | **35**                                                   | `docs/adr/README.id.md` (indeks ter-gate) |
 | Kontrak    | OpenAPI modular per-modul + AsyncAPI                     | `openapi/`, `asyncapi/`                   |
 
@@ -50,7 +50,7 @@ tiga template keluarga AWCMS yang dipakai LANGSUNG**, bukan hierarki base-dan-tu
 
 Modul: `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 `module-management`, `sync-storage`, `workflow-approval`, `reporting`, `email`,
-`domain-event-runtime`, `theming`.
+`domain-event-runtime`, `theming`, `blog-content`, `news-portal`.
 
 > Catatan: generator `repo:inventory` **belum diport** dari `awcms-mini`, jadi
 > [`awcms/repo-inventory.md`](awcms/repo-inventory.md) adalah placeholder — jangan
@@ -58,7 +58,7 @@ Modul: `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **Fondasi 11 modul** aktif dengan RLS `FORCE`, pemisahan role DB
+- **13 modul** aktif dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection
@@ -67,16 +67,28 @@ Modul: `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 - **Authorization**: ABAC dinamis berbasis DSL (`sql/031`/`032`), business-scope hierarchy
   (`sql/027`/`028`), SoD conflict enforcement (`sql/029`/`030`).
 - **`theming`** — modul website pertama di base (`sql/033`/`034`, ADR-0034 Fase 3).
+- **`blog-content` + `news-portal`** — modul konten publik pertama, di-port dari mini
+  (PR #214, `sql/035`–`sql/045`, 19 tabel FORCE RLS). Rute publik path-based
+  `/blog/{tenantCode}` (ADR-0009); `news-portal` menyediakan capability `news_media`
+  (registry R2 + presigned upload) yang dikonsumsi `blog-content` via adapter nyata.
+  DI-DROP saat port (butuh modul lain yang belum ada): rute `/news/**` host-resolved
+  (`tenant_domain`), aktivasi preset full-online-R2 (`module_management` preset subsystem).
+  Lihat skill `awcms-blog-content` / `awcms-news-portal` (kini panduan kode nyata) §DELTA PORT.
+- **UI/UX overhaul** (PR #215) — login + 8 layar admin + blog publik: mobile-first,
+  animasi CSS-only, a11y AA, auto tenant picker di `/login` (sembunyi saat 1 tenant).
+  Presentasi-only; jaminan CSP single-owner "zero third-party origin" dipertahankan.
 - **Kontrak OpenAPI modular** per-modul + bundler deterministik (ADR-0026), **family
   compatibility manifest + CI conformance** (ADR-0032).
 
 ## 4. Backlog / langkah berikutnya
 
 - **Port modul `awcms-mini` yang belum ada** (via skill `awcms-port-from-mini`,
-  alur mini-first): `blog-content`, `news-portal`, `social-publishing`,
-  `visitor-analytics`, `tenant-domain` routing, `data-lifecycle`,
-  `document-infrastructure`, `form-drafts`, `integration-hub`, `idn-admin-regions`.
-  Skill masing-masing (`BACAAN SAJA`) = spesifikasi target.
+  alur mini-first): `social-publishing`, `visitor-analytics`, `tenant-domain` routing,
+  `data-lifecycle`, `document-infrastructure`, `form-drafts`, `integration-hub`,
+  `idn-admin-regions`. Skill masing-masing (`BACAAN SAJA`) = spesifikasi target.
+  (`blog-content` + `news-portal` SUDAH di-port — PR #214; skill-nya kini panduan kode nyata.)
+  Prioritas tinggi: `tenant-domain` (buka rute publik `/news/**` + custom-domain) dan
+  `social-publishing` (mengaktifkan hook publish yang kini no-op di `blog-content`).
 - **Follow-up `theming`**: port `media_library` (asset), adopsi public-route, domain events.
 - **Port generator `repo:inventory`** dari mini agar `repo-inventory.md` jadi ter-generate.
 - **Seam yang menunggu penyedia**: business-scope resolver base masih NO-OP fail-closed;
