@@ -83,6 +83,7 @@ describe("fetchModuleJobs", () => {
 
     expect(commands).toEqual(
       [
+        "bun run blog:publish:scheduled",
         "bun run config:validate",
         "bun run domain-events:dispatch",
         "bun run email:dispatch",

@@ -67,7 +67,14 @@ export type AccessAction =
   // Theming (ADR-0034 Fase 3): `archive` retires the active theme so the site
   // falls back to the default. High-risk (it changes the live public
   // presentation surface), same posture as `publish`/`restore`.
-  | "archive";
+  | "archive"
+  // Blog content (ported from awcms-mini): `schedule` sets a post/page's
+  // future `scheduled_at` (high-risk, same posture as `publish` — it commits
+  // to a future state transition). `preview` is read-only (previews the
+  // automatic internal tag linking transform for a post before publishing,
+  // not itself a mutation).
+  | "schedule"
+  | "preview";
 
 export type AccessRequest = {
   moduleKey: string;

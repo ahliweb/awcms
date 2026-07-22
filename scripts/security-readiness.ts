@@ -1010,7 +1010,15 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // approved-but-elapsed backlog, UPDATE those rows to expired. No DELETE, and
   // NO access to awcms_sod_conflict_evaluations (request-path chokepoint only,
   // on awcms_app). The per-exception audit INSERT reuses awcms_audit_events.
-  awcms_sod_conflict_exceptions: ["SELECT", "UPDATE"]
+  awcms_sod_conflict_exceptions: ["SELECT", "UPDATE"],
+  // blog_content — blog:publish:scheduled (sql/035): SELECT the due-post
+  // batch `FOR UPDATE`, UPDATE it to published. No DELETE (status transition
+  // only, never removes a row). SELECT-only on the two tables the content
+  // quality checklist reads (post-term count, tenant checklist policy). The
+  // job's own audit INSERT reuses awcms_audit_events above.
+  awcms_blog_posts: ["SELECT", "UPDATE"],
+  awcms_blog_post_terms: ["SELECT"],
+  awcms_blog_settings: ["SELECT"]
 };
 
 /**

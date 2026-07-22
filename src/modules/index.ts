@@ -10,6 +10,7 @@ import { workflowApprovalModule } from "./workflow-approval/module";
 import { emailModule } from "./email/module";
 import { reportingModule } from "./reporting/module";
 import { themingModule } from "./theming/module";
+import { blogContentModule } from "./blog-content/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -28,7 +29,13 @@ const baseModules: ModuleDescriptor[] = [
   // ADR-0034 Fase 3 — the first website module implemented directly in the base
   // (depends only on the two Core modules; provides no capability, so the DAG is
   // unchanged). See src/modules/theming/README.md.
-  themingModule
+  themingModule,
+  // Ported from awcms-mini (tenant-scoped blog/content management). Depends
+  // on tenant_admin/identity_access/module_management/logging, all already
+  // above in this list, so the DAG stays acyclic. See
+  // src/modules/blog-content/module.ts and module.ts's own `description`
+  // field for what was ported vs. dropped.
+  blogContentModule
 ];
 
 /**

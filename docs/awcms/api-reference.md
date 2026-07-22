@@ -3828,8 +3828,35 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (14)
+### Channels (41)
 
+- `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
+- `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
+- `awcms.blog-content.ad.updated` — An advertisement (or its placements) was updated. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.updated` log line.
+- `awcms.blog-content.internal-tag-linking-policy.updated` — A tenant's automatic internal tag linking policy was updated. Documented contract only; producer is `pages/api/v1/blog/internal-tag-links/settings.ts`'s `blog-content.internal-tag-linking-policy.updated` log line.
+- `awcms.blog-content.menu.created` — A navigation menu was created. Documented contract only; producer is `pages/api/v1/blog/menus/index.ts`'s `blog-content.menu.created` log line.
+- `awcms.blog-content.menu.deleted` — A navigation menu was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/menus/[id].ts`'s `blog-content.menu.deleted` log line.
+- `awcms.blog-content.menu.updated` — A navigation menu (or its items tree) was updated. Documented contract only; producer is `pages/api/v1/blog/menus/[id].ts`'s `blog-content.menu.updated` log line.
+- `awcms.blog-content.post.archived` — A blog post was archived. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/archive.ts`'s `blog-content.post.archived` log line.
+- `awcms.blog-content.post.created` — A blog post was created (draft). Ported from awcms-mini. Documented contract only, same structured-logger-producer convention as `awcms.email.*` above; producer is `pages/api/v1/blog/posts/index.ts`'s `blog-content.post.created` log line.
+- `awcms.blog-content.post.deleted` — A blog post was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/posts/[id].ts`'s `blog-content.post.deleted` log line.
+- `awcms.blog-content.post.published` — A blog post was published (manually or by the scheduled-publish job). Documented contract only; producer is `pages/api/v1/blog/posts/[id]/publish.ts` / `application/blog-scheduled-publish.ts`'s `blog-content.post.published` log line.
+- `awcms.blog-content.post.purged` — A soft-deleted blog post was permanently purged. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/purge.ts`'s `blog-content.post.purged` log line.
+- `awcms.blog-content.post.restored` — A soft-deleted blog post was restored. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/restore.ts`'s `blog-content.post.restored` log line.
+- `awcms.blog-content.post.scheduled` — A blog post was scheduled for future publishing. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/schedule.ts`'s `blog-content.post.scheduled` log line.
+- `awcms.blog-content.post.submitted-for-review` — A blog post transitioned draft -> review. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/submit-review.ts`'s `blog-content.post.submitted-for-review` log line.
+- `awcms.blog-content.post.updated` — A blog post was updated. Documented contract only; producer is `pages/api/v1/blog/posts/[id].ts`'s `blog-content.post.updated` log line.
+- `awcms.blog-content.revision.created` — An append-only revision snapshot was created for a post/page (a significant content change, or a revision restore). Documented contract only; producer is `application/blog-revision-directory.ts`'s `blog-content.revision.created` log line.
+- `awcms.blog-content.settings.updated` — A tenant's blog settings were updated. Documented contract only; producer is `pages/api/v1/blog/settings/index.ts`'s `blog-content.settings.updated` log line.
+- `awcms.blog-content.template.created` — A presentation template was created. Documented contract only; producer is `pages/api/v1/blog/templates/index.ts`'s `blog-content.template.created` log line.
+- `awcms.blog-content.template.deleted` — A presentation template was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/templates/[id].ts`'s `blog-content.template.deleted` log line.
+- `awcms.blog-content.template.updated` — A presentation template was updated. Documented contract only; producer is `pages/api/v1/blog/templates/[id].ts`'s `blog-content.template.updated` log line.
+- `awcms.blog-content.term.created` — A blog category/tag was created. Documented contract only; producer is `pages/api/v1/blog/terms/index.ts`'s `blog-content.term.created` log line.
+- `awcms.blog-content.term.updated` — A blog category/tag was updated or soft-deleted. Documented contract only; producer is `pages/api/v1/blog/terms/[id].ts`'s `blog-content.term.updated` log line.
+- `awcms.blog-content.theme.updated` — A tenant's blog theme mode override was updated. Documented contract only; producer is `pages/api/v1/blog/theme/index.ts`'s `blog-content.theme.updated` log line.
+- `awcms.blog-content.widget.created` — A widget was created. Documented contract only; producer is `pages/api/v1/blog/widgets/index.ts`'s `blog-content.widget.created` log line.
+- `awcms.blog-content.widget.deleted` — A widget was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.deleted` log line.
+- `awcms.blog-content.widget.updated` — A widget was updated. Documented contract only; producer is `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.updated` log line.
 - `awcms.domain-event-runtime.sample.recorded` — Reference/example event used to exercise the domain-event-runtime outbox, dispatcher, ordering, retry/backoff, dead-letter, and replay mechanism end-to-end. Real producer modules publish their OWN event types the same way, via `appendDomainEvent` — this one is intentionally self-contained rather than tied to another module's business logic in this foundation module (see `src/modules/domain-event-runtime/domain/event-type-registry.ts`'s own doc comment). Producer: any caller of `application/append-domain-event.ts`'s `appendDomainEvent` for this event type; consumers: `infrastructure/consumer-registry.ts`'s two reference consumers (a same-process cross-module audit projector and a self-contained read-model activity-rollup projection).
 - `awcms.email.message.cancelled` — An operator cancelled a still-queued message (`POST /api/v1/email/messages/{id}/cancel`) before dispatch. Documented contract only; producer is the structured JSON logger (`pages/api/v1/email/messages/[id]/cancel.ts`'s `email.message.cancelled` log line).
 - `awcms.email.message.failed` — The email dispatcher exhausted retries (or hit a non-retryable failure) for a queued message. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.failed` log line).

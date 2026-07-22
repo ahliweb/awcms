@@ -1,8 +1,40 @@
 {
-  "moduleCount": 11,
+  "moduleCount": 12,
   "valid": true,
   "issueCount": 0,
   "modules": [
+    {
+      "key": "blog_content",
+      "name": "Blog Content",
+      "version": "0.9.0",
+      "status": "active",
+      "type": "domain",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "module_management",
+        "logging"
+      ],
+      "capabilitiesProvided": ["public_content"],
+      "capabilitiesConsumed": [
+        {
+          "capability": "news_media",
+          "providedBy": "news_portal",
+          "optional": true
+        },
+        {
+          "capability": "social_publishing",
+          "providedBy": "social_publishing",
+          "optional": true
+        }
+      ],
+      "permissionCount": 39,
+      "navigationCount": 1,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
     {
       "key": "domain_event_runtime",
       "name": "Domain Event Runtime",
