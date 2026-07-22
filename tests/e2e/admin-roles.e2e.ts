@@ -14,6 +14,7 @@
  * create form + action controls render.
  */
 import { test, expect } from "@playwright/test";
+import { provideTenant } from "./support/e2e-auth";
 
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
@@ -31,7 +32,7 @@ test.describe("admin roles CRUD (authenticated)", () => {
     page
   }) => {
     await page.goto("/login");
-    await page.locator("#tenant-id").fill(tenantId!);
+    await provideTenant(page, tenantId!);
     await page.locator("#login-identifier").fill(loginIdentifier!);
     await page.locator("#password").fill(password!);
     await page.locator("#login-submit").click();

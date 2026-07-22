@@ -25,6 +25,7 @@
  * the same catalog state.
  */
 import { test, expect } from "@playwright/test";
+import { provideTenant } from "./support/e2e-auth";
 
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
@@ -51,7 +52,7 @@ test.describe("admin modules toggle (authenticated)", () => {
     page.on("dialog", (dialog) => dialog.accept("E2E toggle round-trip"));
 
     await page.goto("/login");
-    await page.locator("#tenant-id").fill(tenantId!);
+    await provideTenant(page, tenantId!);
     await page.locator("#login-identifier").fill(loginIdentifier!);
     await page.locator("#password").fill(password!);
     await page.locator("#login-submit").click();

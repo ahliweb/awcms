@@ -5,9 +5,12 @@
  * read-only SSR read of the active tenant registry to choose the tenant field
  * shape. That read is wrapped so any failure (a placeholder `DATABASE_URL` that
  * never connects, an unmigrated DB, an empty registry) degrades to the manual
- * `#tenant-id` TEXT input — so this spec still needs zero seeded data and
- * `#tenant-id` is still a visible field here (the "pick a target that needs no
- * fixtures" convention, skill #4). It proves the first `.astro` page renders in
+ * `#tenant-id` TEXT input. This spec needs no fixtures of its own, but the CI
+ * e2e-smoke job seeds one tenant before the whole suite runs — with exactly one
+ * tenant the picker renders `#tenant-id` as a HIDDEN prefilled input, so this
+ * spec asserts the field is ATTACHED (a stable DOM id) rather than visible; its
+ * visibility legitimately depends on tenant count. It proves the first `.astro`
+ * page renders in
  * a real browser AND that its client script executes under the middleware CSP
  * (`default-src 'self'`): if Astro had inlined the script, CSP would block it
  * and the form's stable ids would still be present but dead — so a follow-up
@@ -26,7 +29,10 @@ test.describe("login page", () => {
 
     expect(response?.status()).toBe(200);
     await expect(page.locator("#login-form")).toBeVisible();
-    await expect(page.locator("#tenant-id")).toBeVisible();
+    // `#tenant-id` is a stable id but its shape/visibility depends on tenant
+    // count (hidden+prefilled when exactly one tenant is seeded, as in CI
+    // e2e-smoke), so assert it is attached rather than visible.
+    await expect(page.locator("#tenant-id")).toBeAttached();
     await expect(page.locator("#login-identifier")).toBeVisible();
     await expect(page.locator("#password")).toBeVisible();
     await expect(page.locator("#login-submit")).toBeVisible();
