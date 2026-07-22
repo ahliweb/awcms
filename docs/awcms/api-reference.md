@@ -3644,6 +3644,299 @@ Read-only: validate a proposed theme config against its theme descriptor and, wh
 | 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
 
+## News Media
+
+Direct-to-R2 presigned upload flow for news images (news_portal module, ported from awcms-mini) — create an upload session (server-generated object key + short-lived presigned PUT URL), finalize (real R2 GET + magic-byte MIME sniffing + server-side SHA-256 checksum, never a bare HEAD), and cancel a still-pending_upload session. R2 credentials are never exposed to the browser; only a scoped, expiring presigned URL is returned.
+
+### `POST /api/v1/media/news-images/upload-sessions` — Create a direct-to-R2 presigned upload session for a news image
+
+- **operationId**: `newsMediaUploadSessionsCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.media.create. Returns a `pending_upload` metadata row plus a short-lived presigned PUT URL scoped to exactly one server-generated object key. Raw R2 credentials are never exposed to the browser.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`CreateNewsMediaUploadSessionRequest`](#schema-createnewsmediauploadsessionrequest)
+
+**Responses**
+
+| Status | Description                                                                                    | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Upload session created — a `pending_upload` metadata row plus a short-lived presigned PUT URL. | object                                 |
+| 400    | Validation error.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 502    | News media R2 storage is not configured/enabled for this deployment.                           | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/media/news-images/upload-sessions/{id}/cancel` — Cancel a still-pending-upload session
+
+- **operationId**: `newsMediaUploadSessionsCancel`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.media.cancel. Transitions a `pending_upload` session to `failed`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                         | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Upload session cancelled (status `failed`).                                         | object                                 |
+| 400    | Validation error.                                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 409    | Upload session is not `pending_upload` (already uploaded/verified/attached/failed). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/media/news-images/upload-sessions/{id}/finalize` — Finalize an upload session — real R2 GET + magic-byte MIME sniffing + server-side SHA-256 checksum (never a bare HEAD)
+
+- **operationId**: `newsMediaUploadSessionsFinalize`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.media.verify. High-risk, requires Idempotency-Key. Verifies the object actually uploaded to R2 (HEAD for existence/real size, then a full GET), sniffs the MIME type from the object's real magic bytes, and computes a SHA-256 checksum server-side. A client-claimed `checksumSha256` is only a transport-corruption cross-check, never a substitute for the MIME sniff — HEAD alone can never promote a media object to `verified`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (optional): [`FinalizeNewsMediaUploadSessionRequest`](#schema-finalizenewsmediauploadsessionrequest)
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                                        | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Object verified — media object status is now `verified` (or an idempotent replay).                                                                                                                                                 | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Upload session is not `pending_upload`, has expired (`UPLOAD_SESSION_EXPIRED`), or the Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).                                                               | [`ApiError`](#standard-error-envelope) |
+| 422    | Uploaded object failed content verification (`UPLOAD_VERIFICATION_FAILED`). `error.details.reason` is one of `object_not_found`, `size_exceeded`, `mime_not_recognized`, `mime_not_allowed`, `mime_mismatch`, `checksum_mismatch`. | [`ApiError`](#standard-error-envelope) |
+| 502    | Unable to verify the uploaded object right now (R2 provider error/circuit breaker open) — retry shortly.                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+
+## News Portal Homepage Sections
+
+Editorial homepage section composer (news_portal module) — tenant-scoped, RLS-protected CRUD for configurable homepage sections (headline, latest_posts, featured_posts, editor_picks, category_grid, gallery_block). config shape is validated per sectionType server-side; every referenced post/category/media object must already exist for the same tenant (and gallery_block media must be a verified R2 media object). sectionType is immutable after creation; reordering is just a patchable sortOrder field.
+
+### `GET /api/v1/news-portal/homepage-sections` — List this tenant's homepage sections (admin view)
+
+- **operationId**: `newsPortalHomepageSectionsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.homepage_sections.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Homepage sections.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/news-portal/homepage-sections` — Create a homepage section
+
+- **operationId**: `newsPortalHomepageSectionsCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.homepage_sections.configure. `config` is validated per `sectionType`; every referenced post/category/media object must already exist for this tenant (and gallery_block media must be a verified R2 media object).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`HomepageSectionCreateRequest`](#schema-homepagesectioncreaterequest)
+
+**Responses**
+
+| Status | Description                                                                                                                              | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Homepage section created.                                                                                                                | object                                 |
+| 400    | Validation error.                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | sectionKey is already in use for this tenant.                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 422    | config references content that does not exist, does not belong to this tenant, or (for gallery_block) is not a verified R2 media object. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/news-portal/homepage-sections/{id}` — Update a homepage section (title/config/sortOrder/isEnabled/schedule) — sectionType is immutable
+
+- **operationId**: `newsPortalHomepageSectionsUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.homepage_sections.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`HomepageSectionUpdateRequest`](#schema-homepagesectionupdaterequest)
+
+**Responses**
+
+| Status | Description                                                                                                                              | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Homepage section updated.                                                                                                                | object                                 |
+| 400    | Validation error.                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 422    | config references content that does not exist, does not belong to this tenant, or (for gallery_block) is not a verified R2 media object. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/news-portal/homepage-sections/{id}` — Soft-delete a homepage section
+
+- **operationId**: `newsPortalHomepageSectionsDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.homepage_sections.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Homepage section deleted.   | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+## News Portal Ad Placements
+
+R2-only advertisement placement presets for the news portal (news_portal module) — tenant-scoped, RLS-protected CRUD for ads assigned to a fixed set of placement keys. mediaObjectId must reference a verified R2 media object belonging to the same tenant — never a local path or arbitrary external image URL. linkUrl is optional and may be external, but is validated server-side as an absolute http(s) URL only.
+
+### `GET /api/v1/news-portal/ad-placements` — List this tenant's ad placements (admin view)
+
+- **operationId**: `newsPortalAdPlacementsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.ad_placements.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Ad placements.              | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/news-portal/ad-placements` — Create an ad placement (R2-only image, verified media object required)
+
+- **operationId**: `newsPortalAdPlacementsCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.ad_placements.configure. `mediaObjectId` must reference a verified (`verified`/`attached`) R2 media object for this tenant.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`AdPlacementCreateRequest`](#schema-adplacementcreaterequest)
+
+**Responses**
+
+| Status | Description                                                                                                                                               | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Ad placement created.                                                                                                                                     | object                                 |
+| 400    | Validation error.                                                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 422    | mediaObjectId does not exist, does not belong to this tenant, is not a verified R2 media object, or is not an allowed mime type for the target placement. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/news-portal/ad-placements/{id}` — Update an ad placement (media reference/link/rotation/schedule/active)
+
+- **operationId**: `newsPortalAdPlacementsUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.ad_placements.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`AdPlacementUpdateRequest`](#schema-adplacementupdaterequest)
+
+**Responses**
+
+| Status | Description                                                                                                                                               | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Ad placement updated.                                                                                                                                     | object                                 |
+| 400    | Validation error.                                                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 422    | mediaObjectId does not exist, does not belong to this tenant, is not a verified R2 media object, or is not an allowed mime type for the target placement. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/news-portal/ad-placements/{id}` — Soft-delete an ad placement
+
+- **operationId**: `newsPortalAdPlacementsDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by news_portal.ad_placements.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Ad placement deleted.       | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -3748,6 +4041,168 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
 }
 ```
 
+### Schema: AdPlacementCreateRequest
+
+| Field           | Type                                                                                                                                                                                                                             | Required | Nullable | Description |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `placementKey`  | enum(`header_banner`, `below_headline`, `homepage_middle`, `homepage_bottom`, `article_top`, `article_middle`, `article_bottom`, `sidebar_top`, `sidebar_middle`, `sidebar_bottom`, `category_archive_top`, `search_result_top`) | yes      | no       |             |
+| `name`          | string                                                                                                                                                                                                                           | yes      | no       |             |
+| `mediaObjectId` | string (uuid)                                                                                                                                                                                                                    | yes      | no       |             |
+| `linkUrl`       | string                                                                                                                                                                                                                           | no       | yes      |             |
+| `rotationMode`  | enum(`latest`, `priority`, `random_safe`, `weighted`)                                                                                                                                                                            | no       | no       |             |
+| `priority`      | integer                                                                                                                                                                                                                          | no       | no       |             |
+| `isActive`      | boolean                                                                                                                                                                                                                          | no       | no       |             |
+| `startsAt`      | string (date-time)                                                                                                                                                                                                               | no       | yes      |             |
+| `endsAt`        | string (date-time)                                                                                                                                                                                                               | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "placementKey": "header_banner",
+  "name": "string",
+  "mediaObjectId": "00000000-0000-0000-0000-000000000000",
+  "linkUrl": "https://example.com/resource",
+  "rotationMode": "latest",
+  "priority": 0,
+  "isActive": false,
+  "startsAt": "2026-01-01T00:00:00.000Z",
+  "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: AdPlacementUpdateRequest
+
+| Field           | Type                                                                                                                                                                                                                             | Required | Nullable | Description |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `placementKey`  | enum(`header_banner`, `below_headline`, `homepage_middle`, `homepage_bottom`, `article_top`, `article_middle`, `article_bottom`, `sidebar_top`, `sidebar_middle`, `sidebar_bottom`, `category_archive_top`, `search_result_top`) | no       | no       |             |
+| `name`          | string                                                                                                                                                                                                                           | no       | no       |             |
+| `mediaObjectId` | string (uuid)                                                                                                                                                                                                                    | no       | no       |             |
+| `linkUrl`       | string                                                                                                                                                                                                                           | no       | yes      |             |
+| `rotationMode`  | enum(`latest`, `priority`, `random_safe`, `weighted`)                                                                                                                                                                            | no       | no       |             |
+| `priority`      | integer                                                                                                                                                                                                                          | no       | no       |             |
+| `isActive`      | boolean                                                                                                                                                                                                                          | no       | no       |             |
+| `startsAt`      | string (date-time)                                                                                                                                                                                                               | no       | yes      |             |
+| `endsAt`        | string (date-time)                                                                                                                                                                                                               | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "placementKey": "header_banner",
+  "name": "string",
+  "mediaObjectId": "00000000-0000-0000-0000-000000000000",
+  "linkUrl": "https://example.com/resource",
+  "rotationMode": "latest",
+  "priority": 0,
+  "isActive": false,
+  "startsAt": "2026-01-01T00:00:00.000Z",
+  "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: CreateNewsMediaUploadSessionRequest
+
+| Field              | Type    | Required | Nullable | Description                                                                                                                                                                      |
+| ------------------ | ------- | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mimeType`         | string  | yes      | no       | Must be one of the deployment's configured NEWS_MEDIA_R2_ALLOWED_MIME_TYPES (default: image/jpeg, image/png, image/webp, image/gif — image/svg+xml is never allowed by default). |
+| `byteSize`         | integer | yes      | no       | Claimed size in bytes — shape-only check against NEWS_MEDIA_R2_MAX_UPLOAD_BYTES; the real size is re-checked from R2 itself at finalize time.                                    |
+| `originalFilename` | string  | no       | yes      | Stored as display-only metadata — never part of the server-generated object key.                                                                                                 |
+| `altText`          | string  | no       | yes      |                                                                                                                                                                                  |
+| `caption`          | string  | no       | yes      |                                                                                                                                                                                  |
+
+**Example**
+
+```json
+{
+  "mimeType": "image/jpeg",
+  "byteSize": 1,
+  "originalFilename": "string",
+  "altText": "string",
+  "caption": "string"
+}
+```
+
+### Schema: FinalizeNewsMediaUploadSessionRequest
+
+| Field            | Type   | Required | Nullable | Description                                                                                                                                                                                              |
+| ---------------- | ------ | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `checksumSha256` | string | no       | yes      | Optional. When supplied, compared against the checksum computed server-side from the bytes actually read from R2 — a transport-corruption check only, never a substitute for the server-side MIME sniff. |
+
+**Example**
+
+```json
+{
+  "checksumSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}
+```
+
+### Schema: HomepageSectionConfig
+
+Shape depends on sectionType — headline: {postId}; latest_posts: {limit?, categorySlug?}; featured_posts/editor_picks: {postIds: []}; category_grid: {categorySlugs: [], postsPerCategory?}; gallery_block: {mediaObjectIds: [], caption?}. Validated server-side per sectionType; every id/slug must already exist for the same tenant, and gallery_block's mediaObjectIds must each be a verified R2 media object.
+
+Shape depends on sectionType — headline: {postId}; latest_posts: {limit?, categorySlug?}; featured_posts/editor_picks: {postIds: []}; category_grid: {categorySlugs: [], postsPerCategory?}; gallery_block: {mediaObjectIds: [], caption?}. Validated server-side per sectionType; every id/slug must already exist for the same tenant, and gallery_block's mediaObjectIds must each be a verified R2 media object.
+
+**Example**
+
+```json
+{}
+```
+
+### Schema: HomepageSectionCreateRequest
+
+| Field         | Type                                                                                                 | Required | Nullable | Description |
+| ------------- | ---------------------------------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `sectionKey`  | string                                                                                               | yes      | no       |             |
+| `sectionType` | enum(`headline`, `latest_posts`, `featured_posts`, `editor_picks`, `category_grid`, `gallery_block`) | yes      | no       |             |
+| `title`       | string                                                                                               | no       | yes      |             |
+| `config`      | [`HomepageSectionConfig`](#schema-homepagesectionconfig)                                             | yes      | no       |             |
+| `sortOrder`   | integer                                                                                              | no       | no       |             |
+| `isEnabled`   | boolean                                                                                              | no       | no       |             |
+| `startsAt`    | string (date-time)                                                                                   | no       | yes      |             |
+| `endsAt`      | string (date-time)                                                                                   | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "sectionKey": "string",
+  "sectionType": "headline",
+  "title": "string",
+  "config": "(operation-specific payload)",
+  "sortOrder": 0,
+  "isEnabled": false,
+  "startsAt": "2026-01-01T00:00:00.000Z",
+  "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: HomepageSectionUpdateRequest
+
+sectionType cannot be changed after creation — omit it, do not send the old or a new value.
+
+| Field       | Type                                                     | Required | Nullable | Description |
+| ----------- | -------------------------------------------------------- | -------- | -------- | ----------- |
+| `title`     | string                                                   | no       | yes      |             |
+| `config`    | [`HomepageSectionConfig`](#schema-homepagesectionconfig) | no       | no       |             |
+| `sortOrder` | integer                                                  | no       | no       |             |
+| `isEnabled` | boolean                                                  | no       | no       |             |
+| `startsAt`  | string (date-time)                                       | no       | yes      |             |
+| `endsAt`    | string (date-time)                                       | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "title": "string",
+  "config": "(operation-specific payload)",
+  "sortOrder": 0,
+  "isEnabled": false,
+  "startsAt": "2026-01-01T00:00:00.000Z",
+  "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
 ### Schema: ThemeConfigRequest
 
 A tenant's DATA-only theme configuration. Every key/value is validated against the chosen theme descriptor; unknown tokens/slots/assets/sections are rejected, and token values are validated by rejection against strict CSS grammars (no url()/expression()/@import/javascript:/comment-breakout).
@@ -3828,8 +4283,35 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (14)
+### Channels (41)
 
+- `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
+- `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
+- `awcms.blog-content.ad.updated` — An advertisement (or its placements) was updated. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.updated` log line.
+- `awcms.blog-content.internal-tag-linking-policy.updated` — A tenant's automatic internal tag linking policy was updated. Documented contract only; producer is `pages/api/v1/blog/internal-tag-links/settings.ts`'s `blog-content.internal-tag-linking-policy.updated` log line.
+- `awcms.blog-content.menu.created` — A navigation menu was created. Documented contract only; producer is `pages/api/v1/blog/menus/index.ts`'s `blog-content.menu.created` log line.
+- `awcms.blog-content.menu.deleted` — A navigation menu was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/menus/[id].ts`'s `blog-content.menu.deleted` log line.
+- `awcms.blog-content.menu.updated` — A navigation menu (or its items tree) was updated. Documented contract only; producer is `pages/api/v1/blog/menus/[id].ts`'s `blog-content.menu.updated` log line.
+- `awcms.blog-content.post.archived` — A blog post was archived. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/archive.ts`'s `blog-content.post.archived` log line.
+- `awcms.blog-content.post.created` — A blog post was created (draft). Ported from awcms-mini. Documented contract only, same structured-logger-producer convention as `awcms.email.*` above; producer is `pages/api/v1/blog/posts/index.ts`'s `blog-content.post.created` log line.
+- `awcms.blog-content.post.deleted` — A blog post was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/posts/[id].ts`'s `blog-content.post.deleted` log line.
+- `awcms.blog-content.post.published` — A blog post was published (manually or by the scheduled-publish job). Documented contract only; producer is `pages/api/v1/blog/posts/[id]/publish.ts` / `application/blog-scheduled-publish.ts`'s `blog-content.post.published` log line.
+- `awcms.blog-content.post.purged` — A soft-deleted blog post was permanently purged. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/purge.ts`'s `blog-content.post.purged` log line.
+- `awcms.blog-content.post.restored` — A soft-deleted blog post was restored. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/restore.ts`'s `blog-content.post.restored` log line.
+- `awcms.blog-content.post.scheduled` — A blog post was scheduled for future publishing. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/schedule.ts`'s `blog-content.post.scheduled` log line.
+- `awcms.blog-content.post.submitted-for-review` — A blog post transitioned draft -> review. Documented contract only; producer is `pages/api/v1/blog/posts/[id]/submit-review.ts`'s `blog-content.post.submitted-for-review` log line.
+- `awcms.blog-content.post.updated` — A blog post was updated. Documented contract only; producer is `pages/api/v1/blog/posts/[id].ts`'s `blog-content.post.updated` log line.
+- `awcms.blog-content.revision.created` — An append-only revision snapshot was created for a post/page (a significant content change, or a revision restore). Documented contract only; producer is `application/blog-revision-directory.ts`'s `blog-content.revision.created` log line.
+- `awcms.blog-content.settings.updated` — A tenant's blog settings were updated. Documented contract only; producer is `pages/api/v1/blog/settings/index.ts`'s `blog-content.settings.updated` log line.
+- `awcms.blog-content.template.created` — A presentation template was created. Documented contract only; producer is `pages/api/v1/blog/templates/index.ts`'s `blog-content.template.created` log line.
+- `awcms.blog-content.template.deleted` — A presentation template was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/templates/[id].ts`'s `blog-content.template.deleted` log line.
+- `awcms.blog-content.template.updated` — A presentation template was updated. Documented contract only; producer is `pages/api/v1/blog/templates/[id].ts`'s `blog-content.template.updated` log line.
+- `awcms.blog-content.term.created` — A blog category/tag was created. Documented contract only; producer is `pages/api/v1/blog/terms/index.ts`'s `blog-content.term.created` log line.
+- `awcms.blog-content.term.updated` — A blog category/tag was updated or soft-deleted. Documented contract only; producer is `pages/api/v1/blog/terms/[id].ts`'s `blog-content.term.updated` log line.
+- `awcms.blog-content.theme.updated` — A tenant's blog theme mode override was updated. Documented contract only; producer is `pages/api/v1/blog/theme/index.ts`'s `blog-content.theme.updated` log line.
+- `awcms.blog-content.widget.created` — A widget was created. Documented contract only; producer is `pages/api/v1/blog/widgets/index.ts`'s `blog-content.widget.created` log line.
+- `awcms.blog-content.widget.deleted` — A widget was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.deleted` log line.
+- `awcms.blog-content.widget.updated` — A widget was updated. Documented contract only; producer is `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.updated` log line.
 - `awcms.domain-event-runtime.sample.recorded` — Reference/example event used to exercise the domain-event-runtime outbox, dispatcher, ordering, retry/backoff, dead-letter, and replay mechanism end-to-end. Real producer modules publish their OWN event types the same way, via `appendDomainEvent` — this one is intentionally self-contained rather than tied to another module's business logic in this foundation module (see `src/modules/domain-event-runtime/domain/event-type-registry.ts`'s own doc comment). Producer: any caller of `application/append-domain-event.ts`'s `appendDomainEvent` for this event type; consumers: `infrastructure/consumer-registry.ts`'s two reference consumers (a same-process cross-module audit projector and a self-contained read-model activity-rollup projection).
 - `awcms.email.message.cancelled` — An operator cancelled a still-queued message (`POST /api/v1/email/messages/{id}/cancel`) before dispatch. Documented contract only; producer is the structured JSON logger (`pages/api/v1/email/messages/[id]/cancel.ts`'s `email.message.cancelled` log line).
 - `awcms.email.message.failed` — The email dispatcher exhausted retries (or hit a non-retryable failure) for a queued message. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.failed` log line).

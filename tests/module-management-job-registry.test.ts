@@ -83,6 +83,7 @@ describe("fetchModuleJobs", () => {
 
     expect(commands).toEqual(
       [
+        "bun run blog:publish:scheduled",
         "bun run config:validate",
         "bun run domain-events:dispatch",
         "bun run email:dispatch",
@@ -90,6 +91,7 @@ describe("fetchModuleJobs", () => {
         "bun run email:templates:seed-defaults",
         "bun run identity-access:business-scope:expiry",
         "bun run logs:audit:purge",
+        "bun run news-media:reconcile",
         "bun run reporting:exports:dispatch",
         "bun run reporting:projections:refresh",
         "bun run sync:objects:dispatch",

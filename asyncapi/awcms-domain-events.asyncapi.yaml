@@ -165,6 +165,255 @@ channels:
       contract only; producer is the structured JSON logger
       (`pages/api/v1/email/messages/[id]/cancel.ts`'s `email.message.cancelled`
       log line).
+  awcms.blog-content.post.created:
+    address: awcms.blog-content.post.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog post was created (draft). Ported from awcms-mini. Documented
+      contract only, same structured-logger-producer convention as
+      `awcms.email.*` above; producer is
+      `pages/api/v1/blog/posts/index.ts`'s `blog-content.post.created` log
+      line.
+  awcms.blog-content.post.updated:
+    address: awcms.blog-content.post.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog post was updated. Documented contract only; producer is
+      `pages/api/v1/blog/posts/[id].ts`'s `blog-content.post.updated` log
+      line.
+  awcms.blog-content.post.submitted-for-review:
+    address: awcms.blog-content.post.submitted-for-review
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog post transitioned draft -> review. Documented contract only;
+      producer is `pages/api/v1/blog/posts/[id]/submit-review.ts`'s
+      `blog-content.post.submitted-for-review` log line.
+  awcms.blog-content.post.published:
+    address: awcms.blog-content.post.published
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog post was published (manually or by the scheduled-publish job).
+      Documented contract only; producer is
+      `pages/api/v1/blog/posts/[id]/publish.ts` /
+      `application/blog-scheduled-publish.ts`'s `blog-content.post.published`
+      log line.
+  awcms.blog-content.post.scheduled:
+    address: awcms.blog-content.post.scheduled
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog post was scheduled for future publishing. Documented contract
+      only; producer is `pages/api/v1/blog/posts/[id]/schedule.ts`'s
+      `blog-content.post.scheduled` log line.
+  awcms.blog-content.post.archived:
+    address: awcms.blog-content.post.archived
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog post was archived. Documented contract only; producer is
+      `pages/api/v1/blog/posts/[id]/archive.ts`'s `blog-content.post.archived`
+      log line.
+  awcms.blog-content.post.deleted:
+    address: awcms.blog-content.post.deleted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog post was soft-deleted. Documented contract only; producer is
+      `pages/api/v1/blog/posts/[id].ts`'s `blog-content.post.deleted` log
+      line.
+  awcms.blog-content.post.restored:
+    address: awcms.blog-content.post.restored
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A soft-deleted blog post was restored. Documented contract only;
+      producer is `pages/api/v1/blog/posts/[id]/restore.ts`'s
+      `blog-content.post.restored` log line.
+  awcms.blog-content.post.purged:
+    address: awcms.blog-content.post.purged
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A soft-deleted blog post was permanently purged. Documented contract
+      only; producer is `pages/api/v1/blog/posts/[id]/purge.ts`'s
+      `blog-content.post.purged` log line.
+  awcms.blog-content.revision.created:
+    address: awcms.blog-content.revision.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      An append-only revision snapshot was created for a post/page (a
+      significant content change, or a revision restore). Documented
+      contract only; producer is
+      `application/blog-revision-directory.ts`'s `blog-content.revision.created`
+      log line.
+  awcms.blog-content.term.created:
+    address: awcms.blog-content.term.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog category/tag was created. Documented contract only; producer is
+      `pages/api/v1/blog/terms/index.ts`'s `blog-content.term.created` log
+      line.
+  awcms.blog-content.term.updated:
+    address: awcms.blog-content.term.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A blog category/tag was updated or soft-deleted. Documented contract
+      only; producer is `pages/api/v1/blog/terms/[id].ts`'s
+      `blog-content.term.updated` log line.
+  awcms.blog-content.settings.updated:
+    address: awcms.blog-content.settings.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A tenant's blog settings were updated. Documented contract only;
+      producer is `pages/api/v1/blog/settings/index.ts`'s
+      `blog-content.settings.updated` log line.
+  awcms.blog-content.template.created:
+    address: awcms.blog-content.template.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A presentation template was created. Documented contract only;
+      producer is `pages/api/v1/blog/templates/index.ts`'s
+      `blog-content.template.created` log line.
+  awcms.blog-content.template.updated:
+    address: awcms.blog-content.template.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A presentation template was updated. Documented contract only;
+      producer is `pages/api/v1/blog/templates/[id].ts`'s
+      `blog-content.template.updated` log line.
+  awcms.blog-content.template.deleted:
+    address: awcms.blog-content.template.deleted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A presentation template was soft-deleted. Documented contract only;
+      producer is `pages/api/v1/blog/templates/[id].ts`'s
+      `blog-content.template.deleted` log line.
+  awcms.blog-content.menu.created:
+    address: awcms.blog-content.menu.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A navigation menu was created. Documented contract only; producer is
+      `pages/api/v1/blog/menus/index.ts`'s `blog-content.menu.created` log
+      line.
+  awcms.blog-content.menu.updated:
+    address: awcms.blog-content.menu.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A navigation menu (or its items tree) was updated. Documented contract
+      only; producer is `pages/api/v1/blog/menus/[id].ts`'s
+      `blog-content.menu.updated` log line.
+  awcms.blog-content.menu.deleted:
+    address: awcms.blog-content.menu.deleted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A navigation menu was soft-deleted. Documented contract only; producer
+      is `pages/api/v1/blog/menus/[id].ts`'s `blog-content.menu.deleted` log
+      line.
+  awcms.blog-content.widget.created:
+    address: awcms.blog-content.widget.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A widget was created. Documented contract only; producer is
+      `pages/api/v1/blog/widgets/index.ts`'s `blog-content.widget.created`
+      log line.
+  awcms.blog-content.widget.updated:
+    address: awcms.blog-content.widget.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A widget was updated. Documented contract only; producer is
+      `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.updated`
+      log line.
+  awcms.blog-content.widget.deleted:
+    address: awcms.blog-content.widget.deleted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A widget was soft-deleted. Documented contract only; producer is
+      `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.deleted`
+      log line.
+  awcms.blog-content.ad.created:
+    address: awcms.blog-content.ad.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      An advertisement was created. Documented contract only; producer is
+      `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
+  awcms.blog-content.ad.updated:
+    address: awcms.blog-content.ad.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      An advertisement (or its placements) was updated. Documented contract
+      only; producer is `pages/api/v1/blog/ads/[id].ts`'s
+      `blog-content.ad.updated` log line.
+  awcms.blog-content.ad.deleted:
+    address: awcms.blog-content.ad.deleted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      An advertisement was soft-deleted. Documented contract only; producer
+      is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log
+      line.
+  awcms.blog-content.theme.updated:
+    address: awcms.blog-content.theme.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A tenant's blog theme mode override was updated. Documented contract
+      only; producer is `pages/api/v1/blog/theme/index.ts`'s
+      `blog-content.theme.updated` log line.
+  awcms.blog-content.internal-tag-linking-policy.updated:
+    address: awcms.blog-content.internal-tag-linking-policy.updated
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A tenant's automatic internal tag linking policy was updated.
+      Documented contract only; producer is
+      `pages/api/v1/blog/internal-tag-links/settings.ts`'s
+      `blog-content.internal-tag-linking-policy.updated` log line.
 operations:
   publishDomainEventRuntimeSampleRecorded:
     action: send
@@ -256,6 +505,168 @@ operations:
       $ref: "#/channels/awcms.email.message.cancelled"
     messages:
       - $ref: "#/channels/awcms.email.message.cancelled/messages/DomainEvent"
+  publishBlogContentPostCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.created"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.created/messages/DomainEvent"
+  publishBlogContentPostUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.updated/messages/DomainEvent"
+  publishBlogContentPostSubmittedForReview:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.submitted-for-review"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.submitted-for-review/messages/DomainEvent"
+  publishBlogContentPostPublished:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.published"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.published/messages/DomainEvent"
+  publishBlogContentPostScheduled:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.scheduled"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.scheduled/messages/DomainEvent"
+  publishBlogContentPostArchived:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.archived"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.archived/messages/DomainEvent"
+  publishBlogContentPostDeleted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.deleted"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.deleted/messages/DomainEvent"
+  publishBlogContentPostRestored:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.restored"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.restored/messages/DomainEvent"
+  publishBlogContentPostPurged:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.post.purged"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.post.purged/messages/DomainEvent"
+  publishBlogContentRevisionCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.revision.created"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.revision.created/messages/DomainEvent"
+  publishBlogContentTermCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.term.created"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.term.created/messages/DomainEvent"
+  publishBlogContentTermUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.term.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.term.updated/messages/DomainEvent"
+  publishBlogContentSettingsUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.settings.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.settings.updated/messages/DomainEvent"
+  publishBlogContentTemplateCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.template.created"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.template.created/messages/DomainEvent"
+  publishBlogContentTemplateUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.template.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.template.updated/messages/DomainEvent"
+  publishBlogContentTemplateDeleted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.template.deleted"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.template.deleted/messages/DomainEvent"
+  publishBlogContentMenuCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.menu.created"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.menu.created/messages/DomainEvent"
+  publishBlogContentMenuUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.menu.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.menu.updated/messages/DomainEvent"
+  publishBlogContentMenuDeleted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.menu.deleted"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.menu.deleted/messages/DomainEvent"
+  publishBlogContentWidgetCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.widget.created"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.widget.created/messages/DomainEvent"
+  publishBlogContentWidgetUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.widget.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.widget.updated/messages/DomainEvent"
+  publishBlogContentWidgetDeleted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.widget.deleted"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.widget.deleted/messages/DomainEvent"
+  publishBlogContentAdCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.ad.created"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.ad.created/messages/DomainEvent"
+  publishBlogContentAdUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.ad.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.ad.updated/messages/DomainEvent"
+  publishBlogContentAdDeleted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.ad.deleted"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.ad.deleted/messages/DomainEvent"
+  publishBlogContentThemeUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.theme.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.theme.updated/messages/DomainEvent"
+  publishBlogContentInternalTagLinkingPolicyUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.blog-content.internal-tag-linking-policy.updated"
+    messages:
+      - $ref: "#/channels/awcms.blog-content.internal-tag-linking-policy.updated/messages/DomainEvent"
 components:
   messages:
     DomainEvent:

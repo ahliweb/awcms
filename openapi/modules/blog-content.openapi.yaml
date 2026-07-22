@@ -1,0 +1,2565 @@
+# Source fragment for the "Blog Content" module/tag — ported from awcms-mini
+# (epic #536, issues #537-#543 plus the later hardening lineage; see
+# src/modules/blog-content/module.ts's own description field and README.md
+# for the full port-adaptation notes, including what was deliberately
+# dropped: the host-resolved /news/** route family and its two ports'
+# concrete adapters, replaced here by this module's own no-op adapters).
+#
+# Owns every `/api/v1/blog/*` admin path and the schemas referenced ONLY by
+# this tag's operations. The public, anonymous `/blog/{tenantCode}/...`
+# route family (index/detail/category/tag/search/feed/sitemap) is NOT here —
+# same convention theming's own public preview routes use (Astro
+# text/html/xml routes under src/pages/**, not src/pages/api/v1/**, so they
+# are outside the api-spec-check route tree).
+#
+# NOT independently valid OpenAPI -- $ref targets pointing at shared
+# components only resolve after `bun run openapi:bundle` merges this file
+# with the root and every sibling module fragment. Edit this file (or the
+# root for shared components), never the generated bundle.
+paths:
+  /api/v1/blog/posts:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogListPosts
+      summary: List this tenant's non-deleted blog posts
+      description: Gated by blog_content.posts.read. Optional ?status= filter, ?limit= bounded (default 20, max 100).
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, review, scheduled, published, archived]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Matching posts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      posts:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - Blog Content
+      operationId: blogCreatePost
+      summary: Create a draft blog post
+      description: Gated by blog_content.posts.create. Not idempotency-keyed (a retry duplicating a create is caught by the (tenant_id, locale, slug) partial unique index).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlogPostWriteInput"
+      responses:
+        "200":
+          description: Post created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A post already exists for this slug/locale, or the referenced media is not R2-verified in full-online R2-only mode (422 for the latter).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: One or more image/video-thumbnail references are not valid R2 media objects in full-online R2-only mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/posts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Blog Content
+      operationId: blogGetPost
+      summary: Read one blog post
+      description: Gated by blog_content.posts.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The post.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdatePost
+      summary: Update a blog post
+      description: Gated by blog_content.posts.update (with an ownership carve-out — a draft's own author may update it without the broader permission). Only fields present in the body are changed. A significant title/contentJson/contentText change snapshots an append-only revision first.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlogPostWriteInput"
+      responses:
+        "200":
+          description: Post updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: One or more image/video-thumbnail references are not valid R2 media objects in full-online R2-only mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags:
+        - Blog Content
+      operationId: blogDeletePost
+      summary: Soft delete a blog post
+      description: Gated by blog_content.posts.delete. Soft delete only (deleted_at/deleted_by/delete_reason) — see POST .../purge for the permanent, high-risk purge.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Post soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/posts/{id}/submit-review:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Blog Content
+      operationId: blogSubmitPostForReview
+      summary: Submit a draft post for review
+      description: Transitions draft -> review. Gated by blog_content.posts.update (same ownership carve-out as PATCH .../{id}). Not idempotency-keyed — the status transition is naturally idempotent.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Post submitted for review.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The post's current status cannot transition to review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/posts/{id}/publish:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Blog Content
+      operationId: blogPublishPost
+      summary: Publish a blog post
+      description: Gated by blog_content.posts.publish (no ownership carve-out). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. On success, also invokes the social-publishing outbox hook (a documented no-op in this base — social_publishing is not ported).
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Post published (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid status transition, or the Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Publish is blocked by the content quality checklist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/posts/{id}/schedule:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Blog Content
+      operationId: blogSchedulePost
+      summary: Schedule a blog post for future publishing
+      description: Gated by blog_content.posts.schedule. High-risk, requires Idempotency-Key. Same content quality checklist gate as publish. The blog:publish:scheduled job later performs the actual publish once scheduledAt <= now().
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduledAt]
+              properties:
+                scheduledAt:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: Post scheduled (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid status transition, or the Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Scheduling is blocked by the content quality checklist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/posts/{id}/archive:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Blog Content
+      operationId: blogArchivePost
+      summary: Archive a blog post
+      description: Gated by blog_content.posts.archive. High-risk, requires Idempotency-Key.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Post archived (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Invalid status transition, or the Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/posts/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Blog Content
+      operationId: blogRestorePost
+      summary: Restore a soft-deleted blog post
+      description: Gated by blog_content.posts.restore. High-risk, requires Idempotency-Key.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Post restored (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/posts/{id}/purge:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Blog Content
+      operationId: blogPurgePost
+      summary: Permanently purge a soft-deleted blog post
+      description: Gated by blog_content.posts.purge. High-risk, irreversible, requires Idempotency-Key. Only a previously soft-deleted post may be purged.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Post purged (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The post is not soft-deleted, or the Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/posts/{id}/quality-checklist:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Blog Content
+      operationId: blogGetPostQualityChecklist
+      summary: Preview the content quality checklist for a post
+      description: Read-only preview for the admin editor — runs the exact same evaluator POST .../publish and .../schedule enforce. Gated by blog_content.posts.read (no separate permission).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The checklist result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      postId:
+                        type: string
+                        format: uuid
+                      qualityChecklist:
+                        $ref: "#/components/schemas/ContentQualityChecklistResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/posts/{id}/internal-links/preview:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Blog Content
+      operationId: blogPreviewPostInternalLinks
+      summary: Preview automatic internal tag linking for a post
+      description: Read-only preview of which tags would be automatically linked in this post's rendered content before publishing. Gated by blog_content.internal_links.preview.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The preview result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      postId:
+                        type: string
+                        format: uuid
+                      enabled:
+                        type: boolean
+                      disabledReason:
+                        type: string
+                        nullable: true
+                        enum:
+                          [
+                            deployment_disabled,
+                            tenant_disabled,
+                            post_disabled,
+                            null
+                          ]
+                      matches:
+                        type: array
+                        items:
+                          type: object
+                      totalLinked:
+                        type: integer
+                      maxPerPost:
+                        type: integer
+                      maxPerTag:
+                        type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/posts/{id}/revisions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Blog Content
+      operationId: blogListPostRevisions
+      summary: List a post's revision history
+      description: Gated by blog_content.revisions.read. Newest first.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The revision list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      revisions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BlogRevision"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/posts/{id}/revisions/{revisionId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: revisionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Blog Content
+      operationId: blogGetPostRevision
+      summary: Read one revision of a post
+      description: Gated by blog_content.revisions.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The revision.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogRevision"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/posts/{id}/revisions/{revisionId}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: revisionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - Blog Content
+      operationId: blogRestorePostRevision
+      summary: Restore a post to an earlier revision
+      description: Gated by blog_content.revisions.restore. High-risk, requires Idempotency-Key. Restoring APPENDS a new revision snapshot of the restored content — it never overwrites or removes the revision being restored from.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Post restored to the given revision (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: One or more image/video-thumbnail references in the restored content are not valid R2 media objects in full-online R2-only mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/pages:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogListPages
+      summary: List this tenant's non-deleted blog pages
+      description: Gated by blog_content.pages.read. Optional ?status= filter, ?limit= bounded.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, review, scheduled, published, archived]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Matching pages.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      pages:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BlogPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - Blog Content
+      operationId: blogCreatePage
+      summary: Create a draft blog page
+      description: Gated by blog_content.pages.create. Not idempotency-keyed (caught by the (tenant_id, locale, slug) partial unique index).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlogPageWriteInput"
+      responses:
+        "200":
+          description: Page created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A page already exists for this slug/locale.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: One or more image references are not valid R2 media objects in full-online R2-only mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/pages/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Blog Content
+      operationId: blogGetPage
+      summary: Read one blog page
+      description: Gated by blog_content.pages.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdatePage
+      summary: Update a blog page
+      description: Gated by blog_content.pages.update. Only fields present in the body are changed. A significant change snapshots an append-only revision first.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlogPageWriteInput"
+      responses:
+        "200":
+          description: Page updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: One or more image references are not valid R2 media objects in full-online R2-only mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags:
+        - Blog Content
+      operationId: blogDeletePage
+      summary: Soft delete a blog page
+      description: Gated by blog_content.pages.delete.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Page soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/pages/{id}/quality-checklist:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Blog Content
+      operationId: blogGetPageQualityChecklist
+      summary: Preview the content quality checklist for a page
+      description: Read-only preview for the admin editor. Gated by blog_content.pages.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The checklist result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      pageId:
+                        type: string
+                        format: uuid
+                      qualityChecklist:
+                        $ref: "#/components/schemas/ContentQualityChecklistResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/terms:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogListTerms
+      summary: List this tenant's categories/tags
+      description: Gated by blog_content.taxonomies.read. Optional ?taxonomyType= filter.
+      parameters:
+        - name: taxonomyType
+          in: query
+          schema:
+            type: string
+            enum: [category, tag]
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Matching terms.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      terms:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BlogTerm"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - Blog Content
+      operationId: blogCreateTerm
+      summary: Create a category or tag
+      description: Gated by blog_content.taxonomies.configure. A tag must never carry a parentId.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlogTermWriteInput"
+      responses:
+        "200":
+          description: Term created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogTerm"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A term already exists for this taxonomyType/slug.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/terms/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdateTerm
+      summary: Update a category or tag
+      description: Gated by blog_content.taxonomies.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlogTermWriteInput"
+      responses:
+        "200":
+          description: Term updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogTerm"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+        - Blog Content
+      operationId: blogDeleteTerm
+      summary: Soft delete a category or tag
+      description: Gated by blog_content.taxonomies.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Term soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogTerm"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/search:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogSearchContent
+      summary: Full-text search across posts and pages
+      description: Gated by blog_content.search.read. May return content of any status per the caller's granted permission. Keyset-paginated (?cursor=).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: resourceType
+          in: query
+          schema:
+            type: string
+            enum: [post, page]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, review, scheduled, published, archived]
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Matching results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/blog/settings:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogGetSettings
+      summary: Read this tenant's blog settings
+      description: Gated by blog_content.settings.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The tenant's blog settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdateSettings
+      summary: Update this tenant's blog settings
+      description: Gated by blog_content.settings.configure. Only fields present in the body are changed.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Settings updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/blog/templates:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogListTemplates
+      summary: List this tenant's presentation templates
+      description: Gated by blog_content.templates.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Matching templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      templates:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - Blog Content
+      operationId: blogCreateTemplate
+      summary: Create a presentation template
+      description: "Gated by blog_content.templates.configure. layoutJson is a whitelisted shape: { columns: 1|2|3, sidebarPosition: left|right|none }."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, name]
+              properties:
+                key:
+                  type: string
+                name:
+                  type: string
+                layoutJson:
+                  type: object
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Template created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A template already exists for this key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdateTemplate
+      summary: Update a presentation template
+      description: Gated by blog_content.templates.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                layoutJson:
+                  type: object
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Template updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+        - Blog Content
+      operationId: blogDeleteTemplate
+      summary: Soft delete a presentation template
+      description: Gated by blog_content.templates.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Template soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/menus:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogListMenus
+      summary: List this tenant's navigation menus (with items)
+      description: Gated by blog_content.menus.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Matching menus.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      menus:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - Blog Content
+      operationId: blogCreateMenu
+      summary: Create a navigation menu
+      description: "Gated by blog_content.menus.configure. Optionally seeds its initial items tree (one level of nesting; link_type post|page|url gates target_id/url)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, name]
+              properties:
+                key:
+                  type: string
+                name:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/BlogMenuItem"
+      responses:
+        "200":
+          description: Menu created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A menu already exists for this key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/blog/menus/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdateMenu
+      summary: Update a navigation menu (name and/or its items tree)
+      description: Gated by blog_content.menus.configure. Providing items replaces the whole tree.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/BlogMenuItem"
+      responses:
+        "200":
+          description: Menu updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+        - Blog Content
+      operationId: blogDeleteMenu
+      summary: Soft delete a navigation menu
+      description: Gated by blog_content.menus.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Menu soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/widgets:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogListWidgets
+      summary: List this tenant's widgets
+      description: Gated by blog_content.widgets.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Matching widgets.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      widgets:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - Blog Content
+      operationId: blogCreateWidget
+      summary: Create a widget
+      description: Gated by blog_content.widgets.configure. bodyText is plain text, escaped at render time (no raw-HTML field).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position, title]
+              properties:
+                position:
+                  type: string
+                  enum: [header, sidebar, footer, content_before, content_after]
+                title:
+                  type: string
+                bodyText:
+                  type: string
+                isActive:
+                  type: boolean
+                sortOrder:
+                  type: integer
+      responses:
+        "200":
+          description: Widget created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/blog/widgets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdateWidget
+      summary: Update a widget
+      description: Gated by blog_content.widgets.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                position:
+                  type: string
+                  enum: [header, sidebar, footer, content_before, content_after]
+                title:
+                  type: string
+                bodyText:
+                  type: string
+                isActive:
+                  type: boolean
+                sortOrder:
+                  type: integer
+      responses:
+        "200":
+          description: Widget updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+        - Blog Content
+      operationId: blogDeleteWidget
+      summary: Soft delete a widget
+      description: Gated by blog_content.widgets.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Widget soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/ads:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogListAds
+      summary: List this tenant's advertisements
+      description: Gated by blog_content.ads.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Matching ads.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      ads:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - Blog Content
+      operationId: blogCreateAd
+      summary: Create an advertisement
+      description: "Gated by blog_content.ads.configure. imageUrl/linkUrl must be absolute http(s) URLs (never raw HTML/embed markup). Optionally seeds its initial placements (global|widget|post|page; targetId required except for global)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, imageUrl]
+              properties:
+                name:
+                  type: string
+                imageUrl:
+                  type: string
+                linkUrl:
+                  type: string
+                  nullable: true
+                isActive:
+                  type: boolean
+                startsAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                endsAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                placements:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/BlogAdPlacement"
+      responses:
+        "200":
+          description: Ad created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/blog/ads/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdateAd
+      summary: Update an advertisement (and/or its placements)
+      description: Gated by blog_content.ads.configure. Providing placements replaces the whole set.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                imageUrl:
+                  type: string
+                linkUrl:
+                  type: string
+                  nullable: true
+                isActive:
+                  type: boolean
+                startsAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                endsAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                placements:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/BlogAdPlacement"
+      responses:
+        "200":
+          description: Ad updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+        - Blog Content
+      operationId: blogDeleteAd
+      summary: Soft delete an advertisement
+      description: Gated by blog_content.ads.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Ad soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/blog/theme:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogGetTheme
+      summary: Read this tenant's blog theme mode setting
+      description: Gated by blog_content.theme.read. Absence of a row means "inherit the tenant's default_theme".
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The theme setting.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      mode:
+                        type: string
+                        enum: [light, dark, system]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdateTheme
+      summary: Update this tenant's blog theme mode setting
+      description: Gated by blog_content.theme.configure.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  type: string
+                  enum: [light, dark, system]
+      responses:
+        "200":
+          description: Theme setting updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      mode:
+                        type: string
+                        enum: [light, dark, system]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/blog/internal-tag-links/settings:
+    get:
+      tags:
+        - Blog Content
+      operationId: blogGetInternalTagLinkSettings
+      summary: Read this tenant's automatic internal tag linking policy
+      description: Gated by blog_content.internal_links.read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogInternalTagLinkSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags:
+        - Blog Content
+      operationId: blogUpdateInternalTagLinkSettings
+      summary: Update this tenant's automatic internal tag linking policy
+      description: Gated by blog_content.internal_links.configure. disabledTagIds are validated against this tenant's own tag catalog.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                caseInsensitive:
+                  type: boolean
+                disabledTagIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: Policy updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/BlogInternalTagLinkSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+components:
+  schemas:
+    BlogPostWriteInput:
+      type: object
+      description: Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1/blog/posts/{id} (all fields optional, only present fields change).
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        contentJson:
+          type: object
+          description: "{ blocks: ContentBlock[] } — whitelisted block types only (paragraph, heading, list, quote, gallery, video_news); never raw HTML."
+        contentText:
+          type: string
+        locale:
+          type: string
+        visibility:
+          type: string
+          enum: [public, private, unlisted]
+        featuredMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        seoImageMediaId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Explicit "use this image for social/SEO preview" override — takes priority over featuredMediaId.
+        seoTitle:
+          type: string
+          nullable: true
+        metaDescription:
+          type: string
+          nullable: true
+        canonicalUrl:
+          type: string
+          nullable: true
+        termIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        translationGroupId:
+          type: string
+          format: uuid
+          nullable: true
+        autoInternalTagLinksDisabled:
+          type: boolean
+          description: Per-post opt-out of automatic internal tag linking.
+    BlogPost:
+      type: object
+      required:
+        [
+          id,
+          tenantId,
+          title,
+          slug,
+          status,
+          visibility,
+          locale,
+          createdAt,
+          updatedAt,
+          version
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        authorTenantUserId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        contentJson:
+          type: object
+        contentText:
+          type: string
+        status:
+          type: string
+          enum: [draft, review, scheduled, published, archived]
+        visibility:
+          type: string
+          enum: [public, private, unlisted]
+        featuredMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        seoImageMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        seoTitle:
+          type: string
+          nullable: true
+        metaDescription:
+          type: string
+          nullable: true
+        canonicalUrl:
+          type: string
+          nullable: true
+        locale:
+          type: string
+        translationGroupId:
+          type: string
+          format: uuid
+          nullable: true
+        autoInternalTagLinksDisabled:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        scheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+        termIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    BlogPageWriteInput:
+      type: object
+      description: Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all fields optional on update).
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        contentJson:
+          type: object
+        contentText:
+          type: string
+        locale:
+          type: string
+        visibility:
+          type: string
+          enum: [public, private, unlisted]
+        featuredMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        seoTitle:
+          type: string
+          nullable: true
+        metaDescription:
+          type: string
+          nullable: true
+        canonicalUrl:
+          type: string
+          nullable: true
+        pageType:
+          type: string
+          enum: [standard, landing, legal, system]
+        parentPageId:
+          type: string
+          format: uuid
+          nullable: true
+        menuOrder:
+          type: integer
+    BlogPage:
+      type: object
+      required:
+        [
+          id,
+          tenantId,
+          title,
+          slug,
+          status,
+          visibility,
+          pageType,
+          locale,
+          createdAt,
+          updatedAt,
+          version
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        authorTenantUserId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        contentJson:
+          type: object
+        contentText:
+          type: string
+        status:
+          type: string
+          enum: [draft, review, scheduled, published, archived]
+        visibility:
+          type: string
+          enum: [public, private, unlisted]
+        featuredMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        seoTitle:
+          type: string
+          nullable: true
+        metaDescription:
+          type: string
+          nullable: true
+        canonicalUrl:
+          type: string
+          nullable: true
+        locale:
+          type: string
+        pageType:
+          type: string
+          enum: [standard, landing, legal, system]
+        parentPageId:
+          type: string
+          format: uuid
+          nullable: true
+        menuOrder:
+          type: integer
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        scheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+    BlogTermWriteInput:
+      type: object
+      properties:
+        taxonomyType:
+          type: string
+          enum: [category, tag]
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+    BlogTerm:
+      type: object
+      required: [id, tenantId, taxonomyType, name, slug]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        taxonomyType:
+          type: string
+          enum: [category, tag]
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+    BlogRevision:
+      type: object
+      required:
+        [
+          id,
+          tenantId,
+          resourceType,
+          resourceId,
+          revisionNumber,
+          title,
+          status,
+          createdAt
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        resourceType:
+          type: string
+          enum: [post, page]
+        resourceId:
+          type: string
+          format: uuid
+        revisionNumber:
+          type: integer
+        title:
+          type: string
+        contentJson:
+          type: object
+        contentText:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        seoTitle:
+          type: string
+          nullable: true
+        metaDescription:
+          type: string
+          nullable: true
+        canonicalUrl:
+          type: string
+          nullable: true
+        status:
+          type: string
+        changeNote:
+          type: string
+          nullable: true
+        createdByTenantUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+    BlogSettings:
+      type: object
+      properties:
+        blogTitle:
+          type: string
+          nullable: true
+        blogDescription:
+          type: string
+          nullable: true
+        defaultLocale:
+          type: string
+        defaultVisibility:
+          type: string
+          enum: [public, private, unlisted]
+        postsPerPage:
+          type: integer
+        seoDefaultTitle:
+          type: string
+          nullable: true
+        seoDefaultDescription:
+          type: string
+          nullable: true
+        rssEnabled:
+          type: boolean
+        sitemapEnabled:
+          type: boolean
+        contentQualityChecklistPolicy:
+          type: object
+        socialPreviewFallbackImageMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        socialPreviewContentImageFallbackEnabled:
+          type: boolean
+    BlogMenuItem:
+      type: object
+      required: [id, label, linkType, sortOrder]
+      properties:
+        id:
+          type: string
+          format: uuid
+        parentItemId:
+          type: string
+          format: uuid
+          nullable: true
+        label:
+          type: string
+        linkType:
+          type: string
+          enum: [post, page, url]
+        targetId:
+          type: string
+          format: uuid
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+    BlogAdPlacement:
+      type: object
+      required: [placementType]
+      properties:
+        placementType:
+          type: string
+          enum: [global, widget, post, page]
+        targetId:
+          type: string
+          format: uuid
+          nullable: true
+    BlogInternalTagLinkSettings:
+      type: object
+      required: [enabled, caseInsensitive, disabledTagIds]
+      properties:
+        enabled:
+          type: boolean
+        caseInsensitive:
+          type: boolean
+        disabledTagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    ContentQualityChecklistResult:
+      type: object
+      required: [applicable, passed, blockers]
+      description: "notApplicableChecklistResult() when full-online R2-only mode is not active for the tenant (applicable=false, passed=true, blockers=[]) — otherwise a full evaluation."
+      properties:
+        applicable:
+          type: boolean
+        passed:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            type: object
+            required: [ruleId, message]
+            properties:
+              ruleId:
+                type: string
+              message:
+                type: string
+        warnings:
+          type: array
+          items:
+            type: object
