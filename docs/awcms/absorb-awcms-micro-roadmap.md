@@ -21,7 +21,7 @@ Setiap penyerapan = **satu PR atomic**, **adaptasi bukan salin**:
    yang belum ada; jangan menimpa/mundurkan kapabilitas awcms yang sudah lebih maju
    (mis. auth: awcms sudah punya MFA/OIDC/SSO/business-scope/SoD/Turnstile/break-glass).
 2. **Rename prefix** `awcms_micro_` → `awcms_` (tabel, GUC, konstanta, env, katalog permission).
-3. **Penomoran migrasi lanjut & rapat** dari migrasi tertinggi saat ini (`sql/045`;
+3. **Penomoran migrasi lanjut & rapat** dari migrasi tertinggi saat ini (`sql/061`;
    nomor berikutnya 046), **sekuensial tanpa gap** — gap sengaja milik micro (ranges ERP
    tak-diport) TIDAK dibawa ke sini. Migrasi terapan itu immutable; koreksi via migrasi baru.
 4. **Drop dependensi/toolchain yang belum ada di awcms**; bila sebuah modul butuh seam yang
@@ -44,12 +44,13 @@ ABAC DSL, MFA TOTP + step-up, OIDC/SSO generik + break-glass, business-scope, So
 `profile-identity`, `logging`, `module-management`, `sync-storage`, `workflow-approval`,
 `reporting`, `email`, `domain-event-runtime`, **`theming`, `blog-content`, `news-portal`**.
 
-**Diserap dari awcms-micro (belum ada di sini):** pustaka UI `src/components/ui/`,
-seam kontribusi konten, `media-library`, `tenant-domain`, `form-drafts`, `seo-distribution`,
-`site-search`, `comments`, `newsletter`, `social-publishing`, `visitor-analytics`,
-`data-lifecycle`; delta auth/admin (self-registration, password reset, admin security policy
-UI, per-tenant sidebar menu, login OIDC Google spesifik — **verifikasi mana yang belum ada**);
-trajektori e-commerce/toko online (epik lanjutan).
+**Diserap dari awcms-micro (lingkup penuh; status per-modul di §5):** pustaka UI
+`src/components/ui/`, seam kontribusi konten, `media-library` ✅, `tenant-domain` ✅,
+`visitor-analytics` ✅, `data-lifecycle` ✅, `seo-distribution` ✅, `form-drafts`,
+`site-search`, `comments`, `newsletter`, `social-publishing`; delta auth/admin
+(self-registration, password reset, admin security policy UI, per-tenant sidebar menu,
+login OIDC Google spesifik — **verifikasi mana yang belum ada**); trajektori
+e-commerce/toko online (epik lanjutan). ✅ = sudah mendarat (2026-07-24/25).
 
 ## 3. Gelombang & urutan dependensi
 
@@ -102,19 +103,19 @@ OpenAPI beku (add-only). Changeset wajib.
 
 ## 5. Status penyerapan (perbarui saat selesai)
 
-| Gelombang | Item                                                                                                                                                                                                  | Status                                | PR   |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---- |
-| 0         | `src/components/ui/` + token                                                                                                                                                                          | ⏳ belum                              | —    |
-| 0         | Seam kontribusi `ModuleDescriptor`                                                                                                                                                                    | ⏳ belum                              | —    |
-| 0         | `media-library` (wave INVERSI, ADR-0036)                                                                                                                                                              | ✅ selesai                            | #221 |
-| 0         | `tenant-domain`                                                                                                                                                                                       | ✅ selesai                            | #219 |
-| 1         | `form-drafts`                                                                                                                                                                                         | ⏳ belum                              | —    |
-| 1         | `seo-distribution` — discovery ([ADR-0038](../adr/0038-seo-distribution-module-admission-discovery-scope.md)) + redirect governance ([ADR-0039](../adr/0039-seo-distribution-redirect-governance.md)) | ✅ selesai (discovery + redirect/404) | —    |
-| 1         | `site-search`                                                                                                                                                                                         | ⏳ belum                              | —    |
-| 1         | `comments`                                                                                                                                                                                            | ⏳ belum                              | —    |
-| 1         | `newsletter`                                                                                                                                                                                          | ⏳ belum                              | —    |
-| 1         | `social-publishing`                                                                                                                                                                                   | ⏳ belum                              | —    |
-| 1         | `visitor-analytics`                                                                                                                                                                                   | ✅ selesai                            | #220 |
-| 1         | `data-lifecycle` ([ADR-0037](../adr/0037-data-lifecycle-module-admission.md))                                                                                                                         | ✅ selesai                            | —    |
-| 2         | Delta auth/admin                                                                                                                                                                                      | ⏳ belum                              | —    |
-| 3         | E-commerce/toko online                                                                                                                                                                                | ⏳ belum (butuh ADR)                  | —    |
+| Gelombang | Item                                                                                                                                                                                                  | Status                                                                                                                                         | PR        |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 0         | `src/components/ui/` + token                                                                                                                                                                          | ⏳ belum                                                                                                                                       | —         |
+| 0         | Seam kontribusi `ModuleDescriptor`                                                                                                                                                                    | 🟡 sebagian (`dataLifecycle` #222, capability `seo_facts` #223 sudah; `searchSources`/`commentableResources`/`newsletterContentSources` belum) | #222/#223 |
+| 0         | `media-library` (wave INVERSI, ADR-0036)                                                                                                                                                              | ✅ selesai                                                                                                                                     | #221      |
+| 0         | `tenant-domain`                                                                                                                                                                                       | ✅ selesai                                                                                                                                     | #219      |
+| 1         | `form-drafts`                                                                                                                                                                                         | ⏳ belum                                                                                                                                       | —         |
+| 1         | `seo-distribution` — discovery ([ADR-0038](../adr/0038-seo-distribution-module-admission-discovery-scope.md)) + redirect governance ([ADR-0039](../adr/0039-seo-distribution-redirect-governance.md)) | ✅ selesai (discovery + redirect/404)                                                                                                          | #223/#224 |
+| 1         | `site-search`                                                                                                                                                                                         | ⏳ belum                                                                                                                                       | —         |
+| 1         | `comments`                                                                                                                                                                                            | ⏳ belum                                                                                                                                       | —         |
+| 1         | `newsletter`                                                                                                                                                                                          | ⏳ belum                                                                                                                                       | —         |
+| 1         | `social-publishing`                                                                                                                                                                                   | ⏳ belum                                                                                                                                       | —         |
+| 1         | `visitor-analytics`                                                                                                                                                                                   | ✅ selesai                                                                                                                                     | #220      |
+| 1         | `data-lifecycle` ([ADR-0037](../adr/0037-data-lifecycle-module-admission.md))                                                                                                                         | ✅ selesai                                                                                                                                     | #222      |
+| 2         | Delta auth/admin                                                                                                                                                                                      | ⏳ belum                                                                                                                                       | —         |
+| 3         | E-commerce/toko online                                                                                                                                                                                | ⏳ belum (butuh ADR)                                                                                                                           | —         |

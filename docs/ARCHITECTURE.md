@@ -8,7 +8,7 @@ yang di-ship, base menyediakan **modul fondasi reusable + kontrak netral kesiapa
 modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll, dst.)
 **ditambahkan langsung di `src/modules/` template ini** saat dipakai, bukan di repo
 ekstensi/turunan terpisah (jalur aplikasi-turunan DIHAPUS — lihat §Komposisi modul di
-bawah). Repo ini punya **13 modul aktif**, migration `sql/001`-`sql/045`, RLS
+bawah). Repo ini punya **18 modul aktif**, migration `sql/001`-`sql/061`, RLS
 `FORCE` di seluruh tabel tenant-scoped, pemisahan role database, dan admin UI read+write
 (Issue #166, #171). Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk detail
 per modul, lihat `README.md` masing-masing di `src/modules/<module>/`.
@@ -30,7 +30,7 @@ src/modules/<module>/
   api/                  # (opsional) skema/handler bersama; route file tetap di src/pages
 ```
 
-13 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
+18 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
 
 - **`logging`** — audit trail lintas modul (`awcms_audit_events`) + purge terjadwal.
 - **`tenant_admin`** — tenant root, hierarki office, tenant settings, setup wizard sekali jalan.
@@ -44,13 +44,18 @@ src/modules/<module>/
 - **`reporting`** — lima view manajemen (aktivitas tenant, akses/audit, sync health, module usage, email health) plus mekanisme projection read-model (incremental cursor/event-driven, rebuild, freshness, reconciliation, export terjadwal).
 - **`theming`** (`type: "domain"`) — modul **website** pertama yang hidup langsung di base (ADR-0034 Fase 3): konfigurasi tema per tenant (design token), lifecycle draft/preview/publish/retire/rollback ber-immutability, route `/api/v1/theming/*` + stylesheet publik `/theming/{tenantCode}/tokens.css` (eksternal, `style-src 'self'`). Validasi nilai CSS by-rejection, preview beku ber-SHA-256.
 - **`blog-content`** (`type: "domain"`) — modul konten publik pertama, di-port dari mini (PR #214, `sql/035`-`sql/040`, 15 tabel `awcms_blog_*`): CRUD+lifecycle post/page (draft→review→scheduled/published→archived, soft-delete/restore/purge), kategori/tag hierarkis, full-text search, revisi append-only, presentasi/monetisasi (template/menu/widget/ads/theme), auto internal-tag-linking, per-tenant settings. Rute publik **path-based** `/blog/{tenantCode}/*` (ADR-0009): index, detail, arsip kategori/tag, search, RSS feed, sitemap. Rute `/news/**` host-resolved TIDAK di-port (butuh `tenant_domain`).
-- **`news-portal`** (`type: "domain"`) — di-port dari mini (PR #214, `sql/041`-`sql/045`, 4 tabel `awcms_news_*`): media object registry R2 + presigned upload direct-to-R2 (magic-byte MIME sniff + SHA-256), homepage-section composer, ad-placement preset, job reconcile media. Menyediakan capability `news_media` yang dikonsumsi `blog-content` via adapter nyata. DI-DROP saat port: rute `/news/**` (butuh `tenant_domain`), aktivasi preset full-online-R2 (butuh preset subsystem `module_management`) — tabel state ada tapi tanpa writer, mode R2-only fail-closed inactive.
+- **`news-portal`** (`type: "domain"`) — di-port dari mini (PR #214, `sql/041`-`sql/045`, tabel `awcms_news_*`): homepage-section composer, ad-placement preset. Sejak **inversi kepemilikan media** ([ADR-0036](adr/0036-media-library-module-admission-ownership-inversion.md), #221) registry objek media + presigned upload + job `news-media:reconcile` **pindah ke `media_library`**; `news-portal` kini **mengonsumsi** capability `media_library` (bukan lagi menyediakan `news_media` — yang dipensiunkan). DI-DROP saat port: rute `/news/**` (adopsi menyusul kini `tenant_domain` ada), aktivasi preset full-online-R2 (butuh preset subsystem `module_management`).
+- **`tenant-domain`** (`type: "domain"`) — di-port dari micro (#219, `sql/046`-`sql/048`): pendaftaran + verifikasi domain kustom per tenant, primary-host, fungsi lookup host→tenant. Fondasi host-resolved untuk SEO (host kanonik) & rute publik host-based.
+- **`visitor-analytics`** (`type: "domain"`) — di-port dari micro (#220, `sql/049`-`sql/051`): telemetri kunjungan privacy-minimized (`awcms_visit_events`/`awcms_visitor_sessions`), rollup harian, job rollup + purge terjadwal (kini mengonsultasi legal-hold `data_lifecycle`).
+- **`media-library`** (`type: "domain"`) — **inversi kepemilikan** ([ADR-0036](adr/0036-media-library-module-admission-ownership-inversion.md), #221, `sql/052`-`sql/054`): satu modul memiliki SELURUH objek media per-tenant (registry R2 + presign/finalize/cancel + magic-byte MIME sniff + SHA-256), menyediakan capability `media_library` (dikonsumsi `blog-content`, `news-portal`, `seo-distribution`). Enforcement managed-media per-tenant (`POST /api/v1/media/enforcement`, idempotent). `news_media` dipensiunkan.
+- **`data-lifecycle`** (`type: "domain"`) — di-port dari micro ([ADR-0037](adr/0037-data-lifecycle-module-admission.md), #222, `sql/055`-`sql/056`): retensi/arsip/purge generik lintas modul via descriptor `dataLifecycle` pada `ModuleDescriptor` + **legal-hold non-bypassable** (guard `LegalHoldGuardPort` dikonsultasi setiap purge). Base kini ship **1 aturan SoD** `data_lifecycle.legal_hold_maker_checker`.
+- **`seo-distribution`** (`type: "domain"`) — di-port dari micro ([ADR-0038](adr/0038-seo-distribution-module-admission-discovery-scope.md) discovery + [ADR-0039](adr/0039-seo-distribution-redirect-governance.md) redirect governance, #223/#224, `sql/057`-`sql/061`): renderer metadata SEO terpusat (canonical/hreflang/robots/OG/JSON-LD terkontrol, host diturunkan **server** dari `tenant_domain`) + rute discovery publik tak-terautentikasi (`/robots.txt`, `/sitemap.xml`, `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json`) + config admin `/api/v1/seo/config` + **tata kelola redirect** (aturan exact-path `awcms_seo_redirects`, telemetri 404, hook `src/middleware.ts` fail-open, guard open-redirect beku). **Konsumen/agregator** capability `seo_facts` (disediakan `blog_content`) — tidak mengimpor modul konten mana pun.
 
-Modul lain di ekosistem `awcms-mini` (mis. `data-lifecycle`,
-`document-infrastructure`, `form-drafts`, `integration-hub`,
-`social-publishing`, `tenant-domain` routing, `visitor-analytics`,
-`idn-admin-regions`) **belum di-port** ke repo ini — lihat skill masing-masing
-(ditandai "BACAAN SAJA") untuk spesifikasi target saat porting.
+Modul lain di ekosistem keluarga (mis. `form-drafts`, `site-search`,
+`comments`, `newsletter`, `social-publishing`, `document-infrastructure`,
+`integration-hub`, `idn-admin-regions`) **belum di-port** ke repo ini — lihat
+skill masing-masing (ditandai "BACAAN SAJA") + [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
+untuk spesifikasi target & urutan porting.
 
 ### Komposisi & validasi registry modul (ADR-0034)
 

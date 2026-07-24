@@ -101,7 +101,6 @@ Repo ini dilengkapi playbook pengembangan berbasis agent, diadaptasi dari [awcms
 
 - [`.claude/skills/`](.claude/skills/README.md) — 48 skill tingkat-proyek yang meng-encode standar `docs/awcms/` (scaffold modul, migration, endpoint, ABAC guard, audit log, testing, security review, deploy, dst.). Dipanggil otomatis oleh model atau manual via `/<nama-skill>`.
 - [`.claude/agents/`](.claude/skills/README.md#subagents-claudeagents) — subagent `awcms-coder` (implementasi issue end-to-end), `awcms-reviewer` (review PR read-only), `awcms-security-auditor` (audit keamanan read-only).
-- [`docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf`](docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf) — panduan penggunaan keluarga agent AWCMS.
 
 Skill/agent mendeskripsikan pola **target** standar dari repo acuan awcms-mini. Beberapa (mis. `awcms-auth-online-hardening`) mendeskripsikan epik spekulatif yang belum diajukan/dikerjakan — periksa frontmatter `description` tiap skill sebelum mengasumsikan sesuatu sudah ada. Untuk skill yang menargetkan modul ERP/integrasi bisnis vertikal, terapkan langsung di `src/modules/` template ini saat membangun modul itu ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede ADR-0022); nomor issue `#NNN` di dalamnya merujuk epik repo acuan sebagai contoh, bukan tracker repo ini.
 

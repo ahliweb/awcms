@@ -8,7 +8,7 @@ Folder ini berisi paket dokumen teknis standar AWCMS — **template lini ERP/bac
 
 Repo ini sudah melewati tahap fondasi ulang (lihat [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — belasan modul fondasi + website/konten sudah live (termasuk `theming`, `blog-content`, `news-portal`; auth lanjutan MFA/OIDC/SSO/business-scope/SoD; lihat [`../ARCHITECTURE.md`](../ARCHITECTURE.md) sebagai sumber kebenaran state kode). Sebagian dokumen di folder ini masih **rencana/target** untuk kapabilitas yang sedang diserap dari awcms-micro (lihat [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)), bukan seluruhnya kondisi kode saat ini. Klaim "sudah live/tersedia/terverifikasi" dari dokumen sumber awcms-mini/awcms-micro dibaca sebagai target yang mengikat untuk implementasi mendatang bila modul terkait belum di-port.
 
-Paket ini sekarang mengadaptasi **seluruh** dokumen teknis dari repo acuan awcms-mini agar AWCMS siap dikembangkan dengan tooling agent yang sama (lihat juga [`.claude/skills/`](../../.claude/skills/README.md) dan [`Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf`](../Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf)). Dokumen yang berasal dari klaster website/e-commerce (news portal, social publishing, visitor analytics, comments, newsletter, SEO, dst.) kini menjadi **spesifikasi target penyerapan awcms-micro** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), peta di [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)) — modul-modul itu **diserap langsung ke `src/modules/`** template ini, bukan sekadar pola yang dipadankan.
+Paket ini sekarang mengadaptasi **seluruh** dokumen teknis dari repo acuan awcms-mini agar AWCMS siap dikembangkan dengan tooling agent yang sama (lihat juga [`.claude/skills/`](../../.claude/skills/README.md)). Dokumen yang berasal dari klaster website/e-commerce (news portal, social publishing, visitor analytics, comments, newsletter, SEO, dst.) kini menjadi **spesifikasi target penyerapan awcms-micro** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), peta di [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)) — modul-modul itu **diserap langsung ke `src/modules/`** template ini, bukan sekadar pola yang dipadankan.
 
 ## Indeks dokumen
 
@@ -62,8 +62,6 @@ Paket ini sekarang mengadaptasi **seluruh** dokumen teknis dari repo acuan awcms
 | [`AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`](AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md)                 | Audit kepatuhan standar pengembangan (acuan)                                |
 | [`module-composition-inventory.json`](module-composition-inventory.json)                               | Inventaris komposisi modul (artefak, regenerasi via tooling)                |
 | [`work-class-registry.generated.json`](work-class-registry.generated.json)                             | Registry work-class (artefak generated)                                     |
-
-Panduan agent keluarga AWCMS (PDF): [`../Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf`](../Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf).
 
 Dua JSON di atas (`module-composition-inventory.json`, `work-class-registry.generated.json`) adalah **artefak yang di-generate** di repo acuan; nilainya masih mencerminkan modul awcms-mini dan akan diregenerasi oleh tooling repo ini begitu modul ERP terkait ada. Snapshot GitHub (`docs/awcms/github/`) belum diadaptasi — dihasilkan oleh skill `awcms-github-snapshot` saat dijalankan terhadap tracker repo ini.
 
