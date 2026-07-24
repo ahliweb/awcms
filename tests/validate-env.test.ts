@@ -74,4 +74,33 @@ describe("validateEnv", () => {
       0
     );
   });
+
+  test("visitor analytics hash salt is required only when the module is enabled", () => {
+    // Disabled (default) -> no salt required.
+    expect(
+      validateEnv({ ...base, VISITOR_ANALYTICS_ENABLED: "false" }).length
+    ).toBe(0);
+    // Enabled without a real salt -> problem.
+    expect(
+      validateEnv({ ...base, VISITOR_ANALYTICS_ENABLED: "true" }).some((p) =>
+        p.startsWith("VISITOR_ANALYTICS_HASH_SALT")
+      )
+    ).toBe(true);
+    // Enabled with a placeholder salt -> still a problem.
+    expect(
+      validateEnv({
+        ...base,
+        VISITOR_ANALYTICS_ENABLED: "true",
+        VISITOR_ANALYTICS_HASH_SALT: "change-me"
+      }).some((p) => p.startsWith("VISITOR_ANALYTICS_HASH_SALT"))
+    ).toBe(true);
+    // Enabled with a real salt -> clean.
+    expect(
+      validateEnv({
+        ...base,
+        VISITOR_ANALYTICS_ENABLED: "true",
+        VISITOR_ANALYTICS_HASH_SALT: "a-real-deployment-salt"
+      }).length
+    ).toBe(0);
+  });
 });

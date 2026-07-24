@@ -24,7 +24,12 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // rate-limited; the callback trusts nothing until state/nonce/PKCE/ID-token
   // all validate.
   "getAuthSsoStart",
-  "getAuthSsoCallback"
+  "getAuthSsoCallback",
+  // visitor_analytics (ported from awcms-micro epic #617-#624) — the public
+  // visit-ingest beacon is anonymous by design: it carries no session, resolves
+  // the tenant from a public tenant code, records only privacy-preserving,
+  // anonymized, public-area page views, and is fire-and-forget (always 202).
+  "analyticsCollect"
 ]);
 
 /**

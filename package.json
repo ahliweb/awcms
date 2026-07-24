@@ -44,6 +44,8 @@
     "blog:publish:scheduled": "bun scripts/blog-scheduled-publish.ts",
     "news-media:reconcile": "bun scripts/news-media-r2-reconcile.ts",
     "logs:audit:purge": "bun scripts/audit-log-purge.ts",
+    "analytics:rollup": "bun scripts/visitor-analytics-rollup.ts",
+    "analytics:purge": "bun scripts/visitor-analytics-purge.ts",
     "email:dispatch": "bun scripts/email-dispatch.ts",
     "email:provider:health": "bun scripts/email-provider-health.ts",
     "email:templates:seed-defaults": "bun scripts/email-templates-seed-defaults.ts",
