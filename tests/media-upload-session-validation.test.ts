@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   validateCreateNewsMediaUploadSessionInput,
   validateFinalizeNewsMediaUploadSessionInput
-} from "../src/modules/news-portal/domain/news-media-upload-session-validation";
+} from "../src/modules/media-library/domain/media-upload-session-validation";
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_BYTES = 10_485_760;

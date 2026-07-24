@@ -1,9 +1,9 @@
 /**
  * Unit tests for `content-quality-checklist-gate.ts` (Issue #640) — the
  * application-layer orchestration between the pure evaluator and a
- * `NewsMediaPort`. Uses a fake in-memory `NewsMediaPort` (same technique
+ * `MediaLibraryPort`. Uses a fake in-memory `MediaLibraryPort` (same technique
  * `news-media-port.ts`'s own header describes: any function taking a
- * `NewsMediaPort` parameter can be unit-tested without a real database by
+ * `MediaLibraryPort` parameter can be unit-tested without a real database by
  * injecting a fake), so no DATABASE_URL/Postgres is needed — `tx` is never
  * actually dereferenced by the fake, only forwarded.
  */
@@ -11,37 +11,34 @@ import { describe, expect, test } from "bun:test";
 
 import { evaluateContentQualityChecklistForContent } from "../src/modules/blog-content/application/content-quality-checklist-gate";
 import type {
-  NewsMediaPort,
-  ResolvedNewsMediaReferenceDTO
-} from "../src/modules/_shared/ports/news-media-port";
+  MediaLibraryPort,
+  ResolvedMediaReferenceDTO
+} from "../src/modules/_shared/ports/media-library-port";
 
 const FEATURED_ID = "11111111-1111-1111-1111-111111111111";
 const GALLERY_ID = "22222222-2222-2222-2222-222222222222";
 
 function fakePort(options: {
   modeActive: boolean;
-  resolvable?: Record<string, ResolvedNewsMediaReferenceDTO>;
-}): NewsMediaPort {
+  resolvable?: Record<string, ResolvedMediaReferenceDTO>;
+}): MediaLibraryPort {
   const resolvable = options.resolvable ?? {};
 
   return {
-    async isFullOnlineR2ModeActiveForTenant() {
+    async isManagedMediaEnforcementActiveForTenant() {
       return options.modeActive;
     },
     async isMediaReferenceSafe(_tx, _tenantId, mediaObjectId) {
       return mediaObjectId in resolvable;
     },
     async resolveMediaReferences(_tx, _tenantId, mediaObjectIds) {
-      const map = new Map<string, ResolvedNewsMediaReferenceDTO>();
+      const map = new Map<string, ResolvedMediaReferenceDTO>();
       for (const id of mediaObjectIds) {
         if (resolvable[id]) {
           map.set(id, resolvable[id]);
         }
       }
       return map;
-    },
-    resolveMediaPublicBaseUrl() {
-      return "";
     }
   };
 }

@@ -12,7 +12,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   createNewsMediaR2Client,
   readCappedStream
-} from "../src/modules/news-portal/infrastructure/news-media-r2-client";
+} from "../src/modules/media-library/infrastructure/media-r2-client";
 import { resetProviderCircuitBreakersForTests } from "../src/lib/database/circuit-breaker";
 
 afterEach(() => {

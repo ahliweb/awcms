@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import { validateVideoNewsThumbnailReferencesForFullOnlineR2Mode } from "../src/modules/blog-content/application/video-news-thumbnail-reference-gate";
 import type {
-  NewsMediaPort,
-  ResolvedNewsMediaReferenceDTO
-} from "../src/modules/_shared/ports/news-media-port";
+  MediaLibraryPort,
+  ResolvedMediaReferenceDTO
+} from "../src/modules/_shared/ports/media-library-port";
 
 const VALID_ID = "11111111-1111-1111-1111-111111111111";
 const OTHER_TENANT_ID = "22222222-2222-2222-2222-222222222222";
@@ -15,19 +15,16 @@ const FAKE_TX = {} as unknown as Bun.SQL;
 function fakePort(options: {
   modeActive: boolean;
   safeIds?: Set<string>;
-}): NewsMediaPort {
+}): MediaLibraryPort {
   return {
-    async isFullOnlineR2ModeActiveForTenant() {
+    async isManagedMediaEnforcementActiveForTenant() {
       return options.modeActive;
     },
     async isMediaReferenceSafe(_tx, _tenantId, mediaObjectId) {
       return options.safeIds?.has(mediaObjectId) ?? false;
     },
     async resolveMediaReferences() {
-      return new Map<string, ResolvedNewsMediaReferenceDTO>();
-    },
-    resolveMediaPublicBaseUrl() {
-      return "";
+      return new Map<string, ResolvedMediaReferenceDTO>();
     }
   };
 }

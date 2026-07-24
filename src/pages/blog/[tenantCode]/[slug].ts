@@ -13,7 +13,7 @@ import { fetchPublicBlogPostBySlug } from "../../../modules/blog-content/applica
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
 import { fetchBlogSettings } from "../../../modules/blog-content/application/blog-settings-directory";
 import { buildNewsArticleSeoMetadata } from "../../../modules/blog-content/application/news-article-seo-metadata";
-import { newsMediaPortAdapter } from "../../../modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../../../modules/media-library/application/media-library-port-adapter";
 import { resolveBlogShareConfig } from "../../../modules/blog-content/domain/social-share-config";
 import { renderContentJsonToHtml } from "../../../modules/blog-content/domain/content-block-rendering";
 import { renderContentHtmlWithInternalTagLinks } from "../../../modules/blog-content/application/internal-tag-link-rendering";
@@ -76,7 +76,7 @@ export const GET: APIRoute = async ({ params, url }) => {
       const seoMetadata = await buildNewsArticleSeoMetadata(
         tx,
         tenant.tenantId,
-        newsMediaPortAdapter,
+        mediaLibraryPortAdapter,
         blogSettings,
         {
           post,

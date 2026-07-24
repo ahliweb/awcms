@@ -4,7 +4,7 @@
  * (`news-media-reference-gate.ts`): this ENTIRE checklist is a no-op
  * (`applicable: false`) unless full-online R2-only mode is genuinely active
  * for the calling tenant (checked by the caller, `content-quality-checklist-
- * gate.ts`, via `NewsMediaPort.isFullOnlineR2ModeActiveForTenant` — this
+ * gate.ts`, via `MediaLibraryPort.isManagedMediaEnforcementActiveForTenant` — this
  * file never touches a database or the port itself, staying pure/testable
  * like every other `domain` file in this module). The overwhelming majority
  * of `blog_content`-only tenants (no news-portal R2-only preset applied) see
@@ -38,7 +38,7 @@
  * verification logic Issue #634 already owns; see their comments for the
  * precise reasoning. This checklist calls into the EXISTING verified-media
  * primitives (`collectGalleryImageReferences`,
- * `NewsMediaPort.resolveMediaReferences` via the application-layer gate)
+ * `MediaLibraryPort.resolveMediaReferences` via the application-layer gate)
  * rather than re-deriving them, per this issue's own instruction.
  */
 import { isAbsoluteHttpUrl } from "./seo-validation";
@@ -74,7 +74,7 @@ export type ChecklistRuleId =
  * "Security notes") — severity is ALWAYS `"blocking"`, never affected by
  * `ChecklistPolicyOverrides`, in any environment. `featured_image_verified_r2`
  * and `gallery_images_verified` also cover "cross-tenant media object
- * reference" (Issue #640's fifth suggested blocker) — `NewsMediaPort`'s
+ * reference" (Issue #640's fifth suggested blocker) — `MediaLibraryPort`'s
  * resolution already fails closed for a cross-tenant id, so there is no
  * separate rule id for it.
  */
@@ -189,7 +189,7 @@ export type ContentQualityChecklistInput = {
   contentText: string;
   contentJson: Record<string, unknown>;
   featuredMediaId: string | null;
-  /** `null` if unresolved (missing, cross-tenant, wrong status) — the caller (application layer) is the only place that can know this, via `NewsMediaPort`. */
+  /** `null` if unresolved (missing, cross-tenant, wrong status) — the caller (application layer) is the only place that can know this, via `MediaLibraryPort`. */
   featuredMedia: ResolvedFeaturedMediaForChecklist | null;
   galleryViolations: readonly GalleryImageReferenceViolation[];
   /** Well-formed `mediaObjectId`s referenced by gallery image items that did NOT resolve safely (missing/cross-tenant/wrong status) — the ones that DID resolve need no rule (they already passed). */

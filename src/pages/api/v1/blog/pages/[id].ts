@@ -27,7 +27,7 @@ import {
 import { createBlogRevision } from "../../../../../modules/blog-content/application/blog-revision-directory";
 import { validateNewsMediaReferencesForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/news-media-reference-gate";
 import { validateVideoNewsThumbnailReferencesForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/video-news-thumbnail-reference-gate";
-import { newsMediaPortAdapter } from "../../../../../modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../../../../../modules/media-library/application/media-library-port-adapter";
 import {
   validateSoftDeleteBlogPageInput,
   validateUpdateBlogPageInput
@@ -248,7 +248,7 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
           featuredMediaId: input.featuredMediaId,
           contentJson: input.contentJson
         },
-        newsMediaPortAdapter
+        mediaLibraryPortAdapter
       );
 
     if (!mediaReferenceValidation.valid) {
@@ -267,7 +267,7 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
         tx,
         tenantId,
         input.contentJson,
-        newsMediaPortAdapter
+        mediaLibraryPortAdapter
       );
 
     if (!videoThumbnailValidation.valid) {

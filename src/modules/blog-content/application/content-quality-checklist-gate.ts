@@ -4,15 +4,15 @@
  * checklist.ts`'s pure evaluator, same split as `news-media-reference-
  * gate.ts` (Issue #636) uses for the same reason: `domain` stays pure/
  * synchronously testable, this file does the real DB round trips and is
- * injected the caller's `NewsMediaPort` (never imports `news_portal`
- * directly — see `_shared/ports/news-media-port.ts`'s header and
+ * injected the caller's `MediaLibraryPort` (never imports `news_portal`
+ * directly — see `_shared/ports/media-library-port.ts`'s header and
  * `tests/unit/module-boundary.test.ts`).
  *
  * Called from THREE composition roots (route handlers/scripts, per
  * ADR-0011): `POST /api/v1/blog/posts/{id}/publish`,
  * `POST /api/v1/blog/posts/{id}/schedule`, and the scheduled-publish worker
- * (`blog-scheduled-publish.ts`) — each injects `newsMediaPortAdapter` from
- * `news-portal/application/news-media-port-adapter.ts`. Also called
+ * (`blog-scheduled-publish.ts`) — each injects `mediaLibraryPortAdapter` from
+ * `media-library/application/media-library-port-adapter.ts`. Also called
  * read-only by the `GET .../quality-checklist` preview endpoints (posts AND
  * pages) that back the admin editor's checklist panel (Issue #640
  * acceptance criterion: "Checklist is available in admin post/page
@@ -27,7 +27,7 @@ import {
   type ContentQualityChecklistResult
 } from "../domain/content-quality-checklist";
 import { resolveSocialPreviewImageSourceId } from "../domain/social-preview-image-resolution";
-import type { NewsMediaPort } from "../../_shared/ports/news-media-port";
+import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
 
 export type ChecklistEvaluableContent = {
   title: string;
@@ -68,12 +68,12 @@ export async function evaluateContentQualityChecklistForContent(
   contentKind: ChecklistContentKind,
   content: ChecklistEvaluableContent,
   termCount: number,
-  mediaPort: NewsMediaPort,
+  mediaPort: MediaLibraryPort,
   overrides: ChecklistPolicyOverrides,
   options: EvaluateContentQualityChecklistOptions = {},
   env: NodeJS.ProcessEnv = process.env
 ): Promise<ContentQualityChecklistResult> {
-  const modeActive = await mediaPort.isFullOnlineR2ModeActiveForTenant(
+  const modeActive = await mediaPort.isManagedMediaEnforcementActiveForTenant(
     tx,
     tenantId,
     env

@@ -35,9 +35,9 @@
  * calls using different `Idempotency-Key`s would each reach this function
  * and each pay for their own `HEAD`+`GET` against the same object).
  */
-import type { NewsMediaR2Client } from "../infrastructure/news-media-r2-client";
-import { sniffNewsMediaMimeType } from "../domain/news-media-mime-sniffer";
-import { decideNewsMediaFinalizeOutcome } from "../domain/news-media-finalize-decision";
+import type { NewsMediaR2Client } from "../infrastructure/media-r2-client";
+import { sniffNewsMediaMimeType } from "../domain/media-mime-sniffer";
+import { decideNewsMediaFinalizeOutcome } from "../domain/media-finalize-decision";
 
 export type VerifyNewsMediaR2ObjectInput = {
   objectKey: string;

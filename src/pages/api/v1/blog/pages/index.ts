@@ -19,7 +19,7 @@ import {
 } from "../../../../../modules/blog-content/application/blog-page-directory";
 import { validateNewsMediaReferencesForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/news-media-reference-gate";
 import { validateVideoNewsThumbnailReferencesForFullOnlineR2Mode } from "../../../../../modules/blog-content/application/video-news-thumbnail-reference-gate";
-import { newsMediaPortAdapter } from "../../../../../modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../../../../../modules/media-library/application/media-library-port-adapter";
 import { validateCreateBlogPageInput } from "../../../../../modules/blog-content/domain/blog-page-validation";
 import { validateAndNormalizeContentJsonVideoBlocks } from "../../../../../modules/blog-content/domain/video-news-block-validation";
 import {
@@ -215,7 +215,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
           featuredMediaId: input.featuredMediaId,
           contentJson: input.contentJson
         },
-        newsMediaPortAdapter
+        mediaLibraryPortAdapter
       );
 
     if (!mediaReferenceValidation.valid) {
@@ -236,7 +236,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         tx,
         tenantId,
         input.contentJson,
-        newsMediaPortAdapter
+        mediaLibraryPortAdapter
       );
 
     if (!videoThumbnailValidation.valid) {

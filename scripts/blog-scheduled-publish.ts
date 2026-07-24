@@ -14,16 +14,15 @@
  * telemetry), the current convention for a NEW job in this base (mini's own
  * script predates that runner and used a hand-rolled try/catch loop).
  *
- * This script is the composition root (ADR-0011) that would wire
- * `news_portal`'s `NewsMediaPort`/`social_publishing`'s
- * `SocialPublishingPort` implementations into `blog_content`'s scheduled-
- * publish job. Neither module is ported to this base yet, so this script
- * injects `blog_content`'s own no-op adapters instead — see
- * `news-media-port-noop-adapter.ts`/`social-publishing-port-noop-
- * adapter.ts`'s own headers. `blog-scheduled-publish.ts` (the
- * application-layer file) itself never imports either adapter directly,
- * only the port TYPES — this script is the only place that changes once
- * those modules are ported.
+ * This script is the composition root (ADR-0011) that wires the
+ * `MediaLibraryPort` and `SocialPublishingPort` implementations into
+ * `blog_content`'s scheduled-publish job. `media_library` IS ported
+ * (ADR-0036), so this injects its real `mediaLibraryPortAdapter`;
+ * `social_publishing` is NOT ported to this base yet, so this still injects
+ * `blog_content`'s own `noopSocialPublishingPortAdapter` — see that adapter's
+ * header. `blog-scheduled-publish.ts` (the application-layer file) itself never
+ * imports either adapter directly, only the port TYPES — this script is the
+ * only place that changes once `social_publishing` is ported too.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import {
@@ -37,7 +36,7 @@ import {
 } from "../src/lib/jobs/job-runner";
 import { fetchActiveTenants } from "../src/lib/jobs/batching";
 import { publishDueScheduledPosts } from "../src/modules/blog-content/application/blog-scheduled-publish";
-import { newsMediaPortAdapter } from "../src/modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../src/modules/media-library/application/media-library-port-adapter";
 import { noopSocialPublishingPortAdapter } from "../src/modules/blog-content/application/social-publishing-port-noop-adapter";
 
 async function main() {
@@ -78,7 +77,7 @@ async function main() {
             const tenantResult = await publishDueScheduledPosts(
               sql,
               tenant.id,
-              newsMediaPortAdapter,
+              mediaLibraryPortAdapter,
               { now: new Date(), correlationId: ctx.correlationId },
               noopSocialPublishingPortAdapter
             );

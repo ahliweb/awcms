@@ -1,0 +1,428 @@
+# Source fragment for the "Media Library" module (ADR-0036 ownership inversion,
+# adapting awcms-micro ADR-0026). One file per MODULE (Issue #182 convention):
+# this file owns the tenant media registry's presigned-upload/finalize/cancel
+# HTTP surface (moved here out of the news-portal fragment) plus the managed-media
+# enforcement switch, and every schema referenced ONLY by those operations.
+#
+# The "News Media" tag is KEPT on these operations deliberately (same reason the
+# `awcms_news_media_objects` table name and the `news-media:reconcile` command are
+# kept — ADR-0036 §3): a cosmetic rename would churn the api-docs grouping for no
+# gain.
+#
+# Adapted to this base's shared-component vocabulary: success responses are
+# modelled inline (no `ApiSuccess` schema here), the Idempotency-Key header is
+# declared inline where a mutation requires it, and only the shared components
+# this base actually defines (CorrelationId; BadRequest/Unauthorized/Forbidden/
+# NotFound; ApiError) are referenced.
+#
+# NOT independently valid OpenAPI — $ref targets pointing at shared components
+# only resolve after `bun run openapi:bundle` merges this file with the root and
+# every sibling module fragment into openapi/awcms-public-api.openapi.yaml.
+# Edit this file (or the root for shared components), never the generated bundle.
+paths:
+  /api/v1/media/news-images/upload-sessions:
+    post:
+      tags:
+        - News Media
+      summary: Create a direct-to-R2 presigned upload session for a news image
+      description: Gated by media_library.media.create. Returns a `pending_upload` metadata row plus a short-lived presigned PUT URL scoped to exactly one server-generated object key. Raw R2 credentials are never exposed to the browser.
+      operationId: newsMediaUploadSessionsCreate
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNewsMediaUploadSessionRequest"
+      responses:
+        "200":
+          description: Upload session created — a `pending_upload` metadata row plus a short-lived presigned PUT URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/NewsMediaUploadSessionCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502":
+          description: News media R2 storage is not configured/enabled for this deployment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/media/news-images/upload-sessions/{id}/cancel:
+    post:
+      tags:
+        - News Media
+      summary: Cancel a still-pending-upload session
+      description: Gated by media_library.media.cancel. Transitions a `pending_upload` session to `failed`.
+      operationId: newsMediaUploadSessionsCancel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Upload session cancelled (status `failed`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/NewsMediaObjectItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Upload session is not `pending_upload` (already uploaded/verified/attached/failed).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/media/news-images/upload-sessions/{id}/finalize:
+    post:
+      tags:
+        - News Media
+      summary: Finalize an upload session — real R2 GET + magic-byte MIME sniffing + server-side SHA-256 checksum (never a bare HEAD)
+      description: "Gated by media_library.media.verify. High-risk, requires Idempotency-Key. Verifies the object actually uploaded to R2 (HEAD for existence/real size, then a full GET), sniffs the MIME type from the object's real magic bytes, and computes a SHA-256 checksum server-side. A client-claimed `checksumSha256` is only a transport-corruption cross-check, never a substitute for the MIME sniff — HEAD alone can never promote a media object to `verified`."
+      operationId: newsMediaUploadSessionsFinalize
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinalizeNewsMediaUploadSessionRequest"
+      responses:
+        "200":
+          description: Object verified — media object status is now `verified` (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/NewsMediaObjectItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Upload session is not `pending_upload`, has expired (`UPLOAD_SESSION_EXPIRED`), or the Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "Uploaded object failed content verification (`UPLOAD_VERIFICATION_FAILED`). `error.details.reason` is one of `object_not_found`, `size_exceeded`, `mime_not_recognized`, `mime_not_allowed`, `mime_mismatch`, `checksum_mismatch`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Unable to verify the uploaded object right now (R2 provider error/circuit breaker open) — retry shortly.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/media/enforcement:
+    get:
+      tags:
+        - News Media
+      summary: Read whether managed-media enforcement is active for this tenant
+      description: "Gated by media_library.enforcement.read. Reports whether this tenant's content media references must resolve to verified registry objects, and — when enforcement cannot be enabled — the deployment-config reasons why (ADR-0036 step 5a). `reasons` name environment variables, never their values, so nothing secret is exposed; the endpoint is still permission-gated rather than public."
+      operationId: mediaEnforcementRead
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Current enforcement state for this tenant plus this deployment's media readiness.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/MediaEnforcementState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - News Media
+      summary: Turn managed-media enforcement ON for this tenant (one-way)
+      description: "Gated by media_library.enforcement.enable. High-risk, requires Idempotency-Key. Enables managed-media enforcement: from then on, content media references must resolve to verified, same-tenant registry objects rather than raw URLs (ADR-0036 step 5a). This is the switch a brochure-site tenant (`blog_content` + `tenant_domain`, no news portal) previously did not have. This operation is one-way and there is deliberately no counterpart that disables enforcement — a tenant able to switch its own media validation off is a confirmed exploit this design exists to prevent (see migration `sql/043`'s header). A deployment that must roll back does so by changing its `NEWS_MEDIA_R2_*` configuration. Idempotent: re-enabling an already-enforcing tenant succeeds, refreshes the timestamp, and returns `alreadyEnforced: true`; only a successful enable is recorded under the Idempotency-Key, so a rejected (not-ready) attempt may retry the same key after the R2 config is fixed."
+      operationId: mediaEnforcementEnable
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Enforcement is active for this tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/MediaEnforcementEnabled"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "Either the deployment's media storage is not ready, so enforcement cannot be enabled (`MANAGED_MEDIA_NOT_READY`) — `error.details.reasons` says which check failed; a 409 rather than a 400 on purpose (the request is well-formed and the caller is authorized; it is the deployment, not the request body, that must change) — or the Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    CreateNewsMediaUploadSessionRequest:
+      type: object
+      required:
+        - mimeType
+        - byteSize
+      additionalProperties: false
+      properties:
+        mimeType:
+          type: string
+          description: "Must be one of the deployment's configured NEWS_MEDIA_R2_ALLOWED_MIME_TYPES (default: image/jpeg, image/png, image/webp, image/gif — image/svg+xml is never allowed by default)."
+          example: image/jpeg
+        byteSize:
+          type: integer
+          minimum: 1
+          description: Claimed size in bytes — shape-only check against NEWS_MEDIA_R2_MAX_UPLOAD_BYTES; the real size is re-checked from R2 itself at finalize time.
+        originalFilename:
+          type: string
+          nullable: true
+          description: Stored as display-only metadata — never part of the server-generated object key.
+        altText:
+          type: string
+          nullable: true
+        caption:
+          type: string
+          nullable: true
+    FinalizeNewsMediaUploadSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        checksumSha256:
+          type: string
+          nullable: true
+          description: Optional. When supplied, compared against the checksum computed server-side from the bytes actually read from R2 — a transport-corruption check only, never a substitute for the server-side MIME sniff.
+          pattern: ^[0-9a-fA-F]{64}$
+          example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    NewsMediaObjectItem:
+      type: object
+      required:
+        - id
+        - tenantId
+        - objectKey
+        - publicUrl
+        - mimeType
+        - status
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        moduleKey:
+          type: string
+        ownerResourceType:
+          type: string
+          nullable: true
+          enum:
+            - blog_post
+            - blog_page
+            - homepage_section
+            - gallery_item
+            - ad
+            - video_thumbnail
+            - seo_image
+            - null
+        ownerResourceId:
+          type: string
+          format: uuid
+          nullable: true
+        storageDriver:
+          type: string
+          enum:
+            - cloudflare_r2
+        objectKey:
+          type: string
+        originalFilename:
+          type: string
+          nullable: true
+        publicUrl:
+          type: string
+          format: uri
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+          nullable: true
+        checksumSha256:
+          type: string
+          nullable: true
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+        altText:
+          type: string
+          nullable: true
+        caption:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - pending_upload
+            - uploaded
+            - verified
+            - attached
+            - orphaned
+            - deleted
+            - failed
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    NewsMediaUploadSessionCreated:
+      type: object
+      required:
+        - objectId
+        - objectKey
+        - presignedUrl
+        - expiresAt
+      additionalProperties: false
+      properties:
+        objectId:
+          type: string
+          format: uuid
+        objectKey:
+          type: string
+          description: Server-generated — news-media/{tenantId}/{yyyy}/{mm}/{uuid}.{ext}. Never derived from client input.
+          example: news-media/3fa85f64-5717-4562-b3fc-2c963f66afa6/2026/07/1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed.jpg
+        presignedUrl:
+          type: string
+          format: uri
+          description: Short-lived presigned PUT URL scoped to exactly one object key. Never includes raw R2 credentials.
+        expiresAt:
+          type: string
+          format: date-time
+    MediaEnforcementState:
+      type: object
+      required:
+        - enforced
+        - ready
+        - reasons
+        - detail
+      additionalProperties: false
+      properties:
+        enforced:
+          type: boolean
+          description: Whether this tenant's content media references must resolve to verified registry objects. Once true it stays true — enforcement is one-way by design.
+        ready:
+          type: boolean
+          description: Whether this DEPLOYMENT's media storage is configured well enough for enforcement to be enabled. Independent of `enforced` — both must hold for validation to actually run.
+        reasons:
+          type: array
+          description: Machine-readable readiness failures; empty when `ready` is true.
+          items:
+            type: string
+            enum:
+              - news_media_r2_disabled
+              - news_media_r2_config_incomplete
+              - news_media_r2_shares_sync_storage_bucket_or_credentials
+        detail:
+          type: array
+          description: Human-readable evidence, one entry per failing check. Names environment variables, never their values.
+          items:
+            type: string
+    MediaEnforcementEnabled:
+      type: object
+      required:
+        - enforced
+        - enforcedAt
+        - alreadyEnforced
+      additionalProperties: false
+      properties:
+        enforced:
+          type: boolean
+          enum: [true]
+          description: "Always true — a non-enforcing outcome is reported as a 409, never as a 200 whose `enforced` is false."
+        enforcedAt:
+          type: string
+          format: date-time
+          description: When this activation was confirmed. Refreshed on re-activation so it always reflects the most recent confirmed-ready enable.
+        alreadyEnforced:
+          type: boolean
+          description: True when the tenant was already enforcing before this call — an idempotent no-change, still audited.

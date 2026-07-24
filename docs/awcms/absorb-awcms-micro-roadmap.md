@@ -58,12 +58,12 @@ menyerialkan urutan commit. Kerjakan berurut per baris.
 
 ### Gelombang 0 — infra fondasi (membuka jalan sisanya)
 
-| Item                                                | Sumber micro                                                     | Catatan                                                                                                                                                                                                                                                  |
-| --------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pustaka `src/components/ui/` + paritas design-token | `src/components/ui/`, `src/styles/tokens.css`                    | **Rekonsiliasi** dengan overhaul admin awcms yang sudah ada (PR #215: `admin.css`/`admin-screens.css`) — jangan timpa. Komponen: DataTable, FilterBar, FormField, Pagination, StatusBadge, StateNotice, ConfirmDialog, ActionBanner + primitives wizard. |
-| Seam kontribusi pada `ModuleDescriptor`             | `_shared/module-contract.ts`                                     | Tambah field descriptor `seo_facts`, `searchSources`, `commentableResources`, `newsletterContentSources` **bila belum ada** di `src/modules/_shared/module-contract.ts`. Dikonsumsi Gelombang 1.                                                         |
-| `media-library`                                     | `src/modules/media-library/`, sql media-library micro            | Registry aset R2, presign/finalize/cancel, MIME sniffing, `/admin/media`. Banyak modul konten bergantung padanya.                                                                                                                                        |
-| `tenant-domain`                                     | `src/modules/tenant-domain/`, sql tenant-domain micro (ADR-0010) | Routing host→tenant; **buka rute publik `/news/**` host-resolved + custom domain** (prioritas tinggi, sudah ditandai di PROJECT_STATE). Adopsi [ADR-0010](../adr/0010-public-host-tenant-routing.md) yang sudah ada di awcms.                            |
+| Item                                                    | Sumber micro                                                     | Catatan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pustaka `src/components/ui/` + paritas design-token     | `src/components/ui/`, `src/styles/tokens.css`                    | **Rekonsiliasi** dengan overhaul admin awcms yang sudah ada (PR #215: `admin.css`/`admin-screens.css`) — jangan timpa. Komponen: DataTable, FilterBar, FormField, Pagination, StatusBadge, StateNotice, ConfirmDialog, ActionBanner + primitives wizard.                                                                                                                                                                                                                                                                              |
+| Seam kontribusi pada `ModuleDescriptor`                 | `_shared/module-contract.ts`                                     | Tambah field descriptor `seo_facts`, `searchSources`, `commentableResources`, `newsletterContentSources` **bila belum ada** di `src/modules/_shared/module-contract.ts`. Dikonsumsi Gelombang 1.                                                                                                                                                                                                                                                                                                                                      |
+| `media-library` (**wave INVERSI**, bukan Wave-0 aditif) | `src/modules/media-library/`, sql media-library micro            | ✅ **selesai** ([ADR-0036](../adr/0036-media-library-module-admission-ownership-inversion.md)). Bukan port aditif: **inversi kepemilikan ADR-0026** — registry R2 + presign/finalize/cancel + MIME sniffing + job `news-media:reconcile` **DIEKSTRAK keluar dari `news_portal`** ke `media_library`; port `news_media` dipensiunkan → `media_library`; migrasi permission destruktif `052`, tenant-state `053`, enforcement `054` (+ endpoint `POST /api/v1/media/enforcement`). Step 5b/5c/5d (`/admin/media`, srcset, PDF) ditunda. |
+| `tenant-domain`                                         | `src/modules/tenant-domain/`, sql tenant-domain micro (ADR-0010) | Routing host→tenant; **buka rute publik `/news/**` host-resolved + custom domain** (prioritas tinggi, sudah ditandai di PROJECT_STATE). Adopsi [ADR-0010](../adr/0010-public-host-tenant-routing.md) yang sudah ada di awcms.                                                                                                                                                                                                                                                                                                         |
 
 ### Gelombang 1 — klaster website/konten (mengandalkan seam Gelombang 0; blog/news sudah ada)
 
@@ -102,19 +102,19 @@ OpenAPI beku (add-only). Changeset wajib.
 
 ## 5. Status penyerapan (perbarui saat selesai)
 
-| Gelombang | Item                               | Status               | PR  |
-| --------- | ---------------------------------- | -------------------- | --- |
-| 0         | `src/components/ui/` + token       | ⏳ belum             | —   |
-| 0         | Seam kontribusi `ModuleDescriptor` | ⏳ belum             | —   |
-| 0         | `media-library`                    | ⏳ belum             | —   |
-| 0         | `tenant-domain`                    | ⏳ belum             | —   |
-| 1         | `form-drafts`                      | ⏳ belum             | —   |
-| 1         | `seo-distribution`                 | ⏳ belum             | —   |
-| 1         | `site-search`                      | ⏳ belum             | —   |
-| 1         | `comments`                         | ⏳ belum             | —   |
-| 1         | `newsletter`                       | ⏳ belum             | —   |
-| 1         | `social-publishing`                | ⏳ belum             | —   |
-| 1         | `visitor-analytics`                | ⏳ belum             | —   |
-| 1         | `data-lifecycle`                   | ⏳ belum             | —   |
-| 2         | Delta auth/admin                   | ⏳ belum             | —   |
-| 3         | E-commerce/toko online             | ⏳ belum (butuh ADR) | —   |
+| Gelombang | Item                                     | Status               | PR  |
+| --------- | ---------------------------------------- | -------------------- | --- |
+| 0         | `src/components/ui/` + token             | ⏳ belum             | —   |
+| 0         | Seam kontribusi `ModuleDescriptor`       | ⏳ belum             | —   |
+| 0         | `media-library` (wave INVERSI, ADR-0036) | ✅ selesai           | —   |
+| 0         | `tenant-domain`                          | ⏳ belum             | —   |
+| 1         | `form-drafts`                            | ⏳ belum             | —   |
+| 1         | `seo-distribution`                       | ⏳ belum             | —   |
+| 1         | `site-search`                            | ⏳ belum             | —   |
+| 1         | `comments`                               | ⏳ belum             | —   |
+| 1         | `newsletter`                             | ⏳ belum             | —   |
+| 1         | `social-publishing`                      | ⏳ belum             | —   |
+| 1         | `visitor-analytics`                      | ⏳ belum             | —   |
+| 1         | `data-lifecycle`                         | ⏳ belum             | —   |
+| 2         | Delta auth/admin                         | ⏳ belum             | —   |
+| 3         | E-commerce/toko online                   | ⏳ belum (butuh ADR) | —   |

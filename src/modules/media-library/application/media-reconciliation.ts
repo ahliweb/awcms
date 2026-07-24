@@ -82,9 +82,9 @@ import {
   type NewsMediaOrphanInR2Entry,
   type NewsMediaReconciliationDbRow,
   type NewsMediaStaleOrphanedEntry
-} from "../domain/news-media-reconciliation-categorization";
-import type { NewsMediaR2Config } from "../domain/news-media-r2-config";
-import type { NewsMediaR2Client } from "../infrastructure/news-media-r2-client";
+} from "../domain/media-reconciliation-categorization";
+import type { NewsMediaR2Config } from "../domain/media-r2-config";
+import type { NewsMediaR2Client } from "../infrastructure/media-r2-client";
 import {
   fetchNewsMediaObjectsForReconciliation,
   markNewsMediaObjectFailed,
@@ -92,7 +92,7 @@ import {
   NEWS_MEDIA_RECONCILIATION_SNAPSHOT_LIMIT,
   objectKeyExistsForTenant,
   purgeExpiredPendingNewsMediaObject
-} from "./news-media-object-directory";
+} from "./media-object-directory";
 
 /** Safety bound on R2 `list()` pages fetched per tenant per run — mirrors `src/lib/jobs/batching.ts`'s `DEFAULT_MAX_PASSES` reasoning (a single run must never page through an unbounded bucket forever). At the R2 API's own default page size (1000 keys), 50 pages is up to 50,000 objects per tenant per run; a bucket with more is only PARTIALLY reconciled this run (`r2ListTruncated: true`), fully caught up over subsequent runs. */
 export const MAX_R2_LIST_PAGES = 50;

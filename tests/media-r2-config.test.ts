@@ -14,7 +14,7 @@ import {
   NEWS_MEDIA_R2_MIN_ORPHAN_GRACE_DAYS,
   NEWS_MEDIA_R2_REQUIRED_WHEN_ENABLED,
   resolveNewsMediaR2Config
-} from "../src/modules/news-portal/domain/news-media-r2-config";
+} from "../src/modules/media-library/domain/media-r2-config";
 
 describe("resolveNewsMediaR2Config", () => {
   test("defaults to disabled with empty credential fields when env is empty", () => {

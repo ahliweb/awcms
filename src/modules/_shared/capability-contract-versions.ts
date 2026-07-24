@@ -52,16 +52,21 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
   Object.freeze({
     // profile_identity provides (Issue #748, epic #738 platform-evolution
     // Wave 2) — no in-repo consumer yet, same "port defined ahead of
-    // consumer wiring" precedent as `legal-hold-guard-port.ts`. This is the
-    // only capability in this base whose OWNING module (`profile_identity`)
-    // actually ships here.
+    // consumer wiring" precedent as `legal-hold-guard-port.ts`.
+    party_directory: "1.0.0",
+    // media_library provides (ADR-0036 media-library ownership inversion — the
+    // media registry EXTRACTED out of news_portal). Its owning System Foundation
+    // module (`media_library`) ships in this base, consumed by `blog_content`
+    // (optional) and `news_portal` (required), so this base honestly declares the
+    // port version here — first assigned number, not a stability milestone. This
+    // key SUPERSEDES `news_media` (retired): the provider changed AND the port
+    // lost a method (`isFullOnlineR2ModeActiveForTenant`), so any consumer pinned
+    // to `news_media` must fail loudly rather than silently bind to a port that no
+    // longer asks the question it asked.
     //
-    // The content capabilities `news_media`/`public_content`/`social_publishing`
-    // that awcms-mini carries were REMOVED (Issue #183 F4): their owning CMS
-    // modules (news_portal/blog_content/social_publishing) are excluded from the
-    // base by the `no-content-website-modules` divergence (ADR-0022), so listing
-    // their per-capability versions here made this base's "what I provide"
-    // contract dishonest (see the family compatibility manifest). A derived
-    // content application declares those in its OWN compatibility manifest.
-    party_directory: "1.0.0"
+    // The other content capabilities `public_content`/`social_publishing`
+    // (blog_content provides public_content; social_publishing is not ported)
+    // remain unlisted — out of scope for this change and, for social_publishing,
+    // not owned by any base module yet.
+    media_library: "1.0.0"
   });

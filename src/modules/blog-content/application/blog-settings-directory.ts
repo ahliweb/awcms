@@ -94,7 +94,7 @@ function sanitizeChecklistPolicyOverrides(
  * reached this jsonb column (bypassing `blog-settings-policy.ts`'s
  * write-time UUID check), it is never actually TRUSTED as a media reference
  * anyway — the render route always re-resolves it through
- * `NewsMediaPort.resolveMediaReferences`, which fails closed on anything
+ * `MediaLibraryPort.resolveMediaReferences`, which fails closed on anything
  * that isn't a real, verified, same-tenant object id. This function only
  * prevents an obviously-invalid string from being handed to that resolver
  * at all.

@@ -55,7 +55,7 @@ export type UpdateBlogSettingsInput = {
    * usable verified image in its own content). A `awcms_news_media_
    * objects` id — existence/ownership/verified-status is re-checked at
    * RENDER time the exact same way `featuredMediaId` already is
-   * (`NewsMediaPort.resolveMediaReferences`), never trusted from this
+   * (`MediaLibraryPort.resolveMediaReferences`), never trusted from this
    * stored value alone. Storing the id in the generic tenant-writable
    * settings jsonb is safe for the same reason `contentQualityChecklistPolicy`
    * already is (see that field's comment below): this is a tenant BUSINESS

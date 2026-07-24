@@ -8,7 +8,7 @@
  * items: [...]}]}` shape just to call `renderContentJsonToHtml`) — a
  * genuine domain-to-domain cross-module import in BOTH directions
  * (`blog-content` already imported FROM `news-portal` elsewhere, see
- * `news-media-port.ts`'s header), which is exactly the coupling this
+ * `media-library-port.ts`'s header), which is exactly the coupling this
  * issue removes. This file is neutral ground: BOTH modules call it, and
  * it imports from NEITHER of their `application`/`domain` trees.
  *

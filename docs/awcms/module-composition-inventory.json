@@ -1,5 +1,5 @@
 {
-  "moduleCount": 15,
+  "moduleCount": 16,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -18,8 +18,8 @@
       "capabilitiesProvided": ["public_content"],
       "capabilitiesConsumed": [
         {
-          "capability": "news_media",
-          "providedBy": "news_portal",
+          "capability": "media_library",
+          "providedBy": "media_library",
           "optional": true
         },
         {
@@ -106,6 +106,22 @@
       "deploymentProfiles": null
     },
     {
+      "key": "media_library",
+      "name": "Media Library",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "system",
+      "dependencies": ["tenant_admin", "identity_access"],
+      "capabilitiesProvided": ["media_library"],
+      "capabilitiesConsumed": [],
+      "permissionCount": 11,
+      "navigationCount": 0,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
       "key": "module_management",
       "name": "Module Management",
       "version": "0.1.0",
@@ -133,17 +149,22 @@
         "module_management",
         "logging"
       ],
-      "capabilitiesProvided": ["news_media"],
+      "capabilitiesProvided": [],
       "capabilitiesConsumed": [
         {
           "capability": "public_content",
           "providedBy": "blog_content",
           "optional": false
+        },
+        {
+          "capability": "media_library",
+          "providedBy": "media_library",
+          "optional": false
         }
       ],
-      "permissionCount": 13,
+      "permissionCount": 4,
       "navigationCount": 2,
-      "jobCount": 1,
+      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

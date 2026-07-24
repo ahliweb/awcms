@@ -5,7 +5,7 @@ import {
   isOrphanInR2EligibleForDeletion,
   type NewsMediaReconciliationDbRow,
   type NewsMediaReconciliationR2Object
-} from "../src/modules/news-portal/domain/news-media-reconciliation-categorization";
+} from "../src/modules/media-library/domain/media-reconciliation-categorization";
 
 const NOW = new Date("2026-07-12T00:00:00.000Z");
 const PENDING_TTL_MINUTES = 60;

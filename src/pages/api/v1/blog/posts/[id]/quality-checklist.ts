@@ -12,7 +12,7 @@ import { fetchBlogPostById } from "../../../../../../modules/blog-content/applic
 import { fetchPostTermIds } from "../../../../../../modules/blog-content/application/blog-taxonomy-directory";
 import { fetchBlogSettings } from "../../../../../../modules/blog-content/application/blog-settings-directory";
 import { evaluateContentQualityChecklistForContent } from "../../../../../../modules/blog-content/application/content-quality-checklist-gate";
-import { newsMediaPortAdapter } from "../../../../../../modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../../../../../../modules/media-library/application/media-library-port-adapter";
 
 const READ_GUARD = {
   moduleKey: "blog_content",
@@ -79,7 +79,7 @@ export const GET: APIRoute = async ({ request, params, cookies }) => {
       "post",
       post,
       termIds.length,
-      newsMediaPortAdapter,
+      mediaLibraryPortAdapter,
       blogSettings.contentQualityChecklistPolicy,
       {
         socialPreviewFallback: {

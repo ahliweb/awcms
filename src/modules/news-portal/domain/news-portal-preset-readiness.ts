@@ -49,10 +49,9 @@
  * defaulting to `/news` — no new var needed for it either.
  */
 import {
-  findMissingNewsMediaR2Vars,
-  findNewsMediaR2SeparationViolations,
-  isNewsMediaR2Enabled
-} from "./news-media-r2-config";
+  evaluateManagedMediaReadiness,
+  type ManagedMediaReadinessReason
+} from "../../media-library/domain/managed-media-readiness";
 
 export const NEWS_PORTAL_PROFILES = ["full_online_r2"] as const;
 export type NewsPortalProfile = (typeof NEWS_PORTAL_PROFILES)[number];
@@ -63,12 +62,16 @@ export function isKnownNewsPortalProfile(
   return (NEWS_PORTAL_PROFILES as readonly string[]).includes(value ?? "");
 }
 
+/**
+ * The `news_media_r2_*` half is `ManagedMediaReadinessReason` (owned by
+ * `media_library`, ADR-0036) rather than three re-declared string literals —
+ * this union stays the exact same set of strings it always was, but a change to
+ * the media reasons can no longer drift out of sync with this type.
+ */
 export type NewsPortalPresetReadinessReason =
   | "news_portal_disabled"
   | "profile_not_full_online_r2"
-  | "news_media_r2_disabled"
-  | "news_media_r2_config_incomplete"
-  | "news_media_r2_shares_sync_storage_bucket_or_credentials";
+  | ManagedMediaReadinessReason;
 
 export type NewsPortalPresetReadinessResult = {
   ready: boolean;
@@ -116,28 +119,12 @@ export function evaluateNewsPortalFullOnlineR2Readiness(
     );
   }
 
-  if (!isNewsMediaR2Enabled(env)) {
-    reasons.push("news_media_r2_disabled");
-    detail.push(
-      'NEWS_MEDIA_R2_ENABLED is not "true" — this preset requires the R2-only news media mode to be active (no local-storage alternative exists in this mode).'
-    );
-  } else {
-    const missing = findMissingNewsMediaR2Vars(env);
-    if (missing.length > 0) {
-      reasons.push("news_media_r2_config_incomplete");
-      detail.push(
-        `NEWS_MEDIA_R2_ENABLED=true but required var(s) missing: ${missing.join(", ")}.`
-      );
-    }
-
-    const violations = findNewsMediaR2SeparationViolations(env);
-    if (violations.length > 0) {
-      reasons.push("news_media_r2_shares_sync_storage_bucket_or_credentials");
-      detail.push(
-        `NEWS_MEDIA_R2_* must never share a bucket or credential with sync-storage's own R2_* vars (Issue #631 architecture doc §2): ${violations.join(", ")}.`
-      );
-    }
-  }
+  // The media half is `media_library`'s question, not this module's (ADR-0036) —
+  // appended AFTER this module's own two reasons so the resulting `reasons` array
+  // keeps the exact order it has always had.
+  const media = evaluateManagedMediaReadiness(env);
+  reasons.push(...media.reasons);
+  detail.push(...media.detail);
 
   return { ready: reasons.length === 0, reasons, detail };
 }

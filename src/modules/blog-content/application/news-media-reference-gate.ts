@@ -23,18 +23,18 @@
  * notes": enforce hard in R2-only mode, but the mode itself stays opt-in).
  *
  * Issue #681 (epic #679, platform-hardening) — this file previously
- * imported `news-portal/application/news-media-object-directory.ts` and
+ * imported `media-library/application/media-object-directory.ts` and
  * `news-portal/application/news-portal-tenant-state.ts`/`domain/
  * news-portal-preset-readiness.ts` (via `news-portal-r2-mode-gate.ts`)
  * directly, a genuine `blog_content` application-layer import of
  * `news_portal`'s implementation. Both are now accessed only through
- * `_shared/ports/news-media-port.ts`'s `NewsMediaPort` interface, injected
+ * `_shared/ports/media-library-port.ts`'s `MediaLibraryPort` interface, injected
  * by the caller — the route handler (composition root) imports the
- * concrete adapter (`news-portal/application/news-media-port-adapter.ts`)
+ * concrete adapter (`media-library/application/media-library-port-adapter.ts`)
  * and passes it in. `resolveVerifiedNewsMediaReferences` (the render-time
  * resolution half of this file, before this issue) is GONE — every caller
  * (this module's own public detail routes, `news_portal`'s homepage
- * composer) now calls `NewsMediaPort.resolveMediaReferences` directly,
+ * composer) now calls `MediaLibraryPort.resolveMediaReferences` directly,
  * since that IS the port's own capability with nothing left for this file
  * to add on top.
  */
@@ -42,7 +42,7 @@ import {
   collectGalleryImageReferences,
   type GalleryImageReferenceViolation
 } from "../domain/content-block-media-references";
-import type { NewsMediaPort } from "../../_shared/ports/news-media-port";
+import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
 
 export type NewsMediaReferenceValidationError = {
   field: string;
@@ -66,7 +66,7 @@ function violationMessage(violation: GalleryImageReferenceViolation): string {
 /**
  * Runs inside the caller's own tenant-scoped transaction (same `tx` the
  * route handler already opened via `withTenant`). `mediaPort` is the
- * caller-injected `NewsMediaPort` implementation — every existence check
+ * caller-injected `MediaLibraryPort` implementation — every existence check
  * below is naturally tenant-scoped by the port's own `tenantId` parameter,
  * so a cross-tenant `mediaObjectId` simply resolves to "unsafe", never
  * leaking whether the id belongs to a different tenant.
@@ -80,10 +80,10 @@ export async function validateNewsMediaReferencesForFullOnlineR2Mode(
     seoImageMediaId?: string | null | undefined;
     contentJson: Record<string, unknown> | undefined;
   },
-  mediaPort: NewsMediaPort,
+  mediaPort: MediaLibraryPort,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<NewsMediaReferenceValidationResult> {
-  const modeActive = await mediaPort.isFullOnlineR2ModeActiveForTenant(
+  const modeActive = await mediaPort.isManagedMediaEnforcementActiveForTenant(
     tx,
     tenantId,
     env

@@ -8,9 +8,9 @@ import {
   bodyTooLargeResponse,
   readJsonBody
 } from "../../../../../../../lib/security/request-body-limit";
-import { resolveNewsMediaR2Config } from "../../../../../../../modules/news-portal/domain/news-media-r2-config";
-import { validateFinalizeNewsMediaUploadSessionInput } from "../../../../../../../modules/news-portal/domain/news-media-upload-session-validation";
-import { finalizeNewsMediaUploadSession } from "../../../../../../../modules/news-portal/application/news-media-finalize-upload-session";
+import { resolveNewsMediaR2Config } from "../../../../../../../modules/media-library/domain/media-r2-config";
+import { validateFinalizeNewsMediaUploadSessionInput } from "../../../../../../../modules/media-library/domain/media-upload-session-validation";
+import { finalizeNewsMediaUploadSession } from "../../../../../../../modules/media-library/application/media-finalize-upload-session";
 
 /**
  * `POST /api/v1/media/news-images/upload-sessions/{id}/finalize` (Issue

@@ -1,9 +1,9 @@
 import { recordAuditEvent } from "../../logging/application/audit-log";
-import type { NewsMediaR2Config } from "../domain/news-media-r2-config";
+import type { NewsMediaR2Config } from "../domain/media-r2-config";
 import {
   buildNewsMediaObjectKey,
   buildNewsMediaPublicUrl
-} from "../domain/news-media-object-key";
+} from "../domain/media-object-key";
 
 /**
  * Read/write directory for `awcms_news_media_objects` (Issue #633,
@@ -156,7 +156,7 @@ function toView(row: NewsMediaObjectRow): NewsMediaObjectView {
   };
 }
 
-const AUDIT_MODULE_KEY = "news_portal";
+const AUDIT_MODULE_KEY = "media_library";
 const AUDIT_RESOURCE_TYPE = "news_media_object";
 
 export type CreatePendingNewsMediaObjectInput = {

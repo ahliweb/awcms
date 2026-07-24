@@ -28,15 +28,20 @@
  * public-content-port.ts`'s `PublicContentPort` interface, injected by
  * the caller (route handler) via the concrete adapter
  * (`blog-content/application/public-content-port-adapter.ts`).
- * `mediaObjectIds` (`gallery_block`) is UNCHANGED — `news-media-object-
- * directory.ts` is this module's OWN code, not a cross-module import.
+ * `mediaObjectIds` (`gallery_block`) reads the media registry by DIRECT import
+ * of `media_library`'s `media-object-directory.ts` (ADR-0036 ownership
+ * inversion) rather than the injected `MediaLibraryPort` — the same deliberate
+ * divergence as `ad-placement-reference-validation.ts`: this gallery check needs
+ * the media object's own status field, not the port's safe/unsafe boolean. The
+ * direction is legal (domain → System Foundation; `media_library` never imports
+ * back).
  */
 import type { HomepageSectionType } from "../domain/homepage-section-policy";
 import type { PublicContentPort } from "../../_shared/ports/public-content-port";
 import {
   fetchNewsMediaObjectById,
   isNewsMediaObjectSafeForPublicReference
-} from "./news-media-object-directory";
+} from "../../media-library/application/media-object-directory";
 
 export type HomepageSectionReferenceValidationError = {
   field: string;

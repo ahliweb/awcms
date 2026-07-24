@@ -48,22 +48,22 @@ import {
   findIdempotencyRecord,
   saveIdempotencyRecord
 } from "../../_shared/idempotency";
-import type { NewsMediaR2Config } from "../domain/news-media-r2-config";
+import type { NewsMediaR2Config } from "../domain/media-r2-config";
 import {
   fetchNewsMediaObjectById,
   markNewsMediaObjectFailed,
   markNewsMediaObjectUploaded,
   markNewsMediaObjectVerified,
   revertNewsMediaObjectUploadClaim
-} from "./news-media-object-directory";
+} from "./media-object-directory";
 import {
   createNewsMediaR2Client,
   type NewsMediaR2Client
-} from "../infrastructure/news-media-r2-client";
-import { verifyNewsMediaR2Object } from "./news-media-r2-verification";
+} from "../infrastructure/media-r2-client";
+import { verifyNewsMediaR2Object } from "./media-r2-verification";
 
 const VERIFY_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "media_library",
   activityCode: "media",
   action: "verify" as const
 };
@@ -188,7 +188,7 @@ export async function finalizeNewsMediaUploadSession(
         await recordAuditEvent(tx, {
           tenantId,
           actorTenantUserId: auth.context.tenantUserId,
-          moduleKey: "news_portal",
+          moduleKey: "media_library",
           action: "news_media.object.finalize_rejected",
           resourceType: "news_media_object",
           resourceId: objectId,
@@ -317,7 +317,7 @@ export async function finalizeNewsMediaUploadSession(
         await recordAuditEvent(tx, {
           tenantId,
           actorTenantUserId: precheck.actorTenantUserId,
-          moduleKey: "news_portal",
+          moduleKey: "media_library",
           action: "news_media.object.finalize_rejected",
           resourceType: "news_media_object",
           resourceId: precheck.objectId,

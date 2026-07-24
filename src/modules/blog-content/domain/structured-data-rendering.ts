@@ -27,7 +27,7 @@ export type NewsArticleJsonLdInput = {
   description: string;
   /** Already-resolved, safe absolute canonical URL (`seo-rendering.ts`'s `resolveCanonicalUrl`) — the caller only calls this builder when non-null. */
   canonicalUrl: string;
-  /** Already-resolved verified R2 image (`social-preview-image-resolution.ts` + `NewsMediaPort`), or `null` to omit `image` entirely — never an unverified/local/external URL. */
+  /** Already-resolved verified R2 image (`social-preview-image-resolution.ts` + `MediaLibraryPort`), or `null` to omit `image` entirely — never an unverified/local/external URL. */
   image: NewsArticleImage | null;
   datePublished: Date;
   dateModified: Date;

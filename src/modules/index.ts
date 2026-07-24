@@ -10,6 +10,7 @@ import { workflowApprovalModule } from "./workflow-approval/module";
 import { emailModule } from "./email/module";
 import { reportingModule } from "./reporting/module";
 import { themingModule } from "./theming/module";
+import { mediaLibraryModule } from "./media-library/module";
 import { blogContentModule } from "./blog-content/module";
 import { newsPortalModule } from "./news-portal/module";
 import { tenantDomainModule } from "./tenant-domain/module";
@@ -33,20 +34,29 @@ const baseModules: ModuleDescriptor[] = [
   // (depends only on the two Core modules; provides no capability, so the DAG is
   // unchanged). See src/modules/theming/README.md.
   themingModule,
+  // ADR-0036 media-library ownership inversion (adapting awcms-micro ADR-0026):
+  // the tenant media registry + presigned-upload flow + reconciliation job,
+  // EXTRACTED out of news_portal, plus the managed-media enforcement switch.
+  // Depends only on tenant_admin/identity_access (both above); PROVIDES the
+  // `media_library` capability (consumed by blog_content optionally + news_portal
+  // required), but capability edges are not DAG edges, so the graph stays
+  // acyclic. Listed BEFORE blog_content/news_portal for readability (they consume
+  // it). See src/modules/media-library/module.ts's `description`.
+  mediaLibraryModule,
   // Ported from awcms-mini (tenant-scoped blog/content management). Depends
   // on tenant_admin/identity_access/module_management/logging, all already
   // above in this list, so the DAG stays acyclic. See
   // src/modules/blog-content/module.ts and module.ts's own `description`
   // field for what was ported vs. dropped.
   blogContentModule,
-  // Ported from awcms-mini (R2-only news media registry + presigned upload
-  // flow, editorial homepage sections, R2-only ad placements, and the
-  // news-media reconciliation job). Depends on
-  // tenant_admin/identity_access/module_management/logging (all above);
-  // PROVIDES `news_media` (consumed by blog_content) and CONSUMES
-  // blog_content's `public_content`, but capability edges are not DAG edges,
-  // so the graph stays acyclic. See src/modules/news-portal/module.ts's
-  // `description` for what was ported vs. dropped.
+  // Ported from awcms-mini (editorial homepage sections, R2-only ad placements).
+  // ADR-0036 moved the media registry + presigned upload flow + reconciliation
+  // job OUT of this module into media_library. Depends on
+  // tenant_admin/identity_access/module_management/logging (all above); no longer
+  // PROVIDES `news_media` (retired) and now CONSUMES `media_library` (required —
+  // ad placements FK a media object) + blog_content's `public_content`, but
+  // capability edges are not DAG edges, so the graph stays acyclic. See
+  // src/modules/news-portal/module.ts's `description` for what was ported/moved.
   newsPortalModule,
   // Ported from awcms-micro (epic #555): tenant hostname/subdomain -> tenant
   // mapping for host-based public routing, plus a SECURITY DEFINER host-lookup

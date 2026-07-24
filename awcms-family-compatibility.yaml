@@ -34,13 +34,16 @@ contracts:
   # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
   # ships in this base belong here. `party_directory` is owned by the base
   # `profile_identity` module (forward-declared ahead of an in-repo consumer,
-  # ADR-0011). ADR-0034 Fase 3 admitted the first website module (`theming`)
-  # directly into the base, but `theming` provides no capability port, so it adds
-  # no entry here. Content capabilities whose owning CMS modules are not yet
-  # ported to this base (e.g. news_media/public_content/social_publishing) remain
-  # unlisted until those modules land here (ADR-0034 "template dipakai-langsung").
+  # ADR-0011). `media_library` is owned by the base `media_library` module
+  # (ADR-0036 media ownership inversion — the media registry extracted out of
+  # news_portal); it SUPERSEDES the retired `news_media` capability. ADR-0034 Fase
+  # 3 admitted the first website module (`theming`) directly into the base, but
+  # `theming` provides no capability port, so it adds no entry here. Other content
+  # capabilities whose owning CMS modules provide no versioned base port yet (e.g.
+  # public_content/social_publishing) remain unlisted.
   capabilityContractVersions:
     party_directory: "1.0.0"
+    media_library: "1.0.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

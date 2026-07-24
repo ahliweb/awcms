@@ -6,7 +6,7 @@ export const blogContentModule = defineModule({
   version: "0.9.0",
   status: "active",
   description:
-    "Tenant-scoped blog/content management, ported from awcms-mini (epic #536, issues #537-#543 plus the later #636-#649/#681 hardening lineage — see README.md for the full port-adaptation notes). Admin CRUD + lifecycle for posts/pages (draft -> review -> scheduled/published -> archived, soft delete/restore/purge), hierarchical categories/tags with post-term relations, PostgreSQL full-text search, append-only revision history (restore never overwrites, it appends a new revision), presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements with placement targeting/scheduling, a per-tenant theme override falling back to `awcms_tenants.default_theme`), an optional `translation_group_id` linking locale-variants of one post, a whitelisted `gallery`/`video_news` content_json block type (no raw HTML, no new media table), per-tenant blog settings (title/description/RSS/sitemap flags), and automatic internal tag linking (a pure render-time transform, `domain/internal-tag-linking.ts`, gated by a deployment-wide config plus a per-tenant policy table and a per-post opt-out column). Public (anonymous) routes under `/blog/{tenantCode}/...` per ADR-0009 (index, post detail, category/tag archive, search, RSS feed, sitemap) reuse the `resolvePublicTenantByCode` resolver theming's own public preview route already established in this base. PORT-TIME DROPS (documented in the port PR, not silent): the host-resolved `/news/**` route family (Issue #560/#564, epic `news_portal`) is NOT ported — it requires `lib/tenant/public-host-tenant-resolver.ts` (custom-domain-based tenant resolution) and `PUBLIC_TENANT_RESOLUTION_MODE`/`PUBLIC_TRUST_PROXY` env plumbing that belong to the `tenant_domain` routing module, which is not yet ported to this base; the three `/news`-only settings keys (`publicRouteMode`/`publicBasePath`/`publicLabel`) are dropped from `settings.defaults` for the same reason, keeping only `legacyTenantRouteEnabled` (the `/blog/{tenantCode}` on/off switch). The full-online-R2-only-mode media-reference enforcement (Issue #636/#639/#640/#649, gated by the `news_media` capability below) and the publish-time social-publishing outbox trigger (Issue #643, gated by the `social_publishing` capability below) both consume a REQUIRED port parameter at their call sites; since neither `news_portal` nor `social_publishing` is ported yet, every route/worker call site here injects this module's own no-op adapters (`application/news-media-port-noop-adapter.ts`, `application/social-publishing-port-noop-adapter.ts`) instead of importing an absent module's concrete adapter — R2-only mode always reports inactive (every affected gate/checklist becomes the same no-op it already is for every tenant that hasn't opted into that mode) and the social-publishing hook always reports `{ jobsCreated: 0 }`, both exactly matching the documented base-case behavior. Swapping in the real adapters is a pure composition-root change (no `blog_content` file touched) once those modules are ported.",
+    "Tenant-scoped blog/content management, ported from awcms-mini (epic #536, issues #537-#543 plus the later #636-#649/#681 hardening lineage — see README.md for the full port-adaptation notes). Admin CRUD + lifecycle for posts/pages (draft -> review -> scheduled/published -> archived, soft delete/restore/purge), hierarchical categories/tags with post-term relations, PostgreSQL full-text search, append-only revision history (restore never overwrites, it appends a new revision), presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements with placement targeting/scheduling, a per-tenant theme override falling back to `awcms_tenants.default_theme`), an optional `translation_group_id` linking locale-variants of one post, a whitelisted `gallery`/`video_news` content_json block type (no raw HTML, no new media table), per-tenant blog settings (title/description/RSS/sitemap flags), and automatic internal tag linking (a pure render-time transform, `domain/internal-tag-linking.ts`, gated by a deployment-wide config plus a per-tenant policy table and a per-post opt-out column). Public (anonymous) routes under `/blog/{tenantCode}/...` per ADR-0009 (index, post detail, category/tag archive, search, RSS feed, sitemap) reuse the `resolvePublicTenantByCode` resolver theming's own public preview route already established in this base. PORT-TIME DROPS (documented in the port PR, not silent): the host-resolved `/news/**` route family (Issue #560/#564, epic `news_portal`) is NOT ported — it requires `lib/tenant/public-host-tenant-resolver.ts` (custom-domain-based tenant resolution) and `PUBLIC_TENANT_RESOLUTION_MODE`/`PUBLIC_TRUST_PROXY` env plumbing that belong to the `tenant_domain` routing module, which is not yet ported to this base; the three `/news`-only settings keys (`publicRouteMode`/`publicBasePath`/`publicLabel`) are dropped from `settings.defaults` for the same reason, keeping only `legacyTenantRouteEnabled` (the `/blog/{tenantCode}` on/off switch). The managed-media-reference enforcement (Issue #636/#639/#640/#649, gated by the `media_library` capability below — ADR-0036 ownership inversion; formerly `news_media`) and the publish-time social-publishing outbox trigger (Issue #643, gated by the `social_publishing` capability below) both consume a REQUIRED port parameter at their call sites. The media gate now injects `media_library`'s real adapter (`media-library/application/media-library-port-adapter.ts`) at every composition root: managed-media enforcement reports inactive (a safe no-op) for any tenant that has not enabled it, and enabling it no longer requires a news portal. `social_publishing` is still not ported to this base, so its call sites inject this module's own no-op adapter (`application/social-publishing-port-noop-adapter.ts`), which always reports `{ jobsCreated: 0 }`. Swapping in a real social-publishing adapter is a pure composition-root change (no `blog_content` file touched) once that module is ported.",
   // `module_management` + `logging` are real value imports this module
   // already makes — `application/public-route-settings.ts` calls
   // `module_management`'s tenant-module/settings helpers, and
@@ -22,25 +22,31 @@ export const blogContentModule = defineModule({
   type: "domain",
   // This module PROVIDES the `public_content` capability
   // (`_shared/ports/public-content-port.ts`, implemented by
-  // `application/public-content-port-adapter.ts`) for a future `news_portal`
-  // port's homepage section composer to consume, and CONSUMES (both
-  // `optional: true`) `news_portal`'s `news_media` capability and
-  // `social_publishing`'s own `social_publishing` capability. Neither
-  // direction is a `dependencies` edge (capabilities document a
-  // SOURCE-LEVEL relationship, not a lifecycle-ordering constraint). Since
-  // NEITHER `news_portal` NOR `social_publishing` is ported to this base yet,
-  // every real call site injects this module's own no-op adapter instead of
-  // an absent module's concrete one — see the description field above and
-  // `application/news-media-port-noop-adapter.ts`/
-  // `application/social-publishing-port-noop-adapter.ts`'s own headers.
-  // `optional: true` is exactly what makes that safe: a deployment that
-  // never has `news_media`/`social_publishing` provided (every deployment of
-  // this base today) must still fully validate/publish articles, just
-  // without the extra R2/social-outbox behavior.
+  // `application/public-content-port-adapter.ts`) for `news_portal`'s homepage
+  // section composer to consume, and CONSUMES (both `optional: true`)
+  // `media_library`'s `media_library` capability and `social_publishing`'s own
+  // `social_publishing` capability. Neither direction is a `dependencies` edge
+  // (capabilities document a SOURCE-LEVEL relationship, not a lifecycle-ordering
+  // constraint).
+  //
+  // ADR-0036 ownership inversion: was `news_media` providedBy `news_portal` — the
+  // capability is retired and `media_library` provides its successor. Still
+  // `optional`, and for the same reason as before: the media gate safely no-ops
+  // when managed-media enforcement is not active for the tenant. What changed is
+  // that enforcement no longer requires a news portal to exist — the real
+  // `media_library` adapter (`media-library/application/media-library-port-adapter.ts`)
+  // is injected at every composition root. `social_publishing` is still not
+  // ported to this base, so its call sites inject this module's own no-op adapter
+  // (`application/social-publishing-port-noop-adapter.ts`); `optional: true` is
+  // what keeps that safe.
   capabilities: {
     provides: ["public_content"],
     consumes: [
-      { capability: "news_media", providedBy: "news_portal", optional: true },
+      {
+        capability: "media_library",
+        providedBy: "media_library",
+        optional: true
+      },
       {
         capability: "social_publishing",
         providedBy: "social_publishing",

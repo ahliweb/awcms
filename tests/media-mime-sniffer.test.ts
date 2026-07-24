@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { sniffNewsMediaMimeType } from "../src/modules/news-portal/domain/news-media-mime-sniffer";
+import { sniffNewsMediaMimeType } from "../src/modules/media-library/domain/media-mime-sniffer";
 
 function bytesOf(...values: number[]): Uint8Array {
   return new Uint8Array(values);

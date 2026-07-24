@@ -3,7 +3,7 @@
  * capability `blog_content` consumes from `social_publishing`: "an eligible
  * article just became published, create outbox jobs for it if applicable."
  * Lives in neutral ground (`_shared`, imports NOTHING from either module),
- * same reasoning `news-media-port.ts`/`public-content-port.ts` document in
+ * same reasoning `media-library-port.ts`/`public-content-port.ts` document in
  * their own headers.
  *
  * `optional: true` on `blog_content`'s `capabilities.consumes` entry for
@@ -16,18 +16,19 @@
  * The concrete implementation
  * (`social-publishing/application/social-publishing-port-adapter.ts`) is a
  * FACTORY (`createSocialPublishingPortAdapter(mediaPort)`), not a ready-made
- * singleton — it itself needs `news_portal`'s `NewsMediaPort` (to resolve a
+ * singleton — it itself needs `media_library`'s `MediaLibraryPort` (to resolve a
  * verified R2 image URL for the article, per the issue's own "Integration
- * with news content" section) but must not import `news_portal`'s concrete
+ * with news content" section) but must not import `media_library`'s concrete
  * adapter from within `social_publishing/application` (that would be the
  * exact anti-pattern Issue #681 fixed for `blog_content`/`news_portal`).
  * Only the TRUE composition root — `pages/api/v1/blog/posts/[id]/publish.ts`
  * and `scripts/blog-scheduled-publish.ts` — imports both concrete adapters
- * and wires them together: it imports `newsMediaPortAdapter` (the
- * `news_portal` media-port implementation) and
+ * and wires them together: it imports `mediaLibraryPortAdapter` (the
+ * `media_library` media-port implementation, ADR-0036 — formerly
+ * `news_portal`'s `newsMediaPortAdapter`) and
  * `createSocialPublishingPortAdapter` (this port's factory, from
  * `social-publishing/application/social-publishing-port-adapter.ts`), then
- * calls `createSocialPublishingPortAdapter(newsMediaPortAdapter)` once to
+ * calls `createSocialPublishingPortAdapter(mediaLibraryPortAdapter)` once to
  * build the concrete `socialPublishingPort` value used at that call site.
  * (Deliberately described in prose, not a fenced code sample containing a
  * literal import statement — `tests/unit/module-boundary.test.ts`'s
