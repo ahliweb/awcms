@@ -12,6 +12,7 @@ import { reportingModule } from "./reporting/module";
 import { themingModule } from "./theming/module";
 import { blogContentModule } from "./blog-content/module";
 import { newsPortalModule } from "./news-portal/module";
+import { tenantDomainModule } from "./tenant-domain/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -45,7 +46,14 @@ const baseModules: ModuleDescriptor[] = [
   // blog_content's `public_content`, but capability edges are not DAG edges,
   // so the graph stays acyclic. See src/modules/news-portal/module.ts's
   // `description` for what was ported vs. dropped.
-  newsPortalModule
+  newsPortalModule,
+  // Ported from awcms-micro (epic #555): tenant hostname/subdomain -> tenant
+  // mapping for host-based public routing, plus a SECURITY DEFINER host-lookup
+  // bootstrap function and the additive public host resolver. Depends only on
+  // tenant_admin/identity_access (both above), so the DAG stays acyclic. See
+  // src/modules/tenant-domain/module.ts's `description` for what was ported vs.
+  // deferred.
+  tenantDomainModule
 ];
 
 /**

@@ -1,0 +1,436 @@
+---
+/**
+ * Tenant domains management screen — ported/adapted from awcms-micro
+ * (epic #555). Mirrors this base's SSR-read-then-render pattern (see
+ * `admin/offices.astro`): read the tenant's domain mappings server-side by
+ * calling the SAME application function the JSON endpoint uses
+ * (`listTenantDomains`) inside `withTenant`, then render a plain accessible
+ * table + status badges.
+ *
+ * ABAC is enforced server-side by the endpoints; this page additionally gates
+ * its own render on `tenant_domain.domains.read`. Every mutation
+ * (create/update/delete/verify/set-primary) goes through `fetch` to
+ * `/api/v1/tenant/domains/**` — there is no privileged SSR mutation shortcut.
+ * `verify`/`set-primary` send a fresh `Idempotency-Key` per click. Client-side
+ * hostname validation is UX-only — `normalizePublicHost()` via the API is the
+ * single enforcement point.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../../lib/database/client";
+import { withTenant } from "../../../lib/database/tenant-context";
+import { permissionKey } from "../../../modules/identity-access/domain/access-control";
+import {
+  listTenantDomains,
+  type TenantDomainView
+} from "../../../modules/tenant-domain/application/tenant-domain-directory";
+import {
+  TENANT_DOMAIN_TYPES,
+  TENANT_DOMAIN_ROUTE_MODES,
+  TENANT_DOMAIN_VERIFICATION_METHODS
+} from "../../../modules/tenant-domain/domain/tenant-domain-validation";
+
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(
+  permissionKey("tenant_domain", "domains", "read")
+);
+const canCreate = ssr.permissions.has(
+  permissionKey("tenant_domain", "domains", "create")
+);
+const canUpdate = ssr.permissions.has(
+  permissionKey("tenant_domain", "domains", "update")
+);
+const canDelete = ssr.permissions.has(
+  permissionKey("tenant_domain", "domains", "delete")
+);
+const canVerify = ssr.permissions.has(
+  permissionKey("tenant_domain", "domains", "verify")
+);
+const canSetPrimary = ssr.permissions.has(
+  permissionKey("tenant_domain", "domains", "set_primary")
+);
+
+const showActions = canUpdate || canDelete || canVerify || canSetPrimary;
+
+let domains: TenantDomainView[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+      const page = await listTenantDomains(tx, ssr.tenantId);
+      return page.domains;
+    });
+    if (result instanceof Response) {
+      loadError = true;
+    } else {
+      domains = result;
+    }
+  } catch {
+    loadError = true;
+  }
+}
+
+function statusVariant(status: string): string {
+  if (status === "active") return "success";
+  if (status === "failed") return "danger";
+  if (status === "suspended") return "warning";
+  return "neutral";
+}
+---
+
+<AdminLayout title="Tenant domains" active="tenant-domains">
+  <header class="page-header fade-in-up">
+    <h1 id="tenant-domains-heading">Tenant domains</h1>
+    <p class="page-description">
+      Hostname/subdomain mappings for this tenant. Add a mapping, verify
+      ownership (manual-first), and choose one active primary. Deleting a
+      mapping frees its hostname for reuse.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="tenant-domains-denied">
+        You do not have permission to view tenant domains.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="tenant-domains-error">
+        Tenant domains could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canCreate && (
+      <form id="domain-create-form" class="admin-create-form fade-in-up">
+        <p class="form-legend">Add a domain</p>
+        <p
+          id="domain-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="domain-hostname">Hostname</label>
+        <input
+          id="domain-hostname"
+          name="hostname"
+          type="text"
+          required
+          autocomplete="off"
+          placeholder="tenant.example.com"
+        />
+
+        <label for="domain-type">Domain type</label>
+        <select id="domain-type" name="domainType">
+          {TENANT_DOMAIN_TYPES.map((value) => (
+            <option value={value} selected={value === "custom_domain"}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <label for="domain-route-mode">Route mode</label>
+        <select id="domain-route-mode" name="routeMode">
+          {TENANT_DOMAIN_ROUTE_MODES.map((value) => (
+            <option value={value} selected={value === "canonical"}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <label for="domain-verification-method">Verification method</label>
+        <select id="domain-verification-method" name="verificationMethod">
+          <option value="">(none yet)</option>
+          {TENANT_DOMAIN_VERIFICATION_METHODS.map((value) => (
+            <option value={value}>{value}</option>
+          ))}
+        </select>
+
+        <button type="submit" id="domain-create-submit">
+          Add domain
+        </button>
+      </form>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <p
+        id="domain-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <div class="data-table-scroll fade-in-up">
+        <table class="data-table data-table--stack" id="tenant-domains-table">
+          <caption>{domains.length} domain(s)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Hostname</th>
+              <th scope="col">Type</th>
+              <th scope="col">Route mode</th>
+              <th scope="col">Status</th>
+              <th scope="col">Primary</th>
+              {showActions && <th scope="col">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {domains.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={showActions ? 6 : 5}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ⌂
+                    </span>
+                    <span class="empty-state-title">No domains yet</span>
+                    <span class="empty-state-text">
+                      {canCreate
+                        ? "Add your first domain mapping using the form above."
+                        : "Domain mappings for this tenant will appear here."}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              domains.map((domain) => (
+                <tr data-domain-row={domain.id}>
+                  <td data-label="Hostname">
+                    <span class="cell-code">{domain.hostname}</span>
+                  </td>
+                  <td data-label="Type">
+                    <span class="cell-muted">{domain.domainType}</span>
+                  </td>
+                  <td data-label="Route mode">
+                    <span class="cell-muted">{domain.routeMode}</span>
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={statusVariant(domain.status)}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {domain.status}
+                    </span>
+                  </td>
+                  <td data-label="Primary">{domain.isPrimary ? "Yes" : "—"}</td>
+                  {showActions && (
+                    <td data-label="Actions" class="stacked-block">
+                      <div class="row-actions">
+                        {canVerify &&
+                          (domain.status === "pending_verification" ||
+                            domain.status === "failed") && (
+                            <button
+                              type="button"
+                              class="module-toggle domain-verify-btn"
+                              data-domain-id={domain.id}
+                            >
+                              Verify
+                            </button>
+                          )}
+                        {canSetPrimary &&
+                          domain.status === "active" &&
+                          !domain.isPrimary && (
+                            <button
+                              type="button"
+                              class="module-toggle domain-primary-btn"
+                              data-domain-id={domain.id}
+                            >
+                              Set primary
+                            </button>
+                          )}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            class="module-toggle domain-delete-btn"
+                            data-domain-id={domain.id}
+                            data-domain-host={domain.hostname}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import forces Astro to bundle this EXTERNAL (an import-free script is
+  // inlined, and inline scripts are blocked by the middleware CSP). See
+  // admin-form-client.ts.
+  import { lockElement, sendJson } from "../../../lib/ui/admin-form-client";
+
+  const form = document.getElementById(
+    "domain-create-form"
+  ) as HTMLFormElement | null;
+  const createError = document.getElementById("domain-create-error");
+  const submitButton = document.getElementById(
+    "domain-create-submit"
+  ) as HTMLButtonElement | null;
+
+  function showCreateError(message: string): void {
+    if (!createError) return;
+    createError.textContent = message;
+    createError.hidden = false;
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!submitButton || submitButton.disabled) return;
+    const unlock = lockElement(submitButton, "Please wait…");
+    if (createError) createError.hidden = true;
+
+    const formData = new FormData(form);
+    const hostname = String(formData.get("hostname") ?? "").trim();
+    const domainType = String(formData.get("domainType") ?? "").trim();
+    const routeMode = String(formData.get("routeMode") ?? "").trim();
+    const verificationMethodRaw = String(
+      formData.get("verificationMethod") ?? ""
+    ).trim();
+
+    const payload: Record<string, unknown> = {
+      hostname,
+      domainType,
+      routeMode
+    };
+    if (verificationMethodRaw) {
+      payload.verificationMethod = verificationMethodRaw;
+    }
+
+    const result = await sendJson("POST", "/api/v1/tenant/domains", payload);
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showCreateError(
+      result.errorCode === "HOSTNAME_CONFLICT"
+        ? "That hostname is already mapped. Choose another."
+        : "Could not add the domain. Check the hostname and try again."
+    );
+    unlock();
+  });
+
+  const actionError = document.getElementById("domain-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  function clearActionError(): void {
+    if (actionError) actionError.hidden = true;
+  }
+
+  // Verify (high-risk — carries a fresh Idempotency-Key per click).
+  document
+    .querySelectorAll<HTMLButtonElement>(".domain-verify-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.domainId;
+        if (!id) return;
+        clearActionError();
+        const unlock = lockElement(button, "Verifying…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/tenant/domains/${id}/verify`,
+          undefined,
+          { "Idempotency-Key": crypto.randomUUID() }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        showActionError(
+          "Could not verify the domain. Set a verification method first, then retry."
+        );
+        unlock();
+      });
+    });
+
+  // Set primary (high-risk — carries a fresh Idempotency-Key per click).
+  document
+    .querySelectorAll<HTMLButtonElement>(".domain-primary-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.domainId;
+        if (!id) return;
+        clearActionError();
+        const unlock = lockElement(button, "Setting…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/tenant/domains/${id}/set-primary`,
+          undefined,
+          { "Idempotency-Key": crypto.randomUUID() }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        showActionError(
+          "Could not set the domain as primary. Only a verified domain can be primary."
+        );
+        unlock();
+      });
+    });
+
+  // Delete: reason-required soft delete after an explicit confirm.
+  document
+    .querySelectorAll<HTMLButtonElement>(".domain-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.domainId;
+        if (!id) return;
+        const host = button.dataset.domainHost ?? "this domain";
+        const reason = window.prompt(
+          `Delete ${host}? Enter a reason (the hostname becomes reusable):`
+        );
+        if (reason === null || reason.trim().length === 0) {
+          return;
+        }
+        clearActionError();
+        const unlock = lockElement(button, "Deleting…");
+
+        const result = await sendJson(
+          "DELETE",
+          `/api/v1/tenant/domains/${id}`,
+          { reason: reason.trim() }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        showActionError("Could not delete the domain. Please try again.");
+        unlock();
+      });
+    });
+</script>

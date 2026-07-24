@@ -42,7 +42,8 @@ interface Props {
     | "roles"
     | "abac-policies"
     | "modules"
-    | "email-templates";
+    | "email-templates"
+    | "tenant-domains";
 }
 
 const { title, active } = Astro.props;
@@ -108,6 +109,12 @@ const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
             aria-current={active === "offices" ? "page" : undefined}
           >
             Offices
+          </a>
+          <a
+            href="/admin/tenant/domains"
+            aria-current={active === "tenant-domains" ? "page" : undefined}
+          >
+            Tenant domains
           </a>
           <a
             href="/admin/profiles"

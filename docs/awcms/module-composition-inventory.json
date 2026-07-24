@@ -1,5 +1,5 @@
 {
-  "moduleCount": 13,
+  "moduleCount": 14,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -213,6 +213,22 @@
       "capabilitiesConsumed": [],
       "permissionCount": 6,
       "navigationCount": 0,
+      "jobCount": 0,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "tenant_domain",
+      "name": "Tenant Domain",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "domain",
+      "dependencies": ["tenant_admin", "identity_access"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 6,
+      "navigationCount": 1,
       "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
