@@ -2,18 +2,18 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
-# AWCMS — Basis Platform untuk ERP & Solusi Bisnis
+# AWCMS — Template ERP & Solusi Bisnis Online-First (Superset Keluarga AWCMS)
 
-> **AWCMS adalah template lini ERP/back-office keluarga AWCMS — dipakai LANGSUNG.** Ia salah satu dari tiga template sejajar (`awcms-mini`/`awcms`/`awcms-micro`) yang dipakai langsung sebagai titik awal pengembangan, bukan basis-turunan-wajib yang di atasnya harus dibangun repo aplikasi terpisah ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede ADR-0013/0014/0015/0022/0025). Sebagai template yang di-ship, base menyediakan **modul fondasi reusable + kontrak netral kesiapan ERP** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) dan belum berisi logika domain ERP (chart of accounts, general ledger, jurnal, AR/AP, valuasi inventori, payroll, perhitungan pajak). Untuk membangun ERP/solusi bisnis: **pakai template ini langsung dan tambahkan modul domain di `src/modules/`** — bukan membuat repo turunan terpisah. Lihat juga [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
+> **AWCMS adalah template lini ERP/back-office keluarga AWCMS — dipakai LANGSUNG**, dikembangkan dari basis teknis [awcms-mini](https://github.com/ahliweb/awcms-mini). Mode operasinya **hybrid online + offline dengan prioritas online-first** (online adalah jalur utama; offline/LAN adalah mode ketahanan), dan ia **siap ERP serta dibangun untuk SaaS terintegrasi**. Ia adalah template **superset** keluarga: menyerap seluruh klaster modul website/e-commerce, UI/UX, dan pengerasan auth dari `awcms-micro` di atas fondasi awcms-mini dan skop ERP ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), menyempurnakan [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)). Sebaliknya, `awcms-mini` tetap **hybrid offline-first** (siap SaaS) dan `awcms-micro` tetap template **website full-online** yang ramping. Base menyediakan **modul fondasi reusable + kontrak netral kesiapan ERP** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)); modul domain — ERP maupun website/konten — ditambahkan **langsung di `src/modules/`**, bukan repo turunan terpisah. Peta penyerapan awcms-micro: [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md). Lihat juga [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
-> **Status: fondasi aktif dikembangkan.** File kode legacy di repo ini sudah dihapus (lihat commit `chore(foundation): remove legacy repository files`) dan repo ini **dikembangkan ulang dari nol** di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Sebelas modul fondasi sudah live (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk state kode saat ini), sebagai **basis** pengembangan ERP dan solusi bisnis — bukan sekadar CMS/base generik, dan bukan pula sebuah ERP jadi.
+> **Status: fondasi aktif dikembangkan.** File kode legacy di repo ini sudah dihapus (lihat commit `chore(foundation): remove legacy repository files`) dan repo ini **dikembangkan ulang dari nol** di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Tiga belas modul fondasi sudah live (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk state kode saat ini), sebagai **basis** pengembangan ERP, SaaS, dan website/e-commerce — bukan sekadar CMS/base generik, dan bukan pula sebuah ERP jadi.
 
 ## Daftar isi
 
 - [Kenapa repo ini dibangun ulang](#kenapa-repo-ini-dibangun-ulang)
 - [Arah pengembangan: basis teknologi awcms-mini, skop fondasi ERP](#arah-pengembangan-basis-teknologi-awcms-mini-skop-fondasi-erp)
 - [Arsitektur tingkat tinggi](#arsitektur-tingkat-tinggi)
-- [Prinsip offline-first](#prinsip-offline-first)
+- [Prinsip hybrid online-first](#prinsip-hybrid-online-first)
 - [Stack](#stack)
 - [Prinsip utama](#prinsip-utama)
 - [Paket dokumen](#paket-dokumen)
@@ -39,7 +39,7 @@ Setelah seluruh komponen (mcp, public, admin) selesai dipindah dan Supabase tida
 
 ## Arah pengembangan: basis teknologi awcms-mini, skop fondasi ERP
 
-Repo ini **mengadopsi stack dan standar teknis dari [awcms-mini](https://github.com/ahliweb/awcms-mini)** — _modular monolith standard_ AhliWeb — sebagai basis teknologi. Ketiga repo keluarga (`awcms-mini`, `awcms`, `awcms-micro`) adalah **tiga template sejajar yang dipakai langsung** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)), bukan hierarki base-dan-turunan; `awcms` adalah template lini ERP/back-office. Sebagai template yang di-ship, fokus repo ini adalah menyediakan **fondasi + kontrak kesiapan ERP**, dan modul domain ERP ditambahkan **langsung di `src/modules/`** saat template dipakai:
+Repo ini **mengadopsi stack dan standar teknis dari [awcms-mini](https://github.com/ahliweb/awcms-mini)** — _modular monolith standard_ AhliWeb — sebagai basis teknologi, lalu **dikembangkan** untuk skop ERP dan **menyerap** klaster website/e-commerce awcms-micro. Ketiga repo keluarga (`awcms-mini`, `awcms`, `awcms-micro`) adalah **tiga template sejajar yang dipakai langsung** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)), bukan hierarki base-dan-turunan; `awcms` adalah template lini ERP/back-office yang kini diposisikan **online-first hybrid, siap ERP + SaaS terintegrasi, dan superset keluarga** ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)). Fokus repo ini adalah menyediakan **fondasi + kontrak kesiapan ERP + kapabilitas website/e-commerce lengkap** (diserap dari awcms-micro, lihat [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md)), dan modul domain ERP ditambahkan **langsung di `src/modules/`** saat template dipakai:
 
 - **Modul fondasi reusable** — tenant, identity/access (RBAC/ABAC/RLS), central profile, sync/outbox, workflow, reporting, observability, dsb. — dipakai apa adanya oleh modul domain yang dibangun di atasnya.
 - **Kontrak netral kesiapan ERP** — bentuk data pasif, capability port, dan skema payload event (business transaction, posting, period-lock, item/currency/UoM, inventory movement, reporting projection — [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) yang **diimplementasikan/dikonsumsi oleh modul ERP yang ditambahkan langsung di `src/modules/`** (atau oleh template keluarga lain), bukan diisi logikanya oleh base itu sendiri.
@@ -56,7 +56,7 @@ Basis teknologi yang diadopsi dari awcms-mini:
 | Web framework | Vite + React (admin/public terpisah)   | **Astro 7** (SSR di atas Bun, satu shell modular monolith)                                                                                        |
 | Database      | Supabase (Postgres terkelola)          | **PostgreSQL** dengan **RLS wajib** (ADR-0003)                                                                                                    |
 | Arsitektur    | Aplikasi terpisah (mcp, public, admin) | **Modular monolith, microservice-ready** (ADR-0001), modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) |
-| Mode operasi  | Online-dependent                       | **Offline-first / LAN-first** dengan sync outbox HMAC-signed (ADR-0006)                                                                           |
+| Mode operasi  | Online-dependent                       | **Hybrid online-first** (online jalur utama; offline/LAN sebagai mode ketahanan dengan sync outbox HMAC-signed, ADR-0006)                         |
 | Kontrak API   | Ad-hoc                                 | OpenAPI/AsyncAPI tervalidasi, response helper standar                                                                                             |
 
 Modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) dari awcms-mini dipakai apa adanya sebagai fondasi; modul domain ERP dan integrasi bisnis dikembangkan **langsung di atas fondasi tersebut, di `src/modules/` template ini** — bukan di repo turunan terpisah ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede ADR-0022).
@@ -97,16 +97,19 @@ flowchart TB
 
 Modul fondasi ini tidak mengimplementasikan logika ERP — ia hanya menyediakan kontrak netral (event, posting request/result, period-lock, dsb.) yang **dikonsumsi** oleh modul ERP yang ditambahkan langsung di `src/modules/`. Provider bisnis eksternal terhubung lewat **outbox/queue**, bukan jalur langsung transaksi, sehingga alur kritikal tetap berjalan saat koneksi eksternal bermasalah (ADR-0006).
 
-## Prinsip offline-first
+## Prinsip hybrid online-first
+
+Mode operasi `awcms` adalah **hybrid online + offline dengan prioritas online-first**: konektivitas online adalah jalur utama dan default deployment (multi-cabang tersinkron, portal publik, integrasi provider). Kapabilitas offline/LAN (outbox/sync HMAC, [ADR-0006](docs/adr/0006-offline-first-sync-outbox.md)) tetap ada dan didukung sebagai **mode ketahanan** saat koneksi terputus — bukan asumsi utama seperti pada `awcms-mini` yang offline-first. Alur data tetap idempotent & aman untuk direkonsiliasi saat kembali online:
 
 ```mermaid
 flowchart LR
-  Tx[Aksi operasional] --> Local[(DB lokal / LAN)]
+  Tx[Aksi operasional] -->|online (utama)| Server[(Server pusat / SaaS)]
+  Tx -.->|saat offline/LAN| Local[(DB lokal / LAN)]
   Local --> Outbox[Outbox event + object queue]
-  Outbox -->|saat online| Sync[Sync push/pull<br/>HMAC signed]
-  Sync --> Server[(Server pusat)]
-  Outbox -->|saat online| Deliver[Kirim ke provider eksternal]
+  Outbox -->|saat online kembali| Sync[Sync push/pull<br/>HMAC signed]
+  Sync --> Server
   Server -->|conflict| Manual[Resolusi manual + audit]
+  Server -.-> Deliver[Kirim ke provider eksternal]
 ```
 
 ## Stack
@@ -115,10 +118,10 @@ flowchart LR
 - Web framework: **Astro 7** (SSR di atas Bun, `@astrojs/node` sebagai adapter)
 - Database: **PostgreSQL** dengan **RLS FORCE** ([ADR-0003](docs/adr/0003-postgresql-rls-multi-tenant.md))
 - Arsitektur: **Modular monolith, microservice-ready** ([ADR-0001](docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md))
-- Mode operasi: **Offline-first / LAN-first**, sync outbox opsional ([ADR-0006](docs/adr/0006-offline-first-sync-outbox.md))
+- Mode operasi: **Hybrid online-first** — online jalur utama; offline/LAN mode ketahanan, sync outbox opsional ([ADR-0006](docs/adr/0006-offline-first-sync-outbox.md))
 - Security baseline: **RBAC + ABAC default-deny + PostgreSQL RLS + Audit Log** ([ADR-0004](docs/adr/0004-rbac-abac-default-deny.md))
 - Kontrak: **OpenAPI** + **AsyncAPI**, versi independen dari rilis paket ([ADR-0007](docs/adr/0007-openapi-asyncapi-contracts.md), [ADR-0008](docs/adr/0008-independent-contract-and-module-versioning.md))
-- Model keluarga: **template dipakai-langsung, modul domain di `src/modules/`** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede jalur turunan ADR-0013/0022); boundary tenant/entitas & kriteria ekstraksi layanan tetap dari [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)
+- Model keluarga: **template dipakai-langsung, modul domain di `src/modules/`** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede jalur turunan ADR-0013/0022); `awcms` = **online-first hybrid & superset** yang menyerap awcms-micro ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)); boundary tenant/entitas & kriteria ekstraksi layanan tetap dari [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)
 
 ## Prinsip utama
 
@@ -162,8 +165,8 @@ flowchart LR
 ```
 
 - **01–13** perencanaan → kontrak → eksekusi; **14–18** desain teknis; **19** glossary; **20** threat model & arsitektur keamanan; **21** tata kelola penerimaan modul (module admission governance).
-- **Catatan penting:** banyak dokumen di paket ini memakai contoh domain ERP/retail sebagai **ilustrasi** — polanya reusable, entitas/endpoint/layarnya adalah contoh yang diganti aplikasi turunan sesuai kebutuhan domainnya. Lihat [`docs/awcms/README.md`](docs/awcms/README.md) untuk status penerjemahan dan catatan penting lainnya.
-- **Keputusan arsitektural** dicatat di [`docs/adr/`](docs/adr/README.md) (34 ADR saat ini).
+- **Catatan penting:** banyak dokumen di paket ini memakai contoh domain ERP/retail sebagai **ilustrasi** — polanya reusable, entitas/endpoint/layarnya adalah contoh yang diganti/diperluas oleh modul domain di `src/modules/` sesuai kebutuhan domainnya. Lihat [`docs/awcms/README.md`](docs/awcms/README.md) untuk status penerjemahan dan catatan penting lainnya.
+- **Keputusan arsitektural** dicatat di [`docs/adr/`](docs/adr/README.md) (35 ADR saat ini).
 - **State kode saat ini** (bukan rencana): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Untuk kontributor
@@ -176,7 +179,7 @@ flowchart LR
 
 ## Status implementasi
 
-Sebelas modul fondasi sudah live di kode (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk detail per modul, dan README masing-masing modul di `src/modules/*/README.md`): `tenant-admin`, `identity-access` (login, sesi, RBAC/ABAC, admin write CRUD — Issue #166/#171), `profile-identity`, `logging` (audit trail), `module-management` (enable/disable per tenant, ditegakkan di setiap request), `sync-storage` (outbox/inbox HMAC-signed, conflict resolution, object queue R2), `workflow-approval`, `reporting` (projection + export), `email` (dispatch + template), `domain-event-runtime` (publisher event lintas modul). Admin SSR shell (`/admin/*`) menyediakan layar read + write (create/edit/soft-delete/restore) untuk seluruh domain di atas.
+Tiga belas modul fondasi sudah live di kode (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk detail per modul, dan README masing-masing modul di `src/modules/*/README.md`): `tenant-admin`, `identity-access` (login, sesi, RBAC/ABAC, MFA/OIDC/SSO, business-scope, SoD, admin write CRUD — Issue #166/#171), `profile-identity`, `logging` (audit trail), `module-management` (enable/disable per tenant, ditegakkan di setiap request), `sync-storage` (outbox/inbox HMAC-signed, conflict resolution, object queue R2), `workflow-approval`, `reporting` (projection + export), `email` (dispatch + template), `domain-event-runtime` (publisher event lintas modul), `theming`, `blog-content`, `news-portal` (modul website/konten publik). Admin SSR shell (`/admin/*`) menyediakan layar read + write (create/edit/soft-delete/restore) untuk seluruh domain di atas. Kapabilitas website/e-commerce awcms-micro lain sedang **diserap bertahap** — lihat [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md).
 
 Riwayat perubahan lengkap ada di [`CHANGELOG.md`](CHANGELOG.md); status issue/PR terkini di [GitHub Issues](https://github.com/ahliweb/awcms/issues) (kerja dilacak langsung sebagai issue GitHub, bukan backlog statis).
 
@@ -200,7 +203,7 @@ Riwayat perubahan lengkap ada di [`CHANGELOG.md`](CHANGELOG.md); status issue/PR
 
 ## Versioning
 
-**Semantic Versioning** + **[Changesets](.changeset/README.md)**; riwayat lengkap di [`CHANGELOG.md`](CHANGELOG.md). Setiap PR yang mengubah perilaku wajib menyertakan changeset (ditegakkan `bun run changesets:policy:check` di CI). Versi rilis saat ini `5.1.1`.
+**Semantic Versioning** + **[Changesets](.changeset/README.md)**; riwayat lengkap di [`CHANGELOG.md`](CHANGELOG.md). Setiap PR yang mengubah perilaku wajib menyertakan changeset (ditegakkan `bun run changesets:policy:check` di CI). Versi rilis saat ini `6.0.0`.
 
 **Kebijakan penomoran versi (penting, baca sebelum membandingkan versi):**
 

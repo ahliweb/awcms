@@ -1,21 +1,21 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:5e5d4377111133a605936bf081bd7217b6df01876001c04a4c5f0e8837720dfe -->
+<!-- i18n-source-hash: sha256:a9ff0505d7daaf3d02ab0a506c8d9f6fcc1a1b20f4b4f9272ce55caf882b03ce -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
-# AWCMS — Foundation Platform for ERP & Business Solutions
+# AWCMS — Online-First ERP & Business Solutions Template (AWCMS-family superset)
 
-> **AWCMS is the AWCMS-family ERP/back-office template — used DIRECTLY.** It is one of three sibling templates (`awcms-mini`/`awcms`/`awcms-micro`) used directly as a development starting point, not a mandatory base on top of which a separate application repo must be built ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), superseding ADR-0013/0014/0015/0022/0025). As the shipped template, the base provides **reusable foundation modules + neutral ERP-readiness contracts** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) and does not yet contain ERP domain logic (chart of accounts, general ledger, journal, AR/AP, inventory valuation, payroll, tax computation). To build an ERP/business solution: **use this template directly and add domain modules in `src/modules/`** — not by creating a separate derived repo. See also [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
+> **AWCMS is the AWCMS-family ERP/back-office template — used DIRECTLY**, developed from the awcms-mini technical base. Its operating mode is **hybrid online + offline with an online-first priority** (online is the primary path; offline/LAN is the resilience mode), and it is **ERP-ready and built for integrated SaaS**. It is the family's **superset** template: it absorbs the full website/e-commerce module cluster, UI/UX, and auth hardening of `awcms-micro` on top of the awcms-mini foundation and ERP scope ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), refining [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)). By contrast, `awcms-mini` stays hybrid **offline-first** (SaaS-ready) and `awcms-micro` stays the lean **full-online website-only** template. The base provides **reusable foundation modules + neutral ERP-readiness contracts** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)); domain modules — ERP and website/content alike — are added **directly in `src/modules/`**, not a separate derived repo. Absorption map: [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md). See also [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
-> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Eleven foundation modules are already live (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state), as a **foundation** for ERP and business-solution development — not just a generic CMS/base, and not a finished ERP either.
+> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Thirteen foundation modules are already live (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state), as a **foundation** for ERP, SaaS, and website/e-commerce development — not just a generic CMS/base, and not a finished ERP either.
 
 ## Table of contents
 
 - [Why this repo was rebuilt](#why-this-repo-was-rebuilt)
 - [Direction: awcms-mini technology base, ERP-foundation scope](#direction-awcms-mini-technology-base-erp-foundation-scope)
 - [High-level architecture](#high-level-architecture)
-- [Offline-first principle](#offline-first-principle)
+- [Hybrid online-first principle](#hybrid-online-first-principle)
 - [Stack](#stack)
 - [Core principles](#core-principles)
 - [Document package](#document-package)
@@ -41,7 +41,7 @@ Once every component (mcp, public, admin) had finished moving and Supabase was n
 
 ## Direction: awcms-mini technology base, ERP-foundation scope
 
-This repo **adopts the stack and technical standard from [awcms-mini](https://github.com/ahliweb/awcms-mini)** — AhliWeb's _modular monolith standard_ — as its technology base. The three family repos (`awcms-mini`, `awcms`, `awcms-micro`) are **three sibling templates used directly** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)), not a base-and-derivative hierarchy; `awcms` is the ERP/back-office lineage template. As the shipped template, this repo's focus is providing the **foundation + ERP-readiness contracts**, and ERP domain modules are added **directly in `src/modules/`** when the template is used:
+This repo **adopts the stack and technical standard from [awcms-mini](https://github.com/ahliweb/awcms-mini)** — AhliWeb's _modular monolith standard_ — as its technology base, then **develops** it toward ERP scope and **absorbs** awcms-micro's website/e-commerce cluster. The three family repos (`awcms-mini`, `awcms`, `awcms-micro`) are **three sibling templates used directly** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)), not a base-and-derivative hierarchy; `awcms` is the ERP/back-office lineage template, now positioned as **online-first hybrid, ERP + integrated-SaaS ready, and the family superset** ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)). This repo's focus is providing the **foundation + ERP-readiness contracts + a complete website/e-commerce capability set** (absorbed from awcms-micro, see [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md)), and ERP domain modules are added **directly in `src/modules/`** when the template is used:
 
 - **Reusable foundation modules** — tenant, identity/access (RBAC/ABAC/RLS), central profile, sync/outbox, workflow, reporting, observability, etc. — used as-is by the domain modules built on top of them.
 - **Neutral ERP-readiness contracts** — passive data shapes, capability ports, and event payload schemas (business transaction, posting, period-lock, item/currency/UoM, inventory movement, reporting projection — [ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)) that are **implemented/consumed by ERP modules added directly in `src/modules/`** (or by other family templates), not given their logic by the base itself.
@@ -58,7 +58,7 @@ Technology base adopted from awcms-mini:
 | Web framework  | Vite + React (separate admin/public) | **Astro 7** (SSR on Bun, single modular-monolith shell)                                                                                             |
 | Database       | Supabase (managed Postgres)          | **PostgreSQL** with **mandatory RLS** (ADR-0003)                                                                                                    |
 | Architecture   | Separate apps (mcp, public, admin)   | **Modular monolith, microservice-ready** (ADR-0001), reusable base modules (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) |
-| Operating mode | Online-dependent                     | **Offline-first / LAN-first** with HMAC-signed sync outbox (ADR-0006)                                                                               |
+| Operating mode | Online-dependent                     | **Hybrid online-first** (online is the primary path; offline/LAN is the resilience mode with HMAC-signed sync outbox, ADR-0006)                     |
 | API contract   | Ad-hoc                               | Validated OpenAPI/AsyncAPI, standard response helper                                                                                                |
 
 Reusable base modules (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) from awcms-mini are used as-is as the foundation; ERP domain modules and business integrations are developed **directly on top of that foundation, in this template's `src/modules/`** — not in a separate derived repo ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), superseding ADR-0022).
@@ -99,16 +99,19 @@ flowchart TB
 
 These foundation modules do not implement ERP logic — they only provide neutral contracts (events, posting request/result, period-lock, etc.) that are **consumed** by ERP modules added directly in `src/modules/`. External business providers connect via **outbox/queue**, not a direct transaction path, so critical flows keep running when an external connection has issues (ADR-0006).
 
-## Offline-first principle
+## Hybrid online-first principle
+
+`awcms`'s operating mode is **hybrid online + offline with an online-first priority**: online connectivity is the primary path and deployment default (synced multi-branch, public portals, provider integrations). Offline/LAN capabilities (HMAC outbox/sync, [ADR-0006](docs/adr/0006-offline-first-sync-outbox.md)) remain present and supported as a **resilience mode** when connectivity drops — not the primary assumption like `awcms-mini`, which is offline-first. Data flow stays idempotent and safe to reconcile when back online:
 
 ```mermaid
 flowchart LR
-  Tx[Operational action] --> Local[(Local / LAN DB)]
+  Tx[Operational action] -->|online (primary)| Server[(Central server / SaaS)]
+  Tx -.->|when offline/LAN| Local[(Local / LAN DB)]
   Local --> Outbox[Outbox event + object queue]
-  Outbox -->|when online| Sync[Sync push/pull<br/>HMAC signed]
-  Sync --> Server[(Central server)]
-  Outbox -->|when online| Deliver[Send to external provider]
+  Outbox -->|when back online| Sync[Sync push/pull<br/>HMAC signed]
+  Sync --> Server
   Server -->|conflict| Manual[Manual resolution + audit]
+  Server -.-> Deliver[Send to external provider]
 ```
 
 ## Stack
@@ -117,10 +120,10 @@ flowchart LR
 - Web framework: **Astro 7** (SSR on Bun, `@astrojs/node` as adapter)
 - Database: **PostgreSQL** with **RLS FORCE** ([ADR-0003](docs/adr/0003-postgresql-rls-multi-tenant.md))
 - Architecture: **Modular monolith, microservice-ready** ([ADR-0001](docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md))
-- Operating mode: **Offline-first / LAN-first**, optional sync outbox ([ADR-0006](docs/adr/0006-offline-first-sync-outbox.md))
+- Operating mode: **Hybrid online-first** — online is the primary path; offline/LAN is the resilience mode, optional sync outbox ([ADR-0006](docs/adr/0006-offline-first-sync-outbox.md))
 - Security baseline: **RBAC + ABAC default-deny + PostgreSQL RLS + Audit Log** ([ADR-0004](docs/adr/0004-rbac-abac-default-deny.md))
 - Contracts: **OpenAPI** + **AsyncAPI**, versioned independently from the package release ([ADR-0007](docs/adr/0007-openapi-asyncapi-contracts.md), [ADR-0008](docs/adr/0008-independent-contract-and-module-versioning.md))
-- Family model: **direct-use templates, domain modules in `src/modules/`** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), superseding the derived pathway of ADR-0013/0022); tenant/entity boundaries & service-extraction criteria remain from [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)
+- Family model: **direct-use templates, domain modules in `src/modules/`** ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), superseding the derived pathway of ADR-0013/0022); `awcms` = **online-first hybrid & superset** absorbing awcms-micro ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)); tenant/entity boundaries & service-extraction criteria remain from [ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)
 
 ## Core principles
 
@@ -164,8 +167,8 @@ flowchart LR
 ```
 
 - **01–13** planning → contract → execution; **14–18** technical design; **19** glossary; **20** threat model & security architecture; **21** module admission governance.
-- **Important note:** many documents in this package use ERP/retail domain examples as **illustration** — the pattern is reusable, the entities/endpoints/screens are examples a derived application swaps for its own domain needs. See [`docs/awcms/README.md`](docs/awcms/README.md) for translation status and other important notes.
-- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (34 ADRs currently).
+- **Important note:** many documents in this package use ERP/retail domain examples as **illustration** — the pattern is reusable, the entities/endpoints/screens are examples that domain modules in `src/modules/` swap or extend for their own domain needs. See [`docs/awcms/README.md`](docs/awcms/README.md) for translation status and other important notes.
+- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (35 ADRs currently).
 - **Current code state** (not a plan): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## For contributors
@@ -178,7 +181,7 @@ flowchart LR
 
 ## Implementation status
 
-Eleven foundation modules are already live in code (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for per-module detail, and each module's own README at `src/modules/*/README.md`): `tenant-admin`, `identity-access` (login, sessions, RBAC/ABAC, admin write CRUD — Issue #166/#171), `profile-identity`, `logging` (audit trail), `module-management` (per-tenant enable/disable, enforced on every request), `sync-storage` (HMAC-signed outbox/inbox, conflict resolution, R2 object queue), `workflow-approval`, `reporting` (projections + export), `email` (dispatch + templates), `domain-event-runtime` (cross-module event publisher). The admin SSR shell (`/admin/*`) provides read + write (create/edit/soft-delete/restore) screens across all of the above.
+Thirteen foundation modules are already live in code (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for per-module detail, and each module's own README at `src/modules/*/README.md`): `tenant-admin`, `identity-access` (login, sessions, RBAC/ABAC, MFA/OIDC/SSO, business-scope, SoD, admin write CRUD — Issue #166/#171), `profile-identity`, `logging` (audit trail), `module-management` (per-tenant enable/disable, enforced on every request), `sync-storage` (HMAC-signed outbox/inbox, conflict resolution, R2 object queue), `workflow-approval`, `reporting` (projections + export), `email` (dispatch + templates), `domain-event-runtime` (cross-module event publisher), `theming`, `blog-content`, `news-portal` (public website/content modules). The admin SSR shell (`/admin/*`) provides read + write (create/edit/soft-delete/restore) screens across all of the above. The rest of awcms-micro's website/e-commerce capabilities are being **absorbed incrementally** — see [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md).
 
 Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR status is on [GitHub Issues](https://github.com/ahliweb/awcms/issues) (work is tracked directly as GitHub issues, not a static backlog).
 
@@ -202,7 +205,7 @@ Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR statu
 
 ## Versioning
 
-**Semantic Versioning** + **[Changesets](.changeset/README.md)**; full history in [`CHANGELOG.md`](CHANGELOG.md). Every PR that changes behavior must include a changeset (enforced by `bun run changesets:policy:check` in CI). Current release version is `5.1.1`.
+**Semantic Versioning** + **[Changesets](.changeset/README.md)**; full history in [`CHANGELOG.md`](CHANGELOG.md). Every PR that changes behavior must include a changeset (enforced by `bun run changesets:policy:check` in CI). Current release version is `6.0.0`.
 
 **Version numbering policy (important, read before comparing versions):**
 

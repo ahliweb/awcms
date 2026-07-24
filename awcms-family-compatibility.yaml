@@ -21,7 +21,7 @@ familyContractVersion: "1.0.0"
 family:
   standard: awcms-mini
   standardRepository: https://github.com/ahliweb/awcms-mini
-  role: foundation-base rebuild of the awcms-mini modular-monolith standard, ERP-readiness scope (ADR-0001, ADR-0022)
+  role: online-first hybrid ERP + integrated-SaaS template, developed from the awcms-mini modular-monolith standard; family SUPERSET that absorbs awcms-micro's website/e-commerce cluster (ADR-0001, ADR-0034, ADR-0035)
 
 # Pinned contract versions. Where a real source constant exists it is the
 # authority (the gate reads it and fails on mismatch). Where the contract is
@@ -162,7 +162,8 @@ intentionalDivergences:
       exempt) — the one full-online gate MFA/OIDC deliberately dropped.
     reason: >-
       Bot protection is only meaningful for full-online profiles; forcing it on
-      offline-LAN would break the base's offline-first guarantee.
+      the offline/LAN resilience mode of the online-first hybrid would break that
+      degraded-connectivity path.
     owner: "@ahliweb"
     reviewDate: "2027-07-19"
     adr: 0029-deployment-profile-aware-turnstile-bot-protection.md

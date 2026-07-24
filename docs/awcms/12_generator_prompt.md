@@ -68,7 +68,7 @@ Stack final:
 - Web framework: Astro 7.
 - Database: PostgreSQL.
 - Arsitektur: modular monolith, microservice-ready.
-- Mode operasi: offline-first/LAN-first, optional online sync/R2.
+- Mode operasi: hybrid online-first (online jalur utama; offline/LAN mode ketahanan), optional online sync/R2.
 - Security baseline: RBAC + ABAC + PostgreSQL RLS + audit log.
 - API docs: OpenAPI.
 - Event docs: AsyncAPI.
@@ -390,7 +390,7 @@ Objective:
 Kerjakan issue: <ISSUE_TITLE>.
 
 Context:
-AWCMS menggunakan Bun + Astro 7 + PostgreSQL, modular monolith, offline-first, RBAC+ABAC+RLS, audit log, OpenAPI, AsyncAPI. Skop platform: ERP (finance, inventory, procurement, manufacturing, HR/payroll) + integrasi bisnis eksternal.
+AWCMS menggunakan Bun + Astro 7 + PostgreSQL, modular monolith, hybrid online-first (online jalur utama; offline/LAN mode ketahanan), RBAC+ABAC+RLS, audit log, OpenAPI, AsyncAPI. Skop platform: ERP (finance, inventory, procurement, manufacturing, HR/payroll) + website/e-commerce + integrasi bisnis eksternal.
 
 Issue details:
 - Problem:

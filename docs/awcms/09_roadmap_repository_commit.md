@@ -73,7 +73,7 @@ src/
     └── admin/
 ```
 
-Modul domain aplikasi turunan (mis. `catalog-inventory`, `sales-pos`, `warehouse-management`, `accounting-tax`, `crm-communication`, `ai-analyst` pada contoh AWPOS) ditambahkan di repo aplikasi tersebut, bukan bagian struktur base AWCMS.
+Modul domain (mis. `catalog-inventory`, `sales-pos`, `warehouse-management`, `accounting-tax`, `crm-communication`, `ai-analyst`, serta modul website/e-commerce) ditambahkan **langsung di `src/modules/`** template ini ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)) sebagai modul bertipe `domain`, bukan di repo turunan terpisah.
 
 ## Struktur modul standard
 
@@ -148,7 +148,7 @@ test(access): add ABAC default deny tests
 
 Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `security`, `perf`, `ci`, `build`.
 
-Scopes: `foundation`, `db`, `api`, `auth`, `access`, `profile`, `tenant`, `sync`, `ui`, `logging`, `pooling`, `workflow`, `reporting`, `security`, `docs`. Aplikasi turunan menambah scope domainnya sendiri (mis. `pos`, `inventory`, `warehouse`, `tax`, `crm`).
+Scopes: `foundation`, `db`, `api`, `auth`, `access`, `profile`, `tenant`, `sync`, `ui`, `logging`, `pooling`, `workflow`, `reporting`, `security`, `docs`. Modul domain menambah scope domainnya sendiri (mis. `pos`, `inventory`, `warehouse`, `tax`, `crm`, `web`, `commerce`).
 
 ## Urutan commit atomic utama
 
@@ -198,7 +198,7 @@ Scopes: `foundation`, `db`, `api`, `auth`, `access`, `profile`, `tenant`, `sync`
 2. `chore(deploy): add offline LAN and production deployment profiles`
 3. `docs(handover): add operational SOP and handover manual`
 
-Aplikasi turunan menambah sprint/commit domainnya sendiri setelah base ini siap (lihat pola sprint domain di paket dokumen AWPOS sebagai contoh).
+Modul domain menambah sprint/commit domainnya sendiri di `src/modules/` template ini setelah fondasi base siap.
 
 ## Migration order final rekomendasi
 
@@ -224,7 +224,7 @@ Aplikasi turunan menambah sprint/commit domainnya sendiri setelah base ini siap 
 017_awcms_dashboard_materialized_views.sql
 ```
 
-Catatan: setelah production, migration tidak boleh di-rename sembarangan. Koreksi harus migration baru. Aplikasi turunan melanjutkan nomor migration domainnya sendiri mulai nomor setelah migration terakhir base di atas.
+Catatan: setelah production, migration tidak boleh di-rename sembarangan. Koreksi harus migration baru. Modul domain melanjutkan nomor migration domainnya sendiri mulai nomor setelah migration terakhir di atas (penomoran sekuensial tunggal di template ini, tanpa namespace terpisah).
 
 **DICABUT oleh [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (men-supersede ADR-0014).** Seluruh mekanisme jalur aplikasi-turunan yang dijelaskan paragraf lama ini — `src/modules/application-registry.ts`, `composeModuleRegistry()`, reserved namespace migrasi `1-899` vs `900+` (`BASE_MODULE_MIGRATION_NAMESPACE`), dan `ApplicationModuleRegistry.migrationNamespace` — **dihapus**. Keluarga AWCMS kini template **dipakai-langsung**: modul domain/website ditambahkan langsung ke `src/modules/` template ini, dan migrasinya melanjutkan penomoran sekuensial base tanpa reserved namespace terpisah (lihat aturan "mulai nomor setelah migration terakhir" di paragraf sebelumnya, yang kembali menjadi satu-satunya aturan yang berlaku). Catatan koreksi: `src/modules/application-registry.ts` memang **tidak ada** di repo ini (dan sengaja tidak akan dibuat), tetapi **`bun run modules:compose:check` SEKARANG ADA** di `package.json` — perannya kini memvalidasi komposisi registry-base langsung (`scripts/validate-module-composition.ts`), bukan menegakkan namespace jalur-turunan yang sudah dicabut.
 
@@ -251,7 +251,7 @@ Catatan: setelah production, migration tidak boleh di-rename sembarangan. Koreks
 15. `/reports/*` (view generik: tenant activity, access/audit summary, sync health).
 16. `/security/go-live-gates/evaluate`.
 
-Aplikasi turunan menambah endpoint domainnya sendiri (mis. katalog, transaksi, gudang, pajak) setelah urutan base ini.
+Modul domain menambah endpoint domainnya sendiri (mis. katalog, transaksi, gudang, pajak) di `src/modules/` setelah urutan base ini.
 
 ## Urutan UI implementation
 
@@ -266,7 +266,7 @@ Aplikasi turunan menambah endpoint domainnya sendiri (mis. katalog, transaksi, g
 9. Reports generik (tenant activity, sync health, audit).
 10. Logs/security readiness.
 
-Aplikasi turunan menambah layar domainnya sendiri (mis. layar operasional, portal) setelah urutan base ini.
+Modul domain menambah layar domainnya sendiri (mis. layar operasional, portal) di `src/modules/` setelah urutan base ini.
 
 ## Versioning
 
@@ -292,7 +292,7 @@ flowchart LR
 | `v0.7.0` | Workflow approval, deployment profile                                               |
 | `v1.0.0` | Base production-ready (gates doc 07)                                                |
 
-Aplikasi turunan (mis. AWPOS) memakai baseline versinya sendiri di atas base ini (lihat versioning doc 09 milik aplikasi tersebut).
+Modul domain memakai baseline versi template ini (satu skema versioning tunggal; tidak ada baseline aplikasi turunan terpisah).
 
 Nomor versi naik progresif per rilis Changesets, bukan hanya saat satu slot di atas selesai penuh — satu issue yang merge bisa langsung memicu rilis minor/patch walau issue lain dalam slot yang sama belum selesai. `CHANGELOG.md` mencatat isi riil tiap rilis; tabel ini hanya peta target.
 

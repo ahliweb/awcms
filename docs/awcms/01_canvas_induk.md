@@ -1,26 +1,26 @@
 # Bagian 1 — Canvas Induk Tahapan Pengembangan AWCMS
 
-> **Status dokumen:** target/rencana arsitektur, bukan status implementasi. Dokumen ini menggambarkan **fondasi base** (modul reusable + kontrak kesiapan ERP) yang direncanakan/dibangun di repo ini, diadaptasi dari standar base modular monolith yang sudah terbukti (lihat riwayat migrasi ADR-013..023). **Modul domain ERP tidak diimplementasikan di repo ini** — ia dibangun di repo ekstensi/turunan terpisah di atas base ini ([ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)); yang direncanakan di sini adalah fondasi dan kontrak yang dikonsumsi ekstensi itu.
+> **Status dokumen:** target/rencana arsitektur; untuk status kode aktual lihat [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Dokumen ini menggambarkan **fondasi base + modul domain** template `awcms`, dikembangkan dari basis teknis awcms-mini. `awcms` adalah **template ERP/back-office keluarga AWCMS yang dipakai langsung** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)): modul domain (ERP, website/e-commerce, konten) ditambahkan **langsung di `src/modules/`** template ini — tidak ada repo ekstensi/turunan terpisah.
 
 ## Objective
 
-Membangun **AWCMS Modular Monolith** sebagai **basis/fondasi** yang aman, offline-first, dan multi-tenant (RBAC/ABAC, audit, sync) tempat aplikasi **ERP & solusi bisnis dibangun di atasnya** — di repo ekstensi/turunan terpisah, bukan di dalam base ini ([ADR-0013](../adr/0013-extension-layers-and-boundary-model.md), [ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)). AWCMS **bukan sebuah ERP** dan bukan sekadar CMS: ia menyediakan modul fondasi reusable + **kontrak netral** kesiapan ERP (business transaction, posting, period-lock, item/UoM, inventory movement, reporting projection — [ADR-0020](../adr/0020-erp-extension-readiness-contracts.md)). Domain ERP sesungguhnya (keuangan/akuntansi, inventori/gudang, procurement, manufaktur, HR/payroll) dan integrasi bisnis (payment gateway, marketplace, pajak/Coretax, logistik) diimplementasikan oleh ekstensi di repo terpisah yang mengonsumsi kontrak itu.
+Membangun **AWCMS Modular Monolith** sebagai template **ERP/back-office keluarga AWCMS yang dipakai langsung** — aman, **hybrid online + offline dengan prioritas online-first** (online = jalur utama; offline/LAN = mode ketahanan), multi-tenant (RBAC/ABAC, audit, sync), dan **siap ERP + SaaS terintegrasi** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)). `awcms` adalah template **superset** keluarga: ia **menyerap** klaster modul website/e-commerce, UI/UX, dan pengerasan auth dari awcms-micro langsung ke `src/modules/`. Domain ERP & solusi bisnis (keuangan/akuntansi, inventori/gudang, procurement, manufaktur, HR/payroll) dan integrasi bisnis (payment gateway, marketplace, pajak/Coretax, logistik) dibangun **langsung sebagai modul `domain` di `src/modules/`** template ini ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)) — bukan di repo terpisah.
 
 ## Stack final (rencana)
 
-| Area             | Keputusan                                           |
-| ---------------- | --------------------------------------------------- |
-| Runtime          | Bun                                                 |
-| Backend platform | Bun-only; Node.js hanya lewat pengecualian tertulis |
-| Web              | Astro 7                                             |
-| Database         | PostgreSQL                                          |
-| Arsitektur       | Modular monolith, microservice-ready                |
-| Mode operasi     | Offline-first / LAN-first                           |
-| Sync             | Optional online sync                                |
-| Storage          | Local file, optional Cloudflare R2                  |
-| Security         | RBAC + ABAC + PostgreSQL RLS + Audit Log            |
-| API docs         | OpenAPI                                             |
-| Event docs       | AsyncAPI                                            |
+| Area             | Keputusan                                                                      |
+| ---------------- | ------------------------------------------------------------------------------ |
+| Runtime          | Bun                                                                            |
+| Backend platform | Bun-only; Node.js hanya lewat pengecualian tertulis                            |
+| Web              | Astro 7                                                                        |
+| Database         | PostgreSQL                                                                     |
+| Arsitektur       | Modular monolith, microservice-ready                                           |
+| Mode operasi     | Hybrid online + offline, prioritas online-first (offline/LAN = mode ketahanan) |
+| Sync             | Optional online sync                                                           |
+| Storage          | Local file, optional Cloudflare R2                                             |
+| Security         | RBAC + ABAC + PostgreSQL RLS + Audit Log                                       |
+| API docs         | OpenAPI                                                                        |
+| Event docs       | AsyncAPI                                                                       |
 
 ## Arsitektur logis (rencana)
 
@@ -30,7 +30,7 @@ flowchart TB
     Admin[Admin shell]
     App[Modul fondasi reusable<br/>tenant · identity · profile · workflow · reporting]
   end
-  subgraph Ext["Ekstensi/turunan — repo TERPISAH, di atas base"]
+  subgraph Ext["Modul domain (src/modules) — ERP · website/e-commerce · konten"]
     ERP[Modul domain ERP<br/>finance · inventory · procurement · manufaktur · HR]
   end
   ERP -.konsumsi kontrak netral.-> Interface
@@ -75,15 +75,15 @@ flowchart LR
   SEC[Production Security] -.gates.-> ALL
 ```
 
-> Modul domain ERP (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll, integrasi payment gateway/marketplace/pajak/logistik) **tidak digambar sebagai node base** — ia hidup di repo ekstensi terpisah dan bergantung pada base ini hanya lewat kontrak netral (port/event berversi), bukan sebagai modul internal `src/modules/`.
+> Modul domain (ERP: finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll, integrasi payment gateway/marketplace/pajak/logistik; website/e-commerce; konten) kini **hidup langsung di `src/modules/` template ini** sebagai modul bertipe `domain` ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)), bukan di repo ekstensi terpisah.
 
-> Desain teknis implementasi base mengikuti pola dokumen lanjutan setara: UI/UX, frontend & integrasi/offline-first, backend data access & database, seed/RBAC/ABAC, konfigurasi/environment. Aplikasi turunan menambah dokumen setara miliknya sendiri di repo-nya (pola: [`docs/awcms/derived-application-guide.md`](derived-application-guide.md)).
+> Desain teknis implementasi base mengikuti pola dokumen lanjutan setara: UI/UX, frontend & integrasi (hybrid online-first), backend data access & database, seed/RBAC/ABAC, konfigurasi/environment. Modul domain yang ditambahkan langsung di `src/modules/` mengikuti pola dokumen yang sama di dalam template ini.
 
 ## Prinsip desain
 
 1. Sistem harus bisa berjalan lokal tanpa internet.
 2. Internet hanya dibutuhkan untuk sync, R2, atau integrasi eksternal opsional (payment gateway, marketplace, Coretax, logistik).
-3. Modul (base maupun ekstensi turunan) tidak boleh bergantung pada provider eksternal untuk operasi intinya.
+3. Modul (base maupun domain) tidak boleh bergantung pada provider eksternal untuk operasi intinya.
 4. Semua transaksi/dokumen yang sudah posted (jurnal, faktur, dokumen gudang, dsb.) harus immutable.
 5. Mutation high-risk wajib idempotent.
 6. Database harus tenant-aware.
@@ -108,7 +108,7 @@ flowchart LR
 | Management Reporting  | Dashboard dan laporan generik                      |
 | Production Security   | Readiness, finding, go-live gates                  |
 
-Modul domain ERP (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll, integrasi payment gateway/marketplace/pajak-Coretax/logistik) **bukan bagian base ini dan tidak dibangun di `src/modules/` repo ini** — ia dikembangkan di **repo ekstensi/turunan terpisah** (lapisan _ERP Extension_/_Derived Application_, [ADR-0013](../adr/0013-extension-layers-and-boundary-model.md)/[ADR-0022](../adr/0022-erp-modules-live-in-extension-repos.md)), disusun lewat komposisi modul build-time ([ADR-0014](../adr/0014-deterministic-build-time-module-composition.md)) dan mengonsumsi kontrak netral kesiapan ERP base ([ADR-0020](../adr/0020-erp-extension-readiness-contracts.md)). Base ini sendiri **bukan ERP** — tidak ada GL, jurnal, AR/AP, valuasi inventori, payroll, atau perhitungan pajak di sini.
+Modul domain (ERP: finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll, integrasi payment gateway/marketplace/pajak-Coretax/logistik; website/e-commerce; konten) **ditambahkan langsung di `src/modules/` template ini** sebagai modul bertipe `domain` ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)), disusun lewat registry modul base — tidak ada repo ekstensi/turunan terpisah. `awcms` adalah template **superset** yang menyerap klaster website/e-commerce awcms-micro; `awcms-mini` tetap fondasi **hybrid offline-first** (SaaS-ready) dan `awcms-micro` tetap template website **full-online**.
 
 ## Fase pengembangan (base, rencana)
 
@@ -169,11 +169,11 @@ flowchart LR
 - Deployment profile.
 - Handover.
 
-Setelah Fase 0–5 (base) selesai, modul ERP domain (finance, inventory, procurement, manufaktur, HR/payroll) dan modul integrasi bisnis dibangun **di repo ekstensi/turunan terpisah di atas base ini** — masing-masing dengan fase pengembangannya sendiri, mengikuti [`docs/awcms/derived-application-guide.md`](derived-application-guide.md). Base ini tidak menambah modul ERP ke `src/modules/`-nya sendiri.
+Setelah fondasi base matang, modul domain (ERP: finance, inventory, procurement, manufaktur, HR/payroll; website/e-commerce; konten) dan modul integrasi bisnis ditambahkan **langsung di `src/modules/` template ini** sebagai modul bertipe `domain` ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)/[ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)) — masing-masing dengan fase pengembangannya sendiri, mengikuti pola modul base.
 
 ## Base-ready boundary (target)
 
-AWCMS base akan dianggap siap dipakai (untuk mulai membangun ekstensi/aplikasi turunan ERP di atasnya) jika:
+AWCMS base akan dianggap siap dipakai (untuk mulai menambah modul domain ERP langsung di `src/modules/`) jika:
 
 - Tenant setup berhasil.
 - Owner/admin login.
