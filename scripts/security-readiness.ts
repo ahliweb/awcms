@@ -1023,7 +1023,15 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // snapshot, UPDATE claiming pending_upload/uploaded rows to `failed` and
   // soft-deleting stale `orphaned` rows, DELETE hard-deleting expired `failed`
   // rows. The job's own audit INSERT reuses awcms_audit_events above.
-  awcms_news_media_objects: ["SELECT", "UPDATE", "DELETE"]
+  awcms_news_media_objects: ["SELECT", "UPDATE", "DELETE"],
+  // visitor_analytics — analytics:rollup + analytics:purge (sql/050). Rollup
+  // SELECTs raw events and SELECT/INSERT/UPDATEs the daily rollups; purge
+  // DELETEs aged events, SELECT/UPDATE/DELETEs sessions (raw-detail clear +
+  // orphan delete), and DELETEs aged rollups. No audit INSERT (analytics is
+  // log-like, not an audited high-risk action from the scheduled path).
+  awcms_visit_events: ["SELECT", "DELETE"],
+  awcms_visitor_sessions: ["SELECT", "UPDATE", "DELETE"],
+  awcms_visitor_daily_rollups: ["SELECT", "INSERT", "UPDATE", "DELETE"]
 };
 
 /**

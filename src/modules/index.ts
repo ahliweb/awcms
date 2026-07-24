@@ -13,6 +13,7 @@ import { themingModule } from "./theming/module";
 import { blogContentModule } from "./blog-content/module";
 import { newsPortalModule } from "./news-portal/module";
 import { tenantDomainModule } from "./tenant-domain/module";
+import { visitorAnalyticsModule } from "./visitor-analytics/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -53,7 +54,15 @@ const baseModules: ModuleDescriptor[] = [
   // tenant_admin/identity_access (both above), so the DAG stays acyclic. See
   // src/modules/tenant-domain/module.ts's `description` for what was ported vs.
   // deferred.
-  tenantDomainModule
+  tenantDomainModule,
+  // Ported from awcms-micro (epic #617-#624): privacy-first human visitor
+  // analytics. Standalone/additive — depends only on
+  // tenant_admin/identity_access/logging/reporting (all above), so the DAG
+  // stays acyclic. Collection is an additive PUBLIC ingest endpoint (not
+  // middleware); the data_lifecycle legal-hold coupling and the news_portal
+  // preset wiring are dropped/deferred. See
+  // src/modules/visitor-analytics/module.ts's `description`.
+  visitorAnalyticsModule
 ];
 
 /**

@@ -83,6 +83,8 @@ describe("fetchModuleJobs", () => {
 
     expect(commands).toEqual(
       [
+        "bun run analytics:purge",
+        "bun run analytics:rollup",
         "bun run blog:publish:scheduled",
         "bun run config:validate",
         "bun run domain-events:dispatch",

@@ -1,0 +1,557 @@
+---
+/**
+ * Visitor analytics dashboard (ported from awcms-micro epic #617-#624).
+ *
+ * PORT ADAPTATION: awcms-micro's dashboard was a client-side `fetch`-driven
+ * SPA over the `/api/v1/analytics/*` endpoints, built on an i18n framework and
+ * a `components/ui/` library this base does not have. This base renders the
+ * dashboard SERVER-SIDE (the same SSR-read-then-render pattern
+ * `admin/offices.astro` uses): it reads the analytics application-layer query
+ * functions directly inside `withTenant`, then renders plain accessible
+ * tables. No client script, no CSP surface, no i18n dependency.
+ *
+ * ABAC is enforced server-side by the `/api/v1/analytics/*` endpoints; this
+ * page additionally gates its own render on the same permissions (from
+ * `Astro.locals.ssrContext.permissions`) so a user without them gets a clean
+ * notice instead of an empty page. Raw detail (IP/user-agent/login snapshot)
+ * is gated by the separate `visitor_analytics.raw_detail.read`: rows are
+ * shaped through `shapeVisitorSession(row, canRawDetail)` (same server-side
+ * gate the API uses), so a caller without it never receives those values.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { evaluateFieldAccessInTransaction } from "../../modules/identity-access/application/access-guard";
+import { resolveVisitorAnalyticsConfig } from "../../modules/visitor-analytics/domain/visitor-analytics-config";
+import {
+  DEFAULT_ANALYTICS_RANGE,
+  isKnownAnalyticsRange,
+  resolveRangeStart,
+  type AnalyticsRange
+} from "../../modules/visitor-analytics/domain/analytics-range";
+import {
+  fetchAnalyticsSummary,
+  fetchRealtimeStats,
+  fetchSecurityView,
+  fetchTopBrowsers,
+  fetchTopCountries,
+  fetchTopDevices,
+  fetchTopPaths,
+  type AnalyticsSummary,
+  type NamedCount,
+  type RealtimeStats,
+  type SecurityView
+} from "../../modules/visitor-analytics/application/analytics-queries";
+import { listVisitorSessions } from "../../modules/visitor-analytics/application/session-directory";
+import {
+  shapeVisitorSession,
+  type VisitorSessionDto
+} from "../../modules/visitor-analytics/domain/analytics-response-shaping";
+import {
+  buildSessionRowCells,
+  displayOrPlaceholder,
+  isNamedCountListEmpty
+} from "../../modules/visitor-analytics/domain/dashboard-view";
+
+const ssr = Astro.locals.ssrContext!;
+const canView = ssr.permissions.has(
+  permissionKey("visitor_analytics", "dashboard", "read")
+);
+const canRealtime = ssr.permissions.has(
+  permissionKey("visitor_analytics", "realtime", "read")
+);
+const canSessions = ssr.permissions.has(
+  permissionKey("visitor_analytics", "sessions", "read")
+);
+
+// Raw-detail (IP/user-agent/login snapshot) visibility is resolved through the
+// ABAC evaluator inside `withTenant` below (see `rawDetailAllowed`), NOT a bare
+// `ssr.permissions.has(...)` membership check — so a `deny` DSL policy on
+// `visitor_analytics.raw_detail.read` is honored (deny-overrides-allow),
+// matching the `/api/v1/analytics/{sessions,events}` endpoints. Defaults false
+// (fail-closed) until that resolution runs.
+const RAW_DETAIL_GUARD = {
+  moduleKey: "visitor_analytics",
+  activityCode: "raw_detail",
+  action: "read" as const
+};
+const subjectContext = {
+  tenantId: ssr.tenantId,
+  tenantUserId: ssr.tenantUserId,
+  identityId: ssr.identityId,
+  roles: ssr.roles
+};
+let canRawDetail = false;
+
+const config = resolveVisitorAnalyticsConfig();
+const geoActive = config.geoEnabled && config.trustCloudflare;
+
+const rangeParam = Astro.url.searchParams.get("range");
+const range: AnalyticsRange = isKnownAnalyticsRange(rangeParam)
+  ? rangeParam
+  : DEFAULT_ANALYTICS_RANGE;
+const RANGE_OPTIONS: AnalyticsRange[] = ["24h", "7d", "30d", "12m"];
+
+let realtime: RealtimeStats | null = null;
+let summary: AnalyticsSummary | null = null;
+let pages: NamedCount[] = [];
+let browsers: NamedCount[] = [];
+let devices: NamedCount[] = [];
+let countries: NamedCount[] = [];
+let security: SecurityView | null = null;
+let sessions: VisitorSessionDto[] = [];
+let loadError = false;
+
+if (canView) {
+  try {
+    const sql = getDatabaseClient();
+    const now = new Date();
+    const start = resolveRangeStart(range, now);
+
+    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+      // Resolve raw-detail visibility through ABAC (deny-overrides-allow),
+      // reusing the SSR-resolved subject/permissions — only when sessions are
+      // shown at all (the sole place raw detail renders). Fail-closed otherwise.
+      const rawDetailAllowed = canSessions
+        ? await evaluateFieldAccessInTransaction(
+            tx,
+            ssr.tenantId,
+            subjectContext,
+            ssr.permissions,
+            RAW_DETAIL_GUARD,
+            now
+          )
+        : false;
+
+      // Sequential (one tx connection): concurrent queries would leak it.
+      const rt = canRealtime
+        ? await fetchRealtimeStats(tx, ssr.tenantId, config.onlineWindowSeconds)
+        : null;
+      const sum = await fetchAnalyticsSummary(tx, ssr.tenantId, range, start);
+      const topPaths = await fetchTopPaths(tx, ssr.tenantId, start);
+      const topBrowsers = await fetchTopBrowsers(tx, ssr.tenantId, start);
+      const topDevices = await fetchTopDevices(tx, ssr.tenantId, start);
+      const topCountries = geoActive
+        ? await fetchTopCountries(tx, ssr.tenantId, start)
+        : [];
+      const sec = await fetchSecurityView(tx, ssr.tenantId, range, start);
+      const sess = canSessions
+        ? (await listVisitorSessions(tx, ssr.tenantId)).rows.map((row) =>
+            shapeVisitorSession(row, rawDetailAllowed)
+          )
+        : [];
+
+      return {
+        rt,
+        sum,
+        topPaths,
+        topBrowsers,
+        topDevices,
+        topCountries,
+        sec,
+        sess,
+        rawDetailAllowed
+      };
+    });
+
+    // `withTenant` returns a 503 `Response` when the DB circuit breaker is open
+    // / a work-class queue is saturated — degrade to an error notice.
+    if (result instanceof Response) {
+      loadError = true;
+    } else {
+      realtime = result.rt;
+      summary = result.sum;
+      pages = result.topPaths;
+      browsers = result.topBrowsers;
+      devices = result.topDevices;
+      countries = result.topCountries;
+      security = result.sec;
+      sessions = result.sess;
+      canRawDetail = result.rawDetailAllowed;
+    }
+  } catch {
+    loadError = true;
+  }
+}
+
+const sessionCells = sessions.map((s) =>
+  buildSessionRowCells(s, {
+    showRawDetailColumns: canRawDetail,
+    humanLabel: "Human",
+    botLabel: "Bot"
+  })
+);
+---
+
+<AdminLayout title="Visitor Analytics" active="analytics">
+  <header class="page-header fade-in-up">
+    <h1 id="analytics-heading">Visitor analytics</h1>
+    <p class="page-description">
+      Privacy-first human visitor statistics. Visitor identifiers are stored as
+      salted hashes, never raw, unless explicitly enabled. Figures are
+      server-rendered from this tenant's own data.
+    </p>
+  </header>
+
+  {
+    !canView && (
+      <p class="state-notice fade-in-up" id="analytics-denied">
+        You do not have permission to view visitor analytics.
+      </p>
+    )
+  }
+
+  {
+    canView && !config.enabled && (
+      <p class="state-notice fade-in-up" id="analytics-disabled">
+        Visitor analytics collection is disabled
+        (VISITOR_ANALYTICS_ENABLED=false). Figures below reflect only data
+        collected while it was enabled.
+      </p>
+    )
+  }
+
+  {
+    canView && loadError && (
+      <p class="state-notice fade-in-up" id="analytics-error">
+        Analytics could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canView && !loadError && (
+      <>
+        {canRealtime && realtime && (
+          <section
+            class="admin-section fade-in-up"
+            aria-labelledby="realtime-title"
+          >
+            <h2 class="admin-section-title" id="realtime-title">
+              Online now
+            </h2>
+            <div class="stat-grid">
+              <div class="stat-card">
+                <span class="stat-label">Humans online</span>
+                <span class="stat-value">{realtime.onlineHumanCount}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Admin</span>
+                <span class="stat-value">{realtime.onlineAdminCount}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Public</span>
+                <span class="stat-value">{realtime.onlinePublicCount}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">API</span>
+                <span class="stat-value">{realtime.onlineApiCount}</span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section class="admin-section fade-in-up" aria-labelledby="range-title">
+          <h2 class="admin-section-title" id="range-title">
+            Summary
+          </h2>
+          <form method="get" class="admin-toolbar" id="range-form">
+            <label for="range-select">Time range</label>
+            <select id="range-select" name="range">
+              {RANGE_OPTIONS.map((value) => (
+                <option value={value} selected={value === range}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <button type="submit">Apply</button>
+          </form>
+          {summary && (
+            <div class="stat-grid">
+              <div class="stat-card">
+                <span class="stat-label">Human unique visitors</span>
+                <span class="stat-value">{summary.humanUniqueVisitors}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Human pageviews</span>
+                <span class="stat-value">{summary.humanPageviews}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Bot pageviews</span>
+                <span class="stat-value">{summary.botPageviews}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Public unique visitors</span>
+                <span class="stat-value">{summary.publicUniqueVisitors}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Admin unique users</span>
+                <span class="stat-value">{summary.adminUniqueUsers}</span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section class="admin-section fade-in-up" aria-labelledby="pages-title">
+          <h2 class="admin-section-title" id="pages-title">
+            Top pages
+          </h2>
+          <div class="data-table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Path</th>
+                  <th scope="col">Views</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isNamedCountListEmpty(pages) ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={2}>
+                      No data yet.
+                    </td>
+                  </tr>
+                ) : (
+                  pages.map((row) => (
+                    <tr>
+                      <td>
+                        <span class="cell-code">{row.name}</span>
+                      </td>
+                      <td>{row.count}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="devices-title"
+        >
+          <h2 class="admin-section-title" id="devices-title">
+            Browsers &amp; devices
+          </h2>
+          <div class="data-table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Browser</th>
+                  <th scope="col">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isNamedCountListEmpty(browsers) ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={2}>
+                      No data yet.
+                    </td>
+                  </tr>
+                ) : (
+                  browsers.map((row) => (
+                    <tr>
+                      <td>{row.name}</td>
+                      <td>{row.count}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div class="data-table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Device type</th>
+                  <th scope="col">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isNamedCountListEmpty(devices) ? (
+                  <tr>
+                    <td class="data-table-empty" colspan={2}>
+                      No data yet.
+                    </td>
+                  </tr>
+                ) : (
+                  devices.map((row) => (
+                    <tr>
+                      <td>{row.name}</td>
+                      <td>{row.count}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {geoActive && (
+          <section
+            class="admin-section fade-in-up"
+            aria-labelledby="locations-title"
+          >
+            <h2 class="admin-section-title" id="locations-title">
+              Countries
+            </h2>
+            <div class="data-table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Country</th>
+                    <th scope="col">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isNamedCountListEmpty(countries) ? (
+                    <tr>
+                      <td class="data-table-empty" colspan={2}>
+                        No data yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    countries.map((row) => (
+                      <tr>
+                        <td>{row.name}</td>
+                        <td>{row.count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {security && (
+          <section
+            class="admin-section fade-in-up"
+            aria-labelledby="security-title"
+          >
+            <h2 class="admin-section-title" id="security-title">
+              Bot traffic
+            </h2>
+            <div class="stat-grid">
+              <div class="stat-card">
+                <span class="stat-label">Bot pageviews</span>
+                <span class="stat-value">{security.botPageviews}</span>
+              </div>
+            </div>
+            <div class="data-table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Bot reason</th>
+                    <th scope="col">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isNamedCountListEmpty(security.topBotReasons) ? (
+                    <tr>
+                      <td class="data-table-empty" colspan={2}>
+                        No data yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    security.topBotReasons.map((row) => (
+                      <tr>
+                        <td>{row.name}</td>
+                        <td>{row.count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {canSessions && (
+          <section
+            class="admin-section fade-in-up"
+            aria-labelledby="sessions-title"
+          >
+            <h2 class="admin-section-title">
+              <span id="sessions-title">Recent sessions</span>
+              <span class="count-pill">{sessionCells.length}</span>
+            </h2>
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <thead>
+                  <tr>
+                    <th scope="col">Area</th>
+                    <th scope="col">Path</th>
+                    <th scope="col">Browser</th>
+                    <th scope="col">OS</th>
+                    <th scope="col">Device</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Country</th>
+                    {canRawDetail && (
+                      <>
+                        <th scope="col">IP</th>
+                        <th scope="col">IP hash</th>
+                        <th scope="col">UA hash</th>
+                        <th scope="col">Login</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessionCells.length === 0 ? (
+                    <tr>
+                      <td
+                        class="data-table-empty"
+                        colspan={canRawDetail ? 11 : 7}
+                      >
+                        No sessions yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    sessionCells.map((cells) => (
+                      <tr>
+                        <td data-label="Area">{cells.area}</td>
+                        <td data-label="Path">
+                          <span class="cell-code">{cells.currentPath}</span>
+                        </td>
+                        <td data-label="Browser">{cells.browser}</td>
+                        <td data-label="OS">{cells.os}</td>
+                        <td data-label="Device">{cells.device}</td>
+                        <td data-label="Type">{cells.visitorType}</td>
+                        <td data-label="Country">{cells.country}</td>
+                        {canRawDetail && cells.raw && (
+                          <>
+                            <td data-label="IP">
+                              <span class="cell-muted">
+                                {displayOrPlaceholder(cells.raw.ipAddress)}
+                              </span>
+                            </td>
+                            <td data-label="IP hash">
+                              <span class="cell-muted">{cells.raw.ipHash}</span>
+                            </td>
+                            <td data-label="UA hash">
+                              <span class="cell-muted">
+                                {cells.raw.userAgentHash}
+                              </span>
+                            </td>
+                            <td data-label="Login">
+                              <span class="cell-muted">
+                                {cells.raw.loginIdentifier}
+                              </span>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+      </>
+    )
+  }
+</AdminLayout>

@@ -193,11 +193,96 @@ const RULES: readonly Rule[] = [
   { name: "EMAIL_ENABLED", required: false, type: "bool" },
   { name: "EMAIL_FROM_NAME", required: false, type: "string" },
   { name: "EMAIL_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
-  { name: "EMAIL_SEND_MAX_RETRIES", required: false, type: "int", min: 0 }
+  { name: "EMAIL_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
+
+  // visitor_analytics (ported from awcms-micro epic #617-#624). All optional,
+  // privacy-first off-by-default; see
+  // src/modules/visitor-analytics/domain/visitor-analytics-config.ts. The
+  // HASH_SALT cross-rule below requires a real salt whenever the module is
+  // enabled (salted HMAC of visitor identifiers must not use an empty key).
+  { name: "VISITOR_ANALYTICS_ENABLED", required: false, type: "bool" },
+  {
+    name: "VISITOR_ANALYTICS_MODE",
+    required: false,
+    type: "enum",
+    values: ["basic", "detailed"]
+  },
+  { name: "VISITOR_ANALYTICS_COLLECT_ADMIN", required: false, type: "bool" },
+  { name: "VISITOR_ANALYTICS_COLLECT_PUBLIC", required: false, type: "bool" },
+  { name: "VISITOR_ANALYTICS_COLLECT_API", required: false, type: "bool" },
+  { name: "VISITOR_ANALYTICS_DETAILED_ENABLED", required: false, type: "bool" },
+  { name: "VISITOR_ANALYTICS_RAW_IP_ENABLED", required: false, type: "bool" },
+  {
+    name: "VISITOR_ANALYTICS_RAW_USER_AGENT_ENABLED",
+    required: false,
+    type: "bool"
+  },
+  { name: "VISITOR_ANALYTICS_GEO_ENABLED", required: false, type: "bool" },
+  { name: "VISITOR_ANALYTICS_TRUST_PROXY", required: false, type: "bool" },
+  { name: "VISITOR_ANALYTICS_TRUST_CLOUDFLARE", required: false, type: "bool" },
+  {
+    name: "VISITOR_ANALYTICS_ONLINE_WINDOW_SECONDS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "VISITOR_ANALYTICS_EVENT_RETENTION_DAYS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "VISITOR_ANALYTICS_RAW_DETAIL_RETENTION_DAYS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "VISITOR_ANALYTICS_ROLLUP_RETENTION_DAYS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "VISITOR_ANALYTICS_VISITOR_KEY_COOKIE_TTL_DAYS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  // Per-IP rate-limit backstop on the PUBLIC ingest beacon
+  // (`POST /api/v1/analytics/collect`). Optional; the endpoint applies safe
+  // defaults (120 req / 60 s per IP) when unset or invalid.
+  {
+    name: "VISITOR_ANALYTICS_COLLECT_RATE_LIMIT_MAX",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "VISITOR_ANALYTICS_COLLECT_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "VISITOR_ANALYTICS_HASH_SALT",
+    required: false,
+    type: "string",
+    secret: true
+  }
 ];
 
 /** Nilai placeholder yang aman di dev tapi dilarang di produksi. */
 const PLACEHOLDER_SECRETS = new Set(["change-me", "changeme", "secret", ""]);
+
+/**
+ * Panjang minimum `VISITOR_ANALYTICS_HASH_SALT` saat modul aktif. Salt inilah
+ * kunci HMAC yang menahan korelasi hash identifier pengunjung terhadap tabel
+ * pra-komputasi; salt 1-2 karakter praktis tak memberi perlindungan itu, jadi
+ * ditegakkan fail-closed di semua tier saat modul enabled.
+ */
+const VISITOR_ANALYTICS_HASH_SALT_MIN_LENGTH = 16;
 
 function parseEnvFile(source: string): EnvBag {
   const bag: EnvBag = {};
@@ -314,6 +399,24 @@ export function validateEnv(env: EnvBag): string[] {
 
   if (isProduction && env.AUTH_COOKIE_SECURE === "false") {
     problems.push("AUTH_COOKIE_SECURE harus true di produksi.");
+  }
+
+  // visitor_analytics: enabling collection REQUIRES a real hash salt. Visitor
+  // identifiers (visitor-key cookie, IP, user-agent) are stored only as salted
+  // HMAC-SHA256; an empty/placeholder salt would make those hashes trivially
+  // correlatable against a precomputed table. Enforced regardless of APP_ENV —
+  // an empty salt with the module enabled is a privacy defect at any tier.
+  if (env.VISITOR_ANALYTICS_ENABLED === "true") {
+    const salt = env.VISITOR_ANALYTICS_HASH_SALT?.trim() ?? "";
+    if (salt === "" || PLACEHOLDER_SECRETS.has(salt)) {
+      problems.push(
+        "VISITOR_ANALYTICS_HASH_SALT wajib berisi salt nyata saat VISITOR_ANALYTICS_ENABLED=true (hash identifier pengunjung tidak boleh memakai salt kosong)."
+      );
+    } else if (salt.length < VISITOR_ANALYTICS_HASH_SALT_MIN_LENGTH) {
+      problems.push(
+        `VISITOR_ANALYTICS_HASH_SALT harus minimal ${VISITOR_ANALYTICS_HASH_SALT_MIN_LENGTH} karakter saat VISITOR_ANALYTICS_ENABLED=true (salt terlalu pendek mudah ditebak/brute-force).`
+      );
+    }
   }
 
   // MFA: enabling TOTP enrollment REQUIRES a real 32-byte AES-256 key (no
