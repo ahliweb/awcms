@@ -17,12 +17,16 @@
  * free-URL shape to stay backward compatible with (see migration 048's
  * header comment).
  *
- * This lives in `news_portal`'s OWN application layer, not behind a
- * `_shared/ports/` capability — `fetchNewsMediaObjectById`/
- * `isNewsMediaObjectSafeForPublicReference` are this module's OWN code
- * (`news-media-object-directory.ts`, Issue #633), not a cross-module
- * import, exactly like `homepage-section-reference-validation.ts`'s
- * `mediaObjectIds` (`gallery_block`) check.
+ * This lives in `news_portal`'s application layer. It reads the media registry
+ * by DIRECT import of `media_library`'s `fetchNewsMediaObjectById`/
+ * `isNewsMediaObjectSafeForPublicReference` (`media-object-directory.ts`) rather
+ * than the injected `MediaLibraryPort` — a deliberate divergence from the port
+ * (ADR-0036): this validator needs the media object's own fields (status AND the
+ * MIME type, checked against the target placement's allow-list), not the port's
+ * safe/unsafe boolean. The direction is legal (domain → System Foundation;
+ * `media_library` never imports back). Same shape as
+ * `homepage-section-reference-validation.ts`'s `mediaObjectIds` (`gallery_block`)
+ * check.
  */
 import type { AdPlacementKey } from "../domain/ad-placement-policy";
 import { AD_PLACEMENT_PRESETS } from "../domain/ad-placement-policy";

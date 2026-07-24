@@ -42,15 +42,17 @@ description: Modul news_portal SUDAH di-port ke repo ini (PR #214; `src/modules/
 >   `blog_content`, path-based ADR-0009.)
 > - **DI-DROP**: aktivasi preset `news_portal_full_online_r2`
 >   (`apply-news-portal-preset.ts`) — butuh preset subsystem `module_management`
->   yang belum di-port. Tabel `awcms_news_portal_tenant_state` + reader tetap
->   ada (forward-compatible) tapi **tanpa writer**, jadi
->   `isFullOnlineR2ModeActiveForTenant` selalu `false` (fail-closed) — media
->   registry/upload/homepage/ads tetap jalan mandiri.
-> - **Yang NYATA di-port & aktif**: media object registry + presigned
->   direct-to-R2 upload/finalize (magic-byte MIME sniff + SHA-256), homepage
->   sections, ad placements, job reconcile media (`news-media:reconcile`).
->   Capability `news_media` = **adapter nyata** yang dikonsumsi `blog_content`
->   (bukan lagi no-op).
+>   yang belum di-port. Tabel `awcms_news_portal_tenant_state` + reader
+>   `isFullOnlineR2ModeAppliedForTenant` tetap ada (forward-compatible) tapi
+>   **tanpa writer** (inert). Pasca ADR-0036, enforcement managed-media
+>   digerakkan `media_library` lewat `isManagedMediaEnforcementActiveForTenant`
+>   (readiness + flag per-tenant `sql/053`), dinyalakan via `POST /api/v1/media/
+enforcement` — BUKAN lagi `isFullOnlineR2ModeActiveForTenant` port lama.
+> - **Yang NYATA di-port & aktif DI news_portal**: homepage section composer +
+>   ad placements (`sql/044`/`045`). Registry media + presigned upload/finalize +
+>   MIME sniff/SHA-256 + job `news-media:reconcile` sudah PINDAH ke `media_library`
+>   (ADR-0036) — lihat skill `awcms-media-library`. Capability `news_media`
+>   **dipensiunkan**; news_portal kini CONSUMES `media_library`.
 > - Env pre-validasi `NEWS_MEDIA_R2_*` (validate-env + 3 security-readiness
 >   check) **ditunda** saat port — modul fail-safe tanpa itu di runtime.
 > - Nomor `sql/NNN` di badan skill = penomoran awcms-mini; nyata di awcms

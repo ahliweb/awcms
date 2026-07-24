@@ -114,4 +114,14 @@ describe("managed-media enforcement is one-way (ADR-0036 step 5a)", () => {
     expect(exported).not.toContain("PATCH");
     expect(exported).not.toContain("PUT");
   });
+
+  test("the enable POST requires an Idempotency-Key (enforcement.enable is HIGH_RISK)", () => {
+    // `enforcement.enable` ∈ HIGH_RISK_ACTIONS, and the go-live convention
+    // requires idempotency on every high-risk mutation. Guard against a future
+    // edit silently dropping the header requirement.
+    const route = readFileSync("src/pages/api/v1/media/enforcement.ts", "utf8");
+    expect(route).toContain('request.headers.get("idempotency-key")');
+    expect(route).toContain("IDEMPOTENCY_REQUIRED");
+    expect(route).toContain("saveIdempotencyRecord");
+  });
 });

@@ -18,16 +18,17 @@
  * FACTORY (`createSocialPublishingPortAdapter(mediaPort)`), not a ready-made
  * singleton — it itself needs `media_library`'s `MediaLibraryPort` (to resolve a
  * verified R2 image URL for the article, per the issue's own "Integration
- * with news content" section) but must not import `news_portal`'s concrete
+ * with news content" section) but must not import `media_library`'s concrete
  * adapter from within `social_publishing/application` (that would be the
  * exact anti-pattern Issue #681 fixed for `blog_content`/`news_portal`).
  * Only the TRUE composition root — `pages/api/v1/blog/posts/[id]/publish.ts`
  * and `scripts/blog-scheduled-publish.ts` — imports both concrete adapters
- * and wires them together: it imports `newsMediaPortAdapter` (the
- * `news_portal` media-port implementation) and
+ * and wires them together: it imports `mediaLibraryPortAdapter` (the
+ * `media_library` media-port implementation, ADR-0036 — formerly
+ * `news_portal`'s `newsMediaPortAdapter`) and
  * `createSocialPublishingPortAdapter` (this port's factory, from
  * `social-publishing/application/social-publishing-port-adapter.ts`), then
- * calls `createSocialPublishingPortAdapter(newsMediaPortAdapter)` once to
+ * calls `createSocialPublishingPortAdapter(mediaLibraryPortAdapter)` once to
  * build the concrete `socialPublishingPort` value used at that call site.
  * (Deliberately described in prose, not a fenced code sample containing a
  * literal import statement — `tests/unit/module-boundary.test.ts`'s

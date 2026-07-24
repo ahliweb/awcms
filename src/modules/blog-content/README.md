@@ -619,7 +619,7 @@ Audit: `blog.post.revision_restored` (severity `warning`, `attributes: { revisio
 
 `bun run blog:publish:scheduled` (`scripts/blog-scheduled-publish.ts`) — worker internal, bukan endpoint HTTP, dijadwalkan cron/systemd timer (pola sama `scripts/form-draft-purge.ts`). Untuk setiap tenant aktif, memanggil `blog-scheduled-publish.ts`'s `publishDueScheduledPosts(sql, tenantId, mediaPort, options?)`.
 
-**Issue #640 mengubah signature** (`mediaPort: NewsMediaPort` sekarang parameter wajib, disuntik `scripts/blog-scheduled-publish.ts` sebagai composition root — pola port yang sama ADR-0011 tetapkan) **dan** merestrukturisasi dari satu `UPDATE` set-based per tenant menjadi `SELECT ... FOR UPDATE` diikuti loop per-post:
+**Issue #640 mengubah signature** (`mediaPort: MediaLibraryPort` — semula `NewsMediaPort`, di-rename oleh ADR-0036 — sekarang parameter wajib, disuntik `scripts/blog-scheduled-publish.ts` sebagai composition root, pola port yang sama ADR-0011 tetapkan) **dan** merestrukturisasi dari satu `UPDATE` set-based per tenant menjadi `SELECT ... FOR UPDATE` diikuti loop per-post:
 
 ```sql
 SELECT id, slug, title, excerpt, content_json, content_text,
@@ -636,7 +636,7 @@ Idempoten by construction: post yang sudah `published`, `scheduled_at`-nya masih
 
 Audit per post yang dipublish: `blog.post.published` (reuse action yang sama dengan `POST .../publish` manual — pembeda `trigger: "scheduled_publish"` hanya ada di structured log, bukan di audit `attributes`). Plus satu event ringkasan per pemanggilan tenant: `blog.post.scheduled_publish_executed` (`attributes.publishedCount`/`blockedCount`) atau `blog.post.scheduled_publish_skipped` (kalau tidak ada yang due sama sekali).
 
-Tidak ada pemanggilan provider eksternal sama sekali di job ini (ADR-0006 tidak relevan di sini — job murni transisi database, tidak ada dispatcher/provider yang perlu dijaga di luar transaction). `mediaPort` bukan provider eksternal — implementasinya (`newsMediaPortAdapter`) hanya membaca dari Postgres yang sama, bukan Cloudflare R2.
+Tidak ada pemanggilan provider eksternal sama sekali di job ini (ADR-0006 tidak relevan di sini — job murni transisi database, tidak ada dispatcher/provider yang perlu dijaga di luar transaction). `mediaPort` bukan provider eksternal — implementasinya (`mediaLibraryPortAdapter`, ADR-0036 — semula `newsMediaPortAdapter`) hanya membaca dari Postgres yang sama, bukan Cloudflare R2.
 
 ## Domain events (AsyncAPI, Issue #541, diperluas Issue #542)
 

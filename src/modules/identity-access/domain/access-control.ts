@@ -82,8 +82,9 @@ export type AccessAction =
   // the finalize endpoint still requires `Idempotency-Key` and is audited
   // regardless of this classification (`isHighRiskAction` is metadata, not a
   // gate on idempotency/audit). (`attach`/`detach`/`delete`/`restore`/`purge`/
-  // `cancel` are also seeded in the `news_portal.media` permission catalog but
-  // reuse existing union members / are not yet authorized by any ported route.)
+  // `cancel` are also seeded in the `media_library.media` permission catalog
+  // (repointed from `news_portal.media` by ADR-0036's `sql/052`) but reuse
+  // existing union members / are not yet authorized by any ported route.)
   | "verify"
   // Tenant domain (ported from awcms-micro epic #555): `set_primary` atomically
   // makes a verified tenant domain the active primary. Deliberately NOT in

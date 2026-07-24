@@ -1,6 +1,10 @@
 import type { APIRoute } from "astro";
 
-import { fail, ok } from "../../../../modules/_shared/api-response";
+import {
+  fail,
+  jsonResponse,
+  ok
+} from "../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../lib/database/client";
 import { withTenant } from "../../../../lib/database/tenant-context";
 import {
@@ -8,6 +12,11 @@ import {
   resolveAuthInputs
 } from "../../../../modules/identity-access/application/access-guard";
 import { hashSessionToken } from "../../../../lib/auth/session-token";
+import {
+  computeRequestHash,
+  findIdempotencyRecord,
+  saveIdempotencyRecord
+} from "../../../../modules/_shared/idempotency";
 import { evaluateManagedMediaReadiness } from "../../../../modules/media-library/domain/managed-media-readiness";
 import { isManagedMediaEnforcedForTenant } from "../../../../modules/media-library/application/media-library-tenant-state";
 import { enableManagedMediaEnforcement } from "../../../../modules/media-library/application/enable-managed-media-enforcement";
@@ -37,11 +46,15 @@ import { enableManagedMediaEnforcement } from "../../../../modules/media-library
  * their operator; they name variables, never values, so nothing secret leaks.
  * `GET` is still permission-gated (`enforcement.read`) rather than public.
  *
- * No `Idempotency-Key` is required: enabling is a naturally idempotent upsert of
- * one boolean-shaped marker with no external side effect and no resource
- * created, so a replayed request converges on the same state rather than
- * duplicating anything. This matches `POST .../upload-sessions`, which likewise
- * requires none.
+ * ## `POST` requires an `Idempotency-Key`
+ *
+ * `enforcement.enable` is classified HIGH_RISK (`access-control.ts`
+ * `HIGH_RISK_ACTIONS`), and the go-live convention requires idempotency on
+ * every high-risk mutation — so this route follows it even though
+ * `markManagedMediaEnforced` is itself a monotonic, naturally idempotent upsert
+ * (a replay converges on the same state). Only a SUCCESSFUL enable is recorded
+ * under the key; a `rejected` (deployment-not-ready) 409 is deliberately NOT
+ * persisted, so the same key is free to retry once the R2 config is corrected.
  */
 
 const READ_GUARD = {
@@ -55,6 +68,8 @@ const ENABLE_GUARD = {
   activityCode: "enforcement",
   action: "enable" as const
 };
+
+const IDEMPOTENCY_SCOPE = "media_library_enforcement_enable";
 
 type TxResult<T> =
   { kind: "response"; response: Response } | { kind: "ok"; value: T };
@@ -126,14 +141,25 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     return fail(401, "AUTH_REQUIRED", "Authentication required.");
   }
 
+  const idempotencyKey = request.headers.get("idempotency-key");
+
+  if (!idempotencyKey) {
+    return fail(
+      400,
+      "IDEMPOTENCY_REQUIRED",
+      "Idempotency-Key header is required."
+    );
+  }
+
+  const requestHash = computeRequestHash({
+    action: "enable_managed_media_enforcement"
+  });
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
   const correlationId = locals.correlationId;
 
-  const result = await withTenant<
-    TxResult<{ enforced: true; enforcedAt: string; alreadyEnforced: boolean }>
-  >(sql, tenantId, async (tx) => {
+  return withTenant(sql, tenantId, async (tx) => {
     const auth = await authorizeInTransaction(
       tx,
       tenantId,
@@ -143,7 +169,28 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     );
 
     if (!auth.allowed) {
-      return { kind: "response", response: auth.denied };
+      return auth.denied;
+    }
+
+    const existingIdempotency = await findIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      idempotencyKey
+    );
+
+    if (existingIdempotency) {
+      if (existingIdempotency.requestHash !== requestHash) {
+        return fail(
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request."
+        );
+      }
+
+      return jsonResponse(existingIdempotency.responseBody, {
+        status: existingIdempotency.responseStatus
+      });
     }
 
     const outcome = await enableManagedMediaEnforcement(
@@ -159,32 +206,36 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       // 409, not 400: the request is well-formed and the caller is authorized —
       // the DEPLOYMENT is not in a state where this can be turned on. That is
       // not the caller's input to fix, and a 400 would send an operator hunting
-      // through their request body instead of their R2 config.
-      return {
-        kind: "response",
-        response: fail(
-          409,
-          outcome.code,
-          "Managed-media enforcement cannot be enabled: this deployment's media storage is not ready.",
-          {},
-          { reasons: outcome.reasons, detail: outcome.detail }
-        )
-      };
+      // through their request body instead of their R2 config. Deliberately NOT
+      // persisted under the Idempotency-Key: this is a transient
+      // deployment-state failure, so the same key must stay free to retry once
+      // the R2 config is corrected.
+      return fail(
+        409,
+        outcome.code,
+        "Managed-media enforcement cannot be enabled: this deployment's media storage is not ready.",
+        {},
+        { reasons: outcome.reasons, detail: outcome.detail }
+      );
     }
 
-    return {
-      kind: "ok",
-      value: {
-        enforced: true,
-        enforcedAt: outcome.enforcedAt.toISOString(),
-        alreadyEnforced: outcome.alreadyEnforced
-      }
-    };
+    const successResponse = ok({
+      enforced: true,
+      enforcedAt: outcome.enforcedAt.toISOString(),
+      alreadyEnforced: outcome.alreadyEnforced
+    });
+    const successBody = await successResponse.clone().json();
+
+    await saveIdempotencyRecord(
+      tx,
+      tenantId,
+      IDEMPOTENCY_SCOPE,
+      idempotencyKey,
+      requestHash,
+      200,
+      successBody
+    );
+
+    return successResponse;
   });
-
-  if (result.kind === "response") {
-    return result.response;
-  }
-
-  return ok(result.value);
 };
