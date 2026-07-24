@@ -274,15 +274,19 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     for (const name of beforeTags) expect(afterTags.has(name)).toBe(true);
     // The documented additive tags beyond the pre-migration monolith:
     // "Domain Event Runtime" (a previously-undeclared operation tag),
-    // "Theming" (ADR-0034 Fase 3 — the first website module in the base), and
+    // "Theming" (ADR-0034 Fase 3 — the first website module in the base),
     // the three "News *" tags owned by the ported news_portal module (R2 media
-    // registry/upload, editorial homepage sections, R2-only ad placements).
+    // registry/upload, editorial homepage sections, R2-only ad placements), and
+    // "SEO & Distribution" owned by the ported seo_distribution module (ADR-0038
+    // discovery scope — the tenant SEO config admin surface; its public
+    // sitemap/robots/feed routes are unauthenticated Astro routes, not OpenAPI).
     const added = [...afterTags].filter((n) => !beforeTags.has(n)).sort();
     expect(added).toEqual([
       "Domain Event Runtime",
       "News Media",
       "News Portal Ad Placements",
       "News Portal Homepage Sections",
+      "SEO & Distribution",
       "Theming"
     ]);
   });

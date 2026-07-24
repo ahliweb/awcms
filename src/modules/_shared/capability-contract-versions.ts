@@ -68,5 +68,14 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // (blog_content provides public_content; social_publishing is not ported)
     // remain unlisted — out of scope for this change and, for social_publishing,
     // not owned by any base module yet.
-    media_library: "1.0.0"
+    media_library: "1.0.0",
+    // seo_facts provides (ADR-0038 seo_distribution admission — the DISCOVERY
+    // scope, adapting awcms-micro ADR-0028). Owned (provided) by `blog_content`
+    // and consumed by `seo_distribution` (optional), both shipping in this base,
+    // so the port version is honestly declared here. `1.1.0` (not `1.0.0`) is the
+    // first assigned number for this base: the port ships with the
+    // `summarizePublicResourceFacts` roll-up + `offset`/`order` list options that
+    // awcms-micro added as its own 1.1.0 minor, so declaring 1.0.0 would understate
+    // the shape a consumer actually binds against. Not a stability milestone.
+    seo_facts: "1.1.0"
   });

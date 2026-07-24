@@ -1,5 +1,5 @@
 {
-  "moduleCount": 17,
+  "moduleCount": 18,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -15,7 +15,7 @@
         "module_management",
         "logging"
       ],
-      "capabilitiesProvided": ["public_content"],
+      "capabilitiesProvided": ["public_content", "seo_facts"],
       "capabilitiesConsumed": [
         {
           "capability": "media_library",
@@ -219,6 +219,33 @@
       "permissionCount": 7,
       "navigationCount": 0,
       "jobCount": 2,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "seo_distribution",
+      "name": "SEO & Distribution",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "domain",
+      "dependencies": ["tenant_admin", "identity_access"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [
+        {
+          "capability": "seo_facts",
+          "providedBy": "blog_content",
+          "optional": true
+        },
+        {
+          "capability": "media_library",
+          "providedBy": "media_library",
+          "optional": true
+        }
+      ],
+      "permissionCount": 2,
+      "navigationCount": 0,
+      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

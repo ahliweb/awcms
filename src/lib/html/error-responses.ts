@@ -58,3 +58,23 @@ export function serverErrorXmlResponse(): Response {
     }
   );
 }
+
+/**
+ * `text/plain` error variants for the public discovery surfaces whose success
+ * body is not HTML/XML (`/robots.txt`, `/feed.json`) — ADR-0038 seo_distribution.
+ * A fixed generic string only; the caught error's own message/stack is never
+ * passed through (same Issue #540 discipline as the HTML/XML variants).
+ */
+export function notFoundTextResponse(): Response {
+  return new Response("Not Found\n", {
+    status: 404,
+    headers: { "content-type": "text/plain; charset=utf-8" }
+  });
+}
+
+export function serverErrorTextResponse(): Response {
+  return new Response("Internal Server Error\n", {
+    status: 500,
+    headers: { "content-type": "text/plain; charset=utf-8" }
+  });
+}
