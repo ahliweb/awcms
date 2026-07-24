@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:a9ff0505d7daaf3d02ab0a506c8d9f6fcc1a1b20f4b4f9272ce55caf882b03ce -->
+<!-- i18n-source-hash: sha256:e4d6d5a92c2b5f22f6d55b8b8a486aa1b16592b371580d42f00aa15d2726178a -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
@@ -8,7 +8,7 @@
 
 > **AWCMS is the AWCMS-family ERP/back-office template — used DIRECTLY**, developed from the awcms-mini technical base. Its operating mode is **hybrid online + offline with an online-first priority** (online is the primary path; offline/LAN is the resilience mode), and it is **ERP-ready and built for integrated SaaS**. It is the family's **superset** template: it absorbs the full website/e-commerce module cluster, UI/UX, and auth hardening of `awcms-micro` on top of the awcms-mini foundation and ERP scope ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), refining [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)). By contrast, `awcms-mini` stays hybrid **offline-first** (SaaS-ready) and `awcms-micro` stays the lean **full-online website-only** template. The base provides **reusable foundation modules + neutral ERP-readiness contracts** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)); domain modules — ERP and website/content alike — are added **directly in `src/modules/`**, not a separate derived repo. Absorption map: [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md). See also [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
-> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Thirteen foundation modules are already live (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state), as a **foundation** for ERP, SaaS, and website/e-commerce development — not just a generic CMS/base, and not a finished ERP either.
+> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Eighteen modules are already live (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state) — thirteen foundation modules plus five website/content modules absorbed from awcms-micro (`tenant-domain`, `visitor-analytics`, `media-library`, `data-lifecycle`, `seo-distribution`) — as a **foundation** for ERP, SaaS, and website/e-commerce development — not just a generic CMS/base, and not a finished ERP either.
 
 ## Table of contents
 
@@ -168,7 +168,7 @@ flowchart LR
 
 - **01–13** planning → contract → execution; **14–18** technical design; **19** glossary; **20** threat model & security architecture; **21** module admission governance.
 - **Important note:** many documents in this package use ERP/retail domain examples as **illustration** — the pattern is reusable, the entities/endpoints/screens are examples that domain modules in `src/modules/` swap or extend for their own domain needs. See [`docs/awcms/README.md`](docs/awcms/README.md) for translation status and other important notes.
-- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (35 ADRs currently).
+- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (40 ADRs currently).
 - **Current code state** (not a plan): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## For contributors
@@ -193,15 +193,14 @@ Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR statu
 
 ## Governance & community
 
-| Document                                                                                                         | Contents                                             |
-| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                             | How to contribute                                    |
-| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                       | Community behavior standards                         |
-| [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                 | Roles, decision-making, releases                     |
-| [`SUPPORT.md`](SUPPORT.md)                                                                                       | Help channels                                        |
-| [`SECURITY.md`](SECURITY.md)                                                                                     | Security policy                                      |
-| [`docs/adr/`](docs/adr/README.md)                                                                                | Architecture Decision Records                        |
-| [`docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf`](docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf) | Cross-product AWCMS-family AI agent usage guidelines |
+| Document                                   | Contents                         |
+| ------------------------------------------ | -------------------------------- |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md)       | How to contribute                |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community behavior standards     |
+| [`GOVERNANCE.md`](GOVERNANCE.md)           | Roles, decision-making, releases |
+| [`SUPPORT.md`](SUPPORT.md)                 | Help channels                    |
+| [`SECURITY.md`](SECURITY.md)               | Security policy                  |
+| [`docs/adr/`](docs/adr/README.md)          | Architecture Decision Records    |
 
 ## Versioning
 

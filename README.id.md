@@ -6,7 +6,7 @@
 
 > **AWCMS adalah template lini ERP/back-office keluarga AWCMS — dipakai LANGSUNG**, dikembangkan dari basis teknis [awcms-mini](https://github.com/ahliweb/awcms-mini). Mode operasinya **hybrid online + offline dengan prioritas online-first** (online adalah jalur utama; offline/LAN adalah mode ketahanan), dan ia **siap ERP serta dibangun untuk SaaS terintegrasi**. Ia adalah template **superset** keluarga: menyerap seluruh klaster modul website/e-commerce, UI/UX, dan pengerasan auth dari `awcms-micro` di atas fondasi awcms-mini dan skop ERP ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), menyempurnakan [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)). Sebaliknya, `awcms-mini` tetap **hybrid offline-first** (siap SaaS) dan `awcms-micro` tetap template **website full-online** yang ramping. Base menyediakan **modul fondasi reusable + kontrak netral kesiapan ERP** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)); modul domain — ERP maupun website/konten — ditambahkan **langsung di `src/modules/`**, bukan repo turunan terpisah. Peta penyerapan awcms-micro: [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md). Lihat juga [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
-> **Status: fondasi aktif dikembangkan.** File kode legacy di repo ini sudah dihapus (lihat commit `chore(foundation): remove legacy repository files`) dan repo ini **dikembangkan ulang dari nol** di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Tiga belas modul fondasi sudah live (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk state kode saat ini), sebagai **basis** pengembangan ERP, SaaS, dan website/e-commerce — bukan sekadar CMS/base generik, dan bukan pula sebuah ERP jadi.
+> **Status: fondasi aktif dikembangkan.** File kode legacy di repo ini sudah dihapus (lihat commit `chore(foundation): remove legacy repository files`) dan repo ini **dikembangkan ulang dari nol** di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Delapan belas modul sudah live (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk state kode saat ini) — tiga belas modul fondasi plus lima modul website/konten yang diserap dari awcms-micro (`tenant-domain`, `visitor-analytics`, `media-library`, `data-lifecycle`, `seo-distribution`) — sebagai **basis** pengembangan ERP, SaaS, dan website/e-commerce — bukan sekadar CMS/base generik, dan bukan pula sebuah ERP jadi.
 
 ## Daftar isi
 
@@ -166,7 +166,7 @@ flowchart LR
 
 - **01–13** perencanaan → kontrak → eksekusi; **14–18** desain teknis; **19** glossary; **20** threat model & arsitektur keamanan; **21** tata kelola penerimaan modul (module admission governance).
 - **Catatan penting:** banyak dokumen di paket ini memakai contoh domain ERP/retail sebagai **ilustrasi** — polanya reusable, entitas/endpoint/layarnya adalah contoh yang diganti/diperluas oleh modul domain di `src/modules/` sesuai kebutuhan domainnya. Lihat [`docs/awcms/README.md`](docs/awcms/README.md) untuk status penerjemahan dan catatan penting lainnya.
-- **Keputusan arsitektural** dicatat di [`docs/adr/`](docs/adr/README.md) (35 ADR saat ini).
+- **Keputusan arsitektural** dicatat di [`docs/adr/`](docs/adr/README.md) (40 ADR saat ini).
 - **State kode saat ini** (bukan rencana): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Untuk kontributor
@@ -191,15 +191,14 @@ Riwayat perubahan lengkap ada di [`CHANGELOG.md`](CHANGELOG.md); status issue/PR
 
 ## Tata kelola & komunitas
 
-| Dokumen                                                                                                          | Isi                                                      |
-| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                             | Cara berkontribusi                                       |
-| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                       | Standar perilaku komunitas                               |
-| [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                 | Peran, pengambilan keputusan, rilis                      |
-| [`SUPPORT.md`](SUPPORT.md)                                                                                       | Kanal bantuan                                            |
-| [`SECURITY.md`](SECURITY.md)                                                                                     | Kebijakan keamanan                                       |
-| [`docs/adr/`](docs/adr/README.md)                                                                                | Architecture Decision Records                            |
-| [`docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf`](docs/Pedoman_Penggunaan_Agent_Keluarga_AWCMS_v1.0.pdf) | Pedoman penggunaan AI agent lintas keluarga produk AWCMS |
+| Dokumen                                    | Isi                                 |
+| ------------------------------------------ | ----------------------------------- |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md)       | Cara berkontribusi                  |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Standar perilaku komunitas          |
+| [`GOVERNANCE.md`](GOVERNANCE.md)           | Peran, pengambilan keputusan, rilis |
+| [`SUPPORT.md`](SUPPORT.md)                 | Kanal bantuan                       |
+| [`SECURITY.md`](SECURITY.md)               | Kebijakan keamanan                  |
+| [`docs/adr/`](docs/adr/README.md)          | Architecture Decision Records       |
 
 ## Versioning
 
