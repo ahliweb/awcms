@@ -14,6 +14,8 @@
  * safe).
  */
 
+import { normalizePublicHost } from "../../../lib/tenant/public-host-tenant-resolver";
+
 type PrimaryHostRow = { normalized_hostname: string };
 
 /**
@@ -37,5 +39,15 @@ export async function resolveTenantPrimaryHost(
     LIMIT 1
   `) as PrimaryHostRow[];
 
-  return rows[0] ? rows[0].normalized_hostname : null;
+  const host = rows[0]?.normalized_hostname ?? null;
+  if (host === null) return null;
+
+  // Defense-in-depth: re-validate the DNS shape at the render boundary. The
+  // stored value is already `normalized_hostname` (migration 046 rejects
+  // CR/LF/whitespace/underscores at write time), so a valid host round-trips to
+  // itself; if a future domain-write path ever relaxes that validation, this
+  // keeps `https://{host}/sitemap.xml` etc. (robots.txt / sitemap / feed) from
+  // being fed a header/response-splitting payload — an out-of-shape value
+  // degrades to `null` (discovery 404s), never emits a poisoned host.
+  return normalizePublicHost(host) === host ? host : null;
 }

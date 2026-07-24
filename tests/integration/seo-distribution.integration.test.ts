@@ -41,10 +41,11 @@ import {
 } from "../../src/modules/seo-distribution/application/seo-config-directory";
 import {
   buildFeedPayload,
+  buildSitemapIndexPayload,
   buildSitemapPagePayload,
   type SeoDiscoveryContext
 } from "../../src/modules/seo-distribution/application/seo-discovery-service";
-import { blogContentSeoFactsAdapter } from "../../src/modules/blog-content/application/seo-facts-port-adapter";
+import { createBlogContentSeoFactsAdapter } from "../../src/modules/blog-content/application/seo-facts-port-adapter";
 import { EMPTY_SEO_TENANT_SETTINGS } from "../../src/modules/seo-distribution/domain/seo-config";
 
 const TENANT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -220,7 +221,7 @@ suite("seo_distribution module (integration)", () => {
       tenantId: TENANT_A,
       tenantDisplayName: "Tenant A",
       defaultLocale: "en",
-      providers: [blogContentSeoFactsAdapter],
+      providers: [createBlogContentSeoFactsAdapter("/blog/tenant-a")],
       mediaLibrary: null,
       now: NOW
     });
@@ -230,9 +231,11 @@ suite("seo_distribution module (integration)", () => {
     );
     expect(sitemap).not.toBeNull();
     expect(sitemap!.contentType).toContain("application/xml");
-    // The published post's absolute canonical URL is present.
+    // The published post's absolute canonical URL is present AND resolvable:
+    // `/blog/{tenantCode}/{slug}` matches the shipped `/blog/[tenantCode]/[slug]`
+    // route (not the unresolvable `/blog/{slug}`).
     expect(sitemap!.body).toContain(
-      "<loc>https://example.com/blog/public-post</loc>"
+      "<loc>https://example.com/blog/tenant-a/public-post</loc>"
     );
     // The draft and private posts leak into nothing.
     expect(sitemap!.body).not.toContain("draft-post");
@@ -243,9 +246,58 @@ suite("seo_distribution module (integration)", () => {
     );
     expect(rss).not.toBeNull();
     expect(rss!.contentType).toContain("application/rss+xml");
-    expect(rss!.body).toContain("https://example.com/blog/public-post");
+    expect(rss!.body).toContain(
+      "https://example.com/blog/tenant-a/public-post"
+    );
     expect(rss!.body).not.toContain("draft-post");
     expect(rss!.body).not.toContain("private-post");
+  });
+
+  test("tenant-wide default_robots_noindex suppresses sitemap AND feeds (auditor MEDIUM-1), not just robots.txt", async () => {
+    const runtime = getRuntimeSql();
+    await withTenant(runtime, TENANT_A, async (tx) => {
+      await seedPrimaryDomain(tx, TENANT_A, "example.com");
+      await seedBlogPost(tx, TENANT_A, {
+        slug: "public-post",
+        title: "Public Post",
+        status: "published",
+        visibility: "public",
+        publishedAt: new Date("2026-06-01T00:00:00.000Z")
+      });
+      // Whole-site noindex — the operator's intent is "keep this deployment out
+      // of discovery entirely" (e.g. a staging site with real content).
+      await tx`
+        INSERT INTO awcms_seo_tenant_settings (tenant_id, default_robots_noindex)
+        VALUES (${TENANT_A}, true)
+        ON CONFLICT (tenant_id) DO UPDATE SET default_robots_noindex = true
+      `;
+    });
+
+    const ctx = (tx: Bun.SQL): SeoDiscoveryContext => ({
+      tx,
+      tenantId: TENANT_A,
+      tenantDisplayName: "Tenant A",
+      defaultLocale: "en",
+      providers: [createBlogContentSeoFactsAdapter("/blog/tenant-a")],
+      mediaLibrary: null,
+      now: NOW
+    });
+
+    // Even with a verified primary host + a published post, the machine-readable
+    // discovery surfaces return null (route → 404), mirroring robots.txt's
+    // `Disallow: /`. Non-compliant scrapers/aggregators get no URL enumeration.
+    const sitemap = await withTenant(runtime, TENANT_A, (tx) =>
+      buildSitemapPagePayload(ctx(tx), 1)
+    );
+    expect(sitemap).toBeNull();
+    const index = await withTenant(runtime, TENANT_A, (tx) =>
+      buildSitemapIndexPayload(ctx(tx))
+    );
+    expect(index).toBeNull();
+    const rss = await withTenant(runtime, TENANT_A, (tx) =>
+      buildFeedPayload(ctx(tx), "rss")
+    );
+    expect(rss).toBeNull();
   });
 
   test("no primary domain: sitemap/feed 404 (null), but discovery does not crash", async () => {
@@ -265,7 +317,7 @@ suite("seo_distribution module (integration)", () => {
       tenantId: TENANT_A,
       tenantDisplayName: "Tenant A",
       defaultLocale: "en",
-      providers: [blogContentSeoFactsAdapter],
+      providers: [createBlogContentSeoFactsAdapter("/blog/tenant-a")],
       mediaLibrary: null,
       now: NOW
     });

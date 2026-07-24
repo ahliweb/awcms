@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   BLOG_POST_SEO_RESOURCE_TYPE,
   blogContentSeoFactsAdapter,
+  createBlogContentSeoFactsAdapter,
   deriveVisibility
 } from "../src/modules/blog-content/application/seo-facts-port-adapter";
 
@@ -121,6 +122,23 @@ describe("blog-content seo-facts adapter: row → SeoResourceFacts", () => {
     expect(facts!.feed).not.toBeNull();
     expect(facts!.jsonLd[0]!["@type"]).toBe("Article");
     expect(facts!.openGraph.type).toBe("article");
+  });
+
+  test("factory scopes the canonical to the tenant-code base path (→ resolvable /blog/{tenantCode}/{slug})", async () => {
+    // The discovery composition root builds the adapter with `/blog/{tenantCode}`
+    // so every <loc>/feed link resolves against the shipped `/blog/[tenantCode]/[slug]`
+    // route (there is no host-based `/blog/{slug}` route in this base yet).
+    const adapter = createBlogContentSeoFactsAdapter("/blog/tenant-a");
+    const facts = await adapter.resolveResourceFacts(
+      fakeTx([baseRow()]),
+      "t1",
+      BLOG_POST_SEO_RESOURCE_TYPE,
+      "r1"
+    );
+    expect(facts!.canonicalPath).toBe("/blog/tenant-a/hello");
+    // Route-shape guard: a resolvable canonical has exactly 3 path segments
+    // (`blog`, tenantCode, slug) — matching `/blog/[tenantCode]/[slug]`.
+    expect(facts!.canonicalPath.split("/").filter(Boolean)).toHaveLength(3);
   });
 
   test("noindex (unlisted) row → sitemap:null and feed:null (no discovery leakage)", async () => {

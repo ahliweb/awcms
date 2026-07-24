@@ -105,7 +105,8 @@ export async function serveDiscovery(
       async (tx, tenant) => {
         const { providers, mediaLibrary } = await resolveEnabledSeoProviders(
           tx,
-          tenant.tenantId
+          tenant.tenantId,
+          tenant.tenantCode
         );
 
         const ctx: SeoDiscoveryContext = {

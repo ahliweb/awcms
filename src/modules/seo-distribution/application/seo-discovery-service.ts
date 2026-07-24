@@ -390,7 +390,12 @@ export async function buildSitemapIndexPayload(
   ctx: SeoDiscoveryContext
 ): Promise<DiscoveryPayload | null> {
   const { settings, primaryHost, settingsUpdatedAt } = await loadBase(ctx);
-  if (!settings.sitemapEnabled) return null;
+  // Tenant-wide noindex suppresses the machine-readable discovery surfaces too,
+  // not just robots.txt and the in-page <head> — otherwise a "whole-site
+  // noindex" staging deployment still hands crawlers/scrapers/feed aggregators a
+  // full URL enumeration (auditor MEDIUM-1). Mirrors `buildSeoDocument`'s
+  // `!defaultRobotsNoindex` gate and robots.txt's `Disallow: /`.
+  if (!settings.sitemapEnabled || settings.defaultRobotsNoindex) return null;
   // A sitemap `<loc>` MUST be an absolute URL (sitemaps.org protocol). With no
   // verified primary host we would emit relative paths — an invalid document —
   // so we 404 instead (robots.txt already drops its `Sitemap:` line the same
@@ -431,7 +436,12 @@ export async function buildSitemapPagePayload(
   page: number
 ): Promise<DiscoveryPayload | null> {
   const { settings, primaryHost, settingsUpdatedAt } = await loadBase(ctx);
-  if (!settings.sitemapEnabled) return null;
+  // Tenant-wide noindex suppresses the machine-readable discovery surfaces too,
+  // not just robots.txt and the in-page <head> — otherwise a "whole-site
+  // noindex" staging deployment still hands crawlers/scrapers/feed aggregators a
+  // full URL enumeration (auditor MEDIUM-1). Mirrors `buildSeoDocument`'s
+  // `!defaultRobotsNoindex` gate and robots.txt's `Disallow: /`.
+  if (!settings.sitemapEnabled || settings.defaultRobotsNoindex) return null;
   // No absolute host → no valid `<loc>` (see the index builder). 404, not a
   // relative-URL 200.
   if (primaryHost === null) return null;
@@ -523,7 +533,9 @@ export async function buildFeedPayload(
   locale: string | null = null
 ): Promise<DiscoveryPayload | null> {
   const { settings, primaryHost, settingsUpdatedAt } = await loadBase(ctx);
-  if (!settings.feedsEnabled) return null;
+  // Tenant-wide noindex also suppresses feeds (auditor MEDIUM-1) — see the
+  // sitemap gate above.
+  if (!settings.feedsEnabled || settings.defaultRobotsNoindex) return null;
   // A feed's `<id>`/`<guid isPermaLink="true">`/`<link>` MUST be absolute
   // (RFC 4287 / RSS). No verified primary host → no valid feed; 404, not a
   // relative-URL 200 (same refinement of ADR-0038 §5.4 as the sitemap builders).

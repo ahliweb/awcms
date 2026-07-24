@@ -74,6 +74,15 @@ SAME `seo_facts` contract:
 | `/atom.xml`        | Atom 1.0      | Same item set; Atom `<id>`/`<published>`/`<updated>`.                                                                                |
 | `/feed.json`       | JSON Feed 1.1 | Same item set; `content_text` only (never tenant HTML).                                                                              |
 
+- **`<loc>` / feed links are resolvable.** The discovery composition root scopes
+  the blog `seo_facts` adapter to `/blog/{tenantCode}`, so every URL is
+  `https://{host}/blog/{tenantCode}/{slug}` — resolvable by the shipped
+  `/blog/[tenantCode]/[slug]` route today. When a host-based `/blog/{slug}`
+  content route lands (follow-up), the base path becomes `/blog`.
+- **Tenant-wide `noindex` suppresses ALL discovery surfaces**, not just
+  `robots.txt`: with `default_robots_noindex` on, `/sitemap.xml`,
+  `/sitemap-{n}.xml`, and the three feeds all return 404 (no machine-readable URL
+  enumeration for non-`robots.txt`-respecting scrapers).
 - **Tenant/host** resolved by `application/public-seo-tenant-resolution.ts`'s
   `withSeoPublicTenant` (server-controlled host via the shared
   `resolvePublicTenantFromRequest`, migration 048; host trusted only behind a

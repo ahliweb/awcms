@@ -15,7 +15,7 @@
  * A tenant with a content module disabled simply contributes no facts / no
  * images — the aggregator degrades safely (`consumes` optional, ADR-0038 §2).
  */
-import { blogContentSeoFactsAdapter } from "../../modules/blog-content/application/seo-facts-port-adapter";
+import { createBlogContentSeoFactsAdapter } from "../../modules/blog-content/application/seo-facts-port-adapter";
 import { mediaLibraryPortAdapter } from "../../modules/media-library/application/media-library-port-adapter";
 import { fetchTenantModuleEntry } from "../../modules/module-management/application/tenant-module-lifecycle";
 import type { MediaLibraryPort } from "../../modules/_shared/ports/media-library-port";
@@ -33,10 +33,17 @@ const MEDIA_LIBRARY_MODULE_KEY = "media_library";
  * Resolve the `seo_facts` providers + media port enabled for `tenantId`. Runs
  * inside the caller's tenant transaction. Fail-closed: a missing tenant-module
  * entry (module not enabled) contributes nothing rather than defaulting on.
+ *
+ * `tenantCode` scopes the blog adapter's public base path to `/blog/{tenantCode}`
+ * so that every emitted `<loc>`/feed link resolves against the SHIPPED
+ * path-based content route `/blog/[tenantCode]/[slug]` (there is no host-based
+ * `/blog/{slug}` route in this base yet — that is the deferred content-route
+ * follow-up). Advertising `/blog/{slug}` would 404 for crawlers.
  */
 export async function resolveEnabledSeoProviders(
   tx: Bun.TransactionSQL,
-  tenantId: string
+  tenantId: string,
+  tenantCode: string
 ): Promise<EnabledSeoProviders> {
   // Sequential, not Promise.all: concurrent queries on one tx connection leak it (idle in transaction).
   const blogEntry = await fetchTenantModuleEntry(
@@ -52,7 +59,7 @@ export async function resolveEnabledSeoProviders(
 
   const providers: SeoFactsSource[] = [];
   if (blogEntry?.tenantEnabled ?? false) {
-    providers.push(blogContentSeoFactsAdapter);
+    providers.push(createBlogContentSeoFactsAdapter(`/blog/${tenantCode}`));
   }
 
   const mediaLibrary =
