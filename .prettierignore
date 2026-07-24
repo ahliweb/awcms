@@ -6,3 +6,6 @@ CHANGELOG.md
 .changeset/*.md
 .claude/worktrees/
 graphify-out/
+# generated verbatim memory mirror (bun run memory:docs:sync) — reformatting it
+# would break the memory:docs:restore round-trip
+docs/awcms/agent-memory.md
